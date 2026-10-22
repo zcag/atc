@@ -71,7 +71,9 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		if a.StartedAt > 0 {
 			s.StartedAt = time.UnixMilli(a.StartedAt)
 		}
-		s.Title = first(m.Store.Get(a.SessionID).Name, s.Title, a.Name, base(s.Cwd))
+		meta := m.Store.Get(a.SessionID)
+		s.Title = first(meta.Name, s.Title, a.Name, base(s.Cwd))
+		s.Pinned, s.Parked = meta.Pinned, meta.Parked
 		out = append(out, s)
 	}
 	Sort(out)

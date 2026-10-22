@@ -235,6 +235,11 @@ button { cursor: pointer; }
 .msg a { color: var(--work); }
 .msg table { border-collapse: collapse; font-size: 13px; margin: 6px 0; display: block; overflow-x: auto; }
 .msg td, .msg th { border: 1px solid var(--line); padding: 3px 8px; }
+.steps { display: flex; flex-direction: column; gap: 2px; }
+.steps-head { align-self: flex-start; border: 0; background: none; padding: 2px 0; color: var(--faint); font-size: 13.5px; display: inline-flex; gap: 6px; align-items: baseline; text-align: left; }
+.steps-head:hover { color: var(--dim); }
+.steps-head .caret { font-size: 11px; width: 10px; }
+.steps.open .tool { padding-left: 16px; }
 .tool { display: flex; gap: 8px; font: 12.5px/1.5 var(--mono); color: var(--dim); }
 .tool b { font-weight: 600; color: var(--ink); flex: none; }
 .tool span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

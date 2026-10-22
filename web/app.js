@@ -938,14 +938,59 @@ function Transcript({ s }) {
         ${err && html`<p class="err">${err}</p>`}
         ${start > 0 && html`<button class="btn more" onClick=${() => { atEnd.current = false; load(start); }}>Load earlier messages</button>`}
         ${msgs && msgs.length === 0 && html`<p class="empty">No messages yet.</p>`}
-        ${(msgs || []).map((m) =>
-          m.role === "tool"
-            ? html`<div class="tool"><b>${m.tool}</b><span>${m.detail}</span></div>`
+        ${grouped(msgs || []).map((m) =>
+          m.role === "tools"
+            ? html`<${Steps} steps=${m.steps} />`
             : m.role === "user"
               ? html`<div class="msg user">${m.text}</div>`
               : html`<div class="msg assistant" dangerouslySetInnerHTML=${{ __html: md(m.text) }}></div>`
         )}
       </div>
+    </div>
+  `;
+}
+
+const grouped = (msgs) =>
+  msgs.reduce((out, m) => {
+    const last = out[out.length - 1];
+    if (m.role !== "tool") out.push(m);
+    else if (last?.role === "tools") last.steps.push(m);
+    else out.push({ role: "tools", steps: [m] });
+    return out;
+  }, []);
+
+const STEP = [
+  [/^Bash$/, "ran", "command", "commands"],
+  [/^Read$/, "read", "file", "files"],
+  [/^(Edit|Write|MultiEdit|NotebookEdit)$/, "edited", "file", "files"],
+  [/^(Grep|Glob)$/, "searched", "time", "times"],
+  [/^(WebFetch|WebSearch)$/, "looked up", "page", "pages"],
+  [/^(Agent|Task)$/, "ran", "agent", "agents"],
+];
+
+function stepSummary(steps) {
+  const counts = new Map();
+  for (const st of steps) {
+    const kind = STEP.find(([re]) => re.test(st.tool));
+    const key = kind ? `${kind[1]}|${kind[2]}|${kind[3]}` : `used|${st.tool}|${st.tool}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const parts = [...counts].map(([key, n]) => {
+    const [verb, one, many] = key.split("|");
+    return verb === "used" ? `used ${one}${n > 1 ? ` ×${n}` : ""}` : `${verb} ${n} ${n === 1 ? one : many}`;
+  });
+  const text = parts.join(", ");
+  return text[0].toUpperCase() + text.slice(1);
+}
+
+function Steps({ steps }) {
+  const [open, setOpen] = useState(false);
+  return html`
+    <div class="steps ${open ? "open" : ""}">
+      <button class="steps-head" aria-expanded=${open} onClick=${() => setOpen(!open)}>
+        <span class="caret">${open ? "▾" : "▸"}</span>${stepSummary(steps)}
+      </button>
+      ${open && steps.map((st) => html`<div class="tool"><b>${st.tool}</b><span>${st.detail}</span></div>`)}
     </div>
   `;
 }
