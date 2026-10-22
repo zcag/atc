@@ -7,7 +7,6 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyStore
-import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
@@ -48,30 +47,26 @@ object Net {
     private fun open(c: Context, url: String) = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 10_000
         readTimeout = 30_000
-        val fp = Prefs(c).pinFor(URL(url).host)
-        if (this is HttpsURLConnection && fp != null) {
-            sslSocketFactory = pinned(fp)
-            hostnameVerifier = javax.net.ssl.HostnameVerifier { host, session ->
-                HttpsURLConnection.getDefaultHostnameVerifier().verify(host, session) ||
-                    session.peerCertificates.firstOrNull()?.let { sha256(it.encoded) } == fp
-            }
-        }
+        val anchor = Pin.decode(Prefs(c).pinFor(URL(url).host))
+        if (this is HttpsURLConnection && anchor != null) sslSocketFactory = trusting { Pin.validates(it, anchor) }
     }
 
-    private fun pinned(fp: String): SSLSocketFactory {
+    fun caFor(server: String, chain: List<X509Certificate>): X509Certificate? = runCatching {
+        val conn = URL("$server/app/ca.crt").openConnection() as HttpsURLConnection
+        conn.connectTimeout = 10_000
+        conn.readTimeout = 10_000
+        conn.sslSocketFactory = trusting { it.firstOrNull()?.encoded?.contentEquals(chain[0].encoded) == true }
+        try {
+            if (conn.responseCode != 200) return null
+            Pin.parseAll(conn.inputStream.readBytes()).firstOrNull { Pin.validates(chain, it) }
+        } finally {
+            conn.disconnect()
+        }
+    }.getOrNull()
+
+    private fun trusting(accept: (List<X509Certificate>) -> Boolean): SSLSocketFactory {
         val system = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
             .apply { init(null as KeyStore?) }.trustManagers.filterIsInstance<X509TrustManager>().first()
-        val tm = object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<X509Certificate>, type: String) = system.checkClientTrusted(chain, type)
-            override fun getAcceptedIssuers(): Array<X509Certificate> = system.acceptedIssuers
-            override fun checkServerTrusted(chain: Array<X509Certificate>, type: String) {
-                try {
-                    system.checkServerTrusted(chain, type)
-                } catch (e: CertificateException) {
-                    if (sha256(chain[0].encoded) != fp) throw e
-                }
-            }
-        }
-        return SSLContext.getInstance("TLS").apply { init(null, arrayOf(tm), null) }.socketFactory
+        return SSLContext.getInstance("TLS").apply { init(null, arrayOf(Pin.trustManager(system, accept)), null) }.socketFactory
     }
 }

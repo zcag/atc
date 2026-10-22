@@ -7,9 +7,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CoreTest {
-    @Test fun trustAsksWithoutPin() = assertEquals(Trust.ASK, trust(null, "ab"))
-    @Test fun trustAcceptsPinnedCertificate() = assertEquals(Trust.YES, trust("ab", "ab"))
-    @Test fun trustRefusesOtherCertificate() = assertEquals(Trust.NO, trust("ab", "cd"))
+    private fun pem(name: String) = Pin.parseAll(javaClass.classLoader!!.getResource(name).readBytes())
+    private val issued = pem("chain.pem")[0].notBefore
+
+    @Test fun pinnedRootAcceptsItsChain() = assertTrue(Pin.validates(pem("chain.pem"), pem("root.pem")[0], issued))
+    @Test fun pinnedRootRefusesOtherChains() = assertFalse(Pin.validates(pem("chain.pem"), pem("other.pem")[0], issued))
+    @Test fun pinnedRootRefusesExpiredLeaf() = assertFalse(Pin.validates(pem("chain.pem"), pem("root.pem")[0], java.util.Date(issued.time + 400L * 86400_000)))
+    @Test fun selfSignedLeafCanBeItsOwnAnchor() = assertTrue(Pin.validates(pem("other.pem"), pem("other.pem")[0]))
 
     @Test fun fingerprint() {
         assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", sha256("abc".toByteArray()))

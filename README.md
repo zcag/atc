@@ -127,6 +127,16 @@ assistant, so holding the side key opens atc listening, even on the lock screen.
 - **Install:** the server offers the app at `/app/` (set `ATC_APP_DIR` to the folder holding
   `atc.apk` and `version.json`, which `make android` produces). The app checks that folder and
   updates itself.
+- **Private certificates:** if your server uses a certificate from its own authority (Caddy's
+  `tls internal`, a home CA), the app asks once whether to trust it and then trusts that
+  authority, so renewals keep working. Put the authority's certificate in the app folder as
+  `ca.crt` (for Caddy: `pki/authorities/local/root.crt` in its data folder); without it the app
+  trusts the top certificate the server sends, which breaks when that one rotates.
+- **Share to atc:** share a link, text, screenshot or file from any app and choose atc. It opens a
+  screen to say what Claude should do with it, then starts a session in the project it most
+  likely belongs to (named in the text, or picked by `ATC_SPEECH_LLM_URL`'s model from your
+  folders' READMEs and recent sessions), optionally in its own git worktree, or sends it to a
+  running session.
 - **Notifications** use [UnifiedPush](https://unifiedpush.org): install a distributor such as the
   [ntfy](https://ntfy.sh) app, point it at your ntfy server, and the atc app registers with atc
   on its own. You get a notification when a session starts waiting for you and when one finishes

@@ -18,14 +18,14 @@ class ShareActivity : Activity() {
         super.onCreate(savedInstanceState)
         val intent = intent
         Thread {
-            val ok = runCatching { Shared.take(this, intent) }.isSuccess
+            val failed = runCatching { Shared.take(this, intent) }.exceptionOrNull()
             runOnUiThread {
-                if (ok) startActivity(
+                if (failed == null) startActivity(
                     Intent(this, MainActivity::class.java)
                         .putExtra(MainActivity.EXTRA_PATH, "/#/share?n=${System.currentTimeMillis()}")
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 )
-                else Toast.makeText(this, "atc could not read what was shared", Toast.LENGTH_LONG).show()
+                else Toast.makeText(this, "atc could not read what was shared: ${failed.message}", Toast.LENGTH_LONG).show()
                 finish()
             }
         }.start()

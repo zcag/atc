@@ -290,37 +290,46 @@ class MainActivity : Activity() {
     private fun serverHost() = prefs.server?.let { Uri.parse(it).host }
 
     private fun sslError(handler: SslErrorHandler, error: SslError) {
-        val cert = error.certificate.x509Certificate
-        val host = Uri.parse(error.url).host
-        if (cert == null || host != serverHost()) return handler.cancel()
-        val fp = sha256(cert.encoded)
-        when (trust(prefs.pinFor(host), fp)) {
-            Trust.YES -> handler.proceed()
-            Trust.NO -> {
-                handler.cancel()
-                AlertDialog.Builder(this)
-                    .setTitle("Certificate changed")
-                    .setMessage("$host presented a different certificate than the one you trusted, so atc refused to connect.\n\nSHA-256:\n${pretty(fp)}\n\nIf the server's certificate was replaced on purpose, press back twice, choose Change server and enter it again.")
-                    .setPositiveButton("OK", null)
-                    .show()
-            }
-            Trust.ASK -> {
-                sslWaiting += handler
-                if (sslWaiting.size > 1) return
-                val decide = { ok: Boolean ->
-                    if (ok) prefs.pin = "$host $fp"
-                    sslWaiting.forEach { if (ok) it.proceed() else it.cancel() }
-                    sslWaiting.clear()
-                }
-                AlertDialog.Builder(this)
-                    .setTitle("Trust this server?")
-                    .setMessage("$host uses a certificate this device does not trust. Trust it only if the fingerprint matches your server's.\n\nSubject:\n${cert.subjectX500Principal.name}\n\nSHA-256:\n${pretty(fp)}")
-                    .setPositiveButton("Trust") { _, _ -> decide(true) }
-                    .setNegativeButton("Cancel") { _, _ -> decide(false) }
-                    .setCancelable(false)
-                    .show()
-            }
+        val leaf = error.certificate.x509Certificate
+        val url = Uri.parse(error.url)
+        val host = url.host ?: return handler.cancel()
+        if (leaf == null || host != serverHost() || error.hasError(SslError.SSL_IDMISMATCH)) return handler.cancel()
+        sslWaiting += handler
+        if (sslWaiting.size > 1) return
+        val server = prefs.server ?: return handler.cancel()
+        val pinned = Pin.decode(prefs.pinFor(host))
+        val decide = { ok: Boolean ->
+            sslWaiting.forEach { if (ok) it.proceed() else it.cancel() }
+            sslWaiting.clear()
         }
+        Thread {
+            val chain = runCatching { Pin.chainOf(host, if (url.port > 0) url.port else 443) }.getOrDefault(emptyList())
+                .takeIf { it.firstOrNull()?.encoded?.contentEquals(leaf.encoded) == true }
+            val candidate = if (chain == null || pinned != null) null else Net.caFor(server, chain) ?: chain.last()
+            runOnUiThread {
+                when {
+                    chain == null -> decide(false)
+                    pinned != null && Pin.validates(chain, pinned) -> decide(true)
+                    pinned != null -> {
+                        decide(false)
+                        unreachable(error.url, "its certificate is not from the authority you trusted")
+                        AlertDialog.Builder(this)
+                            .setTitle("Certificate changed")
+                            .setMessage("$host presented a certificate that is not signed by the authority you trusted, so atc refused to connect.\n\nIf the server's certificate authority was replaced on purpose, choose Change server and enter it again.")
+                            .setPositiveButton("OK", null)
+                            .setNeutralButton("Change server") { _, _ -> setup() }
+                            .show()
+                    }
+                    else -> AlertDialog.Builder(this)
+                        .setTitle("Trust this server?")
+                        .setMessage("$host uses a certificate this device does not trust. Trust it only if the fingerprint matches your server's certificate authority. atc will then accept any certificate it signs, so renewals keep working.\n\nAuthority:\n${candidate!!.subjectX500Principal.name}\n\nSHA-256:\n${pretty(sha256(candidate.encoded))}")
+                        .setPositiveButton("Trust") { _, _ -> prefs.pin = "$host ${Pin.encode(candidate)}"; decide(true) }
+                        .setNegativeButton("Cancel") { _, _ -> decide(false) }
+                        .setCancelable(false)
+                        .show()
+                }
+            }
+        }.start()
     }
 
     private fun permission(request: PermissionRequest) {

@@ -3,14 +3,6 @@ package io.github.zcag.atc
 import org.json.JSONObject
 import java.security.MessageDigest
 
-enum class Trust { YES, ASK, NO }
-
-fun trust(pinned: String?, presented: String) = when (pinned) {
-    null -> Trust.ASK
-    presented -> Trust.YES
-    else -> Trust.NO
-}
-
 fun sha256(bytes: ByteArray): String =
     MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
 
