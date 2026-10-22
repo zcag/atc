@@ -7,9 +7,13 @@ import android.app.KeyguardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
+import android.net.ConnectivityManager
+import android.net.Network
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.MediaStore
 import android.text.InputType
@@ -18,6 +22,7 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.webkit.CookieManager
 import android.webkit.PermissionRequest
+import android.webkit.WebResourceError
 import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -53,6 +58,14 @@ class MainActivity : Activity() {
     private var mic: PermissionRequest? = null
     private val sslWaiting = mutableListOf<SslErrorHandler>()
     private var lastBack = 0L
+    private var root: FrameLayout? = null
+    private var offline: View? = null
+    private var failed: String? = null
+    private val ui = Handler(Looper.getMainLooper())
+    private val retry = Runnable { failed?.let { web?.loadUrl(it) } }
+    private val network = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(n: Network) { ui.postDelayed(retry, 1500) }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,6 +75,7 @@ class MainActivity : Activity() {
         updater = Updater(this)
         route(intent)
         if (prefs.server != null) started()
+        getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(network)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -84,6 +98,8 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(network) }
+        ui.removeCallbacks(retry)
         bridge.shutdown()
         web?.destroy()
         super.onDestroy()
@@ -198,6 +214,15 @@ class MainActivity : Activity() {
 
             override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) = Push.sync(this@MainActivity)
 
+            override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+                if (request.isForMainFrame) unreachable(request.url.toString(), error.description.toString())
+            }
+
+            override fun onPageFinished(view: WebView, url: String) {
+                if (failed == null) reachable()
+                failed = null
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 if (request.url.host == serverHost()) return false
                 runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
@@ -214,8 +239,42 @@ class MainActivity : Activity() {
         w.loadUrl(url)
     }
 
+    private fun unreachable(url: String, why: String) {
+        failed = url
+        ui.removeCallbacks(retry)
+        ui.postDelayed(retry, 10_000)
+        if (offline != null) return
+        val tailscale = packageManager.getLaunchIntentForPackage("com.tailscale.ipn")
+        val pad = (24 * resources.displayMetrics.density).toInt()
+        val v = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(pad, pad, pad, pad)
+            setBackgroundColor(if (resources.configuration.isNightModeActive) 0xFF151C27.toInt() else 0xFFDDE2EA.toInt())
+            setOnClickListener {}
+            addView(TextView(context).apply { text = "Can't reach atc"; textSize = 22f; gravity = Gravity.CENTER })
+            addView(TextView(context).apply {
+                text = "${serverHost()} did not answer ($why).\n\nIf you reach it over Tailscale, check that Tailscale is connected. atc retries on its own and opens as soon as the server answers."
+                gravity = Gravity.CENTER
+                setPadding(0, pad / 2, 0, pad)
+            })
+            if (tailscale != null) addView(Button(context).apply { text = "Open Tailscale"; setOnClickListener { startActivity(tailscale) } })
+            addView(Button(context).apply { text = "Retry now"; setOnClickListener { ui.removeCallbacks(retry); retry.run() } })
+        }
+        offline = v
+        root?.addView(v, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
+    }
+
+    private fun reachable() {
+        ui.removeCallbacks(retry)
+        offline?.let { root?.removeView(it) }
+        offline = null
+    }
+
     private fun show(v: View) {
+        offline = null
         val frame = FrameLayout(this).apply { addView(v) }
+        root = frame
         ViewCompat.setOnApplyWindowInsetsListener(frame) { view, insets ->
             val b = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime() or WindowInsetsCompat.Type.displayCutout())
             view.setPadding(b.left, b.top, b.right, b.bottom)
