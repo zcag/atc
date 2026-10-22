@@ -606,22 +606,41 @@ const speakable = (t) =>
 const sentences = (t) => (t.match(/[^.!?…]+[.!?…]+["')]?(\s|$)|[^.!?…]+$/g) || [t]).map((x) => x.trim()).filter(Boolean);
 const turkish = (t) => /[çğıöşüÇĞİÖŞÜ]/.test(t);
 const PHANTOM = /^(thank you|thanks for watching|you|bye|altyazı.*|abone olmayı unutmayın.*|\.+)[.!]?$/i;
-const PHASE = { starting: "Starting the microphone…", listening: "Listening", hearing: "Hearing you…", thinking: "Transcribing…", waiting: "Claude is working", speaking: "Speaking", muted: "Microphone off", error: "Voice is not available" };
+const PHASE = { starting: "Starting the microphone…", listening: "Listening", hearing: "Hearing you…", thinking: "Transcribing…", waiting: "Claude is working", speaking: "Speaking · tap to stop", muted: "Muted · tap to talk", error: "Voice is not available" };
+const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
+const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const MIC = html`<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>`;
+const MIC_OFF = html`<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 2l20 20M9 9v1a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.9-.8M5 10a7 7 0 0 0 11.9 5M19 10a7 7 0 0 1-.6 2.9M12 17v5"/></svg>`;
+const STOP = html`<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>`;
+
+function turnsOf(msgs) {
+  const turns = [];
+  for (const m of msgs) {
+    if (m.role === "user") turns.push([]);
+    else if (m.role === "assistant" && turns.length) turns[turns.length - 1].push(m.text);
+  }
+  return turns.map((t) => t.join("\n\n")).filter((t) => t.trim());
+}
 
 function VoiceBar({ s, say, send, onClose }) {
   const [phase, setPhase] = useState("starting");
   const [heard, setHeard] = useState("");
   const [spoken, setSpoken] = useState("");
   const [muted, setMuted] = useState(false);
-  const [source, setSource] = useState(() => { try { return localStorage.getItem("atc.voice") || "device"; } catch { return "device"; } });
-  const st = useRef({ awaiting: false, sentAt: 0, permission: false, speaking: false, audio: null, vad: null });
+  const [source, setSource] = useState(() => pref("atc.voice", "device"));
+  const [bargeIn, setBargeIn] = useState(() => pref("atc.bargein", "off") === "on");
+  const st = useRef({ awaiting: false, sentAt: 0, permission: false, speaking: false, audio: null, vad: null, turns: [], at: -1 });
   const live = useRef({});
-  live.current = { s, source, muted };
+  live.current = { s, source, muted, bargeIn };
 
-  const rest = () => setPhase(live.current.muted ? "muted" : st.current.awaiting ? "waiting" : "listening");
+  const listen = (on) => { const v = st.current.vad; if (!v) return; on ? v.start() : v.pause(); };
+  const rest = () => {
+    if (!live.current.muted) listen(true);
+    setPhase(live.current.muted ? "muted" : st.current.awaiting ? "waiting" : "listening");
+  };
   const stopSpeaking = () => {
     st.current.speaking = false;
-    speechSynthesis.cancel();
+    if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
     st.current.audio?.pause();
   };
   const play = (url) => new Promise((done) => {
@@ -630,11 +649,14 @@ function VoiceBar({ s, say, send, onClose }) {
     a.onended = a.onpause = a.onerror = () => done();
     a.play().catch(() => done());
   });
+  const finished = () => { if (st.current.speaking) { st.current.speaking = false; rest(); } };
   const speak = async (text) => {
     if (!text) return;
     stopSpeaking();
+    await new Promise((r) => setTimeout(r, 60));
     setSpoken(text);
     st.current.speaking = true;
+    if (!live.current.bargeIn) listen(false);
     setPhase("speaking");
     if (live.current.source === "mine" && VOICE.tts) {
       let chain = Promise.resolve();
@@ -646,35 +668,55 @@ function VoiceBar({ s, say, send, onClose }) {
         if (!st.current.speaking) break;
         if (blob) await play(URL.createObjectURL(blob));
       }
-      if (st.current.speaking) { st.current.speaking = false; rest(); }
-      return;
+      return finished();
     }
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = turkish(text) ? "tr-TR" : "en-US";
-    const v = speechSynthesis.getVoices().filter((v) => v.lang.replace("_", "-").startsWith(u.lang.slice(0, 2)));
-    u.voice = v.find((v) => /premium|enhanced|natural|siri/i.test(v.name)) || v.find((v) => v.localService) || v[0] || null;
-    u.onend = u.onerror = () => { if (st.current.speaking) { st.current.speaking = false; rest(); } };
-    speechSynthesis.speak(u);
+    const parts = sentences(text);
+    const lang = turkish(text) ? "tr-TR" : "en-US";
+    const voices = speechSynthesis.getVoices().filter((v) => v.lang.replace("_", "-").startsWith(lang.slice(0, 2)));
+    const voice = voices.find((v) => /premium|enhanced|natural|siri/i.test(v.name)) || voices.find((v) => v.localService) || voices[0] || null;
+    parts.forEach((t, i) => {
+      const u = new SpeechSynthesisUtterance(t);
+      u.lang = lang;
+      u.voice = voice;
+      if (i === parts.length - 1) u.onend = finished;
+      u.onerror = (e) => { if (e.error !== "interrupted" && e.error !== "canceled") finished(); };
+      speechSynthesis.speak(u);
+    });
   };
 
-  const answer = async (state) => {
+  const shorten = async (full) => {
+    const body = speakable(full);
+    if (body.length <= 240) return body;
+    if (VOICE.condense) return api("/api/voice/condense", { method: "POST", body: { text: full } }).then((r) => speakable(r.text), () => sentences(body).slice(0, 3).join(" "));
+    return sentences(body).slice(0, 3).join(" ");
+  };
+  const loadTurns = async () => {
     const p = await api(`/api/sessions/${live.current.s.sessionId}/transcript`).catch(() => ({ messages: [] }));
-    const msgs = p.messages || [];
-    let i = msgs.length;
-    while (i > 0 && msgs[i - 1].role !== "user") i--;
-    const full = msgs.slice(i).filter((m) => m.role === "assistant").map((m) => m.text).join("\n\n");
-    let body = speakable(full);
-    if (body.length > 240 && VOICE.condense) {
-      body = await api("/api/voice/condense", { method: "POST", body: { text: full } }).then((r) => speakable(r.text), () => sentences(body).slice(0, 3).join(" "));
-    } else if (body.length > 240) {
-      body = sentences(body).slice(0, 3).join(" ");
-    }
+    st.current.turns = turnsOf(p.messages || []);
+    return st.current.turns;
+  };
+  const readTurn = async (i, full) => {
+    const turns = st.current.turns.length ? st.current.turns : await loadTurns();
+    if (i < 0 || i >= turns.length) return speak(i < 0 ? "That was the first reply." : "Nothing newer.");
+    st.current.at = i;
+    speak(full ? speakable(turns[i]) : await shorten(turns[i]));
+  };
+  const replay = () => (st.current.at >= 0 ? readTurn(st.current.at, false) : spoken ? speak(spoken) : readLatest());
+  const readLatest = async () => { await loadTurns(); readTurn(st.current.turns.length - 1, false); };
+  const earlier = () => readTurn((st.current.at >= 0 ? st.current.at : st.current.turns.length) - 1, false);
+  const full = () => readTurn(st.current.at >= 0 ? st.current.at : st.current.turns.length - 1, true);
+
+  const answer = async (state) => {
+    const turns = await loadTurns();
+    st.current.at = turns.length - 1;
+    const body = turns.length ? await shorten(turns[turns.length - 1]) : "";
     st.current.permission = state === "needs-you";
     const ask = state === "needs-you" ? `It needs you${live.current.s.activity ? `, to run ${live.current.s.activity}` : ""}. Say yes to allow it.` : "";
     speak([body, ask].filter(Boolean).join(" ") || "Done.");
   };
 
   const heardSpeech = async (audio) => {
+    if (st.current.speaking && !live.current.bargeIn) return;
     setPhase("thinking");
     let text = "";
     try {
@@ -688,6 +730,9 @@ function VoiceBar({ s, say, send, onClose }) {
     setHeard(text);
     const bare = text.toLowerCase().replace(/[.!?,]/g, "").trim();
     if (/^(stop|cancel|dur|durdur|iptal|bekle)$/.test(bare)) { send("\x1b"); st.current.awaiting = false; return rest(); }
+    if (/^(repeat|again|say (that|it) again|tekrar|tekrarla|bir daha)$/.test(bare)) return replay();
+    if (/^(read (it )?all|read the whole (thing|reply)|full|hepsini oku|tamamını oku|tamamı)$/.test(bare)) return full();
+    if (/^(previous|earlier|go back|önceki|öncekini oku|geri)$/.test(bare)) return earlier();
     if (st.current.permission && /^(yes|yeah|yep|evet|tamam|olur|okay|ok)\b/.test(bare)) { st.current.permission = false; send("\r"); st.current.awaiting = true; st.current.sentAt = Date.now(); return rest(); }
     send(text);
     setTimeout(() => send("\r"), 150);
@@ -705,7 +750,7 @@ function VoiceBar({ s, say, send, onClose }) {
 
   useEffect(() => {
     let dead = false, lock = null;
-    speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+    speechSynthesis.getVoices();
     (async () => {
       try {
         await loadScript("vendor/vad/ort.wasm.min.js");
@@ -719,8 +764,11 @@ function VoiceBar({ s, say, send, onClose }) {
           redemptionMs: 1300,
           minSpeechMs: 300,
           getStream: () => navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }),
-          onSpeechStart: () => { if (st.current.speaking) stopSpeaking(); setPhase("hearing"); },
-          onVADMisfire: () => rest(),
+          onSpeechStart: () => {
+            if (st.current.speaking) { if (!live.current.bargeIn) return; stopSpeaking(); }
+            setPhase("hearing");
+          },
+          onVADMisfire: () => { if (!st.current.speaking) rest(); },
           onSpeechEnd: heardSpeech,
         });
         if (dead) return v.destroy();
@@ -736,32 +784,47 @@ function VoiceBar({ s, say, send, onClose }) {
     return () => { dead = true; st.current.vad?.destroy(); stopSpeaking(); lock?.release?.(); };
   }, []);
 
-  const mute = () => {
+  const tapMic = () => {
+    if (phase === "speaking") { stopSpeaking(); return rest(); }
     const m = !muted;
     setMuted(m);
     live.current.muted = m;
-    m ? st.current.vad?.pause() : st.current.vad?.start();
+    listen(!m);
     setPhase(m ? "muted" : st.current.awaiting ? "waiting" : "listening");
   };
-  const pick = (v) => { setSource(v); try { localStorage.setItem("atc.voice", v); } catch {} };
+  const pick = (v) => { setSource(v); setPref("atc.voice", v); };
+  const toggleBarge = () => { setBargeIn(!bargeIn); setPref("atc.bargein", bargeIn ? "off" : "on"); };
 
   return html`
     <div class="voicebar" role="region" aria-label="Voice">
-      <div class="orb ${phase}" aria-hidden="true"></div>
-      <div class="vtext">
-        <div class="vphase" aria-live="polite">${PHASE[phase]}</div>
+      <div class="vtext" aria-live="polite">
         ${heard && html`<div class="vline"><b>You</b> ${heard}</div>`}
-        ${spoken && html`<div class="vline"><b>Claude</b> ${spoken}</div>`}
+        ${spoken && html`<div class="vline said"><b>Claude</b> ${spoken}</div>`}
+        ${!heard && !spoken && html`<div class="vline">Say what you want Claude to do. It answers out loud when it is done.</div>`}
       </div>
-      <div class="vacts">
-        ${phase === "speaking" && html`<button class="btn" onClick=${() => { stopSpeaking(); rest(); }}>Stop talking</button>`}
-        ${phase === "waiting" && html`<button class="btn" onClick=${() => send("\x1b")} title="Send Esc to Claude">Interrupt</button>`}
-        <button class="btn" onClick=${mute}>${muted ? "Unmute" : "Mute"}</button>
-        ${VOICE.tts && html`<div class="seg">
-          <button class=${source === "device" ? "on" : ""} onClick=${() => pick("device")} title="This device's built-in voice: instant">Device</button>
-          <button class=${source === "mine" ? "on" : ""} onClick=${() => pick("mine")} title="The server's voice: slower">Server</button>
-        </div>`}
-        <button class="icon" onClick=${onClose} aria-label="Turn voice off">✕</button>
+      <div class="vrow">
+        <div class="vside">
+          <button class="vbtn" onClick=${replay} title="Read the last reply again (or say “repeat”)">Replay</button>
+          <button class="vbtn" onClick=${earlier} title="Read the reply before (or say “previous”)">Earlier</button>
+          <button class="vbtn" onClick=${full} title="Read the whole reply, not the short version (or say “read it all”)">Full</button>
+        </div>
+        <div class="vmain">
+          <button class="mic ${phase} ${muted ? "off" : ""}" onClick=${tapMic} aria-pressed=${!muted}
+            aria-label=${phase === "speaking" ? "Stop speaking" : muted ? "Unmute microphone" : "Mute microphone"}>
+            ${phase === "speaking" ? STOP : muted ? MIC_OFF : MIC}
+          </button>
+          <div class="vphase">${PHASE[phase]}</div>
+        </div>
+        <div class="vside right">
+          ${phase === "waiting" && html`<button class="vbtn" onClick=${() => send("\x1b")} title="Send Esc to Claude (or say “stop”)">Stop Claude</button>`}
+          ${VOICE.tts && html`<div class="seg">
+            <button class=${source === "device" ? "on" : ""} onClick=${() => pick("device")} title="This device's built-in voice: instant">Device</button>
+            <button class=${source === "mine" ? "on" : ""} onClick=${() => pick("mine")} title="The server's voice: slower">Server</button>
+          </div>`}
+          <button class="vbtn ${bargeIn ? "on" : ""}" onClick=${toggleBarge} aria-pressed=${bargeIn}
+            title="Talking over a reply stops it. Use with headphones: through a speaker, its own sound cuts it off.">Talk over replies</button>
+          <button class="icon" onClick=${onClose} aria-label="Turn voice off">✕</button>
+        </div>
       </div>
     </div>
   `;
