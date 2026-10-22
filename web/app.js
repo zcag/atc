@@ -365,7 +365,9 @@ function Strip({ s, sel, cursor }) {
   const on = sel && sel.sessionId === s.sessionId;
   const press = useRef({ t: 0, fired: false, x: 0, y: 0 });
   const menu = (e) => { e?.preventDefault(); e?.stopPropagation(); QUICK(s, e?.currentTarget?.getBoundingClientRect()); };
+  const hover = useRef(0);
   const down = (e) => {
+    prewarm(s);
     if (e.pointerType !== "touch") return;
     const p = press.current;
     p.fired = false; p.x = e.clientX; p.y = e.clientY;
@@ -378,6 +380,8 @@ function Strip({ s, sel, cursor }) {
     <button class="strip ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}" data-sid=${s.sessionId}
       onClick=${(e) => { if (press.current.fired) { press.current.fired = false; return e.preventDefault(); } go(keyOf(s)); }}
       onContextMenu=${menu} onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${up}
+      onPointerEnter=${(e) => { if (e.pointerType === "mouse") hover.current = setTimeout(() => prewarm(s), 150); }}
+      onPointerLeave=${() => clearTimeout(hover.current)}
       aria-current=${on ? "true" : null}>
       <span class="qbtn" role="button" aria-label="Actions" onClick=${menu}>⋯</span>
       <div class="l1">
@@ -589,6 +593,185 @@ function useKeyboard() {
   return open;
 }
 
+const DOCK = new Map();
+const DOCK_KEEP = 4;
+let dockShelf = null;
+
+function shelf() {
+  if (!dockShelf) {
+    dockShelf = document.createElement("div");
+    dockShelf.className = "dockshelf";
+    document.body.append(dockShelf);
+  }
+  return dockShelf;
+}
+
+function prewarm(s) {
+  if (s?.attachable && s.id && !DOCK.has(s.id)) dock(s);
+}
+
+function dock(s) {
+  let d = DOCK.get(s.id);
+  if (!d) {
+    d = makeDock(s.id);
+    DOCK.set(s.id, d);
+  }
+  d.used = Date.now();
+  const spare = [...DOCK.values()].filter((x) => !x.box && x !== d).sort((p, q) => p.used - q.used);
+  while (DOCK.size > DOCK_KEEP && spare.length) spare.shift().dispose();
+  return d;
+}
+
+function makeDock(id) {
+  const el = document.createElement("div");
+  el.className = "termhost";
+  shelf().append(el);
+  const term = new Terminal({
+    fontFamily: '"Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono", "Noto Sans Symbols 2", "Noto Sans Symbols", monospace',
+    fontSize: touch ? 12.5 : 14,
+    lineHeight: 1.1,
+    theme: PALETTE[CLAUDE_THEME],
+    allowProposedApi: true,
+    scrollback: 2000,
+    macOptionIsMeta: true,
+    cursorStyle: "bar",
+  });
+  const fit = new FitAddon.FitAddon();
+  term.loadAddon(fit);
+  term.loadAddon(new WebLinksAddon.WebLinksAddon());
+  term.loadAddon(new Unicode11Addon.Unicode11Addon());
+  term.unicode.activeVersion = "11";
+  term.loadAddon(new ClipboardAddon.ClipboardAddon());
+  term.open(el);
+  fit.fit();
+
+  const enc = new TextEncoder();
+  const d = { id, el, term, box: null, used: Date.now(), state: { cover: null, foreign: null, retrying: false }, ui: null, hooks: {} };
+  let ws = null, exited = false, owner = false, tries = 0, timer = null, dead = false;
+  const emit = (patch) => { Object.assign(d.state, patch); d.ui?.({ ...d.state }); };
+  const ctl = (o) => ws?.readyState === 1 && ws.send(JSON.stringify(o));
+  d.send = (data) => ws?.readyState === 1 && ws.send(enc.encode(data));
+  d.claim = () => ctl({ type: "claim" });
+  d.focus = () => term.focus();
+
+  const scale = (on) => {
+    const x = el.querySelector(".xterm");
+    if (!x) return;
+    if (!on) { x.style.transform = ""; el.classList.remove("scaled"); return; }
+    const cw = term._core._renderService.dimensions.css.cell.width * term.cols;
+    const ch = term._core._renderService.dimensions.css.cell.height * term.rows;
+    const k = Math.min(1, (el.clientWidth - 8) / cw, (el.clientHeight - 6) / ch);
+    x.style.transformOrigin = "top center";
+    x.style.transform = `scale(${k})`;
+    el.classList.add("scaled");
+  };
+  const relayout = () => {
+    if (!d.box) return;
+    const p = fit.proposeDimensions();
+    if (!p?.cols) return;
+    ctl({ type: "resize", cols: p.cols, rows: p.rows });
+    if (owner) fit.fit(); else scale(true);
+  };
+  d.relayout = relayout;
+
+  const connect = () => {
+    const proto = location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(`${proto}//${location.host}/api/sessions/${id}/attach?cols=${term.cols}&rows=${term.rows}${d.box ? "" : "&hidden=1"}`);
+    ws.binaryType = "arraybuffer";
+    ws.onmessage = (e) => {
+      if (typeof e.data !== "string") return term.write(new Uint8Array(e.data));
+      const c = JSON.parse(e.data);
+      if (c.type === "size") {
+        owner = !!c.owner;
+        if (owner) {
+          scale(false);
+          if (d.box) fit.fit(); else term.resize(c.cols, c.rows);
+          emit({ foreign: null });
+        } else {
+          term.resize(c.cols, c.rows);
+          if (d.box) requestAnimationFrame(() => scale(true));
+          emit({ foreign: d.box ? c.viewers : null });
+        }
+      } else if (c.type === "exit") {
+        exited = true;
+        emit({ cover: "detached" });
+      }
+    };
+    ws.onopen = () => { tries = 0; emit({ retrying: false }); };
+    ws.onclose = () => {
+      if (exited || dead) return;
+      if (tries >= 20) return emit({ cover: "lost" });
+      emit({ retrying: true });
+      timer = setTimeout(connect, Math.min(1000 * 2 ** tries++, 8000));
+    };
+    ws.onerror = () => {};
+  };
+  connect();
+
+  term.onData((data) => d.send(d.hooks.data ? d.hooks.data(data) : data));
+  term.onBinary((data) => ws?.readyState === 1 && ws.send(Uint8Array.from(data, (c) => c.charCodeAt(0))));
+  term.textarea?.addEventListener("focus", () => !owner && d.claim());
+
+  const ro = new ResizeObserver(() => requestAnimationFrame(relayout));
+  ro.observe(el);
+
+  let ty = null, acc = 0;
+  el.addEventListener("touchstart", (e) => { ty = e.touches[0].clientY; acc = 0; }, { passive: true });
+  el.addEventListener("touchmove", (e) => {
+    if (ty === null) return;
+    const y = e.touches[0].clientY;
+    acc += ty - y;
+    ty = y;
+    while (Math.abs(acc) >= 18) {
+      const dy = Math.sign(acc) * 18;
+      acc -= dy;
+      el.querySelector(".xterm-screen")?.dispatchEvent(new WheelEvent("wheel", { deltaY: dy, deltaMode: 0, bubbles: true, cancelable: true, clientX: e.touches[0].clientX, clientY: y }));
+    }
+    e.preventDefault();
+  }, { passive: false });
+  el.addEventListener("touchend", () => (ty = null));
+  el.addEventListener("paste", (e) => {
+    const files = [...(e.clipboardData?.files || [])];
+    if (!files.length || !d.hooks.upload) return;
+    e.preventDefault();
+    e.stopPropagation();
+    d.hooks.upload(files);
+  }, true);
+
+  d.page = (visible) => ctl({ type: visible ? "visible" : "hidden" });
+  d.show = (box) => {
+    d.box = box;
+    box.append(el);
+    shelf().style.cssText = `width:${box.clientWidth}px;height:${box.clientHeight}px`;
+    ctl({ type: "visible" });
+    requestAnimationFrame(relayout);
+  };
+  d.hide = () => {
+    if (dead) return;
+    d.box = null;
+    d.ui = null;
+    d.hooks = {};
+    d.used = Date.now();
+    ctl({ type: "hidden" });
+    shelf().append(el);
+    if (exited || d.state.cover) d.dispose();
+  };
+  d.dispose = () => {
+    dead = true;
+    clearTimeout(timer);
+    ro.disconnect();
+    ws?.close();
+    term.dispose();
+    el.remove();
+    if (DOCK.get(id) === d) DOCK.delete(id);
+  };
+  return d;
+}
+
+document.addEventListener("visibilitychange", () => {
+  for (const d of DOCK.values()) if (d.box) d.page(!document.hidden);
+});
+
 function Term({ s, say, voice, onVoiceOff }) {
   const keyboard = useKeyboard();
   const box = useRef();
@@ -612,143 +795,31 @@ function Term({ s, say, voice, onVoiceOff }) {
     api_.current.focus?.();
   };
   const [gen, setGen] = useState(0);
-  const [cover, setCover] = useState(null);
-  const [retrying, setRetrying] = useState(false);
-  const tries = useRef(0);
-  const [foreign, setForeign] = useState(null);
+  const [st, setSt] = useState({ cover: null, foreign: null, retrying: false });
+  const { cover, foreign, retrying } = st;
   const [ctrl, setCtrl] = useState(false);
   const ctrlRef = useRef(false);
   ctrlRef.current = ctrl;
 
   useEffect(() => {
-    setCover(null);
-    const el = box.current;
-    const term = new Terminal({
-      fontFamily: '"Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono", "Noto Sans Symbols 2", "Noto Sans Symbols", monospace',
-      fontSize: touch ? 12.5 : 14,
-      lineHeight: 1.1,
-      theme: PALETTE[CLAUDE_THEME],
-      allowProposedApi: true,
-      scrollback: 2000,
-      macOptionIsMeta: true,
-      cursorStyle: "bar",
-    });
-    const fit = new FitAddon.FitAddon();
-    term.loadAddon(fit);
-    term.loadAddon(new WebLinksAddon.WebLinksAddon());
-    term.loadAddon(new Unicode11Addon.Unicode11Addon());
-    term.unicode.activeVersion = "11";
-    term.loadAddon(new ClipboardAddon.ClipboardAddon());
-    term.open(el);
-    fit.fit();
-
-    const enc = new TextEncoder();
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${proto}//${location.host}/api/sessions/${s.id}/attach?cols=${term.cols}&rows=${term.rows}`);
-    ws.binaryType = "arraybuffer";
-    let exited = false, owner = true;
-    const ctl = (o) => ws.readyState === 1 && ws.send(JSON.stringify(o));
-    const send = (d) => ws.readyState === 1 && ws.send(enc.encode(d));
-
-    const scale = (on) => {
-      const x = el.querySelector(".xterm");
-      if (!x) return;
-      if (!on) { x.style.transform = ""; el.classList.remove("scaled"); return; }
-      const cw = term._core._renderService.dimensions.css.cell.width * term.cols;
-      const ch = term._core._renderService.dimensions.css.cell.height * term.rows;
-      const k = Math.min(1, (el.clientWidth - 8) / cw, (el.clientHeight - 6) / ch);
-      x.style.transformOrigin = "top center";
-      x.style.transform = `scale(${k})`;
-      el.classList.add("scaled");
-    };
-    const mine = () => fit.proposeDimensions() || { cols: term.cols, rows: term.rows };
-    const relayout = () => {
-      const d = mine();
-      if (!d.cols) return;
-      ctl({ type: "resize", cols: d.cols, rows: d.rows });
-      if (owner) fit.fit(); else scale(true);
-    };
-
-    ws.onmessage = (e) => {
-      if (typeof e.data !== "string") return term.write(new Uint8Array(e.data));
-      const c = JSON.parse(e.data);
-      if (c.type === "size") {
-        owner = !!c.owner;
-        if (owner) {
-          scale(false);
-          fit.fit();
-          setForeign(null);
-        } else {
-          term.resize(c.cols, c.rows);
-          requestAnimationFrame(() => scale(true));
-          setForeign(c.viewers);
+    const d = dock(s);
+    d.ui = setSt;
+    setSt({ ...d.state });
+    d.hooks = {
+      upload: (files) => upload.current(files),
+      data: (data) => {
+        if (ctrlRef.current && data.length === 1) {
+          const c = data.toUpperCase().charCodeAt(0);
+          if (c >= 64 && c <= 95) data = String.fromCharCode(c - 64);
+          setCtrl(false);
         }
-      } else if (c.type === "exit") {
-        exited = true;
-        setCover("detached");
-      }
+        return data;
+      },
     };
-    ws.onopen = () => { tries.current = 0; setRetrying(false); };
-    ws.onclose = () => {
-      if (exited) return;
-      if (tries.current >= 20) return setCover("lost");
-      const wait = Math.min(1000 * 2 ** tries.current++, 8000);
-      setRetrying(true);
-      setTimeout(() => setGen((g) => g + 1), wait);
-    };
-    ws.onerror = () => {};
-
-    term.onData((d) => {
-      if (ctrlRef.current && d.length === 1) {
-        const c = d.toUpperCase().charCodeAt(0);
-        if (c >= 64 && c <= 95) d = String.fromCharCode(c - 64);
-        setCtrl(false);
-      }
-      send(d);
-    });
-    term.onBinary((d) => ws.readyState === 1 && ws.send(Uint8Array.from(d, (c) => c.charCodeAt(0))));
-    term.textarea?.addEventListener("focus", () => !owner && ctl({ type: "claim" }));
-
-    const ro = new ResizeObserver(() => requestAnimationFrame(relayout));
-    ro.observe(el);
-
-    let ty = null, acc = 0;
-    const screen = () => el.querySelector(".xterm-screen");
-    const tstart = (e) => { ty = e.touches[0].clientY; acc = 0; };
-    const tmove = (e) => {
-      if (ty === null) return;
-      const y = e.touches[0].clientY;
-      acc += ty - y;
-      ty = y;
-      const step = 18;
-      while (Math.abs(acc) >= step) {
-        const dy = Math.sign(acc) * step;
-        acc -= dy;
-        screen()?.dispatchEvent(new WheelEvent("wheel", { deltaY: dy, deltaMode: 0, bubbles: true, cancelable: true, clientX: e.touches[0].clientX, clientY: y }));
-      }
-      e.preventDefault();
-    };
-    const tend = () => (ty = null);
-    el.addEventListener("touchstart", tstart, { passive: true });
-    el.addEventListener("touchmove", tmove, { passive: false });
-    el.addEventListener("touchend", tend);
-    const paste = (e) => {
-      const files = [...(e.clipboardData?.files || [])];
-      if (!files.length) return;
-      e.preventDefault();
-      e.stopPropagation();
-      upload.current(files);
-    };
-    el.addEventListener("paste", paste, true);
-
-    api_.current = { send, focus: () => term.focus(), claim: () => ctl({ type: "claim" }) };
-    if (!touch) term.focus();
-    return () => {
-      ro.disconnect();
-      exited = true;
-      ws.close();
-      term.dispose();
-    };
+    d.show(box.current);
+    api_.current = { send: d.send, focus: d.focus, claim: d.claim };
+    if (!touch) d.focus();
+    return () => d.hide();
   }, [s.id, gen]);
 
   const key = (k, seq) => {
@@ -779,7 +850,7 @@ function Term({ s, say, voice, onVoiceOff }) {
             <p class="h">${cover === "detached" ? "Detached" : "Connection lost"}</p>
             <p>${cover === "detached" ? "The terminal closed. The session keeps running." : "The link to the server dropped. The session keeps running."}</p>
             <div class="row">
-              <button class="btn primary" onClick=${() => { tries.current = 0; setGen(gen + 1); }}>Reopen</button>
+              <button class="btn primary" onClick=${() => { DOCK.get(s.id)?.dispose(); setGen(gen + 1); }}>Reopen</button>
               <button class="btn" onClick=${() => go(null)}>Back to list</button>
             </div>
           </div>

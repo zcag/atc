@@ -22,7 +22,11 @@ type tviewer struct {
 
 func connect(t *testing.T, url string, cols, rows int) *tviewer {
 	t.Helper()
-	c, _, err := websocket.Dial(context.Background(), url+"?cols="+itoa(cols)+"&rows="+itoa(rows), nil)
+	sep := "?"
+	if strings.Contains(url, "?") {
+		sep = "&"
+	}
+	c, _, err := websocket.Dial(context.Background(), url+sep+"cols="+itoa(cols)+"&rows="+itoa(rows), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,5 +127,36 @@ func TestOwnershipInputAndExit(t *testing.T) {
 			}
 			break
 		}
+	}
+}
+
+func TestHiddenViewers(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "claude")
+	os.WriteFile(bin, []byte("#!/bin/sh\nstty -echo\nwhile read l; do echo \"got:$l\"; done\n"), 0o755)
+	h := &Hub{Bin: bin}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.Serve(w, r, "s1") }))
+	defer ts.Close()
+	url := "ws" + strings.TrimPrefix(ts.URL, "http")
+
+	a := connect(t, url, 100, 30)
+	a.next(t)
+	b := connect(t, url+"?hidden=1", 60, 20)
+	if m := b.next(t); m.Owner || m.Cols != 100 {
+		t.Fatalf("a hidden viewer must not take the size: %+v", m)
+	}
+	a.next(t)
+	a.c.Write(context.Background(), websocket.MessageText, []byte(`{"type":"hidden"}`))
+	time.Sleep(100 * time.Millisecond)
+	if h.Viewing("s1") {
+		t.Fatal("only hidden viewers left, so nobody is looking")
+	}
+	b.c.Write(context.Background(), websocket.MessageText, []byte(`{"type":"visible"}`))
+	for {
+		if m := b.next(t); m.Owner && m.Cols == 60 {
+			break
+		}
+	}
+	if !h.Viewing("s1") {
+		t.Fatal("a visible viewer is looking")
 	}
 }

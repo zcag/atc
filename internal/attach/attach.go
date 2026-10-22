@@ -40,6 +40,7 @@ type viewer struct {
 	conn       *websocket.Conn
 	pty        *os.File
 	cols, rows uint16
+	hidden     bool
 	wmu        sync.Mutex
 	smu        sync.Mutex
 	sz         Control
@@ -86,7 +87,7 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	v := &viewer{conn: conn, szSig: make(chan struct{}, 1), cols: size(r.URL.Query().Get("cols"), 120), rows: size(r.URL.Query().Get("rows"), 40)}
+	v := &viewer{conn: conn, szSig: make(chan struct{}, 1), cols: size(r.URL.Query().Get("cols"), 120), rows: size(r.URL.Query().Get("rows"), 40), hidden: r.URL.Query().Get("hidden") != ""}
 	cmd := exec.Command(h.Bin, "attach", id)
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
 	v.pty, err = pty.StartWithSize(cmd, &pty.Winsize{Cols: v.cols, Rows: v.rows})
@@ -168,6 +169,8 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 			h.resize(id, v, size(strconv.Itoa(int(c.Cols)), v.cols), size(strconv.Itoa(int(c.Rows)), v.rows))
 		case "claim":
 			h.claim(id, v)
+		case "hidden", "visible":
+			h.show(id, v, c.Type == "visible")
 		}
 	}
 }
@@ -175,7 +178,38 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 func (h *Hub) Viewing(id string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return id != "" && h.groups[id] != nil
+	if g := h.groups[id]; id != "" && g != nil {
+		for v := range g.viewers {
+			if !v.hidden {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (h *Hub) show(id string, v *viewer, visible bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	g := h.groups[id]
+	if g == nil {
+		return
+	}
+	v.hidden = !visible
+	switch {
+	case visible && g.owner != v:
+		g.owner = v
+	case !visible && g.owner == v:
+		for o := range g.viewers {
+			if !o.hidden {
+				g.owner = o
+				break
+			}
+		}
+	default:
+		return
+	}
+	g.apply()
 }
 
 func (h *Hub) join(id string, v *viewer) {
@@ -190,7 +224,9 @@ func (h *Hub) join(id string, v *viewer) {
 		h.groups[id] = g
 	}
 	g.viewers[v] = true
-	g.owner = v
+	if g.owner == nil || !v.hidden {
+		g.owner = v
+	}
 	g.apply()
 }
 
@@ -207,9 +243,11 @@ func (h *Hub) leave(id string, v *viewer) {
 		return
 	}
 	if g.owner == v {
+		g.owner = nil
 		for o := range g.viewers {
-			g.owner = o
-			break
+			if g.owner == nil || !o.hidden {
+				g.owner = o
+			}
 		}
 	}
 	g.apply()
