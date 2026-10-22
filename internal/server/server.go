@@ -476,18 +476,30 @@ func (s *Server) poll() {
 }
 
 func (s *Server) notify(list []sessions.Session) {
-	now := map[string]string{}
-	for _, x := range list {
-		now[x.SessionID] = x.State
-	}
 	prev := s.seen
-	s.seen = now
+	s.seen = states(list)
 	if prev == nil || s.Push == nil {
 		return
 	}
+	viewing := func(x sessions.Session) bool { return s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) }
+	for _, m := range alerts(prev, list, viewing) {
+		go s.Push.Send(m)
+	}
+}
+
+func states(list []sessions.Session) map[string]string {
+	m := map[string]string{}
+	for _, x := range list {
+		m[x.SessionID] = x.State
+	}
+	return m
+}
+
+func alerts(prev map[string]string, list []sessions.Session, viewing func(sessions.Session) bool) []push.Message {
+	var out []push.Message
 	for _, x := range list {
 		was, ok := prev[x.SessionID]
-		if !ok || was == x.State || s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) {
+		if !ok || was == x.State || viewing(x) {
 			continue
 		}
 		m := push.Message{Title: x.Title, Tag: x.SessionID, URL: "/#/s/" + x.SessionID}
@@ -502,8 +514,9 @@ func (s *Server) notify(list []sessions.Session) {
 		default:
 			continue
 		}
-		go s.Push.Send(m)
+		out = append(out, m)
 	}
+	return out
 }
 
 func (s *Server) pushKey(w http.ResponseWriter, r *http.Request) {
