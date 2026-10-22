@@ -229,7 +229,7 @@ function Elapsed({ s }) {
 
 function Session({ s, say, live }) {
   const canAttach = s.attachable;
-  const [mode, setMode] = useState(canAttach ? "term" : "chat");
+  const [mode, setMode] = useState(canAttach || s.state === "stopped" ? "term" : "chat");
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
   useEffect(() => {
