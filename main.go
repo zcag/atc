@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -96,11 +97,14 @@ func (m *multi) Set(v string) error { *m = append(*m, v); return nil }
 
 func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	addr := fs.String("addr", client.DefaultAddr, "listen address")
+	addr := fs.String("addr", cmp.Or(os.Getenv("ATC_ADDR"), client.DefaultAddr), "listen address ($ATC_ADDR)")
 	noAuth := fs.Bool("no-auth", false, "serve without a token (only behind something that authenticates)")
 	var roots multi
-	fs.Var(&roots, "root", "dir whose subdirs are offered for new sessions (repeatable)")
+	fs.Var(&roots, "root", "dir whose subdirs are offered for new sessions (repeatable, or $ATC_ROOTS separated by :)")
 	fs.Parse(args)
+	if len(roots) == 0 && os.Getenv("ATC_ROOTS") != "" {
+		roots = strings.Split(os.Getenv("ATC_ROOTS"), ":")
+	}
 
 	home, _ := os.UserHomeDir()
 	if len(roots) == 0 {
