@@ -22,7 +22,7 @@ class ShareActivity : Activity() {
             runOnUiThread {
                 if (failed == null) startActivity(
                     Intent(this, MainActivity::class.java)
-                        .putExtra(MainActivity.EXTRA_PATH, "/#/share?n=${System.currentTimeMillis()}")
+                        .putExtra(MainActivity.EXTRA_PATH, "/#/share?n=${System.currentTimeMillis()}" + (Targets.sessionOf(intent.getStringExtra(Intent.EXTRA_SHORTCUT_ID))?.let { "&to=$it" } ?: ""))
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 )
                 else Toast.makeText(this, "atc could not read what was shared: ${failed.message}", Toast.LENGTH_LONG).show()

@@ -540,7 +540,13 @@ func (m model) dirChoices() []string {
 		out = append(out, q)
 	}
 	if q == "" {
-		return append(out, paths...)
+		out = []string{"~"}
+		for _, p := range paths {
+			if p != "~" {
+				out = append(out, p)
+			}
+		}
+		return out
 	}
 	for _, f := range fuzzy.Find(q, paths) {
 		if paths[f.Index] != q {

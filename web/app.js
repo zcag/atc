@@ -65,6 +65,7 @@ function useNow(ms) {
 const APP = window.AtcApp || null;
 const APP_VERSION = +((navigator.userAgent.match(/AtcApp\/(\d+)/) || [])[1] || 0);
 let AUTO_VOICE = false;
+let shareTargets = "";
 
 function App() {
   const [me, setMe] = useState(undefined);
@@ -128,6 +129,12 @@ function App() {
     }
     setTimeout(() => setStarting(false), 15000);
   };
+
+  useEffect(() => {
+    if (!APP?.setTargets || !live) return;
+    const targets = JSON.stringify(live.filter((s) => s.attachable && !s.parked).slice(0, 8).map((s) => ({ id: s.sessionId, title: s.title })));
+    if (targets !== shareTargets) APP.setTargets((shareTargets = targets));
+  }, [live]);
 
   useEffect(() => {
     const n = (live || []).filter((s) => s.state === "needs-you" && !s.parked).length;
@@ -1200,7 +1207,7 @@ const untrusted = "Claude Code hasn't been trusted in this folder yet. Open Clau
 function NewSession({ onClose, say, hosts, home }) {
   const [host, setHost] = useState(home);
   const dirs = useDirs(host, home);
-  const [dir, setDir] = useState("");
+  const [dir, setDir] = useState("~");
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
   const [worktree, setWorktree] = useState(false);
@@ -1231,7 +1238,7 @@ function NewSession({ onClose, say, hosts, home }) {
     <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
       <form class="sheet" onSubmit=${start}>
         <h3>New session</h3>
-        <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDir(""); }} />
+        <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDir("~"); }} />
         <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} autofocus />
         <${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />
         <label class="field"><span>Name</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder="Optional" /><small>Without one, Claude titles the session from what you ask.</small></label>
@@ -1247,12 +1254,10 @@ function NewSession({ onClose, say, hosts, home }) {
 }
 
 function readShared() {
-  try {
-    const got = APP?.shared && JSON.parse(APP.shared() || "null");
-    if (got) return got;
-  } catch {}
   const q = new URLSearchParams(location.hash.split("?")[1] || "");
-  return { text: [q.get("title"), q.get("text"), q.get("url")].filter(Boolean).join("\n"), files: [] };
+  let got = null;
+  try { got = APP?.shared && JSON.parse(APP.shared() || "null"); } catch {}
+  return { text: [q.get("title"), q.get("text"), q.get("url")].filter(Boolean).join("\n"), files: [], ...got, to: q.get("to") };
 }
 
 const fileSize = (n) => (n > 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
@@ -1266,11 +1271,14 @@ function Share({ live, hosts, home, say }) {
   const [files, setFiles] = useState(shared.files || []);
   const [ask, setAsk] = useState("");
   const running = (live || []).filter((s) => s.attachable && !s.parked);
-  const [to, setTo] = useState("new");
+  const [to, setTo] = useState(shared.to ? "running" : "new");
   const [target, setTarget] = useState(null);
+  useEffect(() => {
+    if (shared.to && !target) setTarget(running.find((s) => s.sessionId === shared.to) || null);
+  }, [live]);
   const [host, setHost] = useState(home);
   const dirs = useDirs(host, home);
-  const [dir, setDirRaw] = useState("");
+  const [dir, setDirRaw] = useState("~");
   const [picked, setPicked] = useState(false);
   const [note, setNote] = useState("");
   const [worktree, setWorktree] = useState(false);
@@ -1285,11 +1293,11 @@ function Share({ live, hosts, home, say }) {
       api(`/api/guess${hostQ(host, home)}`, { method: "POST", body: { text: about } }).then((r) => {
         if (picked) return;
         if (r.dir) { setDirRaw(tilde(r.dir)); setNote("suggested"); }
-        else if (!dir && dirs[0]) { setDirRaw(tilde(dirs[0].path)); setNote("most recent"); }
+        else { setDirRaw("~"); setNote(""); }
       }, () => {});
     }, ask ? 900 : 0);
     return () => clearTimeout(t);
-  }, [about, host, picked, to, dirs.length]);
+  }, [about, host, picked, to]);
 
   const close = (id) => { APP?.clearShared?.(); id ? go(id) : go(null); };
   const quote = (p) => (/\s/.test(p) ? `"${p}"` : p);
@@ -1349,7 +1357,7 @@ function Share({ live, hosts, home, say }) {
           </div>
         </div>
         ${to === "new" ? html`
-          <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDirRaw(""); setPicked(false); }} />
+          <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDirRaw("~"); setPicked(false); }} />
           <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} note=${note} />
           <${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />
         ` : html`

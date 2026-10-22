@@ -31,6 +31,7 @@ class Bridge(private val a: MainActivity) : TextToSpeech.OnInitListener {
     @JavascriptInterface fun pushStatus() = Push.status(a)
     @JavascriptInterface fun shared() = Shared.json()
     @JavascriptInterface fun clearShared() = Shared.clear(a)
+    @JavascriptInterface fun setTargets(json: String) { Targets.update(a, json) }
     @JavascriptInterface fun checkUpdate() = a.runOnUiThread { a.updater.check(manual = true) }
 
     @JavascriptInterface
