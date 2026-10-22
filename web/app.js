@@ -65,7 +65,8 @@ function useNow(ms) {
 const APP = window.AtcApp || null;
 const APP_VERSION = +((navigator.userAgent.match(/AtcApp\/(\d+)/) || [])[1] || 0);
 let AUTO_VOICE = false;
-let shareTargets = "";
+let appSent = "";
+const FEED_STATES = ["needs-you", "your-turn", "working"];
 
 function App() {
   const [me, setMe] = useState(undefined);
@@ -131,9 +132,18 @@ function App() {
   };
 
   useEffect(() => {
-    if (!APP?.setTargets || !live) return;
-    const targets = JSON.stringify(live.filter((s) => s.attachable && !s.parked).slice(0, 8).map((s) => ({ id: s.sessionId, title: s.title })));
-    if (targets !== shareTargets) APP.setTargets((shareTargets = targets));
+    if (!live) return;
+    if (APP?.setSessions) {
+      const rows = ordered.filter((s) => !s.parked && FEED_STATES.includes(s.state)).slice(0, 12).map((s) => ({
+        id: s.attachable ? s.id : undefined, sid: s.sessionId, title: s.title, state: s.state, host: s.host || undefined, pinned: s.pinned || undefined,
+        since: (s.state === "working" && s.promptAt) || s.updated || undefined,
+      }));
+      const key = JSON.stringify(rows.map(({ since, ...r }) => r));
+      if (key !== appSent) { appSent = key; APP.setSessions(JSON.stringify({ type: "sessions", at: new Date().toISOString(), sessions: rows })); }
+    } else if (APP?.setTargets) {
+      const targets = JSON.stringify(live.filter((s) => s.attachable && !s.parked).slice(0, 8).map((s) => ({ id: s.sessionId, title: s.title })));
+      if (targets !== appSent) APP.setTargets((appSent = targets));
+    }
   }, [live]);
 
   useEffect(() => {

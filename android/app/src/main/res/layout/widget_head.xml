@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/head"
+    android:layout_width="match_parent"
+    android:layout_height="66dp"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingEnd="10dp">
+
+    <ImageView
+        android:layout_width="26dp"
+        android:layout_height="26dp"
+        android:importantForAccessibility="no"
+        android:src="@drawable/widget_mark" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="sans-serif-medium"
+            android:includeFontPadding="false"
+            android:text="@string/app_name"
+            android:textColor="@color/w_ink"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/summary"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="3dp"
+            android:ellipsize="end"
+            android:singleLine="true"
+            android:text="@string/widget_loading"
+            android:textColor="@color/w_dim"
+            android:textSize="12.5sp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/refresh_box"
+        android:layout_width="44dp"
+        android:layout_height="44dp">
+
+        <ImageView
+            android:id="@+id/refresh"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/widget_icon_press"
+            android:contentDescription="@string/refresh"
+            android:padding="12dp"
+            android:src="@drawable/ic_refresh"
+            android:tint="@color/w_faint" />
+
+        <ProgressBar
+            android:id="@+id/busy"
+            style="@android:style/Widget.Material.ProgressBar.Small"
+            android:layout_width="18dp"
+            android:layout_height="18dp"
+            android:layout_gravity="center"
+            android:indeterminateTint="@color/w_faint"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <ImageView
+        android:id="@+id/mic"
+        android:layout_width="46dp"
+        android:layout_height="46dp"
+        android:layout_marginStart="4dp"
+        android:background="@drawable/widget_mic_bg"
+        android:contentDescription="@string/tile_label"
+        android:padding="12dp"
+        android:src="@drawable/ic_mic"
+        android:tint="@color/on_work" />
+</LinearLayout>

@@ -88,6 +88,7 @@ class MainActivity : Activity() {
         super.onResume()
         if (prefs.server == null) return
         Push.sync(this)
+        Live.refresh(this)
         updater.maybeCheck()
         updater.resume()
     }
@@ -180,6 +181,9 @@ class MainActivity : Activity() {
             prefs.server = url
             prefs.pin = null
             prefs.registered = null
+            prefs.feed = null
+            prefs.feedError = null
+            Live.changed(this)
             browse(url)
             started()
         }

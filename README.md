@@ -141,6 +141,10 @@ assistant, so holding the side key opens atc listening, even on the lock screen.
   [ntfy](https://ntfy.sh) app, point it at your ntfy server, and the atc app registers with atc
   on its own. You get a notification when a session starts waiting for you and when one finishes
   a turn, with the start of its reply, unless you have that session open.
+- **Widget and Quick Settings tile:** the home-screen widget lists sessions that need you, are
+  your turn or are working, most urgent first, kept current by a silent push (and a refresh
+  button); tap one to open it. Its mic button and the **Talk to Claude** tile open the assistant,
+  and the tile shows how many sessions need you.
 - **Assistant:** choose atc under Settings → Apps → Default apps → Digital assistant app. Holding
   the side key then opens a session named `assistant` in `ATC_ASSIST_DIR` (default: your home
   folder) with voice on, starting or resuming it as needed.

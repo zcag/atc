@@ -53,6 +53,7 @@ kotlin { compilerOptions.jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.J
 dependencies {
     implementation("org.unifiedpush.android:connector:3.3.5")
     implementation("androidx.core:core:1.15.0")
+    implementation("androidx.core:core-remoteviews:1.1.0")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
 }

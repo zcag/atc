@@ -17,13 +17,13 @@ object Targets {
 
     fun sessionOf(shortcutId: String?) = shortcutId?.removePrefix(PREFIX)?.takeIf { it != shortcutId }
 
-    fun update(c: Context, json: String) = runCatching {
+    fun parse(json: String) = runCatching {
         val arr = JSONArray(json)
-        val n = minOf(arr.length(), ShortcutManagerCompat.getMaxShortcutCountPerActivity(c))
-        val list = (0 until n).map { i ->
-            val o = arr.getJSONObject(i)
-            val id = o.getString("id")
-            val title = o.optString("title").ifBlank { id.take(8) }
+        (0 until arr.length()).map { i -> arr.getJSONObject(i).run { getString("id").let { it to optString("title").ifBlank { it.take(8) } } } }
+    }.getOrDefault(emptyList())
+
+    fun update(c: Context, sessions: List<Pair<String, String>>) = runCatching {
+        val list = sessions.take(ShortcutManagerCompat.getMaxShortcutCountPerActivity(c)).mapIndexed { i, (id, title) ->
             ShortcutInfoCompat.Builder(c, PREFIX + id)
                 .setShortLabel(title.take(24))
                 .setLongLabel(title.take(60))

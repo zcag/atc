@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="w_bg">#151c27</color>
+    <color name="w_row">#1f2836</color>
+    <color name="w_row_line">#2c3748</color>
+    <color name="w_ink">#e6e9ef</color>
+    <color name="w_dim">#9aa4b5</color>
+    <color name="w_faint">#6b7689</color>
+    <color name="w_press">#1effffff</color>
+    <color name="needs">#f2545b</color>
+    <color name="turn">#f0b429</color>
+    <color name="work">#4aa3ff</color>
+    <color name="on_work">#0b1220</color>
+</resources>

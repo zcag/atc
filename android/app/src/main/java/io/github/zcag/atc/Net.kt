@@ -26,7 +26,6 @@ object Net {
             conn.requestMethod = "POST"
             conn.doOutput = true
             conn.setRequestProperty("Content-Type", "application/json")
-            CookieManager.getInstance().getCookie(url)?.let { conn.setRequestProperty("Cookie", it) }
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
             return conn.responseCode
         } finally {
@@ -49,6 +48,7 @@ object Net {
         readTimeout = 30_000
         val anchor = Pin.decode(Prefs(c).pinFor(URL(url).host))
         if (this is HttpsURLConnection && anchor != null) sslSocketFactory = trusting { Pin.validates(it, anchor) }
+        runCatching { CookieManager.getInstance().getCookie(url) }.getOrNull()?.let { setRequestProperty("Cookie", it) }
     }
 
     fun caFor(server: String, chain: List<X509Certificate>): X509Certificate? = runCatching {
