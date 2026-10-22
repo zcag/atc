@@ -127,8 +127,16 @@ type idReply struct {
 }
 
 func (c *Client) Start(dir, name, prompt string) (string, error) {
+	return c.StartOn("", dir, name, prompt)
+}
+
+func (c *Client) StartOn(host, dir, name, prompt string) (string, error) {
 	var r idReply
-	err := c.do("POST", "/api/sessions", map[string]string{"dir": dir, "name": name, "prompt": prompt}, &r)
+	path := "/api/sessions"
+	if host != "" {
+		path += "?host=" + url.QueryEscape(host)
+	}
+	err := c.do("POST", path, map[string]string{"dir": dir, "name": name, "prompt": prompt}, &r)
 	return r.ID, err
 }
 

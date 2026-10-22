@@ -91,8 +91,8 @@ func (c CLI) Remove(ctx context.Context, id string) error {
 }
 
 func idFrom(out string) (string, error) {
-	if id := shortID.FindString(out); id != "" {
-		return id, nil
+	if ids := shortID.FindAllString(out, -1); len(ids) > 0 {
+		return ids[len(ids)-1], nil
 	}
 	return "", fmt.Errorf("no session id in: %s", out)
 }

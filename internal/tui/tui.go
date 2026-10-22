@@ -486,15 +486,7 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m model) tilde(p string) string {
-	if p == m.home {
-		return "~"
-	}
-	if rel, ok := strings.CutPrefix(p, m.home+"/"); ok && m.home != "" {
-		return "~/" + rel
-	}
-	return p
-}
+func (m model) tilde(p string) string { return sessions.Tilde(p, m.home) }
 
 func (m model) dirChoices() []string {
 	q := strings.TrimSpace(m.ti.Value())

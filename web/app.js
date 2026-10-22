@@ -31,7 +31,13 @@ function ago(s) {
 }
 
 let HOME = "", CLAUDE_THEME = "dark";
-const tilde = (p) => (HOME && p && p.startsWith(HOME) ? "~" + p.slice(HOME.length) : p || "");
+const tilde = (p) => {
+  if (!p) return "";
+  if (HOME && (p === HOME || p.startsWith(HOME + "/"))) return "~" + p.slice(HOME.length);
+  const m = p.match(/^\/(home|Users)\/[^/]+(\/.*)?$/);
+  return m ? "~" + (m[2] || "") : p;
+};
+let MULTI = false;
 const model = (m) => (m || "").replace(/^claude-/, "").replace(/-\d.*$/, "");
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
@@ -96,7 +102,10 @@ function App() {
   useNow(30000);
 
   useEffect(() => {
-    api("/api/me").then(setMe, (e) => setMe(e.auth ? null : { host: "" }));
+    const load = () => api("/api/me").then(setMe, (e) => setMe((m) => (e.auth ? null : m || { host: "" })));
+    load();
+    const t = setInterval(load, 20000);
+    return () => clearInterval(t);
   }, []);
 
   useEffect(() => {
@@ -127,6 +136,8 @@ function App() {
   if (me === null) return html`<${Login} onDone=${setMe} />`;
   HOME = me.home || HOME;
   CLAUDE_THEME = me.claudeTheme || CLAUDE_THEME;
+  MULTI = (me.hosts || []).length > 1;
+  const down = (me.peers || []).filter((p) => p.error);
 
   const all = live || [];
   const sel = route && (all.find((s) => s.id === route || s.sessionId === route) || past[route]);
@@ -137,8 +148,9 @@ function App() {
       <aside class="side">
         <header class="top">
           <span class="mark">atc</span>
-          <span class="host">${me.host ? `on ${me.host}` : ""}</span>
+          <span class="host">${me.host ? `on ${(me.hosts || [me.host]).join(" + ")}` : ""}</span>
           <span class="conn ${up ? "" : "down"}" title=${up ? "Live" : "Reconnecting"}></span>
+          ${down.length > 0 && html`<span class="tag" title=${down.map((p) => `${p.name}: ${p.error}`).join("\n")}>${down.map((p) => p.name).join(", ")} unreachable</span>`}
           <span class="grow"></span>
           ${push !== "unsupported" && html`
             <button class="icon bell ${push === "on" ? "on" : ""}" onClick=${() => togglePush().catch((e) => say(e.message))}
@@ -154,7 +166,7 @@ function App() {
           : html`<div class="blank">${route && live ? "This session is gone. Pick another from the list." : "Pick a session, or start a new one."}</div>`}
       </main>
     </div>
-    ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} />`}
+    ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
   `;
 }
@@ -243,6 +255,7 @@ function Strip({ s, sel }) {
       <div class="l2">
         <span class="word">${WORD[s.state] || s.state}</span>
         ${s.id && html`<span class="call">${s.id}</span>`}
+        ${MULTI && s.host && html`<span class="tag">${s.host}</span>`}
         <span>${tilde(s.cwd)}</span>
         ${s.branch && s.branch !== "HEAD" && html`<span>${s.branch}</span>`}
         ${s.model && html`<span>${model(s.model)}</span>`}
@@ -650,14 +663,16 @@ function md(src) {
   return out.join("");
 }
 
-function NewSession({ onClose, say }) {
+function NewSession({ onClose, say, hosts, home }) {
+  const [host, setHost] = useState(home);
+  const hq = host && host !== home ? `?host=${encodeURIComponent(host)}` : "";
   const [dirs, setDirs] = useState([]);
   const [dir, setDir] = useState("");
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { api("/api/dirs").then((d) => setDirs(d || []), () => {}); }, []);
+  useEffect(() => { api(`/api/dirs${hq}`).then((d) => setDirs(d || []), () => setDirs([])); }, [host]);
   useEffect(() => {
     const f = (e) => e.key === "Escape" && onClose();
     addEventListener("keydown", f);
@@ -674,7 +689,7 @@ function NewSession({ onClose, say }) {
     setBusy(true);
     setErr(null);
     try {
-      const r = await api("/api/sessions", { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt } });
+      const r = await api(`/api/sessions${hq}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt } });
       onClose();
       say("Session started.");
       go(r.id);
@@ -688,6 +703,10 @@ function NewSession({ onClose, say }) {
     <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
       <form class="sheet" onSubmit=${start}>
         <h3>New session</h3>
+        ${hosts.length > 1 && html`
+          <div class="field"><span>Machine</span>
+            <div class="seg">${hosts.map((h) => html`<button type="button" class=${h === host ? "on" : ""} onClick=${() => { setHost(h); setDir(""); }}>${h}</button>`)}</div>
+          </div>`}
         <label class="field">
           <span>Folder</span>
           <input value=${dir} onInput=${(e) => setDir(e.target.value)} placeholder="~/projects/app" autofocus autocapitalize="off" autocomplete="off" spellcheck="false" />

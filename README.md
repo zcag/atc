@@ -34,6 +34,16 @@ go install github.com/zcag/atc@latest
 
 or clone and run `make build`.
 
+### Run it as a service (macOS, launchd)
+
+```sh
+make install-mac
+```
+
+installs the binary and `deploy/atc.plist` as a launch agent, reading the same
+`~/.config/atc/env`. The agent sets `AbandonProcessGroup` for the same reason the systemd unit
+sets `KillMode=process`, explained below.
+
 ### Run it as a service (Linux, systemd)
 
 ```sh
@@ -92,6 +102,28 @@ atc stop 2 · atc rm 2 · atc rename 2 "name" · atc pin 2
 same path works on a server where your projects live under the same names.
 
 Inside an attached session, Ctrl+Z detaches. So does Esc from Claude's agent view.
+
+## Several machines in one list
+
+One atc server can list sessions from others. Run atc on each machine, then on the one you open
+in your browser, list the others in `~/.config/atc/peers.json` and restart it:
+
+```json
+[{ "name": "laptop", "url": "http://laptop:7272", "token": "<atc token on the laptop>" }]
+```
+
+Sessions from every machine appear together, tagged with their machine. Opening, stopping,
+resuming or uploading to one is forwarded to the machine it lives on, and **New session** asks
+which machine to start on (`atc new -host laptop` from a terminal). A machine that is off shows as
+unreachable and the rest keep working.
+
+## Notifications
+
+The bell in the header turns on push notifications for that device. You get one when a session
+starts waiting for you, and when a session finishes a turn, with the start of its reply. Nothing
+is sent for a session you have open at that moment. On iPhone and iPad, add atc to the home screen
+first: Safari only allows web push for installed apps. Push needs HTTPS with a certificate the
+device trusts.
 
 ## Notes
 

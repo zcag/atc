@@ -38,6 +38,9 @@ type Server struct {
 	Roots []string
 	Host  string
 	Push  *push.Pusher
+	Peers []Peer
+
+	fleet *fleet
 
 	mu   sync.Mutex
 	subs map[chan []byte]bool
@@ -48,6 +51,7 @@ type Server struct {
 
 func (s *Server) Handler() http.Handler {
 	s.subs = map[chan []byte]bool{}
+	s.fleet = &fleet{peers: s.Peers, client: &http.Client{}, owner: map[string]string{}, status: map[string]string{}, views: map[string]int{}}
 	s.kick = make(chan struct{}, 1)
 	go s.poll()
 
@@ -71,7 +75,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/push/subscribe", s.pushSubscribe)
 	mux.HandleFunc("POST /api/push/unsubscribe", s.pushUnsubscribe)
 	mux.Handle("GET /", s.static())
-	return s.auth(mux)
+	return s.auth(s.route(mux))
 }
 
 func (s *Server) auth(next http.Handler) http.Handler {
@@ -110,7 +114,7 @@ func (s *Server) setCookie(w http.ResponseWriter, tok string) {
 		SameSite: http.SameSiteStrictMode, MaxAge: 400 * 24 * 3600})
 }
 
-func (s *Server) me() map[string]string {
+func (s *Server) me() map[string]any {
 	home, _ := os.UserHomeDir()
 	var cfg struct{ Theme string }
 	if b, err := os.ReadFile(filepath.Join(home, ".claude.json")); err == nil {
@@ -120,7 +124,11 @@ func (s *Server) me() map[string]string {
 	if strings.HasPrefix(cfg.Theme, "light") {
 		theme = "light"
 	}
-	return map[string]string{"host": s.Host, "home": home, "claudeTheme": theme}
+	hosts := []string{s.Host}
+	for _, p := range s.Peers {
+		hosts = append(hosts, p.Name)
+	}
+	return map[string]any{"host": s.Host, "home": home, "claudeTheme": theme, "hosts": hosts, "peers": s.fleet.statuses()}
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -196,12 +204,28 @@ func (s *Server) transcript(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) live(w http.ResponseWriter, r *http.Request) {
-	list, err := s.M.Live(r.Context())
+	list, err := s.liveAll(r.Context(), r.URL.Query().Get("local") != "")
 	if err != nil {
 		fail(w, err)
 		return
 	}
 	reply(w, list)
+}
+
+func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Session, error) {
+	list, err := s.M.Live(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i := range list {
+		list[i].Host = s.Host
+	}
+	if localOnly || len(s.Peers) == 0 {
+		return list, nil
+	}
+	list = append(list, s.fleet.gather(ctx, "/api/sessions?local=1")...)
+	sessions.Sort(list)
+	return list, nil
 }
 
 func (s *Server) history(w http.ResponseWriter, r *http.Request) {
@@ -210,7 +234,41 @@ func (s *Server) history(w http.ResponseWriter, r *http.Request) {
 	if limit <= 0 {
 		limit = 100
 	}
-	reply(w, s.M.History(q.Get("q"), q.Get("dir"), limit))
+	local := s.M.History(q.Get("q"), q.Get("dir"), limit)
+	for i := range local {
+		local[i].Host = s.Host
+	}
+	if q.Get("local") != "" || len(s.Peers) == 0 {
+		reply(w, local)
+		return
+	}
+	q.Set("local", "1")
+	q.Set("limit", strconv.Itoa(limit))
+	reply(w, mergeHistory([][]sessions.Session{local, s.fleet.gather(r.Context(), "/api/history?"+q.Encode())}, limit))
+}
+
+func (s *Server) route(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(s.Peers) == 0 || !strings.HasPrefix(r.URL.Path, "/api/") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		parts := strings.Split(r.URL.Path, "/")
+		host := r.URL.Query().Get("host")
+		if host == "" && len(parts) >= 4 && parts[2] == "sessions" {
+			host = s.fleet.ownerOf(parts[3])
+		}
+		p := s.fleet.peer(host)
+		if p == nil || host == s.Host {
+			next.ServeHTTP(w, r)
+			return
+		}
+		attachID := ""
+		if len(parts) == 5 && parts[4] == "attach" {
+			attachID = parts[3]
+		}
+		s.fleet.proxy(w, r, p, attachID)
+	})
 }
 
 func (s *Server) start(w http.ResponseWriter, r *http.Request) {
@@ -390,7 +448,7 @@ func (s *Server) poll() {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		list, err := s.M.Live(ctx)
+		list, err := s.liveAll(ctx, false)
 		cancel()
 		if err != nil {
 			log.Printf("poll: %v", err)
@@ -424,7 +482,7 @@ func (s *Server) notify(list []sessions.Session) {
 	}
 	for _, x := range list {
 		was, ok := prev[x.SessionID]
-		if !ok || was == x.State || s.Term.Viewing(x.ID) {
+		if !ok || was == x.State || s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) {
 			continue
 		}
 		m := push.Message{Title: x.Title, Tag: x.SessionID, URL: "/#/s/" + x.SessionID}

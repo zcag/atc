@@ -41,7 +41,7 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc ls [-json]                 live sessions, most urgent first
   atc attach <session>           take over this terminal; Ctrl+Z detaches
   atc history [-json] [query]    past conversations, newest first
-  atc new [-n name] [dir] [prompt...]
+  atc new [-n name] [-host machine] [dir] [prompt...]
       dir defaults to the current dir, with your home written as ~ so it
       maps onto the same path under the server's home
   atc resume <session>           bring a stopped or past session back
@@ -144,6 +144,9 @@ func serve(args []string) error {
 		},
 		Roots: roots,
 	}
+	if srv.Peers, err = server.LoadPeers(filepath.Join(client.ConfigDir(), "peers.json")); err != nil {
+		return err
+	}
 	if srv.Push, err = push.Open(client.ConfigDir(), cmp.Or(os.Getenv("ATC_PUSH_CONTACT"), "https://github.com/zcag/atc")); err != nil {
 		return err
 	}
@@ -210,6 +213,7 @@ func hist(args []string) error {
 func newSession(args []string) error {
 	fs := flag.NewFlagSet("new", flag.ExitOnError)
 	name := fs.String("n", "", "session name")
+	host := fs.String("host", "", "machine to start it on, when the server lists several")
 	fs.Parse(args)
 	rest := fs.Args()
 	dir := ""
@@ -219,7 +223,7 @@ func newSession(args []string) error {
 	if dir == "" {
 		dir = tildePWD()
 	}
-	id, err := client.Load().Start(dir, *name, strings.Join(rest, " "))
+	id, err := client.Load().StartOn(*host, dir, *name, strings.Join(rest, " "))
 	if err != nil {
 		return err
 	}
@@ -384,7 +388,10 @@ func printRows(list []sessions.Session) {
 		if s.Pinned {
 			tags = append(tags, "pinned")
 		}
-		where := strings.Replace(s.Cwd, home, "~", 1)
+		where := sessions.Tilde(s.Cwd, home)
+		if s.Host != "" && len(hostsOf(list)) > 1 {
+			where = s.Host + ":" + where
+		}
 		if s.Branch != "" && s.Branch != "HEAD" {
 			where += " · " + s.Branch
 		}
@@ -394,6 +401,14 @@ func printRows(list []sessions.Session) {
 			fmt.Printf("%17s%s\n", "", paint("2", "“"+clip(oneLine(s.LastPrompt), 70)+"”"))
 		}
 	}
+}
+
+func hostsOf(list []sessions.Session) map[string]bool {
+	m := map[string]bool{}
+	for _, s := range list {
+		m[s.Host] = true
+	}
+	return m
 }
 
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }

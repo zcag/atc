@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ const (
 
 type Session struct {
 	SessionID      string    `json:"sessionId"`
+	Host           string    `json:"host,omitempty"`
 	ID             string    `json:"id,omitempty"`
 	Kind           string    `json:"kind"`
 	State          string    `json:"state"`
@@ -71,7 +73,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		s.Title = first(m.Store.Get(a.SessionID).Name, s.Title, a.Name, base(s.Cwd))
 		out = append(out, s)
 	}
-	sort.SliceStable(out, func(i, j int) bool { return less(out[i], out[j]) })
+	Sort(out)
 	return out, nil
 }
 
@@ -123,6 +125,10 @@ func state(a claude.Agent) string {
 	return first(a.State, a.Status)
 }
 
+func Sort(list []Session) {
+	sort.SliceStable(list, func(i, j int) bool { return less(list[i], list[j]) })
+}
+
 var rank = map[string]int{NeedsYou: 0, YourTurn: 1, Working: 2, Stopped: 3, Past: 4}
 
 func less(a, b Session) bool {
@@ -157,6 +163,26 @@ func (s Session) Age() string {
 		return fmt.Sprintf("%dh", int(d.Hours()))
 	}
 	return fmt.Sprintf("%dd", int(d.Hours()/24))
+}
+
+var homeDir = regexp.MustCompile(`^/(home|Users)/[^/]+(/|$)`)
+
+func Tilde(p, home string) string {
+	switch {
+	case p == "":
+		return ""
+	case home != "" && p == home:
+		return "~"
+	case home != "" && strings.HasPrefix(p, home+"/"):
+		return "~/" + p[len(home)+1:]
+	}
+	if m := homeDir.FindString(p); m != "" {
+		if rest := strings.TrimPrefix(p[len(m):], "/"); rest != "" {
+			return "~/" + rest
+		}
+		return "~"
+	}
+	return p
 }
 
 func base(p string) string {
