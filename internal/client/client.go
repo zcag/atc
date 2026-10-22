@@ -97,14 +97,21 @@ func (c *Client) do(method, path string, body, out any) error {
 	return json.NewDecoder(res.Body).Decode(out)
 }
 
-func (c *Client) ServerHome() string {
-	var me struct{ Home string }
-	if c.do("GET", "/api/me", nil, &me) != nil || me.Home == "" {
-		h, _ := os.UserHomeDir()
-		return h
-	}
-	return me.Home
+type Me struct {
+	Host  string   `json:"host"`
+	Home  string   `json:"home"`
+	Hosts []string `json:"hosts"`
 }
+
+func (c *Client) Me() Me {
+	var me Me
+	if c.do("GET", "/api/me", nil, &me) != nil || me.Home == "" {
+		me.Home, _ = os.UserHomeDir()
+	}
+	return me
+}
+
+func (c *Client) ServerHome() string { return c.Me().Home }
 
 func (c *Client) Live() (list []sessions.Session, err error) {
 	return list, c.do("GET", "/api/sessions", nil, &list)
@@ -120,7 +127,13 @@ type Dir struct {
 	Recent bool   `json:"recent"`
 }
 
-func (c *Client) Dirs() (list []Dir, err error) { return list, c.do("GET", "/api/dirs", nil, &list) }
+func (c *Client) Dirs(host string) (list []Dir, err error) {
+	path := "/api/dirs"
+	if host != "" {
+		path += "?host=" + url.QueryEscape(host)
+	}
+	return list, c.do("GET", path, nil, &list)
+}
 
 type idReply struct {
 	ID string `json:"id"`

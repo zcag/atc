@@ -28,6 +28,7 @@ const (
 	newDir
 	newName
 	newPrompt
+	newHost
 )
 
 const rowH = 4
@@ -79,13 +80,15 @@ type model struct {
 	down       string
 	want       string
 	home       string
+	hosts      []string
+	host       string
 }
 
 func Run(c *client.Client) error {
-	home := c.ServerHome()
+	me := c.Me()
 	ti := textinput.New()
 	ti.Prompt = ""
-	p := tea.NewProgram(model{c: c, ti: ti, home: home}, tea.WithAltScreen())
+	p := tea.NewProgram(model{c: c, ti: ti, home: me.Home, hosts: me.Hosts}, tea.WithAltScreen())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go subscribe(ctx, c, p)
@@ -379,9 +382,11 @@ func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.filter = ""
 	case "n":
-		m.dir, m.name, m.dirCur = "", "", 0
-		cmd := m.edit(newDir, "", "type to filter, or a path like ~/src/app")
-		return m, tea.Batch(cmd, func() tea.Msg { l, err := m.c.Dirs(); return dirsMsg{l, err} })
+		m.dir, m.name, m.host, m.dirCur, m.dirs = "", "", "", 0, nil
+		if len(m.hosts) > 1 {
+			return m, m.edit(newHost, "", "which machine")
+		}
+		return m, m.pickDir()
 	case "enter":
 		if ok {
 			return m.open(s)
@@ -429,6 +434,8 @@ func (m model) typing(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		d := map[string]int{"up": -1, "down": 1}[k.String()]
 		if m.in == newDir {
 			m.dirCur = max(0, min(m.dirCur+d, len(m.dirChoices())-1))
+		} else if m.in == newHost {
+			m.dirCur = max(0, min(m.dirCur+d, len(m.hostChoices())-1))
 		} else if m.in == filtering || m.in == searching {
 			m.cur[m.tab()] += d
 			m.clamp()
@@ -448,7 +455,7 @@ func (m model) typing(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			seq := m.seq
 			cmd = tea.Batch(cmd, tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg { return debounce(seq) }))
 		}
-	case newDir:
+	case newDir, newHost:
 		m.dirCur = 0
 	}
 	m.clamp()
@@ -462,6 +469,13 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 		m.in = noInput
 		s := m.target
 		return m, m.do("renamed to "+v, func() error { return m.c.Patch(s.SessionID, map[string]any{"name": v}) })
+	case newHost:
+		ch := m.hostChoices()
+		if m.dirCur >= len(ch) {
+			return m, nil
+		}
+		m.host = ch[m.dirCur]
+		return m, m.pickDir()
 	case newDir:
 		ch := m.dirChoices()
 		if m.dirCur >= len(ch) {
@@ -474,11 +488,15 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 		return m, m.edit(newPrompt, "", "optional, e.g. fix the failing test")
 	case newPrompt:
 		m.in = noInput
-		dir, name := m.dir, m.name
-		m.status = "starting a session in " + dir + "…"
+		dir, name, host := m.dir, m.name, m.host
+		where := dir
+		if host != "" {
+			where = host + ":" + dir
+		}
+		m.status = "starting a session in " + where + "…"
 		return m, func() tea.Msg {
-			id, err := m.c.Start(dir, name, v)
-			return doneMsg{status: "started " + id + " in " + dir, sel: id, err: err}
+			id, err := m.c.StartOn(host, dir, name, v)
+			return doneMsg{status: "started " + id + " in " + where, sel: id, err: err}
 		}
 	}
 	m.in = noInput
@@ -487,6 +505,24 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 }
 
 func (m model) tilde(p string) string { return sessions.Tilde(p, m.home) }
+
+func (m *model) pickDir() tea.Cmd {
+	m.dirCur = 0
+	host := m.host
+	return tea.Batch(m.edit(newDir, "", "type to filter, or a path like ~/src/app"),
+		func() tea.Msg { l, err := m.c.Dirs(host); return dirsMsg{l, err} })
+}
+
+func (m model) hostChoices() []string {
+	q := strings.ToLower(strings.TrimSpace(m.ti.Value()))
+	var out []string
+	for _, h := range m.hosts {
+		if strings.Contains(strings.ToLower(h), q) {
+			out = append(out, h)
+		}
+	}
+	return out
+}
 
 func (m model) dirChoices() []string {
 	q := strings.TrimSpace(m.ti.Value())
@@ -636,8 +672,10 @@ func (m model) header() string {
 	if n := counts[sessions.Working]; n > 0 {
 		right = append(right, plain.Foreground(looks[sessions.Working].color).Render(fmt.Sprintf("%d working", n)))
 	}
-	if !m.online {
+	if !m.online && m.down != "" {
 		right = append(right, plain.Foreground(red).Render("offline"))
+	} else if !m.online {
+		right = append(right, dim.Render("connecting…"))
 	}
 	r := strings.Join(right, dim.Render(" · ")) + " "
 	return left + strings.Repeat(" ", max(1, m.w-lipgloss.Width(left)-lipgloss.Width(r))) + r
@@ -648,7 +686,7 @@ func (m model) footer() string {
 	switch {
 	case m.in != noInput:
 		keys = [][2]string{{"↵", "ok"}, {"esc", "cancel"}}
-		if m.in == newDir || m.in == filtering || m.in == searching {
+		if m.in == newDir || m.in == newHost || m.in == filtering || m.in == searching {
 			keys = append(keys, [2]string{"↑↓", "choose"})
 		}
 	case m.history:
@@ -685,8 +723,21 @@ func (m model) newView() []string {
 		}
 		return "  " + dim.Render(fmt.Sprintf("%-8s", label)) + val
 	}
-	out := []string{"", "  " + bold.Render("New session"), "",
-		field("dir", m.dir, m.in == newDir)}
+	out := []string{"", "  " + bold.Render("New session"), ""}
+	if len(m.hosts) > 1 {
+		out = append(out, field("machine", m.host, m.in == newHost))
+	}
+	if m.in == newHost {
+		for i, h := range m.hostChoices() {
+			if i == m.dirCur {
+				out = append(out, plain.Foreground(accent).Render("  ▌ ")+bold.Render(h))
+			} else {
+				out = append(out, "    "+h)
+			}
+		}
+		return out
+	}
+	out = append(out, field("dir", m.dir, m.in == newDir))
 	if m.in == newDir {
 		recent := map[string]bool{}
 		for _, d := range m.dirs {
@@ -733,7 +784,7 @@ func (m model) View() string {
 	}
 	var body []string
 	switch {
-	case m.in == newDir || m.in == newName || m.in == newPrompt:
+	case m.in == newDir || m.in == newName || m.in == newPrompt || m.in == newHost:
 		body = m.newView()
 	case len(m.rows()) == 0:
 		msg := "no sessions. n starts one"
