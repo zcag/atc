@@ -22,7 +22,7 @@ install-mac: check build
 JAVA_HOME ?= /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 ANDROID_HOME ?= $(HOME)/Library/Android/sdk
 APP_HOST ?= desktop
-APP_DIR ?= ~/.local/share/atc/app
+APP_DIR ?= .local/share/atc/app
 
 android:
 	cd android && JAVA_HOME="$(JAVA_HOME)" ANDROID_HOME="$(ANDROID_HOME)" ./gradlew -q testReleaseUnitTest assembleRelease
