@@ -57,7 +57,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/sessions/{sid}", s.patch)
 	mux.HandleFunc("GET /api/sessions/{sid}/transcript", s.transcript)
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) { s.Term.Serve(w, r, r.PathValue("id")) })
-	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, map[string]string{"host": s.Host}) })
+	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.Handle("GET /", s.static())
 	return s.auth(mux)
@@ -99,6 +99,19 @@ func (s *Server) setCookie(w http.ResponseWriter, tok string) {
 		SameSite: http.SameSiteStrictMode, MaxAge: 400 * 24 * 3600})
 }
 
+func (s *Server) me() map[string]string {
+	home, _ := os.UserHomeDir()
+	var cfg struct{ Theme string }
+	if b, err := os.ReadFile(filepath.Join(home, ".claude.json")); err == nil {
+		json.Unmarshal(b, &cfg)
+	}
+	theme := "dark"
+	if strings.HasPrefix(cfg.Theme, "light") {
+		theme = "light"
+	}
+	return map[string]string{"host": s.Host, "home": home, "claudeTheme": theme}
+}
+
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var req struct{ Token string }
 	json.NewDecoder(r.Body).Decode(&req)
@@ -108,7 +121,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setCookie(w, strings.TrimSpace(req.Token))
-	reply(w, map[string]string{"host": s.Host})
+	reply(w, s.me())
 }
 
 func (s *Server) static() http.Handler {

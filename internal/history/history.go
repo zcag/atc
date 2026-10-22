@@ -25,6 +25,7 @@ type Transcript struct {
 	Branch         string    `json:"branch"`
 	Model          string    `json:"model"`
 	PermissionMode string    `json:"permissionMode"`
+	PromptAt       time.Time `json:"promptAt,omitzero"`
 	Context        int       `json:"context"`
 	Updated        time.Time `json:"updated"`
 	Size           int64     `json:"size"`
@@ -40,6 +41,7 @@ type entry struct {
 	AgentName      string    `json:"agentName"`
 	LastPrompt     string    `json:"lastPrompt"`
 	PermissionMode string    `json:"permissionMode"`
+	PromptID       string    `json:"promptId"`
 	Message        struct {
 		Model string `json:"model"`
 		Usage struct {
@@ -94,9 +96,9 @@ func read(path string, st os.FileInfo) *Transcript {
 		Path:      path, Updated: st.ModTime(), Size: st.Size(),
 	}
 	t.StartCwd = headCwd(path)
-	for _, n := range []int64{64 << 10, 1 << 20} {
+	for _, n := range []int64{64 << 10, 1 << 20, 4 << 20} {
 		parseTail(path, n, t)
-		if t.Title != "" || n >= st.Size() {
+		if t.Title != "" && !t.PromptAt.IsZero() || n >= st.Size() {
 			break
 		}
 	}
@@ -163,6 +165,10 @@ func apply(t *Transcript, e *entry, custom *string) {
 		t.LastPrompt = e.LastPrompt
 	case "permission-mode":
 		t.PermissionMode = e.PermissionMode
+	case "user":
+		if e.PromptID != "" && !e.Timestamp.IsZero() {
+			t.PromptAt = e.Timestamp
+		}
 	case "assistant":
 		if e.Message.Model != "" && e.Message.Model != "<synthetic>" {
 			t.Model = e.Message.Model
