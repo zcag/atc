@@ -469,7 +469,32 @@ const KEYS = [
   ["↑", "\x1b[A"], ["↓", "\x1b[B"], ["←", "\x1b[D"], ["→", "\x1b[C"], ["/", "/"], ["^C", "\x03"],
 ];
 
+function useKeyboard() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!touch) return;
+    let tallest = 0;
+    const check = () => {
+      const h = window.visualViewport?.height || innerHeight;
+      tallest = Math.max(tallest, h);
+      setOpen(h < tallest - 150);
+    };
+    const reset = () => { tallest = 0; setTimeout(check, 300); };
+    check();
+    window.visualViewport?.addEventListener("resize", check);
+    addEventListener("resize", check);
+    addEventListener("orientationchange", reset);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", check);
+      removeEventListener("resize", check);
+      removeEventListener("orientationchange", reset);
+    };
+  }, []);
+  return open;
+}
+
 function Term({ s, say, voice, onVoiceOff }) {
+  const keyboard = useKeyboard();
   const box = useRef();
   const api_ = useRef({});
   const picker = useRef();
@@ -664,7 +689,7 @@ function Term({ s, say, voice, onVoiceOff }) {
           </div>
         </div>`}
       ${voice && !cover && html`<${VoiceBar} s=${s} say=${say} send=${(d) => api_.current.send?.(d)} onClose=${onVoiceOff} />`}
-      <div class="keys" onPointerDown=${(e) => e.preventDefault()}>
+      <div class="keys ${keyboard ? "show" : ""}" onPointerDown=${(e) => e.preventDefault()}>
         ${KEYS.map(([label, seq]) => html`<button class=${label === "ctrl" && ctrl ? "on" : ""} onClick=${() => key(label, seq)}>${label}</button>`)}
         <button onClick=${() => picker.current.click()}>file</button>
       </div>
