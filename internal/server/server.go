@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
@@ -56,6 +57,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/sessions/{id}", s.act(s.M.CLI.Remove))
 	mux.HandleFunc("PATCH /api/sessions/{sid}", s.patch)
 	mux.HandleFunc("GET /api/sessions/{sid}/transcript", s.transcript)
+	mux.HandleFunc("POST /api/sessions/{sid}/upload", s.upload)
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) { s.Term.Serve(w, r, r.PathValue("id")) })
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
@@ -134,6 +136,39 @@ func (s *Server) static() http.Handler {
 		}
 		files.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<20)
+	f, hdr, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer f.Close()
+	cache, _ := os.UserCacheDir()
+	dir := filepath.Join(cache, "atc", "uploads", filepath.Base(r.PathValue("sid")))
+	name := strings.Map(func(c rune) rune {
+		if c == '/' || c == '\\' || c < ' ' {
+			return '_'
+		}
+		return c
+	}, filepath.Base(hdr.Filename))
+	if name == "" || name == "." {
+		name = "upload"
+	}
+	path := filepath.Join(dir, time.Now().Format("150405")+"-"+name)
+	os.MkdirAll(dir, 0o755)
+	out, err := os.Create(path)
+	if err == nil {
+		_, err = io.Copy(out, f)
+		out.Close()
+	}
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]string{"path": path})
 }
 
 func (s *Server) transcript(w http.ResponseWriter, r *http.Request) {

@@ -287,7 +287,7 @@ function Session({ s, say, live }) {
     </div>
     ${mode === "term"
       ? canAttach
-        ? html`<${Term} key=${s.id} s=${s} />`
+        ? html`<${Term} key=${s.id} s=${s} say=${say} />`
         : html`<div class="stage"><div class="cover">${Unattachable(s, resume, busy, setMode)}</div></div>`
       : html`<${Transcript} s=${s} />`}
   `;
@@ -342,9 +342,27 @@ const KEYS = [
   ["↑", "\x1b[A"], ["↓", "\x1b[B"], ["←", "\x1b[D"], ["→", "\x1b[C"], ["/", "/"], ["^C", "\x03"],
 ];
 
-function Term({ s }) {
+function Term({ s, say }) {
   const box = useRef();
   const api_ = useRef({});
+  const picker = useRef();
+  const [dropping, setDropping] = useState(false);
+  const upload = useRef();
+  upload.current = async (files) => {
+    for (const f of files) {
+      const fd = new FormData();
+      fd.append("file", f, f.name || "pasted.png");
+      try {
+        const res = await fetch(`/api/sessions/${s.sessionId}/upload`, { method: "POST", body: fd });
+        if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+        const { path } = await res.json();
+        api_.current.send?.((/\s/.test(path) ? `"${path}"` : path) + " ");
+      } catch (e) {
+        say(`Upload failed: ${e.message}`);
+      }
+    }
+    api_.current.focus?.();
+  };
   const [gen, setGen] = useState(0);
   const [cover, setCover] = useState(null);
   const [foreign, setForeign] = useState(null);
@@ -457,6 +475,14 @@ function Term({ s }) {
     el.addEventListener("touchstart", tstart, { passive: true });
     el.addEventListener("touchmove", tmove, { passive: false });
     el.addEventListener("touchend", tend);
+    const paste = (e) => {
+      const files = [...(e.clipboardData?.files || [])];
+      if (!files.length) return;
+      e.preventDefault();
+      e.stopPropagation();
+      upload.current(files);
+    };
+    el.addEventListener("paste", paste, true);
 
     api_.current = { send, focus: () => term.focus(), claim: () => ctl({ type: "claim" }) };
     if (!touch) term.focus();
@@ -474,8 +500,15 @@ function Term({ s }) {
     if (!touch) api_.current.focus?.();
   };
 
+  const drop = {
+    onDragOver: (e) => { if (e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); setDropping(true); } },
+    onDragLeave: () => setDropping(false),
+    onDrop: (e) => { e.preventDefault(); setDropping(false); upload.current([...e.dataTransfer.files]); },
+  };
   return html`
-    <div class="stage" style=${`--term-bg: ${PALETTE[CLAUDE_THEME].background}`}>
+    <div class="stage ${dropping ? "dropping" : ""}" style=${`--term-bg: ${PALETTE[CLAUDE_THEME].background}`} ...${drop}>
+      <input type="file" multiple hidden ref=${picker} onChange=${(e) => { upload.current([...e.target.files]); e.target.value = ""; }} />
+      <button class="attach" title="Attach a file (or paste or drop one)" aria-label="Attach a file" onClick=${() => picker.current.click()}>Attach</button>
       <div class="term" ref=${box}></div>
       ${foreign && !cover && html`
         <div class="notice">
@@ -495,6 +528,7 @@ function Term({ s }) {
         </div>`}
       <div class="keys" onPointerDown=${(e) => e.preventDefault()}>
         ${KEYS.map(([label, seq]) => html`<button class=${label === "ctrl" && ctrl ? "on" : ""} onClick=${() => key(label, seq)}>${label}</button>`)}
+        <button onClick=${() => picker.current.click()}>file</button>
       </div>
     </div>
   `;
