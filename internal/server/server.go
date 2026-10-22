@@ -564,22 +564,28 @@ func (s *Server) pushUnregister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) assist(w http.ResponseWriter, r *http.Request) {
-	list, err := s.M.Live(r.Context())
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	for _, x := range list {
-		if x.Kind != "background" || (x.Name != "assistant" && s.M.Store.Get(x.SessionID).Name != "assistant") {
-			continue
-		}
-		if x.Attachable {
-			reply(w, map[string]string{"id": x.ID})
+	if r.URL.Query().Get("new") == "" {
+		list, err := s.M.Live(r.Context())
+		if err != nil {
+			fail(w, err)
 			return
 		}
-		id, err := s.M.CLI.Resume(r.Context(), cmp.Or(x.StartCwd, x.Cwd), x.SessionID)
-		s.done(w, id, err)
-		return
+		var last *sessions.Session
+		for i, x := range list {
+			if x.Kind == "background" && (x.Name == "assistant" || s.M.Store.Get(x.SessionID).Name == "assistant") &&
+				(last == nil || x.Last().After(last.Last())) {
+				last = &list[i]
+			}
+		}
+		if last != nil && last.Attachable {
+			reply(w, map[string]string{"id": last.ID})
+			return
+		}
+		if last != nil {
+			id, err := s.M.CLI.Resume(r.Context(), cmp.Or(last.StartCwd, last.Cwd), last.SessionID)
+			s.done(w, id, err)
+			return
+		}
 	}
 	dir, err := expand(cmp.Or(s.AssistDir, "~"))
 	if err != nil {

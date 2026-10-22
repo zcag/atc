@@ -106,25 +106,24 @@ function App() {
     fetch("/app/version.json").then((r) => (r.ok ? r.json() : null)).then((v) => v && v.versionCode > APP_VERSION && setStale(v.versionName), () => {});
   }, [me]);
 
+  const [assisting, setAssisting] = useState(location.hash === "#/assist");
   useEffect(() => {
-    if (!me) return;
-    const assist = async () => {
-      if (location.hash !== "#/assist") return;
-      setStarting(true);
-      try {
-        const r = await api("/api/assist", { method: "POST" });
-        AUTO_VOICE = true;
-        go(r.id);
-      } catch (e) {
-        say(`Could not open the assistant: ${e.message}`);
-        go(null);
-      }
-      setTimeout(() => setStarting(false), 15000);
-    };
-    assist();
-    addEventListener("hashchange", assist);
-    return () => removeEventListener("hashchange", assist);
-  }, [me]);
+    const f = () => setAssisting(location.hash === "#/assist");
+    addEventListener("hashchange", f);
+    return () => removeEventListener("hashchange", f);
+  }, []);
+  const talk = async (fresh) => {
+    setStarting(true);
+    try {
+      const r = await api(`/api/assist${fresh ? "?new=1" : ""}`, { method: "POST" });
+      AUTO_VOICE = true;
+      go(r.id);
+    } catch (e) {
+      say(`Could not open the assistant: ${e.message}`);
+      go(null);
+    }
+    setTimeout(() => setStarting(false), 15000);
+  };
 
   useEffect(() => {
     const n = (live || []).filter((s) => s.state === "needs-you" && !s.parked).length;
@@ -214,6 +213,7 @@ function App() {
       </main>
     </div>
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
+    ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
     ${stale && html`<div class="appbar" role="status">
       <span>A newer atc app is available (${stale}).</span>
@@ -235,6 +235,30 @@ function App() {
           </dl>
         </div>
       </div>`}
+  `;
+}
+
+function Assist({ live, busy, onTalk, onOpen }) {
+  const open = (live || []).filter((s) => !s.parked);
+  const count = (st) => open.filter((s) => s.state === st).length;
+  const summary = [["needs-you", "needs you"], ["your-turn", "your turn"], ["working", "working"]]
+    .map(([st, word]) => count(st) && `${count(st)} ${word}`).filter(Boolean).join(" · ") || "Nothing open";
+  const top = open.filter((s) => s.state !== "stopped").slice(0, 3);
+  const last = open.find((s) => s.name === "assistant" || s.title === "assistant");
+  return html`
+    <div class="assist">
+      <button class="choice talk" disabled=${busy} onClick=${() => onTalk(true)}>
+        <span class="big">${MIC}</span>
+        <span class="what">${busy ? "Starting…" : "New voice session"}</span>
+        <span class="sub">Talk to Claude in a fresh session</span>
+      </button>
+      ${last && html`<button class="link" disabled=${busy} onClick=${() => onTalk(false)}>Continue the last voice session</button>`}
+      <button class="choice" onClick=${onOpen}>
+        <span class="what">Open atc</span>
+        <span class="sub">${live ? summary : "Loading…"}</span>
+        ${top.map((s) => html`<span class="row"><i class=${s.state}></i>${s.title}</span>`)}
+      </button>
+    </div>
   `;
 }
 

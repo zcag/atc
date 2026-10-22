@@ -275,4 +275,22 @@ button { cursor: pointer; }
 .keyhelp dt { font: 600 13px var(--mono); white-space: nowrap; }
 .keyhelp dd { margin: 0; color: var(--dim); font-size: 14px; }
 .appbar { position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%); z-index: 31; display: flex; gap: 10px; align-items: center; background: var(--strip); border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 8px 14px; font-size: 14px; max-width: calc(100% - 24px); box-shadow: 0 6px 24px rgba(0,0,0,.18); }
+.assist {
+  position: fixed; inset: 0; z-index: 25; background: var(--board); display: flex; flex-direction: column; gap: 14px;
+  justify-content: center; padding: max(24px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom));
+}
+.choice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left;
+  border: 1px solid var(--line); background: var(--strip); border-radius: 18px; padding: 22px 22px 20px;
+}
+.choice.talk { background: var(--work); border-color: var(--work); color: #fff; min-height: 38dvh; justify-content: flex-end; }
+.choice.talk .big { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,.18); display: grid; place-items: center; margin-bottom: auto; }
+.choice .what { font-size: 24px; font-weight: 600; }
+.choice .sub { font-size: 15px; opacity: .8; }
+.choice .row { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--dim); max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.choice .row i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--stop); }
+.choice .row i.needs-you { background: var(--needs); }
+.choice .row i.your-turn { background: var(--turn); }
+.choice .row i.working { background: var(--work); }
+.link { border: 0; background: none; color: var(--dim); font-size: 15px; text-decoration: underline; align-self: center; padding: 4px; }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 30; background: var(--ink); color: var(--board); padding: 8px 14px; border-radius: 8px; font-size: 14px; max-width: calc(100% - 32px); }
