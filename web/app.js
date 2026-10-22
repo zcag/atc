@@ -492,6 +492,8 @@ function Term({ s, say, voice, onVoiceOff }) {
   };
   const [gen, setGen] = useState(0);
   const [cover, setCover] = useState(null);
+  const [retrying, setRetrying] = useState(false);
+  const tries = useRef(0);
   const [foreign, setForeign] = useState(null);
   const [ctrl, setCtrl] = useState(false);
   const ctrlRef = useRef(false);
@@ -565,7 +567,14 @@ function Term({ s, say, voice, onVoiceOff }) {
         setCover("detached");
       }
     };
-    ws.onclose = () => !exited && setCover("lost");
+    ws.onopen = () => { tries.current = 0; setRetrying(false); };
+    ws.onclose = () => {
+      if (exited) return;
+      if (tries.current >= 20) return setCover("lost");
+      const wait = Math.min(1000 * 2 ** tries.current++, 8000);
+      setRetrying(true);
+      setTimeout(() => setGen((g) => g + 1), wait);
+    };
     ws.onerror = () => {};
 
     term.onData((d) => {
@@ -637,7 +646,8 @@ function Term({ s, say, voice, onVoiceOff }) {
       <input type="file" multiple hidden ref=${picker} onChange=${(e) => { upload.current([...e.target.files]); e.target.value = ""; }} />
       <button class="attach" title="Attach a file (or paste or drop one)" aria-label="Attach a file" onClick=${() => picker.current.click()}>Attach</button>
       <div class="term" ref=${box}></div>
-      ${foreign && !cover && html`
+      ${retrying && !cover && html`<div class="notice"><span>Reconnecting…</span></div>`}
+      ${foreign && !cover && !retrying && html`
         <div class="notice">
           <span>Sized for another screen</span>
           <button class="btn" onClick=${() => api_.current.claim?.()}>Fit to this one</button>
@@ -648,7 +658,7 @@ function Term({ s, say, voice, onVoiceOff }) {
             <p class="h">${cover === "detached" ? "Detached" : "Connection lost"}</p>
             <p>${cover === "detached" ? "The terminal closed. The session keeps running." : "The link to the server dropped. The session keeps running."}</p>
             <div class="row">
-              <button class="btn primary" onClick=${() => setGen(gen + 1)}>Reopen</button>
+              <button class="btn primary" onClick=${() => { tries.current = 0; setGen(gen + 1); }}>Reopen</button>
               <button class="btn" onClick=${() => go(null)}>Back to list</button>
             </div>
           </div>
