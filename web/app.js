@@ -131,6 +131,14 @@ function App() {
     setTimeout(() => setStarting(false), 15000);
   };
 
+  const warmed = useRef(false);
+  useEffect(() => {
+    if (!live || warmed.current) return;
+    warmed.current = true;
+    const likely = live.filter((x) => x.attachable && !x.parked && (x.state === "needs-you" || x.state === "your-turn")).slice(0, 2);
+    setTimeout(() => likely.forEach(prewarm), 1200);
+  }, [live]);
+
   useEffect(() => {
     if (!live) return;
     if (APP?.setSessions) {
