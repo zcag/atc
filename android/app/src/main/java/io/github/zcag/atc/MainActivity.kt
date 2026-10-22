@@ -3,6 +3,7 @@ package io.github.zcag.atc
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.app.KeyguardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -113,6 +114,19 @@ class MainActivity : Activity() {
         val assist = intent.getBooleanExtra(EXTRA_ASSIST, false) || intent.action == Intent.ACTION_ASSIST
         setShowWhenLocked(assist)
         setTurnScreenOn(assist)
+        val keyguard = getSystemService(KeyguardManager::class.java)
+        if (assist && keyguard.isKeyguardLocked) {
+            keyguard.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
+                override fun onDismissSucceeded() = open(intent, true)
+                override fun onDismissCancelled() = finish()
+                override fun onDismissError() = finish()
+            })
+            return
+        }
+        open(intent, assist)
+    }
+
+    private fun open(intent: Intent, assist: Boolean) {
         val server = prefs.server ?: return setup()
         val path = intent.getStringExtra(EXTRA_PATH) ?: if (assist) "/#/assist" else null
         val w = web
