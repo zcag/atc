@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -78,16 +77,15 @@ type model struct {
 	err        string
 	online     bool
 	down       string
-	since      map[string]time.Time
 	want       string
 	home       string
 }
 
 func Run(c *client.Client) error {
-	home, _ := os.UserHomeDir()
+	home := c.ServerHome()
 	ti := textinput.New()
 	ti.Prompt = ""
-	p := tea.NewProgram(model{c: c, ti: ti, home: home, since: map[string]time.Time{}}, tea.WithAltScreen())
+	p := tea.NewProgram(model{c: c, ti: ti, home: home}, tea.WithAltScreen())
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go subscribe(ctx, c, p)
@@ -264,15 +262,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case liveMsg:
 		prev, _ := m.selected()
 		m.live, m.online, m.down = msg, true, ""
-		now := time.Now()
-		seen := map[string]bool{}
 		for _, s := range m.live {
-			if s.State == sessions.Working {
-				seen[s.SessionID] = true
-				if _, ok := m.since[s.SessionID]; !ok {
-					m.since[s.SessionID] = now
-				}
-			}
 			if m.want != "" && s.ID == m.want {
 				prev, m.want, m.filter = s, "", ""
 			}
@@ -280,11 +270,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for i, s := range m.rows() {
 			if !m.history && s.SessionID == prev.SessionID {
 				m.cur[0] = i
-			}
-		}
-		for k := range m.since {
-			if !seen[k] {
-				delete(m.since, k)
 			}
 		}
 	case downMsg:
@@ -581,8 +566,8 @@ func (m model) row(s sessions.Session, sel bool) []string {
 		look.word = s.State
 	}
 	state := look.glyph + " " + look.word
-	if t, ok := m.since[s.SessionID]; ok && s.State == sessions.Working {
-		state += " " + elapsed(time.Since(t))
+	if s.State == sessions.Working && !s.PromptAt.IsZero() {
+		state += " " + elapsed(time.Since(s.PromptAt))
 	}
 	stateSt := st(plain.Foreground(look.color))
 	if s.State == sessions.Stopped || s.State == sessions.Past {

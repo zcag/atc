@@ -97,6 +97,15 @@ func (c *Client) do(method, path string, body, out any) error {
 	return json.NewDecoder(res.Body).Decode(out)
 }
 
+func (c *Client) ServerHome() string {
+	var me struct{ Home string }
+	if c.do("GET", "/api/me", nil, &me) != nil || me.Home == "" {
+		h, _ := os.UserHomeDir()
+		return h
+	}
+	return me.Home
+}
+
 func (c *Client) Live() (list []sessions.Session, err error) {
 	return list, c.do("GET", "/api/sessions", nil, &list)
 }

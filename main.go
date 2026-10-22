@@ -363,7 +363,7 @@ func printRows(list []sessions.Session) {
 		}
 		return "\033[" + code + "m" + s + "\033[0m"
 	}
-	home, _ := os.UserHomeDir()
+	home := client.Load().ServerHome()
 	for i, s := range list {
 		l, ok := look[s.State]
 		if !ok {
