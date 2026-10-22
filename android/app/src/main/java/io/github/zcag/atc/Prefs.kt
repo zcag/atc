@@ -14,6 +14,9 @@ class Prefs(c: Context) {
     var pin by string()
     var hinted by string()
     var lastCheck by string()
+    var feed by string()
+    var feedAt by string()
+    var feedError by string()
 
     fun pinFor(host: String?) = pin?.split(" ")?.takeIf { it[0] == host }?.get(1)
 

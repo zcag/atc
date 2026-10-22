@@ -28,7 +28,9 @@ class Push : PushService() {
     }
 
     override fun onMessage(message: PushMessage, instance: String) {
-        Note.parse(message.content)?.let { notify(this, it) }
+        val text = String(message.content)
+        if (Feed.parse(text) != null) Live.save(this, text)
+        else Note.parse(message.content)?.let { notify(this, it) }
     }
 
     override fun onRegistrationFailed(reason: FailedReason, instance: String) {
@@ -47,6 +49,8 @@ class Push : PushService() {
     companion object {
         private val syncing = AtomicBoolean()
 
+        private fun key(server: String?, endpoint: String?) = "$server $endpoint widget"
+
         fun start(a: Activity) {
             if (Build.VERSION.SDK_INT >= 33 && a.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
                 a.requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 0)
@@ -60,12 +64,12 @@ class Push : PushService() {
             val p = Prefs(c)
             val server = p.server ?: return
             val endpoint = p.endpoint ?: return
-            if (p.registered == "$server $endpoint" || !syncing.compareAndSet(false, true)) return
+            if (p.registered == key(server, endpoint) || !syncing.compareAndSet(false, true)) return
             thread {
                 try {
-                    val code = Net.post(c, "$server/api/push/register", JSONObject().put("endpoint", endpoint).put("name", Build.MODEL))
+                    val code = Net.post(c, "$server/api/push/register", JSONObject().put("endpoint", endpoint).put("name", Build.MODEL).put("widget", true))
                     when (code) {
-                        in 200..299 -> { p.registered = "$server $endpoint"; p.pushError = null }
+                        in 200..299 -> { p.registered = key(server, endpoint); p.pushError = null }
                         401 -> p.pushError = null
                         else -> p.pushError = "HTTP $code"
                     }
@@ -84,7 +88,7 @@ class Push : PushService() {
         fun status(c: Context): String {
             val p = Prefs(c)
             return when {
-                p.endpoint != null && p.registered == "${p.server} ${p.endpoint}" -> "ok"
+                p.endpoint != null && p.registered == key(p.server, p.endpoint) -> "ok"
                 p.pushError != null -> "error: ${p.pushError}"
                 UnifiedPush.getAckDistributor(c) == null && UnifiedPush.getDistributors(c).isEmpty() -> "no-distributor"
                 else -> "registering"

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="w_bg">#e9ecf1</color>
+    <color name="w_row">#fbfaf5</color>
+    <color name="w_row_line">#d5dae3</color>
+    <color name="w_ink">#1d2533</color>
+    <color name="w_dim">#5d6778</color>
+    <color name="w_faint">#8a93a3</color>
+    <color name="w_press">#14000000</color>
+    <color name="needs">#d63b44</color>
+    <color name="turn">#b7791f</color>
+    <color name="work">#2477d1</color>
+    <color name="on_work">#ffffff</color>
+    <dimen name="widget_radius">20dp</dimen>
+    <dimen name="widget_inner_radius">10dp</dimen>
+    <string name="widget_description">Your Claude sessions at a glance, and a mic to talk to Claude</string>
+    <string name="tile_label">Talk to Claude</string>
+    <string name="refresh">Refresh</string>
+    <string name="widget_loading">Loading</string>
+    <string name="preview_summary">1 needs you · 1 your turn · 1 working</string>
+    <string name="preview_1">Fix the login redirect</string>
+    <string name="preview_1d">needs you · 2m</string>
+    <string name="preview_2">Release notes draft</string>
+    <string name="preview_2d">your turn · 14m</string>
+    <string name="preview_3">Migrate the billing tests</string>
+    <string name="preview_3d">working · 03:41</string>
+</resources>
