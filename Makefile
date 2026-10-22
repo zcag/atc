@@ -20,11 +20,12 @@ install-mac: check build
 	launchctl bootstrap gui/$$(id -u) ~/Library/LaunchAgents/io.github.zcag.atc.plist
 
 JAVA_HOME ?= /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+ANDROID_HOME ?= $(HOME)/Library/Android/sdk
 APP_HOST ?= desktop
 APP_DIR ?= ~/.local/share/atc/app
 
 android:
-	cd android && JAVA_HOME="$(JAVA_HOME)" ./gradlew -q testReleaseUnitTest assembleRelease
+	cd android && JAVA_HOME="$(JAVA_HOME)" ANDROID_HOME="$(ANDROID_HOME)" ./gradlew -q testReleaseUnitTest assembleRelease
 	mkdir -p android/dist
 	cp android/app/build/outputs/apk/release/app-release.apk android/dist/atc.apk
 	n=$$(git rev-list --count HEAD); sum=$$(shasum -a 256 android/dist/atc.apk | cut -d' ' -f1); \
