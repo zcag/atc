@@ -382,6 +382,7 @@ function Strip({ s, sel, cursor }) {
         ${s.branch && s.branch !== "HEAD" && html`<span>${s.branch}</span>`}
         ${s.model && html`<span>${model(s.model)}</span>`}
         ${s.kind === "interactive" && html`<span class="tag">in a terminal</span>`}
+        ${(s.servers || []).slice(0, 2).map((p) => html`<span class="srv" role="link" title=${`Open ${serverURL(s, p)}`} onClick=${(e) => { e.stopPropagation(); openOut(serverURL(s, p)); }}>:${p}</span>`)}
       </div>
       ${s.state === "working" && s.activity
         ? html`<div class="said doing">${s.activity}</div>`
@@ -468,6 +469,8 @@ function Session({ s, say, live }) {
       go(r.id);
     });
   const patch = (body) => act(() => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body }));
+  const outs = useOutputs(s, mode === "out" ? 10000 : 60000);
+  const outCount = outs ? outs.servers.length + outs.files.filter((f) => f.kind !== "text").length + outs.links.length : 0;
 
   return html`
     <div class="head">
@@ -496,6 +499,7 @@ function Session({ s, say, live }) {
       <div class="seg" role="tablist">
         <button class=${mode === "term" ? "on" : ""} onClick=${() => setMode("term")}>Terminal</button>
         <button class=${mode === "chat" ? "on" : ""} onClick=${() => setMode("chat")}>Transcript</button>
+        <button class=${mode === "out" ? "on" : ""} onClick=${() => setMode("out")}>Outputs${outCount > 0 && html`<span class="count ${outs.servers.length ? "live" : ""}">${outCount}</span>`}</button>
       </div>
       <${Menu} busy=${busy} items=${sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) })} />
     </div>
@@ -503,7 +507,7 @@ function Session({ s, say, live }) {
       ? canAttach
         ? html`<${Term} key=${s.id} s=${s} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} />`
         : html`<div class="stage"><div class="cover">${Unattachable(s, resume, busy, setMode)}</div></div>`
-      : html`<${Transcript} s=${s} />`}
+      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} />` : html`<${Transcript} s=${s} />`}
   `;
 }
 
@@ -1031,6 +1035,157 @@ function VoiceBar({ s, say, send, onClose }) {
       </div>
     </div>
   `;
+}
+
+const serverURL = (s, port) => `http://${s.host || location.hostname}:${port}/`;
+
+function openOut(url) {
+  const abs = new URL(url, location.href).href;
+  if (APP?.openExternal) return APP.openExternal(abs);
+  if (APP && new URL(abs).host !== location.host) return void (location.href = abs);
+  window.open(abs, "_blank", "noopener");
+}
+
+function useOutputs(s, every) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    setData(null);
+  }, [s.sessionId]);
+  useEffect(() => {
+    let live = true;
+    const load = () => api(`/api/sessions/${s.sessionId}/outputs`).then(
+      (d) => live && setData({ servers: d.servers || [], links: d.links || [], files: d.files || [] }),
+      () => live && setData((d) => d || { servers: [], links: [], files: [], failed: true }));
+    load();
+    const t = setInterval(load, every);
+    return () => { live = false; clearInterval(t); };
+  }, [s.sessionId, every]);
+  return data;
+}
+
+const agoLong = (at) => { const a = ago({ updated: at }); return a === "now" ? "just now" : a ? `${a} ago` : ""; };
+const KIND_LABEL = { image: "Image", html: "Page", markdown: "Notes", pdf: "PDF", video: "Video", audio: "Audio", text: "File" };
+const baseName = (p) => p.split("/").pop();
+const dirName = (p) => tilde(p.slice(0, p.lastIndexOf("/")) || "/");
+
+function Outputs({ s, data }) {
+  const [open, setOpen] = useState(null);
+  if (!data) return html`<div class="outputs"><p class="empty">Looking through this session…</p></div>`;
+  const made = data.files.filter((f) => f.kind !== "text");
+  const code = data.files.filter((f) => f.kind === "text");
+  const viewable = [...made, ...code];
+  const nothing = !data.servers.length && !data.links.length && !data.files.length;
+  return html`
+    <div class="outputs">
+      <div class="inner">
+        ${nothing && html`<div class="none">
+          <p>${data.failed ? "Couldn't read this session's outputs." : "Nothing here yet."}</p>
+          <p class="sub">Files this session writes, pages it publishes and servers it starts show up here as it works.</p>
+        </div>`}
+        ${data.servers.length > 0 && html`
+          <section>
+            <h4>Running</h4>
+            ${data.servers.map((v) => html`
+              <button class="srvrow" onClick=${() => openOut(v.url)}>
+                <i class="dot"></i>
+                <span class="u">${v.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>
+                <span class="note">${v.localOnly ? `Listens on localhost only, so it opens on ${s.host || "that machine"} itself, not here.` : "Started by this session"}</span>
+              </button>`)}
+          </section>`}
+        ${made.length > 0 && html`
+          <section>
+            <h4>Files</h4>
+            <div class="cards">
+              ${made.map((f) => html`<${OutCard} f=${f} onOpen=${() => setOpen(viewable.indexOf(f))} />`)}
+            </div>
+          </section>`}
+        ${data.links.length > 0 && html`
+          <section>
+            <h4>Links</h4>
+            ${data.links.map((l) => {
+              const u = new URL(l.url);
+              return html`<button class="linkrow" onClick=${() => openOut(l.url)}>
+                <span class="h">${u.host}</span><span class="p">${(u.pathname + u.search).replace(/^\/$/, "")}</span>
+                <span class="when">${ago({ updated: l.at })}</span>
+              </button>`;
+            })}
+          </section>`}
+        ${code.length > 0 && html`
+          <section>
+            <h4>Code it touched</h4>
+            ${code.map((f) => html`<button class="coderow" onClick=${() => setOpen(viewable.indexOf(f))}>
+              <span class="n">${baseName(f.path)}</span><span class="d">${dirName(f.path)}</span>
+              <span class="op">${f.op} ${agoLong(f.at)}</span>
+            </button>`)}
+          </section>`}
+      </div>
+    </div>
+    ${open !== null && viewable[open] && html`<${Viewer} list=${viewable} at=${open} setAt=${setOpen} onClose=${() => setOpen(null)} />`}
+  `;
+}
+
+function OutCard({ f, onOpen }) {
+  const ext = (baseName(f.path).split(".").pop() || "").slice(0, 4);
+  return html`
+    <button class="card ${f.kind}" onClick=${onOpen} title=${tilde(f.path)}>
+      <div class="pv">
+        ${f.kind === "image" ? html`<img loading="lazy" src=${f.url} alt="" />`
+          : f.kind === "html" ? html`<iframe src=${f.url} sandbox="allow-scripts" loading="lazy" tabindex="-1" aria-hidden="true"></iframe>`
+          : f.kind === "video" ? html`<video src=${f.url} preload="metadata" muted></video>`
+          : html`<span class="ext">${ext}</span>`}
+      </div>
+      <div class="cap">
+        <span class="n">${baseName(f.path)}</span>
+        <span class="m">${KIND_LABEL[f.kind]}${f.size ? ` · ${fileSize(f.size)}` : ""} · ${f.op} ${agoLong(f.at)}</span>
+      </div>
+    </button>`;
+}
+
+function Viewer({ list, at, setAt, onClose }) {
+  const f = list[at];
+  const [text, setText] = useState(null);
+  useEffect(() => {
+    setText(null);
+    if (f.kind !== "markdown" && f.kind !== "text") return;
+    if (f.size > 2 << 20) return setText({ big: true });
+    fetch(f.url).then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.status === 410 ? "This link expired. Close and reopen." : r.statusText))))
+      .then((t) => setText({ t }), (e) => setText({ err: e.message }));
+  }, [f.url]);
+  useEffect(() => {
+    const k = (e) => {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowRight" && at < list.length - 1) setAt(at + 1);
+      else if (e.key === "ArrowLeft" && at > 0) setAt(at - 1);
+      else return;
+      e.preventDefault();
+    };
+    addEventListener("keydown", k, true);
+    return () => removeEventListener("keydown", k, true);
+  }, [at, list.length]);
+  const pdfInline = f.kind === "pdf" && !APP;
+  return html`
+    <div class="viewer" role="dialog" aria-label=${baseName(f.path)}>
+      <header>
+        <button class="icon" onClick=${onClose} aria-label="Close">✕</button>
+        <div class="who"><div class="n">${baseName(f.path)}</div><div class="d">${dirName(f.path)}</div></div>
+        <button class="icon" disabled=${at === 0} onClick=${() => setAt(at - 1)} aria-label="Previous">‹</button>
+        <button class="icon" disabled=${at === list.length - 1} onClick=${() => setAt(at + 1)} aria-label="Next">›</button>
+        <button class="btn" onClick=${() => openOut(f.url)}>${APP ? "Open outside" : "New tab"}</button>
+      </header>
+      <div class="body ${f.kind}">
+        ${f.kind === "image" ? html`<img src=${f.url} alt=${baseName(f.path)} />`
+          : f.kind === "html" ? html`<iframe src=${f.url} sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>`
+          : f.kind === "video" ? html`<video src=${f.url} controls autoplay playsinline></video>`
+          : f.kind === "audio" ? html`<audio src=${f.url} controls autoplay></audio>`
+          : pdfInline ? html`<iframe src=${f.url}></iframe>`
+          : f.kind === "pdf" ? html`<div class="none"><p>PDFs open in your browser.</p><button class="btn primary" onClick=${() => openOut(f.url)}>Open PDF</button></div>`
+          : !text ? html`<p class="empty">Loading…</p>`
+          : text.big ? html`<div class="none"><p>Too large to show here.</p><button class="btn" onClick=${() => openOut(f.url)}>Open it</button></div>`
+          : text.err ? html`<p class="empty">${text.err}</p>`
+          : f.kind === "markdown" ? html`<article class="md">${md(text.t)}</article>`
+          : html`<pre class="code">${text.t}</pre>`}
+      </div>
+    </div>`;
 }
 
 function Transcript({ s }) {

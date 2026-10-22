@@ -23,6 +23,7 @@ import (
 	"github.com/zcag/atc/internal/attach"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
+	"github.com/zcag/atc/internal/outputs"
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
@@ -47,8 +48,10 @@ type Server struct {
 	TrustedProxies *Proxies
 	tailnet        *tailnet
 
-	fleet *fleet
-	rv    *reviver
+	fleet   *fleet
+	rv      *reviver
+	scanner outputs.Scanner
+	ports   outputs.Ports
 
 	mu   sync.Mutex
 	subs map[chan []byte]bool
@@ -95,6 +98,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/sessions/{id}/send", s.send)
 	mux.HandleFunc("POST /api/guess", s.guess)
 	mux.HandleFunc("GET /api/widget", s.widget)
+	mux.HandleFunc("GET /api/sessions/{sid}/outputs", s.outputs)
+	mux.HandleFunc("GET /api/sessions/{sid}/o/{tok}/{path...}", s.outputFile)
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) { s.Term.Serve(w, r, r.PathValue("id")) })
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
@@ -112,7 +117,7 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if s.Token == "" || r.URL.Path == "/api/login" || r.URL.Path == "/healthz" {
+		if s.Token == "" || r.URL.Path == "/api/login" || r.URL.Path == "/healthz" || outputPath.MatchString(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -255,6 +260,13 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 	}
 	for i := range list {
 		list[i].Host = s.Host
+		if list[i].PID > 0 {
+			for _, l := range s.ports.Of(list[i].PID) {
+				if !l.LocalOnly {
+					list[i].Servers = append(list[i].Servers, l.Port)
+				}
+			}
+		}
 	}
 	if localOnly || len(s.Peers) == 0 {
 		return list, nil

@@ -308,3 +308,37 @@ func TestWidgetList(t *testing.T) {
 		t.Error("a new time alone must not count as a change")
 	}
 }
+
+func TestOutputFileLinks(t *testing.T) {
+	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
+	s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: fakeClaude(t)}, Index: history.New(t.TempDir()), Store: st}, Term: &attach.Hub{}, Web: fstest.MapFS{}, Token: "tok"}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	dir := filepath.Join(t.TempDir(), "my site")
+	os.MkdirAll(filepath.Join(dir, "css"), 0o755)
+	os.WriteFile(filepath.Join(dir, "index.html"), []byte("<h1>hi</h1>"), 0o644)
+	os.WriteFile(filepath.Join(dir, "css", "a.css"), []byte("h1{}"), 0o644)
+	os.WriteFile(filepath.Join(filepath.Dir(dir), "secret.txt"), []byte("no"), 0o644)
+	link := s.fileURL("sid1", filepath.Join(dir, "index.html"), time.Now().Add(time.Hour).Unix())
+
+	res, body := get(t, ts.URL+link, "")
+	if res.StatusCode != 200 || body != "<h1>hi</h1>" || !strings.Contains(res.Header.Get("Content-Security-Policy"), "sandbox") {
+		t.Fatalf("page: %d %q %v", res.StatusCode, body, res.Header)
+	}
+	if res, _ := get(t, ts.URL+strings.Replace(link, "index.html", "css/a.css", 1), ""); res.StatusCode != 200 {
+		t.Errorf("a file next to it should load: %d", res.StatusCode)
+	}
+	if res, _ := get(t, ts.URL+strings.Replace(link, "my%20site/index.html", "secret.txt", 1), ""); res.StatusCode != 404 {
+		t.Errorf("a file outside its folder must not load: %d", res.StatusCode)
+	}
+	if res, _ := get(t, ts.URL+strings.Replace(link, "/o/", "/o/x", 1), ""); res.StatusCode == 200 {
+		t.Error("a forged token must not load")
+	}
+	old := s.fileURL("sid1", filepath.Join(dir, "index.html"), time.Now().Add(-time.Minute).Unix())
+	if res, _ := get(t, ts.URL+old, ""); res.StatusCode != http.StatusGone {
+		t.Errorf("expired: %d", res.StatusCode)
+	}
+	if res, _ := get(t, ts.URL+strings.Replace(link, "sid1", "sid2", 1), ""); res.StatusCode != 404 {
+		t.Errorf("another session's link must not load: %d", res.StatusCode)
+	}
+}

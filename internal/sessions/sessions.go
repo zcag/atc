@@ -44,6 +44,7 @@ type Session struct {
 	LastReply      string    `json:"lastReply,omitempty"`
 	StartedAt      time.Time `json:"startedAt,omitzero"`
 	Updated        time.Time `json:"updated,omitzero"`
+	Servers        []int     `json:"servers,omitempty"`
 	Pinned         bool      `json:"pinned,omitempty"`
 	Parked         bool      `json:"parked,omitempty"`
 }
