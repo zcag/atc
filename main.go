@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -147,6 +148,9 @@ func serve(args []string) error {
 
 		AppDir:    os.Getenv("ATC_APP_DIR"),
 		AssistDir: os.Getenv("ATC_ASSIST_DIR"),
+
+		TrustTailnet:   tailscaleBin(os.Getenv("ATC_TRUST_TAILNET")),
+		TrustedProxies: server.ParseCIDRs(os.Getenv("ATC_TRUSTED_PROXIES")),
 	}
 	if srv.Peers, err = server.LoadPeers(filepath.Join(client.ConfigDir(), "peers.json")); err != nil {
 		return err
@@ -166,6 +170,16 @@ func serve(args []string) error {
 		log.Printf("run `atc token` for the login token")
 	}
 	return http.ListenAndServe(*addr, srv.Handler())
+}
+
+func tailscaleBin(v string) string {
+	if v != "1" && v != "true" {
+		return ""
+	}
+	if p, err := exec.LookPath("tailscale"); err == nil {
+		return p
+	}
+	return "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
 }
 
 func serverToken() (string, error) {

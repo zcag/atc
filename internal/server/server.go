@@ -11,6 +11,7 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -42,6 +43,10 @@ type Server struct {
 	AppDir    string
 	AssistDir string
 
+	TrustTailnet   string
+	TrustedProxies []*net.IPNet
+	tailnet        *tailnet
+
 	fleet *fleet
 
 	mu   sync.Mutex
@@ -53,6 +58,9 @@ type Server struct {
 
 func (s *Server) Handler() http.Handler {
 	s.subs = map[chan []byte]bool{}
+	if s.TrustTailnet != "" {
+		s.tailnet = &tailnet{bin: s.TrustTailnet}
+	}
 	s.fleet = &fleet{peers: s.Peers, client: &http.Client{}, owner: map[string]string{}, status: map[string]string{}, views: map[string]int{}}
 	s.kick = make(chan struct{}, 1)
 	go s.poll()
@@ -104,7 +112,10 @@ func (s *Server) auth(next http.Handler) http.Handler {
 		if c, err := r.Cookie("atc"); err == nil && tok == "" {
 			tok = c.Value
 		}
-		if !s.valid(tok) {
+		if !s.valid(tok) && !s.fromMyTailnet(r) {
+			if s.tailnet != nil {
+				log.Printf("auth: refused %s (seen as %s)", r.URL.Path, s.clientIP(r))
+			}
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
