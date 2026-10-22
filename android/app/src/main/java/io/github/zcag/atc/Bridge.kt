@@ -68,11 +68,18 @@ class Bridge(private val a: MainActivity) : TextToSpeech.OnInitListener {
     fun shutdown() = tts.shutdown()
 
     private fun pickVoice(locale: Locale) {
-        val voice = tts.voices.orEmpty()
-            .filter { it.locale.language == locale.language && TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in it.features }
-            .minWithOrNull(compareBy<Voice>({ it.locale.country != locale.country }, { it.isNetworkConnectionRequired }, { -it.quality }))
-        if (voice != null) tts.voice = voice else tts.language = locale
+        tts.language = locale
+        val default = tts.defaultVoice
+        if (default != null && default.locale.language == locale.language) {
+            tts.voice = default
+            return
+        }
+        tts.voices.orEmpty()
+            .filter { it.locale.language == locale.language && !it.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED) }
+            .maxWithOrNull(compareBy<Voice>({ it.quality }, { it.locale.country == locale.country }))
+            ?.let { tts.voice = it }
     }
+
 
     private fun done() {
         if (!speaking) return

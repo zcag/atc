@@ -150,10 +150,11 @@ class MainActivity : Activity() {
     }
 
     private fun menu() = AlertDialog.Builder(this)
-        .setItems(arrayOf("Change server", "Check for updates", "Close atc")) { _, i ->
+        .setItems(arrayOf("Change server", "Check for updates", "Voice settings", "Close atc")) { _, i ->
             when (i) {
                 0 -> setup()
                 1 -> updater.check(manual = true)
+                2 -> runCatching { startActivity(Intent("com.android.settings.TTS_SETTINGS")) }
                 else -> finish()
             }
         }
