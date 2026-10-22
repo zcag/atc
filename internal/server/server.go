@@ -1,0 +1,313 @@
+package server
+
+import (
+	"bytes"
+	"context"
+	"crypto/subtle"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/zcag/atc/internal/claude"
+	"github.com/zcag/atc/internal/sessions"
+	"github.com/zcag/atc/internal/store"
+)
+
+type Server struct {
+	M     *sessions.Manager
+	Token string
+	Roots []string
+
+	mu   sync.Mutex
+	subs map[chan []byte]bool
+	last []byte
+	kick chan struct{}
+}
+
+func (s *Server) Handler() http.Handler {
+	s.subs = map[chan []byte]bool{}
+	s.kick = make(chan struct{}, 1)
+	go s.poll()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
+	mux.HandleFunc("GET /api/sessions", s.live)
+	mux.HandleFunc("GET /api/history", s.history)
+	mux.HandleFunc("GET /api/dirs", s.dirs)
+	mux.HandleFunc("GET /api/events", s.events)
+	mux.HandleFunc("POST /api/sessions", s.start)
+	mux.HandleFunc("POST /api/sessions/{sid}/resume", s.resume)
+	mux.HandleFunc("POST /api/sessions/{id}/stop", s.act(s.M.CLI.Stop))
+	mux.HandleFunc("DELETE /api/sessions/{id}", s.act(s.M.CLI.Remove))
+	mux.HandleFunc("PATCH /api/sessions/{sid}", s.patch)
+	return s.auth(mux)
+}
+
+func (s *Server) auth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" || s.Token == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if c, err := r.Cookie("atc"); err == nil && tok == "" {
+			tok = c.Value
+		}
+		if subtle.ConstantTimeCompare([]byte(tok), []byte(s.Token)) != 1 {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) live(w http.ResponseWriter, r *http.Request) {
+	list, err := s.M.Live(r.Context())
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, list)
+}
+
+func (s *Server) history(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	if limit <= 0 {
+		limit = 100
+	}
+	reply(w, s.M.History(q.Get("q"), q.Get("dir"), limit))
+}
+
+func (s *Server) start(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Dir, Name, Prompt string }
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	dir, err := expand(req.Dir)
+	if err == nil {
+		var st os.FileInfo
+		if st, err = os.Stat(dir); err == nil && !st.IsDir() {
+			err = fmt.Errorf("%s is not a directory", dir)
+		}
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	id, err := s.M.CLI.Start(r.Context(), dir, req.Name, req.Prompt)
+	s.done(w, id, err)
+}
+
+func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
+	sid := r.PathValue("sid")
+	dir := ""
+	for _, h := range s.M.History("", "", 0) {
+		if h.SessionID == sid {
+			dir = h.StartCwd
+			break
+		}
+	}
+	if dir == "" {
+		http.Error(w, "unknown session "+sid, http.StatusNotFound)
+		return
+	}
+	id, err := s.M.CLI.Resume(r.Context(), dir, sid)
+	s.done(w, id, err)
+}
+
+func (s *Server) act(f func(context.Context, string) error) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.done(w, r.PathValue("id"), f(r.Context(), r.PathValue("id")))
+	}
+}
+
+func (s *Server) patch(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name   *string `json:"name"`
+		Pinned *bool   `json:"pinned"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	err := s.M.Store.Update(r.PathValue("sid"), func(m *store.Meta) {
+		if req.Name != nil {
+			m.Name = strings.TrimSpace(*req.Name)
+		}
+		if req.Pinned != nil {
+			m.Pinned = *req.Pinned
+		}
+	})
+	s.done(w, r.PathValue("sid"), err)
+}
+
+func (s *Server) done(w http.ResponseWriter, id string, err error) {
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	s.refresh()
+	reply(w, map[string]string{"id": id})
+}
+
+type dir struct {
+	Path   string `json:"path"`
+	Recent bool   `json:"recent,omitempty"`
+}
+
+func (s *Server) dirs(w http.ResponseWriter, r *http.Request) {
+	seen := map[string]bool{}
+	var out []dir
+	add := func(p string, recent bool) {
+		if p == "" || seen[p] {
+			return
+		}
+		if st, err := os.Stat(p); err != nil || !st.IsDir() {
+			return
+		}
+		seen[p] = true
+		out = append(out, dir{p, recent})
+	}
+	for _, h := range s.M.History("", "", 0) {
+		if len(out) >= 30 {
+			break
+		}
+		add(h.StartCwd, true)
+	}
+	for _, root := range s.Roots {
+		add(root, false)
+		ents, _ := os.ReadDir(root)
+		var kids []string
+		for _, e := range ents {
+			if e.IsDir() && !strings.HasPrefix(e.Name(), ".") {
+				kids = append(kids, filepath.Join(root, e.Name()))
+			}
+		}
+		sort.Strings(kids)
+		for _, k := range kids {
+			add(k, false)
+		}
+	}
+	reply(w, out)
+}
+
+func (s *Server) events(w http.ResponseWriter, r *http.Request) {
+	fl, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	ch := make(chan []byte, 4)
+	s.mu.Lock()
+	s.subs[ch] = true
+	last := s.last
+	s.mu.Unlock()
+	defer func() { s.mu.Lock(); delete(s.subs, ch); s.mu.Unlock() }()
+	s.refresh()
+	send := func(b []byte) bool {
+		_, err := fmt.Fprintf(w, "event: sessions\ndata: %s\n\n", b)
+		fl.Flush()
+		return err == nil
+	}
+	if last != nil && !send(last) {
+		return
+	}
+	ping := time.NewTicker(25 * time.Second)
+	defer ping.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case b := <-ch:
+			if !send(b) {
+				return
+			}
+		case <-ping.C:
+			fmt.Fprint(w, ": ping\n\n")
+			fl.Flush()
+		}
+	}
+}
+
+func (s *Server) refresh() {
+	select {
+	case s.kick <- struct{}{}:
+	default:
+	}
+}
+
+func (s *Server) poll() {
+	t := time.NewTicker(2 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+		case <-s.kick:
+		}
+		s.mu.Lock()
+		n := len(s.subs)
+		s.mu.Unlock()
+		if n == 0 {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		list, err := s.M.Live(ctx)
+		cancel()
+		if err != nil {
+			log.Printf("poll: %v", err)
+			continue
+		}
+		b, _ := json.Marshal(list)
+		s.mu.Lock()
+		if !bytes.Equal(b, s.last) {
+			s.last = b
+			for ch := range s.subs {
+				select {
+				case ch <- b:
+				default:
+				}
+			}
+		}
+		s.mu.Unlock()
+	}
+}
+
+func expand(p string) (string, error) {
+	if p == "" {
+		return "", errors.New("dir is required")
+	}
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		home, _ := os.UserHomeDir()
+		p = filepath.Join(home, strings.TrimPrefix(p, "~"))
+	}
+	if !filepath.IsAbs(p) {
+		return "", fmt.Errorf("dir must be absolute: %s", p)
+	}
+	return filepath.Clean(p), nil
+}
+
+func reply(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(v)
+}
+
+func fail(w http.ResponseWriter, err error) {
+	code := http.StatusInternalServerError
+	if errors.Is(err, claude.ErrUntrusted) {
+		code = http.StatusConflict
+	}
+	http.Error(w, err.Error(), code)
+}
