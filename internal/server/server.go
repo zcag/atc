@@ -274,7 +274,10 @@ func (s *Server) route(next http.Handler) http.Handler {
 		parts := strings.Split(r.URL.Path, "/")
 		host := r.URL.Query().Get("host")
 		if host == "" && len(parts) >= 4 && parts[2] == "sessions" {
-			host = s.fleet.ownerOf(parts[3])
+			if host = s.fleet.ownerOf(parts[3]); host == "" {
+				s.fleet.gather(r.Context(), "/api/sessions?local=1")
+				host = s.fleet.ownerOf(parts[3])
+			}
 		}
 		p := s.fleet.peer(host)
 		if p == nil || host == s.Host {
