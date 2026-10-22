@@ -1,7 +1,9 @@
 package client
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -132,4 +134,42 @@ func (c *Client) Remove(id string) error { return c.do("DELETE", "/api/sessions/
 
 func (c *Client) Patch(sid string, fields map[string]any) error {
 	return c.do("PATCH", "/api/sessions/"+sid, fields, nil)
+}
+
+func (c *Client) Events(ctx context.Context, fn func([]sessions.Session)) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", c.URL+"/api/events", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("cannot reach atc at %s: %w", c.URL, err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode >= 300 {
+		return fmt.Errorf("events: %s", res.Status)
+	}
+	sc := bufio.NewScanner(res.Body)
+	sc.Buffer(nil, 16<<20)
+	event, data := "", ""
+	for sc.Scan() {
+		line := sc.Text()
+		switch {
+		case line == "":
+			var list []sessions.Session
+			if event == "sessions" && json.Unmarshal([]byte(data), &list) == nil {
+				fn(list)
+			}
+			event, data = "", ""
+		case strings.HasPrefix(line, "event:"):
+			event = strings.TrimSpace(line[6:])
+		case strings.HasPrefix(line, "data:"):
+			data += strings.TrimPrefix(line[5:], " ")
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return err
+	}
+	return io.ErrUnexpectedEOF
 }

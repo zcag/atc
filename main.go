@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"golang.org/x/term"
 
@@ -36,6 +35,7 @@ SERVER
 CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc login <url> <token>        save where the server is
   atc ls [-json]                 live sessions, most urgent first
+  atc attach <session>           take over this terminal; Ctrl+Z detaches
   atc history [-json] [query]    past conversations, newest first
   atc new [-n name] [dir] [prompt...]
       dir defaults to the current dir, with your home written as ~ so it
@@ -76,6 +76,8 @@ func main() {
 		err = hist(args)
 	case "new":
 		err = newSession(args)
+	case "attach":
+		err = attachTo(args)
 	case "resume", "stop", "rm", "rename", "pin", "unpin":
 		err = act(cmd, args)
 	case "-h", "--help", "help":
@@ -226,18 +228,7 @@ func act(cmd string, args []string) error {
 		return fmt.Errorf("usage: atc %s <session>%s", cmd, map[bool]string{true: " <name>"}[cmd == "rename"])
 	}
 	c := client.Load()
-	pool, err := c.Live()
-	if err != nil {
-		return err
-	}
-	if cmd == "resume" || cmd == "rename" || cmd == "pin" || cmd == "unpin" {
-		past, err := c.History("", "", 0)
-		if err != nil {
-			return err
-		}
-		pool = append(pool, past...)
-	}
-	s, err := resolve(args[0], pool)
+	s, err := find(c, args[0], cmd != "stop" && cmd != "rm")
 	if err != nil {
 		return err
 	}
@@ -261,6 +252,53 @@ func act(cmd string, args []string) error {
 	default:
 		return c.Patch(s.SessionID, map[string]any{"pinned": cmd == "pin"})
 	}
+}
+
+func attachTo(args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: atc attach <session>")
+	}
+	c := client.Load()
+	s, err := find(c, args[0], true)
+	if err != nil {
+		return err
+	}
+	id := s.ID
+	switch {
+	case s.Attachable:
+	case s.Kind == "interactive":
+		return fmt.Errorf("%s runs in a terminal elsewhere, so it cannot be attached", s.Title)
+	default:
+		fmt.Printf("%s is not running. Resume it? [Y/n] ", s.Title)
+		var ans string
+		fmt.Scanln(&ans)
+		if strings.HasPrefix(strings.ToLower(ans), "n") {
+			return nil
+		}
+		if id, err = c.Resume(s.SessionID); err != nil {
+			return err
+		}
+	}
+	if err := c.Attach(id); err != nil {
+		return err
+	}
+	fmt.Println(c.Detached(id, s.Title))
+	return nil
+}
+
+func find(c *client.Client, q string, withPast bool) (sessions.Session, error) {
+	pool, err := c.Live()
+	if err != nil {
+		return sessions.Session{}, err
+	}
+	if withPast {
+		past, err := c.History("", "", 0)
+		if err != nil {
+			return sessions.Session{}, err
+		}
+		pool = append(pool, past...)
+	}
+	return resolve(q, pool)
 }
 
 func resolve(q string, pool []sessions.Session) (sessions.Session, error) {
@@ -335,31 +373,11 @@ func printRows(list []sessions.Session) {
 			where += " · " + s.Branch
 		}
 		fmt.Printf("%3d %s %-10s %-44s %5s  %s\n", i+1, paint(l.color, l.glyph), paint(l.color, l.word),
-			clip(s.Title, 44), ago(s), paint("2", strings.Join(append([]string{where}, tags...), " · ")))
+			clip(s.Title, 44), s.Age(), paint("2", strings.Join(append([]string{where}, tags...), " · ")))
 		if s.LastPrompt != "" {
 			fmt.Printf("%17s%s\n", "", paint("2", "“"+clip(oneLine(s.LastPrompt), 70)+"”"))
 		}
 	}
-}
-
-func ago(s sessions.Session) string {
-	t := s.Updated
-	if s.StartedAt.After(t) {
-		t = s.StartedAt
-	}
-	if t.IsZero() {
-		return ""
-	}
-	d := time.Since(t)
-	switch {
-	case d < time.Minute:
-		return "now"
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	case d < 48*time.Hour:
-		return fmt.Sprintf("%dh", int(d.Hours()))
-	}
-	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
 
 func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
