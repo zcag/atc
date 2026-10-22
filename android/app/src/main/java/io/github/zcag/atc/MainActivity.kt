@@ -122,6 +122,26 @@ class MainActivity : Activity() {
 
     fun js(code: String) = web?.evaluateJavascript(code, null)
 
+    fun openOutside(url: String) {
+        val uri = Uri.parse(url)
+        if (uri.scheme != "http" && uri.scheme != "https") return
+        if (uri.host != serverHost()) return runOnUiThread { runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) } }
+        val name = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "file"
+        Thread {
+            val dir = File(cacheDir, "open").apply { deleteRecursively(); mkdirs() }
+            val f = File(dir, name)
+            val ok = runCatching { Net.download(this, url, f) }.isSuccess
+            runOnUiThread {
+                if (!ok) return@runOnUiThread Toast.makeText(this, "Could not download $name", Toast.LENGTH_LONG).show()
+                val type = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "application/octet-stream"
+                val view = Intent(Intent.ACTION_VIEW).setDataAndType(FileProvider.getUriForFile(this, "$packageName.files", f), type)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                runCatching { startActivity(Intent.createChooser(view, name)) }
+                    .onFailure { Toast.makeText(this, "No app on this phone opens $name", Toast.LENGTH_LONG).show() }
+            }
+        }.start()
+    }
+
     private fun started() {
         Push.start(this)
         updater.check(manual = false)

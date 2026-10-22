@@ -37,6 +37,7 @@ class Bridge(private val a: MainActivity) : TextToSpeech.OnInitListener {
         Live.save(a, json)
         Targets.update(a, feed.targets().take(8))
     }
+    @JavascriptInterface fun openExternal(url: String) { a.openOutside(url) }
     @JavascriptInterface fun checkUpdate() = a.runOnUiThread { a.updater.check(manual = true) }
 
     @JavascriptInterface
