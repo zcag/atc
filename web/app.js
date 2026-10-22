@@ -38,6 +38,7 @@ const tilde = (p) => {
   return m ? "~" + (m[2] || "") : p;
 };
 let MULTI = false;
+let VOICE = {};
 const model = (m) => (m || "").replace(/^claude-/, "").replace(/-\d.*$/, "");
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
@@ -137,6 +138,7 @@ function App() {
   HOME = me.home || HOME;
   CLAUDE_THEME = me.claudeTheme || CLAUDE_THEME;
   MULTI = (me.hosts || []).length > 1;
+  VOICE = me.voice || {};
   const down = (me.peers || []).filter((p) => p.error);
 
   const all = live || [];
@@ -259,7 +261,6 @@ function Strip({ s, sel }) {
         <span>${tilde(s.cwd)}</span>
         ${s.branch && s.branch !== "HEAD" && html`<span>${s.branch}</span>`}
         ${s.model && html`<span>${model(s.model)}</span>`}
-        ${s.permissionMode === "bypassPermissions" && html`<span class="tag bypass">bypass</span>`}
         ${s.kind === "interactive" && html`<span class="tag">in a terminal</span>`}
       </div>
       ${s.state === "working" && s.activity
@@ -281,6 +282,7 @@ function Session({ s, say, live }) {
   const [mode, setMode] = useState(canAttach || s.state === "stopped" ? "term" : "chat");
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  const [voice, setVoice] = useState(false);
   useEffect(() => {
     if (canAttach) setMode("term");
   }, [canAttach]);
@@ -324,8 +326,10 @@ function Session({ s, say, live }) {
           ${s.branch && s.branch !== "HEAD" && html`<span class="wide">${s.branch}</span>`}
           ${s.model && html`<span class="wide">${model(s.model)}</span>`}
           ${s.context > 0 && html`<span class="wide">${Math.round(s.context / 1000)}k context</span>`}
+          ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first">no permission prompts</span>`}
         </div>
       </div>
+      ${VOICE.stt && canAttach && html`<button class="btn voice-btn ${voice ? "on" : ""}" aria-pressed=${voice} onClick=${() => { setVoice(!voice); setMode("term"); }}>Voice</button>`}
       <div class="seg" role="tablist">
         <button class=${mode === "term" ? "on" : ""} onClick=${() => setMode("term")}>Terminal</button>
         <button class=${mode === "chat" ? "on" : ""} onClick=${() => setMode("chat")}>Transcript</button>
@@ -334,7 +338,7 @@ function Session({ s, say, live }) {
     </div>
     ${mode === "term"
       ? canAttach
-        ? html`<${Term} key=${s.id} s=${s} say=${say} />`
+        ? html`<${Term} key=${s.id} s=${s} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} />`
         : html`<div class="stage"><div class="cover">${Unattachable(s, resume, busy, setMode)}</div></div>`
       : html`<${Transcript} s=${s} />`}
   `;
@@ -389,7 +393,7 @@ const KEYS = [
   ["↑", "\x1b[A"], ["↓", "\x1b[B"], ["←", "\x1b[D"], ["→", "\x1b[C"], ["/", "/"], ["^C", "\x03"],
 ];
 
-function Term({ s, say }) {
+function Term({ s, say, voice, onVoiceOff }) {
   const box = useRef();
   const api_ = useRef({});
   const picker = useRef();
@@ -573,9 +577,191 @@ function Term({ s, say }) {
             </div>
           </div>
         </div>`}
+      ${voice && !cover && html`<${VoiceBar} s=${s} say=${say} send=${(d) => api_.current.send?.(d)} onClose=${onVoiceOff} />`}
       <div class="keys" onPointerDown=${(e) => e.preventDefault()}>
         ${KEYS.map(([label, seq]) => html`<button class=${label === "ctrl" && ctrl ? "on" : ""} onClick=${() => key(label, seq)}>${label}</button>`)}
         <button onClick=${() => picker.current.click()}>file</button>
+      </div>
+    </div>
+  `;
+}
+
+const loadScript = (src) =>
+  new Promise((ok, no) => {
+    if (document.querySelector(`script[src="${src}"]`)) return ok();
+    const el = Object.assign(document.createElement("script"), { src, onload: ok, onerror: () => no(new Error(`Could not load ${src}`)) });
+    document.head.appendChild(el);
+  });
+
+const speakable = (t) =>
+  (t || "")
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/https?:\/\/\S+/g, "a link")
+    .replace(/\*\*|__|[*#>|]/g, " ")
+    .replace(/^\s*[-•]\s+/gm, "")
+    .replace(/\s+/g, " ")
+    .trim();
+const sentences = (t) => (t.match(/[^.!?…]+[.!?…]+["')]?(\s|$)|[^.!?…]+$/g) || [t]).map((x) => x.trim()).filter(Boolean);
+const turkish = (t) => /[çğıöşüÇĞİÖŞÜ]/.test(t);
+const PHANTOM = /^(thank you|thanks for watching|you|bye|altyazı.*|abone olmayı unutmayın.*|\.+)[.!]?$/i;
+const PHASE = { starting: "Starting the microphone…", listening: "Listening", hearing: "Hearing you…", thinking: "Transcribing…", waiting: "Claude is working", speaking: "Speaking", muted: "Microphone off", error: "Voice is not available" };
+
+function VoiceBar({ s, say, send, onClose }) {
+  const [phase, setPhase] = useState("starting");
+  const [heard, setHeard] = useState("");
+  const [spoken, setSpoken] = useState("");
+  const [muted, setMuted] = useState(false);
+  const [source, setSource] = useState(() => { try { return localStorage.getItem("atc.voice") || "device"; } catch { return "device"; } });
+  const st = useRef({ awaiting: false, sentAt: 0, permission: false, speaking: false, audio: null, vad: null });
+  const live = useRef({});
+  live.current = { s, source, muted };
+
+  const rest = () => setPhase(live.current.muted ? "muted" : st.current.awaiting ? "waiting" : "listening");
+  const stopSpeaking = () => {
+    st.current.speaking = false;
+    speechSynthesis.cancel();
+    st.current.audio?.pause();
+  };
+  const play = (url) => new Promise((done) => {
+    const a = new Audio(url);
+    st.current.audio = a;
+    a.onended = a.onpause = a.onerror = () => done();
+    a.play().catch(() => done());
+  });
+  const speak = async (text) => {
+    if (!text) return;
+    stopSpeaking();
+    setSpoken(text);
+    st.current.speaking = true;
+    setPhase("speaking");
+    if (live.current.source === "mine" && VOICE.tts) {
+      let chain = Promise.resolve();
+      const clips = sentences(text).map((t) => (chain = chain.then(() =>
+        fetch("/api/voice/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: t }) })
+          .then((r) => (r.ok ? r.blob() : null)).catch(() => null))));
+      for (const clip of clips) {
+        const blob = await clip;
+        if (!st.current.speaking) break;
+        if (blob) await play(URL.createObjectURL(blob));
+      }
+      if (st.current.speaking) { st.current.speaking = false; rest(); }
+      return;
+    }
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = turkish(text) ? "tr-TR" : "en-US";
+    const v = speechSynthesis.getVoices().filter((v) => v.lang.replace("_", "-").startsWith(u.lang.slice(0, 2)));
+    u.voice = v.find((v) => /premium|enhanced|natural|siri/i.test(v.name)) || v.find((v) => v.localService) || v[0] || null;
+    u.onend = u.onerror = () => { if (st.current.speaking) { st.current.speaking = false; rest(); } };
+    speechSynthesis.speak(u);
+  };
+
+  const answer = async (state) => {
+    const p = await api(`/api/sessions/${live.current.s.sessionId}/transcript`).catch(() => ({ messages: [] }));
+    const msgs = p.messages || [];
+    let i = msgs.length;
+    while (i > 0 && msgs[i - 1].role !== "user") i--;
+    const full = msgs.slice(i).filter((m) => m.role === "assistant").map((m) => m.text).join("\n\n");
+    let body = speakable(full);
+    if (body.length > 240 && VOICE.condense) {
+      body = await api("/api/voice/condense", { method: "POST", body: { text: full } }).then((r) => speakable(r.text), () => sentences(body).slice(0, 3).join(" "));
+    } else if (body.length > 240) {
+      body = sentences(body).slice(0, 3).join(" ");
+    }
+    st.current.permission = state === "needs-you";
+    const ask = state === "needs-you" ? `It needs you${live.current.s.activity ? `, to run ${live.current.s.activity}` : ""}. Say yes to allow it.` : "";
+    speak([body, ask].filter(Boolean).join(" ") || "Done.");
+  };
+
+  const heardSpeech = async (audio) => {
+    setPhase("thinking");
+    let text = "";
+    try {
+      const res = await fetch("/api/voice/stt", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: vad.utils.encodeWAV(audio) });
+      if (!res.ok) throw new Error((await res.text()).trim());
+      text = (await res.json()).text.trim();
+    } catch (e) {
+      say(`Could not transcribe: ${e.message}`);
+    }
+    if (!text || PHANTOM.test(text)) return rest();
+    setHeard(text);
+    const bare = text.toLowerCase().replace(/[.!?,]/g, "").trim();
+    if (/^(stop|cancel|dur|durdur|iptal|bekle)$/.test(bare)) { send("\x1b"); st.current.awaiting = false; return rest(); }
+    if (st.current.permission && /^(yes|yeah|yep|evet|tamam|olur|okay|ok)\b/.test(bare)) { st.current.permission = false; send("\r"); st.current.awaiting = true; st.current.sentAt = Date.now(); return rest(); }
+    send(text);
+    setTimeout(() => send("\r"), 150);
+    st.current.awaiting = true;
+    st.current.sentAt = Date.now();
+    setPhase("waiting");
+  };
+
+  useEffect(() => {
+    if (!st.current.awaiting || s.state === "working") return;
+    if (Date.parse(s.promptAt || 0) < st.current.sentAt - 5000) return;
+    st.current.awaiting = false;
+    answer(s.state);
+  }, [s.state, s.promptAt, s.updated]);
+
+  useEffect(() => {
+    let dead = false, lock = null;
+    speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+    (async () => {
+      try {
+        await loadScript("vendor/vad/ort.wasm.min.js");
+        await loadScript("vendor/vad/vad.bundle.min.js");
+        const v = await vad.MicVAD.new({
+          baseAssetPath: new URL("vendor/vad/", location.href).href,
+          onnxWASMBasePath: new URL("vendor/vad/", location.href).href,
+          ortConfig: (ort) => { ort.env.wasm.numThreads = 1; ort.env.logLevel = "error"; },
+          positiveSpeechThreshold: 0.6,
+          negativeSpeechThreshold: 0.4,
+          redemptionMs: 1300,
+          minSpeechMs: 300,
+          getStream: () => navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }),
+          onSpeechStart: () => { if (st.current.speaking) stopSpeaking(); setPhase("hearing"); },
+          onVADMisfire: () => rest(),
+          onSpeechEnd: heardSpeech,
+        });
+        if (dead) return v.destroy();
+        st.current.vad = v;
+        v.start();
+        setPhase("listening");
+        lock = await navigator.wakeLock?.request("screen").catch(() => null);
+      } catch (e) {
+        setPhase("error");
+        say(e.name === "NotAllowedError" ? "Allow the microphone to use voice." : `Voice failed to start: ${e.message}`);
+      }
+    })();
+    return () => { dead = true; st.current.vad?.destroy(); stopSpeaking(); lock?.release?.(); };
+  }, []);
+
+  const mute = () => {
+    const m = !muted;
+    setMuted(m);
+    live.current.muted = m;
+    m ? st.current.vad?.pause() : st.current.vad?.start();
+    setPhase(m ? "muted" : st.current.awaiting ? "waiting" : "listening");
+  };
+  const pick = (v) => { setSource(v); try { localStorage.setItem("atc.voice", v); } catch {} };
+
+  return html`
+    <div class="voicebar" role="region" aria-label="Voice">
+      <div class="orb ${phase}" aria-hidden="true"></div>
+      <div class="vtext">
+        <div class="vphase" aria-live="polite">${PHASE[phase]}</div>
+        ${heard && html`<div class="vline"><b>You</b> ${heard}</div>`}
+        ${spoken && html`<div class="vline"><b>Claude</b> ${spoken}</div>`}
+      </div>
+      <div class="vacts">
+        ${phase === "speaking" && html`<button class="btn" onClick=${() => { stopSpeaking(); rest(); }}>Stop talking</button>`}
+        ${phase === "waiting" && html`<button class="btn" onClick=${() => send("\x1b")} title="Send Esc to Claude">Interrupt</button>`}
+        <button class="btn" onClick=${mute}>${muted ? "Unmute" : "Mute"}</button>
+        ${VOICE.tts && html`<div class="seg">
+          <button class=${source === "device" ? "on" : ""} onClick=${() => pick("device")} title="This device's built-in voice: instant">Device</button>
+          <button class=${source === "mine" ? "on" : ""} onClick=${() => pick("mine")} title="The server's voice: slower">Server</button>
+        </div>`}
+        <button class="icon" onClick=${onClose} aria-label="Turn voice off">✕</button>
       </div>
     </div>
   `;

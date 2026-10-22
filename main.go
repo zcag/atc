@@ -143,6 +143,7 @@ func serve(args []string) error {
 			Store: st,
 		},
 		Roots: roots,
+		Voice: server.VoiceFromEnv(),
 	}
 	if srv.Peers, err = server.LoadPeers(filepath.Join(client.ConfigDir(), "peers.json")); err != nil {
 		return err
@@ -383,9 +384,6 @@ func printRows(list []sessions.Session) {
 		var tags []string
 		if s.Kind == "interactive" {
 			tags = append(tags, "in a terminal")
-		}
-		if s.PermissionMode == "bypassPermissions" {
-			tags = append(tags, paint("31", "bypass"))
 		}
 		if s.Pinned {
 			tags = append(tags, "pinned")

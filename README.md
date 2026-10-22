@@ -125,6 +125,31 @@ is sent for a session you have open at that moment. On iPhone and iPad, add atc 
 first: Safari only allows web push for installed apps. Push needs HTTPS with a certificate the
 device trusts.
 
+## Voice
+
+Open a session and press **Voice** to talk to it. atc listens through the browser, decides when
+you have finished speaking (a pause of about a second and a half), transcribes what you said and
+types it into the session. When the session finishes its turn, atc reads the reply back, shortened
+to a sentence or two when it is long. Talking over it stops the reading. Saying "stop" sends Esc to
+Claude, and "yes" answers a permission prompt.
+
+Voice needs a speech-to-text service that speaks the OpenAI transcription API (a local Whisper
+server works), and optionally a chat model to shorten replies and a text-to-speech service for a
+voice other than the device's own:
+
+```sh
+ATC_STT_URL=http://localhost:8000/v1/audio/transcriptions
+ATC_SPEECH_LLM_URL=http://localhost:8001/v1/chat/completions   # optional
+ATC_SPEECH_LLM_MODEL=qwen
+ATC_TTS_URL=http://localhost:8002/v1/audio/speech                # optional
+ATC_TTS_MODEL=tts-1
+ATC_TTS_VOICE=alloy
+```
+
+Without `ATC_TTS_URL`, replies are read by the device's built-in voice, which is instant. The
+microphone needs HTTPS. On a phone, keep the screen on: browsers stop the microphone when the
+screen locks.
+
 ## Notes
 
 - Claude Code only starts in folders you have trusted. If atc reports a folder is not trusted,

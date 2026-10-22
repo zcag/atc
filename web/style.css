@@ -127,7 +127,6 @@ button { cursor: pointer; }
 .strip .said.doing { font-family: var(--mono); font-size: 12.5px; color: var(--work); }
 .strip.past .title { font-weight: 500; }
 .tag { font-size: 12px; padding: 0 6px; border-radius: 4px; background: var(--sunk); color: var(--dim); }
-.tag.bypass { color: var(--bypass); }
 .word { font-size: 12px; font-weight: 600; color: var(--edge, var(--stop)); }
 
 .search { display: flex; gap: 6px; margin: 14px 0 8px; }
@@ -175,6 +174,24 @@ button { cursor: pointer; }
 .cover .h { font-weight: 600; color: var(--ink); margin-bottom: 6px; }
 .cover .row { display: flex; gap: 8px; justify-content: center; }
 
+.voicebar {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; flex-wrap: wrap;
+  background: var(--strip); border-top: 1px solid var(--line);
+}
+.orb { width: 34px; height: 34px; border-radius: 50%; flex: none; background: var(--stop); transition: transform .15s, background .2s; }
+.orb.listening { background: var(--work); }
+.orb.hearing { background: var(--work); transform: scale(1.18); box-shadow: 0 0 0 6px color-mix(in srgb, var(--work) 25%, transparent); }
+.orb.thinking, .orb.waiting { background: var(--turn); }
+.orb.speaking { background: var(--needs); animation: talk 1s ease-in-out infinite alternate; }
+.orb.error { background: var(--needs); }
+@keyframes talk { from { transform: scale(.94); } to { transform: scale(1.08); } }
+@media (prefers-reduced-motion: reduce) { .orb.speaking { animation: none; } }
+.vtext { flex: 1; min-width: 200px; }
+.vphase { font-weight: 600; font-size: 14px; }
+.vline { font-size: 13px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vline b { color: var(--ink); font-weight: 600; margin-right: 6px; }
+.vacts { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.voice-btn.on { background: var(--work); color: #fff; border-color: var(--work); }
 .keys {
   display: none; gap: 6px; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); overflow-x: auto;
   background: var(--strip); border-top: 1px solid var(--line); scrollbar-width: none;

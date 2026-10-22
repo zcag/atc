@@ -582,9 +582,6 @@ func (m model) row(s sessions.Session, sel bool) []string {
 	if s.Model != "" {
 		meta = append(meta, st(dim).Render(short(s.Model)))
 	}
-	if s.PermissionMode == "bypassPermissions" {
-		meta = append(meta, st(plain.Foreground(red)).Render("bypass"))
-	}
 	if s.Kind == "interactive" {
 		meta = append(meta, st(dim).Render("in a terminal"))
 	}

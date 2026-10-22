@@ -39,6 +39,7 @@ type Server struct {
 	Host  string
 	Push  *push.Pusher
 	Peers []Peer
+	Voice Voice
 
 	fleet *fleet
 
@@ -71,6 +72,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) { s.Term.Serve(w, r, r.PathValue("id")) })
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
+	mux.HandleFunc("POST /api/voice/stt", s.stt)
+	mux.HandleFunc("POST /api/voice/condense", s.condense)
+	mux.HandleFunc("POST /api/voice/tts", s.tts)
 	mux.HandleFunc("GET /api/push/key", s.pushKey)
 	mux.HandleFunc("POST /api/push/subscribe", s.pushSubscribe)
 	mux.HandleFunc("POST /api/push/unsubscribe", s.pushUnsubscribe)
@@ -128,7 +132,8 @@ func (s *Server) me() map[string]any {
 	for _, p := range s.Peers {
 		hosts = append(hosts, p.Name)
 	}
-	return map[string]any{"host": s.Host, "home": home, "claudeTheme": theme, "hosts": hosts, "peers": s.fleet.statuses()}
+	return map[string]any{"host": s.Host, "home": home, "claudeTheme": theme, "hosts": hosts, "peers": s.fleet.statuses(),
+		"voice": map[string]bool{"stt": s.Voice.STT != "", "tts": s.Voice.TTS != "", "condense": s.Voice.LLM != ""}}
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
