@@ -109,8 +109,10 @@ function App() {
   }, [me]);
 
   const [assisting, setAssisting] = useState(location.hash === "#/assist");
+  const shareRoute = () => (location.hash.startsWith("#/share") ? location.hash : null);
+  const [sharing, setSharing] = useState(shareRoute);
   useEffect(() => {
-    const f = () => setAssisting(location.hash === "#/assist");
+    const f = () => { setAssisting(location.hash === "#/assist"); setSharing(shareRoute()); };
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
@@ -215,6 +217,7 @@ function App() {
       </main>
     </div>
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
+    ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
@@ -1150,38 +1153,76 @@ function md(src) {
   return out.join("");
 }
 
+function useDirs(host, home) {
+  const [dirs, setDirs] = useState([]);
+  useEffect(() => { api(`/api/dirs${hostQ(host, home)}`).then((d) => setDirs(d || []), () => setDirs([])); }, [host]);
+  return dirs;
+}
+
+const hostQ = (host, home) => (host && host !== home ? `?host=${encodeURIComponent(host)}` : "");
+
+function FolderField({ dirs, dir, setDir, note, autofocus }) {
+  const shown = useMemo(() => {
+    const q = dir.toLowerCase();
+    return dirs.filter((d) => !q || tilde(d.path).toLowerCase().includes(q.replace(/^~/, "")) || d.path.toLowerCase().includes(q)).slice(0, 40);
+  }, [dir, dirs]);
+  return html`
+    <label class="field">
+      <span>Folder${note && html` <em class="note">${note}</em>`}</span>
+      <input value=${dir} onInput=${(e) => setDir(e.target.value, true)} placeholder="~/projects/app" autofocus=${autofocus} autocapitalize="off" autocomplete="off" spellcheck="false" />
+      <div class="dirs">
+        ${shown.map((d) => html`<button type="button" class=${tilde(d.path) === dir ? "on" : ""} onClick=${() => setDir(tilde(d.path), true)}>${tilde(d.path)}${d.recent && html`<span class="r">recent</span>`}</button>`)}
+        ${shown.length === 0 && html`<p class="empty" style="padding: 10px">No match. A full path works too.</p>`}
+      </div>
+    </label>`;
+}
+
+function WorktreeField({ dirs, dir, on, setOn }) {
+  const d = dirs.find((d) => tilde(d.path) === dir.trim() || d.path === dir.trim());
+  if (!d?.git) return null;
+  return html`
+    <label class="check">
+      <input type="checkbox" checked=${on} onChange=${(e) => setOn(e.target.checked)} />
+      <span>Work in its own git worktree<small>A separate checkout on a new branch, so it can't clash with other sessions in this repo.</small></span>
+    </label>`;
+}
+
+function HostField({ hosts, host, setHost }) {
+  if (hosts.length < 2) return null;
+  return html`
+    <div class="field"><span>Machine</span>
+      <div class="seg">${hosts.map((h) => html`<button type="button" class=${h === host ? "on" : ""} onClick=${() => setHost(h)}>${h}</button>`)}</div>
+    </div>`;
+}
+
+const untrusted = "Claude Code hasn't been trusted in this folder yet. Open Claude there once and accept the prompt, then try again.";
+
 function NewSession({ onClose, say, hosts, home }) {
   const [host, setHost] = useState(home);
-  const hq = host && host !== home ? `?host=${encodeURIComponent(host)}` : "";
-  const [dirs, setDirs] = useState([]);
+  const dirs = useDirs(host, home);
   const [dir, setDir] = useState("");
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
+  const [worktree, setWorktree] = useState(false);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
-  useEffect(() => { api(`/api/dirs${hq}`).then((d) => setDirs(d || []), () => setDirs([])); }, [host]);
   useEffect(() => {
     const f = (e) => e.key === "Escape" && onClose();
     addEventListener("keydown", f);
     return () => removeEventListener("keydown", f);
   }, []);
 
-  const shown = useMemo(() => {
-    const q = dir.toLowerCase();
-    return dirs.filter((d) => !q || tilde(d.path).toLowerCase().includes(q.replace(/^~/, "")) || d.path.toLowerCase().includes(q)).slice(0, 40);
-  }, [dir, dirs]);
-
   const start = async (e) => {
     e.preventDefault();
     setBusy(true);
     setErr(null);
     try {
-      const r = await api(`/api/sessions${hq}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt } });
+      const r = await api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt, worktree } });
       onClose();
       say("Session started.");
       go(r.id);
     } catch (e) {
-      setErr(e.status === 409 ? "Claude Code hasn't been trusted in this folder yet. Open Claude there once and accept the prompt, then try again." : e.message);
+      setErr(e.status === 409 ? untrusted : e.message);
     }
     setBusy(false);
   };
@@ -1190,24 +1231,139 @@ function NewSession({ onClose, say, hosts, home }) {
     <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
       <form class="sheet" onSubmit=${start}>
         <h3>New session</h3>
-        ${hosts.length > 1 && html`
-          <div class="field"><span>Machine</span>
-            <div class="seg">${hosts.map((h) => html`<button type="button" class=${h === host ? "on" : ""} onClick=${() => { setHost(h); setDir(""); }}>${h}</button>`)}</div>
-          </div>`}
-        <label class="field">
-          <span>Folder</span>
-          <input value=${dir} onInput=${(e) => setDir(e.target.value)} placeholder="~/projects/app" autofocus autocapitalize="off" autocomplete="off" spellcheck="false" />
-          <div class="dirs">
-            ${shown.map((d) => html`<button type="button" class=${tilde(d.path) === dir ? "on" : ""} onClick=${() => setDir(tilde(d.path))}>${tilde(d.path)}${d.recent && html`<span class="r">recent</span>`}</button>`)}
-            ${shown.length === 0 && html`<p class="empty" style="padding: 10px">No match. A full path works too.</p>`}
-          </div>
-        </label>
+        <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDir(""); }} />
+        <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} autofocus />
+        <${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />
         <label class="field"><span>Name</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder="Optional" /><small>Without one, Claude titles the session from what you ask.</small></label>
         <label class="field"><span>First message</span><textarea rows="3" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} placeholder="Optional. You can also type it in the terminal."></textarea></label>
         ${err && html`<p class="err">${err}</p>`}
         <div class="actions">
           <button type="button" class="btn" onClick=${onClose}>Cancel</button>
           <button class="btn primary" disabled=${!dir.trim() || busy}>${busy ? "Starting…" : "Start session"}</button>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
+function readShared() {
+  try {
+    const got = APP?.shared && JSON.parse(APP.shared() || "null");
+    if (got) return got;
+  } catch {}
+  const q = new URLSearchParams(location.hash.split("?")[1] || "");
+  return { text: [q.get("title"), q.get("text"), q.get("url")].filter(Boolean).join("\n"), files: [] };
+}
+
+const fileSize = (n) => (n > 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+function Share({ live, hosts, home, say }) {
+  const shared = useMemo(readShared, []);
+  const [text, setText] = useState(() => {
+    const t = (shared.text || "").trim(), sub = (shared.subject || "").trim();
+    return sub && !t.includes(sub) ? `${sub}\n${t}`.trim() : t;
+  });
+  const [files, setFiles] = useState(shared.files || []);
+  const [ask, setAsk] = useState("");
+  const running = (live || []).filter((s) => s.attachable && !s.parked);
+  const [to, setTo] = useState("new");
+  const [target, setTarget] = useState(null);
+  const [host, setHost] = useState(home);
+  const dirs = useDirs(host, home);
+  const [dir, setDirRaw] = useState("");
+  const [picked, setPicked] = useState(false);
+  const [note, setNote] = useState("");
+  const [worktree, setWorktree] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const setDir = (d, byHand) => { setDirRaw(d); if (byHand) { setPicked(true); setNote(""); } };
+
+  const about = [ask, text, ...files.map((f) => f.name)].join("\n");
+  useEffect(() => {
+    if (picked || to !== "new") return;
+    const t = setTimeout(() => {
+      api(`/api/guess${hostQ(host, home)}`, { method: "POST", body: { text: about } }).then((r) => {
+        if (picked) return;
+        if (r.dir) { setDirRaw(tilde(r.dir)); setNote("suggested"); }
+        else if (!dir && dirs[0]) { setDirRaw(tilde(dirs[0].path)); setNote("most recent"); }
+      }, () => {});
+    }, ask ? 900 : 0);
+    return () => clearTimeout(t);
+  }, [about, host, picked, to, dirs.length]);
+
+  const close = (id) => { APP?.clearShared?.(); id ? go(id) : go(null); };
+  const quote = (p) => (/\s/.test(p) ? `"${p}"` : p);
+
+  const send = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      const paths = [];
+      for (const f of files) {
+        const blob = await (await fetch(f.url)).blob();
+        const fd = new FormData();
+        fd.append("file", blob, f.name);
+        const res = await fetch(to === "new" ? `/api/uploads${hostQ(host, home)}` : `/api/sessions/${target.sessionId}/upload`, { method: "POST", body: fd });
+        if (!res.ok) throw new Error(`Uploading ${f.name} failed: ${(await res.text()).trim() || res.statusText}`);
+        paths.push((await res.json()).path);
+      }
+      const prompt = [ask.trim(), text.trim(), paths.map(quote).join("\n")].filter(Boolean).join("\n\n");
+      if (to === "new") {
+        const r = await api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), prompt, worktree } });
+        say("Session started.");
+        close(r.id);
+      } else {
+        await api(`/api/sessions/${target.id}/send`, { method: "POST", body: { text: prompt } });
+        say(`Sent to ${target.title}.`);
+        close(target.id);
+      }
+    } catch (e) {
+      setErr(e.status === 409 ? untrusted : e.message);
+    }
+    setBusy(false);
+  };
+
+  const ready = !busy && (ask.trim() || text.trim() || files.length) && (to === "new" ? dir.trim() : target);
+  return html`
+    <div class="share">
+      <form class="sheet" onSubmit=${send}>
+        <h3>Send to Claude</h3>
+        ${(text || !files.length) && html`<label class="field"><span>Shared</span><textarea class="shared" rows=${Math.min(6, Math.max(2, text.split("\n").length))} value=${text} onInput=${(e) => setText(e.target.value)} placeholder="Paste or type what this is about"></textarea></label>`}
+        ${files.length > 0 && html`
+          <div class="files">
+            ${files.map((f, i) => html`
+              <div class="file">
+                ${f.type?.startsWith("image/") ? html`<img src=${f.url} alt="" />` : html`<span class="ext">${(f.name.split(".").pop() || "file").slice(0, 4)}</span>`}
+                <span class="nm">${f.name}<small>${fileSize(f.size || 0)}</small></span>
+                <button type="button" class="icon" aria-label=${`Remove ${f.name}`} onClick=${() => setFiles(files.filter((_, j) => j !== i))}>✕</button>
+              </div>`)}
+          </div>`}
+        <label class="field"><span>What should Claude do?</span>
+          <textarea rows="2" value=${ask} onInput=${(e) => setAsk(e.target.value)} placeholder="Look into this" autofocus></textarea>
+        </label>
+        <div class="field"><span>Where</span>
+          <div class="seg wide">
+            <button type="button" class=${to === "new" ? "on" : ""} onClick=${() => setTo("new")}>New session</button>
+            <button type="button" class=${to === "running" ? "on" : ""} disabled=${!running.length} onClick=${() => setTo("running")}>Running session</button>
+          </div>
+        </div>
+        ${to === "new" ? html`
+          <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDirRaw(""); setPicked(false); }} />
+          <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} note=${note} />
+          <${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />
+        ` : html`
+          <div class="targets">
+            ${running.map((s) => html`
+              <button type="button" class=${target?.sessionId === s.sessionId ? "on" : ""} onClick=${() => setTarget(s)}>
+                <i class=${s.state}></i>
+                <span class="t">${s.title}<small>${MULTI ? `${s.host} · ` : ""}${tilde(s.cwd)} · ${WORD[s.state] || s.state}</small></span>
+              </button>`)}
+          </div>`}
+        ${err && html`<p class="err">${err}</p>`}
+        <div class="actions">
+          <button type="button" class="btn" onClick=${() => close()}>Cancel</button>
+          <button class="btn primary" disabled=${!ready}>${busy ? "Sending…" : to === "new" ? "Start session" : "Send"}</button>
         </div>
       </form>
     </div>

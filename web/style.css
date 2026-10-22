@@ -304,3 +304,33 @@ button { cursor: pointer; }
 .choice .row i.working { background: var(--work); }
 .link { border: 0; background: none; color: var(--dim); font-size: 15px; text-decoration: underline; align-self: center; padding: 4px; }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 30; background: var(--ink); color: var(--board); padding: 8px 14px; border-radius: 8px; font-size: 14px; max-width: calc(100% - 32px); }
+
+.share { position: fixed; inset: 0; z-index: 25; background: rgba(10, 14, 20, .45); display: grid; place-items: center; padding: 16px; }
+.share .sheet { padding-bottom: max(18px, env(safe-area-inset-bottom)); }
+.share textarea.shared { font: 13px/1.45 var(--mono); }
+.field .note { font: italic 400 12.5px var(--sans); color: var(--work); margin-left: 4px; }
+.seg.wide { display: flex; }
+.seg.wide button { flex: 1; padding: 8px 10px; font-size: 14px; }
+.seg button:disabled { opacity: .45; }
+.check { display: flex; gap: 10px; align-items: flex-start; margin: -4px 0 14px; font-size: 14px; cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--work); width: 16px; height: 16px; flex: none; }
+.check small { display: block; color: var(--faint); font-size: 12.5px; margin-top: 2px; }
+.files { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.file { display: flex; gap: 10px; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--board); padding: 6px 6px 6px 6px; }
+.file img, .file .ext { width: 44px; height: 44px; border-radius: 5px; object-fit: cover; flex: none; }
+.file .ext { display: grid; place-items: center; background: var(--sunk); color: var(--dim); font: 600 11px var(--mono); text-transform: lowercase; }
+.file .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.file .nm small { display: block; color: var(--faint); font-size: 12px; }
+.targets { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; background: var(--board); max-height: 260px; overflow-y: auto; margin-bottom: 14px; }
+.targets button { display: flex; gap: 10px; align-items: center; border: 0; background: none; text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+.targets button:last-child { border-bottom: 0; }
+.targets button.on { background: var(--sunk); box-shadow: inset 3px 0 var(--work); }
+.targets i { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--stop); }
+.targets i.needs-you { background: var(--needs); }
+.targets i.your-turn { background: var(--turn); }
+.targets i.working { background: var(--work); }
+.targets .t { min-width: 0; font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.targets .t small { display: block; font: 400 12px var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 600px) {
+  .share { padding: 0; place-items: stretch; }
+}

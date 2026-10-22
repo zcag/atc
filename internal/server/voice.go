@@ -74,11 +74,20 @@ func (s *Server) condense(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no speech model configured", http.StatusNotImplemented)
 		return
 	}
+	text, err := s.chat(r.Context(), condensePrompt, in.Text, 160)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]string{"text": text})
+}
+
+func (s *Server) chat(ctx context.Context, system, user string, maxTokens int) (string, error) {
 	b, _ := json.Marshal(map[string]any{
-		"model": s.Voice.LLMModel, "temperature": 0.2, "max_tokens": 160,
-		"messages": []map[string]string{{"role": "system", "content": condensePrompt}, {"role": "user", "content": in.Text}},
+		"model": s.Voice.LLMModel, "temperature": 0.2, "max_tokens": maxTokens,
+		"messages": []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": user}},
 	})
-	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, "POST", s.Voice.LLM, bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
@@ -87,11 +96,13 @@ func (s *Server) condense(w http.ResponseWriter, r *http.Request) {
 			Message struct{ Content string } `json:"message"`
 		} `json:"choices"`
 	}
-	if err := call(req, &out); err != nil || len(out.Choices) == 0 {
-		fail(w, cmp.Or(err, fmt.Errorf("empty answer from the speech model")))
-		return
+	if err := call(req, &out); err != nil {
+		return "", err
 	}
-	reply(w, map[string]string{"text": strings.TrimSpace(out.Choices[0].Message.Content)})
+	if len(out.Choices) == 0 {
+		return "", fmt.Errorf("empty answer from the speech model")
+	}
+	return strings.TrimSpace(out.Choices[0].Message.Content), nil
 }
 
 func (s *Server) tts(w http.ResponseWriter, r *http.Request) {

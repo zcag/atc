@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -45,6 +46,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc new [-n name] [-host machine] [dir] [prompt...]
       dir defaults to the current dir, with your home written as ~ so it
       maps onto the same path under the server's home
+  atc send <session> [text...]   type a message into a running session; reads
+                                 stdin when no text is given (cmd | atc send 2)
   atc resume <session>           bring a stopped or past session back
   atc stop <session>             stop it; the conversation is kept
   atc rm <session>               delete a background session
@@ -90,6 +93,8 @@ func main() {
 		err = newSession(args)
 	case "attach":
 		err = attachTo(args)
+	case "send":
+		err = sendTo(args)
 	case "resume", "stop", "rm", "rename", "pin", "unpin", "park", "unpark":
 		err = act(cmd, args)
 	case "-h", "--help", "help":
@@ -295,6 +300,32 @@ func act(cmd string, args []string) error {
 	default:
 		return c.Patch(s.SessionID, map[string]any{"pinned": cmd == "pin"})
 	}
+}
+
+func sendTo(args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: atc send <session> [text...]")
+	}
+	text := strings.Join(args[1:], " ")
+	if text == "" {
+		b, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			return err
+		}
+		text = string(b)
+	}
+	if strings.TrimSpace(text) == "" {
+		return fmt.Errorf("nothing to send")
+	}
+	c := client.Load()
+	s, err := find(c, args[0], false)
+	if err != nil {
+		return err
+	}
+	if !s.Attachable {
+		return fmt.Errorf("%q is not running in the background; resume it first", s.Title)
+	}
+	return c.Send(s.ID, text)
 }
 
 func attachTo(args []string) error {

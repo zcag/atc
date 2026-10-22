@@ -29,6 +29,8 @@ class Bridge(private val a: MainActivity) : TextToSpeech.OnInitListener {
     @JavascriptInterface fun version() = BuildConfig.VERSION_CODE
     @JavascriptInterface fun versionName() = BuildConfig.VERSION_NAME
     @JavascriptInterface fun pushStatus() = Push.status(a)
+    @JavascriptInterface fun shared() = Shared.json()
+    @JavascriptInterface fun clearShared() = Shared.clear(a)
     @JavascriptInterface fun checkUpdate() = a.runOnUiThread { a.updater.check(manual = true) }
 
     @JavascriptInterface

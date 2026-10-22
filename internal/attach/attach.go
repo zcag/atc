@@ -240,3 +240,68 @@ func (g *group) apply() {
 		v.queueSize(Control{Type: "size", Cols: o.cols, Rows: o.rows, Owner: v == o, Viewers: len(g.viewers)})
 	}
 }
+
+func (h *Hub) Send(ctx context.Context, id, text string) error {
+	h.mu.Lock()
+	var cols, rows uint16 = 120, 40
+	var live *os.File
+	if g := h.groups[id]; g != nil {
+		live, cols, rows = g.owner.pty, g.owner.cols, g.owner.rows
+	}
+	h.mu.Unlock()
+	paste := []byte("\x1b[200~" + text + "\x1b[201~")
+	if live != nil {
+		live.Write(paste)
+		time.Sleep(300 * time.Millisecond)
+		_, err := live.Write([]byte("\r"))
+		return err
+	}
+
+	cmd := exec.CommandContext(ctx, h.Bin, "attach", id)
+	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
+	f, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: cols, Rows: rows})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		cmd.Process.Signal(syscall.SIGHUP)
+		f.Close()
+		cmd.Wait()
+	}()
+	out, gone := make(chan struct{}, 1), make(chan struct{})
+	go func() {
+		defer close(gone)
+		buf := make([]byte, 32<<10)
+		for {
+			if _, err := f.Read(buf); err != nil {
+				return
+			}
+			select {
+			case out <- struct{}{}:
+			default:
+			}
+		}
+	}()
+	settle := func(quiet, limit time.Duration) error {
+		end := time.After(limit)
+		for {
+			select {
+			case <-out:
+			case <-time.After(quiet):
+				return nil
+			case <-end:
+				return nil
+			case <-gone:
+				return errors.New("the session ended")
+			}
+		}
+	}
+	if err := settle(700*time.Millisecond, 8*time.Second); err != nil {
+		return err
+	}
+	f.Write(paste)
+	time.Sleep(300 * time.Millisecond)
+	f.Write([]byte("\r"))
+	settle(500*time.Millisecond, 3*time.Second)
+	return nil
+}

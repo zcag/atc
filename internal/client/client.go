@@ -159,6 +159,10 @@ func (c *Client) Resume(sid string) (string, error) {
 	return r.ID, err
 }
 
+func (c *Client) Send(id, text string) error {
+	return c.do("POST", "/api/sessions/"+id+"/send", map[string]string{"text": text}, nil)
+}
+
 func (c *Client) Stop(id string) error   { return c.do("POST", "/api/sessions/"+id+"/stop", nil, nil) }
 func (c *Client) Remove(id string) error { return c.do("DELETE", "/api/sessions/"+id, nil, nil) }
 

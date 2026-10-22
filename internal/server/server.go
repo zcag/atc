@@ -77,6 +77,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/sessions/{sid}", s.patch)
 	mux.HandleFunc("GET /api/sessions/{sid}/transcript", s.transcript)
 	mux.HandleFunc("POST /api/sessions/{sid}/upload", s.upload)
+	mux.HandleFunc("POST /api/uploads", s.upload)
+	mux.HandleFunc("POST /api/sessions/{id}/send", s.send)
+	mux.HandleFunc("POST /api/guess", s.guess)
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) { s.Term.Serve(w, r, r.PathValue("id")) })
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
@@ -182,7 +185,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 	cache, _ := os.UserCacheDir()
-	dir := filepath.Join(cache, "atc", "uploads", filepath.Base(r.PathValue("sid")))
+	dir := filepath.Join(cache, "atc", "uploads", filepath.Base(cmp.Or(r.PathValue("sid"), "shared")))
 	name := strings.Map(func(c rune) rune {
 		if c == '/' || c == '\\' || c < ' ' {
 			return '_'
@@ -293,7 +296,10 @@ func (s *Server) route(next http.Handler) http.Handler {
 }
 
 func (s *Server) start(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Dir, Name, Prompt string }
+	var req struct {
+		Dir, Name, Prompt string
+		Worktree          bool
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -309,8 +315,35 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	id, err := s.M.CLI.Start(r.Context(), dir, req.Name, req.Prompt)
+	var extra []string
+	if req.Worktree {
+		extra = append(extra, "--worktree="+worktreeName(req.Name))
+	}
+	id, err := s.M.CLI.Start(r.Context(), dir, req.Name, req.Prompt, extra...)
 	s.done(w, id, err)
+}
+
+func worktreeName(name string) string {
+	slug := strings.Trim(strings.Map(func(c rune) rune {
+		if c >= 'a' && c <= 'z' || c >= '0' && c <= '9' {
+			return c
+		}
+		return '-'
+	}, strings.ToLower(name)), "-")
+	if len(slug) > 40 {
+		slug = strings.TrimRight(slug[:40], "-")
+	}
+	return cmp.Or(slug, "atc") + "-" + time.Now().Format("0102-1504")
+}
+
+func (s *Server) send(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Text string }
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Text) == "" {
+		http.Error(w, "text is required", http.StatusBadRequest)
+		return
+	}
+	id := r.PathValue("id")
+	s.done(w, id, s.Term.Send(r.Context(), id, req.Text))
 }
 
 func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
@@ -370,28 +403,41 @@ func (s *Server) done(w http.ResponseWriter, id string, err error) {
 }
 
 type dir struct {
-	Path   string `json:"path"`
-	Recent bool   `json:"recent,omitempty"`
+	Path   string   `json:"path"`
+	Recent bool     `json:"recent,omitempty"`
+	Git    bool     `json:"git,omitempty"`
+	Titles []string `json:"-"`
 }
 
 func (s *Server) dirs(w http.ResponseWriter, r *http.Request) {
-	seen := map[string]bool{}
+	reply(w, s.dirList())
+}
+
+func (s *Server) dirList() []dir {
+	at := map[string]int{}
 	var out []dir
-	add := func(p string, recent bool) {
-		if p == "" || seen[p] {
-			return
+	add := func(p string, recent bool) int {
+		if p == "" {
+			return -1
+		}
+		if i, ok := at[p]; ok {
+			return i
 		}
 		if st, err := os.Stat(p); err != nil || !st.IsDir() {
-			return
+			return -1
 		}
-		seen[p] = true
-		out = append(out, dir{p, recent})
+		_, err := os.Stat(filepath.Join(p, ".git"))
+		at[p] = len(out)
+		out = append(out, dir{Path: p, Recent: recent, Git: err == nil})
+		return at[p]
 	}
 	for _, h := range s.M.History("", "", 0) {
-		if len(out) >= 30 {
-			break
+		if _, seen := at[h.StartCwd]; !seen && len(out) >= 30 {
+			continue
 		}
-		add(h.StartCwd, true)
+		if i := add(h.StartCwd, true); i >= 0 && len(out[i].Titles) < 4 && h.Title != "" {
+			out[i].Titles = append(out[i].Titles, h.Title)
+		}
 	}
 	for _, root := range s.Roots {
 		add(root, false)
@@ -407,7 +453,7 @@ func (s *Server) dirs(w http.ResponseWriter, r *http.Request) {
 			add(k, false)
 		}
 	}
-	reply(w, out)
+	return out
 }
 
 func (s *Server) events(w http.ResponseWriter, r *http.Request) {

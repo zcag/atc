@@ -29,17 +29,22 @@ func fakeClaude(t *testing.T) string {
 	os.WriteFile(bin, []byte(`#!/bin/sh
 case "$1" in
 agents) cat "`+dir+`/agents.json" ;;
---bg) echo "backgrounded · abcd1234 · x" ;;
+--bg) echo "$@" > "`+dir+`/started"; echo "backgrounded · abcd1234 · x" ;;
+attach) IFS= read -r line; printf '%s' "$line" > "`+dir+`/sent" ;;
 esac
 `), 0o755)
 	return bin
 }
 
-func newTestServer(t *testing.T, peers []Peer, voice Voice) *httptest.Server {
+func newTestServer(t *testing.T, peers []Peer, voice Voice, roots ...string) *httptest.Server {
+	return serverWith(t, fakeClaude(t), peers, voice, roots...)
+}
+
+func serverWith(t *testing.T, bin string, peers []Peer, voice Voice, roots ...string) *httptest.Server {
 	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
 	s := &Server{
-		M:     &sessions.Manager{CLI: claude.CLI{Bin: fakeClaude(t)}, Index: history.New(t.TempDir()), Store: st},
-		Term:  &attach.Hub{},
+		M:    &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st},
+		Term: &attach.Hub{Bin: bin}, Roots: roots,
 		Web:   fstest.MapFS{"index.html": {Data: []byte("<!doctype html>atc")}},
 		Token: "tok", Host: "here", Peers: peers, Voice: voice,
 	}
@@ -230,5 +235,59 @@ func TestMergeHistory(t *testing.T) {
 	}, 3)
 	if len(got) != 3 || got[0].Title != "d" || got[1].Title != "c" || got[2].Title != "b" {
 		t.Fatalf("got %v", got)
+	}
+}
+
+func TestGuess(t *testing.T) {
+	root := t.TempDir()
+	for _, d := range []string{"alpha", "beta", "gamma"} {
+		os.Mkdir(filepath.Join(root, d), 0o755)
+	}
+	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"choices":[{"message":{"content":"3"}}]}`))
+	}))
+	defer llm.Close()
+	ts := newTestServer(t, nil, Voice{LLM: llm.URL}, root)
+	cases := map[string][2]string{
+		"crash in Beta when saving":                 {"beta", "name"},
+		"https://github.com/someone/alpha/issues/3": {"alpha", "name"},
+		"something vague":                           {"beta", "model"},
+	}
+	for text, want := range cases {
+		b, _ := json.Marshal(map[string]string{"text": text})
+		_, body := do(t, "POST", ts.URL+"/api/guess", "tok", string(b))
+		var got struct{ Dir, By string }
+		json.Unmarshal([]byte(body), &got)
+		if got.Dir != filepath.Join(root, want[0]) || got.By != want[1] {
+			t.Errorf("%q: got %s, want %v", text, body, want)
+		}
+	}
+}
+
+func TestStartWorktreeAndSend(t *testing.T) {
+	bin := fakeClaude(t)
+	ts := serverWith(t, bin, nil, Voice{})
+	dir := t.TempDir()
+	b, _ := json.Marshal(map[string]any{"dir": dir, "name": "Fix the Login bug!", "prompt": "go", "worktree": true})
+	if res, body := do(t, "POST", ts.URL+"/api/sessions", "tok", string(b)); res.StatusCode != 200 {
+		t.Fatalf("start: %d %s", res.StatusCode, body)
+	}
+	if args, _ := os.ReadFile(filepath.Join(filepath.Dir(bin), "started")); !strings.Contains(string(args), "--worktree=fix-the-login-bug-") || !strings.Contains(string(args), "--name Fix the Login bug! go") {
+		t.Errorf("start args: %s", args)
+	}
+	if res, body := do(t, "POST", ts.URL+"/api/sessions/loc00001/send", "tok", `{"text":"hello there"}`); res.StatusCode != 200 {
+		t.Fatalf("send: %d %s", res.StatusCode, body)
+	}
+	if sent, _ := os.ReadFile(filepath.Join(filepath.Dir(bin), "sent")); string(sent) != "\x1b[200~hello there\x1b[201~" {
+		t.Errorf("sent %q", sent)
+	}
+}
+
+func TestWorktreeName(t *testing.T) {
+	if got := worktreeName("Fix the Login bug!"); !strings.HasPrefix(got, "fix-the-login-bug-") {
+		t.Errorf("got %q", got)
+	}
+	if got := worktreeName(""); !strings.HasPrefix(got, "atc-") {
+		t.Errorf("got %q", got)
 	}
 }
