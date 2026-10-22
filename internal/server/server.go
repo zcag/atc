@@ -151,10 +151,10 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 func (s *Server) static() http.Handler {
 	files := http.FileServerFS(s.Web)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" || r.URL.Path == "/index.html" || r.URL.Path == "/sw.js" || r.URL.Path == "/manifest.webmanifest" {
-			w.Header().Set("Cache-Control", "no-cache")
+		if strings.HasPrefix(r.URL.Path, "/vendor/") {
+			w.Header().Set("Cache-Control", "public, max-age=86400")
 		} else {
-			w.Header().Set("Cache-Control", "public, max-age=3600")
+			w.Header().Set("Cache-Control", "no-cache")
 		}
 		files.ServeHTTP(w, r)
 	})

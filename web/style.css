@@ -107,6 +107,7 @@ button { cursor: pointer; }
 }
 .strip:hover { background: var(--strip-hi); }
 .strip.sel { background: var(--strip-hi); box-shadow: inset 0 0 0 2px var(--focus); }
+.strip.kb { box-shadow: inset 0 0 0 2px var(--focus); outline: 2px dashed color-mix(in srgb, var(--focus) 50%, transparent); outline-offset: 2px; }
 .strip::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 6px; background: var(--edge, var(--stop)); }
 .strip.needs-you { --edge: var(--needs); }
 .strip.your-turn { --edge: var(--turn); }
@@ -206,6 +207,7 @@ button { cursor: pointer; }
   .mic { width: 88px; height: 88px; }
   .vside, .vside.right { justify-content: center; }
 }
+.voice-btn.off { opacity: .55; }
 .voice-btn.on { background: var(--work); color: #fff; border-color: var(--work); }
 .keys {
   display: none; gap: 6px; padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); overflow-x: auto;
@@ -264,4 +266,7 @@ button { cursor: pointer; }
 .login p { color: var(--dim); margin: 0 0 16px; }
 .login code { font-family: var(--mono); font-size: .92em; }
 
+.keyhelp dl { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 0; }
+.keyhelp dt { font: 600 13px var(--mono); white-space: nowrap; }
+.keyhelp dd { margin: 0; color: var(--dim); font-size: 14px; }
 .toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 30; background: var(--ink); color: var(--board); padding: 8px 14px; border-radius: 8px; font-size: 14px; max-width: calc(100% - 32px); }

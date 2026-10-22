@@ -97,6 +97,8 @@ function App() {
   const [up, setUp] = useState(true);
   const [past, setPast] = useState({});
   const [creating, setCreating] = useState(false);
+  const [cursor, setCursor] = useState(null);
+  const [help, setHelp] = useState(false);
   const [toast, setToast] = useState(null);
   const route = useRoute();
   const [push, togglePush] = usePush();
@@ -133,6 +135,48 @@ function App() {
     setTimeout(() => setToast((t) => (t === msg ? null : t)), 3500);
   }, []);
 
+  const ordered = (live || []).filter((x) => x.pinned).concat(BAYS.flatMap(([st]) => (live || []).filter((x) => !x.pinned && x.state === st)));
+  const keys = useRef({});
+  keys.current = { ordered, route, cursor, creating };
+  useEffect(() => {
+    const step = (from, d) => {
+      const list = keys.current.ordered;
+      if (!list.length) return null;
+      const i = list.findIndex((x) => keyOf(x) === from || x.sessionId === from);
+      return list[Math.max(0, Math.min(list.length - 1, i < 0 ? (d > 0 ? 0 : list.length - 1) : i + d))];
+    };
+    const onKey = (e) => {
+      const k = keys.current;
+      if (k.creating) return;
+      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+        const next = step(k.route, e.key === "ArrowUp" ? -1 : 1);
+        if (next) { e.preventDefault(); e.stopPropagation(); go(keyOf(next)); }
+        return;
+      }
+      const t = e.target;
+      if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      const move = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[e.key];
+      if (move) {
+        const next = step(k.cursor || k.route, move);
+        if (next) { e.preventDefault(); setCursor(next.sessionId); document.querySelector(`[data-sid="${next.sessionId}"]`)?.scrollIntoView({ block: "nearest" }); }
+      } else if (e.key === "Enter" && k.cursor) {
+        e.preventDefault();
+        const x = k.ordered.find((x) => x.sessionId === k.cursor);
+        if (x) go(keyOf(x));
+      } else if (e.key === "n") {
+        e.preventDefault(); setCreating(true);
+      } else if (e.key === "/") {
+        e.preventDefault(); document.querySelector('.search input')?.focus();
+      } else if (e.key === "?") {
+        setHelp((h) => !h);
+      } else if (e.key === "Escape") {
+        setHelp(false); setCursor(null);
+      }
+    };
+    addEventListener("keydown", onKey, true);
+    return () => removeEventListener("keydown", onKey, true);
+  }, []);
+
   if (me === undefined) return null;
   if (me === null) return html`<${Login} onDone=${setMe} />`;
   HOME = me.home || HOME;
@@ -160,7 +204,7 @@ function App() {
               aria-label="Notifications" aria-pressed=${push === "on"}>${BELL}</button>`}
           <button class="btn primary" onClick=${() => setCreating(true)}>New session</button>
         </header>
-        <${Board} live=${live} sel=${sel} onPast=${remember} />
+        <${Board} live=${live} sel=${sel} cursor=${cursor} onPast=${remember} />
       </aside>
       <main class="main">
         ${sel
@@ -170,6 +214,21 @@ function App() {
     </div>
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
+    ${help && html`
+      <div class="veil" onPointerDown=${() => setHelp(false)}>
+        <div class="sheet keyhelp">
+          <h3>Keyboard</h3>
+          <dl>
+            <dt>j / k, ↓ / ↑</dt><dd>Move through sessions</dd>
+            <dt>Enter</dt><dd>Open the highlighted session</dd>
+            <dt>Alt + ↑ / ↓</dt><dd>Previous or next session, even from inside a terminal</dd>
+            <dt>n</dt><dd>New session</dd>
+            <dt>/</dt><dd>Search earlier sessions</dd>
+            <dt>Ctrl + Z</dt><dd>In a terminal: detach. The session keeps running.</dd>
+            <dt>?</dt><dd>Show or hide this</dd>
+          </dl>
+        </div>
+      </div>`}
   `;
 }
 
@@ -197,7 +256,7 @@ function Login({ onDone }) {
   `;
 }
 
-function Board({ live, sel, onPast }) {
+function Board({ live, sel, cursor, onPast }) {
   const [q, setQ] = useState("");
   const [hist, setHist] = useState(null);
   const [limit, setLimit] = useState(30);
@@ -221,8 +280,8 @@ function Board({ live, sel, onPast }) {
   return html`
     <div class="board">
       ${live.length === 0 && html`<p class="empty">Nothing is running. Start a session, or pick up an earlier one below.</p>`}
-      ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} />`}
-      ${BAYS.map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} />`)}
+      ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
+      ${BAYS.map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
       <section class="bay">
         <h2>Earlier</h2>
         <div class="search">
@@ -236,20 +295,20 @@ function Board({ live, sel, onPast }) {
   `;
 }
 
-function Bay({ title, list, sel }) {
+function Bay({ title, list, sel, cursor }) {
   if (!list.length) return null;
   return html`
     <section class="bay">
       <h2>${title} <span class="n">${list.length}</span></h2>
-      <div class="rack">${list.map((s) => html`<${Strip} s=${s} sel=${sel} />`)}</div>
+      <div class="rack">${list.map((s) => html`<${Strip} s=${s} sel=${sel} cursor=${cursor} />`)}</div>
     </section>
   `;
 }
 
-function Strip({ s, sel }) {
+function Strip({ s, sel, cursor }) {
   const on = sel && sel.sessionId === s.sessionId;
   return html`
-    <button class="strip ${s.state} ${on ? "sel" : ""}" onClick=${() => go(keyOf(s))} aria-current=${on ? "true" : null}>
+    <button class="strip ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}" data-sid=${s.sessionId} onClick=${() => go(keyOf(s))} aria-current=${on ? "true" : null}>
       <div class="l1">
         <span class="title">${s.title || "Untitled"}</span>
         <span class="when">${s.state === "working" ? html`<${Elapsed} s=${s} />` : ago(s)}</span>
@@ -329,7 +388,9 @@ function Session({ s, say, live }) {
           ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first">no permission prompts</span>`}
         </div>
       </div>
-      ${VOICE.stt && canAttach && html`<button class="btn voice-btn ${voice ? "on" : ""}" aria-pressed=${voice} onClick=${() => { setVoice(!voice); setMode("term"); }}>Voice</button>`}
+      ${VOICE.stt && html`<button class="btn voice-btn ${voice ? "on" : ""} ${canAttach ? "" : "off"}" aria-pressed=${voice}
+        onClick=${() => canAttach ? (setVoice(!voice), setMode("term"))
+          : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
       <div class="seg" role="tablist">
         <button class=${mode === "term" ? "on" : ""} onClick=${() => setMode("term")}>Terminal</button>
         <button class=${mode === "chat" ? "on" : ""} onClick=${() => setMode("chat")}>Transcript</button>
