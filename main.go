@@ -156,8 +156,10 @@ func serve(args []string) error {
 		}
 	}
 	log.Printf("atc listening on http://%s", *addr)
-	if srv.Token != "" {
+	if srv.Token != "" && term.IsTerminal(int(os.Stderr.Fd())) {
 		log.Printf("open http://%s/?token=%s to log in a browser", *addr, srv.Token)
+	} else if srv.Token != "" {
+		log.Printf("run `atc token` for the login token")
 	}
 	return http.ListenAndServe(*addr, srv.Handler())
 }
