@@ -528,7 +528,7 @@ function Term({ s, say, voice, onVoiceOff }) {
     setCover(null);
     const el = box.current;
     const term = new Terminal({
-      fontFamily: '"Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace',
+      fontFamily: '"Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono", "Noto Sans Symbols 2", "Noto Sans Symbols", monospace',
       fontSize: touch ? 12.5 : 14,
       lineHeight: 1.1,
       theme: PALETTE[CLAUDE_THEME],
