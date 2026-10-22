@@ -11,7 +11,6 @@ import (
 	"io"
 	"io/fs"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -44,7 +43,7 @@ type Server struct {
 	AssistDir string
 
 	TrustTailnet   string
-	TrustedProxies []*net.IPNet
+	TrustedProxies *Proxies
 	tailnet        *tailnet
 
 	fleet *fleet

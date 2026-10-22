@@ -151,7 +151,7 @@ func serve(args []string) error {
 		AssistDir: os.Getenv("ATC_ASSIST_DIR"),
 
 		TrustTailnet:   tailscaleBin(os.Getenv("ATC_TRUST_TAILNET")),
-		TrustedProxies: server.ParseCIDRs(os.Getenv("ATC_TRUSTED_PROXIES")),
+		TrustedProxies: server.ParseProxies(os.Getenv("ATC_TRUSTED_PROXIES")),
 	}
 	if srv.Peers, err = server.LoadPeers(filepath.Join(client.ConfigDir(), "peers.json")); err != nil {
 		return err

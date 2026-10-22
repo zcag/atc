@@ -136,9 +136,11 @@ function App() {
     setTimeout(() => setToast((t) => (t === msg ? null : t)), 3500);
   }, []);
 
+  const bay = (st) => (live || []).filter((x) => !x.pinned && !x.parked && x.state === st);
   const ordered = (live || []).filter((x) => x.pinned && !x.parked)
-    .concat(BAYS.flatMap(([st]) => (live || []).filter((x) => !x.pinned && !x.parked && x.state === st)))
-    .concat((live || []).filter((x) => x.parked));
+    .concat(["needs-you", "your-turn", "working"].flatMap(bay))
+    .concat((live || []).filter((x) => x.parked))
+    .concat(bay("stopped"));
   const keys = useRef({});
   keys.current = { ordered, route, cursor, creating };
   useEffect(() => {
@@ -286,8 +288,9 @@ function Board({ live, sel, cursor, onPast }) {
     <div class="board">
       ${live.length === 0 && html`<p class="empty">Nothing is running. Start a session, or pick up an earlier one below.</p>`}
       ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
-      ${BAYS.map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
+      ${BAYS.filter(([st]) => st !== "stopped").map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
       ${parked.length > 0 && html`<${Bay} title="Parked" list=${parked} sel=${sel} cursor=${cursor} folded />`}
+      <${Bay} title="Stopped" list=${rest.filter((s) => s.state === "stopped")} sel=${sel} cursor=${cursor} />
       <section class="bay">
         <h2>Earlier</h2>
         <div class="search">

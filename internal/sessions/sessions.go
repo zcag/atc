@@ -132,17 +132,21 @@ func Sort(list []Session) {
 	sort.SliceStable(list, func(i, j int) bool { return less(list[i], list[j]) })
 }
 
-var rank = map[string]int{NeedsYou: 0, YourTurn: 1, Working: 2, Stopped: 3, Past: 4}
+var rank = map[string]int{NeedsYou: 0, YourTurn: 1, Working: 2, Stopped: 4, Past: 5}
+
+func group(s Session) int {
+	if s.Parked && s.State != Past {
+		return 3
+	}
+	return rank[s.State]
+}
 
 func less(a, b Session) bool {
-	if a.Parked != b.Parked {
-		return b.Parked
+	if pa, pb := a.Pinned && !a.Parked, b.Pinned && !b.Parked; pa != pb {
+		return pa
 	}
-	if a.Pinned != b.Pinned {
-		return a.Pinned
-	}
-	if ra, rb := rank[a.State], rank[b.State]; ra != rb {
-		return ra < rb
+	if ga, gb := group(a), group(b); ga != gb {
+		return ga < gb
 	}
 	return a.Last().After(b.Last())
 }

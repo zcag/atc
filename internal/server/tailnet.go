@@ -21,14 +21,53 @@ func mustCIDR(s string) *net.IPNet {
 	return n
 }
 
-func ParseCIDRs(list string) []*net.IPNet {
-	var out []*net.IPNet
+type Proxies struct {
+	nets       []*net.IPNet
+	containers []string
+	mu         sync.Mutex
+	ips        map[string]bool
+	at         time.Time
+}
+
+func ParseProxies(list string) *Proxies {
+	p := &Proxies{}
 	for _, s := range strings.FieldsFunc(list, func(r rune) bool { return r == ',' || r == ' ' }) {
-		if _, n, err := net.ParseCIDR(s); err == nil {
-			out = append(out, n)
+		if name, ok := strings.CutPrefix(s, "docker:"); ok {
+			p.containers = append(p.containers, name)
+		} else if _, n, err := net.ParseCIDR(s); err == nil {
+			p.nets = append(p.nets, n)
 		}
 	}
-	return out
+	return p
+}
+
+func (p *Proxies) Trusts(ip net.IP) bool {
+	if p == nil {
+		return false
+	}
+	for _, n := range p.nets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	if len(p.containers) == 0 {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.ips[ip.String()] && time.Since(p.at) < time.Minute {
+		return true
+	}
+	if time.Since(p.at) > 5*time.Second {
+		p.ips, p.at = map[string]bool{}, time.Now()
+		for _, c := range p.containers {
+			out, _ := exec.Command("docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", c).Output()
+			for _, a := range strings.Fields(string(out)) {
+				p.ips[a] = true
+			}
+		}
+	}
+	return p.ips[ip.String()]
 }
 
 type tailnet struct {
@@ -91,12 +130,10 @@ func (s *Server) clientIP(r *http.Request) net.IP {
 	if ip == nil {
 		return nil
 	}
-	for _, p := range s.TrustedProxies {
-		if p.Contains(ip) {
-			hops := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
-			if fwd := net.ParseIP(strings.TrimSpace(hops[len(hops)-1])); fwd != nil {
-				return fwd
-			}
+	if s.TrustedProxies.Trusts(ip) {
+		hops := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
+		if fwd := net.ParseIP(strings.TrimSpace(hops[len(hops)-1])); fwd != nil {
+			return fwd
 		}
 	}
 	return ip
