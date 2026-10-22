@@ -415,7 +415,8 @@ button { cursor: pointer; }
   .assist > .choice { width: min(520px, 100%); }
   .assist .choice.talk { min-height: 300px; }
 }
-.top .host { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.top .host { white-space: nowrap; flex: none; }
 .top .tag { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .top .btn { flex: none; }
-@media (max-width: 420px) { .btn.talk .lb { display: none; } }
+.btn.talk { padding-left: 9px; padding-right: 9px; }
+.btn.talk .lb { display: none; }
