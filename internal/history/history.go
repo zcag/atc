@@ -26,6 +26,8 @@ type Transcript struct {
 	Model          string    `json:"model"`
 	PermissionMode string    `json:"permissionMode"`
 	PromptAt       time.Time `json:"promptAt,omitzero"`
+	Activity       string    `json:"activity,omitempty"`
+	LastReply      string    `json:"lastReply,omitempty"`
 	Context        int       `json:"context"`
 	Updated        time.Time `json:"updated"`
 	Size           int64     `json:"size"`
@@ -42,9 +44,11 @@ type entry struct {
 	LastPrompt     string    `json:"lastPrompt"`
 	PermissionMode string    `json:"permissionMode"`
 	PromptID       string    `json:"promptId"`
+	IsSidechain    bool      `json:"isSidechain"`
 	Message        struct {
-		Model string `json:"model"`
-		Usage struct {
+		Content json.RawMessage `json:"content"`
+		Model   string          `json:"model"`
+		Usage   struct {
 			Input       int `json:"input_tokens"`
 			CacheRead   int `json:"cache_read_input_tokens"`
 			CacheCreate int `json:"cache_creation_input_tokens"`
@@ -167,9 +171,20 @@ func apply(t *Transcript, e *entry, custom *string) {
 		t.PermissionMode = e.PermissionMode
 	case "user":
 		if e.PromptID != "" && !e.Timestamp.IsZero() {
-			t.PromptAt = e.Timestamp
+			t.PromptAt, t.Activity = e.Timestamp, ""
 		}
 	case "assistant":
+		var blocks []block
+		if !e.IsSidechain && json.Unmarshal(e.Message.Content, &blocks) == nil {
+			for _, b := range blocks {
+				switch {
+				case b.Type == "tool_use":
+					t.Activity = strings.TrimSpace(b.Name + "  " + summarize(b.Input))
+				case b.Type == "text" && strings.TrimSpace(b.Text) != "":
+					t.Activity, t.LastReply = "", clip(strings.Join(strings.Fields(b.Text), " "), 300)
+				}
+			}
+		}
 		if e.Message.Model != "" && e.Message.Model != "<synthetic>" {
 			t.Model = e.Message.Model
 		}
@@ -183,6 +198,13 @@ func apply(t *Transcript, e *entry, custom *string) {
 	if e.GitBranch != "" {
 		t.Branch = e.GitBranch
 	}
+}
+
+func clip(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n-1]) + "…"
+	}
+	return s
 }
 
 func first(s ...string) string {

@@ -14,6 +14,7 @@ func TestScanPrefersCustomTitleAndReadsTail(t *testing.T) {
 	lines := []string{
 		`{"type":"user","cwd":"/home/u/proj","gitBranch":"main","timestamp":"2026-10-01T10:00:00Z"}`,
 		`{"type":"assistant","cwd":"/home/u/proj","message":{"model":"claude-opus-5-5","usage":{"input_tokens":10,"cache_read_input_tokens":1000,"cache_creation_input_tokens":5}}}`,
+		`{"type":"assistant","message":{"content":[{"type":"text","text":"Looking."},{"type":"tool_use","name":"Bash","input":{"command":"go test ./..."}}]}}`,
 		`{"type":"ai-title","aiTitle":"Fix the thing"}`,
 		`{"type":"last-prompt","lastPrompt":"why does it flip?"}`,
 		`{"type":"permission-mode","permissionMode":"bypassPermissions"}`,
@@ -29,7 +30,7 @@ func TestScanPrefersCustomTitleAndReadsTail(t *testing.T) {
 	tr := got[0]
 	if tr.Title != "Fix the thing" || tr.Cwd != "/home/u/proj" || tr.Branch != "main" ||
 		tr.Model != "claude-opus-5-5" || tr.Context != 1015 || tr.LastPrompt != "why does it flip?" ||
-		tr.StartCwd != "/home/u/proj" || tr.PermissionMode != "bypassPermissions" || tr.AgentName != "proj-3" || tr.SessionID != "abc" {
+		tr.StartCwd != "/home/u/proj" || tr.Activity != "Bash  go test ./..." || tr.LastReply != "Looking." || tr.PermissionMode != "bypassPermissions" || tr.AgentName != "proj-3" || tr.SessionID != "abc" {
 		t.Fatalf("unexpected %+v", tr)
 	}
 

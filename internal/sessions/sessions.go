@@ -37,6 +37,8 @@ type Session struct {
 	LastPrompt     string    `json:"lastPrompt,omitempty"`
 	Context        int       `json:"context,omitempty"`
 	PromptAt       time.Time `json:"promptAt,omitzero"`
+	Activity       string    `json:"activity,omitempty"`
+	LastReply      string    `json:"lastReply,omitempty"`
 	StartedAt      time.Time `json:"startedAt,omitzero"`
 	Updated        time.Time `json:"updated,omitzero"`
 	Pinned         bool      `json:"pinned,omitempty"`
@@ -99,6 +101,7 @@ func (m *Manager) build(t history.Transcript) Session {
 		Title: first(meta.Name, t.Title, t.AgentName, base(t.Cwd)), Name: t.AgentName,
 		Cwd: t.Cwd, StartCwd: t.StartCwd, Branch: t.Branch, Model: t.Model,
 		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, Context: t.Context, PromptAt: t.PromptAt,
+		Activity: t.Activity, LastReply: t.LastReply,
 		Updated: t.Updated, Pinned: meta.Pinned,
 	}
 }

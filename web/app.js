@@ -215,7 +215,9 @@ function Strip({ s, sel }) {
         ${s.permissionMode === "bypassPermissions" && html`<span class="tag bypass">bypass</span>`}
         ${s.kind === "interactive" && html`<span class="tag">in a terminal</span>`}
       </div>
-      ${s.lastPrompt && html`<div class="said">${s.lastPrompt.replace(/\s+/g, " ")}</div>`}
+      ${s.state === "working" && s.activity
+        ? html`<div class="said doing">${s.activity}</div>`
+        : s.lastPrompt && html`<div class="said">${s.lastPrompt.replace(/\s+/g, " ")}</div>`}
     </button>
   `;
 }

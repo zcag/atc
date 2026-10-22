@@ -599,15 +599,18 @@ func (m model) row(s sessions.Session, sel bool) []string {
 	if s.Pinned {
 		meta = append(meta, st(plain.Foreground(accent)).Render("pinned"))
 	}
-	prompt := ""
+	prompt, promptSt := "", st(dim)
 	if s.LastPrompt != "" {
 		prompt = "“" + strings.Join(strings.Fields(s.LastPrompt), " ") + "”"
+	}
+	if s.State == sessions.Working && s.Activity != "" {
+		prompt, promptSt = s.Activity, stateSt
 	}
 	lines := []string{
 		bar + stateSt.Render(ansi.Truncate(fmt.Sprintf("%-*s", stateW, state), stateW, "")) +
 			st(bold).Render(ansi.Truncate(s.Title, titleW, "…")),
 		indent + strings.Join(meta, st(dim).Render(" · ")),
-		indent + st(dim).Render(ansi.Truncate(prompt, max(8, m.w-2-stateW-1), "…")),
+		indent + promptSt.Render(ansi.Truncate(prompt, max(8, m.w-2-stateW-1), "…")),
 	}
 	for i, l := range lines {
 		l = ansi.Truncate(l, m.w, "")
