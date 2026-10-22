@@ -73,6 +73,8 @@ function App() {
   const [past, setPast] = useState({});
   const [creating, setCreating] = useState(false);
   const [cursor, setCursor] = useState(null);
+  const [quick, setQuick] = useState(null);
+  QUICK = (s, rect) => setQuick({ s, rect });
   const [help, setHelp] = useState(false);
   const [toast, setToast] = useState(null);
   const route = useRoute();
@@ -214,6 +216,7 @@ function App() {
     </div>
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
+    ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
     ${stale && html`<div class="appbar" role="status">
       <span>A newer atc app is available (${stale}).</span>
@@ -340,8 +343,23 @@ function Bay({ title, list, sel, cursor, dim }) {
 
 function Strip({ s, sel, cursor }) {
   const on = sel && sel.sessionId === s.sessionId;
+  const press = useRef({ t: 0, fired: false, x: 0, y: 0 });
+  const menu = (e) => { e?.preventDefault(); e?.stopPropagation(); QUICK(s, e?.currentTarget?.getBoundingClientRect()); };
+  const down = (e) => {
+    if (e.pointerType !== "touch") return;
+    const p = press.current;
+    p.fired = false; p.x = e.clientX; p.y = e.clientY;
+    const el = e.currentTarget;
+    p.t = setTimeout(() => { p.fired = true; navigator.vibrate?.(15); QUICK(s, el.getBoundingClientRect()); }, 450);
+  };
+  const move = (e) => { const p = press.current; if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) clearTimeout(p.t); };
+  const up = () => clearTimeout(press.current.t);
   return html`
-    <button class="strip ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}" data-sid=${s.sessionId} onClick=${() => go(keyOf(s))} aria-current=${on ? "true" : null}>
+    <button class="strip ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}" data-sid=${s.sessionId}
+      onClick=${(e) => { if (press.current.fired) { press.current.fired = false; return e.preventDefault(); } go(keyOf(s)); }}
+      onContextMenu=${menu} onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${up}
+      aria-current=${on ? "true" : null}>
+      <span class="qbtn" role="button" aria-label="Actions" onClick=${menu}>⋯</span>
       <div class="l1">
         <span class="title">${s.title || "Untitled"}</span>
         <span class="when">${s.state === "working" ? html`<${Elapsed} s=${s} />` : ago(s)}</span>
@@ -369,6 +387,51 @@ function Elapsed({ s }) {
   return d < 3600 ? `${Math.floor(d / 60)}:${String(d % 60).padStart(2, "0")}` : ago(s);
 }
 
+let QUICK = () => {};
+
+function sessionActions(s, say, { rename, open, after } = {}) {
+  const run = (fn, done) => async () => {
+    try {
+      const r = await fn();
+      done && done(r);
+    } catch (e) {
+      say(e.message);
+    }
+    after && after();
+  };
+  const patch = (body) => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body });
+  const items = [];
+  if (open) items.push({ label: "Open", run: () => go(keyOf(s)) });
+  items.push({ label: "Rename", run: rename || run(() => { const n = prompt("Rename session", s.title); return n === null ? null : patch({ name: n }); }) });
+  items.push({ label: s.pinned ? "Unpin" : "Pin to top", run: run(() => patch({ pinned: !s.pinned })) });
+  items.push({ label: s.parked ? "Unpark" : "Park", run: run(() => patch({ parked: !s.parked })) });
+  if (s.attachable) items.push({ label: "Stop", run: run(() => api(`/api/sessions/${s.id}/stop`, { method: "POST" }), () => say("Stopped. Resume it any time.")) });
+  if (!s.attachable && s.kind !== "interactive")
+    items.push({ label: "Resume", run: run(() => api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" }), (r) => go(r.id)) });
+  if (s.id)
+    items.push({ label: "Delete", danger: true, run: run(() => confirm(`Delete "${s.title}"? Its conversation stays in history.`) ? api(`/api/sessions/${s.id}`, { method: "DELETE" }) : null) });
+  return items;
+}
+
+function QuickMenu({ quick, say, onClose }) {
+  useEffect(() => {
+    const f = (e) => e.key === "Escape" && onClose();
+    addEventListener("keydown", f);
+    return () => removeEventListener("keydown", f);
+  }, []);
+  const { s, rect } = quick;
+  const items = sessionActions(s, say, { open: true });
+  const style = touch || !rect ? "" : `position: fixed; left: ${Math.min(rect.left, innerWidth - 220)}px; top: ${Math.min(rect.bottom + 4, innerHeight - 320)}px`;
+  return html`
+    <div class="veil quick ${touch ? "sheetish" : ""}" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
+      <div class="sheet qmenu" style=${style}>
+        <div class="qtitle">${s.title || "Untitled"}</div>
+        ${items.map((it) => html`<button class="btn ${it.danger ? "danger" : ""}" onClick=${() => { onClose(); it.run(); }}>${it.label}</button>`)}
+      </div>
+    </div>
+  `;
+}
+
 function Session({ s, say, live }) {
   const canAttach = s.attachable;
   const [mode, setMode] = useState(canAttach || s.state === "stopped" ? "term" : "chat");
@@ -394,10 +457,6 @@ function Session({ s, say, live }) {
       setMode("term");
       go(r.id);
     });
-  const stop = () => act(() => api(`/api/sessions/${s.id}/stop`, { method: "POST" }), () => say("Stopped. Resume it any time."));
-  const remove = () =>
-    confirm(`Delete "${s.title}"? Its conversation stays in history.`) &&
-    act(() => api(`/api/sessions/${s.id}`, { method: "DELETE" }), () => go(s.sessionId));
   const patch = (body) => act(() => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body }));
 
   return html`
@@ -428,7 +487,7 @@ function Session({ s, say, live }) {
         <button class=${mode === "term" ? "on" : ""} onClick=${() => setMode("term")}>Terminal</button>
         <button class=${mode === "chat" ? "on" : ""} onClick=${() => setMode("chat")}>Transcript</button>
       </div>
-      <${Menu} s=${s} busy=${busy} onRename=${() => setRenaming(true)} onPin=${() => patch({ pinned: !s.pinned })} onPark=${() => patch({ parked: !s.parked })} onStop=${stop} onRemove=${remove} onResume=${resume} />
+      <${Menu} busy=${busy} items=${sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) })} />
     </div>
     ${mode === "term"
       ? canAttach
@@ -444,7 +503,7 @@ function Unattachable(s, resume, busy, setMode) {
   return html`<div><p class="h">${s.state === "stopped" ? "Stopped" : "Not running"}</p><p>Resume it to pick up where it left off. The whole conversation comes back.</p><div class="row"><button class="btn primary" disabled=${busy} onClick=${resume}>${busy ? "Resuming…" : "Resume"}</button></div></div>`;
 }
 
-function Menu({ s, busy, onRename, onPin, onPark, onStop, onRemove, onResume }) {
+function Menu({ busy, items }) {
   const [open, setOpen] = useState(false);
   const ref = useRef();
   useEffect(() => {
@@ -453,18 +512,12 @@ function Menu({ s, busy, onRename, onPin, onPark, onStop, onRemove, onResume }) 
     addEventListener("pointerdown", f);
     return () => removeEventListener("pointerdown", f);
   }, [open]);
-  const item = (label, fn, cls = "") => html`<button class="btn ${cls}" disabled=${busy} onClick=${() => { setOpen(false); fn(); }}>${label}</button>`;
   return html`
     <div ref=${ref} style="position: relative">
       <button class="icon" aria-label="More actions" aria-expanded=${open} onClick=${() => setOpen(!open)}>•••</button>
       ${open && html`
         <div class="sheet" style="position: absolute; right: 0; top: 36px; width: 190px; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
-          ${item("Rename", onRename)}
-          ${item(s.pinned ? "Unpin" : "Pin to top", onPin)}
-          ${item(s.parked ? "Unpark" : "Park", onPark)}
-          ${s.attachable && item("Stop", onStop)}
-          ${!s.attachable && s.kind !== "interactive" && item("Resume", onResume)}
-          ${s.id && item("Delete", onRemove, "danger")}
+          ${items.map((it) => html`<button class="btn ${it.danger ? "danger" : ""}" disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`)}
         </div>`}
     </div>
   `;
@@ -757,7 +810,7 @@ function VoiceBar({ s, say, send, onClose }) {
   const [heard, setHeard] = useState("");
   const [spoken, setSpoken] = useState("");
   const [muted, setMuted] = useState(false);
-  const [source, setSource] = useState(() => pref("atc.voice", "device"));
+  const [source, setSource] = useState(() => pref("atc.voicesrc", VOICE.tts ? "mine" : "device"));
   const [bargeIn, setBargeIn] = useState(() => pref("atc.bargein", "off") === "on");
   const st = useRef({ awaiting: false, sentAt: 0, permission: false, speaking: false, audio: null, vad: null, turns: [], at: -1 });
   const live = useRef({});
@@ -820,32 +873,34 @@ function VoiceBar({ s, say, send, onClose }) {
     });
   };
 
-  const shorten = async (full) => {
-    const body = speakable(full);
-    if (body.length <= 240) return body;
-    if (VOICE.condense) return api("/api/voice/condense", { method: "POST", body: { text: full } }).then((r) => speakable(r.text), () => sentences(body).slice(0, 3).join(" "));
-    return sentences(body).slice(0, 3).join(" ");
+  const opening = (full) => {
+    const all = sentences(speakable(full));
+    return all.length > 6 ? all.slice(0, 6).join(" ") + " There's more in the transcript." : all.join(" ");
   };
+  const condensed = (full) =>
+    api("/api/voice/condense", { method: "POST", body: { text: full } }).then((r) => speakable(r.text), () => opening(full));
   const loadTurns = async () => {
     const p = await api(`/api/sessions/${live.current.s.sessionId}/transcript`).catch(() => ({ messages: [] }));
     st.current.turns = turnsOf(p.messages || []);
     return st.current.turns;
   };
-  const readTurn = async (i, full) => {
+  const readTurn = async (i, how) => {
     const turns = st.current.turns.length ? st.current.turns : await loadTurns();
     if (i < 0 || i >= turns.length) return speak(i < 0 ? "That was the first reply." : "Nothing newer.");
     st.current.at = i;
-    speak(full ? speakable(turns[i]) : await shorten(turns[i]));
+    speak(how === "full" ? speakable(turns[i]) : how === "short" ? await condensed(turns[i]) : opening(turns[i]));
   };
-  const replay = () => (st.current.at >= 0 ? readTurn(st.current.at, false) : spoken ? speak(spoken) : readLatest());
-  const readLatest = async () => { await loadTurns(); readTurn(st.current.turns.length - 1, false); };
-  const earlier = () => readTurn((st.current.at >= 0 ? st.current.at : st.current.turns.length) - 1, false);
-  const full = () => readTurn(st.current.at >= 0 ? st.current.at : st.current.turns.length - 1, true);
+  const current = () => (st.current.at >= 0 ? st.current.at : st.current.turns.length - 1);
+  const replay = () => (spoken ? speak(spoken) : readLatest());
+  const readLatest = async () => { await loadTurns(); readTurn(st.current.turns.length - 1); };
+  const earlier = () => readTurn((st.current.at >= 0 ? st.current.at : st.current.turns.length) - 1);
+  const full = () => readTurn(current(), "full");
+  const short = () => readTurn(current(), "short");
 
   const answer = async (state) => {
     const turns = await loadTurns();
     st.current.at = turns.length - 1;
-    const body = turns.length ? await shorten(turns[turns.length - 1]) : "";
+    const body = turns.length ? opening(turns[turns.length - 1]) : "";
     st.current.permission = state === "needs-you";
     const ask = state === "needs-you" ? `It needs you${live.current.s.activity ? `, to run ${live.current.s.activity}` : ""}. Say yes to allow it.` : "";
     speak([body, ask].filter(Boolean).join(" ") || "Done.");
@@ -929,7 +984,7 @@ function VoiceBar({ s, say, send, onClose }) {
     listen(!m);
     setPhase(m ? "muted" : st.current.awaiting ? "waiting" : "listening");
   };
-  const pick = (v) => { setSource(v); setPref("atc.voice", v); };
+  const pick = (v) => { setSource(v); setPref("atc.voicesrc", v); };
   const toggleBarge = () => { setBargeIn(!bargeIn); setPref("atc.bargein", bargeIn ? "off" : "on"); };
 
   return html`
@@ -943,7 +998,8 @@ function VoiceBar({ s, say, send, onClose }) {
         <div class="vside">
           <button class="vbtn" onClick=${replay} title="Read the last reply again (or say “repeat”)">Replay</button>
           <button class="vbtn" onClick=${earlier} title="Read the reply before (or say “previous”)">Earlier</button>
-          <button class="vbtn" onClick=${full} title="Read the whole reply, not the short version (or say “read it all”)">Full</button>
+          <button class="vbtn" onClick=${full} title="Read the whole reply (or say “read it all”)">Full</button>
+          ${VOICE.condense && html`<button class="vbtn" onClick=${short} title="A one or two sentence summary of the reply, written by the server's model">Short</button>`}
         </div>
         <div class="vmain">
           <button class="mic ${phase} ${muted ? "off" : ""}" onClick=${tapMic} aria-pressed=${!muted}

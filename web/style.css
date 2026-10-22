@@ -119,6 +119,16 @@ button { cursor: pointer; }
 }
 @keyframes sweep { from { top: -40%; } to { top: 100%; } }
 @media (prefers-reduced-motion: reduce) { .strip.working::after { display: none; } }
+.qbtn { position: absolute; right: 6px; bottom: 6px; padding: 0 8px; border-radius: 6px; color: var(--faint); font-size: 18px; line-height: 22px; opacity: 0; }
+.strip:hover .qbtn, .strip:focus-visible .qbtn { opacity: 1; }
+.qbtn:hover { background: var(--sunk); color: var(--ink); }
+@media (pointer: coarse) { .qbtn { display: none; } }
+.strip { -webkit-touch-callout: none; user-select: none; }
+.quick .qmenu { width: 210px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.quick.sheetish { place-items: end stretch; padding: 0; }
+.quick.sheetish .qmenu { width: 100%; border-radius: 16px 16px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); }
+.quick.sheetish .qmenu .btn { padding: 12px; font-size: 16px; text-align: left; }
+.qtitle { font-weight: 600; font-size: 14px; color: var(--dim); padding: 2px 4px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .strip .l1 { display: flex; align-items: baseline; gap: 8px; }
 .strip .title { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .strip .when { color: var(--faint); font: 12px var(--mono); flex: none; }

@@ -57,8 +57,8 @@ func (c CLI) Agents(ctx context.Context) ([]Agent, error) {
 	return as, json.Unmarshal([]byte(out), &as)
 }
 
-func (c CLI) Start(ctx context.Context, dir, name, prompt string) (string, error) {
-	args := append([]string{"--bg"}, c.Args...)
+func (c CLI) Start(ctx context.Context, dir, name, prompt string, extra ...string) (string, error) {
+	args := append(append([]string{"--bg"}, c.Args...), extra...)
 	if name != "" {
 		args = append(args, "--name", name)
 	}

@@ -592,9 +592,14 @@ func (s *Server) assist(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	id, err := s.M.CLI.Start(r.Context(), dir, "assistant", "")
+	id, err := s.M.CLI.Start(r.Context(), dir, "assistant", "", "--append-system-prompt", voicePrompt)
 	s.done(w, id, err)
 }
+
+const voicePrompt = `This session is used by voice. The user speaks to you through speech-to-text and hears your replies through text-to-speech. ` +
+	`Answer the way you would say it out loud: short, natural sentences, the important part first. No markdown, no code blocks, no tables, no bullet lists, ` +
+	`no URLs read out; say file and command names plainly. When the work produces something long (code, a report, a list), put it in a file or the session ` +
+	`and tell the user briefly where it is. Transcription can mishear words: if a request is ambiguous, ask a short question.`
 
 func (s *Server) app() http.Handler {
 	if s.AppDir == "" {
