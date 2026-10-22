@@ -41,12 +41,14 @@ type Server struct {
 
 	AppDir    string
 	AssistDir string
+	StateDir  string
 
 	TrustTailnet   string
 	TrustedProxies *Proxies
 	tailnet        *tailnet
 
 	fleet *fleet
+	rv    *reviver
 
 	mu   sync.Mutex
 	subs map[chan []byte]bool
@@ -65,6 +67,15 @@ func (s *Server) Handler() http.Handler {
 	}
 	s.fleet = &fleet{peers: s.Peers, client: &http.Client{}, owner: map[string]string{}, status: map[string]string{}, views: map[string]int{}}
 	s.kick = make(chan struct{}, 1)
+	if s.StateDir != "" {
+		s.rv = &reviver{path: revivePath(s.StateDir)}
+		if lost := s.rv.afterReboot(); len(lost) > 0 {
+			go func() {
+				time.Sleep(10 * time.Second)
+				s.revive(lost, s.Host+" restarted")
+			}()
+		}
+	}
 	go s.poll()
 
 	mux := http.NewServeMux()
@@ -369,6 +380,9 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) act(f func(context.Context, string) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if s.rv != nil {
+			s.rv.stopping(r.PathValue("id"))
+		}
 		s.done(w, r.PathValue("id"), f(r.Context(), r.PathValue("id")))
 	}
 }
@@ -510,6 +524,7 @@ func (s *Server) refresh() {
 func (s *Server) poll() {
 	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
+	var idle int
 	for {
 		select {
 		case <-t.C:
@@ -520,6 +535,15 @@ func (s *Server) poll() {
 		s.mu.Unlock()
 		if n == 0 && (s.Push == nil || s.Push.Count() == 0) {
 			s.seen = nil
+			if idle++; s.rv == nil || idle%8 != 0 {
+				continue
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			list, err := s.M.Live(ctx)
+			cancel()
+			if err == nil {
+				s.watch(list)
+			}
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -529,6 +553,7 @@ func (s *Server) poll() {
 			log.Printf("poll: %v", err)
 			continue
 		}
+		s.watch(list)
 		s.notify(list)
 		b, _ := json.Marshal(list)
 		s.mu.Lock()
@@ -542,6 +567,15 @@ func (s *Server) poll() {
 			}
 		}
 		s.mu.Unlock()
+	}
+}
+
+func (s *Server) watch(list []sessions.Session) {
+	if s.rv == nil {
+		return
+	}
+	if lost := s.rv.observe(runningOf(list, s.Host)); len(lost) > 0 {
+		go s.revive(lost, "Claude's background service on "+s.Host+" stopped")
 	}
 }
 

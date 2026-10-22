@@ -153,6 +153,7 @@ func serve(args []string) error {
 		Voice: server.VoiceFromEnv(),
 
 		AppDir:    os.Getenv("ATC_APP_DIR"),
+		StateDir:  client.ConfigDir(),
 		AssistDir: os.Getenv("ATC_ASSIST_DIR"),
 
 		TrustTailnet:   tailscaleBin(os.Getenv("ATC_TRUST_TAILNET")),
