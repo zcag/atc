@@ -2,6 +2,7 @@ package main
 
 import (
 	"cmp"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -13,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"golang.org/x/term"
@@ -26,6 +26,7 @@ import (
 	"github.com/zcag/atc/internal/server"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
+	"github.com/zcag/atc/internal/tools"
 	"github.com/zcag/atc/internal/tui"
 	"github.com/zcag/atc/web"
 )
@@ -48,6 +49,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
       maps onto the same path under the server's home
   atc send <session> [text...]   type a message into a running session; reads
                                  stdin when no text is given (cmd | atc send 2)
+  atc mcp                        tools for Claude to see and drive your other sessions
+                                 (MCP over stdio): claude mcp add atc -- atc mcp
   atc resume <session>           bring a stopped or past session back
   atc stop <session>             stop it; the conversation is kept
   atc rm <session>               delete a background session
@@ -95,6 +98,8 @@ func main() {
 		err = attachTo(args)
 	case "send":
 		err = sendTo(args)
+	case "mcp":
+		err = tools.Run(context.Background(), client.Load())
 	case "resume", "stop", "rm", "rename", "pin", "unpin", "park", "unpark":
 		err = act(cmd, args)
 	case "-h", "--help", "help":
@@ -250,7 +255,7 @@ func newSession(args []string) error {
 	if dir == "" {
 		dir = tildePWD()
 	}
-	id, err := client.Load().StartOn(*host, dir, *name, strings.Join(rest, " "))
+	id, err := client.Load().StartOn(*host, dir, *name, strings.Join(rest, " "), false)
 	if err != nil {
 		return err
 	}
@@ -275,7 +280,7 @@ func act(cmd string, args []string) error {
 		return fmt.Errorf("usage: atc %s <session>%s", cmd, map[bool]string{true: " <name>"}[cmd == "rename"])
 	}
 	c := client.Load()
-	s, err := find(c, args[0], cmd != "stop" && cmd != "rm")
+	s, err := c.Find(args[0], cmd != "stop" && cmd != "rm")
 	if err != nil {
 		return err
 	}
@@ -319,7 +324,7 @@ func sendTo(args []string) error {
 		return fmt.Errorf("nothing to send")
 	}
 	c := client.Load()
-	s, err := find(c, args[0], false)
+	s, err := c.Find(args[0], false)
 	if err != nil {
 		return err
 	}
@@ -334,7 +339,7 @@ func attachTo(args []string) error {
 		return fmt.Errorf("usage: atc attach <session>")
 	}
 	c := client.Load()
-	s, err := find(c, args[0], true)
+	s, err := c.Find(args[0], true)
 	if err != nil {
 		return err
 	}
@@ -359,55 +364,6 @@ func attachTo(args []string) error {
 	}
 	fmt.Println(c.Detached(id, s.Title))
 	return nil
-}
-
-func find(c *client.Client, q string, withPast bool) (sessions.Session, error) {
-	pool, err := c.Live()
-	if err != nil {
-		return sessions.Session{}, err
-	}
-	if withPast {
-		past, err := c.History("", "", 0)
-		if err != nil {
-			return sessions.Session{}, err
-		}
-		pool = append(pool, past...)
-	}
-	return resolve(q, pool)
-}
-
-func resolve(q string, pool []sessions.Session) (sessions.Session, error) {
-	if n, err := strconv.Atoi(q); err == nil && n >= 1 && n <= len(pool) && len(q) < 4 {
-		return pool[n-1], nil
-	}
-	var hits []sessions.Session
-	seen := map[string]bool{}
-	for _, pass := range []func(sessions.Session) bool{
-		func(s sessions.Session) bool { return s.ID == q || s.SessionID == q },
-		func(s sessions.Session) bool { return strings.HasPrefix(s.SessionID, q) },
-		func(s sessions.Session) bool { return strings.Contains(strings.ToLower(s.Title), strings.ToLower(q)) },
-	} {
-		for _, s := range pool {
-			if pass(s) && !seen[s.SessionID] {
-				seen[s.SessionID] = true
-				hits = append(hits, s)
-			}
-		}
-		if len(hits) > 0 {
-			break
-		}
-	}
-	switch len(hits) {
-	case 0:
-		return sessions.Session{}, fmt.Errorf("no session matches %q", q)
-	case 1:
-		return hits[0], nil
-	}
-	msg := fmt.Sprintf("%q matches %d sessions:", q, len(hits))
-	for _, h := range hits[:min(len(hits), 8)] {
-		msg += "\n  " + h.SessionID[:8] + "  " + h.Title
-	}
-	return sessions.Session{}, fmt.Errorf("%s", msg)
 }
 
 var look = map[string]struct{ glyph, word, color string }{

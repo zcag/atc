@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/sessions"
 )
 
@@ -140,16 +141,16 @@ type idReply struct {
 }
 
 func (c *Client) Start(dir, name, prompt string) (string, error) {
-	return c.StartOn("", dir, name, prompt)
+	return c.StartOn("", dir, name, prompt, false)
 }
 
-func (c *Client) StartOn(host, dir, name, prompt string) (string, error) {
+func (c *Client) StartOn(host, dir, name, prompt string, worktree bool) (string, error) {
 	var r idReply
 	path := "/api/sessions"
 	if host != "" {
 		path += "?host=" + url.QueryEscape(host)
 	}
-	err := c.do("POST", path, map[string]string{"dir": dir, "name": name, "prompt": prompt}, &r)
+	err := c.do("POST", path, map[string]any{"dir": dir, "name": name, "prompt": prompt, "worktree": worktree}, &r)
 	return r.ID, err
 }
 
@@ -161,6 +162,10 @@ func (c *Client) Resume(sid string) (string, error) {
 
 func (c *Client) Send(id, text string) error {
 	return c.do("POST", "/api/sessions/"+id+"/send", map[string]string{"text": text}, nil)
+}
+
+func (c *Client) Transcript(sid string) (p history.Page, err error) {
+	return p, c.do("GET", "/api/sessions/"+sid+"/transcript", nil, &p)
 }
 
 func (c *Client) Stop(id string) error   { return c.do("POST", "/api/sessions/"+id+"/stop", nil, nil) }

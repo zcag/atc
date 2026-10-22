@@ -500,7 +500,7 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 		}
 		m.status = "starting a session in " + where + "…"
 		return m, func() tea.Msg {
-			id, err := m.c.StartOn(host, dir, name, v)
+			id, err := m.c.StartOn(host, dir, name, v, false)
 			return doneMsg{status: "started " + id + " in " + where, sel: id, err: err}
 		}
 	}

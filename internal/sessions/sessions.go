@@ -29,6 +29,7 @@ type Session struct {
 	Kind           string    `json:"kind"`
 	State          string    `json:"state"`
 	Attachable     bool      `json:"attachable"`
+	PID            int       `json:"pid,omitempty"`
 	Title          string    `json:"title"`
 	Name           string    `json:"name,omitempty"`
 	Cwd            string    `json:"cwd"`
@@ -66,7 +67,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 	for _, a := range agents {
 		s := m.build(byID[a.SessionID])
 		s.SessionID, s.ID, s.Kind, s.Name = a.SessionID, a.ID, a.Kind, a.Name
-		s.State, s.Attachable = state(a), a.Kind == "background" && a.PID > 0
+		s.State, s.Attachable, s.PID = state(a), a.Kind == "background" && a.PID > 0, a.PID
 		if s.State == NeedsYou && a.Kind == "background" && byID[a.SessionID].Pending == "" {
 			s.State = YourTurn
 		}

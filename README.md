@@ -145,6 +145,19 @@ assistant, so holding the side key opens atc listening, even on the lock screen.
   the side key then opens a session named `assistant` in `ATC_ASSIST_DIR` (default: your home
   folder) with voice on, starting or resuming it as needed.
 
+## One session that runs the others
+
+`atc mcp` gives Claude tools to see and drive your other sessions: list them with what each is
+doing, read a conversation, type a message into one (resuming it first if it was stopped), wait
+for its answer, start new ones (optionally in their own git worktree) and stop them. The voice
+assistant session has these tools from the start, so you can say "what is the deploy session up
+to?" or "tell the docs session to also cover the CLI" without opening either. To give them to any
+session, add atc as an MCP server once:
+
+    claude mcp add atc -- atc mcp
+
+Sessions open in a terminal can be read but not typed into. A session never sends to itself.
+
 ## Voice
 
 Open a session and press **Voice** to talk to it. atc listens through the browser, decides when

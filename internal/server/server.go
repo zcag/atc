@@ -738,14 +738,22 @@ func (s *Server) assist(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	id, err := s.M.CLI.Start(r.Context(), dir, "assistant", "", "--append-system-prompt", voicePrompt)
+	extra := []string{"--append-system-prompt", voicePrompt}
+	if exe, err := os.Executable(); err == nil {
+		cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"atc": map[string]any{"command": exe, "args": []string{"mcp"}}}})
+		extra = append(extra, "--mcp-config", string(cfg))
+	}
+	id, err := s.M.CLI.Start(r.Context(), dir, "assistant", "", extra...)
 	s.done(w, id, err)
 }
 
 const voicePrompt = `This session is used by voice. The user speaks to you through speech-to-text and hears your replies through text-to-speech. ` +
 	`Answer the way you would say it out loud: short, natural sentences, the important part first. No markdown, no code blocks, no tables, no bullet lists, ` +
 	`no URLs read out; say file and command names plainly. When the work produces something long (code, a report, a list), put it in a file or the session ` +
-	`and tell the user briefly where it is. Transcription can mishear words: if a request is ambiguous, ask a short question.`
+	`and tell the user briefly where it is. Transcription can mishear words: if a request is ambiguous, ask a short question. ` +
+	`You are also the user's switchboard for their other Claude Code sessions: with the atc tools you can list them, read what they did, ` +
+	`send them instructions, start new ones and wait for results. When the user mentions another session or project, use those tools ` +
+	`rather than doing the work yourself, and match names loosely since speech-to-text mangles them.`
 
 func (s *Server) app() http.Handler {
 	if s.AppDir == "" {
