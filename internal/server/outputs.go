@@ -65,6 +65,17 @@ func (s *Server) outputs(w http.ResponseWriter, r *http.Request) {
 			servers = append(servers, server{fmt.Sprintf("http://%s:%d/", host, port), port, l.LocalOnly, true, at})
 		}
 	}
+	var kept []outputs.Link
+	for _, l := range links {
+		dup := false
+		for _, v := range servers {
+			dup = dup || strings.HasPrefix(l.URL, strings.TrimSuffix(v.URL, "/"))
+		}
+		if !dup {
+			kept = append(kept, l)
+		}
+	}
+	links = kept
 	out := struct {
 		Servers []server       `json:"servers"`
 		Links   []outputs.Link `json:"links"`

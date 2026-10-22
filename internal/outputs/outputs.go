@@ -43,13 +43,14 @@ type Scanner struct {
 }
 
 var (
-	urlRe      = regexp.MustCompile(`https?://[^\s"'<>()\[\]{}` + "`" + `]+`)
+	urlRe      = regexp.MustCompile(`https?://[^\s"'<>\[\]{}` + "`" + `]+`)
 	localURLRe = regexp.MustCompile(`^https?://(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1?\])(?::(\d+))?`)
 	cmdPortRe  = regexp.MustCompile(`(?:--port[= ]?|\s-p\s?|\bPORT=|http\.server\s+|(?:localhost|127\.0\.0\.1|0\.0\.0\.0):)(\d{2,5})\b`)
 	pathRe     = regexp.MustCompile(`(?:^|[\s"'(=:` + "`" + `])((?:~|/)[\w@%+.,/-]*\.(?i:png|jpe?g|gif|webp|svg|avif|html?|md|markdown|pdf|mp4|webm|mov|mp3|wav|ogg|m4a|csv|tsv))\b`)
 	kinds      = map[string]string{
 		".png": "image", ".jpg": "image", ".jpeg": "image", ".gif": "image", ".webp": "image", ".svg": "image", ".avif": "image",
 		".html": "html", ".htm": "html", ".md": "markdown", ".markdown": "markdown", ".pdf": "pdf",
+		".csv": "table", ".tsv": "table",
 		".mp4": "video", ".webm": "video", ".mov": "video", ".mp3": "audio", ".wav": "audio", ".ogg": "audio", ".m4a": "audio",
 	}
 	noise = []string{"/.claude/", "/node_modules/", "/.git/", "/.cache/", "/proc/"}
@@ -178,7 +179,7 @@ func (f *found) scanText(t string, at time.Time, home string, links bool) {
 		return
 	}
 	for _, u := range urlRe.FindAllString(t, -1) {
-		u = strings.TrimRight(u, ".,;:!?*_")
+		u = trimURL(u)
 		if m := localURLRe.FindStringSubmatch(u); m != nil {
 			if m[1] != "" {
 				f.ports[m[1]] = at
@@ -205,6 +206,19 @@ func (f *found) seen(p string, at time.Time) {
 		return
 	}
 	f.files[p] = File{Path: p, Kind: Kind(p), Op: "seen", At: at}
+}
+
+func trimURL(u string) string {
+	for {
+		t := strings.TrimRight(u, ".,;:!?*_'")
+		if strings.HasSuffix(t, ")") && strings.Count(t, "(") < strings.Count(t, ")") {
+			t = t[:len(t)-1]
+		}
+		if t == u {
+			return u
+		}
+		u = t
+	}
 }
 
 func resultText(raw json.RawMessage) string {

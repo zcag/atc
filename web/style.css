@@ -397,3 +397,10 @@ button { cursor: pointer; }
 .viewer .md code { font: .9em var(--mono); background: var(--sunk); padding: 1px 4px; border-radius: 4px; }
 .viewer .md pre code { background: none; padding: 0; }
 .viewer .code { margin: 0; padding: 14px 16px 60px; font: 12.5px/1.55 var(--mono); white-space: pre; tab-size: 4; width: 100%; color: var(--ink); }
+.viewer .tablewrap { width: 100%; overflow: auto; padding: 0 0 40px; }
+.viewer table.data { border-collapse: collapse; font: 12.5px/1.4 var(--mono); min-width: 100%; }
+.viewer table.data th { position: sticky; top: 0; background: var(--strip); text-align: left; font-weight: 600; border-bottom: 1px solid var(--line); }
+.viewer table.data th, .viewer table.data td { padding: 5px 12px; white-space: nowrap; }
+.viewer table.data td { border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
+.viewer table.data td.n { text-align: right; font-variant-numeric: tabular-nums; }
+.viewer table.data tbody tr:hover { background: var(--strip); }

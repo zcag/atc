@@ -1074,7 +1074,7 @@ function useOutputs(s, every) {
 }
 
 const agoLong = (at) => { const a = ago({ updated: at }); return a === "now" ? "just now" : a ? `${a} ago` : ""; };
-const KIND_LABEL = { image: "Image", html: "Page", markdown: "Notes", pdf: "PDF", video: "Video", audio: "Audio", text: "File" };
+const KIND_LABEL = { table: "Table", image: "Image", html: "Page", markdown: "Notes", pdf: "PDF", video: "Video", audio: "Audio", text: "File" };
 const baseName = (p) => p.split("/").pop();
 const dirName = (p) => tilde(p.slice(0, p.lastIndexOf("/")) || "/");
 
@@ -1156,7 +1156,7 @@ function Viewer({ list, at, setAt, onClose }) {
   const [text, setText] = useState(null);
   useEffect(() => {
     setText(null);
-    if (f.kind !== "markdown" && f.kind !== "text") return;
+    if (f.kind !== "markdown" && f.kind !== "text" && f.kind !== "table") return;
     if (f.size > 2 << 20) return setText({ big: true });
     fetch(f.url).then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.status === 410 ? "This link expired. Close and reopen." : r.statusText))))
       .then((t) => setText({ t }), (e) => setText({ err: e.message }));
@@ -1193,8 +1193,41 @@ function Viewer({ list, at, setAt, onClose }) {
           : text.big ? html`<div class="none"><p>Too large to show here.</p><button class="btn" onClick=${() => openOut(f.url)}>Open it</button></div>`
           : text.err ? html`<p class="empty">${text.err}</p>`
           : f.kind === "markdown" ? html`<article class="md">${md(text.t)}</article>`
+          : f.kind === "table" ? html`<${Table} text=${text.t} tsv=${f.path.endsWith(".tsv")} />`
           : html`<pre class="code">${text.t}</pre>`}
       </div>
+    </div>`;
+}
+
+function parseRows(text, sep) {
+  const rows = [];
+  let row = [], cell = "", q = false;
+  for (let i = 0; i < text.length && rows.length < 1001; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+      else if (c === '"') q = false;
+      else cell += c;
+    } else if (c === '"') q = true;
+    else if (c === sep) { row.push(cell); cell = ""; }
+    else if (c === "\n") { row.push(cell.replace(/\r$/, "")); rows.push(row); row = []; cell = ""; }
+    else cell += c;
+  }
+  if (cell || row.length) rows.push([...row, cell]);
+  return rows;
+}
+
+function Table({ text, tsv }) {
+  const rows = useMemo(() => parseRows(text, tsv ? "\t" : ","), [text]);
+  const [head, ...body] = rows;
+  const num = (head || []).map((_, j) => body.slice(0, 50).every((r) => r[j] === undefined || r[j] === "" || !isNaN(+r[j])));
+  return html`
+    <div class="tablewrap">
+      <table class="data">
+        <thead><tr>${(head || []).map((h) => html`<th>${h}</th>`)}</tr></thead>
+        <tbody>${body.slice(0, 1000).map((r) => html`<tr>${r.map((c, j) => html`<td class=${num[j] ? "n" : ""}>${c}</td>`)}</tr>`)}</tbody>
+      </table>
+      ${rows.length > 1000 && html`<p class="empty">Showing the first 1,000 rows.</p>`}
     </div>`;
 }
 

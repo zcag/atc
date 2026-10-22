@@ -62,3 +62,15 @@ func TestCommandPorts(t *testing.T) {
 		}
 	}
 }
+
+func TestTrimURL(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://www.who.int/detail/ambient-(outdoor)-air-quality": "https://www.who.int/detail/ambient-(outdoor)-air-quality",
+		"https://x.org/a).": "https://x.org/a",
+		"https://x.org/a/,": "https://x.org/a/",
+	} {
+		if got := trimURL(in); got != want {
+			t.Errorf("%s: %s", in, got)
+		}
+	}
+}
