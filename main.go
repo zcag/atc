@@ -20,6 +20,7 @@ import (
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/history"
+	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/server"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
@@ -142,6 +143,9 @@ func serve(args []string) error {
 			Store: st,
 		},
 		Roots: roots,
+	}
+	if srv.Push, err = push.Open(client.ConfigDir(), cmp.Or(os.Getenv("ATC_PUSH_CONTACT"), "https://github.com/zcag/atc")); err != nil {
+		return err
 	}
 	if !*noAuth {
 		if srv.Token, err = serverToken(); err != nil {

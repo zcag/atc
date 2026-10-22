@@ -172,6 +172,12 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 	}
 }
 
+func (h *Hub) Viewing(id string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return id != "" && h.groups[id] != nil
+}
+
 func (h *Hub) join(id string, v *viewer) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

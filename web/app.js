@@ -55,6 +55,35 @@ function useNow(ms) {
   }, [ms]);
 }
 
+function usePush() {
+  const [state, setState] = useState("unsupported");
+  useEffect(() => {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    navigator.serviceWorker
+      .register("sw.js")
+      .then((r) => r.pushManager.getSubscription())
+      .then((sub) => setState(sub ? "on" : Notification.permission === "denied" ? "denied" : "off"), () => {});
+  }, []);
+  const toggle = async () => {
+    const reg = await navigator.serviceWorker.ready;
+    const cur = await reg.pushManager.getSubscription();
+    if (cur) {
+      await api("/api/push/unsubscribe", { method: "POST", body: { endpoint: cur.endpoint } }).catch(() => {});
+      await cur.unsubscribe();
+      return setState("off");
+    }
+    if ((await Notification.requestPermission()) !== "granted") return setState("denied");
+    const { key } = await api("/api/push/key");
+    const raw = atob(key.replace(/-/g, "+").replace(/_/g, "/"));
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(raw, (c) => c.charCodeAt(0)) });
+    await api("/api/push/subscribe", { method: "POST", body: sub.toJSON() });
+    setState("on");
+  };
+  return [state, toggle];
+}
+
+const BELL = html`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>`;
+
 function App() {
   const [me, setMe] = useState(undefined);
   const [live, setLive] = useState(null);
@@ -63,6 +92,7 @@ function App() {
   const [creating, setCreating] = useState(false);
   const [toast, setToast] = useState(null);
   const route = useRoute();
+  const [push, togglePush] = usePush();
   useNow(30000);
 
   useEffect(() => {
@@ -110,6 +140,10 @@ function App() {
           <span class="host">${me.host ? `on ${me.host}` : ""}</span>
           <span class="conn ${up ? "" : "down"}" title=${up ? "Live" : "Reconnecting"}></span>
           <span class="grow"></span>
+          ${push !== "unsupported" && html`
+            <button class="icon bell ${push === "on" ? "on" : ""}" onClick=${() => togglePush().catch((e) => say(e.message))}
+              title=${{ on: "Notifications on for this device. Click to turn off.", off: "Notify this device when a session needs you", denied: "Notifications are blocked in this browser's settings" }[push]}
+              aria-label="Notifications" aria-pressed=${push === "on"}>${BELL}</button>`}
           <button class="btn primary" onClick=${() => setCreating(true)}>New session</button>
         </header>
         <${Board} live=${live} sel=${sel} onPast=${remember} />

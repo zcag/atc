@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
@@ -19,9 +20,12 @@ import (
 	"sync"
 	"time"
 
+	webpush "github.com/SherClockHolmes/webpush-go"
+
 	"github.com/zcag/atc/internal/attach"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
+	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
 )
@@ -33,11 +37,13 @@ type Server struct {
 	Token string
 	Roots []string
 	Host  string
+	Push  *push.Pusher
 
 	mu   sync.Mutex
 	subs map[chan []byte]bool
 	last []byte
 	kick chan struct{}
+	seen map[string]string
 }
 
 func (s *Server) Handler() http.Handler {
@@ -61,6 +67,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) { s.Term.Serve(w, r, r.PathValue("id")) })
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
+	mux.HandleFunc("GET /api/push/key", s.pushKey)
+	mux.HandleFunc("POST /api/push/subscribe", s.pushSubscribe)
+	mux.HandleFunc("POST /api/push/unsubscribe", s.pushUnsubscribe)
 	mux.Handle("GET /", s.static())
 	return s.auth(mux)
 }
@@ -129,7 +138,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 func (s *Server) static() http.Handler {
 	files := http.FileServerFS(s.Web)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" || r.URL.Path == "/sw.js" || r.URL.Path == "/manifest.webmanifest" {
 			w.Header().Set("Cache-Control", "no-cache")
 		} else {
 			w.Header().Set("Cache-Control", "public, max-age=3600")
@@ -376,7 +385,8 @@ func (s *Server) poll() {
 		s.mu.Lock()
 		n := len(s.subs)
 		s.mu.Unlock()
-		if n == 0 {
+		if n == 0 && (s.Push == nil || s.Push.Count() == 0) {
+			s.seen = nil
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -386,6 +396,7 @@ func (s *Server) poll() {
 			log.Printf("poll: %v", err)
 			continue
 		}
+		s.notify(list)
 		b, _ := json.Marshal(list)
 		s.mu.Lock()
 		if !bytes.Equal(b, s.last) {
@@ -399,6 +410,65 @@ func (s *Server) poll() {
 		}
 		s.mu.Unlock()
 	}
+}
+
+func (s *Server) notify(list []sessions.Session) {
+	now := map[string]string{}
+	for _, x := range list {
+		now[x.SessionID] = x.State
+	}
+	prev := s.seen
+	s.seen = now
+	if prev == nil || s.Push == nil {
+		return
+	}
+	for _, x := range list {
+		was, ok := prev[x.SessionID]
+		if !ok || was == x.State || s.Term.Viewing(x.ID) {
+			continue
+		}
+		m := push.Message{Title: x.Title, Tag: x.SessionID, URL: "/#/s/" + x.SessionID}
+		switch {
+		case x.State == sessions.NeedsYou:
+			m.Body = "Needs you"
+			if x.Activity != "" {
+				m.Body += ": " + x.Activity
+			}
+		case x.State == sessions.YourTurn && was == sessions.Working:
+			m.Body = cmp.Or(x.LastReply, "Finished. Your turn.")
+		default:
+			continue
+		}
+		go s.Push.Send(m)
+	}
+}
+
+func (s *Server) pushKey(w http.ResponseWriter, r *http.Request) {
+	reply(w, map[string]string{"key": s.Push.Key()})
+}
+
+func (s *Server) pushSubscribe(w http.ResponseWriter, r *http.Request) {
+	var sub webpush.Subscription
+	if err := json.NewDecoder(r.Body).Decode(&sub); err != nil || sub.Endpoint == "" {
+		http.Error(w, "bad subscription", http.StatusBadRequest)
+		return
+	}
+	if err := s.Push.Add(sub); err != nil {
+		fail(w, err)
+		return
+	}
+	s.refresh()
+	reply(w, map[string]string{"ok": "subscribed"})
+}
+
+func (s *Server) pushUnsubscribe(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Endpoint string }
+	json.NewDecoder(r.Body).Decode(&req)
+	if err := s.Push.Remove(req.Endpoint); err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]string{"ok": "unsubscribed"})
 }
 
 func expand(p string) (string, error) {
