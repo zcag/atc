@@ -127,7 +127,7 @@ function App() {
   }, [me]);
 
   useEffect(() => {
-    const n = (live || []).filter((s) => s.state === "needs-you").length;
+    const n = (live || []).filter((s) => s.state === "needs-you" && !s.parked).length;
     document.title = n ? `(${n}) atc` : "atc";
   }, [live]);
 
@@ -136,7 +136,9 @@ function App() {
     setTimeout(() => setToast((t) => (t === msg ? null : t)), 3500);
   }, []);
 
-  const ordered = (live || []).filter((x) => x.pinned).concat(BAYS.flatMap(([st]) => (live || []).filter((x) => !x.pinned && x.state === st)));
+  const ordered = (live || []).filter((x) => x.pinned && !x.parked)
+    .concat(BAYS.flatMap(([st]) => (live || []).filter((x) => !x.pinned && !x.parked && x.state === st)))
+    .concat((live || []).filter((x) => x.parked));
   const keys = useRef({});
   keys.current = { ordered, route, cursor, creating };
   useEffect(() => {
@@ -276,14 +278,16 @@ function Board({ live, sel, cursor, onPast }) {
   if (!live) return html`<div class="board"><p class="empty">Loading sessions…</p></div>`;
   const liveIDs = new Set(live.map((s) => s.sessionId));
   const earlier = (hist || []).filter((s) => !liveIDs.has(s.sessionId));
-  const pinned = live.filter((s) => s.pinned);
-  const rest = live.filter((s) => !s.pinned);
+  const pinned = live.filter((s) => s.pinned && !s.parked);
+  const rest = live.filter((s) => !s.pinned && !s.parked);
+  const parked = live.filter((s) => s.parked);
 
   return html`
     <div class="board">
       ${live.length === 0 && html`<p class="empty">Nothing is running. Start a session, or pick up an earlier one below.</p>`}
       ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
       ${BAYS.map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
+      ${parked.length > 0 && html`<${Bay} title="Parked" list=${parked} sel=${sel} cursor=${cursor} folded />`}
       <section class="bay">
         <h2>Earlier</h2>
         <div class="search">
@@ -297,12 +301,17 @@ function Board({ live, sel, cursor, onPast }) {
   `;
 }
 
-function Bay({ title, list, sel, cursor }) {
+function Bay({ title, list, sel, cursor, folded }) {
+  const [open, setOpen] = useState(() => !folded || pref("atc.parked", "closed") === "open");
   if (!list.length) return null;
+  const toggle = () => { setOpen(!open); setPref("atc.parked", open ? "closed" : "open"); };
+  const shown = open || list.some((s) => sel && s.sessionId === sel.sessionId) ? list : [];
   return html`
-    <section class="bay">
-      <h2>${title} <span class="n">${list.length}</span></h2>
-      <div class="rack">${list.map((s) => html`<${Strip} s=${s} sel=${sel} cursor=${cursor} />`)}</div>
+    <section class="bay ${folded ? "parked" : ""}">
+      ${folded
+        ? html`<h2><button class="fold" aria-expanded=${open} onClick=${toggle}>${open ? "▾" : "▸"} ${title} <span class="n">${list.length}</span></button></h2>`
+        : html`<h2>${title} <span class="n">${list.length}</span></h2>`}
+      <div class="rack">${shown.map((s) => html`<${Strip} s=${s} sel=${sel} cursor=${cursor} />`)}</div>
     </section>
   `;
 }
@@ -397,7 +406,7 @@ function Session({ s, say, live }) {
         <button class=${mode === "term" ? "on" : ""} onClick=${() => setMode("term")}>Terminal</button>
         <button class=${mode === "chat" ? "on" : ""} onClick=${() => setMode("chat")}>Transcript</button>
       </div>
-      <${Menu} s=${s} busy=${busy} onRename=${() => setRenaming(true)} onPin=${() => patch({ pinned: !s.pinned })} onStop=${stop} onRemove=${remove} onResume=${resume} />
+      <${Menu} s=${s} busy=${busy} onRename=${() => setRenaming(true)} onPin=${() => patch({ pinned: !s.pinned })} onPark=${() => patch({ parked: !s.parked })} onStop=${stop} onRemove=${remove} onResume=${resume} />
     </div>
     ${mode === "term"
       ? canAttach
@@ -413,7 +422,7 @@ function Unattachable(s, resume, busy, setMode) {
   return html`<div><p class="h">${s.state === "stopped" ? "Stopped" : "Not running"}</p><p>Resume it to pick up where it left off. The whole conversation comes back.</p><div class="row"><button class="btn primary" disabled=${busy} onClick=${resume}>${busy ? "Resuming…" : "Resume"}</button></div></div>`;
 }
 
-function Menu({ s, busy, onRename, onPin, onStop, onRemove, onResume }) {
+function Menu({ s, busy, onRename, onPin, onPark, onStop, onRemove, onResume }) {
   const [open, setOpen] = useState(false);
   const ref = useRef();
   useEffect(() => {
@@ -430,6 +439,7 @@ function Menu({ s, busy, onRename, onPin, onStop, onRemove, onResume }) {
         <div class="sheet" style="position: absolute; right: 0; top: 36px; width: 190px; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
           ${item("Rename", onRename)}
           ${item(s.pinned ? "Unpin" : "Pin to top", onPin)}
+          ${item(s.parked ? "Unpark" : "Park", onPark)}
           ${s.attachable && item("Stop", onStop)}
           ${!s.attachable && s.kind !== "interactive" && item("Resume", onResume)}
           ${s.id && item("Delete", onRemove, "danger")}

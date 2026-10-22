@@ -338,6 +338,7 @@ func (s *Server) patch(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name   *string `json:"name"`
 		Pinned *bool   `json:"pinned"`
+		Parked *bool   `json:"parked"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -349,6 +350,9 @@ func (s *Server) patch(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Pinned != nil {
 			m.Pinned = *req.Pinned
+		}
+		if req.Parked != nil {
+			m.Parked = *req.Parked
 		}
 	})
 	s.done(w, r.PathValue("sid"), err)
@@ -513,7 +517,7 @@ func alerts(prev map[string]string, list []sessions.Session, viewing func(sessio
 	var out []push.Message
 	for _, x := range list {
 		was, ok := prev[x.SessionID]
-		if !ok || was == x.State || viewing(x) {
+		if !ok || was == x.State || x.Parked || viewing(x) {
 			continue
 		}
 		m := push.Message{Title: x.Title, Tag: x.SessionID, URL: "/#/s/" + x.SessionID}

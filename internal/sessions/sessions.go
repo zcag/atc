@@ -44,6 +44,7 @@ type Session struct {
 	StartedAt      time.Time `json:"startedAt,omitzero"`
 	Updated        time.Time `json:"updated,omitzero"`
 	Pinned         bool      `json:"pinned,omitempty"`
+	Parked         bool      `json:"parked,omitempty"`
 }
 
 type Manager struct {
@@ -104,7 +105,7 @@ func (m *Manager) build(t history.Transcript) Session {
 		Cwd: t.Cwd, StartCwd: t.StartCwd, Branch: t.Branch, Model: t.Model,
 		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, Context: t.Context, PromptAt: t.PromptAt,
 		Activity: t.Activity, LastReply: t.LastReply,
-		Updated: t.Updated, Pinned: meta.Pinned,
+		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked,
 	}
 }
 
@@ -132,6 +133,9 @@ func Sort(list []Session) {
 var rank = map[string]int{NeedsYou: 0, YourTurn: 1, Working: 2, Stopped: 3, Past: 4}
 
 func less(a, b Session) bool {
+	if a.Parked != b.Parked {
+		return b.Parked
+	}
 	if a.Pinned != b.Pinned {
 		return a.Pinned
 	}

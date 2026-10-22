@@ -49,6 +49,7 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc stop <session>             stop it; the conversation is kept
   atc rm <session>               delete a background session
   atc rename <session> <name>    atc pin|unpin <session>
+  atc park|unpark <session>      move it out of the way: bottom of the list, no notifications
 
 <session> is a row number from ls, a short id, a session id prefix, or a
 unique piece of the title.
@@ -89,7 +90,7 @@ func main() {
 		err = newSession(args)
 	case "attach":
 		err = attachTo(args)
-	case "resume", "stop", "rm", "rename", "pin", "unpin":
+	case "resume", "stop", "rm", "rename", "pin", "unpin", "park", "unpark":
 		err = act(cmd, args)
 	case "-h", "--help", "help":
 		fmt.Print(usage)
@@ -289,6 +290,8 @@ func act(cmd string, args []string) error {
 		return c.Remove(s.ID)
 	case "rename":
 		return c.Patch(s.SessionID, map[string]any{"name": strings.Join(args[1:], " ")})
+	case "park", "unpark":
+		return c.Patch(s.SessionID, map[string]any{"parked": cmd == "park"})
 	default:
 		return c.Patch(s.SessionID, map[string]any{"pinned": cmd == "pin"})
 	}

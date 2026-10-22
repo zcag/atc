@@ -10,6 +10,7 @@ import (
 type Meta struct {
 	Name   string `json:"name,omitempty"`
 	Pinned bool   `json:"pinned,omitempty"`
+	Parked bool   `json:"parked,omitempty"`
 }
 
 type Store struct {

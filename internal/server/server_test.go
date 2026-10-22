@@ -156,13 +156,14 @@ func TestPeersAreMergedAndForwarded(t *testing.T) {
 }
 
 func TestAlerts(t *testing.T) {
-	prev := map[string]string{"a": sessions.Working, "b": sessions.YourTurn, "c": sessions.Working, "e": sessions.YourTurn}
+	prev := map[string]string{"a": sessions.Working, "b": sessions.YourTurn, "c": sessions.Working, "e": sessions.YourTurn, "f": sessions.Working}
 	list := []sessions.Session{
 		{SessionID: "a", Title: "A", State: sessions.YourTurn, LastReply: "All tests pass."},
 		{SessionID: "b", Title: "B", State: sessions.NeedsYou, Activity: "Bash  rm -rf build"},
 		{SessionID: "c", Title: "C", State: sessions.YourTurn, ID: "open0001"},
 		{SessionID: "d", Title: "D", State: sessions.NeedsYou},
 		{SessionID: "e", Title: "E", State: sessions.Working},
+		{SessionID: "f", Title: "F", State: sessions.NeedsYou, Parked: true},
 	}
 	got := alerts(prev, list, func(s sessions.Session) bool { return s.ID == "open0001" })
 	if len(got) != 2 {

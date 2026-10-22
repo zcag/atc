@@ -411,6 +411,11 @@ func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			verb := map[bool]string{true: "pinned ", false: "unpinned "}[!s.Pinned]
 			return m, m.do(verb+s.Title, func() error { return m.c.Patch(s.SessionID, map[string]any{"pinned": !s.Pinned}) })
 		}
+	case "z":
+		if ok {
+			verb := map[bool]string{true: "parked ", false: "unparked "}[!s.Parked]
+			return m, m.do(verb+s.Title, func() error { return m.c.Patch(s.SessionID, map[string]any{"parked": !s.Parked}) })
+		}
 	}
 	m.clamp()
 	return m, nil
@@ -624,6 +629,10 @@ func (m model) row(s sessions.Session, sel bool) []string {
 	if s.Pinned {
 		meta = append(meta, st(plain.Foreground(accent)).Render("pinned"))
 	}
+	if s.Parked {
+		meta = append(meta, st(dim).Render("parked"))
+		stateSt = st(dim)
+	}
 	prompt, promptSt := "", st(dim)
 	if s.LastPrompt != "" {
 		prompt = "“" + strings.Join(strings.Fields(s.LastPrompt), " ") + "”"
@@ -633,7 +642,7 @@ func (m model) row(s sessions.Session, sel bool) []string {
 	}
 	lines := []string{
 		bar + stateSt.Render(ansi.Truncate(fmt.Sprintf("%-*s", stateW, state), stateW, "")) +
-			st(bold).Render(ansi.Truncate(s.Title, titleW, "…")),
+			map[bool]lipgloss.Style{true: st(dim), false: st(bold)}[s.Parked].Render(ansi.Truncate(s.Title, titleW, "…")),
 		indent + strings.Join(meta, st(dim).Render(" · ")),
 		indent + promptSt.Render(ansi.Truncate(prompt, max(8, m.w-2-stateW-1), "…")),
 	}
@@ -693,7 +702,7 @@ func (m model) footer() string {
 		keys = [][2]string{{"↵", "open"}, {"/", "search"}, {"h", "live"}, {"r", "rename"}, {"p", "pin"}, {"q", "quit"}}
 	default:
 		keys = [][2]string{{"↵", "attach"}, {"n", "new"}, {"/", "filter"}, {"h", "history"}, {"x", "stop"},
-			{"d", "delete"}, {"r", "rename"}, {"p", "pin"}, {"q", "quit"}}
+			{"d", "delete"}, {"r", "rename"}, {"p", "pin"}, {"z", "park"}, {"q", "quit"}}
 	}
 	var parts []string
 	for _, k := range keys {
