@@ -1,0 +1,53 @@
+package io.github.zcag.atc
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class CoreTest {
+    @Test fun trustAsksWithoutPin() = assertEquals(Trust.ASK, trust(null, "ab"))
+    @Test fun trustAcceptsPinnedCertificate() = assertEquals(Trust.YES, trust("ab", "ab"))
+    @Test fun trustRefusesOtherCertificate() = assertEquals(Trust.NO, trust("ab", "cd"))
+
+    @Test fun fingerprint() {
+        assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", sha256("abc".toByteArray()))
+        assertEquals("BA:78:16", pretty("ba7816"))
+    }
+
+    @Test fun serverUrls() {
+        assertEquals("https://atc.example", serverUrl(" https://atc.example/ "))
+        assertEquals("http://box:7272/atc", serverUrl("http://box:7272/atc"))
+        assertNull(serverUrl("atc.example"))
+        assertNull(serverUrl("ftp://atc.example"))
+        assertNull(serverUrl("https://"))
+    }
+
+    @Test fun release() {
+        val r = Release.parse("""{"versionCode":42,"versionName":"0.42","apk":"/app/atc.apk","sha256":"ABCD"}""")
+        assertEquals(42, r.versionCode)
+        assertEquals("0.42", r.versionName)
+        assertEquals("abcd", r.sha256)
+        assertTrue(r.newerThan(41))
+        assertFalse(r.newerThan(42))
+        assertFalse(r.newerThan(43))
+    }
+
+    @Test fun note() {
+        val n = Note.parse("""{"title":"api","body":"done","tag":"s1","url":"/#/s/s1"}""".toByteArray())!!
+        assertEquals("api", n.title)
+        assertEquals("done", n.body)
+        assertEquals("/#/s/s1", n.url)
+        assertEquals(n.id, Note.parse("""{"tag":"s1"}""".toByteArray())!!.id)
+    }
+
+    @Test fun noteKeepsLinksOnTheServer() {
+        assertEquals("/", Note.parse("""{"tag":"s","url":"https://evil.example"}""".toByteArray())!!.url)
+        assertEquals("/", Note.parse("""{"tag":"s","url":"//evil.example"}""".toByteArray())!!.url)
+        assertNull(Note.parse("not json".toByteArray()))
+    }
+
+    @Test fun splitsSentences() =
+        assertEquals(listOf("Done.", "Tests pass!", "Next?", "Line"), sentences("Done. Tests pass!  Next?\nLine"))
+}

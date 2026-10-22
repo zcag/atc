@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">atc</string>
+    <color name="icon_bg">#151c27</color>
+    <color name="board">#dde2ea</color>
+    <style name="Theme.Atc" parent="android:Theme.DeviceDefault.DayNight">
+        <item name="android:windowBackground">@color/board</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>
