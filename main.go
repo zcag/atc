@@ -16,12 +16,14 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/zcag/atc/internal/attach"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/server"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
+	"github.com/zcag/atc/web"
 )
 
 const usage = `atc: every Claude Code session on a machine, in one place.
@@ -115,7 +117,11 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
+	host, _ := os.Hostname()
 	srv := &server.Server{
+		Term: &attach.Hub{Bin: bin},
+		Web:  web.FS,
+		Host: strings.Split(host, ".")[0],
 		M: &sessions.Manager{
 			CLI:   claude.CLI{Bin: bin, Args: strings.Fields(os.Getenv("ATC_CLAUDE_ARGS"))},
 			Index: history.New(filepath.Join(home, ".claude", "projects")),
@@ -129,6 +135,9 @@ func serve(args []string) error {
 		}
 	}
 	log.Printf("atc listening on http://%s", *addr)
+	if srv.Token != "" {
+		log.Printf("open http://%s/?token=%s to log in a browser", *addr, srv.Token)
+	}
 	return http.ListenAndServe(*addr, srv.Handler())
 }
 

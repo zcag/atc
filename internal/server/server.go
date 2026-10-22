@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -17,15 +18,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zcag/atc/internal/attach"
 	"github.com/zcag/atc/internal/claude"
+	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
 )
 
 type Server struct {
 	M     *sessions.Manager
+	Term  *attach.Hub
+	Web   fs.FS
 	Token string
 	Roots []string
+	Host  string
 
 	mu   sync.Mutex
 	subs map[chan []byte]bool
@@ -49,12 +55,26 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/sessions/{id}/stop", s.act(s.M.CLI.Stop))
 	mux.HandleFunc("DELETE /api/sessions/{id}", s.act(s.M.CLI.Remove))
 	mux.HandleFunc("PATCH /api/sessions/{sid}", s.patch)
+	mux.HandleFunc("GET /api/sessions/{sid}/transcript", s.transcript)
+	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) { s.Term.Serve(w, r, r.PathValue("id")) })
+	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, map[string]string{"host": s.Host}) })
+	mux.HandleFunc("POST /api/login", s.login)
+	mux.Handle("GET /", s.static())
 	return s.auth(mux)
 }
 
 func (s *Server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" || s.Token == "" {
+		if s.Token == "" || r.URL.Path == "/api/login" || r.URL.Path == "/healthz" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if q := r.URL.Query().Get("token"); q != "" && r.URL.Path == "/" && s.valid(q) {
+			s.setCookie(w, q)
+			http.Redirect(w, r, "/", http.StatusFound)
+			return
+		}
+		if !strings.HasPrefix(r.URL.Path, "/api/") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -62,12 +82,60 @@ func (s *Server) auth(next http.Handler) http.Handler {
 		if c, err := r.Cookie("atc"); err == nil && tok == "" {
 			tok = c.Value
 		}
-		if subtle.ConstantTimeCompare([]byte(tok), []byte(s.Token)) != 1 {
+		if !s.valid(tok) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) valid(tok string) bool {
+	return tok != "" && subtle.ConstantTimeCompare([]byte(tok), []byte(s.Token)) == 1
+}
+
+func (s *Server) setCookie(w http.ResponseWriter, tok string) {
+	http.SetCookie(w, &http.Cookie{Name: "atc", Value: tok, Path: "/", HttpOnly: true,
+		SameSite: http.SameSiteStrictMode, MaxAge: 400 * 24 * 3600})
+}
+
+func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Token string }
+	json.NewDecoder(r.Body).Decode(&req)
+	if s.Token != "" && !s.valid(strings.TrimSpace(req.Token)) {
+		time.Sleep(time.Second)
+		http.Error(w, "wrong token", http.StatusUnauthorized)
+		return
+	}
+	s.setCookie(w, strings.TrimSpace(req.Token))
+	reply(w, map[string]string{"host": s.Host})
+}
+
+func (s *Server) static() http.Handler {
+	files := http.FileServerFS(s.Web)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+			w.Header().Set("Cache-Control", "no-cache")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+		}
+		files.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) transcript(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.M.Index.Find(r.PathValue("sid"))
+	if !ok {
+		http.Error(w, "no transcript", http.StatusNotFound)
+		return
+	}
+	before, _ := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
+	p, err := history.ReadPage(t.Path, before, 2<<20)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, p)
 }
 
 func (s *Server) live(w http.ResponseWriter, r *http.Request) {
