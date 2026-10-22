@@ -67,6 +67,9 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		s := m.build(byID[a.SessionID])
 		s.SessionID, s.ID, s.Kind, s.Name = a.SessionID, a.ID, a.Kind, a.Name
 		s.State, s.Attachable = state(a), a.Kind == "background" && a.PID > 0
+		if s.State == NeedsYou && a.Kind == "background" && byID[a.SessionID].Pending == "" {
+			s.State = YourTurn
+		}
 		s.Cwd = first(a.Cwd, s.Cwd)
 		if a.StartedAt > 0 {
 			s.StartedAt = time.UnixMilli(a.StartedAt)

@@ -28,6 +28,8 @@ type Transcript struct {
 	PromptAt       time.Time `json:"promptAt,omitzero"`
 	Activity       string    `json:"activity,omitempty"`
 	LastReply      string    `json:"lastReply,omitempty"`
+	Pending        string    `json:"pending,omitempty"`
+	pendingID      string
 	Context        int       `json:"context"`
 	Updated        time.Time `json:"updated"`
 	Size           int64     `json:"size"`
@@ -171,7 +173,15 @@ func apply(t *Transcript, e *entry, custom *string) {
 		t.PermissionMode = e.PermissionMode
 	case "user":
 		if e.PromptID != "" && !e.Timestamp.IsZero() {
-			t.PromptAt, t.Activity = e.Timestamp, ""
+			t.PromptAt, t.Activity, t.Pending, t.pendingID = e.Timestamp, "", "", ""
+		}
+		var blocks []block
+		if t.pendingID != "" && json.Unmarshal(e.Message.Content, &blocks) == nil {
+			for _, b := range blocks {
+				if b.Type == "tool_result" && b.ToolUseID == t.pendingID {
+					t.Pending, t.pendingID = "", ""
+				}
+			}
 		}
 	case "assistant":
 		var blocks []block
@@ -180,6 +190,7 @@ func apply(t *Transcript, e *entry, custom *string) {
 				switch {
 				case b.Type == "tool_use":
 					t.Activity = strings.TrimSpace(b.Name + "  " + summarize(b.Input))
+					t.Pending, t.pendingID = t.Activity, b.ID
 				case b.Type == "text" && strings.TrimSpace(b.Text) != "":
 					t.Activity, t.LastReply = "", clip(strings.Join(strings.Fields(b.Text), " "), 300)
 				}
