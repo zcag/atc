@@ -19,4 +19,21 @@ install-mac: check build
 	launchctl bootout gui/$$(id -u)/io.github.zcag.atc 2>/dev/null || true
 	launchctl bootstrap gui/$$(id -u) ~/Library/LaunchAgents/io.github.zcag.atc.plist
 
-.PHONY: build check install install-mac
+JAVA_HOME ?= /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+ANDROID_HOME ?= $(HOME)/Library/Android/sdk
+APP_HOST ?= desktop
+APP_DIR ?= ~/.local/share/atc/app
+
+android:
+	cd android && JAVA_HOME="$(JAVA_HOME)" ANDROID_HOME="$(ANDROID_HOME)" ./gradlew -q testReleaseUnitTest assembleRelease
+	mkdir -p android/dist
+	cp android/app/build/outputs/apk/release/app-release.apk android/dist/atc.apk
+	n=$$(git rev-list --count HEAD); sum=$$(shasum -a 256 android/dist/atc.apk | cut -d' ' -f1); \
+	printf '{"versionCode":%s,"versionName":"0.%s","apk":"/app/atc.apk","sha256":"%s"}\n' $$n $$n $$sum > android/dist/version.json
+
+android-publish:
+	ssh $(APP_HOST) mkdir -p $(APP_DIR)
+	rsync -t android/dist/atc.apk $(APP_HOST):$(APP_DIR)/
+	rsync -t android/dist/version.json $(APP_HOST):$(APP_DIR)/
+
+.PHONY: build check install install-mac android android-publish
