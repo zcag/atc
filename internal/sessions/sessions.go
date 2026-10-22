@@ -2,6 +2,7 @@ package sessions
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -128,14 +129,31 @@ func less(a, b Session) bool {
 	if ra, rb := rank[a.State], rank[b.State]; ra != rb {
 		return ra < rb
 	}
-	return latest(a).After(latest(b))
+	return a.Last().After(b.Last())
 }
 
-func latest(s Session) time.Time {
+func (s Session) Last() time.Time {
 	if s.Updated.After(s.StartedAt) {
 		return s.Updated
 	}
 	return s.StartedAt
+}
+
+func (s Session) Age() string {
+	t := s.Last()
+	if t.IsZero() {
+		return ""
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours()/24))
 }
 
 func base(p string) string {
