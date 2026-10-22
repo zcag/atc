@@ -21,6 +21,7 @@ type Message struct {
 type Device struct {
 	Endpoint string    `json:"endpoint"`
 	Name     string    `json:"name,omitempty"`
+	Widget   bool      `json:"widget,omitempty"`
 	Added    time.Time `json:"added"`
 }
 
@@ -68,8 +69,19 @@ func (p *Pusher) Remove(endpoint string) error {
 }
 
 func (p *Pusher) Send(m Message) {
-	body, _ := json.Marshal(m)
+	p.post(m, m.Title+": "+m.Body, func(Device) bool { return true })
+}
+
+func (p *Pusher) SendWidget(v any) {
+	p.post(v, "", func(d Device) bool { return d.Widget })
+}
+
+func (p *Pusher) post(v any, what string, to func(Device) bool) {
+	body, _ := json.Marshal(v)
 	for _, d := range p.Devices() {
+		if !to(d) {
+			continue
+		}
 		res, err := p.client.Post(d.Endpoint, "application/json", bytes.NewReader(body))
 		if err != nil {
 			log.Printf("push: %v", err)
@@ -81,8 +93,8 @@ func (p *Pusher) Send(m Message) {
 			p.Remove(d.Endpoint)
 		case res.StatusCode >= 300:
 			log.Printf("push: %s answered %s", d.Name, res.Status)
-		default:
-			log.Printf("push: %q sent to %s", m.Title+": "+m.Body, d.Name)
+		case what != "":
+			log.Printf("push: %q sent to %s", what, d.Name)
 		}
 	}
 }

@@ -53,6 +53,9 @@ type Server struct {
 	last []byte
 	kick chan struct{}
 	seen map[string]string
+
+	widgetSent string
+	widgetAt   time.Time
 }
 
 func (s *Server) Handler() http.Handler {
@@ -80,6 +83,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/uploads", s.upload)
 	mux.HandleFunc("POST /api/sessions/{id}/send", s.send)
 	mux.HandleFunc("POST /api/guess", s.guess)
+	mux.HandleFunc("GET /api/widget", s.widget)
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) { s.Term.Serve(w, r, r.PathValue("id")) })
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
@@ -551,6 +555,68 @@ func (s *Server) notify(list []sessions.Session) {
 	for _, m := range alerts(prev, list, viewing) {
 		go s.Push.Send(m)
 	}
+	s.syncWidgets(list)
+}
+
+type widgetFeed struct {
+	Type     string          `json:"type"`
+	At       time.Time       `json:"at"`
+	Sessions []widgetSession `json:"sessions"`
+}
+
+type widgetSession struct {
+	ID     string    `json:"id,omitempty"`
+	SID    string    `json:"sid"`
+	Title  string    `json:"title"`
+	State  string    `json:"state"`
+	Host   string    `json:"host,omitempty"`
+	Pinned bool      `json:"pinned,omitempty"`
+	Since  time.Time `json:"since,omitzero"`
+}
+
+func widgetList(list []sessions.Session) []widgetSession {
+	out := []widgetSession{}
+	for _, x := range list {
+		if x.Parked || x.State == sessions.Stopped || x.State == sessions.Past {
+			continue
+		}
+		since := x.Last()
+		if x.State == sessions.Working && !x.PromptAt.IsZero() {
+			since = x.PromptAt
+		}
+		out = append(out, widgetSession{x.ID, x.SessionID, x.Title, x.State, x.Host, x.Pinned, since})
+		if len(out) == 12 {
+			break
+		}
+	}
+	return out
+}
+
+func widgetKey(ws []widgetSession) string {
+	var b strings.Builder
+	for _, w := range ws {
+		fmt.Fprintf(&b, "%s|%s|%s|%s|%v\n", w.SID, w.ID, w.Title, w.State, w.Pinned)
+	}
+	return b.String()
+}
+
+func (s *Server) widget(w http.ResponseWriter, r *http.Request) {
+	list, err := s.liveAll(r.Context(), false)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, widgetFeed{"sessions", time.Now(), widgetList(list)})
+}
+
+func (s *Server) syncWidgets(list []sessions.Session) {
+	ws := widgetList(list)
+	key := widgetKey(ws)
+	if key == s.widgetSent || time.Since(s.widgetAt) < 15*time.Second {
+		return
+	}
+	s.widgetSent, s.widgetAt = key, time.Now()
+	go s.Push.SendWidget(widgetFeed{"sessions", time.Now(), ws})
 }
 
 func states(list []sessions.Session) map[string]string {

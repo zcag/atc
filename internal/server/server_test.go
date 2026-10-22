@@ -291,3 +291,20 @@ func TestWorktreeName(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestWidgetList(t *testing.T) {
+	list := []sessions.Session{
+		{SessionID: "a", Title: "A", State: sessions.NeedsYou},
+		{SessionID: "b", Title: "B", State: sessions.Working, Parked: true},
+		{SessionID: "c", Title: "C", State: sessions.Stopped},
+		{SessionID: "d", Title: "D", State: sessions.Working, PromptAt: time.Unix(100, 0)},
+	}
+	got := widgetList(list)
+	if len(got) != 2 || got[0].SID != "a" || got[1].SID != "d" || !got[1].Since.Equal(time.Unix(100, 0)) {
+		t.Fatalf("got %+v", got)
+	}
+	moved := widgetList(append([]sessions.Session{}, list[0], sessions.Session{SessionID: "d", Title: "D", State: sessions.Working, PromptAt: time.Unix(200, 0)}))
+	if widgetKey(got) != widgetKey(moved) {
+		t.Error("a new time alone must not count as a change")
+	}
+}
