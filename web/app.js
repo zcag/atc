@@ -289,7 +289,7 @@ function Board({ live, sel, cursor, onPast }) {
       ${live.length === 0 && html`<p class="empty">Nothing is running. Start a session, or pick up an earlier one below.</p>`}
       ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
       ${BAYS.filter(([st]) => st !== "stopped").map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
-      ${parked.length > 0 && html`<${Bay} title="Parked" list=${parked} sel=${sel} cursor=${cursor} folded />`}
+      <${Bay} title="Parked" list=${parked} sel=${sel} cursor=${cursor} dim />
       <${Bay} title="Stopped" list=${rest.filter((s) => s.state === "stopped")} sel=${sel} cursor=${cursor} />
       <section class="bay">
         <h2>Earlier</h2>
@@ -304,17 +304,12 @@ function Board({ live, sel, cursor, onPast }) {
   `;
 }
 
-function Bay({ title, list, sel, cursor, folded }) {
-  const [open, setOpen] = useState(() => !folded || pref("atc.parked", "closed") === "open");
+function Bay({ title, list, sel, cursor, dim }) {
   if (!list.length) return null;
-  const toggle = () => { setOpen(!open); setPref("atc.parked", open ? "closed" : "open"); };
-  const shown = open || list.some((s) => sel && s.sessionId === sel.sessionId) ? list : [];
   return html`
-    <section class="bay ${folded ? "parked" : ""}">
-      ${folded
-        ? html`<h2><button class="fold" aria-expanded=${open} onClick=${toggle}>${open ? "▾" : "▸"} ${title} <span class="n">${list.length}</span></button></h2>`
-        : html`<h2>${title} <span class="n">${list.length}</span></h2>`}
-      <div class="rack">${shown.map((s) => html`<${Strip} s=${s} sel=${sel} cursor=${cursor} />`)}</div>
+    <section class="bay ${dim ? "parked" : ""}">
+      <h2>${title} <span class="n">${list.length}</span></h2>
+      <div class="rack">${list.map((s) => html`<${Strip} s=${s} sel=${sel} cursor=${cursor} />`)}</div>
     </section>
   `;
 }
