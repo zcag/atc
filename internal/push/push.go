@@ -1,14 +1,14 @@
 package push
 
 import (
+	"bytes"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
-
-	webpush "github.com/SherClockHolmes/webpush-go"
+	"time"
 )
 
 type Message struct {
@@ -18,114 +18,94 @@ type Message struct {
 	URL   string `json:"url"`
 }
 
+type Device struct {
+	Endpoint string    `json:"endpoint"`
+	Name     string    `json:"name,omitempty"`
+	Added    time.Time `json:"added"`
+}
+
 type Pusher struct {
-	dir     string
-	contact string
-	pub     string
-	priv    string
+	path    string
+	client  *http.Client
 	mu      sync.Mutex
-	subs    []webpush.Subscription
+	devices []Device
 }
 
-func Open(dir, contact string) (*Pusher, error) {
-	p := &Pusher{dir: dir, contact: contact}
-	var keys struct{ Public, Private string }
-	if b, err := os.ReadFile(p.path("vapid.json")); err == nil {
-		json.Unmarshal(b, &keys)
+func Open(path string) (*Pusher, error) {
+	p := &Pusher{path: path, client: &http.Client{Timeout: 15 * time.Second}}
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return p, nil
 	}
-	if keys.Public == "" {
-		priv, pub, err := webpush.GenerateVAPIDKeys()
-		if err != nil {
-			return nil, err
-		}
-		keys.Public, keys.Private = pub, priv
-		if err := p.save("vapid.json", keys); err != nil {
-			return nil, err
-		}
+	if err != nil {
+		return nil, err
 	}
-	p.pub, p.priv = keys.Public, keys.Private
-	if b, err := os.ReadFile(p.path("push.json")); err == nil {
-		json.Unmarshal(b, &p.subs)
-	}
-	return p, nil
+	return p, json.Unmarshal(b, &p.devices)
 }
 
-func (p *Pusher) Key() string { return p.pub }
-
-func (p *Pusher) Count() int {
+func (p *Pusher) Devices() []Device {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return len(p.subs)
+	return append([]Device(nil), p.devices...)
 }
 
-func (p *Pusher) Add(s webpush.Subscription) error {
+func (p *Pusher) Count() int { return len(p.Devices()) }
+
+func (p *Pusher) Add(d Device) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.drop(s.Endpoint)
-	p.subs = append(p.subs, s)
-	return p.save("push.json", p.subs)
+	p.drop(d.Endpoint)
+	d.Added = time.Now()
+	p.devices = append(p.devices, d)
+	return p.save()
 }
 
 func (p *Pusher) Remove(endpoint string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.drop(endpoint)
-	return p.save("push.json", p.subs)
+	return p.save()
 }
 
 func (p *Pusher) Send(m Message) {
 	body, _ := json.Marshal(m)
-	p.mu.Lock()
-	subs := append([]webpush.Subscription(nil), p.subs...)
-	p.mu.Unlock()
-	for _, s := range subs {
-		res, err := webpush.SendNotification(body, &s, &webpush.Options{
-			Subscriber: p.contact, VAPIDPublicKey: p.pub, VAPIDPrivateKey: p.priv,
-			TTL: 3600, Urgency: webpush.UrgencyHigh, Topic: topic(m.Tag),
-		})
+	for _, d := range p.Devices() {
+		res, err := p.client.Post(d.Endpoint, "application/json", bytes.NewReader(body))
 		if err != nil {
 			log.Printf("push: %v", err)
 			continue
 		}
 		res.Body.Close()
-		if res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusGone {
-			p.Remove(s.Endpoint)
-		} else if res.StatusCode >= 300 {
-			log.Printf("push: %s answered %s", s.Endpoint[:min(len(s.Endpoint), 40)], res.Status)
-		} else {
-			log.Printf("push: %q sent (%s)", m.Title+": "+m.Body, res.Status)
+		switch {
+		case res.StatusCode == http.StatusNotFound || res.StatusCode == http.StatusGone:
+			p.Remove(d.Endpoint)
+		case res.StatusCode >= 300:
+			log.Printf("push: %s answered %s", d.Name, res.Status)
+		default:
+			log.Printf("push: %q sent to %s", m.Title+": "+m.Body, d.Name)
 		}
 	}
-}
-
-func topic(tag string) string {
-	if len(tag) > 32 {
-		return tag[:32]
-	}
-	return tag
 }
 
 func (p *Pusher) drop(endpoint string) {
-	out := p.subs[:0]
-	for _, s := range p.subs {
-		if s.Endpoint != endpoint {
-			out = append(out, s)
+	out := p.devices[:0]
+	for _, d := range p.devices {
+		if d.Endpoint != endpoint {
+			out = append(out, d)
 		}
 	}
-	p.subs = out
+	p.devices = out
 }
 
-func (p *Pusher) path(name string) string { return filepath.Join(p.dir, name) }
-
-func (p *Pusher) save(name string, v any) error {
-	b, err := json.MarshalIndent(v, "", "  ")
+func (p *Pusher) save() error {
+	b, err := json.MarshalIndent(p.devices, "", "  ")
 	if err != nil {
 		return err
 	}
-	os.MkdirAll(p.dir, 0o700)
-	tmp := p.path(name) + ".tmp"
+	os.MkdirAll(filepath.Dir(p.path), 0o700)
+	tmp := p.path + ".tmp"
 	if err := os.WriteFile(tmp, b, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, p.path(name))
+	return os.Rename(tmp, p.path)
 }

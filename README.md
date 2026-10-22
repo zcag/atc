@@ -80,6 +80,7 @@ needs the token either way.
 - **New session** starts Claude in any folder, with an optional name and first message.
 - **Earlier** lists past conversations. Open one and press **Resume** to continue it.
 - On a phone, a row of keys above the keyboard gives you Esc, Tab, Shift+Tab, Ctrl and arrows.
+- Press `?` for keyboard shortcuts.
   Drag on the terminal to scroll.
 
 When two screens show the same session, the one you last typed in decides the terminal size, and
@@ -117,13 +118,22 @@ resuming or uploading to one is forwarded to the machine it lives on, and **New 
 which machine to start on (`atc new -host laptop` from a terminal). A machine that is off shows as
 unreachable and the rest keep working.
 
-## Notifications
+## Android app and notifications
 
-The bell in the header turns on push notifications for that device. You get one when a session
-starts waiting for you, and when a session finishes a turn, with the start of its reply. Nothing
-is sent for a session you have open at that moment. On iPhone and iPad, add atc to the home screen
-first: Safari only allows web push for installed apps. Push needs HTTPS with a certificate the
-device trusts.
+`android/` holds a small Android app that shows your atc server's page and adds what a browser
+cannot: notifications, the device's own text-to-speech for voice, and being your phone's digital
+assistant, so holding the side key opens atc listening, even on the lock screen.
+
+- **Install:** the server offers the app at `/app/` (set `ATC_APP_DIR` to the folder holding
+  `atc.apk` and `version.json`, which `make android` produces). The app checks that folder and
+  updates itself.
+- **Notifications** use [UnifiedPush](https://unifiedpush.org): install a distributor such as the
+  [ntfy](https://ntfy.sh) app, point it at your ntfy server, and the atc app registers with atc
+  on its own. You get a notification when a session starts waiting for you and when one finishes
+  a turn, with the start of its reply, unless you have that session open.
+- **Assistant:** choose atc under Settings → Apps → Default apps → Digital assistant app. Holding
+  the side key then opens a session named `assistant` in `ATC_ASSIST_DIR` (default: your home
+  folder) with voice on, starting or resuming it as needed.
 
 ## Voice
 

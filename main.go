@@ -144,11 +144,14 @@ func serve(args []string) error {
 		},
 		Roots: roots,
 		Voice: server.VoiceFromEnv(),
+
+		AppDir:    os.Getenv("ATC_APP_DIR"),
+		AssistDir: os.Getenv("ATC_ASSIST_DIR"),
 	}
 	if srv.Peers, err = server.LoadPeers(filepath.Join(client.ConfigDir(), "peers.json")); err != nil {
 		return err
 	}
-	if srv.Push, err = push.Open(client.ConfigDir(), cmp.Or(os.Getenv("ATC_PUSH_CONTACT"), "https://github.com/zcag/atc")); err != nil {
+	if srv.Push, err = push.Open(filepath.Join(client.ConfigDir(), "devices.json")); err != nil {
 		return err
 	}
 	if !*noAuth {

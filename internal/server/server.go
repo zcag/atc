@@ -20,8 +20,6 @@ import (
 	"sync"
 	"time"
 
-	webpush "github.com/SherClockHolmes/webpush-go"
-
 	"github.com/zcag/atc/internal/attach"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
@@ -40,6 +38,9 @@ type Server struct {
 	Push  *push.Pusher
 	Peers []Peer
 	Voice Voice
+
+	AppDir    string
+	AssistDir string
 
 	fleet *fleet
 
@@ -75,9 +76,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/voice/stt", s.stt)
 	mux.HandleFunc("POST /api/voice/condense", s.condense)
 	mux.HandleFunc("POST /api/voice/tts", s.tts)
-	mux.HandleFunc("GET /api/push/key", s.pushKey)
-	mux.HandleFunc("POST /api/push/subscribe", s.pushSubscribe)
-	mux.HandleFunc("POST /api/push/unsubscribe", s.pushUnsubscribe)
+	mux.HandleFunc("POST /api/push/register", s.pushRegister)
+	mux.HandleFunc("POST /api/push/unregister", s.pushUnregister)
+	mux.HandleFunc("GET /api/push/devices", func(w http.ResponseWriter, r *http.Request) { reply(w, s.Push.Devices()) })
+	mux.HandleFunc("POST /api/assist", s.assist)
+	mux.Handle("GET /app/", s.app())
 	mux.Handle("GET /", s.static())
 	return s.auth(s.route(mux))
 }
@@ -519,33 +522,84 @@ func alerts(prev map[string]string, list []sessions.Session, viewing func(sessio
 	return out
 }
 
-func (s *Server) pushKey(w http.ResponseWriter, r *http.Request) {
-	reply(w, map[string]string{"key": s.Push.Key()})
-}
-
-func (s *Server) pushSubscribe(w http.ResponseWriter, r *http.Request) {
-	var sub webpush.Subscription
-	if err := json.NewDecoder(r.Body).Decode(&sub); err != nil || sub.Endpoint == "" {
-		http.Error(w, "bad subscription", http.StatusBadRequest)
+func (s *Server) pushRegister(w http.ResponseWriter, r *http.Request) {
+	var d push.Device
+	if err := json.NewDecoder(r.Body).Decode(&d); err != nil || !strings.HasPrefix(d.Endpoint, "http") {
+		http.Error(w, "bad endpoint", http.StatusBadRequest)
 		return
 	}
-	if err := s.Push.Add(sub); err != nil {
+	if err := s.Push.Add(d); err != nil {
 		fail(w, err)
 		return
 	}
 	s.refresh()
-	reply(w, map[string]string{"ok": "subscribed"})
+	reply(w, map[string]string{"ok": "registered"})
 }
 
-func (s *Server) pushUnsubscribe(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Endpoint string }
-	json.NewDecoder(r.Body).Decode(&req)
-	if err := s.Push.Remove(req.Endpoint); err != nil {
+func (s *Server) pushUnregister(w http.ResponseWriter, r *http.Request) {
+	var d push.Device
+	json.NewDecoder(r.Body).Decode(&d)
+	if err := s.Push.Remove(d.Endpoint); err != nil {
 		fail(w, err)
 		return
 	}
-	reply(w, map[string]string{"ok": "unsubscribed"})
+	reply(w, map[string]string{"ok": "unregistered"})
 }
+
+func (s *Server) assist(w http.ResponseWriter, r *http.Request) {
+	list, err := s.M.Live(r.Context())
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	for _, x := range list {
+		if x.Kind != "background" || (x.Name != "assistant" && s.M.Store.Get(x.SessionID).Name != "assistant") {
+			continue
+		}
+		if x.Attachable {
+			reply(w, map[string]string{"id": x.ID})
+			return
+		}
+		id, err := s.M.CLI.Resume(r.Context(), cmp.Or(x.StartCwd, x.Cwd), x.SessionID)
+		s.done(w, id, err)
+		return
+	}
+	dir, err := expand(cmp.Or(s.AssistDir, "~"))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	id, err := s.M.CLI.Start(r.Context(), dir, "assistant", "")
+	s.done(w, id, err)
+}
+
+func (s *Server) app() http.Handler {
+	if s.AppDir == "" {
+		return http.NotFoundHandler()
+	}
+	files := http.StripPrefix("/app/", http.FileServer(http.Dir(s.AppDir)))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache")
+		switch {
+		case strings.HasSuffix(r.URL.Path, ".apk"):
+			w.Header().Set("Content-Type", "application/vnd.android.package-archive")
+		case r.URL.Path == "/app/":
+			var v struct{ VersionName string }
+			if b, err := os.ReadFile(filepath.Join(s.AppDir, "version.json")); err == nil {
+				json.Unmarshal(b, &v)
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			fmt.Fprintf(w, appPage, cmp.Or(v.VersionName, "not built yet"))
+			return
+		}
+		files.ServeHTTP(w, r)
+	})
+}
+
+const appPage = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>atc for Android</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:32rem;margin:3rem auto;padding:0 1rem}a.b{display:inline-block;padding:.7rem 1.1rem;border-radius:8px;background:#1d2533;color:#fff;text-decoration:none}</style>
+<h1>atc for Android</h1><p>Version %s.</p><p><a class="b" href="atc.apk">Download the app</a></p>
+<p>Open the downloaded file to install or update it. Android asks once to allow installs from your browser.</p>`
 
 func expand(p string) (string, error) {
 	if p == "" {

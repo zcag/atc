@@ -62,34 +62,9 @@ function useNow(ms) {
   }, [ms]);
 }
 
-function usePush() {
-  const [state, setState] = useState("unsupported");
-  useEffect(() => {
-    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-    navigator.serviceWorker
-      .register("sw.js")
-      .then((r) => r.pushManager.getSubscription())
-      .then((sub) => setState(sub ? "on" : Notification.permission === "denied" ? "denied" : "off"), () => {});
-  }, []);
-  const toggle = async () => {
-    const reg = await navigator.serviceWorker.ready;
-    const cur = await reg.pushManager.getSubscription();
-    if (cur) {
-      await api("/api/push/unsubscribe", { method: "POST", body: { endpoint: cur.endpoint } }).catch(() => {});
-      await cur.unsubscribe();
-      return setState("off");
-    }
-    if ((await Notification.requestPermission()) !== "granted") return setState("denied");
-    const { key } = await api("/api/push/key");
-    const raw = atob(key.replace(/-/g, "+").replace(/_/g, "/"));
-    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: Uint8Array.from(raw, (c) => c.charCodeAt(0)) });
-    await api("/api/push/subscribe", { method: "POST", body: sub.toJSON() });
-    setState("on");
-  };
-  return [state, toggle];
-}
-
-const BELL = html`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>`;
+const APP = window.AtcApp || null;
+const APP_VERSION = +((navigator.userAgent.match(/AtcApp\/(\d+)/) || [])[1] || 0);
+let AUTO_VOICE = false;
 
 function App() {
   const [me, setMe] = useState(undefined);
@@ -101,7 +76,8 @@ function App() {
   const [help, setHelp] = useState(false);
   const [toast, setToast] = useState(null);
   const route = useRoute();
-  const [push, togglePush] = usePush();
+  const [stale, setStale] = useState(null);
+  const [starting, setStarting] = useState(false);
   useNow(30000);
 
   useEffect(() => {
@@ -123,6 +99,31 @@ function App() {
       api("/api/me").catch((e) => e.auth && setMe(null));
     };
     return () => es.close();
+  }, [me]);
+
+  useEffect(() => {
+    if (!me || !APP_VERSION) return;
+    fetch("/app/version.json").then((r) => (r.ok ? r.json() : null)).then((v) => v && v.versionCode > APP_VERSION && setStale(v.versionName), () => {});
+  }, [me]);
+
+  useEffect(() => {
+    if (!me) return;
+    const assist = async () => {
+      if (location.hash !== "#/assist") return;
+      setStarting(true);
+      try {
+        const r = await api("/api/assist", { method: "POST" });
+        AUTO_VOICE = true;
+        go(r.id);
+      } catch (e) {
+        say(`Could not open the assistant: ${e.message}`);
+        go(null);
+      }
+      setTimeout(() => setStarting(false), 15000);
+    };
+    assist();
+    addEventListener("hashchange", assist);
+    return () => removeEventListener("hashchange", assist);
   }, [me]);
 
   useEffect(() => {
@@ -198,10 +199,6 @@ function App() {
           <span class="conn ${up ? "" : "down"}" title=${up ? "Live" : "Reconnecting"}></span>
           ${down.length > 0 && html`<span class="tag" title=${down.map((p) => `${p.name}: ${p.error}`).join("\n")}>${down.map((p) => p.name).join(", ")} unreachable</span>`}
           <span class="grow"></span>
-          ${push !== "unsupported" && html`
-            <button class="icon bell ${push === "on" ? "on" : ""}" onClick=${() => togglePush().catch((e) => say(e.message))}
-              title=${{ on: "Notifications on for this device. Click to turn off.", off: "Notify this device when a session needs you", denied: "Notifications are blocked in this browser's settings" }[push]}
-              aria-label="Notifications" aria-pressed=${push === "on"}>${BELL}</button>`}
           <button class="btn primary" onClick=${() => setCreating(true)}>New session</button>
         </header>
         <${Board} live=${live} sel=${sel} cursor=${cursor} onPast=${remember} />
@@ -209,11 +206,16 @@ function App() {
       <main class="main">
         ${sel
           ? html`<${Session} key=${sel.sessionId} s=${sel} say=${say} live=${all} />`
-          : html`<div class="blank">${route && live ? "This session is gone. Pick another from the list." : "Pick a session, or start a new one."}</div>`}
+          : html`<div class="blank">${starting || (route && !live) ? "Opening…" : route ? "This session is gone. Pick another from the list." : "Pick a session, or start a new one."}</div>`}
       </main>
     </div>
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
+    ${stale && html`<div class="appbar" role="status">
+      <span>A newer atc app is available (${stale}).</span>
+      <button class="btn primary" onClick=${() => APP?.checkUpdate()}>Update</button>
+      <button class="icon" aria-label="Dismiss" onClick=${() => setStale(null)}>✕</button>
+    </div>`}
     ${help && html`
       <div class="veil" onPointerDown=${() => setHelp(false)}>
         <div class="sheet keyhelp">
@@ -341,7 +343,7 @@ function Session({ s, say, live }) {
   const [mode, setMode] = useState(canAttach || s.state === "stopped" ? "term" : "chat");
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const [voice, setVoice] = useState(false);
+  const [voice, setVoice] = useState(() => { const v = AUTO_VOICE && canAttach; if (v) AUTO_VOICE = false; return v; });
   useEffect(() => {
     if (canAttach) setMode("term");
   }, [canAttach]);
@@ -701,7 +703,8 @@ function VoiceBar({ s, say, send, onClose }) {
   };
   const stopSpeaking = () => {
     st.current.speaking = false;
-    if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
+    if (APP) APP.stopSpeaking();
+    else if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
     st.current.audio?.pause();
   };
   const play = (url) => new Promise((done) => {
@@ -731,8 +734,13 @@ function VoiceBar({ s, say, send, onClose }) {
       }
       return finished();
     }
-    const parts = sentences(text);
     const lang = turkish(text) ? "tr-TR" : "en-US";
+    if (APP) {
+      window.atcSpeechDone = finished;
+      APP.speak(text, lang);
+      return;
+    }
+    const parts = sentences(text);
     const voices = speechSynthesis.getVoices().filter((v) => v.lang.replace("_", "-").startsWith(lang.slice(0, 2)));
     const voice = voices.find((v) => /premium|enhanced|natural|siri/i.test(v.name)) || voices.find((v) => v.localService) || voices[0] || null;
     parts.forEach((t, i) => {
@@ -811,7 +819,7 @@ function VoiceBar({ s, say, send, onClose }) {
 
   useEffect(() => {
     let dead = false, lock = null;
-    speechSynthesis.getVoices();
+    if (!APP) speechSynthesis.getVoices();
     (async () => {
       try {
         await loadScript("vendor/vad/ort.wasm.min.js");
@@ -836,13 +844,14 @@ function VoiceBar({ s, say, send, onClose }) {
         st.current.vad = v;
         v.start();
         setPhase("listening");
-        lock = await navigator.wakeLock?.request("screen").catch(() => null);
+        if (APP) APP.keepScreenOn(true);
+        else lock = await navigator.wakeLock?.request("screen").catch(() => null);
       } catch (e) {
         setPhase("error");
         say(e.name === "NotAllowedError" ? "Allow the microphone to use voice." : `Voice failed to start: ${e.message}`);
       }
     })();
-    return () => { dead = true; st.current.vad?.destroy(); stopSpeaking(); lock?.release?.(); };
+    return () => { dead = true; st.current.vad?.destroy(); stopSpeaking(); lock?.release?.(); APP?.keepScreenOn(false); };
   }, []);
 
   const tapMic = () => {
@@ -1037,4 +1046,5 @@ function NewSession({ onClose, say, hosts, home }) {
   `;
 }
 
+navigator.serviceWorker?.getRegistrations().then((rs) => rs.forEach((r) => r.unregister()), () => {});
 render(html`<${App} />`, document.getElementById("app"));
