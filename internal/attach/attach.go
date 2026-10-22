@@ -41,6 +41,7 @@ type viewer struct {
 	pty        *os.File
 	cols, rows uint16
 	hidden     bool
+	rejoin     bool
 	wmu        sync.Mutex
 	smu        sync.Mutex
 	sz         Control
@@ -87,7 +88,8 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	v := &viewer{conn: conn, szSig: make(chan struct{}, 1), cols: size(r.URL.Query().Get("cols"), 120), rows: size(r.URL.Query().Get("rows"), 40), hidden: r.URL.Query().Get("hidden") != ""}
+	q := r.URL.Query()
+	v := &viewer{conn: conn, szSig: make(chan struct{}, 1), cols: size(q.Get("cols"), 120), rows: size(q.Get("rows"), 40), hidden: q.Get("hidden") != "", rejoin: q.Get("reconnect") != ""}
 	cmd := exec.Command(h.Bin, "attach", id)
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
 	v.pty, err = pty.StartWithSize(cmd, &pty.Winsize{Cols: v.cols, Rows: v.rows})
@@ -224,7 +226,7 @@ func (h *Hub) join(id string, v *viewer) {
 		h.groups[id] = g
 	}
 	g.viewers[v] = true
-	if g.owner == nil || !v.hidden {
+	if g.owner == nil || !v.hidden && !v.rejoin {
 		g.owner = v
 	}
 	g.apply()

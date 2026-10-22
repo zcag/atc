@@ -696,7 +696,8 @@ function makeDock(id) {
 
   const connect = () => {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    ws = new WebSocket(`${proto}//${location.host}/api/sessions/${id}/attach?cols=${term.cols}&rows=${term.rows}${d.box ? "" : "&hidden=1"}`);
+    const q = `cols=${term.cols}&rows=${term.rows}${d.box && !document.hidden ? "" : "&hidden=1"}${tries > 0 ? "&reconnect=1" : ""}`;
+    ws = new WebSocket(`${proto}//${location.host}/api/sessions/${id}/attach?${q}`);
     ws.binaryType = "arraybuffer";
     ws.onmessage = (e) => {
       if (typeof e.data !== "string") return term.write(new Uint8Array(e.data));

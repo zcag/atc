@@ -86,6 +86,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        web?.onResume()
         if (prefs.server == null) return
         Push.sync(this)
         Live.refresh(this)
@@ -95,6 +96,7 @@ class MainActivity : Activity() {
 
     override fun onPause() {
         super.onPause()
+        web?.onPause()
         CookieManager.getInstance().flush()
     }
 

@@ -160,3 +160,22 @@ func TestHiddenViewers(t *testing.T) {
 		t.Fatal("a visible viewer is looking")
 	}
 }
+
+func TestReconnectKeepsTheOwner(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "claude")
+	os.WriteFile(bin, []byte("#!/bin/sh\nstty -echo\nwhile read l; do echo \"got:$l\"; done\n"), 0o755)
+	h := &Hub{Bin: bin}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.Serve(w, r, "s1") }))
+	defer ts.Close()
+	url := "ws" + strings.TrimPrefix(ts.URL, "http")
+
+	desk := connect(t, url, 160, 50)
+	desk.next(t)
+	phone := connect(t, url+"?reconnect=1", 40, 30)
+	if m := phone.next(t); m.Owner || m.Cols != 160 {
+		t.Fatalf("a reconnecting screen must not take the size: %+v", m)
+	}
+	if m := desk.next(t); !m.Owner || m.Cols != 160 {
+		t.Fatalf("the desk keeps the size: %+v", m)
+	}
+}
