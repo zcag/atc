@@ -22,6 +22,7 @@ import (
 	"github.com/zcag/atc/internal/server"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
+	"github.com/zcag/atc/internal/tui"
 	"github.com/zcag/atc/web"
 )
 
@@ -33,6 +34,7 @@ SERVER
   atc token                      print this machine's server token
 
 CLIENT (talks to $ATC_URL, a saved login, or the local server)
+  atc                            browse, start and attach in a terminal UI
   atc login <url> <token>        save where the server is
   atc ls [-json]                 live sessions, most urgent first
   atc attach <session>           take over this terminal; Ctrl+Z detaches
@@ -52,8 +54,14 @@ unique piece of the title.
 func main() {
 	log.SetFlags(0)
 	if len(os.Args) < 2 {
-		fmt.Print(usage)
-		os.Exit(2)
+		if !term.IsTerminal(int(os.Stdout.Fd())) {
+			fmt.Print(usage)
+			os.Exit(2)
+		}
+		if err := tui.Run(client.Load()); err != nil {
+			log.Fatalf("atc: %v", err)
+		}
+		return
 	}
 	cmd, args := os.Args[1], os.Args[2:]
 	var err error
