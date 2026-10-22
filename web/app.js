@@ -39,6 +39,7 @@ const tilde = (p) => {
 };
 let MULTI = false;
 let VOICE = {};
+let VOICE_OK = false;
 const model = (m) => (m || "").replace(/^claude-/, "").replace(/-\d.*$/, "");
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
@@ -196,6 +197,8 @@ function App() {
         e.preventDefault();
         const x = k.ordered.find((x) => x.sessionId === k.cursor);
         if (x) go(keyOf(x));
+      } else if (e.key === "t" && VOICE_OK) {
+        e.preventDefault(); location.hash = "#/assist";
       } else if (e.key === "n") {
         e.preventDefault(); setCreating(true);
       } else if (e.key === "/") {
@@ -216,6 +219,7 @@ function App() {
   CLAUDE_THEME = me.claudeTheme || CLAUDE_THEME;
   MULTI = (me.hosts || []).length > 1;
   VOICE = me.voice || {};
+  VOICE_OK = !!VOICE.stt;
   const down = (me.peers || []).filter((p) => p.error);
 
   const all = live || [];
@@ -231,6 +235,7 @@ function App() {
           <span class="conn ${up ? "" : "down"}" title=${up ? "Live" : "Reconnecting"}></span>
           ${down.length > 0 && html`<span class="tag" title=${down.map((p) => `${p.name}: ${p.error}`).join("\n")}>${down.map((p) => p.name).join(", ")} unreachable</span>`}
           <span class="grow"></span>
+          ${VOICE_OK && html`<button class="btn talk" onClick=${() => (location.hash = "#/assist")} title="Talk to Claude (t)"><span class="mi">${MIC}</span>Talk</button>`}
           <button class="btn primary" onClick=${() => setCreating(true)}>New session</button>
         </header>
         <${Board} live=${live} sel=${sel} cursor=${cursor} onPast=${remember} />
@@ -260,6 +265,7 @@ function App() {
             <dt>Enter</dt><dd>Open the highlighted session</dd>
             <dt>Alt + ↑ / ↓</dt><dd>Previous or next session, even from inside a terminal</dd>
             <dt>n</dt><dd>New session</dd>
+            <dt>t</dt><dd>Talk: a voice session with Claude</dd>
             <dt>/</dt><dd>Search earlier sessions</dd>
             <dt>Ctrl + Z</dt><dd>In a terminal: detach. The session keeps running.</dd>
             <dt>?</dt><dd>Show or hide this</dd>
@@ -270,6 +276,11 @@ function App() {
 }
 
 function Assist({ live, busy, onTalk, onOpen }) {
+  useEffect(() => {
+    const k = (e) => { if (e.key === "Escape") onOpen(); };
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, []);
   const open = (live || []).filter((s) => !s.parked);
   const count = (st) => open.filter((s) => s.state === st).length;
   const summary = [["needs-you", "needs you"], ["your-turn", "your turn"], ["working", "working"]]
@@ -278,6 +289,7 @@ function Assist({ live, busy, onTalk, onOpen }) {
   const last = open.find((s) => s.name === "assistant" || s.title === "assistant");
   return html`
     <div class="assist">
+      ${!APP && html`<button class="icon close" onClick=${onOpen} aria-label="Close">✕</button>`}
       <button class="choice talk" disabled=${busy} onClick=${() => onTalk(true)}>
         <span class="big">${MIC}</span>
         <span class="what">${busy ? "Starting…" : "New voice session"}</span>

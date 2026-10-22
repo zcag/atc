@@ -406,3 +406,12 @@ button { cursor: pointer; }
 .viewer table.data td { border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
 .viewer table.data td.n { text-align: right; font-variant-numeric: tabular-nums; }
 .viewer table.data tbody tr:hover { background: var(--strip); }
+
+.btn.talk { display: inline-flex; align-items: center; gap: 6px; }
+.btn.talk .mi svg { width: 16px; height: 16px; }
+.assist .close { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 16px; font-size: 20px; }
+@media (min-width: 700px) {
+  .assist { align-items: center; }
+  .assist > .choice { width: min(520px, 100%); }
+  .assist .choice.talk { min-height: 300px; }
+}
