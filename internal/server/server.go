@@ -110,6 +110,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/presence", s.presencePost)
 	mux.HandleFunc("GET /api/presence", s.presenceGet)
 	mux.HandleFunc("GET /api/sessions/{sid}/outputs", s.outputs)
+	mux.HandleFunc("GET /api/page-image", s.pageImage)
 	mux.HandleFunc("GET /api/sessions/{sid}/usage", s.sessionUsage)
 	mux.HandleFunc("GET /api/usage/limits", s.usageLimits)
 	mux.HandleFunc("GET /api/usage/week", s.usageWeek)
@@ -287,9 +288,7 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 		list[i].Host = s.Host
 		if p := paths[list[i].SessionID]; p != "" {
 			list[i].Pages = s.scanner.Matching(p, home, s.Featured)
-			for j := range list[i].Pages {
-				list[i].Pages[j].Title = s.unfurl.peek(list[i].Pages[j].URL)
-			}
+			s.unfurl.fill(list[i].Pages, false)
 		}
 		if list[i].PID > 0 {
 			for _, l := range s.ports.Of(list[i].PID) {

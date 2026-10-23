@@ -83,13 +83,7 @@ func (s *Server) outputs(w http.ResponseWriter, r *http.Request) {
 			out.Links = append(out.Links, l)
 		}
 	}
-	urls := make([]string, len(out.Featured))
-	for i, l := range out.Featured {
-		urls[i] = l.URL
-	}
-	for i, t := range s.unfurl.titles(urls) {
-		out.Featured[i].Title = t
-	}
+	s.unfurl.fill(out.Featured, true)
 	exp := time.Now().Add(12 * time.Hour).Unix()
 	for _, f := range files[:min(len(files), 300)] {
 		out.Files = append(out.Files, outputFile{f, s.fileURL(sid, f.Path, exp)})

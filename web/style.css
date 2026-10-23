@@ -265,10 +265,18 @@ button { cursor: pointer; }
 .strip .l3 .pg { display: inline-flex; gap: 4px; max-width: 200px; color: var(--work); border: 1px solid color-mix(in srgb, var(--work) 35%, transparent); border-radius: 4px; padding: 0 5px; cursor: pointer; white-space: nowrap; }
 .strip .l3 .pg span { overflow: hidden; text-overflow: ellipsis; }
 .strip .l3 .pg:hover { background: color-mix(in srgb, var(--work) 10%, transparent); }
-.pubitem { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; text-align: left; }
-.pubitem b, .pubitem small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-.pubitem b { font-weight: 500; }
-.pubitem small { color: var(--dim); font-size: 12px; }
+.pubitem { display: flex; align-items: center; gap: 10px; padding: 6px; text-align: left; }
+.pubitem .tx { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.pubitem b, .pubitem small, .pubcard b, .pubcard small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pubitem b, .pubcard b { font-weight: 500; color: var(--ink); }
+.pubitem small, .pubcard small { color: var(--dim); font-size: 12px; font-weight: 400; }
+.shot { flex: none; display: grid; place-items: center; width: 76px; aspect-ratio: 1200 / 630; border-radius: 5px; overflow: hidden; background: var(--sunk); border: 1px solid var(--line); color: var(--faint); }
+.shot img { width: 100%; height: 100%; object-fit: cover; object-position: top; }
+.shot i { font-style: normal; }
+.pubwrap { position: relative; }
+.pubcard { display: none; position: absolute; top: calc(100% + 6px); right: 0; z-index: 30; width: 300px; flex-direction: column; gap: 3px; padding: 8px 8px 10px; background: var(--strip-hi); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 28px rgba(0,0,0,.18); pointer-events: none; }
+.pubcard .shot { width: 100%; margin-bottom: 5px; }
+@media (hover: hover) { .pubwrap:hover .pubcard { display: flex; } }
 .voice-btn.off { opacity: .55; }
 .voice-btn.on { background: var(--work); color: #fff; border-color: var(--work); }
 .keys {
@@ -416,6 +424,8 @@ button { cursor: pointer; }
 .card .pv img, .card .pv video { width: 100%; height: 100%; object-fit: cover; }
 .card.image .pv { background: repeating-conic-gradient(var(--sunk) 0 25%, var(--strip) 0 50%) 0 0 / 16px 16px; }
 .card.image .pv img { object-fit: contain; }
+.card.page .pv { aspect-ratio: 1200 / 630; }
+.card.page .pv img { object-position: top; }
 .card .pv iframe { position: absolute; top: 0; left: 0; width: 400%; height: 400%; border: 0; transform: scale(.25); transform-origin: 0 0; pointer-events: none; background: #fff; }
 .card .ext { font: 600 22px var(--mono); color: var(--dim); text-transform: lowercase; }
 .card .cap { padding: 8px 10px 10px; min-width: 0; }

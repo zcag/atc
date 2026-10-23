@@ -630,13 +630,21 @@ const pageName = (url) => {
 
 const pageLabel = (l) => l.title || pageName(l.url);
 
+const pageMeta = (l) => `${l.title ? `${pageName(l.url)} · ` : ""}${agoLong(l.at)}`;
+
+function Shot({ l }) {
+  return html`<span class="shot">${l.image ? html`<img src=${l.image} loading="lazy" alt="" />` : html`<i>↗</i>`}</span>`;
+}
+
 function Published({ links, inline }) {
   const cls = inline ? "pub inline" : "btn pub";
+  const one = links[0];
   return html`<span class="pubwrap ${inline ? "inline" : ""}">${links.length === 1
-    ? html`<button class=${cls} title=${`Open ${links[0].url}`} onClick=${() => openOut(links[0].url)}><span>${pageLabel(links[0])}</span><i>↗</i></button>`
-    : html`<${Menu} cls=${cls} left=${inline} aria="Published pages" width=${260} label=${html`<span>${links.length} pages</span><i>▾</i>`}
+    ? html`<button class=${cls} onClick=${() => openOut(one.url)}><span>${pageLabel(one)}</span><i>↗</i></button>
+        ${!inline && html`<span class="pubcard" role="tooltip"><${Shot} l=${one} /><b>${pageLabel(one)}</b><small>${one.url.replace(/^https?:\/\//, "")} · ${agoLong(one.at)}</small></span>`}`
+    : html`<${Menu} cls=${cls} left=${inline} aria="Published pages" width=${inline ? "min(320px, calc(100vw - 80px))" : 320} label=${html`<span>${links.length} pages</span><i>▾</i>`}
         items=${links.map((l) => ({ cls: "pubitem", title: l.url, run: () => openOut(l.url),
-          label: html`<b>${pageLabel(l)}</b><small>${l.title ? `${pageName(l.url)} · ` : ""}${agoLong(l.at)}</small>` }))} />`}</span>`;
+          label: html`<${Shot} l=${l} /><span class="tx"><b>${pageLabel(l)}</b><small>${pageMeta(l)}</small></span>` }))} />`}</span>`;
 }
 
 function Elapsed({ s }) {
@@ -766,6 +774,7 @@ function Session({ s, say, live }) {
     return () => { SESSION_API = null; };
   });
   const use = useSessionUsage(s, showUse || s.state === "working" ? 15000 : 90000);
+  const pages = s.pages?.length ? s.pages : outs?.featured || [];
   const outCount = outs ? outs.servers.length + outs.featured.length + outs.files.filter((f) => f.kind !== "text").length + outs.links.length : 0;
 
   return html`
@@ -796,10 +805,10 @@ function Session({ s, say, live }) {
               </span>`}
             </span>`}
           ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first">no permission prompts</span>`}
-          ${s.pages?.length > 0 && html`<${Published} links=${s.pages} inline />`}
+          ${pages.length > 0 && html`<${Published} links=${pages} inline />`}
         </div>
       </div>
-      ${s.pages?.length > 0 && html`<${Published} links=${s.pages} />`}
+      ${pages.length > 0 && html`<${Published} links=${pages} />`}
       ${VOICE.stt && html`<button class="btn voice-btn ${voice ? "on" : ""} ${canAttach ? "" : "off"}" aria-pressed=${voice}
         onClick=${() => canAttach ? (setVoice(!voice), setMode("term"))
           : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
@@ -838,7 +847,7 @@ function Menu({ busy, items, label = "•••", cls = "icon", aria = "More act
     <div ref=${ref} style="position: relative">
       <button class=${cls} aria-label=${aria} aria-expanded=${open} onClick=${() => setOpen(!open)}>${label}</button>
       ${open && html`
-        <div class="sheet" style="position: absolute; ${left ? "left" : "right"}: 0; top: calc(100% + 6px); width: ${width}px; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
+        <div class="sheet" style="position: absolute; ${left ? "left" : "right"}: 0; top: calc(100% + 6px); width: ${typeof width === "number" ? `${width}px` : width}; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
           ${items.map((it) => html`<button class="btn ${it.danger ? "danger" : ""} ${it.cls || ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`)}
         </div>`}
     </div>
@@ -1643,10 +1652,12 @@ function Outputs({ s, data }) {
         ${data.featured.length > 0 && html`
           <section>
             <h4>Published</h4>
-            ${data.featured.map((l) => html`<button class="linkrow" onClick=${() => openOut(l.url)}>
-              <span class="h">${l.title || pageName(l.url)}</span><span class="p">${l.title ? pageName(l.url) : new URL(l.url).host}</span>
-              <span class="when">${ago({ updated: l.at })}</span>
-            </button>`)}
+            <div class="cards">
+              ${data.featured.map((l) => html`<button class="card page" title=${l.url} onClick=${() => openOut(l.url)}>
+                <div class="pv">${l.image ? html`<img loading="lazy" src=${l.image} alt="" />` : html`<span class="ext">page</span>`}</div>
+                <div class="cap"><span class="n">${pageLabel(l)}</span><span class="m">${pageMeta(l)}</span></div>
+              </button>`)}
+            </div>
           </section>`}
         ${made.length > 0 && html`
           <section>

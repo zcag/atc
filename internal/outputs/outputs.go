@@ -25,6 +25,7 @@ type Link struct {
 	URL   string    `json:"url"`
 	At    time.Time `json:"at"`
 	Title string    `json:"title,omitempty"`
+	Image string    `json:"image,omitempty"`
 }
 
 type found struct {
