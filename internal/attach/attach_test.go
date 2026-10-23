@@ -203,3 +203,30 @@ func TestTypingHolderKeepsTheSize(t *testing.T) {
 		}
 	}
 }
+
+func TestTerminalReportsDoNotTakeTheSize(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "claude")
+	os.WriteFile(bin, []byte("#!/bin/sh\nstty -echo\nwhile read l; do echo \"got:$l\"; done\n"), 0o755)
+	h := &Hub{Bin: bin}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.Serve(w, r, "s1") }))
+	defer ts.Close()
+	url := "ws" + strings.TrimPrefix(ts.URL, "http")
+
+	desk := connect(t, url+"?device=desk", 160, 50)
+	desk.next(t)
+	phone := connect(t, url+"?device=phone", 40, 30)
+	desk.next(t)
+	phone.next(t)
+	desk.c.Write(context.Background(), websocket.MessageText, []byte(`{"type":"claim"}`))
+	desk.next(t)
+	phone.next(t)
+	for _, r := range []string{"\x1b[O", "\x1b[I", "\x1b[?997;1n", "\x1b[12;1R", "\x1b]11;rgb:0000/0000/0000\x1b\\"} {
+		phone.c.Write(context.Background(), websocket.MessageBinary, []byte(r))
+	}
+	time.Sleep(300 * time.Millisecond)
+	select {
+	case m := <-desk.ctl:
+		t.Fatalf("a terminal's automatic reply took the size: %+v", m)
+	default:
+	}
+}

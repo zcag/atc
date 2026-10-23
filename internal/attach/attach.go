@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strconv"
 	"sync"
 	"syscall"
@@ -161,10 +162,12 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 			return
 		}
 		if typ == websocket.MessageBinary {
-			h.mu.Lock()
-			v.typed = time.Now()
-			h.mu.Unlock()
-			h.claim(id, v)
+			if !terminalReport.Match(b) {
+				h.mu.Lock()
+				v.typed = time.Now()
+				h.mu.Unlock()
+				h.claim(id, v)
+			}
 			v.pty.Write(b)
 			continue
 		}
@@ -280,6 +283,8 @@ func (h *Hub) resize(id string, v *viewer, cols, rows uint16) {
 }
 
 const recentInput = 2 * time.Minute
+
+var terminalReport = regexp.MustCompile(`^(\x1b\[[IO]|\x1b\[[?>]?[0-9;]*[cnR]|\x1b\][^\x07\x1b]*(\x07|\x1b\\))+$`)
 
 func (g *group) apply() {
 	o := g.owner
