@@ -164,6 +164,12 @@ function App() {
     }
   }, [live]);
 
+  useEffect(() => {
+    if (!live) return;
+    const x = route && live.find((v) => v.id === route || v.sessionId === route);
+    if (!seenMap() || x) markSeen(live, x?.sessionId);
+  }, [live, route]);
+
   const warmed = useRef(false);
   useEffect(() => {
     if (!live || warmed.current) return;
@@ -455,6 +461,30 @@ function Bay({ title, list, sel, cursor, dim }) {
   `;
 }
 
+let SEEN = null;
+function seenMap() {
+  if (SEEN) return SEEN;
+  try { SEEN = JSON.parse(localStorage.getItem("atc.seen") || "null"); } catch {}
+  return SEEN;
+}
+function markSeen(list, sid) {
+  const m = seenMap() || {};
+  const now = new Date().toISOString();
+  if (!seenMap()) for (const x of list) m[x.sessionId] = now;
+  if (sid) m[sid] = now;
+  SEEN = m;
+  try { localStorage.setItem("atc.seen", JSON.stringify(m)); } catch {}
+}
+const unread = (s) => (s.state === "your-turn" || s.state === "needs-you") && !s.parked && !!SEEN && Date.parse(s.updated || 0) > Date.parse(SEEN[s.sessionId] || 0);
+const oneLine = (t) => (t || "").replace(/\s+/g, " ").trim();
+
+function said(s) {
+  if (s.state === "working") return html`<div class="said doing">${oneLine(s.activity) || "Working…"}</div>`;
+  if (s.state === "needs-you" && s.activity) return html`<div class="said ask">Waiting on you: ${oneLine(s.activity)}</div>`;
+  if ((s.state === "your-turn" || s.state === "needs-you") && s.lastReply) return html`<div class="said reply">${oneLine(s.lastReply)}</div>`;
+  return s.lastPrompt ? html`<div class="said">${oneLine(s.lastPrompt)}</div>` : null;
+}
+
 function Strip({ s, sel, cursor }) {
   const on = sel && sel.sessionId === s.sessionId;
   const press = useRef({ t: 0, fired: false, x: 0, y: 0 });
@@ -472,6 +502,7 @@ function Strip({ s, sel, cursor }) {
   const up = () => clearTimeout(press.current.t);
   return html`
     <button class="strip ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}" data-sid=${s.sessionId}
+      title=${[s.title, [WORD[s.state] || s.state, s.id || s.sessionId.slice(0, 8), model(s.model)].filter(Boolean).join(" · ")].join("\n")}
       onClick=${(e) => { if (press.current.fired) { press.current.fired = false; return e.preventDefault(); } go(keyOf(s)); }}
       onContextMenu=${menu} onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${up}
       onPointerEnter=${(e) => { if (e.pointerType === "mouse") hover.current = setTimeout(() => prewarm(s), 150); }}
@@ -479,22 +510,18 @@ function Strip({ s, sel, cursor }) {
       aria-current=${on ? "true" : null}>
       <span class="qbtn" role="button" aria-label="Actions" onClick=${menu}>⋯</span>
       <div class="l1">
+        ${unread(s) && html`<i class="new" aria-label="New"></i>`}
         <span class="title">${s.title || "Untitled"}</span>
         <span class="when">${s.state === "working" ? html`<${Elapsed} s=${s} />` : ago(s)}</span>
       </div>
-      <div class="l2">
-        <span class="word">${WORD[s.state] || s.state}</span>
-        ${s.id && html`<span class="call">${s.id}</span>`}
-        ${MULTI && s.host && html`<span class="tag">${s.host}</span>`}
+      ${said(s)}
+      <div class="l3">
         <${ProjectTag} path=${s.cwd} full />
-        ${s.branch && s.branch !== "HEAD" && html`<span>${s.branch}</span>`}
-        ${s.model && html`<span>${model(s.model)}</span>`}
-        ${s.kind === "interactive" && html`<span class="tag">in a terminal</span>`}
+        ${s.branch && !["HEAD", "main", "master"].includes(s.branch) && html`<span class="br">${s.branch}</span>`}
+        ${MULTI && s.host && html`<span class="host">${s.host}</span>`}
+        ${s.kind === "interactive" && html`<span class="term" title="Open in a terminal window: readable here, not attachable">terminal</span>`}
         ${(s.servers || []).slice(0, 2).map((p) => html`<span class="srv" role="link" title=${`Open ${serverURL(s, p)}`} onClick=${(e) => { e.stopPropagation(); openOut(serverURL(s, p)); }}>:${p}</span>`)}
       </div>
-      ${s.state === "working" && s.activity
-        ? html`<div class="said doing">${s.activity}</div>`
-        : s.lastPrompt && html`<div class="said">${s.lastPrompt.replace(/\s+/g, " ")}</div>`}
     </button>
   `;
 }
