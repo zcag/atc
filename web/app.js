@@ -40,6 +40,10 @@ const tilde = (p) => {
 let MULTI = false;
 let VOICE = {};
 let VOICE_OK = false;
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+let PALETTE_OPEN = () => {};
+let SESSION_API = null;
+let SET_PROJECT = () => {};
 const model = (m) => (m || "").replace(/^claude-/, "").replace(/-\d.*$/, "");
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
@@ -75,6 +79,8 @@ function App() {
   const [up, setUp] = useState(true);
   const [past, setPast] = useState({});
   const [creating, setCreating] = useState(false);
+  const [palette, setPalette] = useState(false);
+  PALETTE_OPEN = () => setPalette(true);
   const [cursor, setCursor] = useState(null);
   const [quick, setQuick] = useState(null);
   QUICK = (s, rect) => setQuick({ s, rect });
@@ -226,6 +232,10 @@ function App() {
         return;
       }
       const t = e.target;
+      if (e.key.toLowerCase() === "k" && (MAC ? e.metaKey : e.ctrlKey && !t.closest?.(".xterm")) && !e.altKey && !e.shiftKey) {
+        e.preventDefault(); e.stopPropagation(); setPalette((v) => !v);
+        return;
+      }
       if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
       const move = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[e.key];
       if (move) {
@@ -275,6 +285,7 @@ function App() {
           <span class="conn ${up ? "" : "down"}" title=${up ? "Live" : "Reconnecting"}></span>
           ${down.length > 0 && html`<span class="tag" title=${down.map((p) => `${p.name}: ${p.error}`).join("\n")}>${down.map((p) => p.name).join(", ")} unreachable</span>`}
           <span class="grow"></span>
+          <button class="btn talk" onClick=${() => setPalette(true)} title=${`Search and commands (${MAC ? "⌘" : "Ctrl+"}K)`} aria-label="Search and commands"><span class="mi">${ICON.search}</span></button>
           ${VOICE_OK && html`<button class="btn talk" onClick=${() => (location.hash = "#/assist")} title="Talk to Claude (t)"><span class="mi">${MIC}</span><span class="lb">Talk</span></button>`}
           <button class="btn primary" onClick=${() => setCreating(true)}>New session</button>
         </header>
@@ -287,7 +298,9 @@ function App() {
           : html`<div class="blank">${starting || (route && !live) ? "Opening…" : route ? "This session is gone. Pick another from the list." : "Pick a session, or start a new one."}</div>`}
       </main>
     </div>
-    ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
+    ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} start=${creating} />`}
+    ${palette && html`<${Palette} live=${live || []} sel=${sel} say=${say} home=${me.host} onClose=${() => setPalette(false)}
+      actions=${{ create: (start) => setCreating(start || true), usage: () => setUsage(true), help: () => setHelp(true), talk: () => (location.hash = "#/assist") }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
     ${usage && html`<${UsageSheet} limits=${limits} multi=${MULTI} onClose=${() => setUsage(false)} />`}
@@ -311,6 +324,7 @@ function App() {
             <dt>j / k, ↓ / ↑</dt><dd>Move through sessions</dd>
             <dt>Enter</dt><dd>Open the highlighted session</dd>
             <dt>Alt + ↑ / ↓</dt><dd>Previous or next session, even from inside a terminal</dd>
+            <dt>${MAC ? "⌘" : "Ctrl"} K</dt><dd>Command palette: jump to anything, run any action</dd>
             <dt>n</dt><dd>New session</dd>
             <dt>t</dt><dd>Talk: a voice session with Claude</dd>
             <dt>/</dt><dd>Search earlier sessions</dd>
@@ -387,6 +401,7 @@ function Board({ live: all, sel, cursor, onPast }) {
     return n;
   });
   PICK_PROJECT = (name) => setOnly((o) => (o === name ? null : name));
+  SET_PROJECT = (name) => setOnly(name);
   const tabs = useMemo(() => projectTabs(all || [], only), [all, only]);
   useEffect(() => {
     const k = (e) => {
@@ -529,6 +544,7 @@ const unread = (s) => (s.state === "your-turn" || s.state === "needs-you") && !s
 const oneLine = (t) => (t || "").replace(/\*\*|__|`+|^#+\s*|^>\s*/gm, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
 
 const ICON = {
+  search: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   pin: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 1.5l5 5-2 .5-2.5 2.5.5 3-1.5 1.5L6 10l-3.5 3.5M6 10L2.5 6.5 4 5l3 .5L9.5 3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   park: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 106.5 6.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   play: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z" fill="currentColor"/></svg>`,
@@ -725,6 +741,10 @@ function Session({ s, say, live }) {
   const patch = (body) => act(() => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body }));
   const outs = useOutputs(s, mode === "out" ? 10000 : 60000);
   const [showUse, setShowUse] = useState(false);
+  useEffect(() => {
+    SESSION_API = { s, canAttach, mode: (m) => setMode(m), voice: () => canAttach && (setVoice((v) => !v), setMode("term")), usage: () => setShowUse(true), rename: () => setRenaming(true) };
+    return () => { SESSION_API = null; };
+  });
   const use = useSessionUsage(s, showUse || s.state === "working" ? 15000 : 90000);
   const outCount = outs ? outs.servers.length + outs.files.filter((f) => f.kind !== "text").length + outs.links.length : 0;
 
@@ -1898,10 +1918,10 @@ function HostField({ hosts, host, setHost }) {
 
 const untrusted = "Claude Code hasn't been trusted in this folder yet. Open Claude there once and accept the prompt, then try again.";
 
-function NewSession({ onClose, say, hosts, home }) {
-  const [host, setHost] = useState(home);
+function NewSession({ onClose, say, hosts, home, start: from }) {
+  const [host, setHost] = useState(from?.host || home);
   const dirs = useDirs(host, home);
-  const [dir, setDir] = useState("~");
+  const [dir, setDir] = useState(from?.dir ? tilde(from.dir) : "~");
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
   const [worktree, setWorktree] = useState(false);
@@ -1955,6 +1975,132 @@ function NewSession({ onClose, say, hosts, home }) {
       </form>
     </div>
   `;
+}
+
+function fuzzy(q, text) {
+  if (!q) return { score: 1, hits: [] };
+  const t = text.toLowerCase();
+  const i = t.indexOf(q);
+  if (i >= 0) return { score: 200 - i + (i === 0 || /[\s/_-]/.test(t[i - 1]) ? 50 : 0), hits: [...Array(q.length).keys()].map((k) => i + k) };
+  const hits = [];
+  let j = 0, gaps = 0, last = -1;
+  for (let k = 0; k < t.length && j < q.length; k++) {
+    if (t[k] === q[j]) { hits.push(k); if (last >= 0) gaps += k - last - 1; last = k; j++; }
+  }
+  return j === q.length ? { score: 100 - gaps - hits[0], hits } : null;
+}
+
+function marked(text, hits) {
+  if (!hits?.length) return text;
+  const set = new Set(hits);
+  const out = [];
+  let run = "", on = false;
+  [...text].forEach((c, k) => {
+    const h = set.has(k);
+    if (h !== on && run) { out.push(on ? html`<b>${run}</b>` : run); run = ""; }
+    on = h; run += c;
+  });
+  if (run) out.push(on ? html`<b>${run}</b>` : run);
+  return out;
+}
+
+function Palette({ live, sel, say, home, actions, onClose }) {
+  const [q, setQ] = useState("");
+  const [at, setAt] = useState(0);
+  const [presets, setPresets] = useState([]);
+  const [dirs, setDirs] = useState([]);
+  const [past, setPast] = useState([]);
+  const list = useRef();
+  useEffect(() => {
+    api("/api/presets").then((p) => setPresets(p || []), () => {});
+    api("/api/dirs").then((d) => setDirs(d || []), () => {});
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(() => api(`/api/history?limit=${q ? 12 : 6}&q=${encodeURIComponent(q)}`).then((h) => setPast(h || []), () => {}), q ? 120 : 0);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const run = (f) => () => { onClose(); f(); };
+  const items = [];
+  const add = (group, label, opts) => items.push({ group, label, ...opts });
+  const cur = SESSION_API;
+  if (cur && sel) {
+    const s = cur.s;
+    const act = (label, f, kw = "") => add(`This session: ${s.title || "Untitled"}`, label, { run: run(f), kw, glyph: "›" });
+    if (cur.canAttach) act("Terminal", () => cur.mode("term"), "shell attach");
+    act("Transcript", () => cur.mode("chat"), "read conversation");
+    act("Outputs", () => cur.mode("out"), "files servers links");
+    if (cur.canAttach && VOICE_OK) act("Voice", cur.voice, "talk speak mic");
+    act("Usage", cur.usage, "tokens cost limit");
+    act("Rename", cur.rename, "title name");
+    act(s.pinned ? "Unpin" : "Pin to top", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }));
+    act(s.parked ? "Unpark" : "Park", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { parked: !s.parked } }), "hide quiet");
+    if (s.attachable) act("Stop", () => api(`/api/sessions/${s.sessionId}/stop`, { method: "POST" }).then(() => say("Stopped. Resume it any time.")), "end");
+  }
+  for (const s of live) add("Sessions", s.title || "Untitled", { s, kw: `${project(s.cwd).name} ${s.host || ""} ${s.lastPrompt || ""}`, run: run(() => go(keyOf(s))) });
+  const liveIDs = new Set(live.map((s) => s.sessionId));
+  for (const s of past.filter((s) => !liveIDs.has(s.sessionId))) add("Earlier", s.title || "Untitled", { s, kw: project(s.cwd).name, run: run(() => go(s.sessionId)) });
+  const projects = [...new Set(live.map((s) => project(s.cwd).name))];
+  for (const n of projects) add("Projects", `Show only ${n}`, { proj: n, kw: n, run: run(() => SET_PROJECT(n)) });
+  if (projects.length) add("Projects", "Show all projects", { glyph: "◌", run: run(() => SET_PROJECT(null)) });
+  add("Actions", "New session", { glyph: "+", hint: "n", run: run(() => actions.create()) });
+  for (const p of presets) add("Actions", `Start ${p.name}`, { proj: p.name, kw: `preset ${p.dir}`, sub: tilde(p.dir), run: run(() => api(`/api/sessions${hostQ(p.host, home)}`, { method: "POST", body: { preset: p.name } }).then((r) => { say(`Started ${p.name}.`); go(r.id); }, (e) => say(e.message))) });
+  if (VOICE_OK) add("Actions", "Talk to Claude", { glyph: "◉", hint: "t", kw: "voice assistant", run: run(actions.talk) });
+  add("Actions", "Usage and limits", { glyph: "%", hint: "u", kw: "tokens cost week", run: run(actions.usage) });
+  add("Actions", "Keyboard shortcuts", { glyph: "?", hint: "?", kw: "help keys", run: run(actions.help) });
+  if (q.length > 1) for (const d of dirs.slice(0, 60)) add("New session in", tilde(d.path), { glyph: "+", kw: "folder", run: run(() => actions.create({ dir: d.path })) });
+
+  const ql = q.trim().toLowerCase();
+  const shown = [];
+  for (const it of items) {
+    const m = fuzzy(ql, it.label) || (ql && fuzzy(ql, `${it.label} ${it.kw || ""}`) && { score: 10, hits: [] });
+    if (m) shown.push({ ...it, ...m });
+  }
+  const order = ["This session", "Sessions", "Earlier", "Projects", "Actions", "New session in"];
+  const gi = (g) => order.findIndex((o) => g.startsWith(o));
+  if (ql) shown.sort((a, b) => b.score - a.score);
+  else shown.sort((a, b) => gi(a.group) - gi(b.group));
+  const top = (ql ? shown.slice(0, 40) : shown.filter((x) => x.group !== "Earlier" || past.indexOf(x.s) < 4).slice(0, 40));
+  const groups = [];
+  for (const it of top) {
+    let g = groups.find((g) => g[0] === it.group);
+    if (!g) groups.push((g = [it.group, []]));
+    g[1].push(it);
+  }
+  const flat = groups.flatMap((g) => g[1]);
+  const pick = Math.min(at, Math.max(0, flat.length - 1));
+  useEffect(() => setAt(0), [q]);
+  useEffect(() => { list.current?.querySelector(".pi.on")?.scrollIntoView({ block: "nearest" }); }, [pick]);
+
+  const key = (e) => {
+    if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) { e.preventDefault(); setAt((pick + 1) % Math.max(1, flat.length)); }
+    else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) { e.preventDefault(); setAt((pick - 1 + flat.length) % Math.max(1, flat.length)); }
+    else if (e.key === "Enter") { e.preventDefault(); flat[pick]?.run(); }
+    else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+  };
+  let n = -1;
+  return html`
+    <div class="veil palveil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
+      <div class="palette" role="dialog" aria-label="Command palette">
+        <div class="pq">
+          <span class="ps">${ICON.search}</span>
+          <input autofocus value=${q} onInput=${(e) => setQ(e.target.value)} onKeyDown=${key} placeholder="Jump to a session, project or action" autocapitalize="off" autocomplete="off" spellcheck="false" />
+          <kbd>esc</kbd>
+        </div>
+        <div class="plist" ref=${list}>
+          ${groups.map(([g, its]) => html`
+            <div class="pg">${g}</div>
+            ${its.map((it) => { n++; const idx = n; return html`
+              <button class=${`pi ${idx === pick ? "on" : ""}`} onPointerMove=${() => idx !== pick && setAt(idx)} onClick=${it.run}>
+                ${it.s ? html`<i class=${`dot ${it.s.parked ? "parked" : it.s.state}`}></i>` : it.proj ? html`<span class="proj" style=${`--ph: ${hueOf(it.proj)}`}>${it.proj.slice(0, 2)}</span>` : html`<span class="gl">${it.glyph || "›"}</span>`}
+                <span class="pl">${marked(it.label, it.hits)}${it.s && it.s.state === "working" && it.s.activity ? html`<small>${oneLine(it.s.activity)}</small>` : it.sub ? html`<small>${it.sub}</small>` : ""}</span>
+                ${it.s ? html`<span class="pr"><${ProjectTag} path=${it.s.cwd} /><span class="when">${ago(it.s)}</span></span>` : it.hint ? html`<kbd>${it.hint}</kbd>` : ""}
+              </button>`; })}`)}
+          ${flat.length === 0 && html`<p class="calm">Nothing matches "${q}".</p>`}
+        </div>
+        <div class="pf"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>${MAC ? "⌘" : "Ctrl"}</kbd><kbd>K</kbd> toggle</span></div>
+      </div>
+    </div>`;
 }
 
 function readShared() {
