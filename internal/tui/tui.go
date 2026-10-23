@@ -15,7 +15,9 @@ import (
 	"github.com/sahilm/fuzzy"
 
 	"github.com/zcag/atc/internal/client"
+	"github.com/zcag/atc/internal/report"
 	"github.com/zcag/atc/internal/sessions"
+	"github.com/zcag/atc/internal/usage"
 )
 
 type input int
@@ -56,7 +58,21 @@ type (
 		id, title string
 		err       error
 	}
+	limitsMsg usage.Limits
+	limitsDue struct{}
+	panelMsg  struct {
+		key   string
+		lines []string
+		err   error
+	}
 )
+
+type panel struct {
+	key, title string
+	lines      []string
+	err        string
+	off        int
+}
 
 type model struct {
 	c          *client.Client
@@ -82,6 +98,8 @@ type model struct {
 	home       string
 	hosts      []string
 	host       string
+	limits     usage.Limits
+	panel      *panel
 }
 
 func Run(c *client.Client) error {
@@ -119,7 +137,46 @@ func subscribe(ctx context.Context, c *client.Client, p *tea.Program) {
 
 func tick() tea.Cmd { return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} }) }
 
-func (m model) Init() tea.Cmd { return tea.Batch(m.fetchLive(), tick()) }
+func (m model) Init() tea.Cmd { return tea.Batch(m.fetchLive(), m.fetchLimits(), tick()) }
+
+func (m model) fetchLimits() tea.Cmd {
+	return func() tea.Msg {
+		l, _ := m.c.Limits()
+		return limitsMsg(l)
+	}
+}
+
+func (m model) openPanel(key, title string, load func() ([]string, error)) (model, tea.Cmd) {
+	m.panel = &panel{key: key, title: title}
+	return m, func() tea.Msg {
+		lines, err := load()
+		return panelMsg{key, lines, err}
+	}
+}
+
+func (m model) panelLines() []string {
+	p := m.panel
+	if p.err != "" {
+		return []string{plain.Foreground(red).Render(p.err)}
+	}
+	if p.lines == nil {
+		return []string{dim.Render("loading…")}
+	}
+	w := max(10, m.w-4)
+	var out []string
+	for _, l := range p.lines {
+		body := strings.TrimLeft(l, " ")
+		if !strings.Contains(body, " ") {
+			out = append(out, ansi.Truncate(l, w, "…"))
+			continue
+		}
+		pad := l[:len(l)-len(body)]
+		for _, part := range strings.Split(ansi.Wordwrap(body, w-len(pad), " "), "\n") {
+			out = append(out, pad+part)
+		}
+	}
+	return out
+}
 
 func (m model) fetchLive() tea.Cmd {
 	return func() tea.Msg {
@@ -262,6 +319,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ti.Width = max(10, m.w-12)
 	case tickMsg:
 		return m, tick()
+	case limitsMsg:
+		m.limits = usage.Limits(msg)
+		return m, tea.Tick(2*time.Minute, func(time.Time) tea.Msg { return limitsDue{} })
+	case limitsDue:
+		return m, m.fetchLimits()
+	case panelMsg:
+		if m.panel != nil && m.panel.key == msg.key {
+			m.panel.lines = msg.lines
+			if msg.err != nil {
+				m.panel.err = msg.err.Error()
+			}
+		}
+		return m, nil
 	case liveMsg:
 		prev, _ := m.selected()
 		m.live, m.online, m.down = msg, true, ""
@@ -345,10 +415,40 @@ func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.in != noInput {
 		return m.typing(k)
 	}
+	if m.panel != nil {
+		return m.panelKey(k)
+	}
 	m.status, m.err = "", ""
 	t := m.tab()
 	s, ok := m.selected()
 	switch k.String() {
+	case "u":
+		if ok {
+			return m.openPanel("u"+s.SessionID, "Usage: "+s.Title, func() ([]string, error) {
+				st, err := m.c.SessionUsage(s.SessionID)
+				return report.Session(st), err
+			})
+		}
+	case "U":
+		return m.openPanel("U", "Plan usage", func() ([]string, error) {
+			l, err := m.c.Limits()
+			if err != nil {
+				return nil, err
+			}
+			days, err := m.c.Days(14)
+			return report.Plan(l, days, time.Now()), err
+		})
+	case "o":
+		if ok {
+			return m.openPanel("o"+s.SessionID, "Outputs: "+s.Title, func() ([]string, error) {
+				o, err := m.c.Outputs(s.SessionID)
+				lines := report.Outputs(o, s.Host, time.Now())
+				if len(o.Files) > 0 {
+					lines = append(lines, "", "atc outputs "+s.SessionID[:min(8, len(s.SessionID))]+" prints the full links, to open a file in a browser.")
+				}
+				return lines, err
+			})
+		}
 	case "q":
 		return m, tea.Quit
 	case "up", "k":
@@ -418,6 +518,31 @@ func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.clamp()
+	return m, nil
+}
+
+func (m model) panelKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	p := *m.panel
+	page := max(1, m.bodyH()-3)
+	switch k.String() {
+	case "esc", "q", "u", "U", "o", "left":
+		m.panel = nil
+		return m, nil
+	case "up", "k":
+		p.off--
+	case "down", "j":
+		p.off++
+	case "pgup", "b":
+		p.off -= page
+	case "pgdown", " ", "f":
+		p.off += page
+	case "home", "g":
+		p.off = 0
+	case "end", "G":
+		p.off = len(m.panelLines())
+	}
+	p.off = max(0, min(p.off, len(m.panelLines())-page))
+	m.panel = &p
 	return m, nil
 }
 
@@ -699,22 +824,33 @@ func (m model) header() string {
 func (m model) footer() string {
 	var keys [][2]string
 	switch {
+	case m.panel != nil:
+		keys = [][2]string{{"↑↓", "scroll"}, {"esc", "back"}}
 	case m.in != noInput:
 		keys = [][2]string{{"↵", "ok"}, {"esc", "cancel"}}
 		if m.in == newDir || m.in == newHost || m.in == filtering || m.in == searching {
 			keys = append(keys, [2]string{"↑↓", "choose"})
 		}
 	case m.history:
-		keys = [][2]string{{"↵", "open"}, {"/", "search"}, {"h", "live"}, {"r", "rename"}, {"p", "pin"}, {"q", "quit"}}
+		keys = [][2]string{{"↵", "open"}, {"/", "search"}, {"h", "live"}, {"r", "rename"}, {"p", "pin"}, {"u", "usage"}, {"o", "outputs"}, {"q", "quit"}}
 	default:
 		keys = [][2]string{{"↵", "attach"}, {"n", "new"}, {"/", "filter"}, {"h", "history"}, {"x", "stop"},
-			{"d", "delete"}, {"r", "rename"}, {"p", "pin"}, {"z", "park"}, {"q", "quit"}}
+			{"d", "delete"}, {"r", "rename"}, {"p", "pin"}, {"z", "park"}, {"u", "usage"}, {"o", "outputs"}, {"q", "quit"}}
 	}
 	var parts []string
 	for _, k := range keys {
 		parts = append(parts, bold.Render(k[0])+" "+dim.Render(k[1]))
 	}
 	return " " + strings.Join(parts, "  ")
+}
+
+func (m model) statusLine() string {
+	msg := ansi.Truncate(m.message(), m.w, "…")
+	lim := report.LimitsShort(m.limits.Windows, time.Now())
+	if lim == "" || lipgloss.Width(msg)+len(lim)+3 > m.w {
+		return msg
+	}
+	return msg + strings.Repeat(" ", m.w-lipgloss.Width(msg)-lipgloss.Width(lim)-1) + dim.Render(lim) + " "
 }
 
 func (m model) message() string {
@@ -799,6 +935,11 @@ func (m model) View() string {
 	}
 	var body []string
 	switch {
+	case m.panel != nil:
+		body = append([]string{"", "  " + bold.Render(ansi.Truncate(m.panel.title, m.w-4, "…")), ""}, m.panelLines()[m.panel.off:]...)
+		for i := 3; i < len(body); i++ {
+			body[i] = "  " + body[i]
+		}
 	case m.in == newDir || m.in == newName || m.in == newPrompt || m.in == newHost:
 		body = m.newView()
 	case len(m.rows()) == 0:
@@ -819,6 +960,6 @@ func (m model) View() string {
 		body = append(body, "")
 	}
 	out = append(out, body[:max(0, m.bodyH())]...)
-	out = append(out, ansi.Truncate(m.message(), m.w, "…"), ansi.Truncate(m.footer(), m.w, ""))
+	out = append(out, m.statusLine(), ansi.Truncate(m.footer(), m.w, ""))
 	return strings.Join(out, "\n")
 }

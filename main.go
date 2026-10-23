@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"golang.org/x/term"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/push"
+	"github.com/zcag/atc/internal/report"
 	"github.com/zcag/atc/internal/server"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
@@ -56,6 +58,11 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc rm <session>               delete a background session
   atc rename <session> <name>    atc pin|unpin <session>
   atc park|unpark <session>      move it out of the way: bottom of the list, no notifications
+  atc outputs [-json] <session>  what it produced: running servers, files (with a link to
+                                 open each in a browser), links, code it touched
+  atc usage [-json] [session]    plan limits and tokens per day; with a session, its tokens,
+                                 models, turns and working time, with an estimated API cost
+  atc limits [-json] [-short]    plan limits, one line each; -short fits a status line
 
 <session> is a row number from ls, a short id, a session id prefix, or a
 unique piece of the title.
@@ -100,6 +107,12 @@ func main() {
 		err = sendTo(args)
 	case "mcp":
 		err = tools.Run(context.Background(), client.Load())
+	case "outputs":
+		err = showOutputs(args)
+	case "usage":
+		err = showUsage(args)
+	case "limits":
+		err = showLimits(args)
 	case "resume", "stop", "rm", "rename", "pin", "unpin", "park", "unpark":
 		err = act(cmd, args)
 	case "-h", "--help", "help":
@@ -219,7 +232,7 @@ func ls(args []string) error {
 		return err
 	}
 	if *asJSON {
-		return json.NewEncoder(os.Stdout).Encode(list)
+		return printJSON(list)
 	}
 	if len(list) == 0 {
 		fmt.Println("no sessions")
@@ -236,7 +249,7 @@ func hist(args []string) error {
 		return err
 	}
 	if *asJSON {
-		return json.NewEncoder(os.Stdout).Encode(list)
+		return printJSON(list)
 	}
 	printRows(list)
 	return nil
@@ -306,6 +319,91 @@ func act(cmd string, args []string) error {
 	default:
 		return c.Patch(s.SessionID, map[string]any{"pinned": cmd == "pin"})
 	}
+}
+
+func printJSON(v any) error { return json.NewEncoder(os.Stdout).Encode(v) }
+
+func printLines(lines []string) {
+	for _, l := range lines {
+		fmt.Println(l)
+	}
+}
+
+func showOutputs(args []string) error {
+	fs, asJSON := jsonFlag("outputs", args)
+	fs.Parse(args)
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: atc outputs [-json] <session>")
+	}
+	c := client.Load()
+	s, err := c.Find(fs.Arg(0), true)
+	if err != nil {
+		return err
+	}
+	o, err := c.Outputs(s.SessionID)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		return printJSON(o)
+	}
+	printLines(report.Outputs(o, s.Host, time.Now()))
+	return nil
+}
+
+func showUsage(args []string) error {
+	fs, asJSON := jsonFlag("usage", args)
+	fs.Parse(args)
+	c := client.Load()
+	if fs.NArg() > 0 {
+		s, err := c.Find(strings.Join(fs.Args(), " "), true)
+		if err != nil {
+			return err
+		}
+		st, err := c.SessionUsage(s.SessionID)
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			return printJSON(st)
+		}
+		printLines(append([]string{s.Title, ""}, report.Session(st)...))
+		return nil
+	}
+	l, err := c.Limits()
+	if err != nil {
+		return err
+	}
+	days, err := c.Days(14)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		return printJSON(map[string]any{"limits": l, "days": days})
+	}
+	printLines(report.Plan(l, days, time.Now()))
+	return nil
+}
+
+func showLimits(args []string) error {
+	fs, asJSON := jsonFlag("limits", args)
+	short := fs.Bool("short", false, "one line, for a status line or prompt")
+	fs.Parse(args)
+	l, err := client.Load().Limits()
+	if err != nil {
+		return err
+	}
+	switch {
+	case *asJSON:
+		return printJSON(l)
+	case *short:
+		fmt.Println(report.LimitsShort(l.Windows, time.Now()))
+	case len(l.Windows) == 0:
+		fmt.Println(report.LimitsNote(l, time.Now()))
+	default:
+		printLines(report.LimitLines(l.Windows, time.Now()))
+	}
+	return nil
 }
 
 func sendTo(args []string) error {
