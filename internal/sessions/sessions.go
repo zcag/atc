@@ -11,6 +11,7 @@ import (
 
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
+	"github.com/zcag/atc/internal/outputs"
 	"github.com/zcag/atc/internal/store"
 )
 
@@ -23,30 +24,31 @@ const (
 )
 
 type Session struct {
-	SessionID      string    `json:"sessionId"`
-	Host           string    `json:"host,omitempty"`
-	ID             string    `json:"id,omitempty"`
-	Kind           string    `json:"kind"`
-	State          string    `json:"state"`
-	Attachable     bool      `json:"attachable"`
-	PID            int       `json:"pid,omitempty"`
-	Title          string    `json:"title"`
-	Name           string    `json:"name,omitempty"`
-	Cwd            string    `json:"cwd"`
-	StartCwd       string    `json:"startCwd,omitempty"`
-	Branch         string    `json:"branch,omitempty"`
-	Model          string    `json:"model,omitempty"`
-	PermissionMode string    `json:"permissionMode,omitempty"`
-	LastPrompt     string    `json:"lastPrompt,omitempty"`
-	Context        int       `json:"context,omitempty"`
-	PromptAt       time.Time `json:"promptAt,omitzero"`
-	Activity       string    `json:"activity,omitempty"`
-	LastReply      string    `json:"lastReply,omitempty"`
-	StartedAt      time.Time `json:"startedAt,omitzero"`
-	Updated        time.Time `json:"updated,omitzero"`
-	Servers        []int     `json:"servers,omitempty"`
-	Pinned         bool      `json:"pinned,omitempty"`
-	Parked         bool      `json:"parked,omitempty"`
+	SessionID      string         `json:"sessionId"`
+	Host           string         `json:"host,omitempty"`
+	ID             string         `json:"id,omitempty"`
+	Kind           string         `json:"kind"`
+	State          string         `json:"state"`
+	Attachable     bool           `json:"attachable"`
+	PID            int            `json:"pid,omitempty"`
+	Title          string         `json:"title"`
+	Name           string         `json:"name,omitempty"`
+	Cwd            string         `json:"cwd"`
+	StartCwd       string         `json:"startCwd,omitempty"`
+	Branch         string         `json:"branch,omitempty"`
+	Model          string         `json:"model,omitempty"`
+	PermissionMode string         `json:"permissionMode,omitempty"`
+	LastPrompt     string         `json:"lastPrompt,omitempty"`
+	Context        int            `json:"context,omitempty"`
+	PromptAt       time.Time      `json:"promptAt,omitzero"`
+	Activity       string         `json:"activity,omitempty"`
+	LastReply      string         `json:"lastReply,omitempty"`
+	StartedAt      time.Time      `json:"startedAt,omitzero"`
+	Updated        time.Time      `json:"updated,omitzero"`
+	Servers        []int          `json:"servers,omitempty"`
+	Pages          []outputs.Link `json:"pages,omitempty"`
+	Pinned         bool           `json:"pinned,omitempty"`
+	Parked         bool           `json:"parked,omitempty"`
 }
 
 type Manager struct {

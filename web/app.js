@@ -616,6 +616,8 @@ function Strip({ s, sel, cursor, size = "full" }) {
         ${MULTI && s.host && html`<span class="host">${s.host}</span>`}
         ${s.kind === "interactive" && html`<span class="interm" title="Open in a terminal window: readable here, not attachable">terminal</span>`}
         ${(s.servers || []).slice(0, 2).map((p) => html`<span class="srv" role="link" title=${`Open ${serverURL(s, p)}`} onClick=${(e) => { e.stopPropagation(); openOut(serverURL(s, p)); }}>:${p}</span>`)}
+        ${s.pages?.length > 0 && html`<span class="pg" role="link" title=${s.pages.map((l) => `${pageLabel(l)}  ${l.url}`).join("\n")}
+          onClick=${(e) => { e.stopPropagation(); openOut(s.pages[0].url); }}><span>${pageLabel(s.pages[0])}</span>${s.pages.length > 1 ? ` +${s.pages.length - 1}` : ""} ↗</span>`}
       </div>
     </button>
   `;
@@ -626,14 +628,15 @@ const pageName = (url) => {
   return decodeURIComponent(u.pathname.replace(/^\/+|\/+$/g, "")) || u.host;
 };
 
-function Published({ links }) {
-  if (links.length === 1) {
-    const l = links[0];
-    return html`<button class="btn pub" title=${`Open ${l.url}`} onClick=${() => openOut(l.url)}><span>${l.title || pageName(l.url)}</span><i>↗</i></button>`;
-  }
-  return html`<${Menu} cls="btn pub" aria="Published pages" width=${260} label=${html`<span>${links.length} pages</span><i>▾</i>`}
-    items=${links.map((l) => ({ cls: "pubitem", title: l.url, run: () => openOut(l.url),
-      label: html`<b>${l.title || pageName(l.url)}</b><small>${l.title ? `${pageName(l.url)} · ` : ""}${agoLong(l.at)}</small>` }))} />`;
+const pageLabel = (l) => l.title || pageName(l.url);
+
+function Published({ links, inline }) {
+  const cls = inline ? "pub inline" : "btn pub";
+  return html`<span class="pubwrap ${inline ? "inline" : ""}">${links.length === 1
+    ? html`<button class=${cls} title=${`Open ${links[0].url}`} onClick=${() => openOut(links[0].url)}><span>${pageLabel(links[0])}</span><i>↗</i></button>`
+    : html`<${Menu} cls=${cls} left=${inline} aria="Published pages" width=${260} label=${html`<span>${links.length} pages</span><i>▾</i>`}
+        items=${links.map((l) => ({ cls: "pubitem", title: l.url, run: () => openOut(l.url),
+          label: html`<b>${pageLabel(l)}</b><small>${l.title ? `${pageName(l.url)} · ` : ""}${agoLong(l.at)}</small>` }))} />`}</span>`;
 }
 
 function Elapsed({ s }) {
@@ -793,9 +796,10 @@ function Session({ s, say, live }) {
               </span>`}
             </span>`}
           ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first">no permission prompts</span>`}
+          ${s.pages?.length > 0 && html`<${Published} links=${s.pages} inline />`}
         </div>
       </div>
-      ${outs?.featured.length > 0 && html`<${Published} links=${outs.featured} />`}
+      ${s.pages?.length > 0 && html`<${Published} links=${s.pages} />`}
       ${VOICE.stt && html`<button class="btn voice-btn ${voice ? "on" : ""} ${canAttach ? "" : "off"}" aria-pressed=${voice}
         onClick=${() => canAttach ? (setVoice(!voice), setMode("term"))
           : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
@@ -821,7 +825,7 @@ function Unattachable(s, resume, busy, setMode) {
   return html`<div><p class="h">${s.state === "stopped" ? "Stopped" : "Not running"}</p><p>Resume it to pick up where it left off. The whole conversation comes back.</p><div class="row"><button class="btn primary" disabled=${busy} onClick=${resume}>${busy ? "Resuming…" : "Resume"}</button></div></div>`;
 }
 
-function Menu({ busy, items, label = "•••", cls = "icon", aria = "More actions", width = 190 }) {
+function Menu({ busy, items, label = "•••", cls = "icon", aria = "More actions", width = 190, left }) {
   const [open, setOpen] = useState(false);
   const ref = useRef();
   useEffect(() => {
@@ -834,7 +838,7 @@ function Menu({ busy, items, label = "•••", cls = "icon", aria = "More act
     <div ref=${ref} style="position: relative">
       <button class=${cls} aria-label=${aria} aria-expanded=${open} onClick=${() => setOpen(!open)}>${label}</button>
       ${open && html`
-        <div class="sheet" style="position: absolute; right: 0; top: 36px; width: ${width}px; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
+        <div class="sheet" style="position: absolute; ${left ? "left" : "right"}: 0; top: calc(100% + 6px); width: ${width}px; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
           ${items.map((it) => html`<button class="btn ${it.danger ? "danger" : ""} ${it.cls || ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`)}
         </div>`}
     </div>

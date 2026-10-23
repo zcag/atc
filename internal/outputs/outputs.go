@@ -80,9 +80,29 @@ type block struct {
 	Content json.RawMessage `json:"content"`
 }
 
-func (s *Scanner) Scan(transcript, home string, featured *regexp.Regexp) ([]File, []Link, map[string]time.Time) {
+func (s *Scanner) Matching(transcript, home string, re *regexp.Regexp) []Link {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	var links []Link
+	for _, l := range s.read(transcript, home, re).found.links {
+		if re.MatchString(l.URL) {
+			links = append(links, l)
+		}
+	}
+	sortLinks(links)
+	return links
+}
+
+func sortLinks(links []Link) {
+	sort.Slice(links, func(i, j int) bool {
+		if !links[i].At.Equal(links[j].At) {
+			return links[i].At.After(links[j].At)
+		}
+		return links[i].URL < links[j].URL
+	})
+}
+
+func (s *Scanner) read(transcript, home string, featured *regexp.Regexp) *entry {
 	if s.cache == nil {
 		s.cache = map[string]*entry{}
 	}
@@ -107,6 +127,13 @@ func (s *Scanner) Scan(transcript, home string, featured *regexp.Regexp) ([]File
 		}
 		f.Close()
 	}
+	return e
+}
+
+func (s *Scanner) Scan(transcript, home string, featured *regexp.Regexp) ([]File, []Link, map[string]time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.read(transcript, home, featured)
 	var files []File
 	for _, f := range e.found.files {
 		st, err := os.Stat(f.Path)
@@ -121,7 +148,7 @@ func (s *Scanner) Scan(transcript, home string, featured *regexp.Regexp) ([]File
 	for _, l := range e.found.links {
 		links = append(links, l)
 	}
-	sort.Slice(links, func(i, j int) bool { return links[i].At.After(links[j].At) })
+	sortLinks(links)
 	ports := map[string]time.Time{}
 	for p, at := range e.found.ports {
 		ports[p] = at
@@ -170,7 +197,8 @@ func (f *found) add(line []byte, home string, featured *regexp.Regexp) {
 				f.scanText(b.Text, at, home, func(string) bool { return true })
 			}
 		case "tool_result":
-			f.scanText(resultText(b.Content), at, home, func(u string) bool { return featured != nil && featured.MatchString(u) })
+			t := resultText(b.Content)
+			f.scanText(t, at, home, func(u string) bool { return featured != nil && featured.MatchString(u) && ownLine(t, u) })
 		}
 	}
 }
@@ -207,6 +235,15 @@ func (f *found) seen(p string, at time.Time) {
 		return
 	}
 	f.files[p] = File{Path: p, Kind: Kind(p), Op: "seen", At: at}
+}
+
+func ownLine(t, u string) bool {
+	for _, l := range strings.Split(t, "\n") {
+		if strings.TrimSpace(l) == u {
+			return true
+		}
+	}
+	return false
 }
 
 func trimURL(u string) string {

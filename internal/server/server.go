@@ -276,8 +276,21 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 	if err != nil {
 		return nil, err
 	}
+	paths := map[string]string{}
+	if s.Featured != nil {
+		for _, t := range s.M.Index.Scan() {
+			paths[t.SessionID] = t.Path
+		}
+	}
+	home, _ := os.UserHomeDir()
 	for i := range list {
 		list[i].Host = s.Host
+		if p := paths[list[i].SessionID]; p != "" {
+			list[i].Pages = s.scanner.Matching(p, home, s.Featured)
+			for j := range list[i].Pages {
+				list[i].Pages[j].Title = s.unfurl.peek(list[i].Pages[j].URL)
+			}
+		}
 		if list[i].PID > 0 {
 			for _, l := range s.ports.Of(list[i].PID) {
 				if !l.LocalOnly {

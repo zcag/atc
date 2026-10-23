@@ -9,7 +9,7 @@ import (
 
 func TestFeaturedFromToolResults(t *testing.T) {
 	tr := filepath.Join(t.TempDir(), "t.jsonl")
-	os.WriteFile(tr, []byte(`{"type":"user","timestamp":"2026-10-01T10:02:00Z","message":{"content":[{"type":"tool_result","content":"fetched https://docs.example.com/x\nhttp://pages.example/report"}]}}
+	os.WriteFile(tr, []byte(`{"type":"user","timestamp":"2026-10-01T10:02:00Z","message":{"content":[{"type":"tool_result","content":"fetched https://docs.example.com/x\n  http://pages.example/report\nconst u = \"http://pages.example/fixture\"\necho http://pages.example/$name"}]}}
 `), 0o644)
 	var s Scanner
 	_, links, _ := s.Scan(tr, t.TempDir(), regexp.MustCompile(`^http://pages\.example/`))
