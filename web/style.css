@@ -568,3 +568,5 @@ button { cursor: pointer; }
 .btn.talk { display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { background: color-mix(in srgb, var(--work) 62%, var(--board)); border-color: transparent; color: #fff; } }
 :root[data-theme="dark"] .btn.primary { background: color-mix(in srgb, var(--work) 62%, var(--board)); border-color: transparent; color: #fff; }
+.btn.talk .mi { display: grid; place-items: center; width: 16px; height: 16px; line-height: 0; }
+.btn.talk .mi svg { display: block; width: 16px; height: 16px; }
