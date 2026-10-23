@@ -97,7 +97,18 @@ atc new ~/code/app "fix the failing test"        # start one
 atc history "auth bug"                           # search past conversations
 atc resume "auth bug"                            # continue one
 atc stop 2 · atc rm 2 · atc rename 2 "name" · atc pin 2
+atc outputs 2                                    # what it produced, with links to open its files
+atc usage                                        # plan limits and tokens per day
+atc usage 2                                      # one session's tokens, turns and estimated cost
+atc limits -short                                # session 4% · week 73% · resets 28m
 ```
+
+Commands that print something take `-json`. `atc limits -short` is one line, for a status line or
+a shell prompt.
+
+In the terminal UI, the line above the keys shows your plan limits, checked every two minutes. `o`
+shows the highlighted session's outputs, `u` its tokens and estimated cost, and `U` the plan
+limits with tokens per day.
 
 `atc new` without a folder uses the current one, written relative to your home folder, so the
 same path works on a server where your projects live under the same names.
