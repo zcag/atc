@@ -21,8 +21,10 @@ phone too. A web change is not done until it works there:
 ## Shipping
 
 Own it end to end: merge to master, push, `make install` on desktop (restarting is safe:
-`KillMode=process` keeps every session alive). Settings live in `~/.config/atc/env`. Don't stop at a
-branch.
+`KillMode=process` keeps every session alive) **and** on laptop
+(`ssh laptop 'cd ~/proj/atc && git pull --ff-only && make install-mac'`). desktop forwards laptop's
+sessions to laptop's atc, so the two must never run different versions. Settings live in
+`~/.config/atc/env` on each. Don't stop at a branch.
 
 ## Terminal size and rendering problems
 
