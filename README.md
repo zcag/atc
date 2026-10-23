@@ -191,8 +191,8 @@ List them in `engines.json` in the config folder, on the machine whose sessions 
 ```
 
 New session then shows a Model line (Claude stays the default), and those sessions carry the
-model's name on their strip. A session is resumed on the engine whose `model` matches the model
-in its transcript. Each engine sets `ANTHROPIC_BASE_URL`, an auth token (`token`, default
+engine's name on their strip. atc remembers each session's engine and resumes it there; a session
+started elsewhere is resumed on the engine whose `model` matches the model in its transcript. Each engine sets `ANTHROPIC_BASE_URL`, an auth token (`token`, default
 `local`) and every model alias to `model`, through `--settings`; `env` adds or overrides
 variables. Replies from models not named `claude-*` cost nothing and are left out of the plan's
 daily usage.

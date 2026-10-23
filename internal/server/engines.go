@@ -2,9 +2,13 @@ package server
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
+	"log"
 	"maps"
 	"net/http"
+
+	"github.com/zcag/atc/internal/store"
 )
 
 type Engine struct {
@@ -41,7 +45,27 @@ func (s *Server) engine(name string) (Engine, bool) {
 	return Engine{}, false
 }
 
+func (s *Server) tagEngine(ctx context.Context, id, engine string) {
+	if engine == "" {
+		return
+	}
+	agents, err := s.M.CLI.Agents(ctx)
+	if err != nil {
+		log.Printf("engine %s for %s: %v", engine, id, err)
+		return
+	}
+	for _, a := range agents {
+		if a.ID == id {
+			s.M.Store.Update(a.SessionID, func(m *store.Meta) { m.Engine = engine })
+			return
+		}
+	}
+}
+
 func (s *Server) engineOf(sid string) (Engine, bool) {
+	if name := s.M.Store.Get(sid).Engine; name != "" {
+		return s.engine(name)
+	}
 	for _, t := range s.M.Index.Scan() {
 		if t.SessionID != sid {
 			continue

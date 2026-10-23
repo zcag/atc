@@ -47,6 +47,8 @@ let TABS = { only: null, tabs: [], set: () => {} };
 const focusOnMount = (el) => { if (el && !el.dataset.focused) { el.dataset.focused = "1"; requestAnimationFrame(() => el.focus({ preventScroll: true })); } };
 const local = (m) => !!m && !m.startsWith("claude-") && m !== "<synthetic>";
 const model = (m) => (local(m) ? m.split("/").pop().split(":")[0] : (m || "").replace(/^claude-/, "").replace(/-\d.*$/, ""));
+const engineTag = (s) => (s.engine || local(s.model)) &&
+  html`<span class="eng" title=${`Runs on ${s.engine || s.model}, not Claude`}>${s.engine || model(s.model)}</span>`;
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
 
@@ -621,7 +623,7 @@ function Strip({ s, sel, cursor, size = "full" }) {
         <${ProjectTag} path=${s.cwd} full />
         ${s.branch && !["HEAD", "main", "master"].includes(s.branch) && html`<span class="br">${s.branch}</span>`}
         ${MULTI && s.host && html`<span class="host">${s.host}</span>`}
-        ${local(s.model) && html`<span class="eng" title=${`Runs on ${s.model}, not Claude`}>${model(s.model)}</span>`}
+        ${engineTag(s)}
         ${s.kind === "interactive" && html`<span class="interm" title="Open in a terminal window: readable here, not attachable">terminal</span>`}
         ${(s.servers || []).slice(0, 2).map((p) => html`<span class="srv" role="link" title=${`Open ${serverURL(s, p)}`} onClick=${(e) => { e.stopPropagation(); openOut(serverURL(s, p)); }}>:${p}</span>`)}
         ${s.pages?.length > 0 && html`<span class="pg" role="link" title=${s.pages.map((l) => `${pageLabel(l)}  ${l.url}`).join("\n")}
@@ -807,7 +809,7 @@ function Session({ s, say, live }) {
           <span class="word" style=${`--edge: var(--${{ "needs-you": "needs", "your-turn": "turn", working: "work" }[s.state] || "stop"})`}>${WORD[s.state] || s.state}</span>
           <${ProjectTag} path=${s.cwd} full />
           ${s.branch && s.branch !== "HEAD" && html`<span class="wide">${s.branch}</span>`}
-          ${s.model && html`<span class=${local(s.model) ? "eng" : "wide"} title=${local(s.model) ? `Runs on ${s.model}, not Claude` : null}>${model(s.model)}</span>`}
+          ${engineTag(s) || (s.model && html`<span class="wide">${model(s.model)}</span>`)}
           ${(s.context > 0 || use?.total > 0) && html`
             <span class="wide usehover" tabindex="0" role="button" onClick=${() => setShowUse(true)} onKeyDown=${(e) => e.key === "Enter" && setShowUse(true)}>
               ${s.context > 0 ? `${Math.round(s.context / 1000)}k context` : "usage"}

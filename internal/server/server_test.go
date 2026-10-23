@@ -404,12 +404,16 @@ func TestStartFromPreset(t *testing.T) {
 	}
 
 	s.Engines = []Engine{{Name: "qwen", Model: "qwen3", URL: "http://gpu:11439", Token: "secret"}}
+	os.WriteFile(filepath.Join(filepath.Dir(bin), "agents.json"), []byte(`[{"id":"abcd1234","sessionId":"s9","kind":"background"}]`), 0o644)
 	if res, body := do(t, "POST", ts.URL+"/api/sessions", "tok", `{"preset":"helper","engine":"qwen"}`); res.StatusCode != 200 {
 		t.Fatalf("start with engine: %d %s", res.StatusCode, body)
 	}
 	args, _ = os.ReadFile(filepath.Join(filepath.Dir(bin), "started"))
 	if !strings.Contains(string(args), `"ANTHROPIC_BASE_URL":"http://gpu:11439"`) || !strings.Contains(string(args), "--model qwen3") {
 		t.Errorf("engine args: %s", args)
+	}
+	if e, ok := s.engineOf("s9"); !ok || e.Name != "qwen" {
+		t.Errorf("engine not remembered for the new session: %+v", st.Get("s9"))
 	}
 	if _, body := get(t, ts.URL+"/api/engines", "tok"); !strings.Contains(body, `"name":"qwen"`) || strings.Contains(body, "secret") || strings.Contains(body, "gpu") {
 		t.Errorf("engines: %s", body)

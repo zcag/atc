@@ -406,6 +406,9 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		extra = append(extra, e.args()...)
 	}
 	id, err := s.M.CLI.Start(r.Context(), dir, req.Name, req.Prompt, extra...)
+	if err == nil {
+		s.tagEngine(r.Context(), id, req.Engine)
+	}
 	s.done(w, id, err)
 }
 
@@ -445,7 +448,7 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown session "+sid, http.StatusNotFound)
 		return
 	}
-	id, err := s.M.CLI.Resume(r.Context(), dir, sid, s.launchArgs(name, dir, sid)...)
+	id, err := s.relaunch(r.Context(), name, dir, sid)
 	s.done(w, id, err)
 }
 
@@ -820,7 +823,7 @@ func (s *Server) assist(w http.ResponseWriter, r *http.Request) {
 		}
 		if last != nil {
 			dir := cmp.Or(last.StartCwd, last.Cwd)
-			id, err := s.M.CLI.Resume(r.Context(), dir, last.SessionID, s.launchArgs("assistant", dir, last.SessionID)...)
+			id, err := s.relaunch(r.Context(), "assistant", dir, last.SessionID)
 			s.done(w, id, err)
 			return
 		}
@@ -843,9 +846,9 @@ func assistArgs() []string {
 	return extra
 }
 
-func (s *Server) launchArgs(name, dir, sid string) []string {
+func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, error) {
 	if name == "assistant" {
-		return assistArgs()
+		return s.M.CLI.Resume(ctx, dir, sid, assistArgs()...)
 	}
 	var extra []string
 	if p, ok := s.preset(name); ok {
@@ -854,10 +857,15 @@ func (s *Server) launchArgs(name, dir, sid string) []string {
 			log.Printf("resume %s: %v", name, err)
 		}
 	}
-	if e, ok := s.engineOf(sid); ok {
+	e, ok := s.engineOf(sid)
+	if ok {
 		extra = append(extra, e.args()...)
 	}
-	return extra
+	id, err := s.M.CLI.Resume(ctx, dir, sid, extra...)
+	if err == nil && ok {
+		s.tagEngine(ctx, id, e.Name)
+	}
+	return id, err
 }
 
 const voicePrompt = `This session is used by voice. The user speaks to you through speech-to-text and hears your replies through text-to-speech. ` +
