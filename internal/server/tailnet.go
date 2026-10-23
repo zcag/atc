@@ -165,13 +165,16 @@ func (s *Server) nameViewer(r *http.Request) {
 	if q.Get("named") != "" {
 		return
 	}
-	device := q.Get("device")
-	if ip := s.clientIP(r); s.tailnet != nil && ip != nil && cgnat.Contains(ip) {
-		if machine := s.tailnet.name(r.Context(), ip.String()); machine != "" {
-			device = strings.TrimSuffix(machine+", "+device, ", ")
-		}
-	}
-	q.Set("device", device)
+	q.Set("device", s.deviceName(r, q.Get("device")))
 	q.Set("named", "1")
 	r.URL.RawQuery = q.Encode()
+}
+
+func (s *Server) deviceName(r *http.Request, device string) string {
+	if ip := s.clientIP(r); s.tailnet != nil && ip != nil && cgnat.Contains(ip) {
+		if machine := s.tailnet.name(r.Context(), ip.String()); machine != "" {
+			return strings.TrimSuffix(machine+", "+device, ", ")
+		}
+	}
+	return device
 }

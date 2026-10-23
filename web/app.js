@@ -967,9 +967,13 @@ function makeDock(id) {
 
   const enc = new TextEncoder();
   const d = { id, el, term, box: null, used: Date.now(), state: { cover: null, foreign: null, retrying: false }, ui: null, hooks: {} };
-  let ws = null, exited = false, owner = false, tries = 0, timer = null, dead = false;
+  let ws = null, exited = false, owner = false, tries = 0, timer = null, dead = false, heard = 0, opened = 0, me = 0;
+  const WS_STATE = ["connecting", "open", "closing", "closed"];
+  const wsState = () => WS_STATE[ws?.readyState] || "none";
+  const quiet = () => (heard ? `${Math.round((Date.now() - heard) / 1000)}s` : "-");
+  const tlog = (event, detail = {}) => fetch("/api/termlog", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device: DEVICE, session: id, event, detail: me ? { ...detail, viewer: `#${me}` } : detail }) }).catch(() => {});
   const emit = (patch) => { Object.assign(d.state, patch); d.ui?.({ ...d.state }); };
-  const ctl = (o) => ws?.readyState === 1 && ws.send(JSON.stringify(o));
+  const ctl = (o) => ws?.readyState === 1 && (ws.send(JSON.stringify(o)), true);
   d.send = (data) => ws?.readyState === 1 && ws.send(enc.encode(data));
   d.claim = () => ctl({ type: "claim" });
   d.focus = () => term.focus();
@@ -989,7 +993,7 @@ function makeDock(id) {
     if (!d.box) return;
     const p = fit.proposeDimensions();
     if (!p?.cols) return;
-    ctl({ type: "resize", cols: p.cols, rows: p.rows });
+    if (!ctl({ type: "resize", cols: p.cols, rows: p.rows })) tlog("resize not sent", { want: `${p.cols}x${p.rows}`, ws: wsState() });
     if (owner) fit.fit(); else scale(true);
   };
   d.relayout = relayout;
@@ -999,10 +1003,14 @@ function makeDock(id) {
     const q = `cols=${term.cols}&rows=${term.rows}&device=${encodeURIComponent(DEVICE)}${d.box && !document.hidden ? "" : "&hidden=1"}${tries > 0 ? "&reconnect=1" : ""}`;
     ws = new WebSocket(`${proto}//${location.host}/api/sessions/${id}/attach?${q}`);
     ws.binaryType = "arraybuffer";
+    const started = Date.now();
     ws.onmessage = (e) => {
+      heard = Date.now();
       if (typeof e.data !== "string") return term.write(new Uint8Array(e.data));
       const c = JSON.parse(e.data);
       if (c.type === "size") {
+        me = c.viewer || me;
+        tlog("size", { got: `${c.cols}x${c.rows}`, mine: !!c.owner, holder: c.holder, viewers: c.viewers, shown: !!d.box });
         owner = !!c.owner;
         if (owner) {
           scale(false);
@@ -1019,11 +1027,15 @@ function makeDock(id) {
       }
     };
     ws.onopen = () => {
+      opened = heard = Date.now();
+      tlog("open", { took: `${opened - started}ms`, attempt: tries, shown: !!d.box });
       tries = 0;
       emit({ retrying: false });
       if (d.box && !document.hidden) { ctl({ type: "visible" }); requestAnimationFrame(relayout); }
     };
-    ws.onclose = () => {
+    ws.onclose = (e) => {
+      tlog("closed", { code: e.code, reason: e.reason || "-", clean: e.wasClean, lasted: opened ? `${Math.round((Date.now() - opened) / 1000)}s` : "never opened", quiet: quiet(), attempt: tries });
+      opened = me = 0;
       if (exited || dead) return;
       if (tries >= 20) return emit({ cover: "lost" });
       emit({ retrying: true });
@@ -1062,11 +1074,16 @@ function makeDock(id) {
     d.hooks.upload(files);
   }, true);
 
-  d.page = (visible) => ctl({ type: visible ? "visible" : "hidden" });
+  d.page = (visible) => {
+    tlog(visible ? "page visible" : "page hidden", { ws: wsState(), quiet: quiet() });
+    ctl({ type: visible ? "visible" : "hidden" });
+  };
   d.show = (box) => {
     d.box = box;
     box.append(el);
     shelf().style.cssText = `width:${box.clientWidth}px;height:${box.clientHeight}px`;
+    const p = fit.proposeDimensions();
+    tlog("show", { ws: wsState(), quiet: quiet(), box: `${box.clientWidth}x${box.clientHeight}px`, fits: p?.cols ? `${p.cols}x${p.rows}` : "-", grid: `${term.cols}x${term.rows}`, holder: owner ? "me" : d.state.foreign || "?" });
     ctl({ type: "visible" });
     requestAnimationFrame(relayout);
   };
@@ -1076,6 +1093,7 @@ function makeDock(id) {
     d.ui = null;
     d.hooks = {};
     d.used = Date.now();
+    tlog("hide", { ws: wsState() });
     ctl({ type: "hidden" });
     shelf().append(el);
     if (exited || d.state.cover) d.dispose();

@@ -108,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/widget", s.widget)
 	mux.HandleFunc("GET /api/presets", s.presets)
 	mux.HandleFunc("POST /api/presence", s.presencePost)
+	mux.HandleFunc("POST /api/termlog", s.termLog)
 	mux.HandleFunc("GET /api/presence", s.presenceGet)
 	mux.HandleFunc("GET /api/sessions/{sid}/outputs", s.outputs)
 	mux.HandleFunc("GET /api/page-image", s.pageImage)

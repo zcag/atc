@@ -73,13 +73,7 @@ func (p *presence) here() (bool, string) {
 func (s *Server) presencePost(w http.ResponseWriter, r *http.Request) {
 	var in struct{ Device string }
 	json.NewDecoder(r.Body).Decode(&in)
-	name := in.Device
-	if ip := s.clientIP(r); s.tailnet != nil && ip != nil && cgnat.Contains(ip) {
-		if m := s.tailnet.name(r.Context(), ip.String()); m != "" {
-			name = m + ", " + name
-		}
-	}
-	s.here.seen(name)
+	s.here.seen(s.deviceName(r, in.Device))
 	reply(w, map[string]bool{"ok": true})
 }
 

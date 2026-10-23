@@ -23,3 +23,19 @@ phone too. A web change is not done until it works there:
 Own it end to end: merge to master, push, `make install` on desktop (restarting is safe:
 `KillMode=process` keeps every session alive). Settings live in `~/.config/atc/env`. Don't stop at a
 branch.
+
+## Terminal size and rendering problems
+
+Every attached screen is logged to the journal, server and browser side, keyed by the session's
+short id: `journalctl --user -u atc --since "1 hour ago" | grep "term 260ef954"`.
+
+- `term <sid> #N (device): …` is the server's view of viewer N: connected (size, hidden,
+  reconnect), visible/hidden, resize, **takes the size** (and why: first viewer, became visible,
+  joined visible, typed, someone hidden or left), the session size applied, how long Claude took to
+  redraw, missed pongs, and how it went away.
+- `term <sid> client (device): …` is what that browser saw, posted over plain HTTP so it arrives
+  even when its socket is dead: show/hide, page visible/hidden, open/closed, every size it
+  received, resizes it could not send. `viewer=#N` ties it to the server lines; `quiet=` is how long
+  since the socket last heard anything.
+- A session on laptop is served by laptop's atc: its server lines are in laptop's log
+  (`ssh laptop grep "term <sid>" /tmp/atc.log`), the browser lines in desktop's.
