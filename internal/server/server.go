@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -48,6 +49,7 @@ type Server struct {
 
 	TrustTailnet   string
 	TrustedProxies *Proxies
+	Featured       *regexp.Regexp
 	tailnet        *tailnet
 
 	fleet   *fleet

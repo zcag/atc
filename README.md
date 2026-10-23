@@ -57,6 +57,7 @@ it. Settings go in `~/.config/atc/env`:
 ATC_ADDR=127.0.0.1:7272                 # where to listen
 ATC_CLAUDE_ARGS=--model opus            # extra flags for sessions atc starts
 ATC_ROOTS=/home/you/code:/home/you      # folders whose subfolders are offered for new sessions
+ATC_FEATURED=^https?://pages\.example/     # links matching this go on a session's header, one click to open
 ```
 
 The unit uses `KillMode=process` on purpose. When atc starts Claude Code's background service,

@@ -192,6 +192,7 @@ button { cursor: pointer; }
   .head .wide { display: none; }
   .head .seg { order: 5; width: 100%; }
   .head .seg button { flex: 1; padding: 6px; }
+  .head .pub { max-width: 130px; }
 }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex: none; }
 .seg button { border: 0; background: none; padding: 5px 10px; font-size: 13px; color: var(--dim); }
@@ -252,6 +253,9 @@ button { cursor: pointer; }
   .mic { width: 88px; height: 88px; }
   .vside, .vside.right { justify-content: center; }
 }
+.pub { display: inline-flex; gap: 4px; align-items: center; max-width: 220px; background: var(--work); color: #fff; border-color: var(--work); white-space: nowrap; }
+.pub span, .sheet .btn { overflow: hidden; text-overflow: ellipsis; }
+.pub:hover { background: var(--work); filter: brightness(1.1); }
 .voice-btn.off { opacity: .55; }
 .voice-btn.on { background: var(--work); color: #fff; border-color: var(--work); }
 .keys {

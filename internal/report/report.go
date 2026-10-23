@@ -270,7 +270,7 @@ func Size(n int64) string {
 }
 
 func Outputs(o client.Outputs, host string, now time.Time) []string {
-	if len(o.Servers)+len(o.Links)+len(o.Files) == 0 {
+	if len(o.Servers)+len(o.Featured)+len(o.Links)+len(o.Files) == 0 {
 		return []string{"Nothing here yet. Files this session writes, pages it publishes and servers it starts show up here."}
 	}
 	var out []string
@@ -288,6 +288,12 @@ func Outputs(o client.Outputs, host string, now time.Time) []string {
 				note = "listens on localhost only, so it opens on " + cmp.Or(host, "that machine") + " itself"
 			}
 			out = append(out, "  "+v.URL+"  "+note)
+		}
+	}
+	if len(o.Featured) > 0 {
+		section("Published")
+		for _, l := range o.Featured {
+			out = append(out, strings.TrimRight("  "+l.URL+"  "+Ago(l.At, now), " "))
 		}
 	}
 	var made, code []client.File

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -177,6 +178,11 @@ func serve(args []string) error {
 
 		TrustTailnet:   tailscaleBin(os.Getenv("ATC_TRUST_TAILNET")),
 		TrustedProxies: server.ParseProxies(os.Getenv("ATC_TRUSTED_PROXIES")),
+	}
+	if f := os.Getenv("ATC_FEATURED"); f != "" {
+		if srv.Featured, err = regexp.Compile(f); err != nil {
+			return fmt.Errorf("ATC_FEATURED: %w", err)
+		}
 	}
 	if srv.Presets, err = server.LoadPresets(filepath.Join(client.ConfigDir(), "presets.json")); err != nil {
 		return err

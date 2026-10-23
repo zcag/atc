@@ -40,7 +40,7 @@ func (s *Server) outputs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	home, _ := os.UserHomeDir()
-	files, links, seen := s.scanner.Scan(t.Path, home)
+	files, links, seen := s.scanner.Scan(t.Path, home, s.Featured)
 	pid := 0
 	if live, err := s.M.Live(r.Context()); err == nil {
 		for _, x := range live {
@@ -65,22 +65,24 @@ func (s *Server) outputs(w http.ResponseWriter, r *http.Request) {
 			servers = append(servers, server{fmt.Sprintf("http://%s:%d/", host, port), port, l.LocalOnly, true, at})
 		}
 	}
-	var kept []outputs.Link
+	out := struct {
+		Servers  []server       `json:"servers"`
+		Featured []outputs.Link `json:"featured"`
+		Links    []outputs.Link `json:"links"`
+		Files    []outputFile   `json:"files"`
+	}{Servers: servers}
 	for _, l := range links {
 		dup := false
 		for _, v := range servers {
 			dup = dup || strings.HasPrefix(l.URL, strings.TrimSuffix(v.URL, "/"))
 		}
-		if !dup {
-			kept = append(kept, l)
+		switch {
+		case s.Featured != nil && s.Featured.MatchString(l.URL):
+			out.Featured = append(out.Featured, l)
+		case !dup:
+			out.Links = append(out.Links, l)
 		}
 	}
-	links = kept
-	out := struct {
-		Servers []server       `json:"servers"`
-		Links   []outputs.Link `json:"links"`
-		Files   []outputFile   `json:"files"`
-	}{Servers: servers, Links: links}
 	exp := time.Now().Add(12 * time.Hour).Unix()
 	for _, f := range files[:min(len(files), 300)] {
 		out.Files = append(out.Files, outputFile{f, s.fileURL(sid, f.Path, exp)})

@@ -79,7 +79,7 @@ type block struct {
 	Content json.RawMessage `json:"content"`
 }
 
-func (s *Scanner) Scan(transcript, home string) ([]File, []Link, map[string]time.Time) {
+func (s *Scanner) Scan(transcript, home string, featured *regexp.Regexp) ([]File, []Link, map[string]time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.cache == nil {
@@ -102,7 +102,7 @@ func (s *Scanner) Scan(transcript, home string) ([]File, []Link, map[string]time
 				break
 			}
 			e.off += int64(len(line))
-			e.found.add(line, home)
+			e.found.add(line, home, featured)
 		}
 		f.Close()
 	}
@@ -128,7 +128,7 @@ func (s *Scanner) Scan(transcript, home string) ([]File, []Link, map[string]time
 	return files, links, ports
 }
 
-func (f *found) add(line []byte, home string) {
+func (f *found) add(line []byte, home string, featured *regexp.Regexp) {
 	var m raw
 	if json.Unmarshal(line, &m) != nil || (m.Type != "assistant" && m.Type != "user") {
 		return
@@ -166,15 +166,15 @@ func (f *found) add(line []byte, home string) {
 			}
 		case "text":
 			if m.Type == "assistant" {
-				f.scanText(b.Text, at, home, true)
+				f.scanText(b.Text, at, home, func(string) bool { return true })
 			}
 		case "tool_result":
-			f.scanText(resultText(b.Content), at, home, false)
+			f.scanText(resultText(b.Content), at, home, func(u string) bool { return featured != nil && featured.MatchString(u) })
 		}
 	}
 }
 
-func (f *found) scanText(t string, at time.Time, home string, links bool) {
+func (f *found) scanText(t string, at time.Time, home string, keep func(string) bool) {
 	if t == "" {
 		return
 	}
@@ -186,8 +186,8 @@ func (f *found) scanText(t string, at time.Time, home string, links bool) {
 			}
 			continue
 		}
-		if links {
-			f.links[u] = Link{u, at}
+		if keep(u) {
+			f.links[u] = Link{URL: u, At: at}
 		}
 	}
 	for _, m := range pathRe.FindAllStringSubmatch(t, -1) {

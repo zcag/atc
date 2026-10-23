@@ -621,6 +621,20 @@ function Strip({ s, sel, cursor, size = "full" }) {
   `;
 }
 
+const pageName = (url) => {
+  const u = new URL(url);
+  return decodeURIComponent(u.pathname.replace(/^\/+|\/+$/g, "")) || u.host;
+};
+
+function Published({ links }) {
+  if (links.length === 1) {
+    const l = links[0];
+    return html`<button class="btn pub" title=${`Open ${l.url}`} onClick=${() => openOut(l.url)}><span>${pageName(l.url)}</span> ↗</button>`;
+  }
+  return html`<${Menu} cls="btn pub" aria="Published pages" width=${260} label=${html`<span>${links.length} pages</span> ▾`}
+    items=${links.map((l) => ({ label: `${pageName(l.url)} ↗`, title: l.url, run: () => openOut(l.url) }))} />`;
+}
+
 function Elapsed({ s }) {
   useNow(1000);
   const t = Date.parse(s.promptAt || s.updated || s.startedAt);
@@ -748,7 +762,7 @@ function Session({ s, say, live }) {
     return () => { SESSION_API = null; };
   });
   const use = useSessionUsage(s, showUse || s.state === "working" ? 15000 : 90000);
-  const outCount = outs ? outs.servers.length + outs.files.filter((f) => f.kind !== "text").length + outs.links.length : 0;
+  const outCount = outs ? outs.servers.length + outs.featured.length + outs.files.filter((f) => f.kind !== "text").length + outs.links.length : 0;
 
   return html`
     <div class="head">
@@ -780,6 +794,7 @@ function Session({ s, say, live }) {
           ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first">no permission prompts</span>`}
         </div>
       </div>
+      ${outs?.featured.length > 0 && html`<${Published} links=${outs.featured} />`}
       ${VOICE.stt && html`<button class="btn voice-btn ${voice ? "on" : ""} ${canAttach ? "" : "off"}" aria-pressed=${voice}
         onClick=${() => canAttach ? (setVoice(!voice), setMode("term"))
           : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
@@ -805,7 +820,7 @@ function Unattachable(s, resume, busy, setMode) {
   return html`<div><p class="h">${s.state === "stopped" ? "Stopped" : "Not running"}</p><p>Resume it to pick up where it left off. The whole conversation comes back.</p><div class="row"><button class="btn primary" disabled=${busy} onClick=${resume}>${busy ? "Resuming…" : "Resume"}</button></div></div>`;
 }
 
-function Menu({ busy, items }) {
+function Menu({ busy, items, label = "•••", cls = "icon", aria = "More actions", width = 190 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef();
   useEffect(() => {
@@ -816,10 +831,10 @@ function Menu({ busy, items }) {
   }, [open]);
   return html`
     <div ref=${ref} style="position: relative">
-      <button class="icon" aria-label="More actions" aria-expanded=${open} onClick=${() => setOpen(!open)}>•••</button>
+      <button class=${cls} aria-label=${aria} aria-expanded=${open} onClick=${() => setOpen(!open)}>${label}</button>
       ${open && html`
-        <div class="sheet" style="position: absolute; right: 0; top: 36px; width: 190px; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
-          ${items.map((it) => html`<button class="btn ${it.danger ? "danger" : ""}" disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`)}
+        <div class="sheet" style="position: absolute; right: 0; top: 36px; width: ${width}px; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
+          ${items.map((it) => html`<button class="btn ${it.danger ? "danger" : ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`)}
         </div>`}
     </div>
   `;
@@ -1582,8 +1597,8 @@ function useOutputs(s, every) {
   useEffect(() => {
     let live = true;
     const load = () => api(`/api/sessions/${s.sessionId}/outputs`).then(
-      (d) => live && setData({ servers: d.servers || [], links: d.links || [], files: d.files || [] }),
-      () => live && setData((d) => d || { servers: [], links: [], files: [], failed: true }));
+      (d) => live && setData({ servers: d.servers || [], featured: d.featured || [], links: d.links || [], files: d.files || [] }),
+      () => live && setData((d) => d || { servers: [], featured: [], links: [], files: [], failed: true }));
     load();
     const t = setInterval(load, every);
     return () => { live = false; clearInterval(t); };
@@ -1602,7 +1617,7 @@ function Outputs({ s, data }) {
   const made = data.files.filter((f) => f.kind !== "text");
   const code = data.files.filter((f) => f.kind === "text");
   const viewable = [...made, ...code];
-  const nothing = !data.servers.length && !data.links.length && !data.files.length;
+  const nothing = !data.servers.length && !data.featured.length && !data.links.length && !data.files.length;
   return html`
     <div class="outputs">
       <div class="inner">
@@ -1619,6 +1634,14 @@ function Outputs({ s, data }) {
                 <span class="u">${v.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>
                 <span class="note">${v.localOnly ? `Listens on localhost only, so it opens on ${s.host || "that machine"} itself, not here.` : "Started by this session"}</span>
               </button>`)}
+          </section>`}
+        ${data.featured.length > 0 && html`
+          <section>
+            <h4>Published</h4>
+            ${data.featured.map((l) => html`<button class="linkrow" onClick=${() => openOut(l.url)}>
+              <span class="h">${pageName(l.url)}</span><span class="p">${new URL(l.url).host}</span>
+              <span class="when">${ago({ updated: l.at })}</span>
+            </button>`)}
           </section>`}
         ${made.length > 0 && html`
           <section>
