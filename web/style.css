@@ -115,11 +115,11 @@ button { cursor: pointer; }
 .strip.your-turn { --edge: var(--turn); }
 .strip.working { --edge: var(--work); }
 .strip.working::after {
-  content: ""; position: absolute; left: 0; width: 6px; height: 40%;
+  content: ""; position: absolute; left: 0; top: 0; width: 6px; height: 40%;
   background: linear-gradient(transparent, rgba(255,255,255,.85), transparent);
-  animation: sweep 2.4s ease-in-out infinite;
+  animation: sweep 2.4s ease-in-out infinite; will-change: transform;
 }
-@keyframes sweep { from { top: -40%; } to { top: 100%; } }
+@keyframes sweep { from { transform: translateY(-100%); } to { transform: translateY(250%); } }
 @media (prefers-reduced-motion: reduce) { .strip.working::after { display: none; } }
 .qbtn { position: absolute; right: 6px; bottom: 6px; padding: 0 8px; border-radius: 6px; color: var(--faint); font-size: 18px; line-height: 22px; opacity: 0; }
 .strip:hover .qbtn, .strip:focus-visible .qbtn { opacity: 1; }
