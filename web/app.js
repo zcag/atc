@@ -476,7 +476,7 @@ function markSeen(list, sid) {
   try { localStorage.setItem("atc.seen", JSON.stringify(m)); } catch {}
 }
 const unread = (s) => (s.state === "your-turn" || s.state === "needs-you") && !s.parked && !!SEEN && Date.parse(s.updated || 0) > Date.parse(SEEN[s.sessionId] || 0);
-const oneLine = (t) => (t || "").replace(/\s+/g, " ").trim();
+const oneLine = (t) => (t || "").replace(/\*\*|__|`+|^#+\s*|^>\s*/gm, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
 
 function said(s) {
   if (s.state === "working") return html`<div class="said doing">${oneLine(s.activity) || "Working…"}</div>`;
