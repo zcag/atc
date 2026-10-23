@@ -529,18 +529,16 @@ button { cursor: pointer; }
 .projtabs button:hover { color: var(--ink); }
 .projtabs button .nm { font-weight: 600; color: hsl(var(--ph, 0) 45% 36%); }
 .projtabs button:first-child .nm, .projtabs button:first-child { font-weight: 600; }
-.projtabs button.on { background: var(--ink); border-color: var(--ink); color: var(--board); }
-.projtabs button.on .nm { color: hsl(var(--ph, 0) 70% 80%); }
-.projtabs button:first-child.on { color: var(--board); }
+.projtabs button.on { background: var(--strip-hi); border-color: color-mix(in srgb, hsl(var(--ph, 220) 55% 50%) 70%, transparent); color: var(--ink); box-shadow: 0 1px 3px rgba(15, 23, 42, .12); }
+.projtabs button:first-child.on { border-color: var(--dim); }
 .projtabs .pips { display: inline-flex; gap: 3px; align-items: center; }
 .projtabs .pips i { width: 6px; height: 6px; border-radius: 50%; background: var(--stop); }
 .projtabs .pips i.needs-you { background: var(--needs); }
 .projtabs .pips i.your-turn { background: var(--turn); }
 .projtabs .pips i.working { background: var(--work); }
 .projtabs .pips em { font-style: normal; font-size: 11px; color: var(--faint); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .projtabs button .nm { color: hsl(var(--ph, 0) 60% 72%); } :root:not([data-theme="light"]) .projtabs button.on .nm { color: hsl(var(--ph, 0) 55% 32%); } }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .projtabs button .nm { color: hsl(var(--ph, 0) 60% 72%); } }
 :root[data-theme="dark"] .projtabs button .nm { color: hsl(var(--ph, 0) 60% 72%); }
-:root[data-theme="dark"] .projtabs button.on .nm { color: hsl(var(--ph, 0) 55% 32%); }
 
 .palveil { place-items: start center; padding-top: min(14vh, 120px); background: rgba(10, 14, 20, .38); backdrop-filter: blur(2px); }
 .palette { width: min(640px, 100%); max-height: min(70vh, 620px); display: flex; flex-direction: column; overflow: hidden; background: var(--strip-hi); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 24px 60px rgba(10, 14, 20, .35); animation: palin .14s ease-out; }
@@ -569,3 +567,7 @@ button { cursor: pointer; }
 .palette .pf { display: flex; gap: 16px; padding: 8px 14px; border-top: 1px solid var(--line); font-size: 12px; color: var(--faint); }
 .palette .pf kbd { margin-right: 2px; }
 @media (max-width: 600px) { .palveil { padding: 0; place-items: stretch; } .palette { max-height: 100dvh; border-radius: 0; border: 0; } .palette .pf { display: none; } }
+
+.btn.talk { display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .btn.primary { background: color-mix(in srgb, var(--work) 62%, var(--board)); border-color: transparent; color: #fff; } }
+:root[data-theme="dark"] .btn.primary { background: color-mix(in srgb, var(--work) 62%, var(--board)); border-color: transparent; color: #fff; }

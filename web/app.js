@@ -288,7 +288,7 @@ function App() {
           <span class="grow"></span>
           <button class="btn talk" onClick=${() => setPalette(true)} title=${`Search and commands (${MAC ? "⌘" : "Ctrl+"}K)`} aria-label="Search and commands"><span class="mi">${ICON.search}</span></button>
           ${VOICE_OK && html`<button class="btn talk" onClick=${() => (location.hash = "#/assist")} title="Talk to Claude (t)"><span class="mi">${MIC}</span><span class="lb">Talk</span></button>`}
-          <button class="btn primary" onClick=${() => setCreating(true)}>New session</button>
+          <button class="btn talk" onClick=${() => setCreating(true)} title="New session (n)" aria-label="New session"><span class="mi">${ICON.plus}</span></button>
         </header>
         <${Board} live=${live} sel=${sel} cursor=${cursor} onPast=${remember} />
         <${UsageFoot} limits=${limits} onOpen=${() => setUsage(true)} />
@@ -545,6 +545,7 @@ const unread = (s) => (s.state === "your-turn" || s.state === "needs-you") && !s
 const oneLine = (t) => (t || "").replace(/\*\*|__|`+|^#+\s*|^>\s*/gm, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
 
 const ICON = {
+  plus: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
   search: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   pin: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 1.5l5 5-2 .5-2.5 2.5.5 3-1.5 1.5L6 10l-3.5 3.5M6 10L2.5 6.5 4 5l3 .5L9.5 3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   park: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 106.5 6.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
