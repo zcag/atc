@@ -1216,7 +1216,7 @@ function Term({ s, say, voice, onVoiceOff }) {
         const res = await fetch(`/api/sessions/${s.sessionId}/upload`, { method: "POST", body: fd });
         if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
         const { path } = await res.json();
-        api_.current.send?.((/\s/.test(path) ? `"${path}"` : path) + " ");
+        api_.current.send?.(` \x1b[200~${/\s/.test(path) ? `"${path}"` : path}\x1b[201~`);
       } catch (e) {
         say(`Upload failed: ${e.message}`);
       }
