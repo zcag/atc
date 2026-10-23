@@ -30,6 +30,9 @@ func (e Engine) args() []string {
 		"ANTHROPIC_DEFAULT_SONNET_MODEL": e.Model,
 		"ANTHROPIC_DEFAULT_HAIKU_MODEL":  e.Model,
 		"CLAUDE_CODE_SUBAGENT_MODEL":     e.Model,
+
+		"CLAUDE_CODE_ATTRIBUTION_HEADER":           "0",
+		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
 	}
 	maps.Copy(env, e.Env)
 	b, _ := json.Marshal(map[string]any{"env": env})
