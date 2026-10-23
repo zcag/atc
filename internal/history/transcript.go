@@ -99,7 +99,7 @@ func convert(m rawMsg) []Message {
 	for _, b := range blocks {
 		switch {
 		case b.Type == "text" && strings.TrimSpace(b.Text) != "":
-			if m.Type == "user" && isNoise(b.Text) {
+			if m.Type == "user" && IsNoise(b.Text) {
 				continue
 			}
 			out = append(out, Message{Role: m.Type, Text: b.Text, Time: m.Timestamp})
@@ -110,7 +110,7 @@ func convert(m rawMsg) []Message {
 	return out
 }
 
-func isNoise(t string) bool {
+func IsNoise(t string) bool {
 	t = strings.TrimSpace(t)
 	for _, p := range []string{"<system-reminder>", "<local-command", "<command-name>", "<command-message>", "<task-notification>", "Caveat:", "[Request interrupted"} {
 		if strings.HasPrefix(t, p) {

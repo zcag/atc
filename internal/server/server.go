@@ -27,6 +27,7 @@ import (
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
+	"github.com/zcag/atc/internal/usage"
 )
 
 type Server struct {
@@ -51,6 +52,8 @@ type Server struct {
 	fleet   *fleet
 	rv      *reviver
 	scanner outputs.Scanner
+	stats   usage.Scanner
+	limits  usage.LimitsClient
 	ports   outputs.Ports
 
 	mu   sync.Mutex
@@ -99,6 +102,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/guess", s.guess)
 	mux.HandleFunc("GET /api/widget", s.widget)
 	mux.HandleFunc("GET /api/sessions/{sid}/outputs", s.outputs)
+	mux.HandleFunc("GET /api/sessions/{sid}/usage", s.sessionUsage)
+	mux.HandleFunc("GET /api/usage/limits", s.usageLimits)
+	mux.HandleFunc("GET /api/usage/days", s.usageDays)
 	mux.HandleFunc("GET /api/sessions/{sid}/o/{tok}/{path...}", s.outputFile)
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) { s.Term.Serve(w, r, r.PathValue("id")) })
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
