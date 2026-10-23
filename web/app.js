@@ -80,6 +80,8 @@ function App() {
   QUICK = (s, rect) => setQuick({ s, rect });
   const [help, setHelp] = useState(false);
   const [toast, setToast] = useState(null);
+  const [usage, setUsage] = useState(false);
+  const [limits, setLimits] = useState(null);
   const route = useRoute();
   const [stale, setStale] = useState(null);
   const [starting, setStarting] = useState(false);
@@ -105,6 +107,14 @@ function App() {
     };
     return () => es.close();
   }, [me]);
+
+  useEffect(() => {
+    if (!me) return;
+    const load = () => api("/api/usage/limits").then(setLimits, () => {});
+    load();
+    const t = setInterval(load, 120000);
+    return () => clearInterval(t);
+  }, [!!me]);
 
   useEffect(() => {
     if (!me || !APP_VERSION) return;
@@ -201,12 +211,14 @@ function App() {
         e.preventDefault(); location.hash = "#/assist";
       } else if (e.key === "n") {
         e.preventDefault(); setCreating(true);
+      } else if (e.key === "u") {
+        e.preventDefault(); setUsage((u) => !u);
       } else if (e.key === "/") {
         e.preventDefault(); document.querySelector('.search input')?.focus();
       } else if (e.key === "?") {
         setHelp((h) => !h);
       } else if (e.key === "Escape") {
-        setHelp(false); setCursor(null);
+        setHelp(false); setCursor(null); setUsage(false);
       }
     };
     addEventListener("keydown", onKey, true);
@@ -239,6 +251,7 @@ function App() {
           <button class="btn primary" onClick=${() => setCreating(true)}>New session</button>
         </header>
         <${Board} live=${live} sel=${sel} cursor=${cursor} onPast=${remember} />
+        <${UsageFoot} limits=${limits} onOpen=${() => setUsage(true)} />
       </aside>
       <main class="main">
         ${sel
@@ -249,6 +262,7 @@ function App() {
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
+    ${usage && html`<${UsageSheet} limits=${limits} multi=${MULTI} onClose=${() => setUsage(false)} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
     ${stale && html`<div class="appbar" role="status">
@@ -267,6 +281,7 @@ function App() {
             <dt>n</dt><dd>New session</dd>
             <dt>t</dt><dd>Talk: a voice session with Claude</dd>
             <dt>/</dt><dd>Search earlier sessions</dd>
+            <dt>u</dt><dd>Usage: plan limits and tokens by day</dd>
             <dt>Ctrl + Z</dt><dd>In a terminal: detach. The session keeps running.</dd>
             <dt>?</dt><dd>Show or hide this</dd>
           </dl>
@@ -504,6 +519,8 @@ function Session({ s, say, live }) {
     });
   const patch = (body) => act(() => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body }));
   const outs = useOutputs(s, mode === "out" ? 10000 : 60000);
+  const [showUse, setShowUse] = useState(false);
+  const use = useSessionUsage(s, showUse || s.state === "working" ? 15000 : 90000);
   const outCount = outs ? outs.servers.length + outs.files.filter((f) => f.kind !== "text").length + outs.links.length : 0;
 
   return html`
@@ -524,6 +541,7 @@ function Session({ s, say, live }) {
           ${s.branch && s.branch !== "HEAD" && html`<span class="wide">${s.branch}</span>`}
           ${s.model && html`<span class="wide">${model(s.model)}</span>`}
           ${s.context > 0 && html`<span class="wide">${Math.round(s.context / 1000)}k context</span>`}
+          ${use && use.total > 0 && html`<button class="wide usechip" title="Usage for this session" onClick=${() => setShowUse(true)}>${tokens(use.total)} tokens · ~${dollars(use.cost)}</button>`}
           ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first">no permission prompts</span>`}
         </div>
       </div>
@@ -535,13 +553,14 @@ function Session({ s, say, live }) {
         <button class=${mode === "chat" ? "on" : ""} onClick=${() => setMode("chat")}>Transcript</button>
         <button class=${mode === "out" ? "on" : ""} onClick=${() => setMode("out")}>Outputs${outCount > 0 && html`<span class="count ${outs.servers.length ? "live" : ""}">${outCount}</span>`}</button>
       </div>
-      <${Menu} busy=${busy} items=${sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) })} />
+      <${Menu} busy=${busy} items=${[...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "Usage", run: () => setShowUse(true) }]} />
     </div>
     ${mode === "term"
       ? canAttach
         ? html`<${Term} key=${s.id} s=${s} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} />`
         : html`<div class="stage"><div class="cover">${Unattachable(s, resume, busy, setMode)}</div></div>`
       : mode === "out" ? html`<${Outputs} s=${s} data=${outs} />` : html`<${Transcript} s=${s} />`}
+    ${showUse && html`<${SessionUsage} s=${s} use=${use} onClose=${() => setShowUse(false)} />`}
   `;
 }
 
@@ -1137,6 +1156,147 @@ function VoiceBar({ s, say, send, onClose }) {
       </div>
     </div>
   `;
+}
+
+const tokens = (n) => {
+  n = n || 0;
+  for (const [d, u] of [[1e9, "B"], [1e6, "M"], [1e3, "k"]]) if (n >= d) return `${(n / d).toFixed(n >= d * 10 ? 0 : 1)}${u}`;
+  return String(n);
+};
+const dollars = (c) => (c > 0 && c < 0.01 ? "<$0.01" : c >= 100 ? `$${Math.round(c).toLocaleString("en-US")}` : `$${(c || 0).toFixed(2)}`);
+const span = (sec) => {
+  const m = Math.round(sec / 60), h = Math.floor(m / 60);
+  return sec < 60 ? `${Math.max(0, Math.round(sec))}s` : m < 60 ? `${m}m` : h < 48 ? `${h}h ${m % 60}m` : `${Math.floor(h / 24)}d ${h % 24}h`;
+};
+const resetText = (at) => {
+  const t = Date.parse(at);
+  if (!t) return "";
+  const d = (t - Date.now()) / 1000;
+  const when = new Date(t).toLocaleString([], d < 20 * 3600 ? { hour: "2-digit", minute: "2-digit" } : { weekday: "short", hour: "2-digit", minute: "2-digit" });
+  return d <= 0 ? "Resetting now" : `Resets in ${span(d)}, ${when}`;
+};
+const level = (p) => (p >= 90 ? "high" : p >= 75 ? "warn" : "");
+const Meter = ({ p }) => html`<span class="meter ${level(p)}"><i style=${`width: ${Math.min(100, Math.max(0, p))}%`}></i></span>`;
+const SHORT = { session: "Session", weekly_all: "Week" };
+const modelName = (m) => {
+  const n = m.replace(/^claude-/, "").replace(/-(\d+)-(\d{1,2})(-\d{8})?$/, " $1.$2").replace(/-(\d+)(-\d{8})?$/, " $1");
+  return n[0].toUpperCase() + n.slice(1);
+};
+
+function useSessionUsage(s, every) {
+  const [data, setData] = useState(null);
+  useEffect(() => setData(null), [s.sessionId]);
+  useEffect(() => {
+    let live = true;
+    const load = () => api(`/api/sessions/${s.sessionId}/usage`).then((d) => live && setData(d), () => live && setData((d) => d || { failed: true }));
+    load();
+    const t = setInterval(load, every);
+    return () => { live = false; clearInterval(t); };
+  }, [s.sessionId, every]);
+  return data;
+}
+
+function UsageFoot({ limits, onOpen }) {
+  useNow(60000);
+  const ws = (limits?.windows || []).filter((w) => SHORT[w.key]);
+  const sess = ws.find((w) => w.key === "session");
+  return html`
+    <button class="usefoot" onClick=${onOpen} title="Usage and limits (u)">
+      ${ws.length
+        ? ws.map((w) => html`<span class="mini"><span class="k">${SHORT[w.key]}</span><${Meter} p=${w.percent} /><span class="v">${Math.round(w.percent)}%</span></span>`)
+        : html`<span class="k">Usage</span>`}
+      <span class="grow"></span>
+      ${sess && Date.parse(sess.resetsAt) > Date.now() && html`<span class="r">resets in ${span((Date.parse(sess.resetsAt) - Date.now()) / 1000)}</span>`}
+    </button>`;
+}
+
+function Sheet({ cls, title, sub, onClose, children }) {
+  useEffect(() => {
+    const k = (e) => e.key === "Escape" && onClose();
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, []);
+  return html`
+    <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
+      <div class="sheet ${cls}" role="dialog" aria-label=${title}>
+        <header class="uhead">
+          <div class="who"><h3>${title}</h3>${sub && html`<div class="sub">${sub}</div>`}</div>
+          <button class="icon" onClick=${onClose} aria-label="Close">✕</button>
+        </header>
+        ${children}
+      </div>
+    </div>`;
+}
+
+const ESTIMATE = (asOf) => `Estimated from the transcripts at Claude API list prices${asOf ? ` (${asOf})` : ""}. A Claude subscription is not billed per token; this shows what the same work would cost on the API.`;
+
+function UsageSheet({ limits, multi, onClose }) {
+  const [days, setDays] = useState(null);
+  const [at, setAt] = useState(null);
+  useEffect(() => { api("/api/usage/days?days=14").then(setDays, () => setDays([])); }, []);
+  const ws = limits?.windows || [];
+  const src = !limits ? "Checking…"
+    : limits.source === "live" ? `Checked ${agoLong(limits.fetchedAt)} with your Claude account.`
+    : limits.source === "cached" ? `Not current: from Claude Code's last check, ${agoLong(limits.fetchedAt)}.` : "";
+  const top = Math.max(...(days || []).map((d) => d.cost), 0.01);
+  const pick = days && days[at ?? days.length - 1];
+  const sum = (days || []).reduce((a, d) => ({ total: a.total + d.total, cost: a.cost + d.cost }), { total: 0, cost: 0 });
+  return html`
+    <${Sheet} cls="usage" title="Usage" sub=${limits?.plan && `${limits.plan} plan`} onClose=${onClose}>
+      <section>
+        <h4>Plan limits</h4>
+        ${ws.map((w) => html`
+          <div class="win">
+            <div class="wl"><span>${w.label}</span><span class="pct">${Math.round(w.percent)}%</span></div>
+            <${Meter} p=${w.percent} />
+            <div class="wr">${resetText(w.resetsAt)}</div>
+          </div>`)}
+        ${limits && !ws.length && html`<p class="note">Limits are not available here${limits.error ? `: ${limits.error}` : "."}</p>`}
+        <p class="note">${src}${ws.length && limits?.error ? ` ${limits.error}.` : ""}</p>
+      </section>
+      <section>
+        <h4>By day${multi ? ", all machines" : ""}</h4>
+        ${!days ? html`<p class="note">Adding up transcripts…</p>` : html`
+          <div class="readout">
+            ${pick && html`<b>${new Date(pick.day + "T12:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}</b>
+              <span>${pick.total ? `${tokens(pick.total)} tokens · ~${dollars(pick.cost)} · ${pick.sessions} session${pick.sessions === 1 ? "" : "s"}` : "No usage"}</span>`}
+          </div>
+          <div class="bars" onPointerLeave=${() => setAt(null)}>
+            ${days.map((d, i) => html`
+              <button class="bar ${i === (at ?? days.length - 1) ? "on" : ""}" onPointerEnter=${() => setAt(i)} onFocus=${() => setAt(i)} onClick=${() => setAt(i)}
+                aria-label=${`${d.day}: ${tokens(d.total)} tokens, about ${dollars(d.cost)}`}>
+                <i style=${`height: ${d.cost > 0 ? Math.max(3, (d.cost / top) * 100) : 0}%`}></i>
+                <span>${+d.day.slice(8)}</span>
+              </button>`)}
+          </div>
+          <p class="total">Last ${days.length} days: <b>${tokens(sum.total)} tokens</b> · <b>~${dollars(sum.cost)}</b></p>
+          <p class="note">${ESTIMATE()}</p>`}
+      </section>
+    <//>`;
+}
+
+function SessionUsage({ s, use, onClose }) {
+  const sub = use?.subagents;
+  const rows = use && !use.failed && [
+    ["Input", tokens(use.input)], ["Output", tokens(use.output)], ["Cache reads", tokens(use.cacheRead)], ["Cache writes", tokens(use.cacheWrite)],
+    ["Turns", use.turns], ["Tool calls", use.toolCalls],
+    ["Subagents", sub.count ? `${sub.count} · ${tokens(sub.total)} tokens · ~${dollars(sub.cost)}` : "none"],
+    ["Wall time", use.start ? `${span(use.wallSeconds)}, since ${new Date(use.start).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : "n/a"],
+  ];
+  return html`
+    <${Sheet} cls="usage" title="Usage" sub=${s.title} onClose=${onClose}>
+      ${!use ? html`<p class="note">Reading the transcript…</p>` : use.failed ? html`<p class="note">Couldn't read this session's usage.</p>` : html`
+        <div class="tiles">
+          <div><span class="n">${tokens(use.total)}</span><span class="l">tokens</span></div>
+          <div><span class="n">~${dollars(use.cost)}</span><span class="l">at API prices</span></div>
+          <div><span class="n">${span(use.activeSeconds)}</span><span class="l">Claude working</span></div>
+        </div>
+        <dl class="facts">${rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
+        ${use.models?.length > 0 && html`
+          <h4>Models</h4>
+          <dl class="facts">${use.models.map((m) => html`<dt>${modelName(m.model)}</dt><dd>${tokens(m.total)} tokens · ~${dollars(m.cost)} · ${m.messages} replies</dd>`)}</dl>`}
+        <p class="note">${ESTIMATE(use.pricesAsOf)}${use.unpriced?.length ? ` No price known for ${use.unpriced.join(", ")}, so it counts as $0.` : ""} Working time adds up the gaps between messages in each turn, at most 10 minutes per gap.</p>`}
+    <//>`;
 }
 
 const serverURL = (s, port) => `http://${s.host || location.hostname}:${port}/`;

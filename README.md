@@ -165,6 +165,24 @@ Each session has an **Outputs** tab with what it produced, so you can check its 
 Files open through links that are signed for that session and folder and expire after 12 hours,
 and pages run sandboxed, away from atc's own login.
 
+## Usage and limits
+
+The bar at the bottom of the session list shows how much of your Claude plan's current 5-hour
+session and weekly limit you have used. Click it (or press `u`) for every limit with its reset
+time, and tokens per day across all your sessions and machines.
+
+The limits come from the same endpoint Claude Code's `/usage` reads, signed in with Claude Code's
+own login on the machine running atc (the macOS keychain, or `~/.claude/.credentials.json`). atc
+only reads that login and never refreshes or changes it; when it has expired, atc shows Claude
+Code's last saved reading, marked as not current, until a session renews it. It checks at most
+every few minutes.
+
+Each session's header shows its tokens and an estimated cost; **Usage** in its menu breaks that
+down: input, output and cache tokens, models, turns, tool calls, subagents (which Claude Code keeps
+in their own transcripts), wall time and how long Claude was working. The cost is what the same
+tokens would cost at Claude API list prices, an estimate for comparison, since a subscription is
+not billed per token.
+
 ## One session that runs the others
 
 `atc mcp` gives Claude tools to see and drive your other sessions: list them with what each is
