@@ -32,6 +32,7 @@ func Resolve(q string, pool []sessions.Session) (sessions.Session, error) {
 	for _, pass := range []func(sessions.Session) bool{
 		func(s sessions.Session) bool { return s.ID == q || s.SessionID == q },
 		func(s sessions.Session) bool { return strings.HasPrefix(s.SessionID, q) },
+		func(s sessions.Session) bool { return strings.EqualFold(s.Title, q) },
 		func(s sessions.Session) bool { return strings.Contains(strings.ToLower(s.Title), strings.ToLower(q)) },
 	} {
 		for _, s := range pool {
