@@ -427,7 +427,7 @@ function Board({ live: all, sel, cursor, onPast }) {
   const working = active.length - waiting;
 
   return html`
-    <div class="board" ref=${boardRef} style=${tabs.length > 1 ? "--stick: 46px" : "--stick: 0px"}>
+    <div class="board" ref=${boardRef} style=${tabs.length > 1 ? "--stick: 40px" : "--stick: 0px"}>
       ${tabs.length > 1 && html`
         <nav class="projtabs" aria-label="Projects">
           <button class=${only ? "" : "on"} onClick=${() => setOnly(null)}>All</button>
@@ -596,7 +596,7 @@ function Strip({ s, sel, cursor, size = "full" }) {
         <${ProjectTag} path=${s.cwd} full />
         ${s.branch && !["HEAD", "main", "master"].includes(s.branch) && html`<span class="br">${s.branch}</span>`}
         ${MULTI && s.host && html`<span class="host">${s.host}</span>`}
-        ${s.kind === "interactive" && html`<span class="term" title="Open in a terminal window: readable here, not attachable">terminal</span>`}
+        ${s.kind === "interactive" && html`<span class="interm" title="Open in a terminal window: readable here, not attachable">terminal</span>`}
         ${(s.servers || []).slice(0, 2).map((p) => html`<span class="srv" role="link" title=${`Open ${serverURL(s, p)}`} onClick=${(e) => { e.stopPropagation(); openOut(serverURL(s, p)); }}>:${p}</span>`)}
       </div>
     </button>
