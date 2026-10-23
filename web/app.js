@@ -1787,17 +1787,8 @@ function NewSession({ onClose, say, hosts, home }) {
     <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
       <form class="sheet" onSubmit=${start}>
         <h3>New session</h3>
-        ${presets.length > 0 && html`
-          <div class="field"><span>Presets</span>
-            <div class="presets">
-              ${presets.map((p) => html`<button type="button" class=${preset === p ? "on" : ""} onClick=${() => setPreset(preset === p ? null : p)}>
-                <span class="proj" style=${`--ph: ${hueOf(p.name)}`}>${p.name}</span>
-                <small>${MULTI && p.host ? `${p.host} · ` : ""}${tilde(p.dir)}</small>
-              </button>`)}
-            </div>
-          </div>`}
         ${preset ? html`
-          <p class="presetnote">Starts in <b>${tilde(preset.dir)}</b>${MULTI && preset.host ? html` on <b>${preset.host}</b>` : ""}${preset.brief ? html`, with the instructions in <b>${preset.brief}</b>` : ""}.</p>
+          <p class="presetnote"><span class="proj" style=${`--ph: ${hueOf(preset.name)}`}>${preset.name}</span> starts in <b>${tilde(preset.dir)}</b>${MULTI && preset.host ? html` on <b>${preset.host}</b>` : ""}${preset.brief ? html`, with the instructions in <b>${preset.brief}</b>` : ""}. <button type="button" class="link" onClick=${() => setPreset(null)}>Pick a folder instead</button></p>
         ` : html`
           <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDir("~"); }} />
           <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} autofocus />
@@ -1805,6 +1796,8 @@ function NewSession({ onClose, say, hosts, home }) {
         <label class="field"><span>Name</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder=${preset ? preset.name : "Optional"} />${!preset && html`<small>Without one, Claude titles the session from what you ask.</small>`}</label>
         <label class="field"><span>First message</span><textarea rows="3" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} placeholder="Optional. You can also type it in the terminal."></textarea></label>
         ${err && html`<p class="err">${err}</p>`}
+        ${presets.length > 0 && !preset && html`
+          <p class="presetline">Or use a preset:${presets.map((p) => html` <button type="button" class="proj" style=${`--ph: ${hueOf(p.name)}`} title=${`${MULTI && p.host ? p.host + ": " : ""}${tilde(p.dir)}`} onClick=${() => setPreset(p)}>${p.name}</button>`)}</p>`}
         <div class="actions">
           <button type="button" class="btn" onClick=${onClose}>Cancel</button>
           <button class="btn primary" disabled=${(!preset && !dir.trim()) || busy}>${busy ? "Starting…" : "Start session"}</button>
