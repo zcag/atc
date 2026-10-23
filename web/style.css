@@ -126,11 +126,12 @@ button { cursor: pointer; }
 .strip.working { --edge: var(--work); }
 .strip.flash { animation: flash 1.6s ease-out; }
 @keyframes flash { 0%, 30% { box-shadow: 0 0 0 2px var(--edge), 0 6px 20px color-mix(in srgb, var(--edge) 30%, transparent); } }
-.strip .pulse { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--work); vertical-align: 1px; animation: pulse 1.8s ease-in-out infinite; }
+.strip .pulse { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: var(--work); vertical-align: 1px; }
 @keyframes pulse { 50% { opacity: .25; } }
 .strip .said.doing { animation: fadein .35s ease-out; }
 @keyframes fadein { from { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .strip .pulse, .strip .said.doing, .strip.flash { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .strip .said.doing, .strip.flash { animation: none; } }
+.unfocused .sumbar.pending .sumtext { animation: none; }
 
 .strip .acts { position: absolute; top: 7px; right: 8px; z-index: 1; display: flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--strip-hi); box-shadow: 0 1px 4px rgba(15, 23, 42, .12); opacity: 0; pointer-events: none; transition: opacity .12s; }
 .strip:hover .acts, .strip:focus-within .acts { opacity: 1; pointer-events: auto; }

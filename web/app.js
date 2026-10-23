@@ -999,6 +999,11 @@ for (const ev of ["keydown", "pointerdown", "wheel", "touchstart"]) addEventList
 addEventListener("focus", beat);
 setInterval(beat, 30000);
 
+const markFocus = () => document.documentElement.classList.toggle("unfocused", !document.hasFocus());
+addEventListener("focus", markFocus);
+addEventListener("blur", markFocus);
+markFocus();
+
 const DOCK = new Map();
 const DOCK_KEEP = 4;
 let dockShelf = null;
