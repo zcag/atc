@@ -17,6 +17,7 @@ install-mac: check build
 	install -m755 atc ~/.local/bin/atc
 	install -m644 deploy/atc.plist ~/Library/LaunchAgents/io.github.zcag.atc.plist
 	launchctl bootout gui/$$(id -u)/io.github.zcag.atc 2>/dev/null || true
+	while launchctl print gui/$$(id -u)/io.github.zcag.atc >/dev/null 2>&1; do sleep 0.2; done
 	launchctl bootstrap gui/$$(id -u) ~/Library/LaunchAgents/io.github.zcag.atc.plist
 
 JAVA_HOME ?= /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
