@@ -44,6 +44,7 @@ const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 let PALETTE_OPEN = () => {};
 let SESSION_API = null;
 let SET_PROJECT = () => {};
+const focusOnMount = (el) => { if (el && !el.dataset.focused) { el.dataset.focused = "1"; requestAnimationFrame(() => el.focus({ preventScroll: true })); } };
 const model = (m) => (m || "").replace(/^claude-/, "").replace(/-\d.*$/, "");
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
@@ -384,7 +385,7 @@ function Login({ onDone }) {
       <form onSubmit=${submit}>
         <span class="mark">atc</span>
         <p>Paste the token for this server. Run <code>atc token</code> on it to print one.</p>
-        <label class="field"><span>Token</span><input type="password" autocomplete="current-password" value=${tok} onInput=${(e) => setTok(e.target.value)} autofocus /></label>
+        <label class="field"><span>Token</span><input type="password" autocomplete="current-password" value=${tok} onInput=${(e) => setTok(e.target.value)} ref=${focusOnMount} /></label>
         ${err && html`<p class="err">${err}</p>`}
         <div class="actions"><button class="btn primary" disabled=${!tok}>Log in</button></div>
       </form>
@@ -754,7 +755,7 @@ function Session({ s, say, live }) {
       <div class="who">
         <div class="t">
           ${renaming
-            ? html`<input autofocus value=${s.title} onKeyDown=${(e) => {
+            ? html`<input ref=${focusOnMount} value=${s.title} onKeyDown=${(e) => {
                 if (e.key === "Enter") { patch({ name: e.target.value }); setRenaming(false); }
                 if (e.key === "Escape") setRenaming(false);
               }} onBlur=${() => setRenaming(false)} />`
@@ -1890,7 +1891,7 @@ function FolderField({ dirs, dir, setDir, note, autofocus }) {
   return html`
     <label class="field">
       <span>Folder${note && html` <em class="note">${note}</em>`}</span>
-      <input value=${dir} onInput=${(e) => setDir(e.target.value, true)} placeholder="~/projects/app" autofocus=${autofocus} autocapitalize="off" autocomplete="off" spellcheck="false" />
+      <input value=${dir} onInput=${(e) => setDir(e.target.value, true)} placeholder="~/projects/app" ref=${autofocus && !touch ? focusOnMount : null} autocapitalize="off" autocomplete="off" spellcheck="false" />
       <div class="dirs">
         ${shown.map((d) => html`<button type="button" class=${tilde(d.path) === dir ? "on" : ""} onClick=${() => setDir(tilde(d.path), true)}>${tilde(d.path)}${d.recent && html`<span class="r">recent</span>`}</button>`)}
         ${shown.length === 0 && html`<p class="empty" style="padding: 10px">No match. A full path works too.</p>`}
@@ -2056,7 +2057,7 @@ function Palette({ live, sel, say, home, actions, onClose }) {
     const m = fuzzy(ql, it.label) || (ql && fuzzy(ql, `${it.label} ${it.kw || ""}`) && { score: 10, hits: [] });
     if (m) shown.push({ ...it, ...m });
   }
-  const order = ["This session", "Sessions", "Earlier", "Projects", "Actions", "New session in"];
+  const order = ["This session", "Sessions", "Actions", "Projects", "Earlier", "New session in"];
   const gi = (g) => order.findIndex((o) => g.startsWith(o));
   if (ql) shown.sort((a, b) => b.score - a.score);
   else shown.sort((a, b) => gi(a.group) - gi(b.group));
@@ -2078,13 +2079,24 @@ function Palette({ live, sel, say, home, actions, onClose }) {
     else if (e.key === "Enter") { e.preventDefault(); flat[pick]?.run(); }
     else if (e.key === "Escape") { e.preventDefault(); onClose(); }
   };
+  const keyRef = useRef();
+  keyRef.current = key;
+  useEffect(() => {
+    const k = (e) => {
+      if (!["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(e.key) && !(e.ctrlKey && (e.key === "n" || e.key === "p"))) return;
+      e.stopPropagation();
+      keyRef.current(e);
+    };
+    addEventListener("keydown", k, true);
+    return () => removeEventListener("keydown", k, true);
+  }, []);
   let n = -1;
   return html`
     <div class="veil palveil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
       <div class="palette" role="dialog" aria-label="Command palette">
         <div class="pq">
           <span class="ps">${ICON.search}</span>
-          <input autofocus value=${q} onInput=${(e) => setQ(e.target.value)} onKeyDown=${key} placeholder="Jump to a session, project or action" autocapitalize="off" autocomplete="off" spellcheck="false" />
+          <input ref=${focusOnMount} value=${q} onInput=${(e) => setQ(e.target.value)} placeholder="Jump to a session, project or action" autocapitalize="off" autocomplete="off" spellcheck="false" />
           <kbd>esc</kbd>
         </div>
         <div class="plist" ref=${list}>
@@ -2198,7 +2210,7 @@ function Share({ live, hosts, home, say }) {
               </div>`)}
           </div>`}
         <label class="field"><span>What should Claude do?</span>
-          <textarea rows="2" value=${ask} onInput=${(e) => setAsk(e.target.value)} placeholder="Look into this" autofocus></textarea>
+          <textarea rows="2" value=${ask} onInput=${(e) => setAsk(e.target.value)} placeholder="Look into this" ref=${touch ? null : focusOnMount}></textarea>
         </label>
         <div class="field"><span>Where</span>
           <div class="seg wide">
