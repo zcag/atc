@@ -492,9 +492,9 @@ function project(path) {
   const segs = parts.filter(Boolean);
   return { name: segs.at(-1) || "/", rest: "" };
 }
-const HUES = [170, 285, 330, 95, 195, 20, 245, 140];
+const HUES = [175, 285, 330, 90, 200, 20, 250];
 const hueOf = (name) => {
-  let h = (2166136261 ^ 66) >>> 0;
+  let h = (2166136261 ^ 108) >>> 0;
   for (const c of name) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
   return HUES[(h >>> 7) % HUES.length];
 };
