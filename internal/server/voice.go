@@ -12,6 +12,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/zcag/atc/internal/llm"
 )
 
 type Voice struct {
@@ -60,7 +62,7 @@ func (s *Server) stt(w http.ResponseWriter, r *http.Request) {
 		Text     string `json:"text"`
 		Language string `json:"language"`
 	}
-	if err := call(req, &out); err != nil {
+	if err := llm.Do(req, &out); err != nil {
 		fail(w, err)
 		return
 	}
@@ -83,26 +85,9 @@ func (s *Server) condense(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) chat(ctx context.Context, system, user string, maxTokens int) (string, error) {
-	b, _ := json.Marshal(map[string]any{
-		"model": s.Voice.LLMModel, "temperature": 0.2, "max_tokens": maxTokens,
-		"messages": []map[string]string{{"role": "system", "content": system}, {"role": "user", "content": user}},
-	})
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "POST", s.Voice.LLM, bytes.NewReader(b))
-	req.Header.Set("Content-Type", "application/json")
-	var out struct {
-		Choices []struct {
-			Message struct{ Content string } `json:"message"`
-		} `json:"choices"`
-	}
-	if err := call(req, &out); err != nil {
-		return "", err
-	}
-	if len(out.Choices) == 0 {
-		return "", fmt.Errorf("empty answer from the speech model")
-	}
-	return strings.TrimSpace(out.Choices[0].Message.Content), nil
+	return llm.Chat(ctx, s.Voice.LLM, s.Voice.LLMModel, system, user, maxTokens, false)
 }
 
 func (s *Server) tts(w http.ResponseWriter, r *http.Request) {
@@ -128,17 +113,4 @@ func (s *Server) tts(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", cmp.Or(res.Header.Get("Content-Type"), "audio/wav"))
 	io.Copy(w, res.Body)
-}
-
-func call(req *http.Request, out any) error {
-	res, err := voiceClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer res.Body.Close()
-	if res.StatusCode >= 300 {
-		msg, _ := io.ReadAll(res.Body)
-		return fmt.Errorf("%s: %s %s", req.URL.Host, res.Status, bytes.TrimSpace(msg))
-	}
-	return json.NewDecoder(res.Body).Decode(out)
 }

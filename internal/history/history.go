@@ -28,6 +28,7 @@ type Transcript struct {
 	PromptAt       time.Time `json:"promptAt,omitzero"`
 	Activity       string    `json:"activity,omitempty"`
 	LastReply      string    `json:"lastReply,omitempty"`
+	ReplyID        string    `json:"replyId,omitempty"`
 	Pending        string    `json:"pending,omitempty"`
 	pendingID      string
 	Context        int       `json:"context"`
@@ -46,6 +47,7 @@ type entry struct {
 	LastPrompt     string    `json:"lastPrompt"`
 	PermissionMode string    `json:"permissionMode"`
 	PromptID       string    `json:"promptId"`
+	UUID           string    `json:"uuid"`
 	IsSidechain    bool      `json:"isSidechain"`
 	Message        struct {
 		Content json.RawMessage `json:"content"`
@@ -192,7 +194,7 @@ func apply(t *Transcript, e *entry, custom *string) {
 					t.Activity = strings.TrimSpace(b.Name + "  " + summarize(b.Input))
 					t.Pending, t.pendingID = t.Activity, b.ID
 				case b.Type == "text" && strings.TrimSpace(b.Text) != "":
-					t.Activity, t.LastReply = "", clip(strings.Join(strings.Fields(b.Text), " "), 300)
+					t.Activity, t.LastReply, t.ReplyID = "", clip(strings.Join(strings.Fields(b.Text), " "), 300), e.UUID
 				}
 			}
 		}

@@ -16,6 +16,7 @@ import (
 
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/sessions"
+	"github.com/zcag/atc/internal/summary"
 )
 
 const DefaultAddr = "127.0.0.1:7272"
@@ -202,6 +203,19 @@ func (c *Client) Send(id, text string) error {
 
 func (c *Client) Transcript(sid string) (p history.Page, err error) {
 	return p, c.do("GET", "/api/sessions/"+sid+"/transcript", nil, &p)
+}
+
+type Summary struct {
+	Summary     *summary.Summary `json:"summary"`
+	Summarizing bool             `json:"summarizing"`
+}
+
+func (c *Client) Summary(sid string, wait int, again bool) (s Summary, err error) {
+	method := "GET"
+	if again {
+		method = "POST"
+	}
+	return s, c.do(method, fmt.Sprintf("/api/sessions/%s/summary?wait=%d", sid, min(wait, 50)), nil, &s)
 }
 
 func (c *Client) Stop(id string) error   { return c.do("POST", "/api/sessions/"+id+"/stop", nil, nil) }

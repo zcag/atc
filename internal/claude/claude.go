@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -89,6 +90,29 @@ func (c CLI) Stop(ctx context.Context, id string) error {
 func (c CLI) Remove(ctx context.Context, id string) error {
 	_, err := c.run(ctx, "", "rm", id)
 	return err
+}
+
+func (c CLI) Print(ctx context.Context, model, system, input string) (string, error) {
+	cmd := exec.CommandContext(ctx, c.Bin, "-p", "--model", model, "--safe-mode", "--system-prompt", system, "--tools", "",
+		"--strict-mcp-config", "--no-session-persistence", "--output-format", "json")
+	cmd.Dir = os.TempDir()
+	cmd.Stdin = strings.NewReader(input)
+	var out, errOut bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errOut
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("claude -p: %v: %s", err, strings.TrimSpace(errOut.String()+out.String()))
+	}
+	var r struct {
+		Result  string `json:"result"`
+		IsError bool   `json:"is_error"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &r); err != nil {
+		return "", fmt.Errorf("claude -p: %v", err)
+	}
+	if r.IsError {
+		return "", fmt.Errorf("claude -p: %s", r.Result)
+	}
+	return r.Result, nil
 }
 
 func idFrom(out string) (string, error) {

@@ -605,3 +605,45 @@ button { cursor: pointer; }
 :root[data-theme="dark"] .btn.primary { background: color-mix(in srgb, var(--work) 62%, var(--board)); border-color: transparent; color: #fff; }
 .btn.talk .mi { display: grid; place-items: center; width: 16px; height: 16px; line-height: 0; }
 .btn.talk .mi svg { display: block; width: 16px; height: 16px; }
+
+.sumbar { --edge: var(--turn); position: relative; flex: none; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--strip) 65%, var(--board)); }
+.sumbar::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--edge); opacity: .85; }
+.sumbar.pending { --edge: var(--line); }
+.sumrow { display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 6px 8px 6px 16px; }
+.sumrow[role="button"] { cursor: pointer; }
+.sumrow[role="button"]:hover { background: color-mix(in srgb, var(--strip-hi) 55%, transparent); }
+.sumtext { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sumbar.pending .sumtext { font-weight: 400; color: var(--faint); animation: pulse 1.8s ease-in-out infinite; }
+.summore { flex: none; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--dim); }
+.summore .caret { width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); }
+.summore .caret.up { transform: translateY(1px) rotate(-135deg); }
+.sumx { flex: none; padding: 4px 7px; font-size: 12px; color: var(--faint); }
+.sumbody { padding: 4px 16px 14px; }
+.sumparts { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px 32px; max-width: 1100px; }
+.sumparts h4 { margin: 0 0 5px; font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--faint); }
+.sumparts ul { display: flex; flex-direction: column; gap: 3px; margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.45; }
+.sumparts ul.ov { list-style: none; padding-left: 0; }
+.sumparts ul.ov b { font-weight: 600; color: var(--dim); }
+.sumfoot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.sumfoot .btn { padding: 5px 10px; font-size: 13px; }
+
+.veil.sumveil { place-items: end stretch; padding: 0; }
+.sumsheet {
+  width: 100%; max-height: 85dvh; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--strip); border-radius: 16px 16px 0 0; box-shadow: 0 -8px 30px rgba(0, 0, 0, .18);
+  padding: 8px 18px calc(16px + env(safe-area-inset-bottom)); animation: rise .22s cubic-bezier(.2, .7, .2, 1);
+}
+@keyframes rise { from { transform: translateY(28px); opacity: 0; } }
+.sumsheet .grab { display: block; width: 38px; height: 4px; margin: 2px auto 14px; border-radius: 2px; background: var(--line); }
+.sumhead { margin: 0 0 16px; font-size: 17px; font-weight: 600; line-height: 1.35; }
+.sumsheet .sumparts { grid-template-columns: minmax(0, 1fr); gap: 18px; }
+.sumsheet .sumparts ul { gap: 7px; font-size: 15px; line-height: 1.5; }
+.sumsheet .sumfoot { margin-top: 20px; }
+.sumsheet .sumfoot .btn { flex: 1; padding: 11px 12px; font-size: 15px; }
+.sumsheet .sumfoot .btn.primary { flex-basis: 100%; }
+@media (max-width: 899px) {
+  .sumrow { min-height: 40px; padding: 6px 2px 6px 14px; }
+  .sumtext { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: 13.5px; line-height: 1.35; }
+}
+@media (pointer: coarse) { .sumx { padding: 10px 12px; } }
+@media (prefers-reduced-motion: reduce) { .sumsheet, .sumbar.pending .sumtext { animation: none; } }

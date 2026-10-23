@@ -66,6 +66,7 @@ type Server struct {
 	last []byte
 	kick chan struct{}
 	seen map[string]string
+	held map[string]held
 
 	widgetSent string
 	widgetAt   time.Time
@@ -73,6 +74,7 @@ type Server struct {
 
 func (s *Server) Handler() http.Handler {
 	s.subs = map[chan []byte]bool{}
+	s.held = map[string]held{}
 	if s.TrustTailnet != "" {
 		s.tailnet = &tailnet{bin: s.TrustTailnet}
 	}
@@ -101,6 +103,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/sessions/{id}", s.act(s.M.CLI.Remove))
 	mux.HandleFunc("PATCH /api/sessions/{sid}", s.patch)
 	mux.HandleFunc("GET /api/sessions/{sid}/transcript", s.transcript)
+	mux.HandleFunc("GET /api/sessions/{sid}/summary", s.summary)
+	mux.HandleFunc("POST /api/sessions/{sid}/summary", s.summary)
 	mux.HandleFunc("POST /api/sessions/{sid}/upload", s.upload)
 	mux.HandleFunc("POST /api/uploads", s.upload)
 	mux.HandleFunc("POST /api/sessions/{id}/send", s.send)
@@ -643,7 +647,11 @@ func (s *Server) notify(list []sessions.Session) {
 		return
 	}
 	viewing := func(x sessions.Session) bool { return s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) }
-	if ms := alerts(prev, list, viewing); len(ms) > 0 {
+	ms, later := alerts(prev, list, viewing)
+	for _, m := range later {
+		s.held[m.Tag] = held{m, time.Now().Add(holdForSummary)}
+	}
+	if ms = append(ms, s.release(list)...); len(ms) > 0 {
 		go func() {
 			if ok, where := s.userActive(context.Background()); ok {
 				log.Printf("push: held %d, you are active (%s)", len(ms), where)
@@ -664,13 +672,14 @@ type widgetFeed struct {
 }
 
 type widgetSession struct {
-	ID     string    `json:"id,omitempty"`
-	SID    string    `json:"sid"`
-	Title  string    `json:"title"`
-	State  string    `json:"state"`
-	Host   string    `json:"host,omitempty"`
-	Pinned bool      `json:"pinned,omitempty"`
-	Since  time.Time `json:"since,omitzero"`
+	ID      string    `json:"id,omitempty"`
+	SID     string    `json:"sid"`
+	Title   string    `json:"title"`
+	State   string    `json:"state"`
+	Host    string    `json:"host,omitempty"`
+	Pinned  bool      `json:"pinned,omitempty"`
+	Since   time.Time `json:"since,omitzero"`
+	Summary string    `json:"summary,omitempty"`
 }
 
 func widgetList(list []sessions.Session) []widgetSession {
@@ -683,7 +692,11 @@ func widgetList(list []sessions.Session) []widgetSession {
 		if x.State == sessions.Working && !x.PromptAt.IsZero() {
 			since = x.PromptAt
 		}
-		out = append(out, widgetSession{x.ID, x.SessionID, x.Title, x.State, x.Host, x.Pinned, since})
+		ws := widgetSession{x.ID, x.SessionID, x.Title, x.State, x.Host, x.Pinned, since, ""}
+		if x.Summary != nil && x.State != sessions.Working {
+			ws.Summary = x.Summary.Status
+		}
+		out = append(out, ws)
 		if len(out) == 12 {
 			break
 		}
@@ -694,7 +707,7 @@ func widgetList(list []sessions.Session) []widgetSession {
 func widgetKey(ws []widgetSession) string {
 	var b strings.Builder
 	for _, w := range ws {
-		fmt.Fprintf(&b, "%s|%s|%s|%s|%v\n", w.SID, w.ID, w.Title, w.State, w.Pinned)
+		fmt.Fprintf(&b, "%s|%s|%s|%s|%v|%s\n", w.SID, w.ID, w.Title, w.State, w.Pinned, w.Summary)
 	}
 	return b.String()
 }
@@ -726,8 +739,7 @@ func states(list []sessions.Session) map[string]string {
 	return m
 }
 
-func alerts(prev map[string]string, list []sessions.Session, viewing func(sessions.Session) bool) []push.Message {
-	var out []push.Message
+func alerts(prev map[string]string, list []sessions.Session, viewing func(sessions.Session) bool) (out, later []push.Message) {
 	for _, x := range list {
 		was, ok := prev[x.SessionID]
 		if !ok || was == x.State || x.Parked || viewing(x) {
@@ -741,13 +753,17 @@ func alerts(prev map[string]string, list []sessions.Session, viewing func(sessio
 				m.Body += ": " + x.Activity
 			}
 		case x.State == sessions.YourTurn && was == sessions.Working:
-			m.Body = cmp.Or(x.LastReply, "Finished. Your turn.")
+			m.Body = cmp.Or(pushBody(x.Summary), x.LastReply, "Finished. Your turn.")
+			if x.Summary == nil && x.Summarizing {
+				later = append(later, m)
+				continue
+			}
 		default:
 			continue
 		}
 		out = append(out, m)
 	}
-	return out
+	return out, later
 }
 
 func (s *Server) pushRegister(w http.ResponseWriter, r *http.Request) {

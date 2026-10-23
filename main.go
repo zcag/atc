@@ -24,11 +24,13 @@ import (
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/history"
+	"github.com/zcag/atc/internal/llm"
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/report"
 	"github.com/zcag/atc/internal/server"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
+	"github.com/zcag/atc/internal/summary"
 	"github.com/zcag/atc/internal/tools"
 	"github.com/zcag/atc/internal/tui"
 	"github.com/zcag/atc/web"
@@ -39,6 +41,9 @@ const usage = `atc: every Claude Code session on a machine, in one place.
 SERVER
   atc serve [-addr host:port] [-root DIR]... [-no-auth]
       Serves the web UI and API. New sessions get the flags in $ATC_CLAUDE_ARGS.
+      A finished turn's final message is summarized with claude -p and haiku
+      ($ATC_SUMMARY_MODEL), or an OpenAI-compatible model at $ATC_SUMMARY_URL;
+      ATC_SUMMARY=off turns it off.
   atc token                      print this machine's server token
 
 CLIENT (talks to $ATC_URL, a saved login, or the local server)
@@ -60,6 +65,9 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc rm <session>               delete a background session
   atc rename <session> <name>    atc pin|unpin <session>
   atc park|unpark <session>      move it out of the way: bottom of the list, no notifications
+  atc summary [-json] [-again] <session>
+                                 its final message in short: a status line, the gist and
+                                 an overview; -again summarizes it anew
   atc outputs [-json] <session>  what it produced: running servers, files (with a link to
                                  open each in a browser), links, code it touched
   atc usage [-json] [session]    plan limits and tokens per day; with a session, its tokens,
@@ -111,6 +119,8 @@ func main() {
 		err = tools.Run(context.Background(), client.Load())
 	case "outputs":
 		err = showOutputs(args)
+	case "summary":
+		err = showSummary(args)
 	case "usage":
 		err = showUsage(args)
 	case "limits":
@@ -159,15 +169,21 @@ func serve(args []string) error {
 	if err != nil {
 		return err
 	}
+	cli := claude.CLI{Bin: bin, Args: strings.Fields(os.Getenv("ATC_CLAUDE_ARGS"))}
+	sum, err := summarizer(cli)
+	if err != nil {
+		return err
+	}
 	host, _ := os.Hostname()
 	srv := &server.Server{
 		Term: &attach.Hub{Bin: bin},
 		Web:  web.FS,
 		Host: strings.Split(host, ".")[0],
 		M: &sessions.Manager{
-			CLI:   claude.CLI{Bin: bin, Args: strings.Fields(os.Getenv("ATC_CLAUDE_ARGS"))},
-			Index: history.New(filepath.Join(home, ".claude", "projects")),
-			Store: st,
+			CLI:     cli,
+			Index:   history.New(filepath.Join(home, ".claude", "projects")),
+			Store:   st,
+			Summary: sum,
 		},
 		Roots: roots,
 		Voice: server.VoiceFromEnv(),
@@ -205,6 +221,23 @@ func serve(args []string) error {
 		log.Printf("run `atc token` for the login token")
 	}
 	return http.ListenAndServe(*addr, srv.Handler())
+}
+
+func summarizer(cli claude.CLI) (*summary.Summarizer, error) {
+	if os.Getenv("ATC_SUMMARY") == "off" {
+		return nil, nil
+	}
+	path := filepath.Join(client.ConfigDir(), "summaries.json")
+	if url := os.Getenv("ATC_SUMMARY_URL"); url != "" {
+		model := os.Getenv("ATC_SUMMARY_MODEL")
+		return summary.Open(path, model, func(ctx context.Context, system, user string) (string, error) {
+			return llm.Chat(ctx, url, model, system, user, 900, true)
+		})
+	}
+	model := cmp.Or(os.Getenv("ATC_SUMMARY_MODEL"), "haiku")
+	return summary.Open(path, model, func(ctx context.Context, system, user string) (string, error) {
+		return cli.Print(ctx, model, system, user)
+	})
 }
 
 func tailscaleBin(v string) string {
@@ -369,6 +402,66 @@ func showOutputs(args []string) error {
 	return nil
 }
 
+func showSummary(args []string) error {
+	fs, asJSON := jsonFlag("summary", args)
+	again := fs.Bool("again", false, "summarize the final message again")
+	fs.Parse(args)
+	if fs.NArg() != 1 {
+		return fmt.Errorf("usage: atc summary [-json] [-again] <session>")
+	}
+	c := client.Load()
+	s, err := c.Find(fs.Arg(0), true)
+	if err != nil {
+		return err
+	}
+	if s.State == sessions.Working {
+		return fmt.Errorf("%q is still working; there is no final message yet", s.Title)
+	}
+	r, err := c.Summary(s.SessionID, 45, *again)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		return printJSON(r)
+	}
+	switch {
+	case r.Summary != nil:
+		printLines(summaryLines(r.Summary, painter()))
+	case r.Summarizing:
+		return fmt.Errorf("still summarizing %q, try again in a moment", s.Title)
+	default:
+		return fmt.Errorf("%q has no final message to summarize", s.Title)
+	}
+	return nil
+}
+
+func summaryLines(x *summary.Summary, paint func(code, s string) string) []string {
+	out := []string{paint("1", x.Status)}
+	if len(x.Gist) > 0 {
+		out = append(out, "")
+		for _, l := range x.Gist {
+			out = append(out, "  • "+l)
+		}
+	}
+	if len(x.Overview) > 0 {
+		out = append(out, "")
+		for _, l := range x.Overview {
+			out = append(out, paint("2", "  "+l))
+		}
+	}
+	return out
+}
+
+func painter() func(code, s string) string {
+	tty := term.IsTerminal(int(os.Stdout.Fd()))
+	return func(code, s string) string {
+		if !tty {
+			return s
+		}
+		return "\033[" + code + "m" + s + "\033[0m"
+	}
+}
+
 func showUsage(args []string) error {
 	fs, asJSON := jsonFlag("usage", args)
 	fs.Parse(args)
@@ -491,13 +584,7 @@ var look = map[string]struct{ glyph, word, color string }{
 }
 
 func printRows(list []sessions.Session) {
-	tty := term.IsTerminal(int(os.Stdout.Fd()))
-	paint := func(code, s string) string {
-		if !tty {
-			return s
-		}
-		return "\033[" + code + "m" + s + "\033[0m"
-	}
+	paint := painter()
 	home := client.Load().ServerHome()
 	for i, s := range list {
 		l, ok := look[s.State]
@@ -521,7 +608,10 @@ func printRows(list []sessions.Session) {
 		}
 		fmt.Printf("%3d %s %-10s %-44s %5s  %s\n", i+1, paint(l.color, l.glyph), paint(l.color, l.word),
 			clip(s.Title, 44), s.Age(), paint("2", strings.Join(append([]string{where}, tags...), " · ")))
-		if s.LastPrompt != "" {
+		switch {
+		case s.Summary != nil && s.State == sessions.YourTurn:
+			fmt.Printf("%17s%s\n", "", "↳ "+clip(s.Summary.Status, 70))
+		case s.LastPrompt != "":
 			fmt.Printf("%17s%s\n", "", paint("2", "“"+clip(oneLine(s.LastPrompt), 70)+"”"))
 		}
 	}

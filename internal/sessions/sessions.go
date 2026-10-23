@@ -13,6 +13,7 @@ import (
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/outputs"
 	"github.com/zcag/atc/internal/store"
+	"github.com/zcag/atc/internal/summary"
 )
 
 const (
@@ -24,37 +25,40 @@ const (
 )
 
 type Session struct {
-	SessionID      string         `json:"sessionId"`
-	Host           string         `json:"host,omitempty"`
-	ID             string         `json:"id,omitempty"`
-	Kind           string         `json:"kind"`
-	State          string         `json:"state"`
-	Attachable     bool           `json:"attachable"`
-	PID            int            `json:"pid,omitempty"`
-	Title          string         `json:"title"`
-	Name           string         `json:"name,omitempty"`
-	Cwd            string         `json:"cwd"`
-	StartCwd       string         `json:"startCwd,omitempty"`
-	Branch         string         `json:"branch,omitempty"`
-	Model          string         `json:"model,omitempty"`
-	PermissionMode string         `json:"permissionMode,omitempty"`
-	LastPrompt     string         `json:"lastPrompt,omitempty"`
-	Context        int            `json:"context,omitempty"`
-	PromptAt       time.Time      `json:"promptAt,omitzero"`
-	Activity       string         `json:"activity,omitempty"`
-	LastReply      string         `json:"lastReply,omitempty"`
-	StartedAt      time.Time      `json:"startedAt,omitzero"`
-	Updated        time.Time      `json:"updated,omitzero"`
-	Servers        []int          `json:"servers,omitempty"`
-	Pages          []outputs.Link `json:"pages,omitempty"`
-	Pinned         bool           `json:"pinned,omitempty"`
-	Parked         bool           `json:"parked,omitempty"`
+	SessionID      string           `json:"sessionId"`
+	Host           string           `json:"host,omitempty"`
+	ID             string           `json:"id,omitempty"`
+	Kind           string           `json:"kind"`
+	State          string           `json:"state"`
+	Attachable     bool             `json:"attachable"`
+	PID            int              `json:"pid,omitempty"`
+	Title          string           `json:"title"`
+	Name           string           `json:"name,omitempty"`
+	Cwd            string           `json:"cwd"`
+	StartCwd       string           `json:"startCwd,omitempty"`
+	Branch         string           `json:"branch,omitempty"`
+	Model          string           `json:"model,omitempty"`
+	PermissionMode string           `json:"permissionMode,omitempty"`
+	LastPrompt     string           `json:"lastPrompt,omitempty"`
+	Context        int              `json:"context,omitempty"`
+	PromptAt       time.Time        `json:"promptAt,omitzero"`
+	Activity       string           `json:"activity,omitempty"`
+	LastReply      string           `json:"lastReply,omitempty"`
+	Summary        *summary.Summary `json:"summary,omitempty"`
+	Summarizing    bool             `json:"summarizing,omitempty"`
+	StartedAt      time.Time        `json:"startedAt,omitzero"`
+	Updated        time.Time        `json:"updated,omitzero"`
+	Servers        []int            `json:"servers,omitempty"`
+	Pages          []outputs.Link   `json:"pages,omitempty"`
+	Pinned         bool             `json:"pinned,omitempty"`
+	Parked         bool             `json:"parked,omitempty"`
 }
 
 type Manager struct {
-	CLI   claude.CLI
-	Index *history.Index
-	Store *store.Store
+	CLI     claude.CLI
+	Index   *history.Index
+	Store   *store.Store
+	Summary *summary.Summarizer
 }
 
 func (m *Manager) Live(ctx context.Context) ([]Session, error) {
@@ -73,6 +77,9 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		s.State, s.Attachable, s.PID = state(a), a.Kind == "background" && a.PID > 0, a.PID
 		if s.State == NeedsYou && a.Kind == "background" && byID[a.SessionID].Pending == "" {
 			s.State = YourTurn
+		}
+		if s.State == YourTurn && s.Summary == nil {
+			s.Summarizing = m.Summary.Want(byID[a.SessionID])
 		}
 		s.Cwd = first(a.Cwd, s.Cwd)
 		if a.StartedAt > 0 {
@@ -113,7 +120,7 @@ func (m *Manager) build(t history.Transcript) Session {
 		Title: first(meta.Name, t.Title, t.AgentName, base(t.Cwd)), Name: t.AgentName,
 		Cwd: t.Cwd, StartCwd: t.StartCwd, Branch: t.Branch, Model: t.Model,
 		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, Context: t.Context, PromptAt: t.PromptAt,
-		Activity: t.Activity, LastReply: t.LastReply,
+		Activity: t.Activity, LastReply: t.LastReply, Summary: m.Summary.Get(t),
 		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked,
 	}
 }

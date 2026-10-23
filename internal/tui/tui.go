@@ -770,6 +770,8 @@ func (m model) row(s sessions.Session, sel bool) []string {
 	}
 	if s.State == sessions.Working && s.Activity != "" {
 		prompt, promptSt = s.Activity, stateSt
+	} else if s.State == sessions.YourTurn && s.Summary != nil {
+		prompt, promptSt = "↳ "+s.Summary.Status, st(plain)
 	}
 	lines := []string{
 		bar + stateSt.Render(ansi.Truncate(fmt.Sprintf("%-*s", stateW, state), stateW, "")) +

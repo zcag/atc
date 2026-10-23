@@ -16,8 +16,10 @@ import (
 	"github.com/zcag/atc/internal/attach"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
+	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
+	"github.com/zcag/atc/internal/summary"
 )
 
 const localAgents = `[{"id":"loc00001","sessionId":"l1","kind":"background","pid":1,"state":"done","cwd":"/tmp","name":"local one"}]`
@@ -161,7 +163,8 @@ func TestPeersAreMergedAndForwarded(t *testing.T) {
 }
 
 func TestAlerts(t *testing.T) {
-	prev := map[string]string{"a": sessions.Working, "b": sessions.YourTurn, "c": sessions.Working, "e": sessions.YourTurn, "f": sessions.Working}
+	prev := map[string]string{"a": sessions.Working, "b": sessions.YourTurn, "c": sessions.Working, "e": sessions.YourTurn, "f": sessions.Working,
+		"g": sessions.Working, "h": sessions.Working}
 	list := []sessions.Session{
 		{SessionID: "a", Title: "A", State: sessions.YourTurn, LastReply: "All tests pass."},
 		{SessionID: "b", Title: "B", State: sessions.NeedsYou, Activity: "Bash  rm -rf build"},
@@ -169,16 +172,49 @@ func TestAlerts(t *testing.T) {
 		{SessionID: "d", Title: "D", State: sessions.NeedsYou},
 		{SessionID: "e", Title: "E", State: sessions.Working},
 		{SessionID: "f", Title: "F", State: sessions.NeedsYou, Parked: true},
+		{SessionID: "g", Title: "G", State: sessions.YourTurn, LastReply: "A long report…", Summarizing: true},
+		{SessionID: "h", Title: "H", State: sessions.YourTurn, LastReply: "A long report…", Summary: &summary.Summary{Status: "Found: the cache is stale", Gist: []string{"Clearing it fixes the test"}}},
 	}
-	got := alerts(prev, list, func(s sessions.Session) bool { return s.ID == "open0001" })
-	if len(got) != 2 {
-		t.Fatalf("want 2 alerts, got %+v", got)
+	got, later := alerts(prev, list, func(s sessions.Session) bool { return s.ID == "open0001" })
+	if len(got) != 3 {
+		t.Fatalf("want 3 alerts, got %+v", got)
 	}
 	if got[0].Title != "A" || got[0].Body != "All tests pass." || got[0].URL != "/#/s/a" {
 		t.Errorf("finished turn: %+v", got[0])
 	}
 	if got[1].Title != "B" || got[1].Body != "Needs you: Bash  rm -rf build" {
 		t.Errorf("needs you: %+v", got[1])
+	}
+	if got[2].Body != "Found: the cache is stale\nClearing it fixes the test" {
+		t.Errorf("summary as the body: %q", got[2].Body)
+	}
+	if len(later) != 1 || later[0].Tag != "g" {
+		t.Fatalf("a turn still being summarized waits: %+v", later)
+	}
+}
+
+func TestReleaseHeldPush(t *testing.T) {
+	s := &Server{held: map[string]held{
+		"ready": {push.Message{Tag: "ready", Body: "raw"}, time.Now().Add(time.Minute)},
+		"slow":  {push.Message{Tag: "slow", Body: "raw"}, time.Now().Add(time.Minute)},
+		"late":  {push.Message{Tag: "late", Body: "raw"}, time.Now().Add(-time.Second)},
+		"moved": {push.Message{Tag: "moved", Body: "raw"}, time.Now().Add(time.Minute)},
+	}}
+	list := []sessions.Session{
+		{SessionID: "ready", State: sessions.YourTurn, Summary: &summary.Summary{Status: "Done: shipped"}},
+		{SessionID: "slow", State: sessions.YourTurn, Summarizing: true},
+		{SessionID: "late", State: sessions.YourTurn, Summarizing: true},
+		{SessionID: "moved", State: sessions.Working},
+	}
+	out := map[string]string{}
+	for _, m := range s.release(list) {
+		out[m.Tag] = m.Body
+	}
+	if len(out) != 2 || out["ready"] != "Done: shipped" || out["late"] != "raw" {
+		t.Fatalf("released %v", out)
+	}
+	if _, ok := s.held["slow"]; !ok || len(s.held) != 1 {
+		t.Fatalf("still held: %v", s.held)
 	}
 }
 

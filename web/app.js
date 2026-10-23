@@ -166,7 +166,7 @@ function App() {
     for (const x of live) {
       const was = prev[x.sessionId];
       if (!was || was === x.state || x.parked || (x.state !== "needs-you" && x.state !== "your-turn")) continue;
-      const n = new Notification(x.title || "atc", { body: x.state === "needs-you" ? `Needs you${x.activity ? ": " + x.activity : ""}` : (x.lastReply || "Finished its turn"), tag: x.sessionId, icon: "/icon.svg" });
+      const n = new Notification(x.title || "atc", { body: x.state === "needs-you" ? `Needs you${x.activity ? ": " + x.activity : ""}` : (x.summary?.status || x.lastReply || "Finished its turn"), tag: x.sessionId, icon: "/icon.svg" });
       n.onclick = () => { window.focus(); go(keyOf(x)); n.close(); };
     }
   }, [live]);
@@ -568,6 +568,7 @@ function HoverActions({ s, menu }) {
 function said(s) {
   if (s.state === "working") return html`<div class="said doing" key=${s.activity}>${oneLine(s.activity) || "Working…"}</div>`;
   if (s.state === "needs-you" && s.activity) return html`<div class="said ask">Waiting on you: ${oneLine(s.activity)}</div>`;
+  if ((s.state === "your-turn" || s.state === "needs-you") && s.summary) return html`<div class="said reply">${s.summary.status}</div>`;
   if ((s.state === "your-turn" || s.state === "needs-you") && s.lastReply) return html`<div class="said reply">${oneLine(s.lastReply)}</div>`;
   return s.lastPrompt ? html`<div class="said">${oneLine(s.lastPrompt)}</div>` : null;
 }
@@ -825,6 +826,7 @@ function Session({ s, say, live }) {
       </div>
       <${Menu} busy=${busy} items=${[...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "Usage", run: () => setShowUse(true) }]} />
     </div>
+    <${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />
     ${mode === "term"
       ? canAttach
         ? html`<${Term} key=${s.id} s=${s} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} />`
@@ -832,6 +834,84 @@ function Session({ s, say, live }) {
       : mode === "out" ? html`<${Outputs} s=${s} data=${outs} />` : html`<${Transcript} s=${s} />`}
     ${showUse && html`<${SessionUsage} s=${s} use=${use} onClose=${() => setShowUse(false)} />`}
   `;
+}
+
+const SUM_OPEN = "atc.summary.open", SUM_HIDDEN = "atc.summary.hidden";
+const stored = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+const PHONE = matchMedia("(max-width: 899px)");
+
+function usePhone() {
+  const [on, setOn] = useState(PHONE.matches);
+  useEffect(() => {
+    const f = () => setOn(PHONE.matches);
+    PHONE.addEventListener("change", f);
+    return () => PHONE.removeEventListener("change", f);
+  }, []);
+  return on;
+}
+
+function SummaryBar({ s, say, onFull }) {
+  const phone = usePhone();
+  const [open, setOpen] = useState(() => stored(SUM_OPEN, false));
+  const [sheet, setSheet] = useState(false);
+  const [hidden, setHidden] = useState(() => stored(SUM_HIDDEN, []));
+  const x = s.summary;
+  const done = s.state !== "working";
+  if (!done || (x ? hidden.includes(x.reply) : !s.summarizing)) return null;
+  if (!x) return html`<div class="sumbar pending" aria-live="polite"><span class="sumtext">Summarizing the reply…</span></div>`;
+
+  const more = x.gist?.length > 0 || x.overview?.length > 0;
+  const toggle = () => (phone ? setSheet(true) : (setOpen(!open), store(SUM_OPEN, !open)));
+  const hide = (e) => {
+    e.stopPropagation();
+    const next = [x.reply, ...hidden].slice(0, 50);
+    setHidden(next);
+    store(SUM_HIDDEN, next);
+  };
+  const again = () => api(`/api/sessions/${s.sessionId}/summary`, { method: "POST" }).then(() => say("Summarizing again…"), (e) => say(e.message));
+  const full = () => { setSheet(false); onFull(); };
+  return html`
+    <div class="sumbar ${open && !phone ? "open" : ""}">
+      <div class="sumrow" role=${more ? "button" : null} tabindex=${more ? 0 : null} aria-expanded=${more ? (phone ? sheet : open) : null}
+        onClick=${more ? toggle : null} onKeyDown=${(e) => more && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), toggle())}>
+        <span class="sumtext">${x.status}</span>
+        ${more && html`<span class="summore">${phone ? "More" : open ? "Less" : "More"}<i class="caret ${open && !phone ? "up" : ""}"></i></span>`}
+        <button class="icon sumx" onClick=${hide} title="Hide until the next reply" aria-label="Hide the summary">✕</button>
+      </div>
+      ${open && !phone && more && html`<div class="sumbody"><${SummaryParts} x=${x} /><${SummaryFoot} onFull=${full} again=${again} /></div>`}
+    </div>
+    ${sheet && html`
+      <div class="veil sumveil" onPointerDown=${(e) => e.target === e.currentTarget && setSheet(false)}>
+        <div class="sumsheet" role="dialog" aria-label="Summary of the final message">
+          <i class="grab" aria-hidden="true"></i>
+          <p class="sumhead">${x.status}</p>
+          <${SummaryParts} x=${x} />
+          <${SummaryFoot} onFull=${full} again=${again} onClose=${() => setSheet(false)} />
+        </div>
+      </div>`}
+  `;
+}
+
+function SummaryParts({ x }) {
+  const label = (l) => {
+    const m = l.match(/^([^:]{1,16}):\s+(.*)$/);
+    return m ? html`<b>${m[1]}:</b> ${m[2]}` : l;
+  };
+  return html`
+    <div class="sumparts">
+      ${x.gist?.length > 0 && html`<section><h4>Gist</h4><ul>${x.gist.map((l) => html`<li>${l}</li>`)}</ul></section>`}
+      ${x.overview?.length > 0 && html`<section><h4>Overview</h4><ul class="ov">${x.overview.map((l) => html`<li>${label(l)}</li>`)}</ul></section>`}
+    </div>`;
+}
+
+function SummaryFoot({ onFull, again, onClose }) {
+  return html`
+    <div class="sumfoot">
+      <button class="btn primary" onClick=${onFull}>Read the full message</button>
+      <button class="btn" onClick=${again}>Summarize again</button>
+      ${onClose && html`<button class="btn" onClick=${onClose}>Close</button>`}
+    </div>`;
 }
 
 function Unattachable(s, resume, busy, setMode) {

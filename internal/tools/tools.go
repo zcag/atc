@@ -11,6 +11,7 @@ import (
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/sessions"
+	"github.com/zcag/atc/internal/summary"
 )
 
 const instructions = `These tools see and drive the user's other Claude Code sessions, the ones atc manages on their machines. ` +
@@ -31,6 +32,7 @@ type Session struct {
 	Doing      string `json:"doing,omitempty" jsonschema:"what it is doing right now, while working"`
 	Asked      string `json:"asked,omitempty" jsonschema:"the last thing the user asked it"`
 	Replied    string `json:"replied,omitempty" jsonschema:"the start of its last reply"`
+	Summary    string `json:"summary,omitempty" jsonschema:"its last reply in one line, once it has finished a turn"`
 	Since      string `json:"since,omitempty"`
 }
 
@@ -72,11 +74,12 @@ type historyIn struct {
 }
 
 type done struct {
-	Ref     string `json:"ref,omitempty"`
-	Title   string `json:"title,omitempty"`
-	State   string `json:"state,omitempty"`
-	Replied string `json:"replied,omitempty"`
-	Note    string `json:"note,omitempty"`
+	Ref     string           `json:"ref,omitempty"`
+	Title   string           `json:"title,omitempty"`
+	State   string           `json:"state,omitempty"`
+	Summary *summary.Summary `json:"summary,omitempty" jsonschema:"the reply in short: status, gist lines and, for long replies, an overview"`
+	Replied string           `json:"replied,omitempty"`
+	Note    string           `json:"note,omitempty"`
 }
 
 type transcript struct {
@@ -103,7 +106,7 @@ func Run(ctx context.Context, c *client.Client) error {
 		})
 	mcp.AddTool(s, &mcp.Tool{Name: "read", Description: "Read the recent conversation of a session (open or past): what was asked, what it answered, which tools it ran."}, t.read)
 	mcp.AddTool(s, &mcp.Tool{Name: "send", Description: "Type a message into a running session, as if the user wrote it there. A stopped or past session is resumed first. Returns right away; use wait for the answer."}, t.send)
-	mcp.AddTool(s, &mcp.Tool{Name: "wait", Description: "Wait until a session finishes its turn or needs the user, then return the start of its reply."}, t.wait)
+	mcp.AddTool(s, &mcp.Tool{Name: "wait", Description: "Wait until a session finishes its turn or needs the user, then return its reply in short and the start of the reply itself."}, t.wait)
 	mcp.AddTool(s, &mcp.Tool{Name: "start", Description: "Start a new background session in a folder with a first message."}, t.start)
 	mcp.AddTool(s, &mcp.Tool{Name: "presets", Description: "List the named presets for new sessions (a folder plus standing instructions, like a dedicated agent). Start one with start and its name."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, struct {
@@ -135,6 +138,8 @@ func (t *tools) view(x sessions.Session) Session {
 	}
 	if x.State == sessions.Working {
 		v.Doing = x.Activity
+	} else if x.Summary != nil {
+		v.Summary = x.Summary.Status
 	}
 	if at := x.Last(); !at.IsZero() {
 		v.Since = at.Format(time.RFC3339)
@@ -256,7 +261,13 @@ func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*m
 	if err != nil {
 		return nil, done{Ref: key, Title: x.Title, State: last.State, Note: "still working: " + last.Activity}, nil
 	}
-	return nil, done{Ref: key, Title: last.Title, State: last.State, Replied: clip(last.LastReply, 1500)}, nil
+	sum := last.Summary
+	if sum == nil && last.State == sessions.YourTurn {
+		if r, err := t.c.Summary(last.SessionID, 30, false); err == nil {
+			sum = r.Summary
+		}
+	}
+	return nil, done{Ref: key, Title: last.Title, State: last.State, Summary: sum, Replied: clip(last.LastReply, 1500)}, nil
 }
 
 func (t *tools) until(ctx context.Context, key string, limit time.Duration, ok func(sessions.Session) bool) error {

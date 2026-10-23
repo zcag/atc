@@ -2,7 +2,9 @@ package history
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -159,3 +161,32 @@ func summarize(raw json.RawMessage) string {
 }
 
 func oneLine(v string) string { return clip(strings.Join(strings.Fields(v), " "), 160) }
+
+func Reply(path, id string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if st, _ := f.Stat(); st.Size() > 8<<20 {
+		f.Seek(-8<<20, io.SeekEnd)
+	}
+	r := bufio.NewReaderSize(f, 1<<20)
+	needle := []byte(`"uuid":"` + id + `"`)
+	for {
+		line, err := r.ReadBytes('\n')
+		var m rawMsg
+		if bytes.Contains(line, needle) && json.Unmarshal(line, &m) == nil {
+			var texts []string
+			for _, x := range convert(m) {
+				if x.Role == "assistant" {
+					texts = append(texts, x.Text)
+				}
+			}
+			return strings.Join(texts, "\n\n"), nil
+		}
+		if err != nil {
+			return "", fmt.Errorf("message %s is not in the transcript", id)
+		}
+	}
+}

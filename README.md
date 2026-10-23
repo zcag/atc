@@ -98,6 +98,7 @@ atc new ~/code/app "fix the failing test"        # start one
 atc history "auth bug"                           # search past conversations
 atc resume "auth bug"                            # continue one
 atc stop 2 · atc rm 2 · atc rename 2 "name" · atc pin 2
+atc summary 2                                    # its final message in short
 atc outputs 2                                    # what it produced, with links to open its files
 atc usage                                        # plan limits and tokens per day
 atc usage 2                                      # one session's tokens, turns and estimated cost
@@ -194,6 +195,34 @@ Each session has an **Outputs** tab with what it produced, so you can check its 
 
 Files open through links that are signed for that session and folder and expire after 12 hours,
 and pages run sandboxed, away from atc's own login.
+
+## Summaries
+
+When a session finishes a turn, atc summarizes its final message at three lengths:
+
+- **Status**, one line: what the message is about. It replaces the start of the reply on the
+  session's strip, in `atc ls` and in the notification.
+- **Gist**, one short line per topic the message covers.
+- **Overview**, for long messages: the content grouped as Answer, Found, Plan, Proposes, Open.
+
+A session shows its summary in a line under its header. On a computer, **More** opens the gist
+and overview in place; on a phone it opens them in a sheet, with a button to the full message. The
+summary is of that one message: once the session moves on, it goes away until the next turn ends.
+A notification for a finished turn waits up to 25 seconds for the summary, then goes out with the
+start of the reply instead.
+
+Summaries come from `claude -p` with haiku and a fixed prompt, with no tools, no CLAUDE.md and no
+saved session, so each costs about 2,500 tokens of your plan. Replies of a line or two are used as
+they are, without a model. Each machine summarizes its own sessions and keeps the result in
+`summaries.json` in its config folder. Set `ATC_SUMMARY_MODEL` for another Claude model,
+`ATC_SUMMARY_URL` (with `ATC_SUMMARY_MODEL`) for an OpenAI-compatible endpoint such as a local
+model, or `ATC_SUMMARY=off` to turn it off. The prompt is `internal/summary/prompt.md`.
+
+The same summary is in the API and the tools: each session in `/api/sessions` carries `summary`
+(`status`, `gist`, `overview`, the `reply` it describes) and `summarizing` while one is being made.
+`GET /api/sessions/{id}/summary?wait=30` returns it, making one if needed (also for a past
+session), and `POST` makes it again. `atc summary <session>` prints it, and the MCP tools include it
+in `sessions` and `wait`.
 
 ## Usage and limits
 
