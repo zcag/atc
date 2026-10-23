@@ -476,3 +476,12 @@ button { cursor: pointer; }
 .usehover .usecard .hint { color: var(--faint); font-size: 12px; margin-top: 2px; }
 .usehover:hover .usecard, .usehover:focus-visible .usecard { display: flex; }
 .sheet .quiet { margin: -4px 0 14px; color: var(--faint); font-size: 13px; }
+
+.proj { --pt: hsl(var(--ph) 50% 32%); --pb: hsl(var(--ph) 45% 90%); display: inline-block; padding: 0 6px; border-radius: 4px; background: var(--pb); color: var(--pt); font-weight: 600; font-size: 12px; line-height: 18px; cursor: pointer; }
+.proj:hover { box-shadow: inset 0 0 0 1px var(--pt); }
+.projtag { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; }
+.projtag .rest { color: var(--faint); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.onlybar { display: flex; align-items: center; gap: 8px; margin: 2px 0 10px; font-size: 13px; color: var(--dim); }
+.onlybar .icon { margin-left: auto; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .proj { --pt: hsl(var(--ph) 60% 72%); --pb: hsl(var(--ph) 30% 21%); } }
+:root[data-theme="dark"] .proj { --pt: hsl(var(--ph) 60% 72%); --pb: hsl(var(--ph) 30% 21%); }

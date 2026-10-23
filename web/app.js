@@ -371,8 +371,12 @@ function Login({ onDone }) {
   `;
 }
 
-function Board({ live, sel, cursor, onPast }) {
+function Board({ live: all, sel, cursor, onPast }) {
   const [q, setQ] = useState("");
+  const [only, setOnly] = useState(null);
+  PICK_PROJECT = (name) => setOnly((o) => (o === name ? null : name));
+  const mine = (s) => !only || project(s.cwd).name === only;
+  const live = all && all.filter(mine);
   const [hist, setHist] = useState(null);
   const [limit, setLimit] = useState(30);
 
@@ -388,14 +392,15 @@ function Board({ live, sel, cursor, onPast }) {
 
   if (!live) return html`<div class="board"><p class="empty">Loading sessions…</p></div>`;
   const liveIDs = new Set(live.map((s) => s.sessionId));
-  const earlier = (hist || []).filter((s) => !liveIDs.has(s.sessionId));
+  const earlier = (hist || []).filter((s) => !liveIDs.has(s.sessionId) && mine(s));
   const pinned = live.filter((s) => s.pinned && !s.parked);
   const rest = live.filter((s) => !s.pinned && !s.parked);
   const parked = live.filter((s) => s.parked);
 
   return html`
     <div class="board">
-      ${live.length === 0 && html`<p class="empty">Nothing is running. Start a session, or pick up an earlier one below.</p>`}
+      ${only && html`<div class="onlybar">Only <span class="proj" style=${`--ph: ${hueOf(only)}`}>${only}</span><button class="icon" aria-label="Show all projects" onClick=${() => setOnly(null)}>✕</button></div>`}
+      ${live.length === 0 && html`<p class="empty">${only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below."}</p>`}
       ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
       ${BAYS.filter(([st]) => st !== "stopped").map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
       <${Bay} title="Parked" list=${parked} sel=${sel} cursor=${cursor} dim />
@@ -454,7 +459,7 @@ function Strip({ s, sel, cursor }) {
         <span class="word">${WORD[s.state] || s.state}</span>
         ${s.id && html`<span class="call">${s.id}</span>`}
         ${MULTI && s.host && html`<span class="tag">${s.host}</span>`}
-        <span>${tilde(s.cwd)}</span>
+        <${ProjectTag} path=${s.cwd} full />
         ${s.branch && s.branch !== "HEAD" && html`<span>${s.branch}</span>`}
         ${s.model && html`<span>${model(s.model)}</span>`}
         ${s.kind === "interactive" && html`<span class="tag">in a terminal</span>`}
@@ -475,6 +480,25 @@ function Elapsed({ s }) {
 }
 
 let QUICK = () => {};
+let PICK_PROJECT = () => {};
+const CONTAINERS = new Set(["proj", "projects", "src", "code", "dev", "work", "repos", "git", "Developer"]);
+function project(path) {
+  const parts = tilde(path || "").replace(/\/\.claude\/worktrees\/[^/]+/, "").split("/");
+  if (parts[0] === "~") {
+    if (parts.length === 1 || !parts[1]) return { name: "~", rest: "" };
+    const i = CONTAINERS.has(parts[1]) && parts.length > 2 ? 2 : 1;
+    return { name: parts[i], rest: parts.slice(i + 1).join("/") };
+  }
+  const segs = parts.filter(Boolean);
+  return { name: segs.at(-1) || "/", rest: "" };
+}
+const HUES = [160, 130, 280, 320, 85, 185, 255];
+const hueOf = (name) => HUES[[...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % HUES.length];
+function ProjectTag({ path, full }) {
+  const p = project(path);
+  return html`<span class="projtag"><span class="proj" style=${`--ph: ${hueOf(p.name)}`} role="button" title=${`${tilde(path)}\nClick to show only ${p.name}`}
+    onClick=${(e) => { e.stopPropagation(); PICK_PROJECT(p.name); }}>${p.name}</span>${full && p.rest && html`<span class="rest">${p.rest}</span>`}</span>`;
+}
 
 function sessionActions(s, say, { rename, open, after } = {}) {
   const run = (fn, done) => async () => {
@@ -564,7 +588,7 @@ function Session({ s, say, live }) {
         </div>
         <div class="meta">
           <span class="word" style=${`--edge: var(--${{ "needs-you": "needs", "your-turn": "turn", working: "work" }[s.state] || "stop"})`}>${WORD[s.state] || s.state}</span>
-          <span>${tilde(s.cwd)}</span>
+          <${ProjectTag} path=${s.cwd} full />
           ${s.branch && s.branch !== "HEAD" && html`<span class="wide">${s.branch}</span>`}
           ${s.model && html`<span class="wide">${model(s.model)}</span>`}
           ${(s.context > 0 || use?.total > 0) && html`
