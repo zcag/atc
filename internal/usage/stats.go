@@ -77,6 +77,7 @@ type Day struct {
 type msg struct {
 	model     string
 	day       string
+	at        time.Time
 	t         Tokens
 	cost      float64
 	priced    bool
@@ -176,9 +177,9 @@ func (f *file) add(raw []byte) {
 		if l.Message.ID == "" || t.Total() == 0 || l.Message.Model == "<synthetic>" {
 			break
 		}
-		m := msg{model: l.Message.Model, day: l.Timestamp.Local().Format(time.DateOnly), t: t, sidechain: l.IsSidechain}
+		m := msg{model: l.Message.Model, day: l.Timestamp.Local().Format(time.DateOnly), at: l.Timestamp, t: t, sidechain: l.IsSidechain}
 		if old, ok := f.msgs[l.Message.ID]; ok {
-			m.day = old.day
+			m.day, m.at = old.day, old.at
 		}
 		m.cost, m.priced = Cost(m.model, t, u.CacheCreation.OneHour, u.Speed == "fast")
 		f.msgs[l.Message.ID] = m
@@ -304,14 +305,12 @@ func (s *Scanner) Session(transcript string) Stats {
 	return st
 }
 
-func (s *Scanner) Days(root string, n int) []Day {
-	since := time.Now().AddDate(0, 0, -n+1)
-	first := since.Format(time.DateOnly)
+func (s *Scanner) recent(root string, since time.Time) ([]string, []*file) {
 	mains, _ := filepath.Glob(filepath.Join(root, "*", "*.jsonl"))
 	subs, _ := filepath.Glob(filepath.Join(root, "*", "*", "subagents", "*.jsonl"))
 	var paths []string
 	for _, p := range append(mains, subs...) {
-		if st, err := os.Stat(p); err == nil && !st.ModTime().Before(since.AddDate(0, 0, -1)) {
+		if st, err := os.Stat(p); err == nil && !st.ModTime().Before(since) {
 			paths = append(paths, p)
 		}
 	}
@@ -330,6 +329,41 @@ func (s *Scanner) Days(root string, n int) []Day {
 	}
 	close(jobs)
 	wg.Wait()
+	return paths, files
+}
+
+func costSince(files []*file, from time.Time, seen map[string]bool) float64 {
+	var c float64
+	for _, f := range files {
+		f.mu.Lock()
+		for id, m := range f.msgs {
+			if !m.at.Before(from) && !seen[id] {
+				seen[id] = true
+				c += m.cost
+			}
+		}
+		f.mu.Unlock()
+	}
+	return c
+}
+
+func (s *Scanner) CostSince(root string, from time.Time) float64 {
+	_, files := s.recent(root, from)
+	return costSince(files, from, map[string]bool{})
+}
+
+func (s *Scanner) SessionCostSince(transcript string, from time.Time) float64 {
+	files := []*file{s.get(transcript)}
+	for _, p := range subagentFiles(transcript) {
+		files = append(files, s.get(p))
+	}
+	return costSince(files, from, map[string]bool{})
+}
+
+func (s *Scanner) Days(root string, n int) []Day {
+	since := time.Now().AddDate(0, 0, -n+1)
+	first := since.Format(time.DateOnly)
+	paths, files := s.recent(root, since.AddDate(0, 0, -1))
 
 	days := map[string]*Day{}
 	seen := map[string]bool{}

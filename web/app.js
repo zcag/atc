@@ -142,6 +142,28 @@ function App() {
     setTimeout(() => setStarting(false), 15000);
   };
 
+  const [notifAsk, setNotifAsk] = useState(() => {
+    try { return !APP && !touch && typeof Notification !== "undefined" && Notification.permission === "default" && !localStorage.getItem("atc.notifask"); } catch { return false; }
+  });
+  const notifDone = (allow) => {
+    try { localStorage.setItem("atc.notifask", "1"); } catch {}
+    setNotifAsk(false);
+    if (allow) Notification.requestPermission().then((p) => p === "granted" && say("Desktop notifications are on."));
+  };
+  const prevStates = useRef(null);
+  useEffect(() => {
+    if (!live) return;
+    const prev = prevStates.current;
+    prevStates.current = Object.fromEntries(live.map((x) => [x.sessionId, x.state]));
+    if (!prev || APP || typeof Notification === "undefined" || Notification.permission !== "granted" || document.hasFocus()) return;
+    for (const x of live) {
+      const was = prev[x.sessionId];
+      if (!was || was === x.state || x.parked || (x.state !== "needs-you" && x.state !== "your-turn")) continue;
+      const n = new Notification(x.title || "atc", { body: x.state === "needs-you" ? `Needs you${x.activity ? ": " + x.activity : ""}` : (x.lastReply || "Finished its turn"), tag: x.sessionId, icon: "/icon.svg" });
+      n.onclick = () => { window.focus(); go(keyOf(x)); n.close(); };
+    }
+  }, [live]);
+
   const warmed = useRef(false);
   useEffect(() => {
     if (!live || warmed.current) return;
@@ -265,6 +287,11 @@ function App() {
     ${usage && html`<${UsageSheet} limits=${limits} multi=${MULTI} onClose=${() => setUsage(false)} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
+    ${notifAsk && me && html`<div class="appbar" role="status">
+      <span>Get a desktop notification when a session finishes or needs you, while this tab is in the background?</span>
+      <button class="btn primary" onClick=${() => notifDone(true)}>Turn on</button>
+      <button class="btn" onClick=${() => notifDone(false)}>Not now</button>
+    </div>`}
     ${stale && html`<div class="appbar" role="status">
       <span>A newer atc app is available (${stale}).</span>
       <button class="btn primary" onClick=${() => APP?.checkUpdate()}>Update</button>
@@ -540,8 +567,16 @@ function Session({ s, say, live }) {
           <span>${tilde(s.cwd)}</span>
           ${s.branch && s.branch !== "HEAD" && html`<span class="wide">${s.branch}</span>`}
           ${s.model && html`<span class="wide">${model(s.model)}</span>`}
-          ${s.context > 0 && html`<span class="wide">${Math.round(s.context / 1000)}k context</span>`}
-          ${use && use.total > 0 && html`<button class="wide usechip" title="Usage for this session" onClick=${() => setShowUse(true)}>${tokens(use.total)} tokens · ~${dollars(use.cost)}</button>`}
+          ${(s.context > 0 || use?.total > 0) && html`
+            <span class="wide usehover" tabindex="0" role="button" onClick=${() => setShowUse(true)} onKeyDown=${(e) => e.key === "Enter" && setShowUse(true)}>
+              ${s.context > 0 ? `${Math.round(s.context / 1000)}k context` : "usage"}
+              ${use?.total > 0 && html`<span class="usecard" role="tooltip">
+                ${weekShare(use, use.week) != null && html`<b>≈${pct(weekShare(use, use.week))} of your weekly limit</b>
+                  <span>The week is at ${Math.round(use.week.percent)}%, resets ${resetDay(use.week.resetsAt)}</span>`}
+                <span>${tokens(use.total)} tokens · ~${dollars(use.cost)} at API prices</span>
+                <span class="hint">Click for details</span>
+              </span>`}
+            </span>`}
           ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first">no permission prompts</span>`}
         </div>
       </div>
@@ -632,6 +667,23 @@ function useKeyboard() {
   return open;
 }
 
+const DEVICE = APP ? "app" : (() => {
+  const u = navigator.userAgent;
+  const b = /Firefox\//.test(u) ? "Firefox" : /Edg\//.test(u) ? "Edge" : /Chrome\//.test(u) ? "Chrome" : /Safari\//.test(u) ? "Safari" : "browser";
+  const o = /Android/.test(u) ? "Android" : /iPhone|iPad/.test(u) ? "iOS" : /Mac OS/.test(u) ? "Mac" : /Windows/.test(u) ? "Windows" : /Linux/.test(u) ? "Linux" : "";
+  return o && !/Mac|Linux|Windows/.test(o) ? `${b} on ${o}` : b;
+})();
+
+let lastInput = Date.now(), lastBeat = 0;
+const beat = () => {
+  if (document.visibilityState !== "visible" || !document.hasFocus() || Date.now() - lastInput > 120000 || Date.now() - lastBeat < 20000) return;
+  lastBeat = Date.now();
+  fetch("/api/presence", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device: DEVICE }) }).catch(() => {});
+};
+for (const ev of ["keydown", "pointerdown", "wheel", "touchstart"]) addEventListener(ev, () => { lastInput = Date.now(); beat(); }, { passive: true, capture: true });
+addEventListener("focus", beat);
+setInterval(beat, 30000);
+
 const DOCK = new Map();
 const DOCK_KEEP = 4;
 let dockShelf = null;
@@ -715,7 +767,7 @@ function makeDock(id) {
 
   const connect = () => {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const q = `cols=${term.cols}&rows=${term.rows}${d.box && !document.hidden ? "" : "&hidden=1"}${tries > 0 ? "&reconnect=1" : ""}`;
+    const q = `cols=${term.cols}&rows=${term.rows}&device=${encodeURIComponent(DEVICE)}${d.box && !document.hidden ? "" : "&hidden=1"}${tries > 0 ? "&reconnect=1" : ""}`;
     ws = new WebSocket(`${proto}//${location.host}/api/sessions/${id}/attach?${q}`);
     ws.binaryType = "arraybuffer";
     ws.onmessage = (e) => {
@@ -730,7 +782,7 @@ function makeDock(id) {
         } else {
           term.resize(c.cols, c.rows);
           if (d.box) requestAnimationFrame(() => scale(true));
-          emit({ foreign: d.box ? c.viewers : null });
+          emit({ foreign: d.box ? c.holder || "another screen" : null });
         }
       } else if (c.type === "exit") {
         exited = true;
@@ -754,7 +806,6 @@ function makeDock(id) {
 
   term.onData((data) => d.send(d.hooks.data ? d.hooks.data(data) : data));
   term.onBinary((data) => ws?.readyState === 1 && ws.send(Uint8Array.from(data, (c) => c.charCodeAt(0))));
-  term.textarea?.addEventListener("focus", () => !owner && d.claim());
 
   const ro = new ResizeObserver(() => requestAnimationFrame(relayout));
   ro.observe(el);
@@ -885,7 +936,7 @@ function Term({ s, say, voice, onVoiceOff }) {
       ${retrying && !cover && html`<div class="notice"><span>Reconnecting…</span></div>`}
       ${foreign && !cover && !retrying && html`
         <div class="notice">
-          <span>Sized for another screen</span>
+          <span>Sized for ${foreign}</span>
           <button class="btn" onClick=${() => api_.current.claim?.()}>Fit to this one</button>
         </div>`}
       ${cover && html`
@@ -1187,12 +1238,22 @@ const modelName = (m) => {
   return n[0].toUpperCase() + n.slice(1);
 };
 
+let WEEK = null, weekAt = 0, weekLoading = null;
+function loadWeek() {
+  if (Date.now() - weekAt < 120000) return Promise.resolve(WEEK);
+  return (weekLoading ||= api("/api/usage/week").then((w) => { WEEK = w; weekAt = Date.now(); return w; }, () => WEEK).finally(() => (weekLoading = null)));
+}
+const weekShare = (use, week) => (week?.total > 0 && use?.weekCost != null ? (use.weekCost / week.total) * week.percent : null);
+const pct = (x) => (x < 0.1 ? "<0.1%" : x < 10 ? `${x.toFixed(1)}%` : `${Math.round(x)}%`);
+const resetDay = (t) => new Date(t).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+
 function useSessionUsage(s, every) {
   const [data, setData] = useState(null);
   useEffect(() => setData(null), [s.sessionId]);
   useEffect(() => {
     let live = true;
-    const load = () => api(`/api/sessions/${s.sessionId}/usage`).then((d) => live && setData(d), () => live && setData((d) => d || { failed: true }));
+    const load = () => loadWeek().then((w) => api(`/api/sessions/${s.sessionId}/usage${w?.from ? `?from=${Math.floor(Date.parse(w.from) / 1000)}` : ""}`))
+      .then((d) => live && setData({ ...d, week: WEEK }), () => live && setData((d) => d || { failed: true }));
     load();
     const t = setInterval(load, every);
     return () => { live = false; clearInterval(t); };
@@ -1291,15 +1352,16 @@ function SessionUsage({ s, use, onClose }) {
     <${Sheet} cls="usage" title="Usage" sub=${s.title} onClose=${onClose}>
       ${!use ? html`<p class="note">Reading the transcript…</p>` : use.failed ? html`<p class="note">Couldn't read this session's usage.</p>` : html`
         <div class="tiles">
+          ${weekShare(use, use.week) != null && html`<div><span class="n">≈${pct(weekShare(use, use.week))}</span><span class="l">of this week's limit</span></div>`}
           <div><span class="n">${tokens(use.total)}</span><span class="l">tokens</span></div>
-          <div><span class="n">~${dollars(use.cost)}</span><span class="l">at API prices</span></div>
           <div><span class="n">${span(use.activeSeconds)}</span><span class="l">Claude working</span></div>
         </div>
+        <p class="quiet">~${dollars(use.cost)} at API prices${use.week?.percent != null ? ` · the week is at ${Math.round(use.week.percent)}%, resets ${resetDay(use.week.resetsAt)}` : ""}</p>
         <dl class="facts">${rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
         ${use.models?.length > 0 && html`
           <h4>Models</h4>
           <dl class="facts">${use.models.map((m) => html`<dt>${modelName(m.model)}</dt><dd>${tokens(m.total)} tokens · ~${dollars(m.cost)} · ${m.messages} replies</dd>`)}</dl>`}
-        <p class="note">${ESTIMATE(use.pricesAsOf)}${use.unpriced?.length ? ` No price known for ${use.unpriced.join(", ")}, so it counts as $0.` : ""} Working time adds up the gaps between messages in each turn, at most 10 minutes per gap.</p>`}
+        <p class="note">The share of your weekly limit is an estimate: this session's part of everything you used since the week started, applied to the week's current percentage. ${ESTIMATE(use.pricesAsOf)}${use.unpriced?.length ? ` No price known for ${use.unpriced.join(", ")}, so it counts as $0.` : ""} Working time adds up the gaps between messages in each turn, at most 10 minutes per gap.</p>`}
     <//>`;
 }
 

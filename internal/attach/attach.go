@@ -22,6 +22,7 @@ type Control struct {
 	Rows    uint16 `json:"rows,omitempty"`
 	Owner   bool   `json:"owner,omitempty"`
 	Viewers int    `json:"viewers,omitempty"`
+	Holder  string `json:"holder,omitempty"`
 	Code    int    `json:"code,omitempty"`
 }
 
@@ -42,6 +43,8 @@ type viewer struct {
 	cols, rows uint16
 	hidden     bool
 	rejoin     bool
+	name       string
+	typed      time.Time
 	wmu        sync.Mutex
 	smu        sync.Mutex
 	sz         Control
@@ -89,7 +92,7 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 	defer cancel()
 
 	q := r.URL.Query()
-	v := &viewer{conn: conn, szSig: make(chan struct{}, 1), cols: size(q.Get("cols"), 120), rows: size(q.Get("rows"), 40), hidden: q.Get("hidden") != "", rejoin: q.Get("reconnect") != ""}
+	v := &viewer{conn: conn, szSig: make(chan struct{}, 1), cols: size(q.Get("cols"), 120), rows: size(q.Get("rows"), 40), hidden: q.Get("hidden") != "", rejoin: q.Get("reconnect") != "", name: q.Get("device")}
 	cmd := exec.Command(h.Bin, "attach", id)
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
 	v.pty, err = pty.StartWithSize(cmd, &pty.Winsize{Cols: v.cols, Rows: v.rows})
@@ -158,6 +161,9 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 			return
 		}
 		if typ == websocket.MessageBinary {
+			h.mu.Lock()
+			v.typed = time.Now()
+			h.mu.Unlock()
 			h.claim(id, v)
 			v.pty.Write(b)
 			continue
@@ -226,7 +232,7 @@ func (h *Hub) join(id string, v *viewer) {
 		h.groups[id] = g
 	}
 	g.viewers[v] = true
-	if g.owner == nil || !v.hidden && !v.rejoin {
+	if g.owner == nil || !v.hidden && !v.rejoin && time.Since(g.owner.typed) > recentInput {
 		g.owner = v
 	}
 	g.apply()
@@ -273,11 +279,13 @@ func (h *Hub) resize(id string, v *viewer, cols, rows uint16) {
 	}
 }
 
+const recentInput = 2 * time.Minute
+
 func (g *group) apply() {
 	o := g.owner
 	for v := range g.viewers {
 		pty.Setsize(v.pty, &pty.Winsize{Cols: o.cols, Rows: o.rows})
-		v.queueSize(Control{Type: "size", Cols: o.cols, Rows: o.rows, Owner: v == o, Viewers: len(g.viewers)})
+		v.queueSize(Control{Type: "size", Cols: o.cols, Rows: o.rows, Owner: v == o, Viewers: len(g.viewers), Holder: o.name})
 	}
 }
 

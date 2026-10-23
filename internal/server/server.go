@@ -51,6 +51,7 @@ type Server struct {
 
 	fleet   *fleet
 	rv      *reviver
+	here    presence
 	scanner outputs.Scanner
 	stats   usage.Scanner
 	limits  usage.LimitsClient
@@ -101,12 +102,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/sessions/{id}/send", s.send)
 	mux.HandleFunc("POST /api/guess", s.guess)
 	mux.HandleFunc("GET /api/widget", s.widget)
+	mux.HandleFunc("POST /api/presence", s.presencePost)
+	mux.HandleFunc("GET /api/presence", s.presenceGet)
 	mux.HandleFunc("GET /api/sessions/{sid}/outputs", s.outputs)
 	mux.HandleFunc("GET /api/sessions/{sid}/usage", s.sessionUsage)
 	mux.HandleFunc("GET /api/usage/limits", s.usageLimits)
+	mux.HandleFunc("GET /api/usage/week", s.usageWeek)
 	mux.HandleFunc("GET /api/usage/days", s.usageDays)
 	mux.HandleFunc("GET /api/sessions/{sid}/o/{tok}/{path...}", s.outputFile)
-	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) { s.Term.Serve(w, r, r.PathValue("id")) })
+	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) {
+		s.nameViewer(r)
+		s.Term.Serve(w, r, r.PathValue("id"))
+	})
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/voice/stt", s.stt)
@@ -323,6 +330,7 @@ func (s *Server) route(next http.Handler) http.Handler {
 		attachID := ""
 		if len(parts) == 5 && parts[4] == "attach" {
 			attachID = parts[3]
+			s.nameViewer(r)
 		}
 		s.fleet.proxy(w, r, p, attachID)
 	})
@@ -604,8 +612,16 @@ func (s *Server) notify(list []sessions.Session) {
 		return
 	}
 	viewing := func(x sessions.Session) bool { return s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) }
-	for _, m := range alerts(prev, list, viewing) {
-		go s.Push.Send(m)
+	if ms := alerts(prev, list, viewing); len(ms) > 0 {
+		go func() {
+			if ok, where := s.userActive(context.Background()); ok {
+				log.Printf("push: held %d, you are active (%s)", len(ms), where)
+				return
+			}
+			for _, m := range ms {
+				s.Push.Send(m)
+			}
+		}()
 	}
 	s.syncWidgets(list)
 }

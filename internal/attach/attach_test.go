@@ -179,3 +179,27 @@ func TestReconnectKeepsTheOwner(t *testing.T) {
 		t.Fatalf("the desk keeps the size: %+v", m)
 	}
 }
+
+func TestTypingHolderKeepsTheSize(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "claude")
+	os.WriteFile(bin, []byte("#!/bin/sh\nstty -echo\nwhile read l; do echo \"got:$l\"; done\n"), 0o755)
+	h := &Hub{Bin: bin}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { h.Serve(w, r, "s1") }))
+	defer ts.Close()
+	url := "ws" + strings.TrimPrefix(ts.URL, "http")
+
+	desk := connect(t, url+"?device=desk", 160, 50)
+	desk.next(t)
+	desk.c.Write(context.Background(), websocket.MessageBinary, []byte("hi\n"))
+	desk.until(t, "got:hi")
+	phone := connect(t, url+"?device=phone", 40, 30)
+	if m := phone.next(t); m.Owner || m.Cols != 160 || m.Holder != "desk" {
+		t.Fatalf("someone typing keeps the size, and the newcomer learns who: %+v", m)
+	}
+	phone.c.Write(context.Background(), websocket.MessageBinary, []byte("yo\n"))
+	for {
+		if m := phone.next(t); m.Owner && m.Cols == 40 {
+			break
+		}
+	}
+}

@@ -78,8 +78,9 @@ type tailnet struct {
 }
 
 type tailnetEntry struct {
-	ok bool
-	at time.Time
+	ok   bool
+	name string
+	at   time.Time
 }
 
 func (t *tailnet) run(ctx context.Context, args ...string) ([]byte, error) {
@@ -88,14 +89,25 @@ func (t *tailnet) run(ctx context.Context, args ...string) ([]byte, error) {
 	return exec.CommandContext(ctx, t.bin, args...).Output()
 }
 
-func (t *tailnet) owner(ctx context.Context, ip string) string {
+func (t *tailnet) whois(ctx context.Context, ip string) (user, name string) {
 	out, err := t.run(ctx, "whois", "--json", ip)
 	if err != nil {
-		return ""
+		return "", ""
 	}
-	var w struct{ UserProfile struct{ ID json.Number } }
+	var w struct {
+		UserProfile struct{ ID json.Number }
+		Node        struct{ Name string }
+	}
 	json.Unmarshal(out, &w)
-	return w.UserProfile.ID.String()
+	name, _, _ = strings.Cut(w.Node.Name, ".")
+	return w.UserProfile.ID.String(), name
+}
+
+func (t *tailnet) name(ctx context.Context, ip string) string {
+	t.mine(ctx, ip)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.known[ip].name
 }
 
 func (t *tailnet) mine(ctx context.Context, ip string) bool {
@@ -113,13 +125,14 @@ func (t *tailnet) mine(ctx context.Context, ip string) bool {
 			self = st.Self.UserID.String()
 		}
 	}
-	ok := self != "" && t.owner(ctx, ip) == self
+	user, name := t.whois(ctx, ip)
+	ok := self != "" && user == self
 	t.mu.Lock()
 	t.self = self
 	if t.known == nil {
 		t.known = map[string]tailnetEntry{}
 	}
-	t.known[ip] = tailnetEntry{ok, time.Now()}
+	t.known[ip] = tailnetEntry{ok, name, time.Now()}
 	t.mu.Unlock()
 	return ok
 }
@@ -145,4 +158,20 @@ func (s *Server) fromMyTailnet(r *http.Request) bool {
 	}
 	ip := s.clientIP(r)
 	return ip != nil && cgnat.Contains(ip) && s.tailnet.mine(r.Context(), ip.String())
+}
+
+func (s *Server) nameViewer(r *http.Request) {
+	q := r.URL.Query()
+	if q.Get("named") != "" {
+		return
+	}
+	device := q.Get("device")
+	if ip := s.clientIP(r); s.tailnet != nil && ip != nil && cgnat.Contains(ip) {
+		if machine := s.tailnet.name(r.Context(), ip.String()); machine != "" {
+			device = strings.TrimSuffix(machine+", "+device, ", ")
+		}
+	}
+	q.Set("device", device)
+	q.Set("named", "1")
+	r.URL.RawQuery = q.Encode()
 }

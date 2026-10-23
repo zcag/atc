@@ -16,7 +16,57 @@ func (s *Server) sessionUsage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no transcript", http.StatusNotFound)
 		return
 	}
-	reply(w, s.stats.Session(t.Path))
+	st := s.stats.Session(t.Path)
+	from, err := strconv.ParseInt(r.URL.Query().Get("from"), 10, 64)
+	if err != nil {
+		reply(w, st)
+		return
+	}
+	reply(w, struct {
+		usage.Stats
+		WeekCost float64 `json:"weekCost"`
+	}{st, s.stats.SessionCostSince(t.Path, time.Unix(from, 0))})
+}
+
+type weekUsage struct {
+	From     time.Time `json:"from,omitzero"`
+	ResetsAt time.Time `json:"resetsAt,omitzero"`
+	Percent  float64   `json:"percent"`
+	Total    float64   `json:"total"`
+}
+
+func (s *Server) usageWeek(w http.ResponseWriter, r *http.Request) {
+	if v, err := strconv.ParseInt(r.URL.Query().Get("from"), 10, 64); err == nil && r.URL.Query().Get("local") != "" {
+		reply(w, weekUsage{Total: s.stats.CostSince(s.M.Index.Root, time.Unix(v, 0))})
+		return
+	}
+	var out weekUsage
+	for _, win := range s.limits.Get(r.Context()).Windows {
+		if win.Key == "weekly_all" {
+			out.ResetsAt, out.Percent, out.From = win.ResetsAt, win.Percent, win.ResetsAt.Add(-7*24*time.Hour)
+		}
+	}
+	if out.From.IsZero() {
+		reply(w, out)
+		return
+	}
+	out.Total = s.stats.CostSince(s.M.Index.Root, out.From)
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, p := range s.Peers {
+		wg.Go(func() {
+			var pw weekUsage
+			if s.fleet.get(ctx, p, "/api/usage/week?local=1&from="+strconv.FormatInt(out.From.Unix(), 10), &pw) == nil {
+				mu.Lock()
+				out.Total += pw.Total
+				mu.Unlock()
+			}
+		})
+	}
+	wg.Wait()
+	reply(w, out)
 }
 
 func (s *Server) usageLimits(w http.ResponseWriter, r *http.Request) {
