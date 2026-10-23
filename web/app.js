@@ -1154,10 +1154,10 @@ function makeDock(id) {
   el.addEventListener("touchend", () => (ty = null));
   el.addEventListener("paste", (e) => {
     const files = [...(e.clipboardData?.files || [])];
-    if (!files.length || !d.hooks.upload) return;
+    if (!files.length || !d.hooks.paste) return;
     e.preventDefault();
     e.stopPropagation();
-    d.hooks.upload(files);
+    d.hooks.paste(files);
   }, true);
 
   d.page = (visible) => {
@@ -1206,6 +1206,7 @@ function Term({ s, say, voice, onVoiceOff }) {
   const api_ = useRef({});
   const picker = useRef();
   const [dropping, setDropping] = useState(false);
+  const [pasted, setPasted] = useState(null);
   const upload = useRef();
   upload.current = async (files) => {
     for (const f of files) {
@@ -1234,7 +1235,7 @@ function Term({ s, say, voice, onVoiceOff }) {
     d.ui = setSt;
     setSt({ ...d.state });
     d.hooks = {
-      upload: (files) => upload.current(files),
+      paste: (files) => setPasted(files),
       data: (data) => {
         if (ctrlRef.current && data.length === 1) {
           const c = data.toUpperCase().charCodeAt(0);
@@ -1283,6 +1284,7 @@ function Term({ s, say, voice, onVoiceOff }) {
             </div>
           </div>
         </div>`}
+      ${pasted && html`<${PasteConfirm} files=${pasted} onClose=${(ok) => { setPasted(null); ok ? upload.current(pasted) : api_.current.focus?.(); }} />`}
       ${voice && !cover && html`<${VoiceBar} s=${s} say=${say} send=${(d) => api_.current.send?.(d)} onClose=${onVoiceOff} />`}
       <div class="keys ${keyboard ? "show" : ""}" onPointerDown=${(e) => e.preventDefault()}>
         ${KEYS.map(([label, seq]) => html`<button class=${label === "ctrl" && ctrl ? "on" : ""} onClick=${() => key(label, seq)}>${label}</button>`)}
@@ -1290,6 +1292,39 @@ function Term({ s, say, voice, onVoiceOff }) {
       </div>
     </div>
   `;
+}
+
+function PasteConfirm({ files, onClose }) {
+  const shown = useMemo(() => files.map((f) => ({ name: f.name || "pasted.png", type: f.type, size: f.size, url: URL.createObjectURL(f) })), [files]);
+  useEffect(() => () => shown.forEach((f) => URL.revokeObjectURL(f.url)), [shown]);
+  useEffect(() => {
+    const f = (e) => e.key === "Escape" && onClose(false);
+    addEventListener("keydown", f);
+    return () => removeEventListener("keydown", f);
+  }, []);
+  return html`
+    <div class="veil confirm" onPointerDown=${(e) => e.target === e.currentTarget && onClose(false)}>
+      <form class="sheet" onSubmit=${(e) => { e.preventDefault(); onClose(true); }}>
+        <h3>Attach ${files.length === 1 ? "this file" : `${files.length} files`} to the session?</h3>
+        <${FileList} files=${shown} />
+        <div class="actions">
+          <button type="button" class="btn" onClick=${() => onClose(false)}>Cancel</button>
+          <button class="btn primary" ref=${focusOnMount}>Attach</button>
+        </div>
+      </form>
+    </div>`;
+}
+
+function FileList({ files, remove }) {
+  return html`
+    <div class="files">
+      ${files.map((f, i) => html`
+        <div class="file">
+          ${f.type?.startsWith("image/") ? html`<img src=${f.url} alt="" />` : html`<span class="ext">${(f.name.split(".").pop() || "file").slice(0, 4)}</span>`}
+          <span class="nm">${f.name}<small>${fileSize(f.size || 0)}</small></span>
+          ${remove && html`<button type="button" class="icon" aria-label=${`Remove ${f.name}`} onClick=${() => remove(i)}>✕</button>`}
+        </div>`)}
+    </div>`;
 }
 
 const loadScript = (src) =>
@@ -2359,15 +2394,7 @@ function Share({ live, hosts, home, say }) {
       <form class="sheet" onSubmit=${send}>
         <h3>Send to Claude</h3>
         ${(text || !files.length) && html`<label class="field"><span>Shared</span><textarea class="shared" rows=${Math.min(6, Math.max(2, text.split("\n").length))} value=${text} onInput=${(e) => setText(e.target.value)} placeholder="Paste or type what this is about"></textarea></label>`}
-        ${files.length > 0 && html`
-          <div class="files">
-            ${files.map((f, i) => html`
-              <div class="file">
-                ${f.type?.startsWith("image/") ? html`<img src=${f.url} alt="" />` : html`<span class="ext">${(f.name.split(".").pop() || "file").slice(0, 4)}</span>`}
-                <span class="nm">${f.name}<small>${fileSize(f.size || 0)}</small></span>
-                <button type="button" class="icon" aria-label=${`Remove ${f.name}`} onClick=${() => setFiles(files.filter((_, j) => j !== i))}>✕</button>
-              </div>`)}
-          </div>`}
+        ${files.length > 0 && html`<${FileList} files=${files} remove=${(i) => setFiles(files.filter((_, j) => j !== i))} />`}
         <label class="field"><span>What should Claude do?</span>
           <textarea rows="2" value=${ask} onInput=${(e) => setAsk(e.target.value)} placeholder="Look into this" ref=${touch ? null : focusOnMount}></textarea>
         </label>

@@ -393,6 +393,8 @@ button { cursor: pointer; }
 .targets .t small { display: block; font: 400 12px var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 600px) {
   .share { padding: 0; place-items: stretch; }
+  .veil.confirm { place-items: end stretch; }
+  .veil.confirm .sheet { border-radius: 16px 16px 0 0; padding-bottom: max(18px, env(safe-area-inset-bottom)); }
 }
 
 .seg .count { margin-left: 5px; color: var(--dim); font: 500 11px var(--sans); opacity: .8; }
