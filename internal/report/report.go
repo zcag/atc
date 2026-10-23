@@ -293,7 +293,10 @@ func Outputs(o client.Outputs, host string, now time.Time) []string {
 	if len(o.Featured) > 0 {
 		section("Published")
 		for _, l := range o.Featured {
-			out = append(out, strings.TrimRight("  "+l.URL+"  "+Ago(l.At, now), " "))
+			out = append(out, strings.TrimRight("  "+cmp.Or(l.Title, l.URL)+"  "+Ago(l.At, now), " "))
+			if l.Title != "" {
+				out = append(out, "    "+l.URL)
+			}
 		}
 	}
 	var made, code []client.File

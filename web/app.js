@@ -629,10 +629,11 @@ const pageName = (url) => {
 function Published({ links }) {
   if (links.length === 1) {
     const l = links[0];
-    return html`<button class="btn pub" title=${`Open ${l.url}`} onClick=${() => openOut(l.url)}><span>${pageName(l.url)}</span> ↗</button>`;
+    return html`<button class="btn pub" title=${`Open ${l.url}`} onClick=${() => openOut(l.url)}><span>${l.title || pageName(l.url)}</span><i>↗</i></button>`;
   }
-  return html`<${Menu} cls="btn pub" aria="Published pages" width=${260} label=${html`<span>${links.length} pages</span> ▾`}
-    items=${links.map((l) => ({ label: `${pageName(l.url)} ↗`, title: l.url, run: () => openOut(l.url) }))} />`;
+  return html`<${Menu} cls="btn pub" aria="Published pages" width=${260} label=${html`<span>${links.length} pages</span><i>▾</i>`}
+    items=${links.map((l) => ({ cls: "pubitem", title: l.url, run: () => openOut(l.url),
+      label: html`<b>${l.title || pageName(l.url)}</b><small>${l.title ? `${pageName(l.url)} · ` : ""}${agoLong(l.at)}</small>` }))} />`;
 }
 
 function Elapsed({ s }) {
@@ -801,7 +802,7 @@ function Session({ s, say, live }) {
       <div class="seg" role="tablist">
         <button class=${mode === "term" ? "on" : ""} onClick=${() => setMode("term")}>Terminal</button>
         <button class=${mode === "chat" ? "on" : ""} onClick=${() => setMode("chat")}>Transcript</button>
-        <button class=${mode === "out" ? "on" : ""} onClick=${() => setMode("out")}>Outputs${outCount > 0 && html`<span class="count ${outs.servers.length ? "live" : ""}">${outCount}</span>`}</button>
+        <button class=${mode === "out" ? "on" : ""} onClick=${() => setMode("out")}>Outputs${outCount > 0 && html`<span class="count">${outCount}</span>`}</button>
       </div>
       <${Menu} busy=${busy} items=${[...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "Usage", run: () => setShowUse(true) }]} />
     </div>
@@ -834,7 +835,7 @@ function Menu({ busy, items, label = "•••", cls = "icon", aria = "More act
       <button class=${cls} aria-label=${aria} aria-expanded=${open} onClick=${() => setOpen(!open)}>${label}</button>
       ${open && html`
         <div class="sheet" style="position: absolute; right: 0; top: 36px; width: ${width}px; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
-          ${items.map((it) => html`<button class="btn ${it.danger ? "danger" : ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`)}
+          ${items.map((it) => html`<button class="btn ${it.danger ? "danger" : ""} ${it.cls || ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`)}
         </div>`}
     </div>
   `;
@@ -1639,7 +1640,7 @@ function Outputs({ s, data }) {
           <section>
             <h4>Published</h4>
             ${data.featured.map((l) => html`<button class="linkrow" onClick=${() => openOut(l.url)}>
-              <span class="h">${pageName(l.url)}</span><span class="p">${new URL(l.url).host}</span>
+              <span class="h">${l.title || pageName(l.url)}</span><span class="p">${l.title ? pageName(l.url) : new URL(l.url).host}</span>
               <span class="when">${ago({ updated: l.at })}</span>
             </button>`)}
           </section>`}

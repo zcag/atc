@@ -22,8 +22,9 @@ type File struct {
 }
 
 type Link struct {
-	URL string    `json:"url"`
-	At  time.Time `json:"at"`
+	URL   string    `json:"url"`
+	At    time.Time `json:"at"`
+	Title string    `json:"title,omitempty"`
 }
 
 type found struct {

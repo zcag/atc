@@ -59,6 +59,7 @@ type Server struct {
 	stats   usage.Scanner
 	limits  usage.LimitsClient
 	ports   outputs.Ports
+	unfurl  unfurler
 
 	mu   sync.Mutex
 	subs map[chan []byte]bool
