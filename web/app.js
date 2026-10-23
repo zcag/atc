@@ -309,6 +309,7 @@ function App() {
             <dt>t</dt><dd>Talk: a voice session with Claude</dd>
             <dt>/</dt><dd>Search earlier sessions</dd>
             <dt>u</dt><dd>Usage: plan limits and tokens by day</dd>
+            <dt>[ / ]</dt><dd>Previous or next project tab</dd>
             <dt>Ctrl + Z</dt><dd>In a terminal: detach. The session keeps running.</dd>
             <dt>?</dt><dd>Show or hide this</dd>
           </dl>
@@ -373,8 +374,25 @@ function Login({ onDone }) {
 
 function Board({ live: all, sel, cursor, onPast }) {
   const [q, setQ] = useState("");
-  const [only, setOnly] = useState(null);
+  const [only, setOnlyRaw] = useState(() => { try { return localStorage.getItem("atc.project") || null; } catch { return null; } });
+  const setOnly = (v) => setOnlyRaw((o) => {
+    const n = typeof v === "function" ? v(o) : v;
+    try { n ? localStorage.setItem("atc.project", n) : localStorage.removeItem("atc.project"); } catch {}
+    return n;
+  });
   PICK_PROJECT = (name) => setOnly((o) => (o === name ? null : name));
+  const tabs = useMemo(() => projectTabs(all || [], only), [all, only]);
+  useEffect(() => {
+    const k = (e) => {
+      if ((e.key !== "[" && e.key !== "]") || e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      const names = [null, ...tabs.map((t) => t.name)];
+      const i = Math.max(0, names.indexOf(only));
+      setOnly(names[(i + (e.key === "]" ? 1 : names.length - 1)) % names.length]);
+      e.preventDefault();
+    };
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, [tabs, only]);
   const mine = (s) => !only || project(s.cwd).name === only;
   const live = all && all.filter(mine);
   const [hist, setHist] = useState(null);
@@ -399,7 +417,16 @@ function Board({ live: all, sel, cursor, onPast }) {
 
   return html`
     <div class="board">
-      ${only && html`<div class="onlybar">Only <span class="proj" style=${`--ph: ${hueOf(only)}`}>${only}</span><button class="icon" aria-label="Show all projects" onClick=${() => setOnly(null)}>✕</button></div>`}
+      ${tabs.length > 1 && html`
+        <nav class="projtabs" aria-label="Projects">
+          <button class=${only ? "" : "on"} onClick=${() => setOnly(null)}>All</button>
+          ${tabs.map((t) => html`
+            <button class=${only === t.name ? "on" : ""} style=${`--ph: ${hueOf(t.name)}`} onClick=${() => setOnly(only === t.name ? null : t.name)}
+              title=${`${t.name}: ${t.summary || "nothing active"}`}>
+              <span class="nm">${t.name}</span>
+              ${t.pips.length > 0 && html`<span class="pips">${t.pips.slice(0, 5).map((st) => html`<i class=${st}></i>`)}${t.pips.length > 5 && html`<em>+${t.pips.length - 5}</em>`}</span>`}
+            </button>`)}
+        </nav>`}
       ${live.length === 0 && html`<p class="empty">${only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below."}</p>`}
       ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
       ${BAYS.filter(([st]) => st !== "stopped").map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
@@ -498,6 +525,25 @@ const hueOf = (name) => {
   for (const c of name) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
   return HUES[(h >>> 7) % HUES.length];
 };
+const RANK = { "needs-you": 0, "your-turn": 1, working: 2 };
+function projectTabs(live, keep) {
+  const by = new Map();
+  for (const x of live) {
+    if (x.state === "past") continue;
+    const n = project(x.cwd).name;
+    if (!by.has(n)) by.set(n, { name: n, pips: [] });
+    if (!x.parked && RANK[x.state] !== undefined) by.get(n).pips.push(x.state);
+  }
+  if (keep && !by.has(keep)) by.set(keep, { name: keep, pips: [] });
+  const tabs = [...by.values()];
+  for (const t of tabs) {
+    t.pips.sort((a, b) => RANK[a] - RANK[b]);
+    t.summary = Object.entries(t.pips.reduce((c, st) => ({ ...c, [st]: (c[st] || 0) + 1 }), {})).map(([st, n]) => `${n} ${WORD[st]}`).join(", ");
+  }
+  const key = (t) => (t.pips.length ? RANK[t.pips[0]] : 9);
+  return tabs.sort((a, b) => key(a) - key(b) || b.pips.length - a.pips.length || a.name.localeCompare(b.name));
+}
+
 function ProjectTag({ path, full }) {
   const p = project(path);
   return html`<span class="projtag"><span class="proj" style=${`--ph: ${hueOf(p.name)}`} role="button" title=${`${tilde(path)}\nClick to show only ${p.name}`}
