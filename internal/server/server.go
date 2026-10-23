@@ -420,10 +420,10 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 	sid := r.PathValue("sid")
-	dir := ""
+	dir, name := "", ""
 	for _, h := range s.M.History("", "", 0) {
 		if h.SessionID == sid {
-			dir = h.StartCwd
+			dir, name = h.StartCwd, h.Name
 			break
 		}
 	}
@@ -431,7 +431,7 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown session "+sid, http.StatusNotFound)
 		return
 	}
-	id, err := s.M.CLI.Resume(r.Context(), dir, sid)
+	id, err := s.M.CLI.Resume(r.Context(), dir, sid, s.launchArgs(name, dir)...)
 	s.done(w, id, err)
 }
 
@@ -793,7 +793,8 @@ func (s *Server) assist(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if last != nil {
-			id, err := s.M.CLI.Resume(r.Context(), cmp.Or(last.StartCwd, last.Cwd), last.SessionID)
+			dir := cmp.Or(last.StartCwd, last.Cwd)
+			id, err := s.M.CLI.Resume(r.Context(), dir, last.SessionID, s.launchArgs("assistant", dir)...)
 			s.done(w, id, err)
 			return
 		}
@@ -803,13 +804,32 @@ func (s *Server) assist(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	id, err := s.M.CLI.Start(r.Context(), dir, "assistant", "", assistArgs()...)
+	s.done(w, id, err)
+}
+
+func assistArgs() []string {
 	extra := []string{"--append-system-prompt", voicePrompt}
 	if exe, err := os.Executable(); err == nil {
 		cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"atc": map[string]any{"command": exe, "args": []string{"mcp"}}}})
 		extra = append(extra, "--mcp-config", string(cfg))
 	}
-	id, err := s.M.CLI.Start(r.Context(), dir, "assistant", "", extra...)
-	s.done(w, id, err)
+	return extra
+}
+
+func (s *Server) launchArgs(name, dir string) []string {
+	if name == "assistant" {
+		return assistArgs()
+	}
+	p, ok := s.preset(name)
+	if !ok {
+		return nil
+	}
+	extra, err := p.extra(dir)
+	if err != nil {
+		log.Printf("resume %s: %v", name, err)
+	}
+	return extra
 }
 
 const voicePrompt = `This session is used by voice. The user speaks to you through speech-to-text and hears your replies through text-to-speech. ` +

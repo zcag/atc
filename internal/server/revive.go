@@ -27,6 +27,7 @@ type running struct {
 	ID      string `json:"id"`
 	Dir     string `json:"dir"`
 	Title   string `json:"title"`
+	Name    string `json:"name,omitempty"`
 	Working bool   `json:"working,omitempty"`
 }
 
@@ -56,7 +57,7 @@ func runningOf(list []sessions.Session, host string) map[string]running {
 	out := map[string]running{}
 	for _, x := range list {
 		if x.Attachable && cmp.Or(x.Host, host) == host {
-			out[x.SessionID] = running{x.SessionID, x.ID, cmp.Or(x.StartCwd, x.Cwd), x.Title, x.State == sessions.Working}
+			out[x.SessionID] = running{x.SessionID, x.ID, cmp.Or(x.StartCwd, x.Cwd), x.Title, x.Name, x.State == sessions.Working}
 		}
 	}
 	return out
@@ -154,7 +155,7 @@ func (s *Server) revive(lost []running, why string) {
 	var back []string
 	for _, r := range lost {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		id, err := s.M.CLI.Resume(ctx, r.Dir, r.SID)
+		id, err := s.M.CLI.Resume(ctx, r.Dir, r.SID, s.launchArgs(r.Name, r.Dir)...)
 		cancel()
 		if err != nil {
 			log.Printf("revive %s: %v", r.Title, err)

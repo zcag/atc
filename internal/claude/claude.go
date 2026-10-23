@@ -72,8 +72,9 @@ func (c CLI) Start(ctx context.Context, dir, name, prompt string, extra ...strin
 	return idFrom(out)
 }
 
-func (c CLI) Resume(ctx context.Context, dir, sessionID string) (string, error) {
-	out, err := c.run(ctx, dir, "--bg", "--resume", sessionID)
+func (c CLI) Resume(ctx context.Context, dir, sessionID string, extra ...string) (string, error) {
+	args := append(append([]string{"--bg"}, c.Args...), extra...)
+	out, err := c.run(ctx, dir, append(args, "--resume", sessionID)...)
 	if err != nil {
 		return "", err
 	}
