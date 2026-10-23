@@ -2058,7 +2058,7 @@ function Palette({ live, sel, say, home, actions, onClose }) {
     const m = fuzzy(ql, it.label) || (ql && fuzzy(ql, `${it.label} ${it.kw || ""}`) && { score: 10, hits: [] });
     if (m) shown.push({ ...it, ...m });
   }
-  const order = ["This session", "Sessions", "Actions", "Projects", "Earlier", "New session in"];
+  const order = ["Sessions", "Actions", "This session", "Projects", "Earlier", "New session in"];
   const gi = (g) => order.findIndex((o) => g.startsWith(o));
   if (ql) shown.sort((a, b) => b.score - a.score);
   else shown.sort((a, b) => gi(a.group) - gi(b.group));
