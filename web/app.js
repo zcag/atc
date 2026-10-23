@@ -1,4 +1,4 @@
-import { html, render, useState, useEffect, useRef, useMemo, useCallback } from "./vendor/preact-htm.js";
+import { html, render, useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "./vendor/preact-htm.js";
 
 const BAYS = [
   ["needs-you", "Needs you"],
@@ -414,15 +414,20 @@ function Board({ live: all, sel, cursor, onPast }) {
     return () => clearTimeout(t);
   }, [q, limit]);
 
-  if (!live) return html`<div class="board"><p class="empty">Loading sessions…</p></div>`;
+  const boardRef = useRef();
+  useFlip(boardRef, all);
+  if (!live) return html`<div class="board"><div class="skeleton"><i></i><i></i><i></i></div></div>`;
   const liveIDs = new Set(live.map((s) => s.sessionId));
   const earlier = (hist || []).filter((s) => !liveIDs.has(s.sessionId) && mine(s));
   const pinned = live.filter((s) => s.pinned && !s.parked);
   const rest = live.filter((s) => !s.pinned && !s.parked);
   const parked = live.filter((s) => s.parked);
+  const active = live.filter((s) => !s.parked && ["needs-you", "your-turn", "working"].includes(s.state));
+  const waiting = active.filter((s) => s.state !== "working").length;
+  const working = active.length - waiting;
 
   return html`
-    <div class="board">
+    <div class="board" ref=${boardRef} style=${tabs.length > 1 ? "--stick: 46px" : "--stick: 0px"}>
       ${tabs.length > 1 && html`
         <nav class="projtabs" aria-label="Projects">
           <button class=${only ? "" : "on"} onClick=${() => setOnly(null)}>All</button>
@@ -433,32 +438,77 @@ function Board({ live: all, sel, cursor, onPast }) {
               ${t.pips.length > 0 && html`<span class="pips">${t.pips.slice(0, 5).map((st) => html`<i class=${st}></i>`)}${t.pips.length > 5 && html`<em>+${t.pips.length - 5}</em>`}</span>`}
             </button>`)}
         </nav>`}
-      ${live.length === 0 && html`<p class="empty">${only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below."}</p>`}
+      ${live.length === 0
+        ? html`<p class="calm">${only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below."}</p>`
+        : !waiting && html`<p class="calm">${working ? `Nothing needs you. ${working} working.` : "All quiet."}</p>`}
       ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
       ${BAYS.filter(([st]) => st !== "stopped").map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
-      <${Bay} title="Parked" list=${parked} sel=${sel} cursor=${cursor} dim />
-      <${Bay} title="Stopped" list=${rest.filter((s) => s.state === "stopped")} sel=${sel} cursor=${cursor} />
-      <section class="bay">
+      <${Bay} title="Parked" list=${parked} sel=${sel} cursor=${cursor} size="slim" dim />
+      <${Bay} title="Stopped" list=${rest.filter((s) => s.state === "stopped")} sel=${sel} cursor=${cursor} size="slim" />
+      <section class="bay earlier">
         <h2>Earlier</h2>
         <div class="search">
-          <input type="search" placeholder="Search titles, prompts and folders" value=${q} onInput=${(e) => setQ(e.target.value)} />
+          <input type="search" placeholder="Search titles, prompts and folders  /" value=${q} onInput=${(e) => setQ(e.target.value)} />
         </div>
-        <div class="rack">${earlier.map((s) => html`<${Strip} s=${s} sel=${sel} />`)}</div>
+        ${dayGroups(earlier).map(([label, list]) => html`
+          <h3>${label}</h3>
+          <div class="rack rows">${list.map((s) => html`<${Strip} s=${s} sel=${sel} size="row" />`)}</div>`)}
         ${hist && hist.length >= limit && html`<button class="btn more" onClick=${() => setLimit(limit + 30)}>Show more</button>`}
-        ${hist && earlier.length === 0 && html`<p class="empty">${q ? "No earlier sessions match." : "No earlier sessions."}</p>`}
+        ${hist && earlier.length === 0 && html`<p class="calm">${q ? "No earlier sessions match." : only ? `No earlier sessions in ${only} yet.` : "No earlier sessions."}</p>`}
       </section>
     </div>
   `;
 }
 
-function Bay({ title, list, sel, cursor, dim }) {
+function Bay({ title, list, sel, cursor, dim, size = "full" }) {
   if (!list.length) return null;
   return html`
     <section class="bay ${dim ? "parked" : ""}">
       <h2>${title} <span class="n">${list.length}</span></h2>
-      <div class="rack">${list.map((s) => html`<${Strip} s=${s} sel=${sel} cursor=${cursor} />`)}</div>
+      <div class="rack">${list.map((s) => html`<${Strip} s=${s} sel=${sel} cursor=${cursor} size=${size} />`)}</div>
     </section>
   `;
+}
+
+function dayGroups(list) {
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const day = 86400000, t0 = start.getTime();
+  const label = (s) => {
+    const t = Date.parse(s.updated || s.startedAt || 0);
+    return t >= t0 ? "Today" : t >= t0 - day ? "Yesterday" : t >= t0 - 6 * day ? "This week" : "Older";
+  };
+  const out = [];
+  for (const s of list) {
+    const l = label(s);
+    if (out.at(-1)?.[0] !== l) out.push([l, []]);
+    out.at(-1)[1].push(s);
+  }
+  return out;
+}
+
+function useFlip(ref, list) {
+  const rects = useRef(new Map());
+  const states = useRef(new Map());
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const next = new Map();
+    for (const el of root.querySelectorAll(".strip[data-sid]:not(.row)")) {
+      const sid = el.dataset.sid, r = el.getBoundingClientRect(), prev = rects.current.get(sid);
+      next.set(sid, r);
+      const st = el.dataset.state, was = states.current.get(sid);
+      if (was && was !== st && st !== "working") { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+      states.current.set(sid, st);
+      if (!prev || reduce) continue;
+      const dx = prev.left - r.left, dy = prev.top - r.top;
+      if (Math.abs(dy) < 2 && Math.abs(dx) < 2) continue;
+      el.style.transition = "none";
+      el.style.transform = `translate(${dx}px, ${dy}px)`;
+      requestAnimationFrame(() => { el.style.transition = "transform .38s cubic-bezier(.2,.7,.2,1)"; el.style.transform = ""; });
+    }
+    rects.current = next;
+  });
 }
 
 let SEEN = null;
@@ -478,14 +528,33 @@ function markSeen(list, sid) {
 const unread = (s) => (s.state === "your-turn" || s.state === "needs-you") && !s.parked && !!SEEN && Date.parse(s.updated || 0) > Date.parse(SEEN[s.sessionId] || 0);
 const oneLine = (t) => (t || "").replace(/\*\*|__|`+|^#+\s*|^>\s*/gm, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
 
+const ICON = {
+  pin: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 1.5l5 5-2 .5-2.5 2.5.5 3-1.5 1.5L6 10l-3.5 3.5M6 10L2.5 6.5 4 5l3 .5L9.5 3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
+  park: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 106.5 6.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
+  play: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z" fill="currentColor"/></svg>`,
+  more: html`<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="12.5" cy="8" r="1.3" fill="currentColor"/></svg>`,
+};
+
+function HoverActions({ s, menu }) {
+  const patch = (body) => (e) => { e.stopPropagation(); api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body }).catch(() => {}); };
+  const resume = (e) => { e.stopPropagation(); api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" }).then((r) => go(r.id), () => {}); };
+  return html`
+    <span class="acts" onPointerDown=${(e) => e.stopPropagation()}>
+      ${!s.attachable && s.kind !== "interactive" && html`<span role="button" title="Resume" onClick=${resume}>${ICON.play}</span>`}
+      <span role="button" class=${s.pinned ? "on" : ""} title=${s.pinned ? "Unpin" : "Pin to top"} onClick=${patch({ pinned: !s.pinned })}>${ICON.pin}</span>
+      <span role="button" class=${s.parked ? "on" : ""} title=${s.parked ? "Unpark" : "Park: out of the way, no notifications"} onClick=${patch({ parked: !s.parked })}>${ICON.park}</span>
+      <span role="button" title="More" onClick=${menu}>${ICON.more}</span>
+    </span>`;
+}
+
 function said(s) {
-  if (s.state === "working") return html`<div class="said doing">${oneLine(s.activity) || "Working…"}</div>`;
+  if (s.state === "working") return html`<div class="said doing" key=${s.activity}>${oneLine(s.activity) || "Working…"}</div>`;
   if (s.state === "needs-you" && s.activity) return html`<div class="said ask">Waiting on you: ${oneLine(s.activity)}</div>`;
   if ((s.state === "your-turn" || s.state === "needs-you") && s.lastReply) return html`<div class="said reply">${oneLine(s.lastReply)}</div>`;
   return s.lastPrompt ? html`<div class="said">${oneLine(s.lastPrompt)}</div>` : null;
 }
 
-function Strip({ s, sel, cursor }) {
+function Strip({ s, sel, cursor, size = "full" }) {
   const on = sel && sel.sessionId === s.sessionId;
   const press = useRef({ t: 0, fired: false, x: 0, y: 0 });
   const menu = (e) => { e?.preventDefault(); e?.stopPropagation(); QUICK(s, e?.currentTarget?.getBoundingClientRect()); };
@@ -500,19 +569,27 @@ function Strip({ s, sel, cursor }) {
   };
   const move = (e) => { const p = press.current; if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) clearTimeout(p.t); };
   const up = () => clearTimeout(press.current.t);
+  const events = {
+    onClick: (e) => { if (press.current.fired) { press.current.fired = false; return e.preventDefault(); } go(keyOf(s)); },
+    onContextMenu: menu, onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: up,
+    onPointerEnter: (e) => { if (e.pointerType === "mouse") hover.current = setTimeout(() => prewarm(s), 150); },
+    onPointerLeave: () => clearTimeout(hover.current),
+  };
+  const tip = [s.title, [WORD[s.state] || s.state, s.id || s.sessionId.slice(0, 8), model(s.model)].filter(Boolean).join(" · ")].join("\n");
+  const cls = `strip ${size} ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}`;
+  if (size === "row") return html`
+    <button class=${cls} data-sid=${s.sessionId} data-state=${s.state} title=${tip} aria-current=${on ? "true" : null} ...${events}>
+      <span class="title">${s.title || "Untitled"}</span>
+      <${ProjectTag} path=${s.cwd} />
+      <span class="when" title=${new Date(s.updated || 0).toLocaleString()}>${ago(s)}</span>
+    </button>`;
   return html`
-    <button class="strip ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}" data-sid=${s.sessionId}
-      title=${[s.title, [WORD[s.state] || s.state, s.id || s.sessionId.slice(0, 8), model(s.model)].filter(Boolean).join(" · ")].join("\n")}
-      onClick=${(e) => { if (press.current.fired) { press.current.fired = false; return e.preventDefault(); } go(keyOf(s)); }}
-      onContextMenu=${menu} onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${up}
-      onPointerEnter=${(e) => { if (e.pointerType === "mouse") hover.current = setTimeout(() => prewarm(s), 150); }}
-      onPointerLeave=${() => clearTimeout(hover.current)}
-      aria-current=${on ? "true" : null}>
-      <span class="qbtn" role="button" aria-label="Actions" onClick=${menu}>⋯</span>
+    <button class=${cls} data-sid=${s.sessionId} data-state=${s.state} title=${tip} aria-current=${on ? "true" : null} ...${events}>
+      <${HoverActions} s=${s} menu=${menu} />
       <div class="l1">
         ${unread(s) && html`<i class="new" aria-label="New"></i>`}
         <span class="title">${s.title || "Untitled"}</span>
-        <span class="when">${s.state === "working" ? html`<${Elapsed} s=${s} />` : ago(s)}</span>
+        <span class="when" title=${new Date(s.updated || 0).toLocaleString()}>${s.state === "working" ? html`<i class="pulse"></i><${Elapsed} s=${s} />` : ago(s)}</span>
       </div>
       ${said(s)}
       <div class="l3">
