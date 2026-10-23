@@ -41,6 +41,7 @@ type Server struct {
 	Push    *push.Pusher
 	Peers   []Peer
 	Presets []Preset
+	Engines []Engine
 	Voice   Voice
 
 	AppDir    string
@@ -111,6 +112,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/guess", s.guess)
 	mux.HandleFunc("GET /api/widget", s.widget)
 	mux.HandleFunc("GET /api/presets", s.presets)
+	mux.HandleFunc("GET /api/engines", s.engines)
 	mux.HandleFunc("POST /api/presence", s.presencePost)
 	mux.HandleFunc("POST /api/termlog", s.termLog)
 	mux.HandleFunc("GET /api/presence", s.presenceGet)
@@ -360,8 +362,8 @@ func (s *Server) route(next http.Handler) http.Handler {
 
 func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Dir, Name, Prompt, Preset string
-		Worktree                  bool
+		Dir, Name, Prompt, Preset, Engine string
+		Worktree                          bool
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -394,6 +396,14 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Worktree {
 		extra = append(extra, "--worktree="+worktreeName(req.Name))
+	}
+	if req.Engine != "" {
+		e, ok := s.engine(req.Engine)
+		if !ok {
+			http.Error(w, "no engine named "+req.Engine, http.StatusBadRequest)
+			return
+		}
+		extra = append(extra, e.args()...)
 	}
 	id, err := s.M.CLI.Start(r.Context(), dir, req.Name, req.Prompt, extra...)
 	s.done(w, id, err)
@@ -435,7 +445,7 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown session "+sid, http.StatusNotFound)
 		return
 	}
-	id, err := s.M.CLI.Resume(r.Context(), dir, sid, s.launchArgs(name, dir)...)
+	id, err := s.M.CLI.Resume(r.Context(), dir, sid, s.launchArgs(name, dir, sid)...)
 	s.done(w, id, err)
 }
 
@@ -810,7 +820,7 @@ func (s *Server) assist(w http.ResponseWriter, r *http.Request) {
 		}
 		if last != nil {
 			dir := cmp.Or(last.StartCwd, last.Cwd)
-			id, err := s.M.CLI.Resume(r.Context(), dir, last.SessionID, s.launchArgs("assistant", dir)...)
+			id, err := s.M.CLI.Resume(r.Context(), dir, last.SessionID, s.launchArgs("assistant", dir, last.SessionID)...)
 			s.done(w, id, err)
 			return
 		}
@@ -833,17 +843,19 @@ func assistArgs() []string {
 	return extra
 }
 
-func (s *Server) launchArgs(name, dir string) []string {
+func (s *Server) launchArgs(name, dir, sid string) []string {
 	if name == "assistant" {
 		return assistArgs()
 	}
-	p, ok := s.preset(name)
-	if !ok {
-		return nil
+	var extra []string
+	if p, ok := s.preset(name); ok {
+		var err error
+		if extra, err = p.extra(dir); err != nil {
+			log.Printf("resume %s: %v", name, err)
+		}
 	}
-	extra, err := p.extra(dir)
-	if err != nil {
-		log.Printf("resume %s: %v", name, err)
+	if e, ok := s.engineOf(sid); ok {
+		extra = append(extra, e.args()...)
 	}
 	return extra
 }

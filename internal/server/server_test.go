@@ -402,4 +402,19 @@ func TestStartFromPreset(t *testing.T) {
 	if !strings.Contains(body, `"name":"helper"`) || !strings.Contains(body, `"host":"here"`) {
 		t.Errorf("presets: %s", body)
 	}
+
+	s.Engines = []Engine{{Name: "qwen", Model: "qwen3", URL: "http://gpu:11439", Token: "secret"}}
+	if res, body := do(t, "POST", ts.URL+"/api/sessions", "tok", `{"preset":"helper","engine":"qwen"}`); res.StatusCode != 200 {
+		t.Fatalf("start with engine: %d %s", res.StatusCode, body)
+	}
+	args, _ = os.ReadFile(filepath.Join(filepath.Dir(bin), "started"))
+	if !strings.Contains(string(args), `"ANTHROPIC_BASE_URL":"http://gpu:11439"`) || !strings.Contains(string(args), "--model qwen3") {
+		t.Errorf("engine args: %s", args)
+	}
+	if _, body := get(t, ts.URL+"/api/engines", "tok"); !strings.Contains(body, `"name":"qwen"`) || strings.Contains(body, "secret") || strings.Contains(body, "gpu") {
+		t.Errorf("engines: %s", body)
+	}
+	if res, _ := do(t, "POST", ts.URL+"/api/sessions", "tok", `{"preset":"helper","engine":"nope"}`); res.StatusCode != 400 {
+		t.Errorf("unknown engine: %d", res.StatusCode)
+	}
 }

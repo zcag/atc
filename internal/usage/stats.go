@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -65,6 +67,7 @@ type Stats struct {
 	Wall      int64     `json:"wallSeconds"`
 	Active    int64     `json:"activeSeconds"`
 	Unpriced  []string  `json:"unpriced,omitempty"`
+	Local     []string  `json:"local,omitempty"`
 	PricesAt  string    `json:"pricesAsOf"`
 }
 
@@ -81,6 +84,7 @@ type msg struct {
 	t         Tokens
 	cost      float64
 	priced    bool
+	local     bool
 	sidechain bool
 }
 
@@ -182,6 +186,7 @@ func (f *file) add(raw []byte) {
 			m.day, m.at = old.day, old.at
 		}
 		m.cost, m.priced = Cost(m.model, t, u.CacheCreation.OneHour, u.Speed == "fast")
+		m.local = Local(m.model)
 		f.msgs[l.Message.ID] = m
 	default:
 		return
@@ -259,7 +264,7 @@ func subagentFiles(transcript string) []string {
 func (s *Scanner) Session(transcript string) Stats {
 	st := Stats{PricesAt: PricesAsOf}
 	models := map[string]*ModelPart{}
-	unpriced := map[string]bool{}
+	unpriced, local := map[string]bool{}, map[string]bool{}
 	agents := map[string]bool{}
 	take := func(f *file, sub bool) {
 		f.mu.Lock()
@@ -273,7 +278,9 @@ func (s *Scanner) Session(transcript string) Stats {
 			if sub || m.sidechain {
 				st.Subagents.add(m)
 			}
-			if !m.priced {
+			if m.local {
+				local[m.model] = true
+			} else if !m.priced {
 				unpriced[m.model] = true
 			}
 		}
@@ -302,6 +309,7 @@ func (s *Scanner) Session(transcript string) Stats {
 		st.Unpriced = append(st.Unpriced, m)
 	}
 	sort.Strings(st.Unpriced)
+	st.Local = slices.Sorted(maps.Keys(local))
 	return st
 }
 
@@ -371,7 +379,7 @@ func (s *Scanner) Days(root string, n int) []Day {
 		sid := sessionOf(paths[i])
 		f.mu.Lock()
 		for id, m := range f.msgs {
-			if m.day < first || seen[id] {
+			if m.day < first || m.local || seen[id] {
 				continue
 			}
 			seen[id] = true

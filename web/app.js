@@ -45,7 +45,8 @@ let PALETTE_OPEN = () => {};
 let SESSION_API = null;
 let TABS = { only: null, tabs: [], set: () => {} };
 const focusOnMount = (el) => { if (el && !el.dataset.focused) { el.dataset.focused = "1"; requestAnimationFrame(() => el.focus({ preventScroll: true })); } };
-const model = (m) => (m || "").replace(/^claude-/, "").replace(/-\d.*$/, "");
+const local = (m) => !!m && !m.startsWith("claude-") && m !== "<synthetic>";
+const model = (m) => (local(m) ? m.split("/").pop().split(":")[0] : (m || "").replace(/^claude-/, "").replace(/-\d.*$/, ""));
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
 
@@ -620,6 +621,7 @@ function Strip({ s, sel, cursor, size = "full" }) {
         <${ProjectTag} path=${s.cwd} full />
         ${s.branch && !["HEAD", "main", "master"].includes(s.branch) && html`<span class="br">${s.branch}</span>`}
         ${MULTI && s.host && html`<span class="host">${s.host}</span>`}
+        ${local(s.model) && html`<span class="eng" title=${`Runs on ${s.model}, not Claude`}>${model(s.model)}</span>`}
         ${s.kind === "interactive" && html`<span class="interm" title="Open in a terminal window: readable here, not attachable">terminal</span>`}
         ${(s.servers || []).slice(0, 2).map((p) => html`<span class="srv" role="link" title=${`Open ${serverURL(s, p)}`} onClick=${(e) => { e.stopPropagation(); openOut(serverURL(s, p)); }}>:${p}</span>`)}
         ${s.pages?.length > 0 && html`<span class="pg" role="link" title=${s.pages.map((l) => `${pageLabel(l)}  ${l.url}`).join("\n")}
@@ -805,7 +807,7 @@ function Session({ s, say, live }) {
           <span class="word" style=${`--edge: var(--${{ "needs-you": "needs", "your-turn": "turn", working: "work" }[s.state] || "stop"})`}>${WORD[s.state] || s.state}</span>
           <${ProjectTag} path=${s.cwd} full />
           ${s.branch && s.branch !== "HEAD" && html`<span class="wide">${s.branch}</span>`}
-          ${s.model && html`<span class="wide">${model(s.model)}</span>`}
+          ${s.model && html`<span class=${local(s.model) ? "eng" : "wide"} title=${local(s.model) ? `Runs on ${s.model}, not Claude` : null}>${model(s.model)}</span>`}
           ${(s.context > 0 || use?.total > 0) && html`
             <span class="wide usehover" tabindex="0" role="button" onClick=${() => setShowUse(true)} onKeyDown=${(e) => e.key === "Enter" && setShowUse(true)}>
               ${s.context > 0 ? `${Math.round(s.context / 1000)}k context` : "usage"}
@@ -1617,7 +1619,7 @@ function loadWeek() {
   if (Date.now() - weekAt < 120000) return Promise.resolve(WEEK);
   return (weekLoading ||= api("/api/usage/week").then((w) => { WEEK = w; weekAt = Date.now(); return w; }, () => WEEK).finally(() => (weekLoading = null)));
 }
-const weekShare = (use, week) => (week?.total > 0 && use?.weekCost != null ? (use.weekCost / week.total) * week.percent : null);
+const weekShare = (use, week) => (week?.total > 0 && use?.weekCost != null && !(use.local?.length && !use.cost) ?(use.weekCost / week.total) * week.percent : null);
 const pct = (x) => (x < 0.1 ? "<0.1%" : x < 10 ? `${x.toFixed(1)}%` : `${Math.round(x)}%`);
 const resetDay = (t) => new Date(t).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
 
@@ -1730,7 +1732,8 @@ function SessionUsage({ s, use, onClose }) {
           <div><span class="n">${tokens(use.total)}</span><span class="l">tokens</span></div>
           <div><span class="n">${span(use.activeSeconds)}</span><span class="l">Claude working</span></div>
         </div>
-        <p class="quiet">~${dollars(use.cost)} at API prices${use.week?.percent != null ? ` · the week is at ${Math.round(use.week.percent)}%, resets ${resetDay(use.week.resetsAt)}` : ""}</p>
+        ${use.local?.length > 0 && html`<p class="quiet">${use.local.join(", ")} is not Claude: its part costs nothing and doesn't count toward your plan.</p>`}
+        ${(!use.local?.length || use.cost > 0) && html`<p class="quiet">~${dollars(use.cost)} at API prices${use.week?.percent != null ? ` · the week is at ${Math.round(use.week.percent)}%, resets ${resetDay(use.week.resetsAt)}` : ""}</p>`}
         <dl class="facts">${rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
         ${use.models?.length > 0 && html`
           <h4>Models</h4>
@@ -2131,6 +2134,12 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
   const [presets, setPresets] = useState([]);
   const [preset, setPreset] = useState(null);
   useEffect(() => { api("/api/presets").then((p) => setPresets(p || []), () => {}); }, []);
+  const [engines, setEngines] = useState([]);
+  const [engine, setEngine] = useState("");
+  useEffect(() => { api("/api/engines").then((e) => setEngines(e || []), () => {}); }, []);
+  const target = preset ? preset.host || home : host;
+  const usable = engines.filter((e) => (e.host || home) === target);
+  useEffect(() => { if (!usable.some((e) => e.name === engine)) setEngine(""); }, [target, engines]);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -2145,8 +2154,8 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
     setErr(null);
     try {
       const r = preset
-        ? await api(`/api/sessions${hostQ(preset.host, home)}`, { method: "POST", body: { preset: preset.name, name: name.trim(), prompt } })
-        : await api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt, worktree } });
+        ? await api(`/api/sessions${hostQ(preset.host, home)}`, { method: "POST", body: { preset: preset.name, name: name.trim(), prompt, engine } })
+        : await api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt, worktree, engine } });
       onClose();
       say("Session started.");
       go(r.id);
@@ -2169,6 +2178,9 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
         <label class="field"><span>Name</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder=${preset ? preset.name : "Optional"} />${!preset && html`<small>Without one, Claude titles the session from what you ask.</small>`}</label>
         <label class="field"><span>First message</span><textarea rows="3" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} placeholder="Optional. You can also type it in the terminal."></textarea></label>
         ${err && html`<p class="err">${err}</p>`}
+        ${usable.length > 0 && html`
+          <p class="presetline">Model:${[{ name: "" }, ...usable].map((e) => html` <button type="button" class="pick ${e.name === engine ? "on" : ""}" title=${e.model || "Claude, as configured"}
+            onClick=${() => setEngine(e.name)}>${e.name || "Claude"}</button>`)}</p>`}
         ${presets.length > 0 && !preset && html`
           <p class="presetline">Or use a preset:${presets.map((p) => html` <button type="button" class="proj" style=${`--ph: ${hueOf(p.name)}`} title=${`${MULTI && p.host ? p.host + ": " : ""}${tilde(p.dir)}`} onClick=${() => setPreset(p)}>${p.name}</button>`)}</p>`}
         <div class="actions">

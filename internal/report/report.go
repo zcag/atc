@@ -256,6 +256,9 @@ func Session(st usage.Stats) []string {
 	if len(st.Unpriced) > 0 {
 		note += " No price known for " + strings.Join(st.Unpriced, ", ") + ", so it counts as $0."
 	}
+	if len(st.Local) > 0 {
+		note += " " + strings.Join(st.Local, ", ") + " is not a Claude model: it costs nothing and is left out of your plan's usage."
+	}
 	return append(out, "", note)
 }
 

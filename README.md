@@ -180,6 +180,23 @@ read fresh at each start and given to Claude as instructions rather than as your
 the session's title comes from what you actually ask. `args` adds Claude Code flags; `worktree`
 starts it in its own git worktree.
 
+## Other models
+
+Claude Code runs on any model served through Anthropic's Messages API (`/v1/messages`): Ollama
+serves it natively, and LiteLLM or claude-code-router put it in front of an OpenAI-only server.
+List them in `engines.json` in the config folder, on the machine whose sessions use them:
+
+```json
+[{ "name": "qwen", "model": "qwen3:30b-a3b-instruct-2507-q4_K_M", "url": "http://gpu:11439" }]
+```
+
+New session then shows a Model line (Claude stays the default), and those sessions carry the
+model's name on their strip. A session is resumed on the engine whose `model` matches the model
+in its transcript. Each engine sets `ANTHROPIC_BASE_URL`, an auth token (`token`, default
+`local`) and every model alias to `model`, through `--settings`; `env` adds or overrides
+variables. Replies from models not named `claude-*` cost nothing and are left out of the plan's
+daily usage.
+
 ## Outputs
 
 Each session has an **Outputs** tab with what it produced, so you can check its work from a phone:

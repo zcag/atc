@@ -109,7 +109,11 @@ func TestDays(t *testing.T) {
 	os.WriteFile(filepath.Join(proj, "s1.jsonl"), []byte(line("a")+line("b")), 0o644)
 	os.WriteFile(filepath.Join(proj, "s1", "subagents", "agent-x.jsonl"), []byte(line("c")), 0o644)
 	os.WriteFile(filepath.Join(proj, "s2.jsonl"), []byte(line("a")+line("d")), 0o644)
+	os.WriteFile(filepath.Join(proj, "s3.jsonl"), []byte(strings.ReplaceAll(line("q"), "claude-opus-5-5", "qwen3:30b")), 0o644)
 	var s Scanner
+	if st := s.Session(filepath.Join(proj, "s3.jsonl")); len(st.Local) != 1 || len(st.Unpriced) != 0 || st.Total != 2 {
+		t.Fatalf("local session %+v", st)
+	}
 	days := s.Days(root, 7)
 	last := days[len(days)-1]
 	if len(days) != 7 || last.Day != time.Now().Format(time.DateOnly) || last.Messages != 4 || last.Sessions != 2 || last.Total != 8 {

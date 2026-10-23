@@ -33,6 +33,8 @@ var prices = []struct {
 	{"claude-3-haiku", price{0.25, 1.25, 0.03, false}},
 }
 
+func Local(model string) bool { return !strings.HasPrefix(model, "claude-") }
+
 func priceOf(model string) (price, bool) {
 	for _, p := range prices {
 		if strings.HasPrefix(model, p.prefix) {

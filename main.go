@@ -203,6 +203,9 @@ func serve(args []string) error {
 	if srv.Presets, err = server.LoadPresets(filepath.Join(client.ConfigDir(), "presets.json")); err != nil {
 		return err
 	}
+	if srv.Engines, err = server.LoadEngines(filepath.Join(client.ConfigDir(), "engines.json")); err != nil {
+		return err
+	}
 	if srv.Peers, err = server.LoadPeers(filepath.Join(client.ConfigDir(), "peers.json")); err != nil {
 		return err
 	}

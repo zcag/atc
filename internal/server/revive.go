@@ -155,7 +155,7 @@ func (s *Server) revive(lost []running, why string) {
 	var back []string
 	for _, r := range lost {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		id, err := s.M.CLI.Resume(ctx, r.Dir, r.SID, s.launchArgs(r.Name, r.Dir)...)
+		id, err := s.M.CLI.Resume(ctx, r.Dir, r.SID, s.launchArgs(r.Name, r.Dir, r.SID)...)
 		cancel()
 		if err != nil {
 			log.Printf("revive %s: %v", r.Title, err)

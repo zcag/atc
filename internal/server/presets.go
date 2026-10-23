@@ -20,7 +20,9 @@ type Preset struct {
 	Host     string   `json:"host,omitempty"`
 }
 
-func LoadPresets(path string) ([]Preset, error) {
+func LoadPresets(path string) ([]Preset, error) { return loadList[Preset](path) }
+
+func loadList[T any](path string) ([]T, error) {
 	b, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -28,11 +30,11 @@ func LoadPresets(path string) ([]Preset, error) {
 	if err != nil {
 		return nil, err
 	}
-	var ps []Preset
-	if err := json.Unmarshal(b, &ps); err != nil {
+	var list []T
+	if err := json.Unmarshal(b, &list); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	return ps, nil
+	return list, nil
 }
 
 func (s *Server) preset(name string) (Preset, bool) {
@@ -61,10 +63,14 @@ func (p Preset) extra(dir string) ([]string, error) {
 }
 
 func (s *Server) presets(w http.ResponseWriter, r *http.Request) {
-	out := []Preset{}
-	for _, p := range s.Presets {
-		p.Host = s.Host
-		out = append(out, p)
+	gather(s, w, r, "/api/presets", s.Presets, func(p *Preset, h string) { p.Host = h })
+}
+
+func gather[T any](s *Server, w http.ResponseWriter, r *http.Request, path string, local []T, setHost func(*T, string)) {
+	out := []T{}
+	for _, x := range local {
+		setHost(&x, s.Host)
+		out = append(out, x)
 	}
 	if r.URL.Query().Get("local") != "" || len(s.Peers) == 0 {
 		reply(w, out)
@@ -76,12 +82,12 @@ func (s *Server) presets(w http.ResponseWriter, r *http.Request) {
 	var wg sync.WaitGroup
 	for _, peer := range s.Peers {
 		wg.Go(func() {
-			var ps []Preset
-			if s.fleet.get(ctx, peer, "/api/presets?local=1", &ps) == nil {
+			var xs []T
+			if s.fleet.get(ctx, peer, path+"?local=1", &xs) == nil {
 				mu.Lock()
-				for _, p := range ps {
-					p.Host = peer.Name
-					out = append(out, p)
+				for _, x := range xs {
+					setHost(&x, peer.Name)
+					out = append(out, x)
 				}
 				mu.Unlock()
 			}
