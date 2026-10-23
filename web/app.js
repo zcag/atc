@@ -468,7 +468,7 @@ function Board({ live: all, sel, cursor, onPast }) {
         </div>
         ${dayGroups(earlier).map(([label, list]) => html`
           <h3>${label}</h3>
-          <div class="rack rows">${list.map((s) => html`<${Strip} s=${s} sel=${sel} size="row" />`)}</div>`)}
+          <div class="rack rows">${list.map((s) => html`<${Strip} key=${s.sessionId} s=${s} sel=${sel} size="row" />`)}</div>`)}
         ${hist && hist.length >= limit && html`<button class="btn more" onClick=${() => setLimit(limit + 30)}>Show more</button>`}
         ${hist && earlier.length === 0 && html`<p class="calm">${q ? "No earlier sessions match." : only ? `No earlier sessions in ${only} yet.` : "No earlier sessions."}</p>`}
       </section>
@@ -481,7 +481,7 @@ function Bay({ title, list, sel, cursor, dim, size = "full" }) {
   return html`
     <section class="bay ${dim ? "parked" : ""}">
       <h2>${title} <span class="n">${list.length}</span></h2>
-      <div class="rack">${list.map((s) => html`<${Strip} s=${s} sel=${sel} cursor=${cursor} size=${size} />`)}</div>
+      <div class="rack">${list.map((s) => html`<${Strip} key=${s.sessionId} s=${s} sel=${sel} cursor=${cursor} size=${size} />`)}</div>
     </section>
   `;
 }
@@ -509,21 +509,26 @@ function useFlip(ref, list) {
     const root = ref.current;
     if (!root) return;
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const next = new Map();
+    const next = new Map(), moved = [];
     for (const el of root.querySelectorAll(".strip[data-sid]:not(.row)")) {
       const sid = el.dataset.sid, r = el.getBoundingClientRect(), prev = rects.current.get(sid);
-      next.set(sid, r);
+      const t = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+      const at = { left: r.left - t.m41, top: r.top - t.m42 };
+      next.set(sid, at);
       const st = el.dataset.state, was = states.current.get(sid);
       if (was && was !== st && st !== "working") { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
       states.current.set(sid, st);
       if (!prev || reduce) continue;
-      const dx = prev.left - r.left, dy = prev.top - r.top;
+      const dx = prev.left - at.left, dy = prev.top - at.top;
       if (Math.abs(dy) < 2 && Math.abs(dx) < 2) continue;
       el.style.transition = "none";
-      el.style.transform = `translate(${dx}px, ${dy}px)`;
-      requestAnimationFrame(() => { el.style.transition = "transform .38s cubic-bezier(.2,.7,.2,1)"; el.style.transform = ""; });
+      el.style.transform = `translate(${dx + t.m41}px, ${dy + t.m42}px)`;
+      moved.push(el);
     }
     rects.current = next;
+    if (!moved.length) return;
+    void root.offsetWidth;
+    for (const el of moved) { el.style.transition = "transform .38s cubic-bezier(.2,.7,.2,1)"; el.style.transform = ""; }
   });
 }
 

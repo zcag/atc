@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestSummarizeQuestionAndPlan(t *testing.T) {
@@ -42,6 +43,9 @@ func TestScanPrefersCustomTitleAndReadsTail(t *testing.T) {
 		tr.Model != "claude-opus-5-5" || tr.Context != 1015 || tr.LastPrompt != "why does it flip?" ||
 		tr.StartCwd != "/home/u/proj" || tr.Activity != "Bash  go test ./..." || tr.Pending != "Bash  go test ./..." || tr.LastReply != "Looking." || tr.PermissionMode != "bypassPermissions" || tr.AgentName != "proj-3" || tr.SessionID != "abc" {
 		t.Fatalf("unexpected %+v", tr)
+	}
+	if want := time.Date(2026, 10, 1, 10, 0, 0, 0, time.UTC); !tr.Updated.Equal(want) {
+		t.Fatalf("updated %v, want the last timestamped entry %v, not the file's mtime", tr.Updated, want)
 	}
 
 	f, _ := os.OpenFile(filepath.Join(dir, "abc.jsonl"), os.O_APPEND|os.O_WRONLY, 0)

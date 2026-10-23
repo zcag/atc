@@ -34,6 +34,7 @@ type Transcript struct {
 	Context        int       `json:"context"`
 	Updated        time.Time `json:"updated"`
 	Size           int64     `json:"size"`
+	modTime        time.Time
 }
 
 type entry struct {
@@ -81,7 +82,7 @@ func (x *Index) Scan() []Transcript {
 		}
 		seen[p] = true
 		t := x.cache[p]
-		if t == nil || t.Size != st.Size() || !t.Updated.Equal(st.ModTime()) {
+		if t == nil || t.Size != st.Size() || !t.modTime.Equal(st.ModTime()) {
 			t = read(p, st)
 			x.cache[p] = t
 		}
@@ -101,7 +102,7 @@ func (x *Index) Scan() []Transcript {
 func read(path string, st os.FileInfo) *Transcript {
 	t := &Transcript{
 		SessionID: strings.TrimSuffix(filepath.Base(path), ".jsonl"),
-		Path:      path, Updated: st.ModTime(), Size: st.Size(),
+		Path:      path, Size: st.Size(), modTime: st.ModTime(),
 	}
 	t.StartCwd = headCwd(path)
 	for _, n := range []int64{64 << 10, 1 << 20, 4 << 20} {
@@ -109,6 +110,9 @@ func read(path string, st os.FileInfo) *Transcript {
 		if t.Title != "" && !t.PromptAt.IsZero() || n >= st.Size() {
 			break
 		}
+	}
+	if t.Updated.IsZero() {
+		t.Updated = st.ModTime()
 	}
 	return t
 }
@@ -162,6 +166,9 @@ func headCwd(path string) string {
 }
 
 func apply(t *Transcript, e *entry, custom *string) {
+	if e.Timestamp.After(t.Updated) {
+		t.Updated = e.Timestamp
+	}
 	switch e.Type {
 	case "ai-title":
 		t.AITitle = e.AITitle
