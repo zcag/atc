@@ -492,8 +492,12 @@ function project(path) {
   const segs = parts.filter(Boolean);
   return { name: segs.at(-1) || "/", rest: "" };
 }
-const HUES = [160, 130, 280, 320, 85, 185, 255];
-const hueOf = (name) => HUES[[...name].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % HUES.length];
+const HUES = [170, 285, 330, 95, 195, 20, 245, 140];
+const hueOf = (name) => {
+  let h = (2166136261 ^ 66) >>> 0;
+  for (const c of name) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
+  return HUES[(h >>> 7) % HUES.length];
+};
 function ProjectTag({ path, full }) {
   const p = project(path);
   return html`<span class="projtag"><span class="proj" style=${`--ph: ${hueOf(p.name)}`} role="button" title=${`${tilde(path)}\nClick to show only ${p.name}`}
