@@ -1301,7 +1301,8 @@ const loadScript = (src) =>
 
 const speakable = (t) =>
   (t || "")
-    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/```[\s\S]*?```/g, " There's some code in the transcript. ")
+    .replace(/(^\|.*\|[ \t]*(\n|$))+/gm, " There's a table in the transcript. ")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
     .replace(/https?:\/\/\S+/g, "a link")
@@ -1319,13 +1320,13 @@ const MIC = html`<svg viewBox="0 0 24 24" width="30" height="30" fill="none" str
 const MIC_OFF = html`<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 2l20 20M9 9v1a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.9-.8M5 10a7 7 0 0 0 11.9 5M19 10a7 7 0 0 1-.6 2.9M12 17v5"/></svg>`;
 const STOP = html`<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>`;
 
-function turnsOf(msgs) {
-  const turns = [];
+function finalReplies(msgs) {
+  const out = [];
   for (const m of msgs) {
-    if (m.role === "user") turns.push([]);
-    else if (m.role === "assistant" && turns.length) turns[turns.length - 1].push(m.text);
+    if (m.role === "user") out.push("");
+    else if (m.role === "assistant" && out.length && m.text.trim()) out[out.length - 1] = m.text;
   }
-  return turns.map((t) => t.join("\n\n")).filter((t) => t.trim());
+  return out.filter((t) => t.trim());
 }
 
 function VoiceBar({ s, say, send, onClose }) {
@@ -1396,34 +1397,30 @@ function VoiceBar({ s, say, send, onClose }) {
     });
   };
 
-  const opening = (full) => {
-    const all = sentences(speakable(full));
-    return all.length > 6 ? all.slice(0, 6).join(" ") + " There's more in the transcript." : all.join(" ");
-  };
   const condensed = (full) =>
-    api("/api/voice/condense", { method: "POST", body: { text: full } }).then((r) => speakable(r.text), () => opening(full));
+    api("/api/voice/condense", { method: "POST", body: { text: full } }).then((r) => speakable(r.text), () => speakable(full));
   const loadTurns = async () => {
     const p = await api(`/api/sessions/${live.current.s.sessionId}/transcript`).catch(() => ({ messages: [] }));
-    st.current.turns = turnsOf(p.messages || []);
+    st.current.turns = finalReplies(p.messages || []);
     return st.current.turns;
   };
   const readTurn = async (i, how) => {
     const turns = st.current.turns.length ? st.current.turns : await loadTurns();
     if (i < 0 || i >= turns.length) return speak(i < 0 ? "That was the first reply." : "Nothing newer.");
     st.current.at = i;
-    speak(how === "full" ? speakable(turns[i]) : how === "short" ? await condensed(turns[i]) : opening(turns[i]));
+    speak(how === "short" ? await condensed(turns[i]) : speakable(turns[i]));
   };
   const current = () => (st.current.at >= 0 ? st.current.at : st.current.turns.length - 1);
   const replay = () => (spoken ? speak(spoken) : readLatest());
   const readLatest = async () => { await loadTurns(); readTurn(st.current.turns.length - 1); };
   const earlier = () => readTurn((st.current.at >= 0 ? st.current.at : st.current.turns.length) - 1);
-  const full = () => readTurn(current(), "full");
+  const full = () => readTurn(current());
   const short = () => readTurn(current(), "short");
 
   const answer = async (state) => {
     const turns = await loadTurns();
     st.current.at = turns.length - 1;
-    const body = turns.length ? opening(turns[turns.length - 1]) : "";
+    const body = turns.length ? speakable(turns[turns.length - 1]) : "";
     st.current.permission = state === "needs-you";
     const ask = state === "needs-you" ? `It needs you${live.current.s.activity ? `, to run ${live.current.s.activity}` : ""}. Say yes to allow it.` : "";
     speak([body, ask].filter(Boolean).join(" ") || "Done.");
@@ -1521,7 +1518,6 @@ function VoiceBar({ s, say, send, onClose }) {
         <div class="vside">
           <button class="vbtn" onClick=${replay} title="Read the last reply again (or say “repeat”)">Replay</button>
           <button class="vbtn" onClick=${earlier} title="Read the reply before (or say “previous”)">Earlier</button>
-          <button class="vbtn" onClick=${full} title="Read the whole reply (or say “read it all”)">Full</button>
           ${VOICE.condense && html`<button class="vbtn" onClick=${short} title="A one or two sentence summary of the reply, written by the server's model">Short</button>`}
         </div>
         <div class="vmain">

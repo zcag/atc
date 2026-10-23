@@ -259,9 +259,11 @@ Sessions open in a terminal can be read but not typed into. A session never send
 
 Open a session and press **Voice** to talk to it. atc listens through the browser, decides when
 you have finished speaking (a pause of about a second and a half), transcribes what you said and
-types it into the session. When the session finishes its turn, atc reads the reply back, shortened
-to a sentence or two when it is long. Talking over it stops the reading. Saying "stop" sends Esc to
-Claude, and "yes" answers a permission prompt.
+types it into the session. When the session finishes its turn, atc reads its final message back in
+full, leaving out what Claude wrote between tool calls; code and tables are mentioned rather than
+read out. Talking over it stops the reading. **Earlier** reads the final message of the turn before,
+**Short** a sentence or two of it. Saying "stop" sends Esc to Claude, and "yes" answers a
+permission prompt.
 
 Voice needs a speech-to-text service that speaks the OpenAI transcription API (a local Whisper
 server works), and optionally a chat model to shorten replies and a text-to-speech service for a
