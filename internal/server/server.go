@@ -31,13 +31,13 @@ import (
 )
 
 type Server struct {
-	M     *sessions.Manager
-	Term  *attach.Hub
-	Web   fs.FS
-	Token string
-	Roots []string
-	Host  string
-	Push  *push.Pusher
+	M       *sessions.Manager
+	Term    *attach.Hub
+	Web     fs.FS
+	Token   string
+	Roots   []string
+	Host    string
+	Push    *push.Pusher
 	Peers   []Peer
 	Presets []Preset
 	Voice   Voice
