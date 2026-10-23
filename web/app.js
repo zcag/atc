@@ -43,7 +43,7 @@ let VOICE_OK = false;
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 let PALETTE_OPEN = () => {};
 let SESSION_API = null;
-let SET_PROJECT = () => {};
+let TABS = { only: null, tabs: [], set: () => {} };
 const focusOnMount = (el) => { if (el && !el.dataset.focused) { el.dataset.focused = "1"; requestAnimationFrame(() => el.focus({ preventScroll: true })); } };
 const model = (m) => (m || "").replace(/^claude-/, "").replace(/-\d.*$/, "");
 const keyOf = (s) => s.id || s.sessionId;
@@ -402,8 +402,8 @@ function Board({ live: all, sel, cursor, onPast }) {
     return n;
   });
   PICK_PROJECT = (name) => setOnly((o) => (o === name ? null : name));
-  SET_PROJECT = (name) => setOnly(name);
   const tabs = useMemo(() => projectTabs(all || [], only), [all, only]);
+  TABS = { only, tabs, set: setOnly };
   useEffect(() => {
     const k = (e) => {
       if ((e.key !== "[" && e.key !== "]") || e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
@@ -2042,9 +2042,11 @@ function Palette({ live, sel, say, home, actions, onClose }) {
   for (const s of live) add("Sessions", s.title || "Untitled", { s, kw: `${project(s.cwd).name} ${s.host || ""} ${s.lastPrompt || ""}`, run: run(() => go(keyOf(s))) });
   const liveIDs = new Set(live.map((s) => s.sessionId));
   for (const s of past.filter((s) => !liveIDs.has(s.sessionId))) add("Earlier", s.title || "Untitled", { s, kw: project(s.cwd).name, run: run(() => go(s.sessionId)) });
-  const projects = [...new Set(live.map((s) => project(s.cwd).name))];
-  for (const n of projects) add("Projects", `Show only ${n}`, { proj: n, kw: n, run: run(() => SET_PROJECT(n)) });
-  if (projects.length) add("Projects", "Show all projects", { glyph: "◌", run: run(() => SET_PROJECT(null)) });
+  if (TABS.tabs.length > 1) {
+    const tab = (label, name, sub, opts) => add("Tabs", label, { kw: "tab project", sub: [TABS.only === name && "shown", sub].filter(Boolean).join(" · "), run: run(() => { TABS.set(name); if (matchMedia("(max-width: 899px)").matches) go(null); }), ...opts });
+    tab("All", null, "", { glyph: "◌" });
+    for (const t of TABS.tabs) tab(t.name, t.name, t.summary, { proj: t.name });
+  }
   add("Actions", "New session", { glyph: "+", hint: "n", run: run(() => actions.create()) });
   for (const p of presets) add("Actions", `Start ${p.name}`, { proj: p.name, kw: `preset ${p.dir}`, sub: tilde(p.dir), run: run(() => api(`/api/sessions${hostQ(p.host, home)}`, { method: "POST", body: { preset: p.name } }).then((r) => { say(`Started ${p.name}.`); go(r.id); }, (e) => say(e.message))) });
   if (VOICE_OK) add("Actions", "Talk to Claude", { glyph: "◉", hint: "t", kw: "voice assistant", run: run(actions.talk) });
@@ -2058,7 +2060,7 @@ function Palette({ live, sel, say, home, actions, onClose }) {
     const m = fuzzy(ql, it.label) || (ql && fuzzy(ql, `${it.label} ${it.kw || ""}`) && { score: 10, hits: [] });
     if (m) shown.push({ ...it, ...m });
   }
-  const order = ["Sessions", "Actions", "This session", "Projects", "Earlier", "New session in"];
+  const order = ["Tabs", "Sessions", "Actions", "This session", "Earlier", "New session in"];
   const gi = (g) => order.findIndex((o) => g.startsWith(o));
   if (ql) shown.sort((a, b) => b.score - a.score);
   else shown.sort((a, b) => gi(a.group) - gi(b.group));
@@ -2097,7 +2099,7 @@ function Palette({ live, sel, say, home, actions, onClose }) {
       <div class="palette" role="dialog" aria-label="Command palette">
         <div class="pq">
           <span class="ps">${ICON.search}</span>
-          <input ref=${focusOnMount} value=${q} onInput=${(e) => setQ(e.target.value)} placeholder="Jump to a session, project or action" autocapitalize="off" autocomplete="off" spellcheck="false" />
+          <input ref=${focusOnMount} value=${q} onInput=${(e) => setQ(e.target.value)} placeholder="Jump to a tab, session or action" autocapitalize="off" autocomplete="off" spellcheck="false" />
           <kbd>esc</kbd>
         </div>
         <div class="plist" ref=${list}>
