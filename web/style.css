@@ -438,7 +438,6 @@ button { cursor: pointer; }
 .viewer table.data td.n { text-align: right; font-variant-numeric: tabular-nums; }
 .viewer table.data tbody tr:hover { background: var(--strip); }
 
-.btn.talk { display: inline-flex; align-items: center; gap: 6px; }
 .btn.talk .mi svg { width: 16px; height: 16px; }
 .assist .close { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 16px; font-size: 20px; }
 @media (min-width: 700px) {
@@ -449,8 +448,6 @@ button { cursor: pointer; }
 .top .host { white-space: nowrap; flex: none; }
 .top .tag { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .top .btn { flex: none; }
-.btn.talk { padding-left: 9px; padding-right: 9px; }
-.btn.talk .lb { display: none; }
 
 .usefoot {
   display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
