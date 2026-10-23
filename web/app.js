@@ -737,7 +737,11 @@ function makeDock(id) {
         emit({ cover: "detached" });
       }
     };
-    ws.onopen = () => { tries = 0; emit({ retrying: false }); };
+    ws.onopen = () => {
+      tries = 0;
+      emit({ retrying: false });
+      if (d.box && !document.hidden) { ctl({ type: "visible" }); requestAnimationFrame(relayout); }
+    };
     ws.onclose = () => {
       if (exited || dead) return;
       if (tries >= 20) return emit({ cover: "lost" });
