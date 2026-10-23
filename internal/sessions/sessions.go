@@ -129,6 +129,9 @@ func state(a claude.Agent) string {
 	if a.Kind == "background" && a.PID == 0 {
 		return Stopped
 	}
+	if a.State == "working" && a.Status == "idle" {
+		return YourTurn
+	}
 	switch first(a.State, a.Status) {
 	case "working", "busy":
 		return Working
