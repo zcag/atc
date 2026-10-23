@@ -47,6 +47,7 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc attach <session>           take over this terminal; Ctrl+Z detaches
   atc history [-json] [query]    past conversations, newest first
   atc new [-n name] [-host machine] [dir] [prompt...]
+  atc new -p preset [prompt...]  start from a preset (presets.json in the server's config folder)
       dir defaults to the current dir, with your home written as ~ so it
       maps onto the same path under the server's home
   atc send <session> [text...]   type a message into a running session; reads
@@ -177,6 +178,9 @@ func serve(args []string) error {
 		TrustTailnet:   tailscaleBin(os.Getenv("ATC_TRUST_TAILNET")),
 		TrustedProxies: server.ParseProxies(os.Getenv("ATC_TRUSTED_PROXIES")),
 	}
+	if srv.Presets, err = server.LoadPresets(filepath.Join(client.ConfigDir(), "presets.json")); err != nil {
+		return err
+	}
 	if srv.Peers, err = server.LoadPeers(filepath.Join(client.ConfigDir(), "peers.json")); err != nil {
 		return err
 	}
@@ -259,8 +263,16 @@ func newSession(args []string) error {
 	fs := flag.NewFlagSet("new", flag.ExitOnError)
 	name := fs.String("n", "", "session name")
 	host := fs.String("host", "", "machine to start it on, when the server lists several")
+	preset := fs.String("p", "", "start from a named preset")
 	fs.Parse(args)
 	rest := fs.Args()
+	if *preset != "" {
+		id, dir, err := client.Load().StartPreset(*preset, strings.Join(rest, " "))
+		if err == nil {
+			fmt.Printf("started %s (%s) in %s\n", id, *preset, dir)
+		}
+		return err
+	}
 	dir := ""
 	if len(rest) > 0 && (strings.HasPrefix(rest[0], "/") || strings.HasPrefix(rest[0], "~")) {
 		dir, rest = rest[0], rest[1:]

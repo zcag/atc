@@ -145,13 +145,49 @@ func (c *Client) Start(dir, name, prompt string) (string, error) {
 }
 
 func (c *Client) StartOn(host, dir, name, prompt string, worktree bool) (string, error) {
+	return c.Begin(host, map[string]any{"dir": dir, "name": name, "prompt": prompt, "worktree": worktree})
+}
+
+func (c *Client) Begin(host string, req map[string]any) (string, error) {
 	var r idReply
 	path := "/api/sessions"
 	if host != "" {
 		path += "?host=" + url.QueryEscape(host)
 	}
-	err := c.do("POST", path, map[string]any{"dir": dir, "name": name, "prompt": prompt, "worktree": worktree}, &r)
+	err := c.do("POST", path, req, &r)
 	return r.ID, err
+}
+
+type Preset struct {
+	Name  string `json:"name"`
+	Dir   string `json:"dir"`
+	Brief string `json:"brief,omitempty"`
+	Host  string `json:"host,omitempty"`
+}
+
+func (c *Client) Presets() (ps []Preset, err error) {
+	return ps, c.do("GET", "/api/presets", nil, &ps)
+}
+
+func (c *Client) StartPreset(name, prompt string) (string, string, error) {
+	ps, err := c.Presets()
+	if err != nil {
+		return "", "", err
+	}
+	for _, p := range ps {
+		if p.Name == name {
+			id, err := c.Begin(p.Host, map[string]any{"preset": name, "prompt": prompt})
+			return id, p.Dir, err
+		}
+	}
+	var names []string
+	for _, p := range ps {
+		names = append(names, p.Name)
+	}
+	if len(names) == 0 {
+		return "", "", fmt.Errorf("no presets defined; add them to presets.json in the server's config folder")
+	}
+	return "", "", fmt.Errorf("no preset named %q (have: %s)", name, strings.Join(names, ", "))
 }
 
 func (c *Client) Resume(sid string) (string, error) {

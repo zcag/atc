@@ -38,8 +38,9 @@ type Server struct {
 	Roots []string
 	Host  string
 	Push  *push.Pusher
-	Peers []Peer
-	Voice Voice
+	Peers   []Peer
+	Presets []Preset
+	Voice   Voice
 
 	AppDir    string
 	AssistDir string
@@ -102,6 +103,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/sessions/{id}/send", s.send)
 	mux.HandleFunc("POST /api/guess", s.guess)
 	mux.HandleFunc("GET /api/widget", s.widget)
+	mux.HandleFunc("GET /api/presets", s.presets)
 	mux.HandleFunc("POST /api/presence", s.presencePost)
 	mux.HandleFunc("GET /api/presence", s.presenceGet)
 	mux.HandleFunc("GET /api/sessions/{sid}/outputs", s.outputs)
@@ -338,12 +340,21 @@ func (s *Server) route(next http.Handler) http.Handler {
 
 func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Dir, Name, Prompt string
-		Worktree          bool
+		Dir, Name, Prompt, Preset string
+		Worktree                  bool
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	var p Preset
+	if req.Preset != "" {
+		var ok bool
+		if p, ok = s.preset(req.Preset); !ok {
+			http.Error(w, "no preset named "+req.Preset, http.StatusBadRequest)
+			return
+		}
+		req.Dir, req.Name, req.Worktree = cmp.Or(req.Dir, p.Dir), cmp.Or(req.Name, p.Name), req.Worktree || p.Worktree
 	}
 	dir, err := expand(req.Dir)
 	if err == nil {
@@ -356,7 +367,11 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	var extra []string
+	extra, err := p.extra(dir)
+	if err != nil {
+		fail(w, err)
+		return
+	}
 	if req.Worktree {
 		extra = append(extra, "--worktree="+worktreeName(req.Name))
 	}

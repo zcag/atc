@@ -160,6 +160,24 @@ assistant, so holding the side key opens atc listening, even on the lock screen.
   the side key then opens a session named `assistant` in `ATC_ASSIST_DIR` (default: your home
   folder) with voice on, starting or resuming it as needed.
 
+## Presets
+
+Name the sessions you start often, each with its folder and standing instructions, in
+`presets.json` in atc's config folder (`~/.config/atc/` by default) on the machine they run on:
+
+```json
+[
+  { "name": "reviewer", "dir": "~/work/app", "brief": "REVIEWER.md" },
+  { "name": "notes", "dir": "~/notes", "brief": "~/notes/assistant.md", "worktree": false }
+]
+```
+
+They show as one-tap choices in New session (from every machine), as `atc new -p reviewer`, and
+to the voice assistant ("start the reviewer"). `brief` is a file, relative to `dir` or absolute,
+read fresh at each start and given to Claude as instructions rather than as your first message, so
+the session's title comes from what you actually ask. `args` adds Claude Code flags; `worktree`
+starts it in its own git worktree.
+
 ## Outputs
 
 Each session has an **Outputs** tab with what it produced, so you can check its work from a phone:

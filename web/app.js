@@ -1755,6 +1755,9 @@ function NewSession({ onClose, say, hosts, home }) {
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState("");
   const [worktree, setWorktree] = useState(false);
+  const [presets, setPresets] = useState([]);
+  const [preset, setPreset] = useState(null);
+  useEffect(() => { api("/api/presets").then((p) => setPresets(p || []), () => {}); }, []);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -1768,7 +1771,9 @@ function NewSession({ onClose, say, hosts, home }) {
     setBusy(true);
     setErr(null);
     try {
-      const r = await api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt, worktree } });
+      const r = preset
+        ? await api(`/api/sessions${hostQ(preset.host, home)}`, { method: "POST", body: { preset: preset.name, name: name.trim(), prompt } })
+        : await api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt, worktree } });
       onClose();
       say("Session started.");
       go(r.id);
@@ -1782,15 +1787,27 @@ function NewSession({ onClose, say, hosts, home }) {
     <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
       <form class="sheet" onSubmit=${start}>
         <h3>New session</h3>
-        <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDir("~"); }} />
-        <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} autofocus />
-        <${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />
-        <label class="field"><span>Name</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder="Optional" /><small>Without one, Claude titles the session from what you ask.</small></label>
+        ${presets.length > 0 && html`
+          <div class="field"><span>Presets</span>
+            <div class="presets">
+              ${presets.map((p) => html`<button type="button" class=${preset === p ? "on" : ""} onClick=${() => setPreset(preset === p ? null : p)}>
+                <span class="proj" style=${`--ph: ${hueOf(p.name)}`}>${p.name}</span>
+                <small>${MULTI && p.host ? `${p.host} · ` : ""}${tilde(p.dir)}</small>
+              </button>`)}
+            </div>
+          </div>`}
+        ${preset ? html`
+          <p class="presetnote">Starts in <b>${tilde(preset.dir)}</b>${MULTI && preset.host ? html` on <b>${preset.host}</b>` : ""}${preset.brief ? html`, with the instructions in <b>${preset.brief}</b>` : ""}.</p>
+        ` : html`
+          <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDir("~"); }} />
+          <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} autofocus />
+          <${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />`}
+        <label class="field"><span>Name</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder=${preset ? preset.name : "Optional"} />${!preset && html`<small>Without one, Claude titles the session from what you ask.</small>`}</label>
         <label class="field"><span>First message</span><textarea rows="3" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} placeholder="Optional. You can also type it in the terminal."></textarea></label>
         ${err && html`<p class="err">${err}</p>`}
         <div class="actions">
           <button type="button" class="btn" onClick=${onClose}>Cancel</button>
-          <button class="btn primary" disabled=${!dir.trim() || busy}>${busy ? "Starting…" : "Start session"}</button>
+          <button class="btn primary" disabled=${(!preset && !dir.trim()) || busy}>${busy ? "Starting…" : "Start session"}</button>
         </div>
       </form>
     </div>

@@ -53,8 +53,9 @@ type sendIn struct {
 }
 
 type startIn struct {
-	Dir      string `json:"dir" jsonschema:"folder on that machine, ~ allowed"`
-	Prompt   string `json:"prompt" jsonschema:"the first message"`
+	Preset   string `json:"preset,omitempty" jsonschema:"a preset name from the presets tool; it sets folder, name and instructions, so dir can be left empty"`
+	Dir      string `json:"dir,omitempty" jsonschema:"folder on that machine, ~ allowed"`
+	Prompt   string `json:"prompt,omitempty" jsonschema:"the first message"`
 	Name     string `json:"name,omitempty" jsonschema:"short title; without one Claude titles it"`
 	Host     string `json:"host,omitempty" jsonschema:"machine name from the sessions list; default the main one"`
 	Worktree bool   `json:"worktree,omitempty" jsonschema:"work in its own git worktree so it cannot clash with other sessions in the repo"`
@@ -104,6 +105,15 @@ func Run(ctx context.Context, c *client.Client) error {
 	mcp.AddTool(s, &mcp.Tool{Name: "send", Description: "Type a message into a running session, as if the user wrote it there. A stopped or past session is resumed first. Returns right away; use wait for the answer."}, t.send)
 	mcp.AddTool(s, &mcp.Tool{Name: "wait", Description: "Wait until a session finishes its turn or needs the user, then return the start of its reply."}, t.wait)
 	mcp.AddTool(s, &mcp.Tool{Name: "start", Description: "Start a new background session in a folder with a first message."}, t.start)
+	mcp.AddTool(s, &mcp.Tool{Name: "presets", Description: "List the named presets for new sessions (a folder plus standing instructions, like a dedicated agent). Start one with start and its name."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, struct {
+			Presets []client.Preset `json:"presets"`
+		}, error) {
+			ps, err := c.Presets()
+			return nil, struct {
+				Presets []client.Preset `json:"presets"`
+			}{ps}, err
+		})
 	mcp.AddTool(s, &mcp.Tool{Name: "stop", Description: "Stop a running session. Its conversation is kept and can be resumed."}, t.stop)
 	mcp.AddTool(s, &mcp.Tool{Name: "history", Description: "Search earlier conversations by title, prompts or folder, newest first."}, t.history)
 	return s.Run(ctx, &mcp.StdioTransport{})
@@ -272,6 +282,13 @@ func (t *tools) until(ctx context.Context, key string, limit time.Duration, ok f
 }
 
 func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (*mcp.CallToolResult, done, error) {
+	if in.Preset != "" {
+		id, _, err := t.c.StartPreset(in.Preset, in.Prompt)
+		if err != nil {
+			return nil, done{}, err
+		}
+		return nil, done{Ref: id, Title: in.Preset, State: "started"}, nil
+	}
 	id, err := t.c.StartOn(in.Host, in.Dir, in.Name, in.Prompt, in.Worktree)
 	if err != nil {
 		return nil, done{}, err

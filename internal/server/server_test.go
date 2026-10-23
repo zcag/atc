@@ -342,3 +342,28 @@ func TestOutputFileLinks(t *testing.T) {
 		t.Errorf("another session's link must not load: %d", res.StatusCode)
 	}
 }
+
+func TestStartFromPreset(t *testing.T) {
+	bin := fakeClaude(t)
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "brief.md"), []byte("You are the helper."), 0o644)
+	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
+	s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st}, Term: &attach.Hub{}, Web: fstest.MapFS{}, Token: "tok", Host: "here",
+		Presets: []Preset{{Name: "helper", Dir: dir, Brief: "brief.md"}}}
+	ts := httptest.NewServer(s.Handler())
+	defer ts.Close()
+	if res, body := do(t, "POST", ts.URL+"/api/sessions", "tok", `{"preset":"helper","prompt":"hi"}`); res.StatusCode != 200 {
+		t.Fatalf("start: %d %s", res.StatusCode, body)
+	}
+	args, _ := os.ReadFile(filepath.Join(filepath.Dir(bin), "started"))
+	if !strings.Contains(string(args), "--append-system-prompt You are the helper. --name helper hi") {
+		t.Errorf("args: %s", args)
+	}
+	if res, _ := do(t, "POST", ts.URL+"/api/sessions", "tok", `{"preset":"nope"}`); res.StatusCode != 400 {
+		t.Errorf("unknown preset: %d", res.StatusCode)
+	}
+	_, body := get(t, ts.URL+"/api/presets", "tok")
+	if !strings.Contains(body, `"name":"helper"`) || !strings.Contains(body, `"host":"here"`) {
+		t.Errorf("presets: %s", body)
+	}
+}
