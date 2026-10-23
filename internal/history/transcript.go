@@ -125,14 +125,37 @@ func summarize(raw json.RawMessage) string {
 	if json.Unmarshal(raw, &in) != nil {
 		return ""
 	}
+	if qs, ok := in["questions"].([]any); ok && len(qs) > 0 {
+		if q, ok := qs[0].(map[string]any); ok {
+			var labels []string
+			opts, _ := q["options"].([]any)
+			for _, o := range opts {
+				if m, ok := o.(map[string]any); ok {
+					if l, ok := m["label"].(string); ok && l != "" {
+						labels = append(labels, l)
+					}
+				}
+			}
+			v, _ := q["question"].(string)
+			if len(labels) > 0 {
+				v += " (" + strings.Join(labels, " · ") + ")"
+			}
+			return oneLine(v)
+		}
+	}
+	if plan, ok := in["plan"].(string); ok {
+		for _, l := range strings.Split(plan, "\n") {
+			if l = strings.TrimSpace(strings.TrimLeft(l, "# ")); l != "" {
+				return oneLine(l)
+			}
+		}
+	}
 	for _, k := range []string{"description", "command", "file_path", "pattern", "url", "query", "prompt", "skill"} {
 		if v, ok := in[k].(string); ok && v != "" {
-			v = strings.Join(strings.Fields(v), " ")
-			if r := []rune(v); len(r) > 160 {
-				v = string(r[:159]) + "…"
-			}
-			return v
+			return oneLine(v)
 		}
 	}
 	return ""
 }
+
+func oneLine(v string) string { return clip(strings.Join(strings.Fields(v), " "), 160) }

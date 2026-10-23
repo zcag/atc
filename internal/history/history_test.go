@@ -7,6 +7,16 @@ import (
 	"testing"
 )
 
+func TestSummarizeQuestionAndPlan(t *testing.T) {
+	q := `{"questions":[{"question":"Which version do we cut?","options":[{"label":"2.4"},{"label":"2.5"}]},{"question":"later"}]}`
+	if got := summarize([]byte(q)); got != "Which version do we cut? (2.4 · 2.5)" {
+		t.Fatalf("question: %q", got)
+	}
+	if got := summarize([]byte(`{"plan":"\n# Rewrite search\n\n1. Index"}`)); got != "Rewrite search" {
+		t.Fatalf("plan: %q", got)
+	}
+}
+
 func TestScanPrefersCustomTitleAndReadsTail(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, "-home-u-proj")
