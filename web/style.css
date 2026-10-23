@@ -519,9 +519,12 @@ button { cursor: pointer; }
 .win { margin-bottom: 14px; }
 .win .wl { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 5px; font-size: 14px; }
 .win .pct { font: 600 15px var(--mono); }
+.win .pct small { margin-right: 8px; font-weight: 400; font-size: 13px; color: var(--dim); }
 .win .wr { margin-top: 4px; font-size: 12.5px; color: var(--dim); }
+.win .wr.hot { color: var(--needs); }
 .readout { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; min-height: 22px; font-size: 13.5px; }
 .readout span { color: var(--dim); font-variant-numeric: tabular-nums; }
+.readout.sub { min-height: 18px; font-size: 12.5px; color: var(--faint); }
 .bars { display: flex; align-items: stretch; gap: 2px; height: 120px; margin: 8px 0 4px; border-bottom: 1px solid var(--line); }
 .bar { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; border: 0; background: none; padding: 0; position: relative; }
 .bar i { display: block; width: min(70%, 18px); border-radius: 4px 4px 0 0; background: color-mix(in srgb, var(--work) 55%, var(--sunk)); }
@@ -530,10 +533,19 @@ button { cursor: pointer; }
 .bar.on span { color: var(--ink); font-weight: 600; }
 .usage .total { margin: 24px 0 0; font-size: 13.5px; color: var(--dim); }
 .usage .total b { color: var(--ink); font-weight: 600; }
-.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
+.tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 16px; }
 .tiles div { background: var(--board); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .tiles .n { display: block; font: 600 20px/1.2 var(--mono); }
 .tiles .l { display: block; font-size: 12px; color: var(--dim); margin-top: 2px; }
+.tiles .l.faint { color: var(--faint); margin-top: 0; }
+.shares { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; margin-bottom: 16px; }
+.srow { position: relative; min-width: 0; display: flex; align-items: baseline; gap: 10px; padding: 6px 8px 8px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.srow:hover:not(:disabled) { background: var(--sunk); }
+.srow.flat { cursor: default; }
+.srow .sl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srow .sv { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.srow small { margin-left: 8px; font-size: 12px; color: var(--faint); }
+.srow i { position: absolute; left: 8px; bottom: 3px; max-width: calc(100% - 16px); height: 3px; border-radius: 2px; background: color-mix(in srgb, var(--work) 55%, var(--sunk)); }
 .facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; margin: 0 0 16px; font-size: 14px; }
 .facts dt { color: var(--dim); }
 .facts dd { margin: 0; font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }

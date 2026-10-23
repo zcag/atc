@@ -279,6 +279,12 @@ function App() {
   const all = live || [];
   const sel = route && (all.find((s) => s.id === route || s.sessionId === route) || past[route]);
   const remember = (list) => setPast((p) => Object.fromEntries([...Object.entries(p), ...list.map((s) => [s.sessionId, s])]));
+  const openFromUsage = async (x) => {
+    if (!all.some((s) => s.sessionId === x.sessionId) && !past[x.sessionId])
+      remember((await api(`/api/history?q=${encodeURIComponent(x.title)}&limit=50`).catch(() => [])).filter((s) => s.sessionId === x.sessionId));
+    setUsage(false);
+    go(x.sessionId);
+  };
 
   return html`
     <div class="shell ${route ? "open" : ""}">
@@ -307,7 +313,7 @@ function App() {
       actions=${{ create: (start) => setCreating(start || true), usage: () => setUsage(true), help: () => setHelp(true), talk: () => (location.hash = "#/assist") }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
-    ${usage && html`<${UsageSheet} limits=${limits} multi=${MULTI} onClose=${() => setUsage(false)} />`}
+    ${usage && html`<${UsageSheet} limits=${limits} multi=${MULTI} onClose=${() => setUsage(false)} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
     ${notifAsk && me && html`<div class="appbar" role="status">
@@ -814,9 +820,9 @@ function Session({ s, say, live }) {
             <span class="wide usehover" tabindex="0" role="button" onClick=${() => setShowUse(true)} onKeyDown=${(e) => e.key === "Enter" && setShowUse(true)}>
               ${s.context > 0 ? `${Math.round(s.context / 1000)}k context` : "usage"}
               ${use?.total > 0 && html`<span class="usecard" role="tooltip">
-                ${weekShare(use, use.week) != null && html`<b>≈${pct(weekShare(use, use.week))} of your weekly limit</b>
-                  <span>The week is at ${Math.round(use.week.percent)}%, resets ${resetDay(use.week.resetsAt)}</span>`}
-                <span>${tokens(use.total)} tokens · ~${dollars(use.cost)} at API prices</span>
+                ${shares(use).map((x, i) => i === 0 ? html`<b>${x.p != null ? `${approx(x.p)} of your weekly limit · ` : ""}${usd(x.cost)} this week</b>`
+                  : html`<span>${x.p != null ? `${approx(x.p)} of the 5-hour window · ` : ""}${usd(x.cost)} in it</span>`)}
+                <span>Whole session: ${usd(use.cost)} · ${tokens(use.total)} tokens</span>
                 <span class="hint">Click for details</span>
               </span>`}
             </span>`}
@@ -1616,28 +1622,51 @@ const modelName = (m) => {
   return n[0].toUpperCase() + n.slice(1);
 };
 
-let WEEK = null, weekAt = 0, weekLoading = null;
-function loadWeek() {
-  if (Date.now() - weekAt < 120000) return Promise.resolve(WEEK);
-  return (weekLoading ||= api("/api/usage/week").then((w) => { WEEK = w; weekAt = Date.now(); return w; }, () => WEEK).finally(() => (weekLoading = null)));
+let WINS = null, winsAt = 0, winsLoading = null;
+function loadWindows(fresh) {
+  if (!fresh && Date.now() - winsAt < 120000) return Promise.resolve(WINS);
+  return (winsLoading ||= api("/api/usage/windows").then((w) => { WINS = w; winsAt = Date.now(); return w; }, () => WINS).finally(() => (winsLoading = null)));
 }
-const weekShare = (use, week) => (week?.total > 0 && use?.weekCost != null && !(use.local?.length && !use.cost) ?(use.weekCost / week.total) * week.percent : null);
+const winOf = (u, key) => u?.windows?.find((w) => w.key === key);
+const perPct = (w) => (w?.cost > 0 && w.percent >= 1 ? w.cost / w.percent : null);
+const asPct = (cost, w) => (cost != null && perPct(w) ? cost / perPct(w) : null);
 const pct = (x) => (x < 0.1 ? "<0.1%" : x < 10 ? `${x.toFixed(1)}%` : `${Math.round(x)}%`);
+const usd = (c) => (c > 0 && c < 0.01 ? "<$0.01" : `~${dollars(c)}`);
+const approx = (x) => (x < 0.1 ? "<0.1%" : `≈${pct(x)}`);
 const resetDay = (t) => new Date(t).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+
+function pace(w) {
+  const from = Date.parse(w.from), end = Date.parse(w.resetsAt), now = Date.now();
+  const gone = (now - from) / (end - from);
+  if (!(gone > 0.1 && gone < 1) || w.percent < 1 || w.percent >= 100) return null;
+  const at100 = from + ((now - from) * 100) / w.percent;
+  return at100 < end
+    ? { hot: true, text: `At this pace you reach 100% ${resetDay(at100)}, ${span((end - at100) / 1000)} before it resets.` }
+    : { text: `At this pace you end near ${Math.round(w.percent / gone)}% (${Math.round(gone * 100)}% of the window has passed).` };
+}
 
 function useSessionUsage(s, every) {
   const [data, setData] = useState(null);
   useEffect(() => setData(null), [s.sessionId]);
   useEffect(() => {
     let live = true;
-    const load = () => loadWeek().then((w) => api(`/api/sessions/${s.sessionId}/usage${w?.from ? `?from=${Math.floor(Date.parse(w.from) / 1000)}` : ""}`))
-      .then((d) => live && setData({ ...d, week: WEEK }), () => live && setData((d) => d || { failed: true }));
+    const load = () => loadWindows().then((u) => {
+      const q = [["week", winOf(u, "weekly_all")], ["fiveHour", winOf(u, "session")]].filter(([, w]) => w).map(([k, w]) => `${k}=${Math.floor(Date.parse(w.from) / 1000)}`);
+      return api(`/api/sessions/${s.sessionId}/usage${q.length ? `?${q.join("&")}` : ""}`);
+    }).then((d) => live && setData({ ...d, wins: WINS }), () => live && setData((d) => d || { failed: true }));
     load();
     const t = setInterval(load, every);
     return () => { live = false; clearInterval(t); };
   }, [s.sessionId, every]);
   return data;
 }
+
+const shares = (use) => {
+  if (!use || use.failed || (use.local?.length && !use.cost)) return [];
+  return [["week", "weekly_all", use.weekCost], ["5-hour window", "session", use.fiveHourCost]]
+    .map(([name, key, cost]) => ({ name, cost, w: winOf(use.wins, key), p: asPct(cost, winOf(use.wins, key)) }))
+    .filter((x) => x.cost != null && x.w);
+};
 
 function UsageFoot({ limits, onOpen }) {
   useNow(60000);
@@ -1671,39 +1700,71 @@ function Sheet({ cls, title, sub, onClose, children }) {
     </div>`;
 }
 
-const ESTIMATE = (asOf) => `Estimated from the transcripts at Claude API list prices${asOf ? ` (${asOf})` : ""}. A Claude subscription is not billed per token; this shows what the same work would cost on the API.`;
+const ESTIMATE = (asOf) => `Dollar figures are estimated from the transcripts at Claude API list prices${asOf ? ` (${asOf})` : ""}. A Claude subscription is not billed per token; this is what the same work would cost on the API.`;
+const RATE = "Dollars and percent convert at each window's own rate: what was spent in it so far divided by its percentage. Anthropic reports whole percents, so the rate is rough while a window is in single digits.";
 
-function UsageSheet({ limits, multi, onClose }) {
+const ShareRows = ({ rows, total, w, onPick }) => html`
+  <div class="shares">
+    ${rows.map((r) => html`
+      <button class="srow ${onPick ? "" : "flat"}" disabled=${!onPick} onClick=${() => onPick?.(r)} title=${r.hint || r.label}>
+        <span class="sl">${r.label}${r.sub && html`<small>${r.sub}</small>`}</span>
+        <span class="sv">${usd(r.cost)}${asPct(r.cost, w) != null && html`<small>${approx(asPct(r.cost, w))}</small>`}</span>
+        <i style=${`width: ${total > 0 ? Math.max(1, (r.cost / total) * 100) : 0}%`}></i>
+      </button>`)}
+  </div>`;
+
+function UsageSheet({ limits, multi, onClose, onOpen }) {
   const [days, setDays] = useState(null);
   const [at, setAt] = useState(null);
-  useEffect(() => { api("/api/usage/days?days=14").then(setDays, () => setDays([])); }, []);
+  const [u, setU] = useState(WINS);
+  useEffect(() => { api("/api/usage/days?days=14").then(setDays, () => setDays([])); loadWindows(true).then(setU); }, []);
   const ws = limits?.windows || [];
   const src = !limits ? "Checking…"
     : limits.source === "live" ? `Checked ${agoLong(limits.fetchedAt)} with your Claude account.`
     : limits.source === "cached" ? `Not current: from Claude Code's last check, ${agoLong(limits.fetchedAt)}.` : "";
+  const week = winOf(u, "weekly_all");
   const top = Math.max(...(days || []).map((d) => d.cost), 0.01);
   const pick = days && days[at ?? days.length - 1];
   const sum = (days || []).reduce((a, d) => ({ total: a.total + d.total, cost: a.cost + d.cost }), { total: 0, cost: 0 });
+  const models = Object.entries(u?.week?.models || {}).map(([m, c]) => ({ label: modelName(m), cost: c })).filter((r) => r.cost >= 0.005).sort((a, b) => b.cost - a.cost);
+  const split = (d) => Object.entries(d.models || {}).sort((a, b) => b[1] - a[1]).filter(([, c]) => c >= 0.005).slice(0, 3).map(([m, c]) => `${modelName(m)} ${dollars(c)}`).join(" · ");
   return html`
     <${Sheet} cls="usage" title="Usage" sub=${limits?.plan && `${limits.plan} plan`} onClose=${onClose}>
       <section>
         <h4>Plan limits</h4>
-        ${ws.map((w) => html`
-          <div class="win">
-            <div class="wl"><span>${w.label}</span><span class="pct">${Math.round(w.percent)}%</span></div>
-            <${Meter} p=${w.percent} />
-            <div class="wr">${resetText(w.resetsAt)}</div>
-          </div>`)}
+        ${ws.map((w) => {
+          const x = winOf(u, w.key), rate = perPct(x), p = x && pace(x);
+          return html`
+            <div class="win">
+              <div class="wl"><span>${w.key === "session" ? "5-hour window" : w.label}</span><span class="pct">${x?.cost > 0 && html`<small>${usd(x.cost)}</small>`}${Math.round(w.percent)}%</span></div>
+              <${Meter} p=${w.percent} />
+              ${rate && html`<div class="wr">≈${dollars(rate)} of work per 1%${w.percent < 100 ? ` · ${Math.round(100 - w.percent)}% left ≈ ${dollars(rate * (100 - w.percent))}` : ""}</div>`}
+              ${p && html`<div class="wr ${p.hot ? "hot" : ""}">${p.text}</div>`}
+              <div class="wr">${resetText(w.resetsAt)}</div>
+            </div>`;
+        })}
         ${limits && !ws.length && html`<p class="note">Limits are not available here${limits.error ? `: ${limits.error}` : "."}</p>`}
         <p class="note">${src}${ws.length && limits?.error ? ` ${limits.error}.` : ""}</p>
       </section>
+      ${u?.week?.sessions?.length > 0 && html`
+        <section>
+          <h4>Biggest sessions this week${multi ? ", all machines" : ""}</h4>
+          <${ShareRows} w=${week} total=${u.week.sessions[0].cost} onPick=${onOpen}
+            rows=${u.week.sessions.map((x) => ({ ...x, label: x.title || x.sessionId.slice(0, 8), sub: multi && x.host }))} />
+        </section>`}
+      ${models.length > 0 && html`
+        <section>
+          <h4>Models this week</h4>
+          <${ShareRows} w=${week} total=${models[0].cost} rows=${models} />
+        </section>`}
       <section>
         <h4>By day${multi ? ", all machines" : ""}</h4>
         ${!days ? html`<p class="note">Adding up transcripts…</p>` : html`
           <div class="readout">
             ${pick && html`<b>${new Date(pick.day + "T12:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}</b>
-              <span>${pick.total ? `${tokens(pick.total)} tokens · ~${dollars(pick.cost)} · ${pick.sessions} session${pick.sessions === 1 ? "" : "s"}` : "No usage"}</span>`}
+              <span>${pick.total ? `${usd(pick.cost)}${asPct(pick.cost, week) != null ? `, ${approx(asPct(pick.cost, week))} of a week` : ""} · ${tokens(pick.total)} tokens · ${pick.sessions} session${pick.sessions === 1 ? "" : "s"}` : "No usage"}</span>`}
           </div>
+          <div class="readout sub">${pick?.total > 0 && split(pick)}</div>
           <div class="bars" onPointerLeave=${() => setAt(null)}>
             ${days.map((d, i) => html`
               <button class="bar ${i === (at ?? days.length - 1) ? "on" : ""}" onPointerEnter=${() => setAt(i)} onFocus=${() => setAt(i)} onClick=${() => setAt(i)}
@@ -1712,35 +1773,62 @@ function UsageSheet({ limits, multi, onClose }) {
                 <span>${+d.day.slice(8)}</span>
               </button>`)}
           </div>
-          <p class="total">Last ${days.length} days: <b>${tokens(sum.total)} tokens</b> · <b>~${dollars(sum.cost)}</b></p>
-          <p class="note">${ESTIMATE()}</p>`}
+          <p class="total">Last ${days.length} days: <b>${usd(sum.cost)}</b> · <b>${tokens(sum.total)} tokens</b>${perPct(week) ? html` · ≈<b>${(sum.cost / (perPct(week) * 100)).toFixed(1)}×</b> a full week's limit` : ""}</p>`}
       </section>
+      <p class="note">${ESTIMATE()} ${RATE}</p>
     <//>`;
 }
 
 function SessionUsage({ s, use, onClose }) {
   const sub = use?.subagents;
+  const sh = shares(use);
+  const week = winOf(use?.wins, "weekly_all");
+  const cin = use ? use.input + use.cacheRead + use.cacheWrite : 0;
+  const kinds = use && !use.failed && use.costs && [
+    ["Output", use.output, use.costs.output, "What Claude wrote, thinking included"],
+    ["Cache reads", use.cacheRead, use.costs.cacheRead, "Earlier context re-read from the prompt cache on every call"],
+    ["Cache writes", use.cacheWrite, use.costs.cacheWrite, "New context stored in the prompt cache"],
+    ["Input", use.input, use.costs.input, "Context sent without caching"],
+  ].map(([label, n, cost, hint]) => ({ label, sub: `${tokens(n)} tokens`, cost, hint }));
   const rows = use && !use.failed && [
-    ["Input", tokens(use.input)], ["Output", tokens(use.output)], ["Cache reads", tokens(use.cacheRead)], ["Cache writes", tokens(use.cacheWrite)],
-    ["Turns", use.turns], ["Tool calls", use.toolCalls],
-    ["Subagents", sub.count ? `${sub.count} · ${tokens(sub.total)} tokens · ~${dollars(sub.cost)}` : "none"],
+    ["Turns", use.turns ? `${use.turns}${use.cost > 0 ? ` · ${usd(use.cost / use.turns)} each` : ""}` : "0"],
+    ["Replies", use.messages],
+    ["Tool calls", use.toolCalls],
+    ["Cache hits", cin ? `${Math.round((use.cacheRead / cin) * 100)}% of the context came from cache` : "n/a"],
+    ["Subagents", sub.count ? `${sub.count} · ${tokens(sub.total)} tokens · ${usd(sub.cost)}${use.cost > 0 ? ` (${Math.round((sub.cost / use.cost) * 100)}%)` : ""}` : "none"],
     ["Wall time", use.start ? `${span(use.wallSeconds)}, since ${new Date(use.start).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : "n/a"],
   ];
   return html`
     <${Sheet} cls="usage" title="Usage" sub=${s.title} onClose=${onClose}>
       ${!use ? html`<p class="note">Reading the transcript…</p>` : use.failed ? html`<p class="note">Couldn't read this session's usage.</p>` : html`
         <div class="tiles">
-          ${weekShare(use, use.week) != null && html`<div><span class="n">≈${pct(weekShare(use, use.week))}</span><span class="l">of this week's limit</span></div>`}
-          <div><span class="n">${tokens(use.total)}</span><span class="l">tokens</span></div>
-          <div><span class="n">${span(use.activeSeconds)}</span><span class="l">Claude working</span></div>
+          ${sh.map((x) => html`<div>
+            <span class="n">${x.p != null ? approx(x.p) : `${usd(x.cost)}`}</span>
+            <span class="l">of this ${x.name}${x.p != null ? ` · ${usd(x.cost)}` : ""}</span>
+            <span class="l faint">${x.name === "week" ? `at ${Math.round(x.w.percent)}%, resets ${resetDay(x.w.resetsAt)}` : `at ${Math.round(x.w.percent)}%, resets in ${span((Date.parse(x.w.resetsAt) - Date.now()) / 1000)}`}</span>
+          </div>`)}
+          <div>
+            <span class="n">${usd(use.cost)}</span>
+            <span class="l">whole session${asPct(use.cost, week) != null ? `, ${approx(asPct(use.cost, week))} of a week` : ""}</span>
+            <span class="l faint">${tokens(use.total)} tokens</span>
+          </div>
+          <div>
+            <span class="n">${span(use.activeSeconds)}</span>
+            <span class="l">Claude working</span>
+            ${use.activeSeconds > 60 && use.cost > 0 && html`<span class="l faint">${usd(use.cost / (use.activeSeconds / 3600))} per working hour</span>`}
+          </div>
         </div>
         ${use.local?.length > 0 && html`<p class="quiet">${use.local.join(", ")} is not Claude: its part costs nothing and doesn't count toward your plan.</p>`}
-        ${(!use.local?.length || use.cost > 0) && html`<p class="quiet">~${dollars(use.cost)} at API prices${use.week?.percent != null ? ` · the week is at ${Math.round(use.week.percent)}%, resets ${resetDay(use.week.resetsAt)}` : ""}</p>`}
-        <dl class="facts">${rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
+        ${kinds && use.cost > 0 && html`
+          <h4>Where the cost goes</h4>
+          <${ShareRows} w=${week} total=${Math.max(...kinds.map((k) => k.cost))} rows=${kinds} />`}
         ${use.models?.length > 0 && html`
           <h4>Models</h4>
-          <dl class="facts">${use.models.map((m) => html`<dt>${modelName(m.model)}</dt><dd>${tokens(m.total)} tokens · ~${dollars(m.cost)} · ${m.messages} replies</dd>`)}</dl>`}
-        <p class="note">The share of your weekly limit is an estimate: this session's part of everything you used since the week started, applied to the week's current percentage. ${ESTIMATE(use.pricesAsOf)}${use.unpriced?.length ? ` No price known for ${use.unpriced.join(", ")}, so it counts as $0.` : ""} Working time adds up the gaps between messages in each turn, at most 10 minutes per gap.</p>`}
+          <${ShareRows} w=${week} total=${use.models[0].cost}
+            rows=${use.models.map((m) => ({ label: modelName(m.model), sub: `${tokens(m.total)} tokens · ${m.messages} replies`, cost: m.cost }))} />`}
+        <h4>Activity</h4>
+        <dl class="facts">${rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
+        <p class="note">The share of a limit counts this session's spend since that window opened. ${RATE} ${ESTIMATE(use.pricesAsOf)}${use.unpriced?.length ? ` No price known for ${use.unpriced.join(", ")}, so it counts as $0.` : ""} Working time adds up the gaps between messages in each turn, at most 10 minutes per gap.</p>`}
     <//>`;
 }
 

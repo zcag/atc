@@ -120,7 +120,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/page-image", s.pageImage)
 	mux.HandleFunc("GET /api/sessions/{sid}/usage", s.sessionUsage)
 	mux.HandleFunc("GET /api/usage/limits", s.usageLimits)
-	mux.HandleFunc("GET /api/usage/week", s.usageWeek)
+	mux.HandleFunc("GET /api/usage/windows", s.usageWindows)
+	mux.HandleFunc("GET /api/usage/spend", s.usageSpend)
 	mux.HandleFunc("GET /api/usage/days", s.usageDays)
 	mux.HandleFunc("GET /api/sessions/{sid}/o/{tok}/{path...}", s.outputFile)
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) {

@@ -26,6 +26,18 @@ type Window struct {
 	Percent  float64   `json:"percent"`
 	ResetsAt time.Time `json:"resetsAt,omitzero"`
 	Severity string    `json:"severity,omitempty"`
+	Scope    string    `json:"scope,omitempty"`
+}
+
+func (w Window) From() time.Time {
+	if w.Key == "session" {
+		return w.ResetsAt.Add(-5 * time.Hour)
+	}
+	return w.ResetsAt.Add(-7 * 24 * time.Hour)
+}
+
+func (w Window) Counts(model string) bool {
+	return w.Scope == "" || strings.Contains(model, strings.ToLower(w.Scope))
 }
 
 type Limits struct {
@@ -221,15 +233,15 @@ func ParseWindows(b []byte, now time.Time) []Window {
 		return nil
 	}
 	out := []Window{}
-	add := func(key, label string, pct *float64, resets, severity string) {
+	add := func(key, label string, pct *float64, resets, severity, scope string) {
 		at, _ := time.Parse(time.RFC3339Nano, resets)
 		if pct == nil || !at.IsZero() && at.Before(now) {
 			return
 		}
-		out = append(out, Window{key, label, *pct, at, severity})
+		out = append(out, Window{key, label, *pct, at, severity, scope})
 	}
 	for _, l := range v.Limits {
-		label := strings.ReplaceAll(l.Kind, "_", " ")
+		label, scope := strings.ReplaceAll(l.Kind, "_", " "), ""
 		switch l.Kind {
 		case "session":
 			label = "Current session"
@@ -238,19 +250,20 @@ func ParseWindows(b []byte, now time.Time) []Window {
 		case "weekly_scoped":
 			label = "This week"
 			if l.Scope != nil && l.Scope.Model != nil && l.Scope.Model.DisplayName != "" {
-				label += ", " + l.Scope.Model.DisplayName
+				scope = l.Scope.Model.DisplayName
+				label += ", " + scope
 			}
 		}
-		add(l.Kind, label, l.Percent, l.ResetsAt, l.Severity)
+		add(l.Kind, label, l.Percent, l.ResetsAt, l.Severity, scope)
 	}
 	if len(v.Limits) == 0 {
 		for _, w := range []struct {
-			key, label string
-			w          *window
-		}{{"session", "Current session", v.FiveHour}, {"weekly_all", "This week, all models", v.SevenDay},
-			{"weekly_opus", "This week, Opus", v.WeekOpus}, {"weekly_sonnet", "This week, Sonnet", v.WeekSonnet}} {
+			key, label, scope string
+			w                 *window
+		}{{"session", "Current session", "", v.FiveHour}, {"weekly_all", "This week, all models", "", v.SevenDay},
+			{"weekly_opus", "This week, Opus", "Opus", v.WeekOpus}, {"weekly_sonnet", "This week, Sonnet", "Sonnet", v.WeekSonnet}} {
 			if w.w != nil {
-				add(w.key, w.label, w.w.Utilization, w.w.ResetsAt, "")
+				add(w.key, w.label, w.w.Utilization, w.w.ResetsAt, "", w.scope)
 			}
 		}
 	}

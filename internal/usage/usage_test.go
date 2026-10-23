@@ -86,6 +86,9 @@ func TestSessionStats(t *testing.T) {
 	if !near(st.Cost, opus+opus2+haiku+sonnet) || !near(st.Subagents.Cost, haiku+sonnet) {
 		t.Fatalf("cost %v sub %v", st.Cost, st.Subagents.Cost)
 	}
+	if !near(st.Costs.Sum(), st.Cost) || !near(st.Costs.Output, (40*20+10*20+5*5+100*10)/1e6) {
+		t.Fatalf("split %+v", st.Costs)
+	}
 	if len(st.Models) != 3 || st.Models[1].Model != "claude-opus-5-5" || st.Models[1].Messages != 2 {
 		t.Fatalf("models %+v", st.Models)
 	}
@@ -122,6 +125,10 @@ func TestDays(t *testing.T) {
 	merged := MergeDays(days, []Day{{Day: last.Day, Part: Part{Tokens: Tokens{Input: 5}, Cost: 1, Messages: 1}, Sessions: 1}})
 	if m := merged[len(merged)-1]; m.Input != 9 || m.Total != 13 || m.Sessions != 3 || len(merged) != 7 {
 		t.Fatalf("merged %+v", m)
+	}
+	sp := s.Spend(root, time.Now().Add(-time.Hour))
+	if !near(sp.Cost, last.Cost) || len(sp.Sessions) != 2 || !near(sp.Sessions["s1"], 3*sp.Sessions["s2"]) || len(sp.Models) != 1 {
+		t.Fatalf("spend %+v", sp)
 	}
 }
 

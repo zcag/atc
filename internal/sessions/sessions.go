@@ -118,12 +118,30 @@ func (m *Manager) build(t history.Transcript) Session {
 	meta := m.Store.Get(t.SessionID)
 	return Session{
 		SessionID: t.SessionID, Kind: "transcript", State: Past,
-		Title: first(meta.Name, t.Title, t.AgentName, base(t.Cwd)), Name: t.AgentName,
+		Title: title(meta.Name, t), Name: t.AgentName,
 		Cwd: t.Cwd, StartCwd: t.StartCwd, Branch: t.Branch, Model: t.Model,
 		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, Context: t.Context, PromptAt: t.PromptAt,
 		Activity: t.Activity, LastReply: t.LastReply, Summary: m.Summary.Get(t),
 		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine,
 	}
+}
+
+func title(name string, t history.Transcript) string {
+	return first(name, t.Title, t.AgentName, base(t.Cwd))
+}
+
+func (m *Manager) Titles(ids []string) map[string]string {
+	want := map[string]bool{}
+	for _, id := range ids {
+		want[id] = true
+	}
+	out := map[string]string{}
+	for _, t := range m.Index.Scan() {
+		if want[t.SessionID] {
+			out[t.SessionID] = title(m.Store.Get(t.SessionID).Name, t)
+		}
+	}
+	return out
 }
 
 func state(a claude.Agent) string {

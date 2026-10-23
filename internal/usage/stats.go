@@ -38,13 +38,15 @@ type Part struct {
 	Tokens
 	Total    int64   `json:"total"`
 	Cost     float64 `json:"cost"`
+	Costs    Split   `json:"costs"`
 	Messages int     `json:"messages"`
 }
 
 func (p *Part) add(m msg) {
 	p.Tokens.add(m.t)
 	p.Total = p.Tokens.Total()
-	p.Cost += m.cost
+	p.Costs.add(m.costs)
+	p.Cost = p.Costs.Sum()
 	p.Messages++
 }
 
@@ -74,7 +76,14 @@ type Stats struct {
 type Day struct {
 	Day string `json:"day"`
 	Part
-	Sessions int `json:"sessions"`
+	Sessions int                `json:"sessions"`
+	Models   map[string]float64 `json:"models,omitempty"`
+}
+
+type Spend struct {
+	Cost     float64            `json:"cost"`
+	Models   map[string]float64 `json:"models"`
+	Sessions map[string]float64 `json:"sessions"`
 }
 
 type msg struct {
@@ -82,6 +91,7 @@ type msg struct {
 	day       string
 	at        time.Time
 	t         Tokens
+	costs     Split
 	cost      float64
 	priced    bool
 	local     bool
@@ -185,7 +195,8 @@ func (f *file) add(raw []byte) {
 		if old, ok := f.msgs[l.Message.ID]; ok {
 			m.day, m.at = old.day, old.at
 		}
-		m.cost, m.priced = Cost(m.model, t, u.CacheCreation.OneHour, u.Speed == "fast")
+		m.costs, m.priced = Costs(m.model, t, u.CacheCreation.OneHour, u.Speed == "fast")
+		m.cost = m.costs.Sum()
 		m.local = Local(m.model)
 		f.msgs[l.Message.ID] = m
 	default:
@@ -355,9 +366,25 @@ func costSince(files []*file, from time.Time, seen map[string]bool) float64 {
 	return c
 }
 
-func (s *Scanner) CostSince(root string, from time.Time) float64 {
-	_, files := s.recent(root, from)
-	return costSince(files, from, map[string]bool{})
+func (s *Scanner) Spend(root string, from time.Time) Spend {
+	paths, files := s.recent(root, from)
+	sp := Spend{Models: map[string]float64{}, Sessions: map[string]float64{}}
+	seen := map[string]bool{}
+	for i, f := range files {
+		sid := sessionOf(paths[i])
+		f.mu.Lock()
+		for id, m := range f.msgs {
+			if m.at.Before(from) || m.local || seen[id] {
+				continue
+			}
+			seen[id] = true
+			sp.Cost += m.cost
+			sp.Models[m.model] += m.cost
+			sp.Sessions[sid] += m.cost
+		}
+		f.mu.Unlock()
+	}
+	return sp
 }
 
 func (s *Scanner) SessionCostSince(transcript string, from time.Time) float64 {
@@ -389,6 +416,10 @@ func (s *Scanner) Days(root string, n int) []Day {
 				days[m.day] = d
 			}
 			d.add(m)
+			if d.Models == nil {
+				d.Models = map[string]float64{}
+			}
+			d.Models[m.model] += m.cost
 			if k := m.day + "|" + sid; !seen[k] {
 				seen[k] = true
 				d.Sessions++
@@ -428,7 +459,14 @@ func MergeDays(lists ...[]Day) []Day {
 			}
 			x.Tokens.add(d.Tokens)
 			x.Total = x.Tokens.Total()
+			x.Costs.add(d.Costs)
 			x.Cost += d.Cost
+			for m, c := range d.Models {
+				if x.Models == nil {
+					x.Models = map[string]float64{}
+				}
+				x.Models[m] += c
+			}
 			x.Messages += d.Messages
 			x.Sessions += d.Sessions
 		}

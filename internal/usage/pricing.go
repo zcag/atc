@@ -44,19 +44,44 @@ func priceOf(model string) (price, bool) {
 	return price{}, false
 }
 
+type Split struct {
+	Input      float64 `json:"input"`
+	Output     float64 `json:"output"`
+	CacheRead  float64 `json:"cacheRead"`
+	CacheWrite float64 `json:"cacheWrite"`
+}
+
+func (s Split) Sum() float64 { return s.Input + s.Output + s.CacheRead + s.CacheWrite }
+
+func (s *Split) add(o Split) {
+	s.Input += o.Input
+	s.Output += o.Output
+	s.CacheRead += o.CacheRead
+	s.CacheWrite += o.CacheWrite
+}
+
 func Cost(model string, t Tokens, write1h int64, fast bool) (float64, bool) {
+	s, ok := Costs(model, t, write1h, fast)
+	return s.Sum(), ok
+}
+
+func Costs(model string, t Tokens, write1h int64, fast bool) (Split, bool) {
 	p, ok := priceOf(model)
 	if !ok {
-		return 0, false
+		return Split{}, false
 	}
 	if p.tiered && t.Input+t.CacheRead+t.CacheWrite > 100_000 {
 		p.in, p.out, p.read = p.in*5, p.out*5, p.read*5
 	}
 	write1h = min(write1h, t.CacheWrite)
-	c := float64(t.Input)*p.in + float64(t.Output)*p.out + float64(t.CacheRead)*p.read +
-		float64(t.CacheWrite-write1h)*p.in*1.25 + float64(write1h)*p.in*2
+	k := 1e-6
 	if fast {
-		c *= 2
+		k *= 2
 	}
-	return c / 1e6, true
+	return Split{
+		Input:      float64(t.Input) * p.in * k,
+		Output:     float64(t.Output) * p.out * k,
+		CacheRead:  float64(t.CacheRead) * p.read * k,
+		CacheWrite: (float64(t.CacheWrite-write1h)*1.25 + float64(write1h)*2) * p.in * k,
+	}, true
 }
