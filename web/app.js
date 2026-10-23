@@ -632,8 +632,14 @@ const pageLabel = (l) => l.title || pageName(l.url);
 
 const pageMeta = (l) => `${l.title ? `${pageName(l.url)} · ` : ""}${agoLong(l.at)}`;
 
+function Pic({ src, alt = "", fallback }) {
+  const [bad, setBad] = useState(false);
+  useEffect(() => setBad(false), [src]);
+  return !src || bad ? fallback : html`<img loading="lazy" src=${src} alt=${alt} onError=${() => setBad(true)} />`;
+}
+
 function Shot({ l }) {
-  return html`<span class="shot">${l.image ? html`<img src=${l.image} loading="lazy" alt="" />` : html`<i>↗</i>`}</span>`;
+  return html`<span class="shot"><${Pic} src=${l.image} fallback=${html`<i>↗</i>`} /></span>`;
 }
 
 function Published({ links, inline }) {
@@ -1671,8 +1677,9 @@ function Outputs({ s, data }) {
           <section>
             <h4>Published</h4>
             <div class="cards">
-              ${data.featured.map((l) => html`<button class="card page" title=${l.url} onClick=${() => openOut(l.url)}>
-                <div class="pv">${l.image ? html`<img loading="lazy" src=${l.image} alt="" />` : html`<span class="ext">page</span>`}</div>
+              ${data.featured.map((l) => html`<button class="card ${l.kind || "page"}" title=${l.url} onClick=${() => openOut(l.url)}>
+                <div class="pv"><${Pic} src=${l.image} fallback=${l.text ? html`<${Peek} kind=${l.kind} text=${l.text} tsv=${l.url.endsWith(".tsv")} />`
+                  : html`<span class="ext">${l.kind || "page"}</span>`} /></div>
                 <div class="cap"><span class="n">${pageLabel(l)}</span><span class="m">${pageMeta(l)}</span></div>
               </button>`)}
             </div>
@@ -1714,9 +1721,10 @@ function OutCard({ f, onOpen }) {
   return html`
     <button class="card ${f.kind}" onClick=${onOpen} title=${tilde(f.path)}>
       <div class="pv">
-        ${f.kind === "image" ? html`<img loading="lazy" src=${f.url} alt="" />`
+        ${f.kind === "image" ? html`<${Pic} src=${f.url} fallback=${html`<span class="ext">${ext}</span>`} />`
           : f.kind === "html" ? html`<iframe src=${f.url} sandbox="allow-scripts" loading="lazy" tabindex="-1" aria-hidden="true"></iframe>`
           : f.kind === "video" ? html`<video src=${f.url} preload="metadata" muted></video>`
+          : f.kind === "markdown" || f.kind === "table" ? html`<${FilePeek} f=${f} ext=${ext} />`
           : html`<span class="ext">${ext}</span>`}
       </div>
       <div class="cap">
@@ -1724,6 +1732,21 @@ function OutCard({ f, onOpen }) {
         <span class="m">${KIND_LABEL[f.kind]}${f.size ? ` · ${fileSize(f.size)}` : ""} · ${f.op} ${agoLong(f.at)}</span>
       </div>
     </button>`;
+}
+
+function FilePeek({ f, ext }) {
+  const [text, setText] = useState(null);
+  useEffect(() => {
+    fetch(f.url, { headers: { Range: "bytes=0-2047" } }).then((r) => (r.ok ? r.text() : "")).then(setText, () => setText(""));
+  }, [f.url]);
+  return text ? html`<${Peek} kind=${f.kind} text=${text} tsv=${f.path.endsWith(".tsv")} />` : html`<span class="ext">${ext}</span>`;
+}
+
+function Peek({ kind, text, tsv }) {
+  if (kind === "markdown") return html`<div class="peek md" dangerouslySetInnerHTML=${{ __html: md(text) }}></div>`;
+  if (kind !== "table") return html`<pre class="peek">${text}</pre>`;
+  const rows = parseRows(text, tsv ? "\t" : ",").slice(0, 12);
+  return html`<div class="peek"><table class="data">${rows.map((r, i) => html`<tr>${r.slice(0, 6).map((c) => (i ? html`<td>${c}</td>` : html`<th>${c}</th>`))}</tr>`)}</table></div>`;
 }
 
 function Viewer({ list, at, setAt, onClose }) {
@@ -1767,7 +1790,7 @@ function Viewer({ list, at, setAt, onClose }) {
           : !text ? html`<p class="empty">Loading…</p>`
           : text.big ? html`<div class="none"><p>Too large to show here.</p><button class="btn" onClick=${() => openOut(f.url)}>Open it</button></div>`
           : text.err ? html`<p class="empty">${text.err}</p>`
-          : f.kind === "markdown" ? html`<article class="md">${md(text.t)}</article>`
+          : f.kind === "markdown" ? html`<article class="md" dangerouslySetInnerHTML=${{ __html: md(text.t) }}></article>`
           : f.kind === "table" ? html`<${Table} text=${text.t} tsv=${f.path.endsWith(".tsv")} />`
           : html`<pre class="code">${text.t}</pre>`}
       </div>
@@ -1926,7 +1949,7 @@ function md(src) {
       i++;
     } else {
       const para = [];
-      for (; i < lines.length && lines[i].trim() && !/^(```|#{1,6}\s|\s*([-*]|\d+\.)\s|\|)/.test(lines[i]); i++) para.push(lines[i]);
+      for (; i < lines.length && lines[i].trim() && !/^(```|#{1,6}\s|\s*([-*]|\d+\.)\s|\|.*\|\s*$)/.test(lines[i]); i++) para.push(lines[i]);
       out.push(`<p>${inline(para.join("\n")).replace(/\n/g, "<br>")}</p>`);
     }
   }
