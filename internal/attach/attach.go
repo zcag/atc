@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -76,11 +77,17 @@ func (v *viewer) String() string {
 }
 
 func (v *viewer) logf(format string, a ...any) {
-	sid := v.sid
-	if len(sid) > 8 {
-		sid = sid[:8]
+	log.Printf("term %s %v: %s", Short(v.sid), v, fmt.Sprintf(format, a...))
+}
+
+func Short(sid string) string {
+	switch {
+	case len(sid) <= 8:
+		return sid
+	case strings.Contains(sid, "_"):
+		return sid[len(sid)-8:]
 	}
-	log.Printf("term %s %v: %s", sid, v, fmt.Sprintf(format, a...))
+	return sid[:8]
 }
 
 func (v *viewer) queueSize(c Control) {

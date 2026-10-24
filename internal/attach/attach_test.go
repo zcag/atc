@@ -230,3 +230,15 @@ func TestTerminalReportsDoNotTakeTheSize(t *testing.T) {
 	default:
 	}
 }
+
+func TestShortKeysLogsByTheUniquePart(t *testing.T) {
+	for in, want := range map[string]string{
+		"260ef954":                             "260ef954",
+		"260ef954-1c2d-4e5f-8a9b-0c1d2e3f4a5b": "260ef954",
+		"ses_e92825d24ffez9G2bPLMRSuduy":       "LMRSuduy",
+	} {
+		if got := Short(in); got != want {
+			t.Errorf("Short(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

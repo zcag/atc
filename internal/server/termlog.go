@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+
+	"github.com/zcag/atc/internal/attach"
 )
 
 func (s *Server) termLog(w http.ResponseWriter, r *http.Request) {
@@ -27,10 +29,6 @@ func (s *Server) termLog(w http.ResponseWriter, r *http.Request) {
 	for _, k := range keys {
 		fmt.Fprintf(&b, " %s=%v", k, in.Detail[k])
 	}
-	sid := in.Session
-	if len(sid) > 8 {
-		sid = sid[:8]
-	}
-	log.Printf("term %s client (%s): %s%s", sid, s.deviceName(r, in.Device), in.Event, b.String())
+	log.Printf("term %s client (%s): %s%s", attach.Short(in.Session), s.deviceName(r, in.Device), in.Event, b.String())
 	w.WriteHeader(http.StatusNoContent)
 }

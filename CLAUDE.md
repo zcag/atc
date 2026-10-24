@@ -29,7 +29,8 @@ sessions to laptop's atc, so the two must never run different versions. Settings
 ## Terminal size and rendering problems
 
 Every attached screen is logged to the journal, server and browser side, keyed by the session's
-short id: `journalctl --user -u atc --since "1 hour ago" | grep "term 260ef954"`.
+short id: `journalctl --user -u atc --since "1 hour ago" | grep "term 260ef954"` (an opencode
+session's `ses_…` id is keyed by its last 8 characters).
 
 - `term <sid> #N (device): …` is the server's view of viewer N: connected (size, hidden,
   reconnect), visible/hidden, resize, **takes the size** (and why: first viewer, became visible,
