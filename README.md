@@ -227,7 +227,9 @@ default. Without `ATC_OPENCODE` nothing about atc changes.
 The service runs with its own config folder, `~/.config/atc/opencode`: `config.json` links to
 your normal opencode config so providers stay in one place, `opencode.json` makes `atc` the default
 agent, and `agent/atc.md` (from `deploy/opencode/`) is that agent: a short prompt and only the core
-tools (question, bash, read, glob, grep, edit, write). The unit also turns off opencode's
+tools (question, bash, read, glob, grep, edit, write). It knows where your notes folder is and may
+read it, but only looks something up when a question needs it, through the notes's index, so the
+notes don't take up the prompt (a lookup measured 9-28 s). The unit also turns off opencode's
 Claude Code compatibility (`~/.claude/CLAUDE.md` and `~/.claude/skills`) and external skills. A
 local model needs this to be usable: what gets resent on every step has to fit the server's prompt
 cache, or every step re-reads it all. Measured on gpu's MLX Qwen3-Coder-30B, one step in
