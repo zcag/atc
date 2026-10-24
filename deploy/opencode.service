@@ -4,6 +4,10 @@ After=network-online.target
 
 [Service]
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=OPENCODE_CONFIG_DIR=%h/.config/atc/opencode
+Environment=OPENCODE_DISABLE_CLAUDE_CODE_PROMPT=1
+Environment=OPENCODE_DISABLE_CLAUDE_CODE_SKILLS=1
+Environment=OPENCODE_DISABLE_EXTERNAL_SKILLS=1
 WorkingDirectory=%h
 ExecStart=%h/.local/bin/opencode serve --hostname 127.0.0.1 --port 4096
 Restart=always

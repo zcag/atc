@@ -14,9 +14,13 @@ install: check build
 	systemctl --user restart atc
 
 install-opencode:
+	install -Dm644 deploy/opencode/agent/atc.md ~/.config/atc/opencode/agent/atc.md
+	install -m644 deploy/opencode/opencode.json ~/.config/atc/opencode/opencode.json
+	test -e ~/.config/atc/opencode/config.json || ln -s ~/.config/opencode/config.json ~/.config/atc/opencode/config.json
 	install -Dm644 deploy/opencode.service ~/.config/systemd/user/opencode.service
 	systemctl --user daemon-reload
-	systemctl --user enable --now opencode
+	systemctl --user enable opencode
+	systemctl --user restart opencode
 
 install-mac: check build
 	install -m755 atc ~/.local/bin/atc

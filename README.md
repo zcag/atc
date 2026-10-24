@@ -224,6 +224,25 @@ ATC_OPENCODE=http://127.0.0.1:4096
 `model` is opencode's `provider/model` from its own config; leave it out to use opencode's
 default. Without `ATC_OPENCODE` nothing about atc changes.
 
+The service runs with its own config folder, `~/.config/atc/opencode`: `config.json` links to
+your normal opencode config so providers stay in one place, `opencode.json` makes `atc` the default
+agent, and `agent/atc.md` (from `deploy/opencode/`) is that agent: a short prompt and only the core
+tools (question, bash, read, glob, grep, edit, write). The unit also turns off opencode's
+Claude Code compatibility (`~/.claude/CLAUDE.md` and `~/.claude/skills`) and external skills. A
+local model needs this to be usable: what gets resent on every step has to fit the server's prompt
+cache, or every step re-reads it all. Measured on gpu's MLX Qwen3-Coder-30B, one step in
+`~/proj/atc`:
+
+| Setup | Prompt | First step |
+|---|---|---|
+| opencode defaults (global AGENTS.md, Claude skills, `build` agent) | 25,856 tokens | 72 s |
+| own config folder, Claude compatibility off | 6,022 | 11.7 s |
+| plus the `atc` agent | 3,607 | 5.4 s |
+
+With the `atc` agent, an 8-step fix-the-failing-test task took 22 s in total: after the first
+step each one sent 15-97 new tokens and read the rest from the cache. Your own `opencode` in a
+terminal keeps its normal config.
+
 An opencode session is a full atc session: its strip, states and push, the terminal
 (`opencode attach`, shared and sized like any other), transcript, summary, outputs, usage (tokens,
 no cost), send, voice and the MCP tools. What maps differently:
