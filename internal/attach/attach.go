@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"sync"
@@ -33,6 +34,7 @@ type Control struct {
 
 type Hub struct {
 	Bin    string
+	Attach func(id string) *exec.Cmd
 	mu     sync.Mutex
 	groups map[string]*group
 	seq    int
@@ -127,8 +129,7 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 	h.seq++
 	v.n = h.seq
 	h.mu.Unlock()
-	cmd := exec.Command(h.Bin, "attach", id)
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
+	cmd := h.command(id)
 	v.pty, err = pty.StartWithSize(cmd, &pty.Winsize{Cols: v.cols, Rows: v.rows})
 	if err != nil {
 		v.logf("attach failed: %v", err)
@@ -169,7 +170,7 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 			code = ee.ExitCode()
 		}
 		if ctx.Err() == nil {
-			v.logf("claude attach exited (%d)", code)
+			v.logf("%s %s exited (%d)", filepath.Base(cmd.Args[0]), cmd.Args[1], code)
 		}
 		v.control(ctx, Control{Type: "exit", Code: code})
 		conn.Close(websocket.StatusNormalClosure, "attach exited")
@@ -244,6 +245,18 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 			h.show(id, v, c.Type == "visible")
 		}
 	}
+}
+
+func (h *Hub) command(id string) *exec.Cmd {
+	var cmd *exec.Cmd
+	if h.Attach != nil {
+		cmd = h.Attach(id)
+	}
+	if cmd == nil {
+		cmd = exec.Command(h.Bin, "attach", id)
+	}
+	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
+	return cmd
 }
 
 func (h *Hub) Viewing(id string) bool {

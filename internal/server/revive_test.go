@@ -38,6 +38,26 @@ func TestReviverSpotsAMassStop(t *testing.T) {
 	}
 }
 
+func TestReviverIgnoresOpenCodeWhenClaudeStops(t *testing.T) {
+	rv := &reviver{path: filepath.Join(t.TempDir(), "running.json")}
+	oc := sessions.Session{SessionID: "ses_x", ID: "ses_x", Attachable: true, Title: "X", State: sessions.Working, Harness: "opencode"}
+	live := []sessions.Session{
+		{SessionID: "a", ID: "aaaa0001", Attachable: true, Title: "A"},
+		{SessionID: "b", ID: "bbbb0001", Attachable: true, Title: "B"},
+		oc,
+	}
+	rv.observe(runningOf(live, "here"))
+	lost := rv.observe(runningOf([]sessions.Session{oc}, "here"))
+	if len(lost) != 2 {
+		t.Fatalf("an opencode session still running must not hide Claude's service stopping: %+v", lost)
+	}
+	for _, r := range lost {
+		if r.Harness != "" {
+			t.Fatalf("opencode keeps its own sessions; only Claude's come back: %+v", r)
+		}
+	}
+}
+
 func TestReviverAfterReboot(t *testing.T) {
 	dir := t.TempDir()
 	rv := &reviver{path: revivePath(dir)}

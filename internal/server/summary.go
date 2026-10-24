@@ -24,7 +24,7 @@ func (s *Server) summary(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "summaries are turned off on "+s.Host, http.StatusNotImplemented)
 		return
 	}
-	t, ok := s.M.Index.Find(r.PathValue("sid"))
+	t, ok := s.M.Find(r.PathValue("sid"))
 	if !ok {
 		http.Error(w, "no transcript", http.StatusNotFound)
 		return

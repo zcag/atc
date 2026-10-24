@@ -47,8 +47,9 @@ let TABS = { only: null, tabs: [], set: () => {} };
 const focusOnMount = (el) => { if (el && !el.dataset.focused) { el.dataset.focused = "1"; requestAnimationFrame(() => el.focus({ preventScroll: true })); } };
 const local = (m) => !!m && !m.startsWith("claude-") && m !== "<synthetic>";
 const model = (m) => (local(m) ? m.split("/").pop().split(":")[0] : (m || "").replace(/^claude-/, "").replace(/-\d.*$/, ""));
-const engineTag = (s) => (s.engine || local(s.model)) &&
-  html`<span class="eng" title=${`Runs on ${s.engine || s.model}, not Claude`}>${s.engine || model(s.model)}</span>`;
+const engineTag = (s) => s.harness
+  ? html`<span class="eng" title=${`Runs in ${s.harness}${s.model ? ` on ${s.model}` : ""}, not Claude Code`}>${s.engine || s.harness}</span>`
+  : (s.engine || local(s.model)) && html`<span class="eng" title=${`Runs on ${s.engine || s.model}, not Claude`}>${s.engine || model(s.model)}</span>`;
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
 
@@ -841,6 +842,7 @@ function Session({ s, say, live }) {
       </div>
       <${Menu} busy=${busy} items=${[...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "Usage", run: () => setShowUse(true) }]} />
     </div>
+    <${AskBar} s=${s} say=${say} />
     <${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />
     ${mode === "term"
       ? canAttach
@@ -906,6 +908,56 @@ function SummaryBar({ s, say, onFull }) {
         </div>
       </div>`}
   `;
+}
+
+function AskBar({ s, say }) {
+  const a = s.asks?.[0];
+  const [picked, setPicked] = useState([]);
+  const [typed, setTyped] = useState([]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setPicked([]); setTyped([]); setBusy(false); }, [a?.id]);
+  if (!a) return null;
+  const send = (body) => {
+    setBusy(true);
+    api(`/api/sessions/${s.sessionId}/asks/${a.id}`, { method: "POST", body }).catch((e) => { say(e.message); setBusy(false); });
+  };
+  if (a.permission) return html`
+    <div class="askbar" role="group" aria-label="Permission request">
+      <p class="asktext">${s.harness} wants to use <b>${a.permission}</b>${a.patterns?.length > 0 && html` <code>${a.patterns.join(" ")}</code>`}</p>
+      <div class="askopts">
+        <button class="btn primary" disabled=${busy} onClick=${() => send({ reply: "once" })}>Allow once</button>
+        <button class="btn" disabled=${busy} onClick=${() => send({ reply: "always" })}>Always allow</button>
+        <button class="btn" disabled=${busy} onClick=${() => send({ reject: true })}>Reject</button>
+      </div>
+    </div>`;
+  const qs = a.questions || [];
+  const oneTap = qs.length === 1 && !qs[0].multiple && !qs[0].custom;
+  const dismiss = html`<button class="btn askskip" disabled=${busy} onClick=${() => send({ reject: true })}>Dismiss</button>`;
+  const answers = () => qs.map((_, i) => [...(picked[i] || []), ...(typed[i]?.trim() ? [typed[i].trim()] : [])]);
+  const choose = (i, label) => {
+    if (oneTap) return send({ answers: [[label]] });
+    const cur = picked[i] || [];
+    const next = qs[i].multiple ? (cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label]) : cur.includes(label) ? [] : [label];
+    setPicked(Object.assign([...picked], { [i]: next }));
+  };
+  return html`
+    <div class="askbar" role="group" aria-label="Question">
+      ${qs.map((q, i) => html`
+        <div class="askq">
+          <p class="asktext">${q.question}</p>
+          <div class="askopts">
+            ${q.options.map((o) => html`<button class="btn ${picked[i]?.includes(o.label) ? "on" : ""}" disabled=${busy} title=${o.description || ""}
+              aria-pressed=${oneTap ? null : !!picked[i]?.includes(o.label)} onClick=${() => choose(i, o.label)}>${o.label}</button>`)}
+            ${q.custom && html`<input class="askin" placeholder="Or type an answer" value=${typed[i] || ""} disabled=${busy}
+              onInput=${(e) => setTyped(Object.assign([...typed], { [i]: e.target.value }))} />`}
+            ${oneTap && dismiss}
+          </div>
+        </div>`)}
+      ${!oneTap && html`<div class="askopts">
+        <button class="btn primary" disabled=${busy || !answers().every((x) => x.length)} onClick=${() => send({ answers: answers() })}>Send</button>
+        ${dismiss}
+      </div>`}
+    </div>`;
 }
 
 function SummaryParts({ x }) {
@@ -1368,7 +1420,7 @@ const speakable = (t) =>
 const sentences = (t) => (t.match(/[^.!?…]+[.!?…]+["')]?(\s|$)|[^.!?…]+$/g) || [t]).map((x) => x.trim()).filter(Boolean);
 const turkish = (t) => /[çğıöşüÇĞİÖŞÜ]/.test(t);
 const PHANTOM = /^(thank you|thanks for watching|you|bye|altyazı.*|abone olmayı unutmayın.*|\.+)[.!]?$/i;
-const PHASE = { starting: "Starting the microphone…", listening: "Listening", hearing: "Hearing you…", thinking: "Transcribing…", waiting: "Claude is working", speaking: "Speaking · tap to stop", muted: "Muted · tap to talk", error: "Voice is not available" };
+const PHASE = { starting: "Starting the microphone…", listening: "Listening", hearing: "Hearing you…", thinking: "Transcribing…", speaking: "Speaking · tap to stop", muted: "Muted · tap to talk", error: "Voice is not available" };
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 const MIC = html`<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>`;
@@ -1385,6 +1437,7 @@ function finalReplies(msgs) {
 }
 
 function VoiceBar({ s, say, send, onClose }) {
+  const who = s.harness || "Claude";
   const [phase, setPhase] = useState("starting");
   const [heard, setHeard] = useState("");
   const [spoken, setSpoken] = useState("");
@@ -1566,8 +1619,8 @@ function VoiceBar({ s, say, send, onClose }) {
     <div class="voicebar" role="region" aria-label="Voice">
       <div class="vtext" aria-live="polite">
         ${heard && html`<div class="vline"><b>You</b> ${heard}</div>`}
-        ${spoken && html`<div class="vline said"><b>Claude</b> ${spoken}</div>`}
-        ${!heard && !spoken && html`<div class="vline">Say what you want Claude to do. It answers out loud when it is done.</div>`}
+        ${spoken && html`<div class="vline said"><b>${who}</b> ${spoken}</div>`}
+        ${!heard && !spoken && html`<div class="vline">Say what you want ${who} to do. It answers out loud when it is done.</div>`}
       </div>
       <div class="vrow">
         <div class="vside">
@@ -1580,10 +1633,10 @@ function VoiceBar({ s, say, send, onClose }) {
             aria-label=${phase === "speaking" ? "Stop speaking" : muted ? "Unmute microphone" : "Mute microphone"}>
             ${phase === "speaking" ? STOP : muted ? MIC_OFF : MIC}
           </button>
-          <div class="vphase">${PHASE[phase]}</div>
+          <div class="vphase">${phase === "waiting" ? `${who} is working` : PHASE[phase]}</div>
         </div>
         <div class="vside right">
-          ${phase === "waiting" && html`<button class="vbtn" onClick=${() => send("\x1b")} title="Send Esc to Claude (or say “stop”)">Stop Claude</button>`}
+          ${phase === "waiting" && html`<button class="vbtn" onClick=${() => send("\x1b")} title=${`Send Esc to ${who} (or say “stop”)`}>Stop ${who}</button>`}
           ${VOICE.tts && html`<div class="seg">
             <button class=${source === "device" ? "on" : ""} onClick=${() => pick("device")} title="This device's built-in voice: instant">Device</button>
             <button class=${source === "mine" ? "on" : ""} onClick=${() => pick("mine")} title="The server's voice: slower">Server</button>
@@ -1814,7 +1867,7 @@ function SessionUsage({ s, use, onClose }) {
           </div>
           <div>
             <span class="n">${span(use.activeSeconds)}</span>
-            <span class="l">Claude working</span>
+            <span class="l">${s.harness || "Claude"} working</span>
             ${use.activeSeconds > 60 && use.cost > 0 && html`<span class="l faint">${usd(use.cost / (use.activeSeconds / 3600))} per working hour</span>`}
           </div>
         </div>
@@ -2230,6 +2283,7 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
   const target = preset ? preset.host || home : host;
   const usable = engines.filter((e) => (e.host || home) === target);
   useEffect(() => { if (!usable.some((e) => e.name === engine)) setEngine(""); }, [target, engines]);
+  const harness = usable.find((e) => e.name === engine)?.harness;
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => {
@@ -2245,7 +2299,7 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
     try {
       const r = preset
         ? await api(`/api/sessions${hostQ(preset.host, home)}`, { method: "POST", body: { preset: preset.name, name: name.trim(), prompt, engine } })
-        : await api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt, worktree, engine } });
+        : await api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt, worktree: worktree && !harness, engine } });
       onClose();
       say("Session started.");
       go(r.id);
@@ -2264,12 +2318,12 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
         ` : html`
           <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDir("~"); }} />
           <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} autofocus />
-          <${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />`}
-        <label class="field"><span>Name</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder=${preset ? preset.name : "Optional"} />${!preset && html`<small>Without one, Claude titles the session from what you ask.</small>`}</label>
+          ${!harness && html`<${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />`}`}
+        <label class="field"><span>Name</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder=${preset ? preset.name : "Optional"} />${!preset && html`<small>Without one, ${harness || "Claude"} titles the session from what you ask.</small>`}</label>
         <label class="field"><span>First message</span><textarea rows="3" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} placeholder="Optional. You can also type it in the terminal."></textarea></label>
         ${err && html`<p class="err">${err}</p>`}
         ${usable.length > 0 && html`
-          <p class="presetline">Model:${[{ name: "" }, ...usable].map((e) => html` <button type="button" class="pick ${e.name === engine ? "on" : ""}" title=${e.model || "Claude, as configured"}
+          <p class="presetline">Model:${[{ name: "" }, ...usable].map((e) => html` <button type="button" class="pick ${e.name === engine ? "on" : ""}" title=${e.harness ? `${e.harness}${e.model ? ` on ${e.model}` : ""}` : e.model || "Claude, as configured"}
             onClick=${() => setEngine(e.name)}>${e.name || "Claude"}</button>`)}</p>`}
         ${presets.length > 0 && !preset && html`
           <p class="presetline">Or use a preset:${presets.map((p) => html` <button type="button" class="proj" style=${`--ph: ${hueOf(p.name)}`} title=${`${MULTI && p.host ? p.host + ": " : ""}${tilde(p.dir)}`} onClick=${() => setPreset(p)}>${p.name}</button>`)}</p>`}

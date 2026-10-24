@@ -11,6 +11,7 @@ import (
 
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
+	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/outputs"
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/summary"
@@ -39,6 +40,8 @@ type Session struct {
 	Branch         string           `json:"branch,omitempty"`
 	Model          string           `json:"model,omitempty"`
 	Engine         string           `json:"engine,omitempty"`
+	Harness        string           `json:"harness,omitempty"`
+	Asks           []opencode.Ask   `json:"asks,omitempty"`
 	PermissionMode string           `json:"permissionMode,omitempty"`
 	LastPrompt     string           `json:"lastPrompt,omitempty"`
 	Context        int              `json:"context,omitempty"`
@@ -60,6 +63,7 @@ type Manager struct {
 	Index   *history.Index
 	Store   *store.Store
 	Summary *summary.Summarizer
+	OC      *opencode.Backend
 }
 
 func (m *Manager) Live(ctx context.Context) ([]Session, error) {
@@ -91,6 +95,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		s.Pinned, s.Parked, s.Engine = meta.Pinned, meta.Parked, meta.Engine
 		out = append(out, s)
 	}
+	out = append(out, m.openCode(ctx)...)
 	Sort(out)
 	return out, nil
 }
@@ -98,7 +103,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 func (m *Manager) History(q, dir string, limit int) []Session {
 	q = strings.ToLower(q)
 	var out []Session
-	for _, t := range m.Index.Scan() {
+	for _, t := range m.transcripts() {
 		s := m.build(t)
 		if dir != "" && s.StartCwd != dir && s.Cwd != dir {
 			continue
@@ -122,7 +127,7 @@ func (m *Manager) build(t history.Transcript) Session {
 		Cwd: t.Cwd, StartCwd: t.StartCwd, Branch: t.Branch, Model: t.Model,
 		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, Context: t.Context, PromptAt: t.PromptAt,
 		Activity: t.Activity, LastReply: t.LastReply, Summary: m.Summary.Get(t),
-		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine,
+		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine, Harness: t.Harness,
 	}
 }
 

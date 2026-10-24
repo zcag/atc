@@ -13,6 +13,11 @@ install: check build
 	systemctl --user enable --now atc
 	systemctl --user restart atc
 
+install-opencode:
+	install -Dm644 deploy/opencode.service ~/.config/systemd/user/opencode.service
+	systemctl --user daemon-reload
+	systemctl --user enable --now opencode
+
 install-mac: check build
 	install -m755 atc ~/.local/bin/atc
 	install -m644 deploy/atc.plist ~/Library/LaunchAgents/io.github.zcag.atc.plist
@@ -37,4 +42,4 @@ android-publish:
 	rsync -t android/dist/atc.apk $(APP_HOST):$(APP_DIR)/
 	rsync -t android/dist/version.json $(APP_HOST):$(APP_DIR)/
 
-.PHONY: build check install install-mac android android-publish
+.PHONY: build check install install-opencode install-mac android android-publish

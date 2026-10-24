@@ -42,6 +42,7 @@ type Complete func(ctx context.Context, system, user string) (string, error)
 
 type Summarizer struct {
 	Model    string
+	Read     map[string]func(sid, reply string) (string, error)
 	complete Complete
 	path     string
 
@@ -59,7 +60,7 @@ type failure struct {
 }
 
 type job struct {
-	sid, path, reply, prompt string
+	sid, path, reply, prompt, harness string
 }
 
 func Open(path, model string, complete Complete) (*Summarizer, error) {
@@ -91,7 +92,7 @@ func (s *Summarizer) Get(t history.Transcript) *Summary {
 }
 
 func (s *Summarizer) Want(t history.Transcript) bool {
-	if s == nil || t.ReplyID == "" || t.Path == "" {
+	if s == nil || t.ReplyID == "" || t.Path == "" && s.Read[t.Harness] == nil {
 		return false
 	}
 	key := t.SessionID + "/" + t.ReplyID
@@ -107,7 +108,7 @@ func (s *Summarizer) Want(t history.Transcript) bool {
 		return false
 	}
 	select {
-	case s.queue <- job{t.SessionID, t.Path, t.ReplyID, t.LastPrompt}:
+	case s.queue <- job{t.SessionID, t.Path, t.ReplyID, t.LastPrompt, t.Harness}:
 		s.queued[key] = true
 		return true
 	default:
@@ -176,7 +177,11 @@ func (s *Summarizer) work() {
 }
 
 func (s *Summarizer) make(j job) (Summary, error) {
-	text, err := history.Reply(j.path, j.reply)
+	read := func(_, reply string) (string, error) { return history.Reply(j.path, reply) }
+	if r := s.Read[j.harness]; r != nil {
+		read = r
+	}
+	text, err := read(j.sid, j.reply)
 	if err != nil {
 		return Summary{}, err
 	}

@@ -31,6 +31,7 @@ type Transcript struct {
 	ReplyID        string    `json:"replyId,omitempty"`
 	Pending        string    `json:"pending,omitempty"`
 	pendingID      string
+	Harness        string    `json:"harness,omitempty"`
 	Context        int       `json:"context"`
 	Updated        time.Time `json:"updated"`
 	Size           int64     `json:"size"`
@@ -198,7 +199,7 @@ func apply(t *Transcript, e *entry, custom *string) {
 			for _, b := range blocks {
 				switch {
 				case b.Type == "tool_use":
-					t.Activity = strings.TrimSpace(b.Name + "  " + summarize(b.Input))
+					t.Activity = strings.TrimSpace(b.Name + "  " + Detail(b.Input))
 					t.Pending, t.pendingID = t.Activity, b.ID
 				case b.Type == "text" && strings.TrimSpace(b.Text) != "":
 					t.Activity, t.LastReply, t.ReplyID = "", clip(strings.Join(strings.Fields(b.Text), " "), 300), e.UUID

@@ -86,8 +86,16 @@ type block struct {
 func (s *Scanner) Matching(transcript, home string, re *regexp.Regexp) []Link {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	var links []Link
+	var all []Link
 	for _, l := range s.read(transcript, home, re).found.links {
+		all = append(all, l)
+	}
+	return Featured(all, re)
+}
+
+func Featured(all []Link, re *regexp.Regexp) []Link {
+	var links []Link
+	for _, l := range all {
 		if re.MatchString(l.URL) {
 			links = append(links, l)
 		}
@@ -136,7 +144,10 @@ func (s *Scanner) read(transcript, home string, featured *regexp.Regexp) *entry 
 func (s *Scanner) Scan(transcript, home string, featured *regexp.Regexp) ([]File, []Link, map[string]time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e := s.read(transcript, home, featured)
+	return s.read(transcript, home, featured).results()
+}
+
+func (e *entry) results() ([]File, []Link, map[string]time.Time) {
 	var files []File
 	for _, f := range e.found.files {
 		st, err := os.Stat(f.Path)
@@ -168,7 +179,6 @@ func (f *found) add(line []byte, home string, featured *regexp.Regexp) {
 	if json.Unmarshal(m.Message.Content, &blocks) != nil {
 		return
 	}
-	at := m.Timestamp
 	for _, b := range blocks {
 		switch b.Type {
 		case "tool_use":
@@ -178,32 +188,58 @@ func (f *found) add(line []byte, home string, featured *regexp.Regexp) {
 				Command      string `json:"command"`
 			}
 			json.Unmarshal(b.Input, &in)
-			for _, m := range cmdPortRe.FindAllStringSubmatch(in.Command, -1) {
-				f.ports[m[1]] = at
-			}
-			p := cleanPath(cmpOr(in.FilePath, in.NotebookPath), home)
-			switch {
-			case p == "":
-			case b.Name == "Write":
-				op := "made"
-				if old, ok := f.files[p]; ok && old.Op == "edited" {
-					op = "edited"
-				}
-				f.files[p] = File{Path: p, Kind: Kind(p), Op: op, At: at}
-			case b.Name == "Edit" || b.Name == "MultiEdit" || b.Name == "NotebookEdit":
-				f.files[p] = File{Path: p, Kind: Kind(p), Op: "edited", At: at}
-			case Kind(p) != "text":
-				f.seen(p, at)
-			}
+			f.step(Step{At: m.Timestamp, Tool: b.Name, Path: cmpOr(in.FilePath, in.NotebookPath), Command: in.Command}, home, featured)
 		case "text":
 			if m.Type == "assistant" {
-				f.scanText(b.Text, at, home, func(string) bool { return true })
+				f.step(Step{At: m.Timestamp, Text: b.Text}, home, featured)
 			}
 		case "tool_result":
-			t := resultText(b.Content)
-			f.scanText(t, at, home, func(u string) bool { return featured != nil && featured.MatchString(u) && ownLine(t, u) })
+			f.step(Step{At: m.Timestamp, Result: resultText(b.Content)}, home, featured)
 		}
 	}
+}
+
+type Step struct {
+	At      time.Time
+	Tool    string
+	Path    string
+	Command string
+	Text    string
+	Result  string
+}
+
+func Collect(steps []Step, home string, featured *regexp.Regexp) ([]File, []Link, map[string]time.Time) {
+	e := &entry{found: found{map[string]File{}, map[string]Link{}, map[string]time.Time{}}}
+	for _, s := range steps {
+		e.found.step(s, home, featured)
+	}
+	return e.results()
+}
+
+func (f *found) step(s Step, home string, featured *regexp.Regexp) {
+	at := s.At
+	if s.Tool != "" {
+		for _, m := range cmdPortRe.FindAllStringSubmatch(s.Command, -1) {
+			f.ports[m[1]] = at
+		}
+		p := cleanPath(s.Path, home)
+		switch {
+		case p == "":
+		case s.Tool == "Write":
+			op := "made"
+			if old, ok := f.files[p]; ok && old.Op == "edited" {
+				op = "edited"
+			}
+			f.files[p] = File{Path: p, Kind: Kind(p), Op: op, At: at}
+		case s.Tool == "Edit" || s.Tool == "MultiEdit" || s.Tool == "NotebookEdit":
+			f.files[p] = File{Path: p, Kind: Kind(p), Op: "edited", At: at}
+		case Kind(p) != "text":
+			f.seen(p, at)
+		}
+	}
+	f.scanText(s.Text, at, home, func(string) bool { return true })
+	t := s.Result
+	f.scanText(t, at, home, func(u string) bool { return featured != nil && featured.MatchString(u) && ownLine(t, u) })
 }
 
 func (f *found) scanText(t string, at time.Time, home string, keep func(string) bool) {

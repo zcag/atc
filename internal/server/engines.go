@@ -8,16 +8,18 @@ import (
 	"maps"
 	"net/http"
 
+	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/store"
 )
 
 type Engine struct {
-	Name  string            `json:"name"`
-	Model string            `json:"model"`
-	URL   string            `json:"url,omitempty"`
-	Token string            `json:"token,omitempty"`
-	Env   map[string]string `json:"env,omitempty"`
-	Host  string            `json:"host,omitempty"`
+	Name    string            `json:"name"`
+	Harness string            `json:"harness,omitempty"`
+	Model   string            `json:"model"`
+	URL     string            `json:"url,omitempty"`
+	Token   string            `json:"token,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Host    string            `json:"host,omitempty"`
 }
 
 func LoadEngines(path string) ([]Engine, error) { return loadList[Engine](path) }
@@ -41,7 +43,7 @@ func (e Engine) args() []string {
 
 func (s *Server) engine(name string) (Engine, bool) {
 	for _, e := range s.Engines {
-		if e.Name == name {
+		if e.Name == name && (e.Harness != opencode.Harness || s.M.OC != nil) {
 			return e, true
 		}
 	}
@@ -84,9 +86,11 @@ func (s *Server) engineOf(sid string) (Engine, bool) {
 }
 
 func (s *Server) engines(w http.ResponseWriter, r *http.Request) {
-	list := make([]Engine, len(s.Engines))
-	for i, e := range s.Engines {
-		list[i] = Engine{Name: e.Name, Model: e.Model}
+	list := []Engine{}
+	for _, e := range s.Engines {
+		if _, ok := s.engine(e.Name); ok {
+			list = append(list, Engine{Name: e.Name, Harness: e.Harness, Model: e.Model})
+		}
 	}
 	gather(s, w, r, "/api/engines", list, func(e *Engine, h string) { e.Host = h })
 }

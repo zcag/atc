@@ -34,13 +34,24 @@ type outputFile struct {
 
 func (s *Server) outputs(w http.ResponseWriter, r *http.Request) {
 	sid := r.PathValue("sid")
-	t, ok := s.M.Index.Find(sid)
-	if !ok {
-		http.Error(w, "no transcript", http.StatusNotFound)
-		return
+	var files []outputs.File
+	var links []outputs.Link
+	var seen map[string]time.Time
+	if s.M.OpenCode(sid) {
+		var err error
+		if files, links, seen, err = s.openCodeFound(r.Context(), sid); err != nil {
+			fail(w, err)
+			return
+		}
+	} else {
+		t, ok := s.M.Index.Find(sid)
+		if !ok {
+			http.Error(w, "no transcript", http.StatusNotFound)
+			return
+		}
+		home, _ := os.UserHomeDir()
+		files, links, seen = s.scanner.Scan(t.Path, home, s.Featured)
 	}
-	home, _ := os.UserHomeDir()
-	files, links, seen := s.scanner.Scan(t.Path, home, s.Featured)
 	pid := 0
 	if live, err := s.M.Live(r.Context()); err == nil {
 		for _, x := range live {

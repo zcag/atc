@@ -200,6 +200,50 @@ session, so a local server's prompt cache never matched and each new session re-
 tokens. On gpu's MLX Qwen a new session's first turn went from 62-73 s to 2.7 s with it off. Replies from models not named `claude-*` cost nothing and are left out of the plan's
 daily usage.
 
+## opencode
+
+atc also runs [opencode](https://opencode.ai) sessions next to Claude's, through one headless
+`opencode serve` on the same machine. That server keeps every session alive the way Claude's
+background service does, for every folder at once, so opencode sessions survive atc restarting
+too. Run it as its own service, never under atc:
+
+```sh
+make install-opencode        # deploy/opencode.service, on 127.0.0.1:4096
+```
+
+then point atc at it in `~/.config/atc/env` and add an engine with `"harness": "opencode"`:
+
+```sh
+ATC_OPENCODE=http://127.0.0.1:4096
+```
+
+```json
+{ "name": "opencode", "harness": "opencode", "model": "mlx/mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ" }
+```
+
+`model` is opencode's `provider/model` from its own config; leave it out to use opencode's
+default. Without `ATC_OPENCODE` nothing about atc changes.
+
+An opencode session is a full atc session: its strip, states and push, the terminal
+(`opencode attach`, shared and sized like any other), transcript, summary, outputs, usage (tokens,
+no cost), send, voice and the MCP tools. What maps differently:
+
+- **State** comes from the server: busy is working; a pending question or permission is needs
+  you, with the question as the activity line.
+- **Questions and permissions** show above the session's terminal with their options as buttons
+  (Allow once / Always allow / Reject for a permission), answered through the server.
+  `opencode attach` does not show a question asked before it attached, which is the usual case
+  when you open a session because atc said it needs you.
+- **Which sessions are live:** the ones atc started or resumed, and any session that starts
+  working on the server, until you stop or remove them. Stop interrupts the turn and keeps the
+  session resumable; remove takes it off the list, and the conversation stays in history.
+- **Presets** give the folder, name and brief. The brief goes in as hidden context with the first
+  message, so it stays in the conversation. `args` are Claude flags and are not used, and git
+  worktrees are Claude-only.
+- **After a reboot**, a session that was working gets the same "continue" message as Claude's.
+- Sessions from a plain `opencode` in a terminal run their own server: they show in history, not
+  as live.
+
 ## Outputs
 
 Each session has an **Outputs** tab with what it produced, so you can check its work from a phone:

@@ -10,10 +10,10 @@ import (
 
 func TestSummarizeQuestionAndPlan(t *testing.T) {
 	q := `{"questions":[{"question":"Which version do we cut?","options":[{"label":"2.4"},{"label":"2.5"}]},{"question":"later"}]}`
-	if got := summarize([]byte(q)); got != "Which version do we cut? (2.4 · 2.5)" {
+	if got := Detail([]byte(q)); got != "Which version do we cut? (2.4 · 2.5)" {
 		t.Fatalf("question: %q", got)
 	}
-	if got := summarize([]byte(`{"plan":"\n# Rewrite search\n\n1. Index"}`)); got != "Rewrite search" {
+	if got := Detail([]byte(`{"plan":"\n# Rewrite search\n\n1. Index"}`)); got != "Rewrite search" {
 		t.Fatalf("plan: %q", got)
 	}
 }

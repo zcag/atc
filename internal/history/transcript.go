@@ -106,7 +106,7 @@ func convert(m rawMsg) []Message {
 			}
 			out = append(out, Message{Role: m.Type, Text: b.Text, Time: m.Timestamp})
 		case b.Type == "tool_use":
-			out = append(out, Message{Role: "tool", Tool: b.Name, Detail: summarize(b.Input), Time: m.Timestamp})
+			out = append(out, Message{Role: "tool", Tool: b.Name, Detail: Detail(b.Input), Time: m.Timestamp})
 		}
 	}
 	return out
@@ -122,7 +122,7 @@ func IsNoise(t string) bool {
 	return false
 }
 
-func summarize(raw json.RawMessage) string {
+func Detail(raw json.RawMessage) string {
 	var in map[string]any
 	if json.Unmarshal(raw, &in) != nil {
 		return ""
@@ -152,7 +152,7 @@ func summarize(raw json.RawMessage) string {
 			}
 		}
 	}
-	for _, k := range []string{"description", "command", "file_path", "pattern", "url", "query", "prompt", "skill"} {
+	for _, k := range []string{"description", "command", "file_path", "filePath", "pattern", "url", "query", "prompt", "skill"} {
 		if v, ok := in[k].(string); ok && v != "" {
 			return oneLine(v)
 		}

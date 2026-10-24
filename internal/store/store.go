@@ -12,7 +12,13 @@ type Meta struct {
 	Pinned bool   `json:"pinned,omitempty"`
 	Parked bool   `json:"parked,omitempty"`
 	Engine string `json:"engine,omitempty"`
+	Live   string `json:"live,omitempty"`
 }
+
+const (
+	Running = "running"
+	Stopped = "stopped"
+)
 
 type Store struct {
 	path string
@@ -36,6 +42,18 @@ func (s *Store) Get(id string) Meta {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.m[id]
+}
+
+func (s *Store) Live(match func(id string) bool) []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var ids []string
+	for id, m := range s.m {
+		if m.Live != "" && match(id) {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 func (s *Store) Update(id string, f func(*Meta)) error {

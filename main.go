@@ -25,6 +25,7 @@ import (
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/llm"
+	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/report"
 	"github.com/zcag/atc/internal/server"
@@ -194,6 +195,12 @@ func serve(args []string) error {
 
 		TrustTailnet:   tailscaleBin(os.Getenv("ATC_TRUST_TAILNET")),
 		TrustedProxies: server.ParseProxies(os.Getenv("ATC_TRUSTED_PROXIES")),
+	}
+	if u := os.Getenv("ATC_OPENCODE"); u != "" {
+		srv.M.OC = opencode.New(u, cmp.Or(os.Getenv("ATC_OPENCODE_BIN"), "opencode"))
+		if sum != nil {
+			sum.Read = map[string]func(sid, reply string) (string, error){opencode.Harness: srv.M.OC.Reply}
+		}
 	}
 	if f := os.Getenv("ATC_FEATURED"); f != "" {
 		if srv.Featured, err = regexp.Compile(f); err != nil {

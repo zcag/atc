@@ -48,18 +48,29 @@ func (s *Server) preset(name string) (Preset, bool) {
 
 func (p Preset) extra(dir string) ([]string, error) {
 	extra := append([]string(nil), p.Args...)
-	if p.Brief != "" {
-		path, err := expand(p.Brief)
-		if err != nil {
-			path = filepath.Join(dir, p.Brief)
-		}
-		b, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("preset %s: %w", p.Name, err)
-		}
-		extra = append(extra, "--append-system-prompt", string(b))
+	brief, err := p.brief(dir)
+	if err != nil {
+		return nil, err
+	}
+	if brief != "" {
+		extra = append(extra, "--append-system-prompt", brief)
 	}
 	return extra, nil
+}
+
+func (p Preset) brief(dir string) (string, error) {
+	if p.Brief == "" {
+		return "", nil
+	}
+	path, err := expand(p.Brief)
+	if err != nil {
+		path = filepath.Join(dir, p.Brief)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("preset %s: %w", p.Name, err)
+	}
+	return string(b), nil
 }
 
 func (s *Server) presets(w http.ResponseWriter, r *http.Request) {

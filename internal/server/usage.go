@@ -10,10 +10,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/usage"
 )
 
 func (s *Server) sessionUsage(w http.ResponseWriter, r *http.Request) {
+	if sid := r.PathValue("sid"); s.M.OpenCode(sid) {
+		ms, err := s.M.OC.All(r.Context(), sid)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		reply(w, opencode.Usage(ms))
+		return
+	}
 	t, ok := s.M.Index.Find(r.PathValue("sid"))
 	if !ok {
 		http.Error(w, "no transcript", http.StatusNotFound)

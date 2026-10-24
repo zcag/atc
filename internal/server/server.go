@@ -24,6 +24,7 @@ import (
 	"github.com/zcag/atc/internal/attach"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
+	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/outputs"
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/sessions"
@@ -91,6 +92,7 @@ func (s *Server) Handler() http.Handler {
 		}
 	}
 	go s.poll()
+	s.watchOpenCode()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
@@ -100,8 +102,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("POST /api/sessions", s.start)
 	mux.HandleFunc("POST /api/sessions/{sid}/resume", s.resume)
-	mux.HandleFunc("POST /api/sessions/{id}/stop", s.act(s.M.CLI.Stop))
-	mux.HandleFunc("DELETE /api/sessions/{id}", s.act(s.M.CLI.Remove))
+	mux.HandleFunc("POST /api/sessions/{id}/stop", s.act(s.stop))
+	mux.HandleFunc("DELETE /api/sessions/{id}", s.act(s.remove))
 	mux.HandleFunc("PATCH /api/sessions/{sid}", s.patch)
 	mux.HandleFunc("GET /api/sessions/{sid}/transcript", s.transcript)
 	mux.HandleFunc("GET /api/sessions/{sid}/summary", s.summary)
@@ -109,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/sessions/{sid}/upload", s.upload)
 	mux.HandleFunc("POST /api/uploads", s.upload)
 	mux.HandleFunc("POST /api/sessions/{id}/send", s.send)
+	mux.HandleFunc("POST /api/sessions/{sid}/asks/{ask}", s.answer)
 	mux.HandleFunc("POST /api/guess", s.guess)
 	mux.HandleFunc("GET /api/widget", s.widget)
 	mux.HandleFunc("GET /api/presets", s.presets)
@@ -257,6 +260,15 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) transcript(w http.ResponseWriter, r *http.Request) {
+	if sid := r.PathValue("sid"); s.M.OpenCode(sid) {
+		p, err := s.M.OC.Page(r.Context(), sid)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		reply(w, p)
+		return
+	}
 	t, ok := s.M.Index.Find(r.PathValue("sid"))
 	if !ok {
 		http.Error(w, "no transcript", http.StatusNotFound)
@@ -294,6 +306,9 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 	home, _ := os.UserHomeDir()
 	for i := range list {
 		list[i].Host = s.Host
+		if s.Featured != nil && list[i].Harness == opencode.Harness {
+			s.openCodePages(ctx, &list[i])
+		}
 		if p := paths[list[i].SessionID]; p != "" {
 			list[i].Pages = s.scanner.Matching(p, home, s.Featured)
 			s.unfurl.fill(list[i].Pages, false)
@@ -395,15 +410,31 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	var e Engine
+	if req.Engine != "" {
+		var ok bool
+		if e, ok = s.engine(req.Engine); !ok {
+			http.Error(w, "no engine named "+req.Engine, http.StatusBadRequest)
+			return
+		}
+	}
+	if e.Harness == opencode.Harness {
+		if req.Worktree {
+			http.Error(w, "a git worktree needs Claude; opencode sessions start in the folder itself", http.StatusBadRequest)
+			return
+		}
+		var pp *Preset
+		if req.Preset != "" {
+			pp = &p
+		}
+		id, err := s.startOpenCode(r.Context(), dir, req.Name, req.Prompt, e, pp)
+		s.done(w, id, err)
+		return
+	}
 	if req.Worktree {
 		extra = append(extra, "--worktree="+worktreeName(req.Name))
 	}
 	if req.Engine != "" {
-		e, ok := s.engine(req.Engine)
-		if !ok {
-			http.Error(w, "no engine named "+req.Engine, http.StatusBadRequest)
-			return
-		}
 		extra = append(extra, e.args()...)
 	}
 	id, err := s.M.CLI.Start(r.Context(), dir, req.Name, req.Prompt, extra...)
@@ -433,18 +464,21 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	if s.M.OpenCode(id) {
+		s.done(w, id, s.sendOpenCode(r.Context(), id, req.Text))
+		return
+	}
 	s.done(w, id, s.Term.Send(r.Context(), id, req.Text))
 }
 
 func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 	sid := r.PathValue("sid")
-	dir, name := "", ""
-	for _, h := range s.M.History("", "", 0) {
-		if h.SessionID == sid {
-			dir, name = h.StartCwd, h.Name
-			break
-		}
+	if s.M.OpenCode(sid) {
+		s.done(w, sid, s.M.Keep(sid, store.Running))
+		return
 	}
+	t, _ := s.M.Index.Find(sid)
+	dir, name := t.StartCwd, t.AgentName
 	if dir == "" {
 		http.Error(w, "unknown session "+sid, http.StatusNotFound)
 		return
