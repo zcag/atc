@@ -61,7 +61,7 @@ type rawMsg struct {
 		Type   string `json:"type"`
 		Prompt string `json:"prompt"`
 	} `json:"attachment"`
-	Message       struct {
+	Message struct {
 		ID      string          `json:"id"`
 		Model   string          `json:"model"`
 		Content json.RawMessage `json:"content"`
