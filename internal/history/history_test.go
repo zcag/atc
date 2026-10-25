@@ -3,6 +3,7 @@ package history
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -60,5 +61,47 @@ func TestScanPrefersCustomTitleAndReadsTail(t *testing.T) {
 	f.Close()
 	if got := x.Scan(); got[0].Pending != "" {
 		t.Fatalf("tool result should clear pending: %q", got[0].Pending)
+	}
+}
+
+func TestReadPageAttachesResultsAndTurns(t *testing.T) {
+	long := strings.Repeat("x\n", 300)
+	lines := []string{
+		`{"type":"user","timestamp":"2026-10-01T10:00:00Z","message":{"content":"fix it"}}`,
+		`{"type":"assistant","timestamp":"2026-10-01T10:00:01Z","message":{"id":"m1","model":"claude-opus-5-5","usage":{"input_tokens":3,"output_tokens":7},"content":[{"type":"text","text":"Looking."},{"type":"tool_use","id":"t1","name":"Write","input":{"file_path":"/a.go","content":` + strconv.Quote(long) + `}}]}}`,
+		`{"type":"assistant","timestamp":"2026-10-01T10:00:01Z","message":{"id":"m1","model":"claude-opus-5-5","usage":{"input_tokens":3,"output_tokens":7},"content":[{"type":"tool_use","id":"t2","name":"AskUserQuestion","input":{"questions":[{"question":"Which?"}]}}]}}`,
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"ok","is_error":true}]}}`,
+		`{"type":"user","toolUseResult":{"answers":{"Which?":"that one"}},"message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"answered"}]}}`,
+		`{"type":"user","message":{"content":"<task-notification><summary>Build finished</summary></task-notification>"}}`,
+		`{"type":"system","subtype":"turn_duration","durationMs":4200}`,
+	}
+	path := filepath.Join(t.TempDir(), "s.jsonl")
+	os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+	p, err := ReadPage(path, 0, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roles []string
+	for _, m := range p.Messages {
+		roles = append(roles, m.Role)
+	}
+	if got := strings.Join(roles, " "); got != "user assistant tool tool event done" {
+		t.Fatalf("roles %q", got)
+	}
+	m := p.Messages
+	if m[1].Usage == nil || m[1].Usage.Output != 7 || m[3].Usage != nil {
+		t.Fatalf("usage belongs on the first block of a message only: %+v %+v", m[1].Usage, m[3].Usage)
+	}
+	if m[2].Out == nil || !m[2].Out.Error || m[2].Out.Text != "ok" {
+		t.Fatalf("write result %+v", m[2].Out)
+	}
+	if !strings.Contains(string(m[2].Input), `"_cut":{"content":61}`) {
+		t.Fatalf("long input not clipped: %.80s", m[2].Input)
+	}
+	if a, _ := m[3].Out.Meta["answers"].(map[string]string); a["Which?"] != "that one" {
+		t.Fatalf("answers %+v", m[3].Out.Meta)
+	}
+	if m[4].Text != "Build finished" || m[5].Ms != 4200 {
+		t.Fatalf("event %q, done %d", m[4].Text, m[5].Ms)
 	}
 }

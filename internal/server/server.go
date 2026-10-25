@@ -280,6 +280,11 @@ func (s *Server) transcript(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	for i, m := range p.Messages {
+		if u := m.Usage; u != nil {
+			p.Messages[i].Cost, _ = usage.Cost(m.Model, usage.Tokens{Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}, u.Write1h, false)
+		}
+	}
 	reply(w, p)
 }
 

@@ -7,16 +7,37 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
 
 type Message struct {
-	Role   string    `json:"role"`
-	Text   string    `json:"text,omitempty"`
-	Tool   string    `json:"tool,omitempty"`
-	Detail string    `json:"detail,omitempty"`
-	Time   time.Time `json:"time,omitzero"`
+	Role   string          `json:"role"`
+	Text   string          `json:"text,omitempty"`
+	Tool   string          `json:"tool,omitempty"`
+	Detail string          `json:"detail,omitempty"`
+	Time   time.Time       `json:"time,omitzero"`
+	ID     string          `json:"id,omitempty"`
+	Input  json.RawMessage `json:"input,omitempty"`
+	Out    *Output         `json:"out,omitempty"`
+	Images []string        `json:"images,omitempty"`
+	Model  string          `json:"model,omitempty"`
+	Usage  *Usage          `json:"-"`
+	Cost   float64         `json:"cost,omitempty"`
+	Ms     int64           `json:"ms,omitempty"`
+}
+
+type Output struct {
+	Text   string         `json:"text,omitempty"`
+	More   int            `json:"more,omitempty"`
+	Error  bool           `json:"error,omitempty"`
+	Images []string       `json:"images,omitempty"`
+	Meta   map[string]any `json:"meta,omitempty"`
+}
+
+type Usage struct {
+	Input, Output, CacheRead, CacheWrite, Write1h int64
 }
 
 type Page struct {
@@ -26,12 +47,26 @@ type Page struct {
 }
 
 type rawMsg struct {
-	Type        string    `json:"type"`
-	IsMeta      bool      `json:"isMeta"`
-	IsSidechain bool      `json:"isSidechain"`
-	Timestamp   time.Time `json:"timestamp"`
-	Message     struct {
+	Type          string          `json:"type"`
+	Subtype       string          `json:"subtype"`
+	DurationMs    int64           `json:"durationMs"`
+	IsMeta        bool            `json:"isMeta"`
+	IsSidechain   bool            `json:"isSidechain"`
+	Timestamp     time.Time       `json:"timestamp"`
+	ToolUseResult json.RawMessage `json:"toolUseResult"`
+	Message       struct {
+		ID      string          `json:"id"`
+		Model   string          `json:"model"`
 		Content json.RawMessage `json:"content"`
+		Usage   *struct {
+			Input         int64 `json:"input_tokens"`
+			Output        int64 `json:"output_tokens"`
+			CacheRead     int64 `json:"cache_read_input_tokens"`
+			CacheWrite    int64 `json:"cache_creation_input_tokens"`
+			CacheCreation struct {
+				Write1h int64 `json:"ephemeral_1h_input_tokens"`
+			} `json:"cache_creation"`
+		} `json:"usage"`
 	} `json:"message"`
 }
 
@@ -42,7 +77,20 @@ type block struct {
 	ID        string          `json:"id"`
 	ToolUseID string          `json:"tool_use_id"`
 	Input     json.RawMessage `json:"input"`
+	Content   json.RawMessage `json:"content"`
+	IsError   bool            `json:"is_error"`
+	Source    *struct {
+		Type      string `json:"type"`
+		MediaType string `json:"media_type"`
+		Data      string `json:"data"`
+	} `json:"source"`
 }
+
+const (
+	maxOutLines   = 80
+	maxInputLines = 240
+	maxImage      = 400 << 10
+)
 
 func (x *Index) Find(sid string) (Transcript, bool) {
 	for _, t := range x.Scan() {
@@ -71,12 +119,28 @@ func ReadPage(path string, before, window int64) (Page, error) {
 		skipped, _ := r.ReadBytes('\n')
 		p.Start += int64(len(skipped))
 	}
+	tools, billed := map[string]int{}, map[string]bool{}
 	for {
 		line, err := r.ReadBytes('\n')
-		if len(line) > 1 {
-			var m rawMsg
-			if json.Unmarshal(line, &m) == nil && !m.IsMeta && !m.IsSidechain {
-				p.Messages = append(p.Messages, convert(m)...)
+		var m rawMsg
+		if len(line) > 1 && json.Unmarshal(line, &m) == nil && !m.IsMeta && !m.IsSidechain {
+			switch {
+			case m.Type == "system" && m.Subtype == "turn_duration":
+				p.Messages = append(p.Messages, Message{Role: "done", Ms: m.DurationMs, Time: m.Timestamp})
+			case m.Type == "user" && attachResults(p.Messages, tools, m):
+			default:
+				ms := convert(m)
+				if m.Type == "assistant" && len(ms) > 0 && m.Message.Usage != nil && !billed[m.Message.ID] {
+					billed[m.Message.ID] = true
+					u := m.Message.Usage
+					ms[0].Model, ms[0].Usage = m.Message.Model, &Usage{u.Input, u.Output, u.CacheRead, u.CacheWrite, u.CacheCreation.Write1h}
+				}
+				for _, x := range ms {
+					if x.ID != "" {
+						tools[x.ID] = len(p.Messages)
+					}
+					p.Messages = append(p.Messages, x)
+				}
 			}
 		}
 		if err != nil {
@@ -85,6 +149,141 @@ func ReadPage(path string, before, window int64) (Page, error) {
 	}
 	return p, nil
 }
+
+func attachResults(msgs []Message, tools map[string]int, m rawMsg) bool {
+	var blocks []block
+	if json.Unmarshal(m.Message.Content, &blocks) != nil || len(blocks) == 0 || blocks[0].Type != "tool_result" {
+		return false
+	}
+	for _, b := range blocks {
+		if i, ok := tools[b.ToolUseID]; ok && b.Type == "tool_result" {
+			msgs[i].Out = output(b, m.ToolUseResult)
+		}
+	}
+	return true
+}
+
+func output(b block, result json.RawMessage) *Output {
+	o := &Output{Error: b.IsError}
+	var texts []string
+	var s string
+	var parts []block
+	if json.Unmarshal(b.Content, &s) == nil {
+		texts = append(texts, s)
+	} else if json.Unmarshal(b.Content, &parts) == nil {
+		for _, p := range parts {
+			if p.Type == "text" {
+				texts = append(texts, p.Text)
+			} else if img := image(p); img != "" {
+				o.Images = append(o.Images, img)
+			}
+		}
+	}
+	o.Text, o.More = clipLines(strings.TrimRight(strings.Join(texts, "\n"), "\n"), maxOutLines)
+	o.Meta = meta(result)
+	return o
+}
+
+func meta(raw json.RawMessage) map[string]any {
+	var r struct {
+		Answers map[string]string `json:"answers"`
+		Results []json.RawMessage `json:"results"`
+		File    *struct {
+			NumLines   int `json:"numLines"`
+			StartLine  int `json:"startLine"`
+			TotalLines int `json:"totalLines"`
+		} `json:"file"`
+	}
+	if json.Unmarshal(raw, &r) != nil {
+		return nil
+	}
+	m := map[string]any{}
+	if len(r.Answers) > 0 {
+		m["answers"] = r.Answers
+	}
+	var hits []map[string]string
+	for _, res := range r.Results {
+		var x struct {
+			Content []struct{ Title, URL string } `json:"content"`
+		}
+		if json.Unmarshal(res, &x) == nil {
+			for _, h := range x.Content {
+				if h.URL != "" && len(hits) < 8 {
+					hits = append(hits, map[string]string{"title": h.Title, "url": h.URL})
+				}
+			}
+		}
+	}
+	if len(hits) > 0 {
+		m["hits"] = hits
+	}
+	if r.File != nil && r.File.TotalLines > 0 {
+		m["lines"] = r.File.NumLines
+		m["total"] = r.File.TotalLines
+	}
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
+func image(b block) string {
+	if b.Type != "image" || b.Source == nil || b.Source.Type != "base64" || len(b.Source.Data) > maxImage {
+		return ""
+	}
+	return "data:" + b.Source.MediaType + ";base64," + b.Source.Data
+}
+
+func clipLines(s string, n int) (string, int) {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return s, 0
+	}
+	return strings.Join(lines[:n], "\n"), len(lines) - n
+}
+
+func clipInput(raw json.RawMessage) json.RawMessage {
+	var in map[string]any
+	if json.Unmarshal(raw, &in) != nil {
+		return raw
+	}
+	cut := map[string]int{}
+	var walk func(v any) any
+	walk = func(v any) any {
+		switch x := v.(type) {
+		case string:
+			s, _ := clipLines(x, maxInputLines)
+			return s
+		case []any:
+			for i := range x {
+				x[i] = walk(x[i])
+			}
+		case map[string]any:
+			for k := range x {
+				x[k] = walk(x[k])
+			}
+		}
+		return v
+	}
+	for k, v := range in {
+		if s, ok := v.(string); ok {
+			var more int
+			in[k], more = clipLines(s, maxInputLines)
+			if more > 0 {
+				cut[k] = more
+			}
+		} else {
+			in[k] = walk(v)
+		}
+	}
+	if len(cut) > 0 {
+		in["_cut"] = cut
+	}
+	out, _ := json.Marshal(in)
+	return out
+}
+
+var notice = regexp.MustCompile(`(?s)<summary>(.*?)</summary>`)
 
 func convert(m rawMsg) []Message {
 	if m.Type != "user" && m.Type != "assistant" {
@@ -98,16 +297,38 @@ func convert(m rawMsg) []Message {
 		return nil
 	}
 	var out []Message
+	var images []string
 	for _, b := range blocks {
 		switch {
 		case b.Type == "text" && strings.TrimSpace(b.Text) != "":
+			if m.Type == "user" && strings.HasPrefix(strings.TrimSpace(b.Text), "<task-notification>") {
+				text := "A background task finished"
+				if sm := notice.FindStringSubmatch(b.Text); sm != nil {
+					text = strings.TrimSpace(sm[1])
+				}
+				out = append(out, Message{Role: "event", Text: text, Time: m.Timestamp})
+				continue
+			}
 			if m.Type == "user" && IsNoise(b.Text) {
 				continue
 			}
 			out = append(out, Message{Role: m.Type, Text: b.Text, Time: m.Timestamp})
+		case b.Type == "image" && m.Type == "user":
+			if img := image(b); img != "" {
+				images = append(images, img)
+			}
 		case b.Type == "tool_use":
-			out = append(out, Message{Role: "tool", Tool: b.Name, Detail: Detail(b.Input), Time: m.Timestamp})
+			out = append(out, Message{Role: "tool", Tool: b.Name, Detail: Detail(b.Input), Time: m.Timestamp, ID: b.ID, Input: clipInput(b.Input)})
 		}
+	}
+	if len(images) > 0 {
+		for i := range out {
+			if out[i].Role == "user" {
+				out[i].Images = images
+				return out
+			}
+		}
+		out = append(out, Message{Role: "user", Images: images, Time: m.Timestamp})
 	}
 	return out
 }

@@ -168,25 +168,15 @@ func (t *tools) read(ctx context.Context, _ *mcp.CallToolRequest, in readIn) (*m
 }
 
 func render(msgs []history.Message, n int) string {
-	var talk []history.Message
-	for _, m := range msgs {
+	var talk []int
+	for i, m := range msgs {
 		if m.Role == "user" || m.Role == "assistant" {
-			talk = append(talk, m)
+			talk = append(talk, i)
 		}
-	}
-	from := 0
-	if len(talk) > n {
-		from = len(talk) - n
 	}
 	start := 0
-	if from > 0 {
-		first := talk[from]
-		for i, m := range msgs {
-			if m == first {
-				start = i
-				break
-			}
-		}
+	if len(talk) > n {
+		start = talk[len(talk)-n]
 	}
 	var b strings.Builder
 	tools := 0

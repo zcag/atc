@@ -77,7 +77,14 @@ needs the token either way.
 - Sessions are grouped by what they need: **needs you** (waiting for a permission or an answer),
   **your turn** (finished, waiting for your next message), **working**, and **stopped**.
 - Open one to get its terminal. Close the tab whenever you like; the session keeps going.
-- **Transcript** shows the conversation as readable text, which is easier on a phone.
+- **Transcript** is the conversation as something to read, and it opens at the end: your last
+  prompt at the top, Claude's reply below it, and the turns you have already read folded into one
+  line each above (the ones that arrived since you last looked stay open). What Claude did between
+  your prompt and its reply folds into one line too ("Ran 12 commands, changed 3 files"); open it
+  for each step: commands with their output, edits as diffs, screenshots it looked at, pages it
+  searched, and the questions it asked you with the answer you picked. **Outline**, **Story** and
+  **Everything** (`1` `2` `3`) choose how much to show, **Aa** sets the typeface, size and line
+  length, and the bar at the bottom (`r`) replies to the session, quoting any passage you select.
 - **New session** starts Claude in any folder, with an optional name and first message.
 - **Earlier** lists past conversations. Open one and press **Resume** to continue it.
 - On a phone, a row of keys above the keyboard gives you Esc, Tab, Shift+Tab, Ctrl and arrows.
@@ -378,5 +385,6 @@ screen locks.
 
 ## Third-party code
 
-IBM Plex fonts are under the SIL Open Font License (`web/vendor/fonts/OFL.txt`). xterm.js, Preact
-and htm are MIT licensed.
+IBM Plex, Newsreader and Literata fonts are under the SIL Open Font License
+(`web/vendor/fonts/OFL.txt`). xterm.js, Preact, htm and marked are MIT licensed, highlight.js and
+jsdiff BSD licensed.

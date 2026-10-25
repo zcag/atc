@@ -1,4 +1,7 @@
 import { html, render, useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "./vendor/preact-htm.js";
+import { marked as Marked } from "./vendor/marked.esm.js";
+import hljs from "./vendor/highlight.min.js";
+import { diffLines } from "./vendor/diff.mjs";
 
 const BAYS = [
   ["needs-you", "Needs you"],
@@ -342,6 +345,8 @@ function App() {
             <dt>u</dt><dd>Usage: plan limits and tokens by day</dd>
             <dt>[ / ]</dt><dd>Previous or next project tab</dd>
             <dt>Ctrl + Z</dt><dd>In a terminal: detach. The session keeps running.</dd>
+            <dt>1 / 2 / 3</dt><dd>In a transcript: outline, story or everything</dd>
+            <dt>r</dt><dd>In a transcript: reply to the session</dd>
             <dt>?</dt><dd>Show or hide this</dd>
           </dl>
         </div>
@@ -848,7 +853,7 @@ function Session({ s, say, live }) {
       ? canAttach
         ? html`<${Term} key=${s.id} s=${s} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} />`
         : html`<div class="stage"><div class="cover">${Unattachable(s, resume, busy, setMode)}</div></div>`
-      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} />` : html`<${Transcript} s=${s} />`}
+      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} />` : html`<${Transcript} s=${s} say=${say} />`}
     ${showUse && html`<${SessionUsage} s=${s} use=${use} onClose=${() => setShowUse(false)} />`}
   `;
 }
@@ -2096,132 +2101,580 @@ function Table({ text, tsv }) {
     </div>`;
 }
 
-function Transcript({ s }) {
+const TX_LEVELS = [[1, "Outline"], [2, "Story"], [3, "Everything"]];
+const TX_FACES = {
+  news: { name: "Newsreader", css: "Newsreader, Georgia, serif", sizes: [17, 19, 21], lh: 1.6 },
+  lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [15.5, 17, 19], lh: 1.66 },
+  sans: { name: "Plex Sans", css: "var(--sans)", sizes: [15, 16, 17.5], lh: 1.62 },
+};
+const txStore = {
+  get: (k, d) => { try { return JSON.parse(localStorage.getItem(`atc.tx.${k}`)) ?? d; } catch { return d; } },
+  set: (k, v) => { try { localStorage.setItem(`atc.tx.${k}`, JSON.stringify(v)); } catch {} },
+};
+
+function turnsOf(msgs) {
+  const turns = [];
+  let cur = null;
+  for (const m of msgs) {
+    if (m.role === "user") {
+      cur = { prompt: m.text || "", images: m.images || [], at: m.time, end: m.time, items: [], cost: 0, ms: 0 };
+      turns.push(cur);
+      continue;
+    }
+    if (!cur) continue;
+    if (m.time) cur.end = m.time;
+    cur.cost += m.cost || 0;
+    if (m.role === "done") cur.ms = Math.max(cur.ms, m.ms || 0);
+    else if (m.role === "assistant") cur.items.push({ t: "text", text: m.text });
+    else if (m.role === "event") cur.items.push({ t: "event", text: m.text });
+    else if (m.role === "tool") cur.items.push({ t: "step", ...m, input: m.input || {} });
+  }
+  for (const t of turns) {
+    const last = t.items.findLastIndex((it) => it.t === "step");
+    t.answer = t.items.slice(last + 1).filter((it) => it.t === "text").map((it) => it.text).join("\n\n");
+    t.items = t.items.slice(0, last + 1).concat(t.items.slice(last + 1).filter((it) => it.t === "event"));
+  }
+  return turns;
+}
+
+const txKind = (s) => {
+  if (s.tool === "Bash") return "run";
+  if (/^(Edit|MultiEdit|Write|NotebookEdit)$/.test(s.tool)) return "edit";
+  if (/^(Read|Grep|Glob|LS)$/.test(s.tool)) return "look";
+  if (/^Web/.test(s.tool)) return "web";
+  if (/^(Agent|Task)$/.test(s.tool)) return "agent";
+  if (s.tool === "AskUserQuestion") return "ask";
+  return "tool";
+};
+const TX_NOISE = /^(ToolSearch|EnterWorktree|ExitWorktree|TaskCreate|TaskUpdate|TaskList|TaskGet|TaskStop|ReadNotifications|TodoWrite|TodoRead)$/;
+const txSteps = (t) => t.items.filter((i) => i.t === "step");
+const txSpan = (ms) => { const s = Math.round(ms / 1000); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; };
+const txDur = (t) => { const ms = Math.max(t.ms || 0, t.end && t.at ? new Date(t.end) - new Date(t.at) : 0); return ms >= 1000 ? txSpan(ms) : ""; };
+const txClock = (ts) => ts ? new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
+const txDay = (ts) => new Date(ts).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+const txUsd = (n) => n >= 1 ? `$${n.toFixed(2)}` : n >= 0.005 ? `${Math.round(n * 100)}¢` : "";
+const plain = (t) => (t || "").replace(/```[\s\S]*?```/g, " ").replace(/^#+\s*/gm, "").replace(/^\s*>\s?/gm, "").replace(/[*`|]/g, "").replace(/(^|\s)_([^_]+)_(?=\s|$)/g, "$1$2").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
+const firstSentence = (t) => { const p = plain(t); const m = p.match(/^.{20,220}?[.!?](\s|$)/); return m ? m[0].trim() : p.slice(0, 200) + (p.length > 200 ? "…" : ""); };
+const toolName = (n) => n.startsWith("mcp__") ? n.split("__").slice(1).join(" · ").replace(/_/g, " ") : n;
+const relPath = (p, s) => {
+  if (!p) return "";
+  const wt = p.match(/\/\.claude\/worktrees\/[^/]+\/(.*)/);
+  if (wt) return wt[1];
+  for (const base of [s.cwd, s.startCwd]) if (base && p.startsWith(base + "/")) return p.slice(base.length + 1);
+  return p.replace(/^\/(home|Users)\/[^/]+(?=\/|$)/, "~");
+};
+
+function txEdits(s) {
+  const i = s.input;
+  if (s.tool === "MultiEdit") return (i.edits || []).map((e) => ({ old: e.old_string || "", new: e.new_string || "" }));
+  return [{ old: i.old_string || "", new: i.new_string || "" }];
+}
+const writeLines = (s) => (s.input.content || "").split("\n").length + (s.input._cut?.content || 0);
+function diffStat(s) {
+  if (s.tool === "Write") return { add: writeLines(s), del: 0 };
+  let add = 0, del = 0;
+  for (const e of txEdits(s)) for (const p of diffLines(e.old, e.new)) { if (p.added) add += p.count; else if (p.removed) del += p.count; }
+  return { add, del };
+}
+function filesOf(t, s) {
+  const m = new Map();
+  for (const st of txSteps(t)) if (txKind(st) === "edit" && st.input.file_path && !st.out?.error) {
+    const d = diffStat(st), p = relPath(st.input.file_path, s), cur = m.get(p) || { add: 0, del: 0 };
+    m.set(p, { add: cur.add + d.add, del: cur.del + d.del });
+  }
+  return [...m];
+}
+function trailSummary(t, s) {
+  const c = {};
+  for (const st of txSteps(t)) if (!TX_NOISE.test(st.tool)) c[txKind(st)] = (c[txKind(st)] || 0) + 1;
+  const files = filesOf(t, s).length, bad = txSteps(t).filter((x) => x.out?.error).length;
+  const parts = [];
+  if (c.look) parts.push(`read ${c.look}`);
+  if (c.run) parts.push(`ran ${c.run} command${c.run > 1 ? "s" : ""}`);
+  if (files) parts.push(`changed ${files} file${files > 1 ? "s" : ""}`);
+  if (c.web) parts.push(`${c.web} web lookup${c.web > 1 ? "s" : ""}`);
+  if (c.agent) parts.push(`${c.agent} agent${c.agent > 1 ? "s" : ""}`);
+  if (c.tool) parts.push(`${c.tool} other`);
+  if (bad) parts.push(`${bad} failed`);
+  const out = parts.join(", ");
+  return out ? out[0].toUpperCase() + out.slice(1) : "Worked";
+}
+
+function Beads({ t, max = 40 }) {
+  const ss = txSteps(t).filter((s) => !TX_NOISE.test(s.tool));
+  if (ss.length < 4) return null;
+  return html`<span class="beads" aria-hidden="true">${ss.slice(0, max).map((s) => html`<i class="bead ${txKind(s) === "ask" ? "q" : txKind(s)} ${s.out?.error ? "bad" : ""}"></i>`)}${ss.length > max && html`<small>+${ss.length - max}</small>`}</span>`;
+}
+
+function Clip({ out, bad, n = 8 }) {
+  const [all, setAll] = useState(false);
+  if (!out?.text) return null;
+  const lines = out.text.split("\n");
+  const hidden = (all ? 0 : Math.max(0, lines.length - n)) + (out.more || 0);
+  return html`<pre class="tpre out ${bad ? "bad" : ""}">${all ? out.text : lines.slice(0, n).join("\n")}</pre>${hidden > 0 && !all && html`<button class="more-lines" onClick=${() => setAll(true)}>Show ${hidden} more line${hidden > 1 ? "s" : ""}</button>`}${all && out.more > 0 && html`<p class="more-lines">${out.more} more lines were not kept</p>`}`;
+}
+
+const TX_LANG = { go: "go", js: "javascript", mjs: "javascript", ts: "typescript", tsx: "typescript", py: "python", kt: "kotlin", css: "css", html: "xml", sh: "bash", json: "json", md: "markdown", yml: "yaml", yaml: "yaml", rb: "ruby", sql: "sql", toml: "ini" };
+const tint = (line, lang) => lang ? hljs.highlight(line, { language: lang, ignoreIllegals: true }).value : esc(line);
+function dedent(lines) {
+  const ind = Math.min(...lines.filter((l) => l.trim()).map((l) => l.match(/^\s*/)[0].length));
+  return isFinite(ind) && ind > 0 ? lines.map((l) => l.slice(ind)) : lines;
+}
+
+function Diff({ edits, path }) {
+  const lang = TX_LANG[(path || "").split(".").pop()];
+  const rows = [];
+  edits.forEach((e, ei) => {
+    if (ei) rows.push({ gap: "…" });
+    const parts = diffLines(e.old, e.new);
+    parts.forEach((p, pi) => {
+      const ls = p.value.replace(/\n$/, "").split("\n");
+      const c = p.added ? "add" : p.removed ? "del" : "ctx", sig = p.added ? "+" : p.removed ? "−" : "";
+      if (c === "ctx" && ls.length > 6) {
+        const head = pi === 0 ? [] : ls.slice(0, 3), tail = pi === parts.length - 1 ? [] : ls.slice(-3);
+        head.forEach((l) => rows.push({ c, sig, l }));
+        rows.push({ gap: `${ls.length - head.length - tail.length} unchanged lines` });
+        tail.forEach((l) => rows.push({ c, sig, l }));
+      } else ls.forEach((l) => rows.push({ c, sig, l }));
+    });
+  });
+  const code = dedent(rows.filter((r) => !r.gap).map((r) => r.l.replace(/\t/g, "  ")));
+  let k = 0;
+  return html`<div class="diff"><div class="rows">${rows.map((r) => r.gap
+    ? html`<span class="gap">${r.gap}</span>`
+    : html`<div class="r ${r.c}" data-s=${r.sig} dangerouslySetInnerHTML=${{ __html: tint(code[k++], lang) || " " }}></div>`)}</div></div>`;
+}
+
+const Shots = ({ s, zoom }) => (s.out?.images || []).map((src) => html`<img class="snap" src=${src} alt="Screenshot Claude looked at" onClick=${() => zoom(src)} />`);
+const Failed = ({ s }) => s.out?.error && html`<span class="end bad">failed</span>`;
+
+function answersOf(s) {
+  const a = s.out?.meta?.answers;
+  if (a) return a;
+  return Object.fromEntries([...(s.out?.text || "").matchAll(/"([^"]+)"="([^"]*)"/g)].map((m) => [m[1], m[2]]));
+}
+
+function Step({ st, s, zoom }) {
+  const k = txKind(st), i = st.input, bad = st.out?.error;
+  const [open, setOpen] = useState(!!bad || (st.out?.images || []).length > 0);
+  const toggle = () => setOpen(!open);
+  const cls = `step ${st.tool === "Write" ? "write" : k} ${bad ? "bad" : ""}`;
+  if (k === "ask") {
+    const ans = answersOf(st);
+    return html`<div class=${cls}>${(i.questions || []).map((q) => {
+      const a = ans[q.question] || "";
+      const hit = q.options?.find((o) => a === o.label || a.startsWith(o.label));
+      return html`<div class="qcard"><p class="q">${q.question}</p><div class="opts">${q.options?.map((o) => html`<div class="opt ${o === hit ? "chosen" : ""}"><b>${o.label}</b>${o.description}</div>`)}</div>${a && !hit && html`<p class="said">${a}</p>`}</div>`;
+    })}</div>`;
+  }
+  if (st.tool === "Bash") {
+    const cmd = i.command || st.detail || "";
+    return html`<div class=${cls}>
+      <div class="line click" onClick=${toggle}><b>${i.description || "Ran"}</b>${!i.description && html`<span class="arg">${cmd.split("\n")[0]}</span>`}<${Failed} s=${st} /></div>
+      ${open && html`<div class="tbox"><pre class="tpre"><span class="ps">$ </span>${cmd}</pre><${Clip} out=${st.out} bad=${bad} /></div>`}
+    </div>`;
+  }
+  if (k === "edit") {
+    const d = diffStat(st), path = relPath(i.file_path || st.detail, s);
+    return html`<div class=${cls}>
+      <div class="line click" onClick=${toggle}><b>${st.tool === "Write" ? "Wrote" : st.n > 1 ? `Edited ×${st.n}` : "Edited"}</b><span class="arg">${path}</span><span class="end"><span class="plus">+${d.add}</span>${d.del > 0 && html` <span class="minus">−${d.del}</span>`}</span></div>
+      ${open && html`<div class="tbox"><div class="hd"><span class="p"><bdi>${path}</bdi></span><span class="n">${st.tool === "Write" ? `new, ${writeLines(st)} lines` : ""}</span></div>
+        ${st.tool === "Write" ? html`<pre class="tpre">${(i.content || "").split("\n").slice(0, 40).join("\n")}</pre>${writeLines(st) > 40 && html`<p class="more-lines">${writeLines(st) - 40} more lines</p>`}` : html`<${Diff} edits=${st.edits || txEdits(st)} path=${path} />`}</div>`}
+    </div>`;
+  }
+  if (st.tool === "Read") {
+    const from = i.offset, to = i.offset && i.limit ? i.offset + i.limit : null;
+    return html`<div class=${cls}><div class="line"><b>Read</b><span class="arg">${relPath(i.file_path || st.detail, s)}${from ? `:${from}${to ? `–${to}` : ""}` : ""}</span><${Failed} s=${st} /></div><${Shots} s=${st} zoom=${zoom} /></div>`;
+  }
+  if (st.tool === "Grep" || st.tool === "Glob") return html`<div class=${cls}><div class="line"><b>Searched</b><span class="arg">${i.pattern || st.detail}${i.path ? `  in ${relPath(i.path, s)}` : ""}</span></div></div>`;
+  if (st.tool === "WebSearch") {
+    const hits = st.out?.meta?.hits || [];
+    return html`<div class=${cls}>
+      <div class="line click" onClick=${toggle}><b>Searched the web</b><span class="arg wrap sans">${i.query || st.detail}</span></div>
+      ${open && hits.length > 0 && html`<div class="tbox"><ul class="hits">${hits.map((h) => html`<li><span class="d">${hostOf(h.url)}</span><a href=${h.url} data-out>${h.title}</a></li>`)}</ul></div>`}
+    </div>`;
+  }
+  if (st.tool === "WebFetch") return html`<div class=${cls}>
+    <div class="line click" onClick=${toggle}><b>Read</b><span class="arg">${hostOf(i.url || st.detail)}</span></div>
+    ${open && html`<div class="tbox">${i.prompt && html`<div class="hd"><span>${i.prompt}</span></div>`}<div class="prose small" dangerouslySetInnerHTML=${{ __html: md(st.out?.text) }}></div></div>`}
+  </div>`;
+  if (k === "agent") return html`<div class=${cls}>
+    <div class="line click" onClick=${toggle}><b>Agent</b><span class="arg wrap sans">${i.description || st.detail}</span></div>
+    ${open && html`<div class="tbox"><div class="prose small" dangerouslySetInnerHTML=${{ __html: md(st.out?.text) }}></div></div>`}
+  </div>`;
+  if (TX_NOISE.test(st.tool)) return null;
+  const input = Object.keys(i).length ? JSON.stringify(i, null, 1) : st.detail;
+  return html`<div class=${cls}>
+    <div class="line click" onClick=${toggle}><b>${toolName(st.tool)}</b><${Failed} s=${st} /></div>
+    ${open && html`<div class="tbox">${input && html`<pre class="tpre">${input}</pre>`}<${Clip} out=${st.out} bad=${bad} /></div>`}
+    <${Shots} s=${st} zoom=${zoom} />
+  </div>`;
+}
+
+const hostOf = (u) => { try { const x = new URL(u); return x.hostname.replace(/^www\./, "") + (x.pathname.length > 1 ? x.pathname : ""); } catch { return u || ""; } };
+const isEdit = (s) => s?.t === "step" && /^(Edit|MultiEdit)$/.test(s.tool) && !s.out?.error;
+const joinEdits = (items) => items.reduce((out, it) => {
+  const last = out[out.length - 1];
+  if (isEdit(it) && isEdit(last) && last.input.file_path === it.input.file_path) out[out.length - 1] = { ...last, edits: [...(last.edits || txEdits(last)), ...txEdits(it)], n: (last.n || 1) + 1 };
+  else out.push(it);
+  return out;
+}, []);
+
+function Trail({ t, s, level, zoom }) {
+  const [open, setOpen] = useState(level === 3);
+  useEffect(() => setOpen(level === 3), [level]);
+  if (!t.items.length) return null;
+  const asks = txSteps(t).filter((x) => txKind(x) === "ask");
+  return html`
+    ${!open && asks.map((x) => html`<${Step} st=${x} s=${s} zoom=${zoom} />`)}
+    <div class="trail ${open ? "open" : ""}">
+      <button class="trail-head" aria-expanded=${open} onClick=${() => setOpen(!open)}>
+        <${Beads} t=${t} />
+        <span class="what">${trailSummary(t, s)}</span>
+        <svg class="chev" width="12" height="12" viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      ${open && html`<div class="steps">${joinEdits(t.items).map((it) =>
+        it.t === "text" ? html`<p class="narr">${plain(it.text)}</p>`
+        : it.t === "event" ? html`<p class="event">${it.text}</p>`
+        : html`<${Step} st=${it} s=${s} zoom=${zoom} />`)}</div>`}
+    </div>`;
+}
+
+function Prompt({ t }) {
+  const [all, setAll] = useState(false);
+  const long = t.prompt.length > 480 || t.prompt.split("\n").length > 6;
+  return html`<div class="prompt">${t.prompt && html`<div class=${long && !all ? "clamp" : ""}>${t.prompt}</div>`}${long && html`<button class="fold" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}${t.images.map((src) => html`<img src=${src} alt="Image you attached" />`)}</div>`;
+}
+
+const heads = (src) => [...(src || "").matchAll(/^#{1,3}\s+(.+)$/gm)].map((m) => plain(m[1]));
+const readMin = (t) => Math.round(plain(t).split(" ").length / 230);
+
+function Margin({ t, i, s }) {
+  const files = filesOf(t, s);
+  return html`<aside class="margin">
+    <div><span class="k">${txClock(t.at)}</span>${txDur(t) && html` · worked <span class="k">${txDur(t)}</span>`}</div>
+    ${txUsd(t.cost) && html`<div><span class="k">${txUsd(t.cost)}</span> at API prices</div>`}
+    ${readMin(t.answer) > 1 && html`<div><span class="k">${readMin(t.answer)} min</span> to read</div>`}
+    ${heads(t.answer).length > 1 && html`<ul class="toc">${heads(t.answer).map((h, j) => html`<li><a href=${`#tx${i}h${j}`} data-jump>${h}</a></li>`)}</ul>`}
+    ${files.length > 0 && html`<ul class="flist">${files.slice(0, 8).map(([p, d]) => html`<li><span class="p"><bdi>${p}</bdi></span><span class="n"><span class="plus">+${d.add}</span>${d.del > 0 && html` <span class="minus">−${d.del}</span>`}</span></li>`)}${files.length > 8 && html`<li>and ${files.length - 8} more</li>`}</ul>`}
+  </aside>`;
+}
+
+function Acts({ t, i, reply }) {
+  const [copied, setCopied] = useState(false);
+  return html`<div class="acts">
+    <button onClick=${() => { copyText(t.answer); setCopied(true); setTimeout(() => setCopied(false), 1200); }}>${copied ? "Copied" : "Copy"}</button>
+    ${reply && html`<button onClick=${() => reply({ text: firstSentence(t.answer) })}>Reply</button>`}
+  </div>`;
+}
+
+function Turn({ t, i, s, level, zoom, reply, latest }) {
+  const files = filesOf(t, s);
+  const body = useMemo(() => { let j = 0; return md(t.answer).replace(/<h([1-3])>/g, (_, n) => `<h${n} id="tx${i}h${j++}">`); }, [t.answer]);
+  return html`<section class="turn ${latest ? "latest" : ""}" id=${`tx${i}`} data-i=${i}>
+    <${Prompt} t=${t} />
+    <p class="meta-inline">${txClock(t.at)}${txDur(t) && ` · worked ${txDur(t)}`}${txUsd(t.cost) && ` · ${txUsd(t.cost)}`}${files.length > 0 && ` · ${files.length} file${files.length > 1 ? "s" : ""} changed`}</p>
+    <${Margin} t=${t} i=${i} s=${s} />
+    <${Trail} t=${t} s=${s} level=${level} zoom=${zoom} />
+    ${t.answer ? html`<div class="prose" data-answer dangerouslySetInnerHTML=${{ __html: body }}></div><${Acts} t=${t} i=${i} reply=${reply} />`
+      : !latest && html`<p class="cont">No reply after this.</p>`}
+  </section>`;
+}
+
+const Folded = ({ t, i, open }) => html`<button class="ol-row folded" id=${`tx${i}`} data-i=${i} onClick=${() => open(i)}>
+  <span class="t">${txClock(t.at)}</span>
+  <span class="a">${plain(t.prompt) || "Image"}</span>
+  <span class="b">${t.answer ? firstSentence(t.answer) : "No reply"}</span>
+</button>`;
+
+function Outline({ turns, go }) {
+  let lastDay = "";
+  return html`<div class="ol">${turns.map((t, i) => {
+    const d = txDay(t.at), showDay = d !== lastDay;
+    lastDay = d;
+    return html`${showDay && html`<p class="ol-day">${d}</p>`}<button class="ol-row" onClick=${() => go(i)}>
+      <span class="t">${txClock(t.at)}</span>
+      <span class="a">${plain(t.prompt) || "Image"}</span>
+      <span class="b">${t.answer ? firstSentence(t.answer) : "No reply"}</span>
+    </button>`;
+  })}</div>`;
+}
+
+function Scrub({ turns, inView, go }) {
+  const [tip, setTip] = useState(null);
+  const n = turns.length;
+  if (n < 2) return null;
+  const pick = (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const i = Math.min(n - 1, Math.max(0, Math.floor(((e.clientY - r.top) / r.height) * n)));
+    setTip({ i, y: e.clientY - r.top });
+    go(i, true);
+  };
+  return html`<div class="scrub" onPointerDown=${(e) => { e.currentTarget.setPointerCapture(e.pointerId); pick(e); }} onPointerMove=${(e) => e.buttons && pick(e)} onPointerUp=${() => setTip(null)} onPointerCancel=${() => setTip(null)}>
+    ${turns.map((t, i) => html`<i class=${inView.has(i) ? "in" : ""} style=${`top:${(i / n) * 100}%;height:max(3px, calc(${100 / n}% - 4px))`}></i>`)}
+    ${tip && html`<div class="tip" style=${`top:${tip.y - 18}px`}>${plain(turns[tip.i].prompt).slice(0, 90)}<small>${txClock(turns[tip.i].at)}</small></div>`}
+  </div>`;
+}
+
+function Zoom({ level, set }) {
+  const ref = useRef();
+  const [knob, setKnob] = useState(null);
+  useLayoutEffect(() => { const b = ref.current?.querySelector(`[aria-pressed="true"]`); if (b) setKnob({ left: b.offsetLeft, width: b.offsetWidth }); }, [level]);
+  return html`<div class="zoom" ref=${ref} role="group" aria-label="How much to show">
+    ${knob && html`<span class="knob" style=${`left:${knob.left}px;width:${knob.width}px`}></span>`}
+    ${TX_LEVELS.map(([l, name]) => html`<button aria-pressed=${level === l} onClick=${() => set(l)} title=${`${name} (${l})`}>${name}</button>`)}
+  </div>`;
+}
+
+function Prefs({ prefs, set }) {
+  const row = (items) => html`<div class="opts">${items.map(([on, label, act, style]) => html`<button aria-pressed=${on} onClick=${act} style=${style || ""}>${label}</button>`)}</div>`;
+  return html`<div class="prefs" role="dialog" aria-label="Reading settings">
+    <p>Typeface</p>
+    ${row(Object.entries(TX_FACES).map(([k, f]) => [prefs.face === k, f.name, () => set({ face: k }), `font-family:${f.css}`]))}
+    <p>Size</p>
+    ${row(["Small", "Medium", "Large"].map((n, i) => [prefs.size === i, n, () => set({ size: i })]))}
+    <p>Line length</p>
+    ${row(["Narrow", "Normal", "Wide"].map((n, i) => [prefs.width === i, n, () => set({ width: i })]))}
+  </div>`;
+}
+
+function Composer({ quote, send, close }) {
+  const ref = useRef();
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => ref.current?.focus(), []);
+  const go = async () => {
+    if (!text.trim() || busy) return;
+    setBusy(true);
+    const quoted = quote.text ? quote.text.split("\n").map((l) => `> ${l}`).join("\n") + "\n\n" : "";
+    if (await send(quoted + text.trim())) close();
+    setBusy(false);
+  };
+  return html`<div class="composer"><div class="in">
+    ${quote.text && html`<blockquote>${quote.text}</blockquote>`}
+    <div class="row">
+      <textarea ref=${ref} rows="1" value=${text} placeholder=${quote.text ? "Your reply about this part" : "Reply to Claude"}
+        onInput=${(e) => { setText(e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
+        onKeyDown=${(e) => { if (e.key === "Enter" && !e.shiftKey && !touch) { e.preventDefault(); go(); } if (e.key === "Escape") close(); }}></textarea>
+      <button class="x" onClick=${close}>Cancel</button>
+      <button class="send" disabled=${!text.trim() || busy} onClick=${go}>${busy ? "Sending" : "Send"}</button>
+    </div>
+  </div></div>`;
+}
+
+function copyText(text) {
+  try { navigator.clipboard.writeText(text); } catch { const ta = Object.assign(document.createElement("textarea"), { value: text }); document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
+}
+
+function Transcript({ s, say }) {
   const [msgs, setMsgs] = useState(null);
   const [start, setStart] = useState(0);
   const [err, setErr] = useState(null);
-  const ref = useRef();
-  const atEnd = useRef(true);
+  const [level, setLevelRaw] = useState(() => txStore.get("level", 2));
+  const [prefs, setPrefsRaw] = useState(() => ({ face: "news", size: 1, width: 1, ...txStore.get("prefs", {}) }));
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [opened, setOpened] = useState(() => new Set());
+  const [inView, setInView] = useState(() => new Set());
+  const [quote, setQuote] = useState(null);
+  const [quoteBtn, setQuoteBtn] = useState(null);
+  const [shot, setShot] = useState(null);
+  const box = useRef();
+  const landed = useRef(false);
+  const atEnd = useRef(false);
+  const seenAt = useRef(txStore.get(`seen.${s.sessionId}`, null));
+  const live = s.attachable || s.harness === "opencode";
 
   const load = async (before) => {
     try {
       const p = await api(`/api/sessions/${s.sessionId}/transcript${before ? `?before=${before}` : ""}`);
       setStart(p.start);
       setMsgs((m) => (before ? [...(p.messages || []), ...(m || [])] : p.messages || []));
+      setErr(null);
     } catch (e) {
       setErr(e.message);
     }
   };
-  useEffect(() => { load(0); }, [s.sessionId, s.updated]);
+  useEffect(() => { landed.current = false; setOpened(new Set()); setMsgs(null); seenAt.current = txStore.get(`seen.${s.sessionId}`, null); load(0); }, [s.sessionId]);
+  useEffect(() => { if (landed.current) load(0); }, [s.updated]);
+
+  const turns = useMemo(() => turnsOf(msgs || []), [msgs]);
+  const firstOpen = useMemo(() => {
+    if (!turns.length) return 0;
+    const i = seenAt.current ? turns.findIndex((t) => t.at > seenAt.current) : -1;
+    return i < 0 ? turns.length - 1 : i;
+  }, [turns.length > 0, s.sessionId]);
+  const folded = (i) => level === 2 && i < firstOpen && !opened.has(i);
+  const openTurn = (i) => setOpened((o) => new Set(o).add(i));
+
   useEffect(() => {
-    const el = ref.current;
-    if (el && atEnd.current) el.scrollTop = el.scrollHeight;
-  }, [msgs]);
+    const p = { ...prefs }, f = TX_FACES[p.face] || TX_FACES.news, st = box.current?.style;
+    if (!st) return;
+    st.setProperty("--rf", f.css);
+    st.setProperty("--rs", `${f.sizes[p.size]}px`);
+    st.setProperty("--rl", f.lh);
+    st.setProperty("--measure", `${[600, 660, 740][p.width]}px`);
+    txStore.set("prefs", p);
+  }, [prefs, msgs === null]);
+  const setPrefs = (p) => setPrefsRaw((cur) => ({ ...cur, ...p }));
 
-  return html`
-    <div class="chat" ref=${ref} onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }}>
-      <div class="inner">
-        ${err && html`<p class="err">${err}</p>`}
-        ${start > 0 && html`<button class="btn more" onClick=${() => { atEnd.current = false; load(start); }}>Load earlier messages</button>`}
-        ${msgs && msgs.length === 0 && html`<p class="empty">No messages yet.</p>`}
-        ${grouped(msgs || []).map((m) =>
-          m.role === "tools"
-            ? html`<${Steps} steps=${m.steps} />`
-            : m.role === "user"
-              ? html`<div class="msg user">${m.text}</div>`
-              : html`<div class="msg assistant" dangerouslySetInnerHTML=${{ __html: md(m.text) }}></div>`
-        )}
+  const topTurn = () => {
+    const el = box.current, top = el?.getBoundingClientRect().top || 0;
+    const rows = [...(el?.querySelectorAll(".turn, .folded") || [])];
+    const r = rows.find((e) => e.getBoundingClientRect().bottom > top + 60) || rows[0];
+    return r ? { i: +r.dataset.i, off: r.getBoundingClientRect().top } : null;
+  };
+  const go = (i, instant) => {
+    if (level === 1) setLevelRaw(2);
+    if (i < firstOpen) openTurn(i);
+    requestAnimationFrame(() => box.current?.querySelector(`#tx${i}`)?.scrollIntoView({ behavior: instant || level === 1 ? "instant" : "smooth", block: "start" }));
+  };
+  const anchor = useRef(null);
+  const setLevel = (l) => { anchor.current = level === 1 ? null : topTurn(); setLevelRaw(l); txStore.set("level", l); };
+  useLayoutEffect(() => {
+    const a = anchor.current;
+    anchor.current = null;
+    const el = a && box.current?.querySelector(`#tx${a.i}`);
+    if (el) box.current.scrollTop += el.getBoundingClientRect().top - a.off;
+  }, [level]);
+
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || !turns.length) return;
+    if (!landed.current) {
+      landed.current = true;
+      const land = () => {
+        if (level === 1) return;
+        const mark = el.querySelector(".since") || el.querySelector(`#tx${firstOpen}`);
+        if (mark) el.scrollTop = Math.min(firstOpen === 0 ? 0 : mark.offsetTop - 12, el.scrollHeight - el.clientHeight);
+      };
+      land();
+      document.fonts.ready.then(() => requestAnimationFrame(land));
+    } else if (atEnd.current) el.scrollTop = el.scrollHeight;
+    txStore.set(`seen.${s.sessionId}`, turns[turns.length - 1].at);
+  }, [turns]);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const io = new IntersectionObserver((es) => setInView((prev) => {
+      const n = new Set(prev);
+      for (const e of es) e.isIntersecting ? n.add(+e.target.dataset.i) : n.delete(+e.target.dataset.i);
+      return n;
+    }), { root: el, rootMargin: "-40px 0px -30% 0px" });
+    el.querySelectorAll(".turn, .folded").forEach((x) => io.observe(x));
+    return () => io.disconnect();
+  }, [turns, level, opened]);
+
+  useEffect(() => {
+    if (!prefsOpen) return;
+    const off = (e) => !e.target.closest(".prefs, .aa") && setPrefsOpen(false);
+    document.addEventListener("pointerdown", off);
+    return () => document.removeEventListener("pointerdown", off);
+  }, [prefsOpen]);
+
+  useEffect(() => {
+    const onKey = (e) => {
+      const t = e.target;
+      if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+      if (["1", "2", "3"].includes(e.key)) { e.preventDefault(); setLevel(+e.key); }
+      else if (e.key === "r" && live) { e.preventDefault(); setQuote({ text: "" }); }
+      else if (e.key === "Escape") { setQuote(null); setShot(null); setPrefsOpen(false); }
+    };
+    const onSel = () => {
+      const sel = getSelection(), txt = sel?.toString().trim();
+      const node = sel?.anchorNode?.parentElement?.closest?.(".tx .prose[data-answer]");
+      if (!live || !txt || txt.length < 3 || !node) return setQuoteBtn(null);
+      const r = sel.getRangeAt(0).getBoundingClientRect(), b = box.current.getBoundingClientRect();
+      setQuoteBtn({ text: txt, x: Math.min(b.width - 130, Math.max(8, r.left - b.left + r.width / 2 - 56)), y: r.top - b.top - 42 });
+    };
+    addEventListener("keydown", onKey);
+    document.addEventListener("selectionchange", onSel);
+    return () => { removeEventListener("keydown", onKey); document.removeEventListener("selectionchange", onSel); };
+  }, [level, live]);
+
+  const onClick = (e) => {
+    const j = e.target.closest("a[data-jump]");
+    if (j) { e.preventDefault(); box.current.querySelector(j.getAttribute("href"))?.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  };
+
+  const send = async (text) => {
+    try {
+      await api(`/api/sessions/${s.id || s.sessionId}/send`, { method: "POST", body: { text } });
+      atEnd.current = true;
+      return true;
+    } catch (e) {
+      say(e.message);
+      return false;
+    }
+  };
+
+  const working = s.state === "working";
+  const nFolded = turns.filter((_, i) => folded(i)).length;
+  return html`<div class="tx-wrap">
+    <div class="tx" ref=${box} onClick=${onClick} onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>
+      <div class="tx-bar">
+        <span class="count">${turns.length > 0 && `${turns.length} turn${turns.length > 1 ? "s" : ""}${start > 0 ? " shown" : ""}`}</span>
+        <${Zoom} level=${level} set=${setLevel} />
+        <button class="aa" aria-expanded=${prefsOpen} onClick=${() => setPrefsOpen(!prefsOpen)} title="Reading settings" aria-label="Reading settings">Aa</button>
+        ${prefsOpen && html`<${Prefs} prefs=${prefs} set=${setPrefs} />`}
       </div>
+      <div class="frame">
+        <main class="col">
+          ${err && html`<p class="err">${err}</p>`}
+          ${msgs === null && !err && html`<p class="cont">Reading the transcript…</p>`}
+          ${msgs && turns.length === 0 && html`<p class="cont">No messages yet.</p>`}
+          ${start > 0 && html`<button class="earlier-load" onClick=${() => { atEnd.current = false; load(start); }}>Load earlier turns</button>`}
+          ${level === 1 ? html`<${Outline} turns=${turns} go=${go} />` : html`
+            ${nFolded > 0 && html`<div class="earlier"><span>${nFolded} earlier turn${nFolded > 1 ? "s" : ""} you've read</span><button onClick=${() => setOpened(new Set(turns.map((_, i) => i)))}>Open all</button></div>`}
+            ${turns.map((t, i) => folded(i)
+              ? html`<${Folded} key=${`f${i}`} t=${t} i=${i} open=${openTurn} />`
+              : html`${i === firstOpen && firstOpen > 0 && html`<div class="since">${firstOpen === turns.length - 1 ? "Latest" : `${turns.length - firstOpen} new since you last read`}</div>`}<${Turn} key=${`t${i}`} t=${t} i=${i} s=${s} level=${level} zoom=${setShot} reply=${live ? setQuote : null} latest=${i === turns.length - 1} />`)}
+            ${working && html`<p class="live-line"><span class="dot"></span>${s.activity || "Working"}</p>`}
+          `}
+        </main>
+      </div>
+      ${quoteBtn && !quote && html`<button class="quote-btn" style=${`left:${quoteBtn.x}px;top:${quoteBtn.y + box.current.scrollTop}px`} onMouseDown=${(e) => e.preventDefault()} onClick=${() => { setQuote(quoteBtn); setQuoteBtn(null); }}>Reply to this</button>`}
     </div>
-  `;
-}
-
-const grouped = (msgs) =>
-  msgs.reduce((out, m) => {
-    const last = out[out.length - 1];
-    if (m.role !== "tool") out.push(m);
-    else if (last?.role === "tools") last.steps.push(m);
-    else out.push({ role: "tools", steps: [m] });
-    return out;
-  }, []);
-
-const STEP = [
-  [/^Bash$/, "ran", "command", "commands"],
-  [/^Read$/, "read", "file", "files"],
-  [/^(Edit|Write|MultiEdit|NotebookEdit)$/, "edited", "file", "files"],
-  [/^(Grep|Glob)$/, "searched", "time", "times"],
-  [/^(WebFetch|WebSearch)$/, "looked up", "page", "pages"],
-  [/^(Agent|Task)$/, "ran", "agent", "agents"],
-];
-
-function stepSummary(steps) {
-  const counts = new Map();
-  for (const st of steps) {
-    const kind = STEP.find(([re]) => re.test(st.tool));
-    const key = kind ? `${kind[1]}|${kind[2]}|${kind[3]}` : `used|${st.tool}|${st.tool}`;
-    counts.set(key, (counts.get(key) || 0) + 1);
-  }
-  const parts = [...counts].map(([key, n]) => {
-    const [verb, one, many] = key.split("|");
-    return verb === "used" ? `used ${one}${n > 1 ? ` ×${n}` : ""}` : `${verb} ${n} ${n === 1 ? one : many}`;
-  });
-  const text = parts.join(", ");
-  return text[0].toUpperCase() + text.slice(1);
-}
-
-function Steps({ steps }) {
-  const [open, setOpen] = useState(false);
-  return html`
-    <div class="steps ${open ? "open" : ""}">
-      <button class="steps-head" aria-expanded=${open} onClick=${() => setOpen(!open)}>
-        <span class="caret">${open ? "▾" : "▸"}</span>${stepSummary(steps)}
-      </button>
-      ${open && steps.map((st) => html`<div class="tool"><b>${st.tool}</b><span>${st.detail}</span></div>`)}
-    </div>
-  `;
+    ${level !== 1 && html`<${Scrub} turns=${turns} inView=${inView} go=${go} />`}
+    ${live && level !== 1 && (quote ? html`<${Composer} quote=${quote} send=${send} close=${() => setQuote(null)} />`
+      : html`<button class="dock" onClick=${() => setQuote({ text: "" })}><span>Reply to Claude</span>${!touch && html`<kbd>r</kbd>`}</button>`)}
+    ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
+  </div>`;
 }
 
 const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-function inline(t) {
-  return esc(t)
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, "$1<em>$2</em>")
-    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-}
-function md(src) {
-  const out = [];
-  const lines = src.split("\n");
-  for (let i = 0; i < lines.length; ) {
-    const l = lines[i];
-    if (l.startsWith("```")) {
-      const body = [];
-      for (i++; i < lines.length && !lines[i].startsWith("```"); i++) body.push(lines[i]);
-      i++;
-      out.push(`<pre><code>${esc(body.join("\n"))}</code></pre>`);
-    } else if (/^#{1,6}\s/.test(l)) {
-      const n = Math.min(3, l.match(/^#+/)[0].length);
-      out.push(`<h${n}>${inline(l.replace(/^#+\s*/, ""))}</h${n}>`);
-      i++;
-    } else if (/^\s*([-*]|\d+\.)\s/.test(l)) {
-      const ordered = /^\s*\d+\./.test(l);
-      const items = [];
-      for (; i < lines.length && /^\s*([-*]|\d+\.)\s/.test(lines[i]); i++) items.push(`<li>${inline(lines[i].replace(/^\s*([-*]|\d+\.)\s/, ""))}</li>`);
-      out.push(`<${ordered ? "ol" : "ul"}>${items.join("")}</${ordered ? "ol" : "ul"}>`);
-    } else if (/^\|.*\|\s*$/.test(l)) {
-      const rows = [];
-      for (; i < lines.length && /^\|.*\|\s*$/.test(lines[i]); i++) if (!/^\|[\s:|-]+\|\s*$/.test(lines[i])) rows.push(lines[i]);
-      out.push(`<table>${rows.map((r, k) => `<tr>${r.slice(1, -1).split("|").map((c) => `<${k ? "td" : "th"}>${inline(c.trim())}</${k ? "td" : "th"}>`).join("")}</tr>`).join("")}</table>`);
-    } else if (!l.trim()) {
-      i++;
-    } else {
-      const para = [];
-      for (; i < lines.length && lines[i].trim() && !/^(```|#{1,6}\s|\s*([-*]|\d+\.)\s|\|.*\|\s*$)/.test(lines[i]); i++) para.push(lines[i]);
-      out.push(`<p>${inline(para.join("\n")).replace(/\n/g, "<br>")}</p>`);
-    }
-  }
-  return out.join("");
-}
+const TX_FILE = /^(~?[\w.\-]+\/)*[\w.\-]+\.(go|js|mjs|ts|tsx|py|md|json|kt|css|html|sh|yml|yaml|toml|rb|sql|txt|service|plist)(:\d+(-\d+)?)?$/;
+const safeURL = (u) => /^(https?:|mailto:|\/|#|\.)/i.test(u || "") ? u : null;
+const mdRender = new Marked.Renderer();
+mdRender.code = (code, lang) => {
+  const l = (lang || "").split(/\s/)[0];
+  const body = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : esc(code);
+  return `<pre><button class="copy" data-copy>Copy</button><code>${body}</code></pre>`;
+};
+mdRender.codespan = (t) => `<code class="${TX_FILE.test(t.replace(/&amp;/g, "&")) ? "path" : ""} ${t.length < 28 ? "nowrap" : ""}">${t}</code>`;
+mdRender.table = (header, body) => `<div class="tbl"><table><thead>${header}</thead><tbody>${body}</tbody></table></div>`;
+mdRender.link = (href, title, text) => safeURL(href) ? `<a href="${esc(href)}" data-out>${text}</a>` : text;
+mdRender.image = (href, title, text) => safeURL(href) ? `<a href="${esc(href)}" data-out>${esc(text || href)}</a>` : esc(text || "");
+mdRender.html = (h) => esc(h);
+Marked.use({
+  renderer: mdRender, gfm: true, breaks: false,
+  tokenizer: {
+    del(src) {
+      const m = /^~~(?=\S)([\s\S]*?\S)~~(?!~)/.exec(src);
+      if (m) return { type: "del", raw: m[0], text: m[1], tokens: this.lexer.inlineTokens(m[1]) };
+      const lone = /^~+/.exec(src);
+      return lone ? { type: "text", raw: lone[0], text: lone[0] } : false;
+    },
+  },
+});
+const md = (src) => Marked.parse(src || "");
+
+document.addEventListener("click", (e) => {
+  const c = e.target.closest?.("[data-copy]");
+  if (c) { copyText(c.parentElement.querySelector("code").innerText); c.textContent = "Copied"; setTimeout(() => (c.textContent = "Copy"), 1200); return; }
+  const a = e.target.closest?.("a[data-out]");
+  if (a) { e.preventDefault(); openOut(a.getAttribute("href")); }
+});
 
 function useDirs(host, home) {
   const [dirs, setDirs] = useState([]);
