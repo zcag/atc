@@ -2149,11 +2149,12 @@ function bodyOf(msgs) {
     if (m.role === "done") ms = Math.max(ms, m.ms || 0);
     else if (m.role === "assistant") items.push({ t: "text", text: m.text, time: m.time });
     else if (m.role === "event") items.push({ t: "event", text: m.text, time: m.time });
+    else if (m.role === "note") items.push({ t: "note", text: m.text, time: m.time });
     else if (m.role === "tool") items.push({ t: "step", ...m, input: m.input || {} });
   }
   const last = items.findLastIndex((it) => it.t === "step");
   const answer = items.slice(last + 1).filter((it) => it.t === "text").map((it) => it.text).join("\n\n");
-  const work = items.slice(0, last + 1).concat(items.slice(last + 1).filter((it) => it.t === "event"));
+  const work = items.slice(0, last + 1).concat(items.slice(last + 1).filter((it) => it.t === "event" || it.t === "note"));
   const user = msgs.find((m) => m.role === "user");
   return { items: work, answer, images: user?.images || [], prompt: user?.text, cost, ms };
 }
@@ -2424,10 +2425,14 @@ function Story({ items, s, level, zoom, live, badges }) {
   const files = new Set(steps.filter((x) => txKind(x) === "edit" && !x.out?.error).map((x) => x.input.file_path)).size;
   const counts = [steps.length > 0 && `${steps.length} step${steps.length > 1 ? "s" : ""}`, files > 0 && `${files} file${files > 1 ? "s" : ""} changed`, failed > 0 && `${failed} failed`].filter(Boolean).join(" · ");
   const lastStep = steps[steps.length - 1];
-  const row = (it, j) => it.t === "looks" ? html`<${Looks} key=${`l${j}`} steps=${it.steps} s=${s} />`
+  const row = (it, j) => it.t === "note" ? html`<${Note} key=${`m${j}`} n=${it} />`
+    : it.t === "looks" ? html`<${Looks} key=${`l${j}`} steps=${it.steps} s=${s} />`
     : it.t === "event" ? html`<p class="event" key=${`e${j}`}>${it.text}</p>`
     : html`<${Step} key=${it.id || j} st=${it} s=${s} zoom=${zoom} pin=${follow && it === lastStep} />`;
   const heads = phases.filter((p) => p.head);
+  const notes = items.filter((it) => it.t === "note");
+  const tail = follow ? new Set(rowsOf(phases[phases.length - 1]?.rows || []).slice(-TX_TAIL)) : new Set();
+  const loose = open ? [] : notes.filter((n) => !tail.has(n));
   return html`
     ${!open && !follow && asks.map((x) => html`<${Step} st=${x} s=${s} zoom=${zoom} />`)}
     <div class="story ${open ? "open" : ""} ${follow ? "live" : ""}">
@@ -2439,6 +2444,7 @@ function Story({ items, s, level, zoom, live, badges }) {
       ${!open && !follow && heads.length > 0 && html`<ol class="plot" onClick=${() => setOpen(true)}>
         ${(heads.length > 5 ? [...heads.slice(0, 2), null, ...heads.slice(-2)] : heads).map((p) => p ? html`<li>${firstSentence(p.head)}</li>` : html`<li class="skip">${heads.length - 4} more</li>`)}
       </ol>`}
+      ${loose.length > 0 && html`<div class="notes">${loose.map((n, j) => html`<${Note} key=${`ln${j}`} n=${n} />`)}</div>`}
       ${follow && html`<div class="phases">
         ${phases.length > 1 && html`<button class="earlier-steps" onClick=${() => setOpen(true)}>${phases.length - 1} earlier part${phases.length > 2 ? "s" : ""}: ${phases.slice(0, -1).filter((p) => p.head).slice(-1).map((p) => firstSentence(p.head))}</button>`}
         ${phases.slice(-1).map((p) => html`<section class="phase">
@@ -2452,6 +2458,8 @@ function Story({ items, s, level, zoom, live, badges }) {
       </section>`)}</div>`}
     </div>`;
 }
+
+const Note = ({ n }) => html`<div class="note-you" title=${`You, while Claude was working${n.time ? ` · ${txClock(n.time)}` : ""}`}><span>${n.text}</span></div>`;
 
 function Prompt({ text, images, partial }) {
   const [all, setAll] = useState(false);
@@ -2840,8 +2848,11 @@ function Transcript({ s, say, slot }) {
   useEffect(() => { opened.forEach((i) => need(i)); }, [opened]);
   useEffect(() => {
     if (!pending.length || !idx) return;
-    const landed = (p) => turns.some((t) => t.at && new Date(t.at) >= p.at - 60000 && plain(t.prompt).startsWith(plain(p.text).slice(0, 24)));
-    if (pending.some((p) => p.state === "sent" && landed(p))) setPending((ps) => ps.filter((p) => !(p.state === "sent" && landed(p))));
+    const head = (p) => plain(p.text).slice(0, 24);
+    const landed = (p) => turns.some((t) => (t.at && new Date(t.at) >= p.at - 60000 && plain(t.prompt).startsWith(head(p))) || (t.notes || []).some((n) => plain(n).startsWith(head(p))));
+    const stale = (p) => !working && Date.now() - p.at > 5 * 60e3;
+    const gone = (p) => p.state === "sent" && (landed(p) || stale(p));
+    if (pending.some(gone)) setPending((ps) => ps.filter((p) => !gone(p)));
   }, [idx]);
 
   useEffect(() => {

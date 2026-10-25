@@ -456,6 +456,10 @@ button { cursor: pointer; }
 .tx .story.live .steps { border-left-color: color-mix(in srgb, var(--work) 45%, var(--line)); }
 .tx .earlier-steps { display: block; margin: 6px 0 4px; font-size: 12.5px; color: var(--faint); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tx .earlier-steps:hover { color: var(--ink); }
+.tx .note-you { display: flex; justify-content: flex-end; margin: 10px 0; }
+.tx .note-you span { max-width: 82%; padding: 8px 14px; border-radius: 16px 16px 5px 16px; background: color-mix(in srgb, var(--hue) 14%, var(--paper)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hue) 22%, transparent); font: 450 14px/1.45 var(--sans); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.tx .notes { margin: 6px 0 10px; }
+.tx .steps .note-you { margin-right: 0; }
 .tx .event { margin: 12px 0; font-size: 13px; color: var(--quiet); display: flex; gap: 8px; }
 .tx .event::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--ask); margin-top: 7px; flex: none; }
 

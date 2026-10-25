@@ -91,3 +91,20 @@ func TestTurnsIndexAndGrow(t *testing.T) {
 		t.Fatalf("after the line completes: %+v", turns)
 	}
 }
+
+func TestMidTurnMessagesBelongToTheTurn(t *testing.T) {
+	lines := []string{
+		`{"type":"user","timestamp":"2026-10-01T10:00:00Z","message":{"content":"fix it"}}`,
+		`{"type":"assistant","message":{"id":"m1","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]}}`,
+		`{"type":"attachment","timestamp":"2026-10-01T10:00:05Z","attachment":{"type":"queued_command","prompt":"also check the tests"}}`,
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"a.go"}]}}`,
+		`{"type":"assistant","message":{"id":"m2","content":[{"type":"text","text":"Done, tests too."}]}}`,
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "s.jsonl")
+	os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+	turns, _, _ := New(dir).Turns(path)
+	if len(turns) != 1 || len(turns[0].Notes) != 1 || turns[0].Notes[0] != "also check the tests" || turns[0].Reply != "Done, tests too." {
+		t.Fatalf("a message sent mid-turn should stay in its turn: %+v", turns)
+	}
+}

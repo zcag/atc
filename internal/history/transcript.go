@@ -57,6 +57,10 @@ type rawMsg struct {
 	IsSidechain   bool            `json:"isSidechain"`
 	Timestamp     time.Time       `json:"timestamp"`
 	ToolUseResult json.RawMessage `json:"toolUseResult"`
+	Attachment    *struct {
+		Type   string `json:"type"`
+		Prompt string `json:"prompt"`
+	} `json:"attachment"`
 	Message       struct {
 		ID      string          `json:"id"`
 		Model   string          `json:"model"`
@@ -220,6 +224,10 @@ func (rd *reader) line(line []byte, off int64) {
 		rd.msgs, rd.offs = append(rd.msgs, x), append(rd.offs, off)
 	}
 	switch {
+	case m.Type == "attachment" && m.Attachment != nil && m.Attachment.Type == "queued_command":
+		if x, ok := queued(m.Attachment.Prompt, m.Timestamp); ok {
+			add(x)
+		}
 	case m.Type == "system" && m.Subtype == "turn_duration":
 		add(Message{Role: "done", Ms: m.DurationMs, Time: m.Timestamp})
 	case m.Type == "user" && rd.results(m):
@@ -379,6 +387,26 @@ func clipInput(raw json.RawMessage) json.RawMessage {
 
 var notice = regexp.MustCompile(`(?s)<summary>(.*?)</summary>`)
 
+func queued(text string, at time.Time) (Message, bool) {
+	t := strings.TrimSpace(text)
+	switch {
+	case t == "":
+		return Message{}, false
+	case strings.HasPrefix(t, "<task-notification>"):
+		return Message{Role: "event", Text: noticeText(t), Time: at}, true
+	case IsNoise(t):
+		return Message{}, false
+	}
+	return Message{Role: "note", Text: t, Time: at}, true
+}
+
+func noticeText(t string) string {
+	if sm := notice.FindStringSubmatch(t); sm != nil {
+		return strings.TrimSpace(sm[1])
+	}
+	return "A background task finished"
+}
+
 func convert(m rawMsg) []Message {
 	if m.Type != "user" && m.Type != "assistant" {
 		return nil
@@ -396,11 +424,7 @@ func convert(m rawMsg) []Message {
 		switch {
 		case b.Type == "text" && strings.TrimSpace(b.Text) != "":
 			if m.Type == "user" && strings.HasPrefix(strings.TrimSpace(b.Text), "<task-notification>") {
-				text := "A background task finished"
-				if sm := notice.FindStringSubmatch(b.Text); sm != nil {
-					text = strings.TrimSpace(sm[1])
-				}
-				out = append(out, Message{Role: "event", Text: text, Time: m.Timestamp})
+				out = append(out, Message{Role: "event", Text: noticeText(b.Text), Time: m.Timestamp})
 				continue
 			}
 			if m.Type == "user" && IsNoise(b.Text) {

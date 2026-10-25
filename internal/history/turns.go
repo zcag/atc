@@ -25,6 +25,7 @@ type Turn struct {
 	Files   []FileChange `json:"files,omitempty"`
 	Badges  []Badge      `json:"badges,omitempty"`
 	Asks    int          `json:"asks,omitempty"`
+	Notes   []string     `json:"notes,omitempty"`
 	Cost    float64      `json:"cost,omitempty"`
 	Ms      int64        `json:"ms,omitempty"`
 }
@@ -72,6 +73,8 @@ func BuildTurns(msgs []Message, offs []int64, end int64, price func(string, Usag
 			cur.Cost += price(m.Model, *m.Usage)
 		}
 		switch m.Role {
+		case "note":
+			cur.Notes = append(cur.Notes, clip(m.Text, 300))
 		case "done":
 			cur.Ms = max(cur.Ms, m.Ms)
 		case "assistant":
