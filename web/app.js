@@ -2484,7 +2484,7 @@ function Turn({ t, i, s, body, level, zoom, quote, latest, live, fresh }) {
     <${Prompt} text=${body?.prompt ?? t.prompt} images=${body?.images} partial=${t.partial} />
     <p class="meta-inline">${txClock(t.at)}${txDur(t) && ` · worked ${txDur(t)}`}${txUsd(t.cost) && ` · ${txUsd(t.cost)}`}${files.length > 0 && ` · ${files.length} file${files.length > 1 ? "s" : ""} changed`}</p>
     <${Margin} t=${t} i=${i} s=${s} answer=${answer} />
-    ${!body ? html`<div class="skeleton"><i></i><i></i><i></i></div>` : html`
+    ${!body ? (t.steps || t.reply) && html`<div class="skeleton"><i></i><i></i><i></i></div>` : html`
       <${Story} items=${body.items} s=${s} level=${level} zoom=${zoom} live=${live} />
       ${latest && answer && html`<${Gist} s=${s} answer=${answer} />`}
       ${answer ? html`<div class="prose" data-answer dangerouslySetInnerHTML=${{ __html: html_ }}></div><${Acts} answer=${answer} quote=${quote} />`
@@ -2755,11 +2755,13 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, ask, focus
   </div>`;
 }
 
+const pendingOf = (sid) => txStore.get(`pending.${sid}`, []).filter((p) => Date.now() - p.at < 6 * 3600e3).map((p) => (p.state === "sending" ? { ...p, state: "sent" } : p));
+
 function Pending({ p, retry, drop }) {
   return html`<section class="turn pending">
     <span class="node live" aria-hidden="true"></span>
     <div class="prompt">${p.text}</div>
-    <p class="pend ${p.state}">${p.state === "sending" ? "Sending…" : p.state === "failed" ? html`Not sent: ${p.err} <button onClick=${retry}>Try again</button><button onClick=${drop}>Discard</button>` : p.queued ? "Sent. Claude reads it after its current step" : "Sent. Waiting for Claude"}</p>
+    <p class="live-line pend ${p.state}"><span class="dot"></span>${p.state === "sending" ? "Sending" : p.state === "failed" ? html`Not sent: ${p.err} <button onClick=${retry}>Try again</button><button onClick=${drop}>Discard</button>` : p.queued ? "Queued. Claude reads it after its current step" : "Sent. Waiting for Claude"}</p>
   </section>`;
 }
 
@@ -2790,7 +2792,8 @@ function Transcript({ s, say, slot }) {
   const [inView, setInView] = useState(() => new Set());
   const [sel, setSel] = useState(null);
   const [shot, setShot] = useState(null);
-  const [pending, setPending] = useState([]);
+  const [pending, setPendingRaw] = useState(() => pendingOf(s.sessionId));
+  const setPending = (f) => setPendingRaw((ps) => { const n = typeof f === "function" ? f(ps) : f; txStore.set(`pending.${s.sessionId}`, n.length ? n : null); return n; });
   const [draft, setDraftRaw] = useState(() => txStore.get(`draft.${s.sessionId}`, ""));
   const [quotes, setQuotes] = useState([]);
   const box = useRef(), landed = useRef(false), atEnd = useRef(false), loading = useRef(new Set()), focusInput = useRef(() => {}), findQ = useRef("");
@@ -2822,7 +2825,7 @@ function Transcript({ s, say, slot }) {
     loading.current.delete(key);
   };
 
-  useEffect(() => { landed.current = false; setIdx(null); setBodies({}); setOpened(new Set()); setPending([]); setQuotes([]); setDraftRaw(txStore.get(`draft.${s.sessionId}`, "")); seenAt.current = txStore.get(`seen.${s.sessionId}`, null); loadIdx(); }, [s.sessionId]);
+  useEffect(() => { landed.current = false; setIdx(null); setBodies({}); setOpened(new Set()); setPendingRaw(pendingOf(s.sessionId)); setQuotes([]); setDraftRaw(txStore.get(`draft.${s.sessionId}`, "")); seenAt.current = txStore.get(`seen.${s.sessionId}`, null); loadIdx(); }, [s.sessionId]);
   useEffect(() => { if (idx) loadIdx(); }, [s.updated, s.state]);
 
   const firstOpen = useMemo(() => {
@@ -2838,7 +2841,8 @@ function Transcript({ s, say, slot }) {
   useEffect(() => { opened.forEach((i) => need(i)); }, [opened]);
   useEffect(() => {
     if (!pending.length || !idx) return;
-    setPending((ps) => ps.filter((p) => !(p.state === "sent" && turns.some((t) => t.at && new Date(t.at) >= p.at - 60000 && plain(t.prompt).startsWith(plain(p.text).slice(0, 24))))));
+    const landed = (p) => turns.some((t) => t.at && new Date(t.at) >= p.at - 60000 && plain(t.prompt).startsWith(plain(p.text).slice(0, 24)));
+    if (pending.some((p) => p.state === "sent" && landed(p))) setPending((ps) => ps.filter((p) => !(p.state === "sent" && landed(p))));
   }, [idx]);
 
   useEffect(() => {
@@ -3011,7 +3015,7 @@ function Transcript({ s, say, slot }) {
                 ? html`<${Folded} key=${`f${t.from}`} t=${t} i=${i} open=${openTurn} />`
                 : html`${i === firstOpen && firstOpen > 0 && html`<div class="since">${firstOpen === turns.length - 1 ? "Latest" : `${turns.length - firstOpen} new since you last read`}</div>`}<${Turn} key=${`t${t.from}`} t=${t} i=${i} s=${s} body=${bodies[t.from]} level=${level} zoom=${setShot} quote=${live ? quote : null} latest=${i === turns.length - 1} live=${working && i === turns.length - 1} fresh=${opened.has(i)} />`}`)}
             ${pending.map((p) => html`<${Pending} key=${p.id} p=${p} retry=${() => send(p.text, p.id)} drop=${() => setPending((ps) => ps.filter((x) => x.id !== p.id))} />`)}
-            ${working && !running && html`<${Thinking} since=${last?.end} />`}
+            ${working && !running && !pending.some((p) => p.state !== "failed") && html`<${Thinking} since=${last?.end} />`}
           `}
         </main>
       </div>
