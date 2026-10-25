@@ -2325,7 +2325,13 @@ function Running({ st }) {
 
 function AgentThread({ st, s, zoom }) {
   const [page, setPage] = useState(null);
-  useEffect(() => { api(`/api/sessions/${s.sessionId}/agents/${st.id}`).then(setPage, () => setPage({ messages: [] })); }, [st.id, !!st.out]);
+  useEffect(() => {
+    const get = () => api(`/api/sessions/${s.sessionId}/agents/${st.id}`).then(setPage, () => setPage((p) => p || { messages: [] }));
+    get();
+    if (st.out) return;
+    const t = setInterval(get, 3000);
+    return () => clearInterval(t);
+  }, [st.id, !!st.out]);
   if (!page) return html`<p class="cont">Reading the agent's work…</p>`;
   const b = bodyOf(page.messages || []);
   return html`<div class="thread">
