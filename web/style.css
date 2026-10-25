@@ -1175,3 +1175,7 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .rail .av .badge { position: absolute; top: -5px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--turn); color: #1d2533; font: 700 10.5px/18px var(--sans); text-align: center; box-shadow: 0 0 0 2px var(--board); }
 .rail .av .badge.needs-you { background: var(--needs); color: #fff; }
 .rail .grow { flex: 1; }
+.rack.r-lrow { gap: 0; }
+.rack.r-lrow .it.lrow { border-top: 0; border-radius: 8px; padding: 6px 8px; }
+.rack.r-lrow .it.lrow:hover { background: var(--strip); }
+.rack.r-lrow .it.lrow.sel { background: var(--strip-hi); box-shadow: 0 0 0 1px var(--line); }

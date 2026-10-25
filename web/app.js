@@ -565,7 +565,7 @@ function Triage({ live, only, sel, cursor }) {
   const wait = live.filter((s) => !s.parked && (s.state === "needs-you" || s.state === "your-turn"))
     .sort((a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1));
   const work = live.filter((s) => s.state === "working");
-  const rest = live.filter((s) => !wait.includes(s) && !work.includes(s)).sort((a, b) => !!b.pinned - !!a.pinned || !!a.parked - !!b.parked);
+  const rest = live.filter((s) => !wait.includes(s) && !work.includes(s)).sort((a, b) => !!b.pinned - !!a.pinned);
   const name = (s) => html`<b>${s.title || "Untitled"}</b>`;
   const busy = work.length ? ` ${work.length} working.` : "";
   const brief = wait.length > 1 ? html`${name(wait[0])} and ${wait.length - 1} more are waiting on you.${busy}`
@@ -577,7 +577,8 @@ function Triage({ live, only, sel, cursor }) {
     <p class="brief">${brief}</p>
     <${Bay} title="Your turn" list=${wait} sel=${sel} cursor=${cursor} size="card" />
     <${Bay} title="Working" list=${work} sel=${sel} cursor=${cursor} size="work" />
-    <${Bay} title=${rest.some((s) => s.state !== "stopped") ? "Parked and stopped" : "Stopped"} list=${rest} sel=${sel} cursor=${cursor} size="line" />`;
+    <${Bay} title="Parked" list=${rest.filter((s) => s.parked)} sel=${sel} cursor=${cursor} size="lrow" />
+    <${Bay} title="Stopped" list=${rest.filter((s) => !s.parked)} sel=${sel} cursor=${cursor} size="line" />`;
 }
 
 function lanesOf(live, earlier) {
@@ -770,7 +771,7 @@ function CardReplies({ s }) {
 function said(s, human) {
   if (s.state === "working") return html`<div class="said doing" key=${s.activity}>${human ? doing(s) : oneLine(s.activity) || "Working…"}</div>`;
   if (s.state === "needs-you" && s.activity) return html`<div class="said ask">Waiting on you: ${oneLine(s.activity)}</div>`;
-  if ((s.state === "your-turn" || s.state === "needs-you") && s.summary) return html`<div class="said reply">${human ? headline(s) : s.summary.status}</div>`;
+  if ((human || s.state === "your-turn" || s.state === "needs-you") && s.summary) return html`<div class="said reply">${human ? headline(s) : s.summary.status}</div>`;
   if ((s.state === "your-turn" || s.state === "needs-you") && s.lastReply) return html`<div class="said reply">${oneLine(s.lastReply)}</div>`;
   return s.lastPrompt ? html`<div class="said">${oneLine(s.lastPrompt)}</div>` : null;
 }
