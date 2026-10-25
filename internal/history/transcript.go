@@ -47,6 +47,7 @@ type Page struct {
 	Messages []Message `json:"messages"`
 	Start    int64     `json:"start"`
 	Size     int64     `json:"size"`
+	Done     bool      `json:"done,omitempty"`
 }
 
 type rawMsg struct {
@@ -168,6 +169,7 @@ func ReadAgent(transcript, toolUseID string) (Page, error) {
 	for _, mp := range metas {
 		var meta struct {
 			ToolUseID string `json:"toolUseId"`
+			Finished  bool   `json:"finished"`
 		}
 		if b, err := os.ReadFile(mp); err != nil || json.Unmarshal(b, &meta) != nil || meta.ToolUseID != toolUseID {
 			continue
@@ -180,7 +182,7 @@ func ReadAgent(transcript, toolUseID string) (Page, error) {
 		rd := newReader(false)
 		rd.sidechain = true
 		rd.read(bufio.NewReaderSize(f, 1<<20), 0)
-		return Page{Messages: rd.msgs}, nil
+		return Page{Messages: rd.msgs, Done: meta.Finished}, nil
 	}
 	return Page{}, fmt.Errorf("no subagent transcript for %s", toolUseID)
 }

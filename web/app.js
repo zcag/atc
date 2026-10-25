@@ -2325,19 +2325,22 @@ function Running({ st }) {
 
 function AgentThread({ st, s, zoom }) {
   const [page, setPage] = useState(null);
+  const done = page?.done || (st.out && !/^Async agent launched/.test(st.out.text || ""));
   useEffect(() => {
     const get = () => api(`/api/sessions/${s.sessionId}/agents/${st.id}`).then(setPage, () => setPage((p) => p || { messages: [] }));
     get();
-    if (st.out) return;
+    if (done) return;
     const t = setInterval(get, 3000);
     return () => clearInterval(t);
-  }, [st.id, !!st.out]);
+  }, [st.id, done]);
   if (!page) return html`<p class="cont">Reading the agent's work…</p>`;
   const b = bodyOf(page.messages || []);
   return html`<div class="thread">
     ${b.prompt && html`<p class="thread-ask">${firstSentence(b.prompt)}</p>`}
-    ${b.items.length > 0 && html`<${Story} items=${b.items} s=${s} zoom=${zoom} level=${2} />`}
-    <div class="prose small" dangerouslySetInnerHTML=${{ __html: md(b.answer || st.out?.text) }}></div>
+    ${b.items.length > 0 && html`<${Story} items=${b.items} s=${s} zoom=${zoom} level=${2} live=${!done} />`}
+    ${b.answer ? html`<div class="prose small" dangerouslySetInnerHTML=${{ __html: md(b.answer) }}></div>`
+      : done ? st.out?.text && html`<div class="prose small" dangerouslySetInnerHTML=${{ __html: md(st.out.text) }}></div>`
+      : html`<p class="live-line"><span class="dot"></span>The agent is still working</p>`}
   </div>`;
 }
 
