@@ -781,6 +781,7 @@ function paneFor(s) {
 function Session({ s, say, live }) {
   const canAttach = s.attachable;
   const [mode, setMode] = useState(() => paneFor(s));
+  const [slot, setSlot] = useState(null);
   const choose = (m) => { setMode(m); try { localStorage.setItem(PANE, m); } catch {} };
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -850,6 +851,7 @@ function Session({ s, say, live }) {
       ${VOICE.stt && html`<button class="btn voice-btn ${voice ? "on" : ""} ${canAttach ? "" : "off"}" aria-pressed=${voice}
         onClick=${() => canAttach ? (setVoice(!voice), setMode("term"))
           : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
+      ${mode === "chat" && html`<div class="tx-slot" ref=${setSlot}></div>`}
       <div class="seg" role="tablist">
         <button class=${mode === "term" ? "on" : ""} onClick=${() => choose("term")}>Terminal</button>
         <button class=${mode === "chat" ? "on" : ""} onClick=${() => choose("chat")}>Transcript</button>
@@ -858,12 +860,12 @@ function Session({ s, say, live }) {
       <${Menu} busy=${busy} items=${[...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "Usage", run: () => setShowUse(true) }]} />
     </div>
     <${AskBar} s=${s} say=${say} />
-    <${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />
+    ${mode !== "chat" && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
     ${mode === "term"
       ? canAttach
         ? html`<${Term} key=${s.id} s=${s} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} />`
         : html`<div class="stage"><div class="cover">${Unattachable(s, resume, busy, setMode)}</div></div>`
-      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} />` : html`<${Transcript} s=${s} say=${say} />`}
+      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} />` : html`<${Transcript} s=${s} say=${say} slot=${slot} />`}
     ${showUse && html`<${SessionUsage} s=${s} use=${use} onClose=${() => setShowUse(false)} />`}
   `;
 }
@@ -2469,11 +2471,12 @@ function Gist({ s, answer }) {
   return html`<div class="gist"><p>In short</p><ul>${sum.gist.map((g) => html`<li>${g}</li>`)}</ul></div>`;
 }
 
-function Turn({ t, i, s, body, level, zoom, quote, latest, live }) {
+function Turn({ t, i, s, body, level, zoom, quote, latest, live, fresh }) {
   const answer = body?.answer || "";
   const html_ = useMemo(() => { let j = 0; return md(answer).replace(/<h([1-3])>/g, (_, n) => `<h${n} id="tx${i}h${j++}">`); }, [answer]);
   const files = (t.files || []).filter((f) => !scratch(f.path));
-  return html`<section class="turn ${latest ? "latest" : ""}" id=${`tx${i}`} data-i=${i}>
+  return html`<section class="turn ${latest ? "latest" : ""} ${fresh ? "fresh" : ""}" id=${`tx${i}`} data-i=${i}>
+    <${Node} t=${t} live=${live} />
     <${Prompt} text=${body?.prompt ?? t.prompt} images=${body?.images} partial=${t.partial} />
     <p class="meta-inline">${txClock(t.at)}${txDur(t) && ` · worked ${txDur(t)}`}${txUsd(t.cost) && ` · ${txUsd(t.cost)}`}${files.length > 0 && ` · ${files.length} file${files.length > 1 ? "s" : ""} changed`}</p>
     <${Margin} t=${t} i=${i} s=${s} answer=${answer} />
@@ -2486,6 +2489,7 @@ function Turn({ t, i, s, body, level, zoom, quote, latest, live }) {
 }
 
 const Folded = ({ t, i, open }) => html`<button class="ol-row folded" id=${`tx${i}`} data-i=${i} onClick=${() => open(i)}>
+  <${Node} t=${t} />
   <span class="t">${txClock(t.at)}</span>
   <span class="a">${t.partial ? "Continued from earlier" : plain(t.prompt) || "Image"}</span>
   <span class="b">${t.reply ? firstSentence(t.reply) : t.steps ? `${t.steps} steps, no reply` : "No reply"}</span>
@@ -2731,7 +2735,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, ask, focus
         </div>
       </div>`}
       ${quotes.length > 0 && html`<div class="quotes">${quotes.map((q, j) => html`<div class="qchip"><span>${q}</span><button aria-label="Remove quote" onClick=${() => setQuotes(quotes.filter((_, k) => k !== j))}>✕</button></div>`)}</div>`}
-      <div class="box" onClick=${(e) => e.target === e.currentTarget && ta.current?.focus()}>
+      <div class="box ${ready ? "ready" : ""}" onClick=${(e) => e.target === e.currentTarget && ta.current?.focus()}>
         <textarea ref=${ta} rows="1" value=${draft} placeholder=${hint} enterkeyhint=${touch ? "enter" : "send"}
           onInput=${(e) => setDraft(e.target.value)}
           onPaste=${(e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); upload(fs); } }}
@@ -2751,6 +2755,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, ask, focus
 
 function Pending({ p, retry, drop }) {
   return html`<section class="turn pending">
+    <span class="node live" aria-hidden="true"></span>
     <div class="prompt">${p.text}</div>
     <p class="pend ${p.state}">${p.state === "sending" ? "Sending…" : p.state === "failed" ? html`Not sent: ${p.err} <button onClick=${retry}>Try again</button><button onClick=${drop}>Discard</button>` : p.queued ? "Sent. Claude reads it after its current step" : "Sent. Waiting for Claude"}</p>
   </section>`;
@@ -2771,7 +2776,8 @@ function copyText(text) {
   try { navigator.clipboard.writeText(text); } catch { const ta = Object.assign(document.createElement("textarea"), { value: text }); document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
 }
 
-function Transcript({ s, say }) {
+function Transcript({ s, say, slot }) {
+  const wide = useWide();
   const [idx, setIdx] = useState(null);
   const [bodies, setBodies] = useState({});
   const [err, setErr] = useState(null);
@@ -2907,7 +2913,7 @@ function Transcript({ s, say }) {
 
   useEffect(() => {
     if (!pop) return;
-    const off = (e) => !e.target.closest(".pop, .tx-bar button") && setPop(null);
+    const off = (e) => !e.target.closest(".pop, .txc button") && setPop(null);
     document.addEventListener("pointerdown", off);
     return () => document.removeEventListener("pointerdown", off);
   }, [pop]);
@@ -2973,28 +2979,34 @@ function Transcript({ s, say }) {
   const nFolded = turns.filter((_, i) => folded(i)).length;
   const cost = turns.reduce((a, t) => a + (t.cost || 0), 0);
   const files = new Set(turns.flatMap((t) => (t.files || []).filter((f) => !scratch(f.path)).map((f) => f.path))).size;
-  return html`<div class="tx-wrap">
+  const controls = html`<div class="txc">
+    <${Zoom} level=${level} set=${setLevel} />
+    <button class="tb" aria-pressed=${pop === "find"} onClick=${() => { findQ.current = ""; setPop(pop === "find" ? null : "find"); }} title="Find in this session (f)"><svg width="15" height="15" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+    <button class="tb" aria-pressed=${pop === "results"} onClick=${() => setPop(pop === "results" ? null : "results")} title="What this session produced"><svg width="15" height="15" viewBox="0 0 16 16"><path d="M3 2.5h7l3 3v8H3z M10 2.5v3h3 M5.5 8.5h5M5.5 11h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>${files > 0 && html`<span class="n">${files}</span>`}</button>
+    <button class="tb aa" aria-pressed=${pop === "prefs"} onClick=${() => setPop(pop === "prefs" ? null : "prefs")} title="Reading settings">Aa</button>
+  </div>`;
+  const inHeader = slot && wide;
+  return html`<div class="tx-wrap" style=${`--ph: ${hueOf(project(s.cwd || "").name)}`}>
+    ${inHeader && html`<${Into} node=${slot}>${controls}<//>`}
     <div class="tx" ref=${box} onClick=${onClick} onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; setSel(null); }}>
-      <div class="tx-bar">
-        <span class="count">${turns.length > 0 && `${turns.length} turn${turns.length > 1 ? "s" : ""}${txUsd(cost) ? ` · ${txUsd(cost)}` : ""}`}</span>
-        <button class="tb" aria-pressed=${pop === "find"} onClick=${() => { findQ.current = ""; setPop(pop === "find" ? null : "find"); }} title="Find in this session (f)"><svg width="15" height="15" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
-        <button class="tb" aria-pressed=${pop === "results"} onClick=${() => setPop(pop === "results" ? null : "results")} title="What this session produced"><svg width="15" height="15" viewBox="0 0 16 16"><path d="M3 2.5h7l3 3v8H3z M10 2.5v3h3 M5.5 8.5h5M5.5 11h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>${files > 0 && html`<span class="n">${files}</span>`}</button>
-        <${Zoom} level=${level} set=${setLevel} />
-        <button class="tb aa" aria-pressed=${pop === "prefs"} onClick=${() => setPop(pop === "prefs" ? null : "prefs")} title="Reading settings">Aa</button>
+      <div class="tx-top ${inHeader ? "bare" : ""}">
+        ${!inHeader && controls}
         ${pop === "prefs" && html`<${Prefs} prefs=${prefs} set=${setPrefs} />`}
         ${pop === "find" && html`<${Find} turns=${turns} s=${s} go=${go} close=${() => setPop(null)} init=${findQ.current} key=${findQ.current} />`}
         ${pop === "results" && html`<${Results} turns=${turns} s=${s} bodies=${bodies} need=${need} go=${go} close=${() => setPop(null)} />`}
       </div>
       <div class="frame">
-        <main class="col">
+        <main class="col ${level === 1 ? "" : "spined"}">
           ${err && html`<p class="err">${err}</p>`}
           ${idx === null && !err && html`<div class="skeleton big"><i></i><i></i><i></i><i></i></div>`}
           ${idx && turns.length === 0 && !pending.length && html`<p class="cont empty">No messages yet.${live ? " Write the first one below." : ""}</p>`}
           ${level === 1 ? html`<${Outline} turns=${turns} go=${go} />` : html`
             ${nFolded > 0 && html`<div class="earlier"><span>${nFolded} earlier turn${nFolded > 1 ? "s" : ""} you've read</span><button onClick=${() => setOpened(new Set(turns.map((_, i) => i)))}>Open all</button></div>`}
-            ${turns.map((t, i) => folded(i)
-              ? html`<${Folded} key=${`f${t.from}`} t=${t} i=${i} open=${openTurn} />`
-              : html`${i === firstOpen && firstOpen > 0 && html`<div class="since">${firstOpen === turns.length - 1 ? "Latest" : `${turns.length - firstOpen} new since you last read`}</div>`}<${Turn} key=${`t${t.from}`} t=${t} i=${i} s=${s} body=${bodies[t.from]} level=${level} zoom=${setShot} quote=${live ? quote : null} latest=${i === turns.length - 1} live=${working && i === turns.length - 1} />`)}
+            ${turns.map((t, i) => html`
+              ${i > 0 && html`<${Lapse} a=${turns[i - 1]} b=${t} />`}
+              ${folded(i)
+                ? html`<${Folded} key=${`f${t.from}`} t=${t} i=${i} open=${openTurn} />`
+                : html`${i === firstOpen && firstOpen > 0 && html`<div class="since">${firstOpen === turns.length - 1 ? "Latest" : `${turns.length - firstOpen} new since you last read`}</div>`}<${Turn} key=${`t${t.from}`} t=${t} i=${i} s=${s} body=${bodies[t.from]} level=${level} zoom=${setShot} quote=${live ? quote : null} latest=${i === turns.length - 1} live=${working && i === turns.length - 1} fresh=${opened.has(i)} />`}`)}
             ${pending.map((p) => html`<${Pending} key=${p.id} p=${p} retry=${() => send(p.text, p.id)} drop=${() => setPending((ps) => ps.filter((x) => x.id !== p.id))} />`)}
             ${working && !running && html`<${Thinking} since=${last?.end} />`}
           `}
@@ -3007,6 +3019,32 @@ function Transcript({ s, say }) {
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
   </div>`;
 }
+
+function Into({ node, children }) {
+  useLayoutEffect(() => { if (node) render(children, node); });
+  useLayoutEffect(() => () => node && render(null, node), [node]);
+  return null;
+}
+
+function useWide(q = "(min-width: 900px)") {
+  const [wide, setWide] = useState(() => matchMedia(q).matches);
+  useEffect(() => {
+    const m = matchMedia(q), f = () => setWide(m.matches);
+    m.addEventListener("change", f);
+    return () => m.removeEventListener("change", f);
+  }, [q]);
+  return wide;
+}
+
+function Lapse({ a, b }) {
+  const gap = a.end && b.at ? new Date(b.at) - new Date(a.end) : 0;
+  const newDay = txDay(a.at) !== txDay(b.at);
+  if (!newDay && gap < 3600e3) return null;
+  return html`<div class="lapse"><span>${newDay ? txDay(b.at) : `${txSpan(gap).replace(/ \d+s$/, "")} later`}</span></div>`;
+}
+
+const shipped = (t) => (t.badges || []).some((b) => b.ok && (b.kind === "commit" || b.kind === "push" || b.kind === "deploy" || b.kind === "publish"));
+const Node = ({ t, live }) => html`<span class="node ${shipped(t) ? "ship" : ""} ${live ? "live" : ""}" aria-hidden="true"><span class="node-t">${txClock(t.at)}</span></span>`;
 
 function Thinking({ since }) {
   useNow(1000);
