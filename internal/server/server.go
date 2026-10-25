@@ -107,6 +107,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/sessions/{id}", s.act(s.remove))
 	mux.HandleFunc("PATCH /api/sessions/{sid}", s.patch)
 	mux.HandleFunc("GET /api/sessions/{sid}/transcript", s.transcript)
+	mux.HandleFunc("GET /api/sessions/{sid}/turns", s.turns)
+	mux.HandleFunc("GET /api/sessions/{sid}/search", s.search)
 	mux.HandleFunc("GET /api/sessions/{sid}/summary", s.summary)
 	mux.HandleFunc("POST /api/sessions/{sid}/summary", s.summary)
 	mux.HandleFunc("POST /api/sessions/{sid}/upload", s.upload)
@@ -261,36 +263,113 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) transcript(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	from, _ := strconv.ParseInt(q.Get("from"), 10, 64)
+	to, _ := strconv.ParseInt(q.Get("to"), 10, 64)
 	if sid := r.PathValue("sid"); s.M.OpenCode(sid) {
 		p, err := s.M.OC.Page(r.Context(), sid)
 		if err != nil {
 			fail(w, err)
 			return
 		}
+		if q.Has("from") {
+			n := int64(len(p.Messages))
+			if to <= 0 || to > n {
+				to = n
+			}
+			p.Messages, p.Start = p.Messages[min(from, to):to], from
+		}
 		reply(w, p)
 		return
 	}
-	t, ok := s.M.Index.Find(r.PathValue("sid"))
+	t, ok := s.findTranscript(w, r)
 	if !ok {
-		if s.running(r.Context(), r.PathValue("sid")) {
-			reply(w, history.Page{Messages: []history.Message{}})
-			return
-		}
-		http.Error(w, "no transcript", http.StatusNotFound)
 		return
 	}
-	before, _ := strconv.ParseInt(r.URL.Query().Get("before"), 10, 64)
-	p, err := history.ReadPage(t.Path, before, 2<<20)
+	var p history.Page
+	var err error
+	if q.Has("from") {
+		p, err = history.ReadRange(t.Path, from, to)
+	} else {
+		before, _ := strconv.ParseInt(q.Get("before"), 10, 64)
+		p, err = history.ReadPage(t.Path, before, 2<<20)
+	}
 	if err != nil {
 		fail(w, err)
 		return
 	}
 	for i, m := range p.Messages {
 		if u := m.Usage; u != nil {
-			p.Messages[i].Cost, _ = usage.Cost(m.Model, usage.Tokens{Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}, u.Write1h, false)
+			p.Messages[i].Cost = Priced(m.Model, *u)
 		}
 	}
 	reply(w, p)
+}
+
+func Priced(model string, u history.Usage) float64 {
+	c, _ := usage.Cost(model, usage.Tokens{Input: u.Input, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}, u.Write1h, false)
+	return c
+}
+
+func (s *Server) findTranscript(w http.ResponseWriter, r *http.Request) (history.Transcript, bool) {
+	t, ok := s.M.Index.Find(r.PathValue("sid"))
+	if !ok {
+		if s.running(r.Context(), r.PathValue("sid")) {
+			reply(w, map[string]any{"messages": []history.Message{}, "turns": []history.Turn{}, "hits": []history.Hit{}})
+		} else {
+			http.Error(w, "no transcript", http.StatusNotFound)
+		}
+	}
+	return t, ok
+}
+
+func (s *Server) turns(w http.ResponseWriter, r *http.Request) {
+	if sid := r.PathValue("sid"); s.M.OpenCode(sid) {
+		p, err := s.M.OC.Page(r.Context(), sid)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		offs := make([]int64, len(p.Messages))
+		for i := range offs {
+			offs[i] = int64(i)
+		}
+		reply(w, map[string]any{"turns": history.BuildTurns(p.Messages, offs, int64(len(p.Messages)), Priced), "size": len(p.Messages)})
+		return
+	}
+	t, ok := s.findTranscript(w, r)
+	if !ok {
+		return
+	}
+	turns, size, err := s.M.Index.Turns(t.Path)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]any{"turns": turns, "size": size})
+}
+
+func (s *Server) search(w http.ResponseWriter, r *http.Request) {
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if len(q) < 2 || s.M.OpenCode(r.PathValue("sid")) {
+		reply(w, map[string]any{"hits": []history.Hit{}})
+		return
+	}
+	t, ok := s.findTranscript(w, r)
+	if !ok {
+		return
+	}
+	turns, _, err := s.M.Index.Turns(t.Path)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	hits, err := history.Search(t.Path, q, turns, 60)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]any{"hits": hits})
 }
 
 func (s *Server) running(ctx context.Context, sid string) bool {

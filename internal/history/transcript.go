@@ -26,6 +26,8 @@ type Message struct {
 	Usage  *Usage          `json:"-"`
 	Cost   float64         `json:"cost,omitempty"`
 	Ms     int64           `json:"ms,omitempty"`
+	Badge  *Badge          `json:"badge,omitempty"`
+	Look   bool            `json:"look,omitempty"`
 }
 
 type Output struct {
@@ -134,45 +136,98 @@ func ReadPage(path string, before, window int64) (Page, error) {
 		skipped, _ := r.ReadBytes('\n')
 		p.Start += int64(len(skipped))
 	}
-	tools, billed := map[string]int{}, map[string]bool{}
-	for {
-		line, err := r.ReadBytes('\n')
-		var m rawMsg
-		if len(line) > 1 && json.Unmarshal(line, &m) == nil && !m.IsMeta && !m.IsSidechain {
-			switch {
-			case m.Type == "system" && m.Subtype == "turn_duration":
-				p.Messages = append(p.Messages, Message{Role: "done", Ms: m.DurationMs, Time: m.Timestamp})
-			case m.Type == "user" && attachResults(p.Messages, tools, m):
-			default:
-				ms := convert(m)
-				if m.Type == "assistant" && len(ms) > 0 && m.Message.Usage != nil && !billed[m.Message.ID] {
-					billed[m.Message.ID] = true
-					u := m.Message.Usage
-					ms[0].Model, ms[0].Usage = m.Message.Model, &Usage{u.Input, u.Output, u.CacheRead, u.CacheWrite, u.CacheCreation.Write1h}
-				}
-				for _, x := range ms {
-					if x.ID != "" {
-						tools[x.ID] = len(p.Messages)
-					}
-					p.Messages = append(p.Messages, x)
-				}
-			}
-		}
-		if err != nil {
-			break
-		}
-	}
+	rd := newReader(false)
+	rd.read(r, p.Start)
+	p.Messages = rd.msgs
 	return p, nil
 }
 
-func attachResults(msgs []Message, tools map[string]int, m rawMsg) bool {
+func ReadRange(path string, from, to int64) (Page, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return Page{}, err
+	}
+	defer f.Close()
+	st, _ := f.Stat()
+	if to <= 0 || to > st.Size() {
+		to = st.Size()
+	}
+	f.Seek(from, io.SeekStart)
+	rd := newReader(false)
+	rd.read(bufio.NewReaderSize(io.LimitReader(f, to-from), 1<<20), from)
+	return Page{Messages: rd.msgs, Start: from, Size: st.Size()}, nil
+}
+
+type reader struct {
+	msgs     []Message
+	offs     []int64
+	tools    map[string]int
+	billed   map[string]bool
+	noImages bool
+}
+
+func newReader(noImages bool) *reader {
+	return &reader{tools: map[string]int{}, billed: map[string]bool{}, noImages: noImages}
+}
+
+func (rd *reader) read(r *bufio.Reader, off int64) int64 {
+	for {
+		line, err := r.ReadBytes('\n')
+		if err != nil && len(line) > 0 && line[len(line)-1] != '\n' {
+			return off
+		}
+		rd.line(line, off)
+		off += int64(len(line))
+		if err != nil {
+			return off
+		}
+	}
+}
+
+func (rd *reader) line(line []byte, off int64) {
+	var m rawMsg
+	if len(line) < 2 || json.Unmarshal(line, &m) != nil || m.IsMeta || m.IsSidechain {
+		return
+	}
+	add := func(x Message) {
+		if x.ID != "" {
+			rd.tools[x.ID] = len(rd.msgs)
+		}
+		rd.msgs, rd.offs = append(rd.msgs, x), append(rd.offs, off)
+	}
+	switch {
+	case m.Type == "system" && m.Subtype == "turn_duration":
+		add(Message{Role: "done", Ms: m.DurationMs, Time: m.Timestamp})
+	case m.Type == "user" && rd.results(m):
+	default:
+		ms := convert(m)
+		if m.Type == "assistant" && len(ms) > 0 && m.Message.Usage != nil && !rd.billed[m.Message.ID] {
+			rd.billed[m.Message.ID] = true
+			u := m.Message.Usage
+			ms[0].Model, ms[0].Usage = m.Message.Model, &Usage{u.Input, u.Output, u.CacheRead, u.CacheWrite, u.CacheCreation.Write1h}
+		}
+		for _, x := range ms {
+			if rd.noImages {
+				x.Images = nil
+			}
+			add(x)
+		}
+	}
+}
+
+func (rd *reader) results(m rawMsg) bool {
 	var blocks []block
 	if json.Unmarshal(m.Message.Content, &blocks) != nil || len(blocks) == 0 || blocks[0].Type != "tool_result" {
 		return false
 	}
 	for _, b := range blocks {
-		if i, ok := tools[b.ToolUseID]; ok && b.Type == "tool_result" {
-			msgs[i].Out = output(b, m.ToolUseResult)
+		if i, ok := rd.tools[b.ToolUseID]; ok && b.Type == "tool_result" {
+			x := &rd.msgs[i]
+			x.Out = output(b, m.ToolUseResult)
+			x.Badge, x.Look = classify(*x)
+			if rd.noImages {
+				x.Out.Images = nil
+			}
 		}
 	}
 	return true
