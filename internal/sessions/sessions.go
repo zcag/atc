@@ -84,7 +84,10 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		s := m.build(t)
 		s.SessionID, s.ID, s.Kind, s.Name = a.SessionID, a.ID, a.Kind, a.Name
 		s.State, s.Attachable, s.PID = state(a), a.Kind == "background" && a.PID > 0, a.PID
-		if s.State == NeedsYou && a.Kind == "background" && byID[a.SessionID].Pending == "" {
+		if qs := claude.Asking(a.ID); a.Kind == "background" && len(qs) > 0 {
+			s.State, s.Asks = NeedsYou, []opencode.Ask{claudeAsk(a.ID, qs, history.LastAsk(t.Path))}
+			s.Activity = s.Asks[0].Activity()
+		} else if s.State == NeedsYou && a.Kind == "background" && byID[a.SessionID].Pending == "" {
 			s.State = YourTurn
 		}
 		if s.State == YourTurn && s.Summary == nil {
@@ -254,4 +257,21 @@ func first(s ...string) string {
 		}
 	}
 	return ""
+}
+
+var pickAny = regexp.MustCompile(`(?i)\b(pick|choose|select) (any|all|one or more)\b|all that apply`)
+
+func claudeAsk(id string, qs []claude.Question, multi map[string]bool) opencode.Ask {
+	a := opencode.Ask{ID: "claude", SessionID: id}
+	for _, q := range qs {
+		x := opencode.Question{Question: q.Question, Header: q.Header, Multiple: q.MultiSelect || multi[q.Question] || pickAny.MatchString(q.Question), Custom: true}
+		for _, o := range q.Options {
+			x.Options = append(x.Options, struct {
+				Label       string `json:"label"`
+				Description string `json:"description,omitempty"`
+			}{o.Label, o.Description})
+		}
+		a.Questions = append(a.Questions, x)
+	}
+	return a
 }

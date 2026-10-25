@@ -1071,7 +1071,7 @@ function Session({ s, say, live }) {
       </div>
       <${Menu} busy=${busy} items=${[...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "Usage", run: () => setShowUse(true) }]} />
     </div>
-    <${AskBar} s=${s} say=${say} />
+    ${mode !== "chat" && html`<${AskBar} s=${s} say=${say} />`}
     ${mode !== "chat" && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
     ${mode === "term"
       ? canAttach
@@ -1189,7 +1189,7 @@ function AskBar({ s, say }) {
           <p class="asktext">${q.question}</p>
           <div class="askopts">
             ${q.options.map((o) => html`<button class="btn ${picked[i]?.includes(o.label) ? "on" : ""}" disabled=${busy} title=${o.description || ""}
-              aria-pressed=${oneTap ? null : !!picked[i]?.includes(o.label)} onClick=${() => choose(i, o.label)}>${o.label}</button>`)}
+              aria-pressed=${oneTap ? null : !!picked[i]?.includes(o.label)} onClick=${() => choose(i, o.label)}><span class="ol">${o.label}</span>${o.description && o.description !== o.label && html`<small>${o.description}</small>`}</button>`)}
             ${q.custom && html`<input class="askin" placeholder="Or type an answer" value=${typed[i] || ""} disabled=${busy}
               onInput=${(e) => setTyped(Object.assign([...typed], { [i]: e.target.value }))} />`}
             ${oneTap && dismiss}
@@ -2567,8 +2567,9 @@ function Step({ st, s, zoom, pin }) {
     const ans = answersOf(st);
     return html`<div class=${cls}>${(i.questions || []).map((q) => {
       const a = ans[q.question] || "";
-      const hit = q.options?.find((o) => a === o.label || a.startsWith(o.label));
-      return html`<div class="qcard"><p class="q">${q.question}</p><div class="opts">${q.options?.map((o) => html`<div class="opt ${o === hit ? "chosen" : ""}"><b>${o.label}</b>${o.description}</div>`)}</div>${a && !hit && html`<p class="said">${a}</p>`}${!a && html`<p class="said wait">Waiting for your answer in the terminal</p>`}</div>`;
+      const parts = a.split(/,\s*/), hits = q.options?.filter((o) => a === o.label || parts.includes(o.label)) || [];
+      const rest = parts.filter((x) => x && !hits.some((o) => o.label === x)).join(", ");
+      return html`<div class="qcard"><p class="q">${q.question}</p><div class="opts">${q.options?.map((o) => html`<div class="opt ${hits.includes(o) ? "chosen" : ""}"><b>${o.label}</b>${o.description !== o.label && o.description}</div>`)}</div>${a && rest && html`<p class="said">${rest}</p>`}${!a && !st.out && html`<p class="said wait">${s.asks?.length ? "Answer below" : "Waiting for your answer in the terminal"}</p>`}</div>`;
     })}</div>`;
   }
   if (st.tool === "Bash") {
@@ -2948,7 +2949,8 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   const press = useRef(), held = useRef(false);
   const fill = (text) => { setDraft(text); requestAnimationFrame(() => { const el = ta.current; el?.focus(); el?.setSelectionRange(text.length, text.length); }); };
   const ready = (draft.trim() || quotes.length) && !busy;
-  const hint = working ? "Queue a message for Claude" : s.state === "needs-you" ? "Claude is waiting on you" : "Reply to Claude";
+  const asked = s.asks?.[0]?.questions;
+  const hint = asked ? (asked.length === 1 ? "Or type your own answer" : "Answer the questions above") : working ? "Queue a message for Claude" : s.state === "needs-you" ? "Claude is waiting on you" : "Reply to Claude";
   const root = useRef();
   useLayoutEffect(() => {
     const el = root.current, wrap = el?.parentElement;
@@ -2959,7 +2961,8 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   }, []);
   return html`<div class="composer ${drag ? "drag" : ""}" ref=${root} onDragOver=${(e) => { e.preventDefault(); setDrag(true); }} onDragLeave=${() => setDrag(false)} onDrop=${(e) => { e.preventDefault(); setDrag(false); upload([...e.dataTransfer.files]); }}>
     <div class="in">
-      ${replies?.length > 0 && !draft && !quotes.length && html`<div class="ask-card"><div class="quick" role="group" aria-label="Suggested replies">
+      ${s.asks?.length > 0 && html`<div class="ask-card asking"><${AskBar} s=${s} say=${say} /></div>`}
+      ${replies?.length > 0 && !s.asks?.length && !draft && !quotes.length && html`<div class="ask-card"><div class="quick" role="group" aria-label="Suggested replies">
         ${replies.map((t) => html`<span class="sugg"><button title=${touch ? "Tap to send, hold to edit first" : `Send “${t}”`} onClick=${() => !held.current && send(t, { suggested: true })}
           onPointerDown=${() => { held.current = false; clearTimeout(press.current); press.current = setTimeout(() => { held.current = true; fill(t); }, 450); }}
           onPointerUp=${() => clearTimeout(press.current)} onPointerLeave=${() => clearTimeout(press.current)} onContextMenu=${(e) => touch && e.preventDefault()}>${t}</button>${!touch && html`<button class="edit" title="Edit before sending" aria-label=${`Edit “${t}” before sending`} onClick=${() => fill(t)}><svg width="13" height="13" viewBox="0 0 16 16"><path d="M10.5 2.5l3 3-8 8H2.5v-3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>`}</span>`)}
@@ -3124,7 +3127,7 @@ function Transcript({ s, say, slot }) {
       const land = () => {
         if (level === 1) return;
         const mark = el.querySelector(".since") || el.querySelector(`#tx${firstOpen}`);
-        if (mark) el.scrollTop = Math.min(firstOpen === 0 ? 0 : mark.offsetTop - 12, el.scrollHeight - el.clientHeight);
+        if (mark) el.scrollTop = Math.min(firstOpen === 0 ? 0 : mark.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 12, el.scrollHeight - el.clientHeight);
       };
       land();
       document.fonts.ready.then(() => requestAnimationFrame(land));
@@ -3190,6 +3193,12 @@ function Transcript({ s, say, slot }) {
   };
 
   const send = async (text, { retryId, suggested } = {}) => {
+    const ask = s.asks?.[0];
+    if (ask && !ask.permission) {
+      if (ask.questions?.length !== 1) { say("Answer the questions above first."); return false; }
+      try { await api(`/api/sessions/${s.sessionId}/asks/${ask.id}`, { method: "POST", body: { answers: [[text]] } }); return true; }
+      catch (e) { say(e.message); return false; }
+    }
     const id = retryId || Math.random().toString(36).slice(2);
     const p = { id, text, at: Date.now(), state: "sending", queued: working };
     setPending((ps) => [...ps.filter((x) => x.id !== id), p]);

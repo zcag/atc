@@ -401,6 +401,12 @@ func (g *group) apply() {
 }
 
 func (h *Hub) Send(ctx context.Context, id, text string) error {
+	return h.Keys(ctx, id, "\x1b[200~"+text+"\x1b[201~", "\r")
+}
+
+const keyGap = 1200 * time.Millisecond
+
+func (h *Hub) Keys(ctx context.Context, id string, keys ...string) error {
 	h.mu.Lock()
 	var cols, rows uint16 = 120, 40
 	var live *os.File
@@ -408,12 +414,16 @@ func (h *Hub) Send(ctx context.Context, id, text string) error {
 		live, cols, rows = g.owner.pty, g.owner.cols, g.owner.rows
 	}
 	h.mu.Unlock()
-	paste := []byte("\x1b[200~" + text + "\x1b[201~")
 	if live != nil {
-		live.Write(paste)
-		time.Sleep(300 * time.Millisecond)
-		_, err := live.Write([]byte("\r"))
-		return err
+		for i, k := range keys {
+			if i > 0 {
+				time.Sleep(keyGap)
+			}
+			if _, err := live.Write([]byte(k)); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
 	cmd := exec.CommandContext(ctx, h.Bin, "attach", id)
@@ -458,9 +468,10 @@ func (h *Hub) Send(ctx context.Context, id, text string) error {
 	if err := settle(700*time.Millisecond, 8*time.Second); err != nil {
 		return err
 	}
-	f.Write(paste)
-	time.Sleep(300 * time.Millisecond)
-	f.Write([]byte("\r"))
-	settle(500*time.Millisecond, 3*time.Second)
+	for _, k := range keys {
+		f.Write([]byte(k))
+		settle(keyGap, 3*time.Second)
+	}
+	settle(time.Second, 4*time.Second)
 	return nil
 }

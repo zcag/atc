@@ -531,3 +531,41 @@ func Reply(path, id string) (string, error) {
 		}
 	}
 }
+
+func LastAsk(path string) map[string]bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	if st, _ := f.Stat(); st.Size() > 2<<20 {
+		f.Seek(-2<<20, io.SeekEnd)
+	}
+	multi := map[string]bool{}
+	r := bufio.NewReaderSize(f, 1<<20)
+	for {
+		line, err := r.ReadBytes('\n')
+		if bytes.Contains(line, []byte(`"AskUserQuestion"`)) {
+			var m rawMsg
+			var blocks []block
+			if json.Unmarshal(line, &m) == nil && json.Unmarshal(m.Message.Content, &blocks) == nil {
+				for _, b := range blocks {
+					var in struct {
+						Questions []struct {
+							Question    string `json:"question"`
+							MultiSelect bool   `json:"multiSelect"`
+						} `json:"questions"`
+					}
+					if b.Type == "tool_use" && b.Name == "AskUserQuestion" && json.Unmarshal(b.Input, &in) == nil {
+						for _, q := range in.Questions {
+							multi[q.Question] = q.MultiSelect
+						}
+					}
+				}
+			}
+		}
+		if err != nil {
+			return multi
+		}
+	}
+}

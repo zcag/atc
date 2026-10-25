@@ -422,3 +422,33 @@ func TestStartFromPreset(t *testing.T) {
 		t.Errorf("unknown engine: %d", res.StatusCode)
 	}
 }
+
+func TestClaudeAnswerKeys(t *testing.T) {
+	q := func(text string, multi bool, opts ...string) claude.Question {
+		x := claude.Question{Question: text, MultiSelect: multi}
+		for _, o := range opts {
+			x.Options = append(x.Options, struct {
+				Label       string `json:"label"`
+				Description string `json:"description"`
+			}{Label: o})
+		}
+		return x
+	}
+	cases := []struct {
+		qs   []claude.Question
+		ans  [][]string
+		want string
+	}{
+		{[]claude.Question{q("Which?", false, "Apple", "Pear")}, [][]string{{"Pear"}}, `["2"]`},
+		{[]claude.Question{q("Which?", false, "Apple", "Pear")}, [][]string{{"banana"}}, `["3","banana","\r"]`},
+		{[]claude.Question{q("Colour?", false, "Red", "Blue"), q("Sizes?", true, "S", "M", "L")}, [][]string{{"Blue"}, {"S", "L"}}, `["2","1","3","\u001b[C","1"]`},
+		{[]claude.Question{q("Sizes?", true, "S", "M")}, [][]string{{"M"}}, `["2","\u001b[B\u001b[B\u001b[B","\r"]`},
+	}
+	for _, c := range cases {
+		keys, err := claudeKeys(c.qs, c.ans)
+		got, _ := json.Marshal(keys)
+		if err != nil || string(got) != c.want {
+			t.Errorf("%v: got %s %v, want %s", c.ans, got, err, c.want)
+		}
+	}
+}

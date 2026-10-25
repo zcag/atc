@@ -32,3 +32,30 @@ func ForkedFrom(sid string) string {
 	}
 	return ""
 }
+
+type Question struct {
+	Question string `json:"question"`
+	Header   string `json:"header"`
+	Options  []struct {
+		Label       string `json:"label"`
+		Description string `json:"description"`
+	} `json:"options"`
+	MultiSelect bool `json:"multiSelect"`
+}
+
+func Asking(id string) []Question {
+	b, err := os.ReadFile(filepath.Join(ConfigDir(), "jobs", id, "state.json"))
+	if err != nil {
+		return nil
+	}
+	var st struct {
+		Tempo string `json:"tempo"`
+		Block *struct {
+			Questions []Question `json:"questions"`
+		} `json:"block"`
+	}
+	if json.Unmarshal(b, &st) != nil || st.Tempo != "blocked" || st.Block == nil {
+		return nil
+	}
+	return st.Block.Questions
+}

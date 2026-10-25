@@ -657,6 +657,20 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .tx-wrap .composer .qchip span { flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; border-left: 2px solid var(--accent); padding-left: 10px; }
 .tx-wrap .composer .qchip button { color: var(--faint); font: 12px var(--sans); padding: 2px 4px; }
 .tx-wrap .composer .ask-card { position: relative; margin: 0 14px -18px; padding: 12px 16px 28px; border-radius: 18px 18px 0 0; background: color-mix(in srgb, var(--hue) 9%, var(--raised)); box-shadow: 0 0 0 1px var(--hair); animation: tx-rise .3s cubic-bezier(.2,.7,.2,1); }
+.tx-wrap .composer .ask-card.asking { padding: 4px 4px 22px; background: color-mix(in srgb, var(--needs) 9%, var(--raised)); max-height: 55vh; overflow: auto; }
+.tx-wrap .composer .asking .askbar { border: 0; background: none; padding: 10px 12px 4px; }
+.tx-wrap .composer .asking .askbar::before { display: none; }
+.askopts .btn small { display: none; }
+.tx-wrap .composer .asking .askopts { flex-direction: column; align-items: stretch; gap: 4px; }
+.tx-wrap .composer .asking .askopts .btn { display: block; width: 100%; max-width: 100%; white-space: normal; overflow-wrap: anywhere; text-align: left; padding: 8px 12px; border-radius: 12px; background: var(--raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--hair); font-size: 13.5px; }
+.tx-wrap .composer .asking .askopts .btn .ol { font-weight: 500; }
+.tx-wrap .composer .asking .askopts .btn small { display: block; margin-top: 2px; font-size: 12.5px; line-height: 1.4; color: var(--quiet); }
+.tx-wrap .composer .asking .askopts .btn:hover:not(:disabled) { box-shadow: inset 0 0 0 1.5px var(--hue); }
+.tx-wrap .composer .asking .askopts .btn.on { background: color-mix(in srgb, var(--hue) 16%, var(--raised)); box-shadow: inset 0 0 0 1.5px var(--hue); }
+.tx-wrap .composer .asking .askopts .btn.primary { width: auto; align-self: flex-start; padding: 7px 18px; border-radius: 999px; background: var(--hue); color: var(--on-hue); box-shadow: none; font-weight: 600; }
+.tx-wrap .composer .asking .askopts .btn.primary:disabled { background: var(--wash); color: var(--faint); }
+.tx-wrap .composer .asking .askopts .askskip { width: auto; align-self: flex-end; margin-top: -32px; background: none; box-shadow: none; color: var(--quiet); }
+.tx-wrap .composer .asking .askin { flex: none; height: 36px; width: 100%; padding: 8px 12px; border-radius: 12px; border: 0; box-shadow: inset 0 0 0 1px var(--hair); background: var(--paper); color: var(--ink); font: 13.5px var(--sans); }
 .tx-wrap .composer .ask-card + .box, .tx-wrap .composer .ask-card ~ .box { position: relative; }
 .tx-wrap .composer .quick { display: flex; flex-wrap: wrap; gap: 6px; }
 .tx-wrap .composer .quick button { max-width: 100%; padding: 6px 12px; border-radius: 999px; background: var(--wash); color: var(--body); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
