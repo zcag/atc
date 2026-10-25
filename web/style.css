@@ -474,6 +474,11 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .tx .acts button { padding: 4px 8px; border-radius: 7px; font-size: 12.5px; color: var(--faint); }
 .tx .acts button:hover { background: var(--wash); color: var(--ink); }
 @media (hover: none) { .tx .acts { opacity: 1; } }
+.tx .partial { margin: 0 0 22px; font-size: 13px; color: var(--faint); }
+.tx .earlier-steps { display: block; margin: 2px 0 8px; font-size: 12.5px; color: var(--faint); }
+.tx .earlier-steps:hover { color: var(--ink); }
+.tx .line .end.running { color: var(--work); animation: tx-breathe 1.6s ease-in-out infinite; }
+.tx .trail.live .steps { animation: none; }
 .tx .live-line { display: flex; align-items: center; gap: 10px; margin: 28px 0 0; font: 13px var(--mono); color: var(--work); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tx .live-line .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--work); flex: none; animation: tx-breathe 1.6s ease-in-out infinite; }
 @keyframes tx-breathe { 50% { opacity: .3; } }

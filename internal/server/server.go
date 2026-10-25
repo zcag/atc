@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -271,6 +272,10 @@ func (s *Server) transcript(w http.ResponseWriter, r *http.Request) {
 	}
 	t, ok := s.M.Index.Find(r.PathValue("sid"))
 	if !ok {
+		if s.running(r.Context(), r.PathValue("sid")) {
+			reply(w, history.Page{Messages: []history.Message{}})
+			return
+		}
 		http.Error(w, "no transcript", http.StatusNotFound)
 		return
 	}
@@ -286,6 +291,11 @@ func (s *Server) transcript(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	reply(w, p)
+}
+
+func (s *Server) running(ctx context.Context, sid string) bool {
+	agents, _ := s.M.CLI.Agents(ctx)
+	return slices.ContainsFunc(agents, func(a claude.Agent) bool { return a.SessionID == sid })
 }
 
 func (s *Server) live(w http.ResponseWriter, r *http.Request) {

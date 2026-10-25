@@ -77,7 +77,11 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 	}
 	out := make([]Session, 0, len(agents))
 	for _, a := range agents {
-		s := m.build(byID[a.SessionID])
+		t, ok := byID[a.SessionID]
+		if !ok && m.Index.ForkedFrom != nil {
+			t = byID[m.Index.ForkedFrom(a.SessionID)]
+		}
+		s := m.build(t)
 		s.SessionID, s.ID, s.Kind, s.Name = a.SessionID, a.ID, a.Kind, a.Name
 		s.State, s.Attachable, s.PID = state(a), a.Kind == "background" && a.PID > 0, a.PID
 		if s.State == NeedsYou && a.Kind == "background" && byID[a.SessionID].Pending == "" {

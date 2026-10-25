@@ -769,14 +769,23 @@ function QuickMenu({ quick, say, onClose }) {
   `;
 }
 
+const PANE = "atc.pane";
+function paneFor(s) {
+  let p = null;
+  try { p = localStorage.getItem(PANE); } catch {}
+  if (p === "chat" || p === "out") return p;
+  return s.attachable || s.state === "stopped" ? "term" : "chat";
+}
+
 function Session({ s, say, live }) {
   const canAttach = s.attachable;
-  const [mode, setMode] = useState(canAttach || s.state === "stopped" ? "term" : "chat");
+  const [mode, setMode] = useState(() => paneFor(s));
+  const choose = (m) => { setMode(m); try { localStorage.setItem(PANE, m); } catch {} };
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [voice, setVoice] = useState(() => { const v = AUTO_VOICE && canAttach; if (v) AUTO_VOICE = false; return v; });
   useEffect(() => {
-    if (canAttach) setMode("term");
+    if (canAttach && paneFor(s) === "term") setMode("term");
   }, [canAttach]);
 
   const act = async (fn, done) => {
@@ -798,7 +807,7 @@ function Session({ s, say, live }) {
   const outs = useOutputs(s, mode === "out" ? 10000 : 60000);
   const [showUse, setShowUse] = useState(false);
   useEffect(() => {
-    SESSION_API = { s, canAttach, mode: (m) => setMode(m), voice: () => canAttach && (setVoice((v) => !v), setMode("term")), usage: () => setShowUse(true), rename: () => setRenaming(true) };
+    SESSION_API = { s, canAttach, mode: choose, voice: () => canAttach && (setVoice((v) => !v), setMode("term")), usage: () => setShowUse(true), rename: () => setRenaming(true) };
     return () => { SESSION_API = null; };
   });
   const use = useSessionUsage(s, showUse || s.state === "working" ? 15000 : 90000);
@@ -841,9 +850,9 @@ function Session({ s, say, live }) {
         onClick=${() => canAttach ? (setVoice(!voice), setMode("term"))
           : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
       <div class="seg" role="tablist">
-        <button class=${mode === "term" ? "on" : ""} onClick=${() => setMode("term")}>Terminal</button>
-        <button class=${mode === "chat" ? "on" : ""} onClick=${() => setMode("chat")}>Transcript</button>
-        <button class=${mode === "out" ? "on" : ""} onClick=${() => setMode("out")}>Outputs${outCount > 0 && html`<span class="count">${outCount}</span>`}</button>
+        <button class=${mode === "term" ? "on" : ""} onClick=${() => choose("term")}>Terminal</button>
+        <button class=${mode === "chat" ? "on" : ""} onClick=${() => choose("chat")}>Transcript</button>
+        <button class=${mode === "out" ? "on" : ""} onClick=${() => choose("out")}>Outputs${outCount > 0 && html`<span class="count">${outCount}</span>`}</button>
       </div>
       <${Menu} busy=${busy} items=${[...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "Usage", run: () => setShowUse(true) }]} />
     </div>
@@ -2121,7 +2130,10 @@ function turnsOf(msgs) {
       turns.push(cur);
       continue;
     }
-    if (!cur) continue;
+    if (!cur) {
+      cur = { prompt: "", images: [], at: m.time, end: m.time, items: [], cost: 0, ms: 0, partial: true };
+      turns.push(cur);
+    }
     if (m.time) cur.end = m.time;
     cur.cost += m.cost || 0;
     if (m.role === "done") cur.ms = Math.max(cur.ms, m.ms || 0);
@@ -2254,9 +2266,10 @@ function answersOf(s) {
   return Object.fromEntries([...(s.out?.text || "").matchAll(/"([^"]+)"="([^"]*)"/g)].map((m) => [m[1], m[2]]));
 }
 
-function Step({ st, s, zoom }) {
+function Step({ st, s, zoom, pin }) {
   const k = txKind(st), i = st.input, bad = st.out?.error;
-  const [open, setOpen] = useState(!!bad || (st.out?.images || []).length > 0);
+  const [opened, setOpen] = useState(!!bad || (st.out?.images || []).length > 0);
+  const open = opened || pin;
   const toggle = () => setOpen(!open);
   const cls = `step ${st.tool === "Write" ? "write" : k} ${bad ? "bad" : ""}`;
   if (k === "ask") {
@@ -2270,7 +2283,7 @@ function Step({ st, s, zoom }) {
   if (st.tool === "Bash") {
     const cmd = i.command || st.detail || "";
     return html`<div class=${cls}>
-      <div class="line click" onClick=${toggle}><b>${i.description || "Ran"}</b>${!i.description && html`<span class="arg">${cmd.split("\n")[0]}</span>`}<${Failed} s=${st} /></div>
+      <div class="line click" onClick=${toggle}><b>${i.description || "Ran"}</b>${!i.description && html`<span class="arg">${cmd.split("\n")[0]}</span>`}<${Failed} s=${st} />${pin && !st.out && html`<span class="end running">running</span>`}</div>
       ${open && html`<div class="tbox"><pre class="tpre"><span class="ps">$ </span>${cmd}</pre><${Clip} out=${st.out} bad=${bad} /></div>`}
     </div>`;
   }
@@ -2320,29 +2333,38 @@ const joinEdits = (items) => items.reduce((out, it) => {
   return out;
 }, []);
 
-function Trail({ t, s, level, zoom }) {
+const TX_TAIL = 4;
+
+function Trail({ t, s, level, zoom, live }) {
   const [open, setOpen] = useState(level === 3);
   useEffect(() => setOpen(level === 3), [level]);
   if (!t.items.length) return null;
   const asks = txSteps(t).filter((x) => txKind(x) === "ask");
+  const items = joinEdits(t.items), follow = live && !open;
+  const shown = follow ? items.slice(-TX_TAIL) : items, hidden = items.length - shown.length;
+  const last = shown.findLast((it) => it.t === "step");
+  const row = (it, j) => it.t === "text" ? html`<p class="narr" key=${`n${j}`}>${plain(it.text)}</p>`
+    : it.t === "event" ? html`<p class="event" key=${`e${j}`}>${it.text}</p>`
+    : html`<${Step} key=${it.id || j} st=${it} s=${s} zoom=${zoom} pin=${follow && it === last} />`;
   return html`
-    ${!open && asks.map((x) => html`<${Step} st=${x} s=${s} zoom=${zoom} />`)}
-    <div class="trail ${open ? "open" : ""}">
+    ${!open && !follow && asks.map((x) => html`<${Step} st=${x} s=${s} zoom=${zoom} />`)}
+    <div class="trail ${open || follow ? "open" : ""} ${follow ? "live" : ""}">
       <button class="trail-head" aria-expanded=${open} onClick=${() => setOpen(!open)}>
         <${Beads} t=${t} />
         <span class="what">${trailSummary(t, s)}</span>
         <svg class="chev" width="12" height="12" viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      ${open && html`<div class="steps">${joinEdits(t.items).map((it) =>
-        it.t === "text" ? html`<p class="narr">${plain(it.text)}</p>`
-        : it.t === "event" ? html`<p class="event">${it.text}</p>`
-        : html`<${Step} st=${it} s=${s} zoom=${zoom} />`)}</div>`}
+      ${(open || follow) && html`<div class="steps">
+        ${hidden > 0 && html`<button class="earlier-steps" onClick=${() => setOpen(true)}>${hidden} earlier step${hidden > 1 ? "s" : ""}</button>`}
+        ${shown.map(row)}
+      </div>`}
     </div>`;
 }
 
 function Prompt({ t }) {
   const [all, setAll] = useState(false);
   const long = t.prompt.length > 480 || t.prompt.split("\n").length > 6;
+  if (t.partial) return html`<p class="partial">Continued from earlier in the session. Load earlier turns at the top to see how it started.</p>`;
   return html`<div class="prompt">${t.prompt && html`<div class=${long && !all ? "clamp" : ""}>${t.prompt}</div>`}${long && html`<button class="fold" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}${t.images.map((src) => html`<img src=${src} alt="Image you attached" />`)}</div>`;
 }
 
@@ -2368,14 +2390,14 @@ function Acts({ t, i, reply }) {
   </div>`;
 }
 
-function Turn({ t, i, s, level, zoom, reply, latest }) {
+function Turn({ t, i, s, level, zoom, reply, latest, live }) {
   const files = filesOf(t, s);
   const body = useMemo(() => { let j = 0; return md(t.answer).replace(/<h([1-3])>/g, (_, n) => `<h${n} id="tx${i}h${j++}">`); }, [t.answer]);
   return html`<section class="turn ${latest ? "latest" : ""}" id=${`tx${i}`} data-i=${i}>
     <${Prompt} t=${t} />
     <p class="meta-inline">${txClock(t.at)}${txDur(t) && ` · worked ${txDur(t)}`}${txUsd(t.cost) && ` · ${txUsd(t.cost)}`}${files.length > 0 && ` · ${files.length} file${files.length > 1 ? "s" : ""} changed`}</p>
     <${Margin} t=${t} i=${i} s=${s} />
-    <${Trail} t=${t} s=${s} level=${level} zoom=${zoom} />
+    <${Trail} t=${t} s=${s} level=${level} zoom=${zoom} live=${live} />
     ${t.answer ? html`<div class="prose" data-answer dangerouslySetInnerHTML=${{ __html: body }}></div><${Acts} t=${t} i=${i} reply=${reply} />`
       : !latest && html`<p class="cont">No reply after this.</p>`}
   </section>`;
@@ -2383,7 +2405,7 @@ function Turn({ t, i, s, level, zoom, reply, latest }) {
 
 const Folded = ({ t, i, open }) => html`<button class="ol-row folded" id=${`tx${i}`} data-i=${i} onClick=${() => open(i)}>
   <span class="t">${txClock(t.at)}</span>
-  <span class="a">${plain(t.prompt) || "Image"}</span>
+  <span class="a">${t.partial ? "Continued from earlier" : plain(t.prompt) || "Image"}</span>
   <span class="b">${t.answer ? firstSentence(t.answer) : "No reply"}</span>
 </button>`;
 
@@ -2394,7 +2416,7 @@ function Outline({ turns, go }) {
     lastDay = d;
     return html`${showDay && html`<p class="ol-day">${d}</p>`}<button class="ol-row" onClick=${() => go(i)}>
       <span class="t">${txClock(t.at)}</span>
-      <span class="a">${plain(t.prompt) || "Image"}</span>
+      <span class="a">${t.partial ? "Continued from earlier" : plain(t.prompt) || "Image"}</span>
       <span class="b">${t.answer ? firstSentence(t.answer) : "No reply"}</span>
     </button>`;
   })}</div>`;
@@ -2486,9 +2508,14 @@ function Transcript({ s, say }) {
 
   const load = async (before) => {
     try {
-      const p = await api(`/api/sessions/${s.sessionId}/transcript${before ? `?before=${before}` : ""}`);
+      const page = (b) => api(`/api/sessions/${s.sessionId}/transcript${b ? `?before=${b}` : ""}`);
+      let p = await page(before), got = p.messages || [];
+      for (let n = 0; p.start > 0 && !got.some((m) => m.role === "user") && n < 4; n++) {
+        p = await page(p.start);
+        got = [...(p.messages || []), ...got];
+      }
       setStart(p.start);
-      setMsgs((m) => (before ? [...(p.messages || []), ...(m || [])] : p.messages || []));
+      setMsgs((m) => (before ? [...got, ...(m || [])] : got));
       setErr(null);
     } catch (e) {
       setErr(e.message);
@@ -2628,8 +2655,8 @@ function Transcript({ s, say }) {
             ${nFolded > 0 && html`<div class="earlier"><span>${nFolded} earlier turn${nFolded > 1 ? "s" : ""} you've read</span><button onClick=${() => setOpened(new Set(turns.map((_, i) => i)))}>Open all</button></div>`}
             ${turns.map((t, i) => folded(i)
               ? html`<${Folded} key=${`f${i}`} t=${t} i=${i} open=${openTurn} />`
-              : html`${i === firstOpen && firstOpen > 0 && html`<div class="since">${firstOpen === turns.length - 1 ? "Latest" : `${turns.length - firstOpen} new since you last read`}</div>`}<${Turn} key=${`t${i}`} t=${t} i=${i} s=${s} level=${level} zoom=${setShot} reply=${live ? setQuote : null} latest=${i === turns.length - 1} />`)}
-            ${working && html`<p class="live-line"><span class="dot"></span>${s.activity || "Working"}</p>`}
+              : html`${i === firstOpen && firstOpen > 0 && html`<div class="since">${firstOpen === turns.length - 1 ? "Latest" : `${turns.length - firstOpen} new since you last read`}</div>`}<${Turn} key=${`t${i}`} t=${t} i=${i} s=${s} level=${level} zoom=${setShot} reply=${live ? setQuote : null} latest=${i === turns.length - 1} live=${working && i === turns.length - 1} />`)}
+            ${working && !txSteps(turns[turns.length - 1] || { items: [] }).some((x) => !x.out) && html`<p class="live-line"><span class="dot"></span>${s.activity || "Working"}</p>`}
           `}
         </main>
       </div>

@@ -105,3 +105,18 @@ func TestReadPageAttachesResultsAndTurns(t *testing.T) {
 		t.Fatalf("event %q, done %d", m[4].Text, m[5].Ms)
 	}
 }
+
+func TestFindFallsBackToTheForkedConversation(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "-home-u")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "old.jsonl"), []byte(`{"type":"user","cwd":"/home/u","timestamp":"2026-10-01T10:00:00Z","message":{"content":"hi"}}`+"\n"), 0o644)
+	x := New(root)
+	if _, ok := x.Find("new"); ok {
+		t.Fatal("found a transcript for a session that has none")
+	}
+	x.ForkedFrom = func(sid string) string { return map[string]string{"new": "old"}[sid] }
+	if tr, ok := x.Find("new"); !ok || tr.SessionID != "old" {
+		t.Fatalf("got %+v %v", tr, ok)
+	}
+}

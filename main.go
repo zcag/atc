@@ -176,13 +176,15 @@ func serve(args []string) error {
 		return err
 	}
 	host, _ := os.Hostname()
+	index := history.New(filepath.Join(claude.ConfigDir(), "projects"))
+	index.ForkedFrom = claude.ForkedFrom
 	srv := &server.Server{
 		Term: &attach.Hub{Bin: bin},
 		Web:  web.FS,
 		Host: strings.Split(host, ".")[0],
 		M: &sessions.Manager{
 			CLI:     cli,
-			Index:   history.New(filepath.Join(claude.ConfigDir(), "projects")),
+			Index:   index,
 			Store:   st,
 			Summary: sum,
 		},

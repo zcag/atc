@@ -93,12 +93,27 @@ const (
 )
 
 func (x *Index) Find(sid string) (Transcript, bool) {
-	for _, t := range x.Scan() {
+	all := x.Scan()
+	for _, t := range all {
 		if t.SessionID == sid {
 			return t, true
 		}
 	}
+	if from := x.forked(sid); from != "" {
+		for _, t := range all {
+			if t.SessionID == from {
+				return t, true
+			}
+		}
+	}
 	return Transcript{}, false
+}
+
+func (x *Index) forked(sid string) string {
+	if x.ForkedFrom == nil {
+		return ""
+	}
+	return x.ForkedFrom(sid)
 }
 
 func ReadPage(path string, before, window int64) (Page, error) {
