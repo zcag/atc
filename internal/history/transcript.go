@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -158,12 +159,35 @@ func ReadRange(path string, from, to int64) (Page, error) {
 	return Page{Messages: rd.msgs, Start: from, Size: st.Size()}, nil
 }
 
+func ReadAgent(transcript, toolUseID string) (Page, error) {
+	metas, _ := filepath.Glob(filepath.Join(strings.TrimSuffix(transcript, ".jsonl"), "subagents", "*.meta.json"))
+	for _, mp := range metas {
+		var meta struct {
+			ToolUseID string `json:"toolUseId"`
+		}
+		if b, err := os.ReadFile(mp); err != nil || json.Unmarshal(b, &meta) != nil || meta.ToolUseID != toolUseID {
+			continue
+		}
+		f, err := os.Open(strings.TrimSuffix(mp, ".meta.json") + ".jsonl")
+		if err != nil {
+			return Page{}, err
+		}
+		defer f.Close()
+		rd := newReader(false)
+		rd.sidechain = true
+		rd.read(bufio.NewReaderSize(f, 1<<20), 0)
+		return Page{Messages: rd.msgs}, nil
+	}
+	return Page{}, fmt.Errorf("no subagent transcript for %s", toolUseID)
+}
+
 type reader struct {
-	msgs     []Message
-	offs     []int64
-	tools    map[string]int
-	billed   map[string]bool
-	noImages bool
+	msgs      []Message
+	offs      []int64
+	tools     map[string]int
+	billed    map[string]bool
+	noImages  bool
+	sidechain bool
 }
 
 func newReader(noImages bool) *reader {
@@ -186,7 +210,7 @@ func (rd *reader) read(r *bufio.Reader, off int64) int64 {
 
 func (rd *reader) line(line []byte, off int64) {
 	var m rawMsg
-	if len(line) < 2 || json.Unmarshal(line, &m) != nil || m.IsMeta || m.IsSidechain {
+	if len(line) < 2 || json.Unmarshal(line, &m) != nil || m.IsMeta || m.IsSidechain != rd.sidechain {
 		return
 	}
 	add := func(x Message) {

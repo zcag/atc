@@ -346,7 +346,8 @@ function App() {
             <dt>[ / ]</dt><dd>Previous or next project tab</dd>
             <dt>Ctrl + Z</dt><dd>In a terminal: detach. The session keeps running.</dd>
             <dt>1 / 2 / 3</dt><dd>In a transcript: outline, story or everything</dd>
-            <dt>r</dt><dd>In a transcript: reply to the session</dd>
+            <dt>r</dt><dd>In a transcript: write to the session</dd>
+            <dt>f</dt><dd>In a transcript: find in the session</dd>
             <dt>?</dt><dd>Show or hide this</dd>
           </dl>
         </div>
@@ -2110,7 +2111,7 @@ function Table({ text, tsv }) {
     </div>`;
 }
 
-const TX_LEVELS = [[1, "Outline"], [2, "Story"], [3, "Everything"]];
+const TX_LEVELS = [[1, "Outline", "Outline"], [2, "Story", "Story"], [3, "Everything", "All"]];
 const TX_FACES = {
   news: { name: "Newsreader", css: "Newsreader, Georgia, serif", sizes: [17, 19, 21], lh: 1.6 },
   lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [15.5, 17, 19], lh: 1.66 },
@@ -2118,39 +2119,54 @@ const TX_FACES = {
 };
 const txStore = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(`atc.tx.${k}`)) ?? d; } catch { return d; } },
-  set: (k, v) => { try { localStorage.setItem(`atc.tx.${k}`, JSON.stringify(v)); } catch {} },
+  set: (k, v) => { try { v === null ? localStorage.removeItem(`atc.tx.${k}`) : localStorage.setItem(`atc.tx.${k}`, JSON.stringify(v)); } catch {} },
 };
 
-function turnsOf(msgs) {
-  const turns = [];
-  let cur = null;
+function bodyOf(msgs) {
+  const items = [];
+  let cost = 0, ms = 0;
   for (const m of msgs) {
-    if (m.role === "user") {
-      cur = { prompt: m.text || "", images: m.images || [], at: m.time, end: m.time, items: [], cost: 0, ms: 0 };
-      turns.push(cur);
-      continue;
-    }
-    if (!cur) {
-      cur = { prompt: "", images: [], at: m.time, end: m.time, items: [], cost: 0, ms: 0, partial: true };
-      turns.push(cur);
-    }
-    if (m.time) cur.end = m.time;
-    cur.cost += m.cost || 0;
-    if (m.role === "done") cur.ms = Math.max(cur.ms, m.ms || 0);
-    else if (m.role === "assistant") cur.items.push({ t: "text", text: m.text });
-    else if (m.role === "event") cur.items.push({ t: "event", text: m.text });
-    else if (m.role === "tool") cur.items.push({ t: "step", ...m, input: m.input || {} });
+    cost += m.cost || 0;
+    if (m.role === "done") ms = Math.max(ms, m.ms || 0);
+    else if (m.role === "assistant") items.push({ t: "text", text: m.text, time: m.time });
+    else if (m.role === "event") items.push({ t: "event", text: m.text, time: m.time });
+    else if (m.role === "tool") items.push({ t: "step", ...m, input: m.input || {} });
   }
-  for (const t of turns) {
-    const last = t.items.findLastIndex((it) => it.t === "step");
-    t.answer = t.items.slice(last + 1).filter((it) => it.t === "text").map((it) => it.text).join("\n\n");
-    t.items = t.items.slice(0, last + 1).concat(t.items.slice(last + 1).filter((it) => it.t === "event"));
+  const last = items.findLastIndex((it) => it.t === "step");
+  const answer = items.slice(last + 1).filter((it) => it.t === "text").map((it) => it.text).join("\n\n");
+  const work = items.slice(0, last + 1).concat(items.slice(last + 1).filter((it) => it.t === "event"));
+  const user = msgs.find((m) => m.role === "user");
+  return { items: work, answer, images: user?.images || [], prompt: user?.text, cost, ms };
+}
+
+function phasesOf(items) {
+  const phases = [];
+  let cur = null;
+  for (const it of joinEdits(items)) {
+    if (it.t === "text" || !cur) {
+      cur = { head: it.t === "text" ? it.text : "", rows: [] };
+      phases.push(cur);
+      if (it.t === "text") continue;
+    }
+    cur.rows.push(it);
   }
-  return turns;
+  return phases.filter((p) => p.head || p.rows.length);
+}
+
+function rowsOf(rows) {
+  const out = [];
+  for (const r of rows) {
+    const prev = out[out.length - 1];
+    if (r.t === "step" && r.look && !r.out?.error && !(r.out?.images || []).length) {
+      if (prev?.t === "looks") prev.steps.push(r);
+      else out.push({ t: "looks", steps: [r] });
+    } else out.push(r);
+  }
+  return out;
 }
 
 const txKind = (s) => {
-  if (s.tool === "Bash") return "run";
+  if (s.tool === "Bash") return s.badge ? s.badge.kind : "run";
   if (/^(Edit|MultiEdit|Write|NotebookEdit)$/.test(s.tool)) return "edit";
   if (/^(Read|Grep|Glob|LS)$/.test(s.tool)) return "look";
   if (/^Web/.test(s.tool)) return "web";
@@ -2159,14 +2175,14 @@ const txKind = (s) => {
   return "tool";
 };
 const TX_NOISE = /^(ToolSearch|EnterWorktree|ExitWorktree|TaskCreate|TaskUpdate|TaskList|TaskGet|TaskStop|ReadNotifications|TodoWrite|TodoRead)$/;
-const txSteps = (t) => t.items.filter((i) => i.t === "step");
+const txSteps = (items) => items.filter((i) => i.t === "step");
 const txSpan = (ms) => { const s = Math.round(ms / 1000); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; };
 const txDur = (t) => { const ms = Math.max(t.ms || 0, t.end && t.at ? new Date(t.end) - new Date(t.at) : 0); return ms >= 1000 ? txSpan(ms) : ""; };
 const txClock = (ts) => ts ? new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
-const txDay = (ts) => new Date(ts).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+const txDay = (ts) => ts ? new Date(ts).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }) : "";
 const txUsd = (n) => n >= 1 ? `$${n.toFixed(2)}` : n >= 0.005 ? `${Math.round(n * 100)}¢` : "";
 const plain = (t) => (t || "").replace(/```[\s\S]*?```/g, " ").replace(/^#+\s*/gm, "").replace(/^\s*>\s?/gm, "").replace(/[*`|]/g, "").replace(/(^|\s)_([^_]+)_(?=\s|$)/g, "$1$2").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
-const firstSentence = (t) => { const p = plain(t); const m = p.match(/^.{20,220}?[.!?](\s|$)/); return m ? m[0].trim() : p.slice(0, 200) + (p.length > 200 ? "…" : ""); };
+const firstSentence = (t) => { const p = plain(t); const m = p.match(/^.{12,220}?[.!?:](\s|$)/); return m ? m[0].trim().replace(/:$/, "") : p.slice(0, 200) + (p.length > 200 ? "…" : ""); };
 const toolName = (n) => n.startsWith("mcp__") ? n.split("__").slice(1).join(" · ").replace(/_/g, " ") : n;
 const relPath = (p, s) => {
   if (!p) return "";
@@ -2175,6 +2191,9 @@ const relPath = (p, s) => {
   for (const base of [s.cwd, s.startCwd]) if (base && p.startsWith(base + "/")) return p.slice(base.length + 1);
   return p.replace(/^\/(home|Users)\/[^/]+(?=\/|$)/, "~");
 };
+const scratch = (p) => /^(\/tmp\/|\/var\/|\/private\/)|\/\.claude\/jobs\/|\/\.cache\//.test(p || "");
+const byKeep = (a, b) => scratch(a.path) - scratch(b.path);
+const hostOf = (u) => { try { const x = new URL(u); return x.hostname.replace(/^www\./, "") + (x.pathname.length > 1 ? x.pathname : ""); } catch { return u || ""; } };
 
 function txEdits(s) {
   const i = s.input;
@@ -2185,38 +2204,51 @@ const writeLines = (s) => (s.input.content || "").split("\n").length + (s.input.
 function diffStat(s) {
   if (s.tool === "Write") return { add: writeLines(s), del: 0 };
   let add = 0, del = 0;
-  for (const e of txEdits(s)) for (const p of diffLines(e.old, e.new)) { if (p.added) add += p.count; else if (p.removed) del += p.count; }
+  for (const e of s.edits || txEdits(s)) for (const p of diffLines(e.old, e.new)) { if (p.added) add += p.count; else if (p.removed) del += p.count; }
   return { add, del };
 }
-function filesOf(t, s) {
-  const m = new Map();
-  for (const st of txSteps(t)) if (txKind(st) === "edit" && st.input.file_path && !st.out?.error) {
-    const d = diffStat(st), p = relPath(st.input.file_path, s), cur = m.get(p) || { add: 0, del: 0 };
-    m.set(p, { add: cur.add + d.add, del: cur.del + d.del });
+const isEdit = (s) => s?.t === "step" && /^(Edit|MultiEdit)$/.test(s.tool) && !s.out?.error;
+const joinEdits = (items) => items.reduce((out, it) => {
+  const last = out[out.length - 1];
+  if (isEdit(it) && isEdit(last) && last.input.file_path === it.input.file_path) out[out.length - 1] = { ...last, edits: [...(last.edits || txEdits(last)), ...txEdits(it)], n: (last.n || 1) + 1 };
+  else out.push(it);
+  return out;
+}, []);
+
+function squash(badges) {
+  const out = [], seen = new Set();
+  const last = (kind) => badges.findLast((b) => b.kind === kind);
+  const test = last("test"), build = last("build");
+  if (test) out.push(test);
+  if (build && !build.ok) out.push(build);
+  for (const b of badges) {
+    if (b.kind === "test" || b.kind === "build") continue;
+    const key = b.kind + (b.kind === "commit" ? b.ref : b.kind === "publish" ? b.ref : b.text + (b.ref || ""));
+    if (!seen.has(key)) { seen.add(key); out.push(b); }
   }
-  return [...m];
-}
-function trailSummary(t, s) {
-  const c = {};
-  for (const st of txSteps(t)) if (!TX_NOISE.test(st.tool)) c[txKind(st)] = (c[txKind(st)] || 0) + 1;
-  const files = filesOf(t, s).length, bad = txSteps(t).filter((x) => x.out?.error).length;
-  const parts = [];
-  if (c.look) parts.push(`read ${c.look}`);
-  if (c.run) parts.push(`ran ${c.run} command${c.run > 1 ? "s" : ""}`);
-  if (files) parts.push(`changed ${files} file${files > 1 ? "s" : ""}`);
-  if (c.web) parts.push(`${c.web} web lookup${c.web > 1 ? "s" : ""}`);
-  if (c.agent) parts.push(`${c.agent} agent${c.agent > 1 ? "s" : ""}`);
-  if (c.tool) parts.push(`${c.tool} other`);
-  if (bad) parts.push(`${bad} failed`);
-  const out = parts.join(", ");
-  return out ? out[0].toUpperCase() + out.slice(1) : "Worked";
+  return out;
 }
 
-function Beads({ t, max = 40 }) {
-  const ss = txSteps(t).filter((s) => !TX_NOISE.test(s.tool));
-  if (ss.length < 4) return null;
-  return html`<span class="beads" aria-hidden="true">${ss.slice(0, max).map((s) => html`<i class="bead ${txKind(s) === "ask" ? "q" : txKind(s)} ${s.out?.error ? "bad" : ""}"></i>`)}${ss.length > max && html`<small>+${ss.length - max}</small>`}</span>`;
+const TX_ICON = {
+  test: (ok) => ok ? "M3 8.5l3 3 7-7" : "M4 4l8 8M12 4l-8 8",
+  build: (ok) => ok ? "M3 8.5l3 3 7-7" : "M4 4l8 8M12 4l-8 8",
+  commit: () => "M8 2v4M8 10v4M8 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
+  push: () => "M8 13V3M4 7l4-4 4 4",
+  deploy: () => "M3 13h10M8 10V2M5 5l3-3 3 3",
+  publish: () => "M6 3H3v10h10v-3M9 3h4v4M13 3L7 9",
+};
+const Ico = ({ d, cls = "" }) => html`<svg class="ico ${cls}" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d=${d} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+function BadgeChip({ b }) {
+  const label = b.kind === "commit" ? b.text : b.kind === "deploy" ? (b.ok ? `Deployed · ${b.ref}` : b.text) : b.kind === "test" && b.ref ? `${b.text} · ${b.ref}` : b.text;
+  const chip = html`<span class="chip ${b.kind} ${b.ok ? "ok" : "bad"}" title=${b.ref || label}><${Ico} d=${TX_ICON[b.kind]?.(b.ok) || ""} />${b.kind === "commit" && html`<code>${b.ref}</code>`}<span class="l">${label}</span></span>`;
+  return b.kind === "publish" && b.ref ? html`<a class="chiplink" href=${b.ref} data-out>${chip}</a>` : chip;
 }
+const Chips = ({ badges, max = 6 }) => {
+  const list = squash(badges || []);
+  if (!list.length) return null;
+  return html`<div class="chips">${list.slice(0, max).map((b) => html`<${BadgeChip} b=${b} />`)}${list.length > max && html`<span class="chip more">+${list.length - max}</span>`}</div>`;
+};
 
 function Clip({ out, bad, n = 8 }) {
   const [all, setAll] = useState(false);
@@ -2257,13 +2289,30 @@ function Diff({ edits, path }) {
     : html`<div class="r ${r.c}" data-s=${r.sig} dangerouslySetInnerHTML=${{ __html: tint(code[k++], lang) || " " }}></div>`)}</div></div>`;
 }
 
-const Shots = ({ s, zoom }) => (s.out?.images || []).map((src) => html`<img class="snap" src=${src} alt="Screenshot Claude looked at" onClick=${() => zoom(src)} />`);
-const Failed = ({ s }) => s.out?.error && html`<span class="end bad">failed</span>`;
+const Shots = ({ st, zoom }) => (st.out?.images || []).map((src) => html`<img class="snap" src=${src} alt="Screenshot Claude looked at" onClick=${() => zoom(src)} />`);
+const Failed = ({ st }) => st.out?.error && html`<span class="end bad">failed</span>`;
 
-function answersOf(s) {
-  const a = s.out?.meta?.answers;
+function answersOf(st) {
+  const a = st.out?.meta?.answers;
   if (a) return a;
-  return Object.fromEntries([...(s.out?.text || "").matchAll(/"([^"]+)"="([^"]*)"/g)].map((m) => [m[1], m[2]]));
+  return Object.fromEntries([...(st.out?.text || "").matchAll(/"([^"]+)"="([^"]*)"/g)].map((m) => [m[1], m[2]]));
+}
+
+function Running({ st }) {
+  useNow(1000);
+  return html`<span class="end running">${st.time ? txSpan(Date.now() - new Date(st.time)) : "running"}</span>`;
+}
+
+function AgentThread({ st, s, zoom }) {
+  const [page, setPage] = useState(null);
+  useEffect(() => { api(`/api/sessions/${s.sessionId}/agents/${st.id}`).then(setPage, () => setPage({ messages: [] })); }, [st.id, !!st.out]);
+  if (!page) return html`<p class="cont">Reading the agent's work…</p>`;
+  const b = bodyOf(page.messages || []);
+  return html`<div class="thread">
+    ${b.prompt && html`<p class="thread-ask">${firstSentence(b.prompt)}</p>`}
+    ${b.items.length > 0 && html`<${Story} items=${b.items} s=${s} zoom=${zoom} level=${2} />`}
+    <div class="prose small" dangerouslySetInnerHTML=${{ __html: md(b.answer || st.out?.text) }}></div>
+  </div>`;
 }
 
 function Step({ st, s, zoom, pin }) {
@@ -2272,141 +2321,174 @@ function Step({ st, s, zoom, pin }) {
   const open = opened || pin;
   const toggle = () => setOpen(!open);
   const cls = `step ${st.tool === "Write" ? "write" : k} ${bad ? "bad" : ""}`;
+  const running = pin && !st.out && html`<${Running} st=${st} />`;
   if (k === "ask") {
     const ans = answersOf(st);
     return html`<div class=${cls}>${(i.questions || []).map((q) => {
       const a = ans[q.question] || "";
       const hit = q.options?.find((o) => a === o.label || a.startsWith(o.label));
-      return html`<div class="qcard"><p class="q">${q.question}</p><div class="opts">${q.options?.map((o) => html`<div class="opt ${o === hit ? "chosen" : ""}"><b>${o.label}</b>${o.description}</div>`)}</div>${a && !hit && html`<p class="said">${a}</p>`}</div>`;
+      return html`<div class="qcard"><p class="q">${q.question}</p><div class="opts">${q.options?.map((o) => html`<div class="opt ${o === hit ? "chosen" : ""}"><b>${o.label}</b>${o.description}</div>`)}</div>${a && !hit && html`<p class="said">${a}</p>`}${!a && html`<p class="said wait">Waiting for your answer in the terminal</p>`}</div>`;
     })}</div>`;
   }
   if (st.tool === "Bash") {
     const cmd = i.command || st.detail || "";
+    const b = st.badge;
     return html`<div class=${cls}>
-      <div class="line click" onClick=${toggle}><b>${i.description || "Ran"}</b>${!i.description && html`<span class="arg">${cmd.split("\n")[0]}</span>`}<${Failed} s=${st} />${pin && !st.out && html`<span class="end running">running</span>`}</div>
+      <div class="line click" onClick=${toggle}>
+        ${b ? html`<${BadgeChip} b=${b} />` : html`<b>${i.description || "Ran"}</b>`}
+        ${!b && !i.description && html`<span class="arg">${cmd.split("\n")[0]}</span>`}
+        ${b && i.description && html`<span class="arg sans">${i.description}</span>`}
+        <${Failed} st=${b ? {} : st} />${running}
+      </div>
       ${open && html`<div class="tbox"><pre class="tpre"><span class="ps">$ </span>${cmd}</pre><${Clip} out=${st.out} bad=${bad} /></div>`}
     </div>`;
   }
   if (k === "edit") {
     const d = diffStat(st), path = relPath(i.file_path || st.detail, s);
     return html`<div class=${cls}>
-      <div class="line click" onClick=${toggle}><b>${st.tool === "Write" ? "Wrote" : st.n > 1 ? `Edited ×${st.n}` : "Edited"}</b><span class="arg">${path}</span><span class="end"><span class="plus">+${d.add}</span>${d.del > 0 && html` <span class="minus">−${d.del}</span>`}</span></div>
+      <div class="line click" onClick=${toggle}><b>${st.tool === "Write" ? "Wrote" : st.n > 1 ? `Edited ×${st.n}` : "Edited"}</b><span class="arg">${path}</span><span class="end"><span class="plus">+${d.add}</span>${d.del > 0 && html` <span class="minus">−${d.del}</span>`}</span>${running}</div>
       ${open && html`<div class="tbox"><div class="hd"><span class="p"><bdi>${path}</bdi></span><span class="n">${st.tool === "Write" ? `new, ${writeLines(st)} lines` : ""}</span></div>
         ${st.tool === "Write" ? html`<pre class="tpre">${(i.content || "").split("\n").slice(0, 40).join("\n")}</pre>${writeLines(st) > 40 && html`<p class="more-lines">${writeLines(st) - 40} more lines</p>`}` : html`<${Diff} edits=${st.edits || txEdits(st)} path=${path} />`}</div>`}
     </div>`;
   }
   if (st.tool === "Read") {
     const from = i.offset, to = i.offset && i.limit ? i.offset + i.limit : null;
-    return html`<div class=${cls}><div class="line"><b>Read</b><span class="arg">${relPath(i.file_path || st.detail, s)}${from ? `:${from}${to ? `–${to}` : ""}` : ""}</span><${Failed} s=${st} /></div><${Shots} s=${st} zoom=${zoom} /></div>`;
+    return html`<div class=${cls}><div class="line"><b>Read</b><span class="arg">${relPath(i.file_path || st.detail, s)}${from ? `:${from}${to ? `–${to}` : ""}` : ""}</span><${Failed} st=${st} />${running}</div><${Shots} st=${st} zoom=${zoom} /></div>`;
   }
-  if (st.tool === "Grep" || st.tool === "Glob") return html`<div class=${cls}><div class="line"><b>Searched</b><span class="arg">${i.pattern || st.detail}${i.path ? `  in ${relPath(i.path, s)}` : ""}</span></div></div>`;
+  if (st.tool === "Grep" || st.tool === "Glob") return html`<div class=${cls}><div class="line"><b>Searched</b><span class="arg">${i.pattern || st.detail}${i.path ? `  in ${relPath(i.path, s)}` : ""}</span>${running}</div></div>`;
   if (st.tool === "WebSearch") {
     const hits = st.out?.meta?.hits || [];
     return html`<div class=${cls}>
-      <div class="line click" onClick=${toggle}><b>Searched the web</b><span class="arg wrap sans">${i.query || st.detail}</span></div>
+      <div class="line click" onClick=${toggle}><b>Searched the web</b><span class="arg wrap sans">${i.query || st.detail}</span>${running}</div>
       ${open && hits.length > 0 && html`<div class="tbox"><ul class="hits">${hits.map((h) => html`<li><span class="d">${hostOf(h.url)}</span><a href=${h.url} data-out>${h.title}</a></li>`)}</ul></div>`}
     </div>`;
   }
   if (st.tool === "WebFetch") return html`<div class=${cls}>
-    <div class="line click" onClick=${toggle}><b>Read</b><span class="arg">${hostOf(i.url || st.detail)}</span></div>
+    <div class="line click" onClick=${toggle}><b>Read</b><span class="arg">${hostOf(i.url || st.detail)}</span>${running}</div>
     ${open && html`<div class="tbox">${i.prompt && html`<div class="hd"><span>${i.prompt}</span></div>`}<div class="prose small" dangerouslySetInnerHTML=${{ __html: md(st.out?.text) }}></div></div>`}
   </div>`;
   if (k === "agent") return html`<div class=${cls}>
-    <div class="line click" onClick=${toggle}><b>Agent</b><span class="arg wrap sans">${i.description || st.detail}</span></div>
-    ${open && html`<div class="tbox"><div class="prose small" dangerouslySetInnerHTML=${{ __html: md(st.out?.text) }}></div></div>`}
+    <div class="line click" onClick=${toggle}><b>Agent</b><span class="arg wrap sans">${i.description || st.detail}</span>${running}</div>
+    ${open && html`<div class="tbox"><${AgentThread} st=${st} s=${s} zoom=${zoom} /></div>`}
   </div>`;
   if (TX_NOISE.test(st.tool)) return null;
   const input = Object.keys(i).length ? JSON.stringify(i, null, 1) : st.detail;
   return html`<div class=${cls}>
-    <div class="line click" onClick=${toggle}><b>${toolName(st.tool)}</b><${Failed} s=${st} /></div>
+    <div class="line click" onClick=${toggle}><b>${toolName(st.tool)}</b><${Failed} st=${st} />${running}</div>
     ${open && html`<div class="tbox">${input && html`<pre class="tpre">${input}</pre>`}<${Clip} out=${st.out} bad=${bad} /></div>`}
-    <${Shots} s=${st} zoom=${zoom} />
+    <${Shots} st=${st} zoom=${zoom} />
   </div>`;
 }
 
-const hostOf = (u) => { try { const x = new URL(u); return x.hostname.replace(/^www\./, "") + (x.pathname.length > 1 ? x.pathname : ""); } catch { return u || ""; } };
-const isEdit = (s) => s?.t === "step" && /^(Edit|MultiEdit)$/.test(s.tool) && !s.out?.error;
-const joinEdits = (items) => items.reduce((out, it) => {
-  const last = out[out.length - 1];
-  if (isEdit(it) && isEdit(last) && last.input.file_path === it.input.file_path) out[out.length - 1] = { ...last, edits: [...(last.edits || txEdits(last)), ...txEdits(it)], n: (last.n || 1) + 1 };
-  else out.push(it);
-  return out;
-}, []);
+function Looks({ steps, s }) {
+  const [open, setOpen] = useState(false);
+  const names = [...new Set(steps.map((x) => x.tool === "Bash" ? null : relPath(x.input.file_path || x.input.path || x.input.pattern || "", s).split("/").pop()).filter(Boolean))];
+  const cmds = steps.filter((x) => x.tool === "Bash").length;
+  const what = [names.length && `${names.slice(0, 3).join(", ")}${names.length > 3 ? ` and ${names.length - 3} more` : ""}`, cmds && `${cmds} quick check${cmds > 1 ? "s" : ""}`].filter(Boolean).join(", ");
+  return html`<div class="step look group">
+    <div class="line click" onClick=${() => setOpen(!open)}><b>Looked at</b><span class="arg sans">${what}</span></div>
+    ${open && html`<div class="looks">${steps.map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${() => {}} />`)}</div>`}
+  </div>`;
+}
 
 const TX_TAIL = 4;
 
-function Trail({ t, s, level, zoom, live }) {
+function Story({ items, s, level, zoom, live, badges }) {
   const [open, setOpen] = useState(level === 3);
   useEffect(() => setOpen(level === 3), [level]);
-  if (!t.items.length) return null;
-  const asks = txSteps(t).filter((x) => txKind(x) === "ask");
-  const items = joinEdits(t.items), follow = live && !open;
-  const shown = follow ? items.slice(-TX_TAIL) : items, hidden = items.length - shown.length;
-  const last = shown.findLast((it) => it.t === "step");
-  const row = (it, j) => it.t === "text" ? html`<p class="narr" key=${`n${j}`}>${plain(it.text)}</p>`
+  if (!items.length) return null;
+  const phases = phasesOf(items);
+  const follow = live && !open;
+  const steps = txSteps(items).filter((x) => !TX_NOISE.test(x.tool));
+  const asks = steps.filter((x) => txKind(x) === "ask");
+  const failed = steps.filter((x) => x.out?.error).length;
+  const files = new Set(steps.filter((x) => txKind(x) === "edit" && !x.out?.error).map((x) => x.input.file_path)).size;
+  const counts = [steps.length > 0 && `${steps.length} step${steps.length > 1 ? "s" : ""}`, files > 0 && `${files} file${files > 1 ? "s" : ""} changed`, failed > 0 && `${failed} failed`].filter(Boolean).join(" · ");
+  const lastStep = steps[steps.length - 1];
+  const row = (it, j) => it.t === "looks" ? html`<${Looks} key=${`l${j}`} steps=${it.steps} s=${s} />`
     : it.t === "event" ? html`<p class="event" key=${`e${j}`}>${it.text}</p>`
-    : html`<${Step} key=${it.id || j} st=${it} s=${s} zoom=${zoom} pin=${follow && it === last} />`;
+    : html`<${Step} key=${it.id || j} st=${it} s=${s} zoom=${zoom} pin=${follow && it === lastStep} />`;
+  const heads = phases.filter((p) => p.head);
   return html`
     ${!open && !follow && asks.map((x) => html`<${Step} st=${x} s=${s} zoom=${zoom} />`)}
-    <div class="trail ${open || follow ? "open" : ""} ${follow ? "live" : ""}">
-      <button class="trail-head" aria-expanded=${open} onClick=${() => setOpen(!open)}>
-        <${Beads} t=${t} />
-        <span class="what">${trailSummary(t, s)}</span>
+    <div class="story ${open ? "open" : ""} ${follow ? "live" : ""}">
+      <button class="story-head" aria-expanded=${open} onClick=${() => setOpen(!open)}>
+        <span class="what">${counts || "Worked"}</span>
         <svg class="chev" width="12" height="12" viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
-      ${(open || follow) && html`<div class="steps">
-        ${hidden > 0 && html`<button class="earlier-steps" onClick=${() => setOpen(true)}>${hidden} earlier step${hidden > 1 ? "s" : ""}</button>`}
-        ${shown.map(row)}
+      ${badges !== false && html`<${Chips} badges=${steps.map((x) => x.badge).filter(Boolean)} />`}
+      ${!open && !follow && heads.length > 0 && html`<ol class="plot" onClick=${() => setOpen(true)}>
+        ${(heads.length > 5 ? [...heads.slice(0, 2), null, ...heads.slice(-2)] : heads).map((p) => p ? html`<li>${firstSentence(p.head)}</li>` : html`<li class="skip">${heads.length - 4} more</li>`)}
+      </ol>`}
+      ${follow && html`<div class="phases">
+        ${phases.length > 1 && html`<button class="earlier-steps" onClick=${() => setOpen(true)}>${phases.length - 1} earlier part${phases.length > 2 ? "s" : ""}: ${phases.slice(0, -1).filter((p) => p.head).slice(-1).map((p) => firstSentence(p.head))}</button>`}
+        ${phases.slice(-1).map((p) => html`<section class="phase">
+          ${p.head && html`<p class="narr">${plain(p.head)}</p>`}
+          ${(() => { const rows = rowsOf(p.rows), shown = rows.slice(-TX_TAIL), hidden = rows.length - shown.length; return html`${hidden > 0 && html`<button class="earlier-steps" onClick=${() => setOpen(true)}>${hidden} earlier step${hidden > 1 ? "s" : ""}</button>`}<div class="steps">${shown.map(row)}</div>`; })()}
+        </section>`)}
       </div>`}
+      ${open && html`<div class="phases">${phases.map((p) => html`<section class="phase">
+        ${p.head && html`<p class="narr">${plain(p.head)}</p>`}
+        ${p.rows.length > 0 && html`<div class="steps">${(level === 3 ? p.rows : rowsOf(p.rows)).map(row)}</div>`}
+      </section>`)}</div>`}
     </div>`;
 }
 
-function Prompt({ t }) {
+function Prompt({ text, images, partial }) {
   const [all, setAll] = useState(false);
-  const long = t.prompt.length > 480 || t.prompt.split("\n").length > 6;
-  if (t.partial) return html`<p class="partial">Continued from earlier in the session. Load earlier turns at the top to see how it started.</p>`;
-  return html`<div class="prompt">${t.prompt && html`<div class=${long && !all ? "clamp" : ""}>${t.prompt}</div>`}${long && html`<button class="fold" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}${t.images.map((src) => html`<img src=${src} alt="Image you attached" />`)}</div>`;
+  if (partial) return html`<p class="partial">This turn started before what is loaded here.</p>`;
+  const long = text.length > 480 || text.split("\n").length > 6;
+  return html`<div class="prompt">${text && html`<div class=${long && !all ? "clamp" : ""}>${text}</div>`}${long && html`<button class="fold" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}${(images || []).map((src) => html`<img src=${src} alt="Image you attached" />`)}</div>`;
 }
 
-const heads = (src) => [...(src || "").matchAll(/^#{1,3}\s+(.+)$/gm)].map((m) => plain(m[1]));
+const headsOf = (src) => [...(src || "").matchAll(/^#{1,3}\s+(.+)$/gm)].map((m) => plain(m[1]));
 const readMin = (t) => Math.round(plain(t).split(" ").length / 230);
 
-function Margin({ t, i, s }) {
-  const files = filesOf(t, s);
+function Margin({ t, i, s, answer }) {
+  const files = (t.files || []).filter((f) => !scratch(f.path));
   return html`<aside class="margin">
     <div><span class="k">${txClock(t.at)}</span>${txDur(t) && html` · worked <span class="k">${txDur(t)}</span>`}</div>
     ${txUsd(t.cost) && html`<div><span class="k">${txUsd(t.cost)}</span> at API prices</div>`}
-    ${readMin(t.answer) > 1 && html`<div><span class="k">${readMin(t.answer)} min</span> to read</div>`}
-    ${heads(t.answer).length > 1 && html`<ul class="toc">${heads(t.answer).map((h, j) => html`<li><a href=${`#tx${i}h${j}`} data-jump>${h}</a></li>`)}</ul>`}
-    ${files.length > 0 && html`<ul class="flist">${files.slice(0, 8).map(([p, d]) => html`<li><span class="p"><bdi>${p}</bdi></span><span class="n"><span class="plus">+${d.add}</span>${d.del > 0 && html` <span class="minus">−${d.del}</span>`}</span></li>`)}${files.length > 8 && html`<li>and ${files.length - 8} more</li>`}</ul>`}
+    ${readMin(answer) > 1 && html`<div><span class="k">${readMin(answer)} min</span> to read</div>`}
+    ${headsOf(answer).length > 1 && html`<ul class="toc">${headsOf(answer).map((h, j) => html`<li><a href=${`#tx${i}h${j}`} data-jump>${h}</a></li>`)}</ul>`}
+    ${files.length > 0 && html`<ul class="flist">${files.slice(0, 8).map((f) => html`<li><span class="p"><bdi>${relPath(f.path, s)}</bdi></span><span class="n"><span class="plus">+${f.add}</span>${f.del > 0 && html` <span class="minus">−${f.del}</span>`}</span></li>`)}${files.length > 8 && html`<li>and ${files.length - 8} more</li>`}</ul>`}
   </aside>`;
 }
 
-function Acts({ t, i, reply }) {
+function Acts({ answer, quote }) {
   const [copied, setCopied] = useState(false);
   return html`<div class="acts">
-    <button onClick=${() => { copyText(t.answer); setCopied(true); setTimeout(() => setCopied(false), 1200); }}>${copied ? "Copied" : "Copy"}</button>
-    ${reply && html`<button onClick=${() => reply({ text: firstSentence(t.answer) })}>Reply</button>`}
+    <button onClick=${() => { copyText(answer); setCopied(true); setTimeout(() => setCopied(false), 1200); }}>${copied ? "Copied" : "Copy"}</button>
+    ${quote && html`<button onClick=${() => quote(firstSentence(answer))}>Quote in reply</button>`}
   </div>`;
 }
 
-function Turn({ t, i, s, level, zoom, reply, latest, live }) {
-  const files = filesOf(t, s);
-  const body = useMemo(() => { let j = 0; return md(t.answer).replace(/<h([1-3])>/g, (_, n) => `<h${n} id="tx${i}h${j++}">`); }, [t.answer]);
+function Gist({ s, answer }) {
+  const sum = s.summary;
+  if (!sum?.gist?.length || answer.length < 1400 || !sum.reply || !answer.startsWith(sum.reply.slice(0, 40))) return null;
+  return html`<div class="gist"><p>In short</p><ul>${sum.gist.map((g) => html`<li>${g}</li>`)}</ul></div>`;
+}
+
+function Turn({ t, i, s, body, level, zoom, quote, latest, live }) {
+  const answer = body?.answer || "";
+  const html_ = useMemo(() => { let j = 0; return md(answer).replace(/<h([1-3])>/g, (_, n) => `<h${n} id="tx${i}h${j++}">`); }, [answer]);
+  const files = (t.files || []).filter((f) => !scratch(f.path));
   return html`<section class="turn ${latest ? "latest" : ""}" id=${`tx${i}`} data-i=${i}>
-    <${Prompt} t=${t} />
+    <${Prompt} text=${body?.prompt ?? t.prompt} images=${body?.images} partial=${t.partial} />
     <p class="meta-inline">${txClock(t.at)}${txDur(t) && ` · worked ${txDur(t)}`}${txUsd(t.cost) && ` · ${txUsd(t.cost)}`}${files.length > 0 && ` · ${files.length} file${files.length > 1 ? "s" : ""} changed`}</p>
-    <${Margin} t=${t} i=${i} s=${s} />
-    <${Trail} t=${t} s=${s} level=${level} zoom=${zoom} live=${live} />
-    ${t.answer ? html`<div class="prose" data-answer dangerouslySetInnerHTML=${{ __html: body }}></div><${Acts} t=${t} i=${i} reply=${reply} />`
-      : !latest && html`<p class="cont">No reply after this.</p>`}
+    <${Margin} t=${t} i=${i} s=${s} answer=${answer} />
+    ${!body ? html`<div class="skeleton"><i></i><i></i><i></i></div>` : html`
+      <${Story} items=${body.items} s=${s} level=${level} zoom=${zoom} live=${live} />
+      ${latest && answer && html`<${Gist} s=${s} answer=${answer} />`}
+      ${answer ? html`<div class="prose" data-answer dangerouslySetInnerHTML=${{ __html: html_ }}></div><${Acts} answer=${answer} quote=${quote} />`
+        : !latest && html`<p class="cont">No reply after this.</p>`}`}
   </section>`;
 }
 
 const Folded = ({ t, i, open }) => html`<button class="ol-row folded" id=${`tx${i}`} data-i=${i} onClick=${() => open(i)}>
   <span class="t">${txClock(t.at)}</span>
   <span class="a">${t.partial ? "Continued from earlier" : plain(t.prompt) || "Image"}</span>
-  <span class="b">${t.answer ? firstSentence(t.answer) : "No reply"}</span>
+  <span class="b">${t.reply ? firstSentence(t.reply) : t.steps ? `${t.steps} steps, no reply` : "No reply"}</span>
 </button>`;
 
 function Outline({ turns, go }) {
@@ -2414,10 +2496,10 @@ function Outline({ turns, go }) {
   return html`<div class="ol">${turns.map((t, i) => {
     const d = txDay(t.at), showDay = d !== lastDay;
     lastDay = d;
-    return html`${showDay && html`<p class="ol-day">${d}</p>`}<button class="ol-row" onClick=${() => go(i)}>
+    return html`${showDay && html`<p class="ol-day">${d}</p>`}<button class="ol-row" data-i=${i} onClick=${() => go(i)}>
       <span class="t">${txClock(t.at)}</span>
       <span class="a">${t.partial ? "Continued from earlier" : plain(t.prompt) || "Image"}</span>
-      <span class="b">${t.answer ? firstSentence(t.answer) : "No reply"}</span>
+      <span class="b">${t.reply ? firstSentence(t.reply) : "No reply"}</span>
     </button>`;
   })}</div>`;
 }
@@ -2433,10 +2515,11 @@ function Scrub({ turns, inView, go }) {
     go(i, true);
   };
   return html`<div class="scrub" onPointerDown=${(e) => { e.currentTarget.setPointerCapture(e.pointerId); pick(e); }} onPointerMove=${(e) => e.buttons && pick(e)} onPointerUp=${() => setTip(null)} onPointerCancel=${() => setTip(null)}>
-    ${turns.map((t, i) => html`<i class=${inView.has(i) ? "in" : ""} style=${`top:${(i / n) * 100}%;height:max(3px, calc(${100 / n}% - 4px))`}></i>`)}
-    ${tip && html`<div class="tip" style=${`top:${tip.y - 18}px`}>${plain(turns[tip.i].prompt).slice(0, 90)}<small>${txClock(turns[tip.i].at)}</small></div>`}
+    ${turns.map((t, i) => html`<i class="${inView.has(i) ? "in" : ""} ${t.failed ? "bad" : ""}" style=${`top:${(i / n) * 100}%;height:max(3px, calc(${100 / n}% - 4px))`}></i>`)}
+    ${tip && html`<div class="tip" style=${`top:${tip.y - 18}px`}>${t0(turns[tip.i])}<small>${txClock(turns[tip.i].at)}</small></div>`}
   </div>`;
 }
+const t0 = (t) => (t.partial ? "Continued from earlier" : plain(t.prompt)).slice(0, 90);
 
 function Zoom({ level, set }) {
   const ref = useRef();
@@ -2444,13 +2527,13 @@ function Zoom({ level, set }) {
   useLayoutEffect(() => { const b = ref.current?.querySelector(`[aria-pressed="true"]`); if (b) setKnob({ left: b.offsetLeft, width: b.offsetWidth }); }, [level]);
   return html`<div class="zoom" ref=${ref} role="group" aria-label="How much to show">
     ${knob && html`<span class="knob" style=${`left:${knob.left}px;width:${knob.width}px`}></span>`}
-    ${TX_LEVELS.map(([l, name]) => html`<button aria-pressed=${level === l} onClick=${() => set(l)} title=${`${name} (${l})`}>${name}</button>`)}
+    ${TX_LEVELS.map(([l, name, short]) => html`<button aria-pressed=${level === l} onClick=${() => set(l)} title=${`${name} (${l})`}><span class="full">${name}</span><span class="short">${short}</span></button>`)}
   </div>`;
 }
 
 function Prefs({ prefs, set }) {
   const row = (items) => html`<div class="opts">${items.map(([on, label, act, style]) => html`<button aria-pressed=${on} onClick=${act} style=${style || ""}>${label}</button>`)}</div>`;
-  return html`<div class="prefs" role="dialog" aria-label="Reading settings">
+  return html`<div class="pop prefs" role="dialog" aria-label="Reading settings">
     <p>Typeface</p>
     ${row(Object.entries(TX_FACES).map(([k, f]) => [prefs.face === k, f.name, () => set({ face: k }), `font-family:${f.css}`]))}
     <p>Size</p>
@@ -2460,28 +2543,228 @@ function Prefs({ prefs, set }) {
   </div>`;
 }
 
-function Composer({ quote, send, close }) {
+function Results({ turns, s, bodies, need, go, close }) {
+  const files = new Map(), commits = [], deploys = [], pushes = [], pubs = [];
+  turns.forEach((t, i) => {
+    for (const f of t.files || []) { const cur = files.get(f.path) || { path: f.path, add: 0, del: 0, turns: [] }; cur.add += f.add; cur.del += f.del; cur.turns.push(i); files.set(f.path, cur); }
+    for (const b of t.badges || []) {
+      if (b.kind === "commit") commits.push({ ...b, i });
+      if (b.kind === "deploy" && b.ok) deploys.push({ ...b, i });
+      if (b.kind === "push" && b.ok) pushes.push({ ...b, i });
+      if (b.kind === "publish" && b.ref) pubs.push({ ...b, i });
+    }
+  });
+  const [file, setFile] = useState(null);
+  const [showJunk, setShowJunk] = useState(false);
+  const all = [...files.values()], kept = all.filter((f) => !scratch(f.path)), junk = all.filter((f) => scratch(f.path));
+  const fileRow = (f) => html`<li><button onClick=${() => setFile(f)}><span class="p"><bdi>${relPath(f.path, s)}</bdi></span><span class="n"><span class="plus">+${f.add}</span>${f.del > 0 && html` <span class="minus">−${f.del}</span>`}</span></button></li>`;
+  useEffect(() => { if (file) file.turns.forEach((i) => need(i)); }, [file]);
+  const fileEdits = file && file.turns.flatMap((i) => txSteps(bodies[turns[i].from]?.items || []).filter((x) => txKind(x) === "edit" && x.input.file_path === file.path && !x.out?.error).flatMap((x) => x.tool === "Write" ? [{ old: "", new: x.input.content || "" }] : txEdits(x)));
+  const pages = [...(s.pages || []).map((p) => ({ url: p.url, title: p.title })), ...pubs.filter((p) => !(s.pages || []).some((x) => x.url === p.ref)).map((p) => ({ url: p.ref }))];
+  const sec = (title, n, body) => n > 0 && html`<section><h4>${title}<span>${n}</span></h4>${body}</section>`;
+  return html`<div class="pop results" role="dialog" aria-label="What this session produced">
+    <div class="pop-head"><b>What this session produced</b><button class="x" onClick=${close} aria-label="Close">✕</button></div>
+    ${file ? html`<div class="file-diff">
+      <button class="back" onClick=${() => setFile(null)}>‹ All files</button>
+      <p class="p"><bdi>${relPath(file.path, s)}</bdi> <span class="plus">+${file.add}</span> <span class="minus">−${file.del}</span></p>
+      ${fileEdits.length ? html`<${Diff} edits=${fileEdits} path=${file.path} />` : html`<p class="cont">Loading the edits…</p>`}
+    </div>` : html`
+      ${sec("Files changed", kept.length || junk.length, html`<ul class="rlist">${kept.map(fileRow)}${junk.length > 0 && html`<li><button onClick=${() => setShowJunk(!showJunk)}><span class="l quiet">${showJunk ? "Hide" : "Show"} ${junk.length} scratch file${junk.length > 1 ? "s" : ""}</span></button></li>`}${showJunk && junk.map(fileRow)}</ul>`)}
+      ${sec("Commits", commits.length, html`<ul class="rlist">${commits.map((c) => html`<li><button onClick=${() => { go(c.i); close(); }}><code>${c.ref}</code><span class="l">${c.text}</span></button></li>`)}</ul>`)}
+      ${sec("Pushed", new Set(pushes.map((p) => p.text)).size, html`<ul class="rlist">${[...new Set(pushes.map((p) => p.text))].map((t) => html`<li><span class="l">${t}</span></li>`)}</ul>`)}
+      ${sec("Deployed", deploys.length, html`<ul class="rlist">${deploys.map((d) => html`<li><button onClick=${() => { go(d.i); close(); }}><span class="l">${d.ref}</span><span class="n">${txClock(turns[d.i].at)}</span></button></li>`)}</ul>`)}
+      ${sec("Pages", pages.length, html`<ul class="rlist">${pages.map((p) => html`<li><a href=${p.url} data-out><span class="l">${p.title || hostOf(p.url)}</span></a></li>`)}</ul>`)}
+      ${sec("Running", (s.servers || []).length, html`<ul class="rlist">${(s.servers || []).map((p) => html`<li><a href=${serverURL(s, p)} data-out><span class="l">:${p}</span></a></li>`)}</ul>`)}
+      ${!files.size && !commits.length && !deploys.length && !pages.length && html`<p class="cont">Nothing yet: no files changed, commits, deploys or pages.</p>`}
+    `}
+  </div>`;
+}
+
+const TX_FILTERS = [["failed", "Failures", (t) => t.failed > 0], ["commit", "Commits", (t) => (t.badges || []).some((b) => b.kind === "commit")], ["files", "Changed files", (t) => (t.files || []).length > 0], ["deploy", "Deploys", (t) => (t.badges || []).some((b) => b.kind === "deploy" || b.kind === "publish")], ["asks", "Questions", (t) => t.asks > 0]];
+
+function Find({ turns, s, go, close, init }) {
+  const [q, setQ] = useState(init || "");
+  const [filter, setFilter] = useState(null);
+  const [hits, setHits] = useState([]);
   const ref = useRef();
-  const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
   useEffect(() => ref.current?.focus(), []);
+  useEffect(() => {
+    if (q.trim().length < 2) return setHits([]);
+    const t = setTimeout(() => api(`/api/sessions/${s.sessionId}/search?q=${encodeURIComponent(q.trim())}`).then((r) => setHits(r.hits || []), () => {}), 220);
+    return () => clearTimeout(t);
+  }, [q]);
+  const ql = q.trim().toLowerCase();
+  const f = TX_FILTERS.find((x) => x[0] === filter);
+  const rows = new Map();
+  turns.forEach((t, i) => {
+    if (f && !f[2](t)) return;
+    if (!ql) { if (f) rows.set(i, ""); return; }
+    const file = (t.files || []).find((x) => x.path.toLowerCase().includes(ql));
+    if (plain(t.prompt).toLowerCase().includes(ql)) rows.set(i, "");
+    else if (file) rows.set(i, `changed ${relPath(file.path, s)}`);
+  });
+  if (ql) for (const h of hits) if (!f || f[2](turns[h.turn] || {})) if (!rows.get(h.turn) && !plain(turns[h.turn]?.prompt).startsWith(plain(h.text).replace(/^…/, "").slice(0, 30))) rows.set(h.turn, h.text);
+  const list = [...rows].sort((a, b) => b[0] - a[0]);
+  return html`<div class="pop find" role="dialog" aria-label="Find in this session">
+    <div class="find-in"><input ref=${ref} value=${q} placeholder="Find in this session: words, files, commands" onInput=${(e) => setQ(e.target.value)} onKeyDown=${(e) => { if (e.key === "Escape") close(); if (e.key === "Enter" && list[0]) { go(list[0][0], false, q); close(); } }} /><button class="x" onClick=${close} aria-label="Close">✕</button></div>
+    <div class="filters">${TX_FILTERS.map(([k, label]) => html`<button aria-pressed=${filter === k} onClick=${() => setFilter(filter === k ? null : k)}>${label}</button>`)}</div>
+    ${(ql || f) && html`<ul class="hitlist">${list.length === 0 && html`<li class="none">No turn matches.</li>`}${list.slice(0, 40).map(([i, text]) => html`<li><button onClick=${() => { go(i, false, q); close(); }}>
+      <span class="t">${txClock(turns[i].at)}</span><span class="a">${t0(turns[i])}</span>${text && html`<span class="b">${text}</span>`}</button></li>`)}</ul>`}
+  </div>`;
+}
+
+function highlight(el, q) {
+  if (!el || !q || !window.CSS?.highlights) return;
+  const ranges = [], needle = q.toLowerCase();
+  const walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    const t = n.data.toLowerCase();
+    for (let i = t.indexOf(needle); i >= 0; i = t.indexOf(needle, i + needle.length)) {
+      const r = new Range(); r.setStart(n, i); r.setEnd(n, i + needle.length); ranges.push(r);
+    }
+  }
+  CSS.highlights.set("tx-find", new Highlight(...ranges));
+  ranges[0]?.startContainer.parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+function askOf(answer) {
+  const paras = answer.trim().split(/\n\s*\n/);
+  const last = plain(paras[paras.length - 1] || "");
+  const qs = last.match(/[^.!?]*\?/g);
+  if (!qs) return null;
+  const question = qs[qs.length - 1].trim();
+  const opts = [...answer.matchAll(/^(?:#{1,4}\s*|\s*)(\d+)[.)]\s+(?:\*\*)?([^*\n]{3,80})/gm)].map((m) => ({ n: m[1], label: plain(m[2]) }));
+  const uniq = [...new Map(opts.map((o) => [o.n, o])).values()].slice(0, 5);
+  const yes = /^(want|should|shall|do you want|ready|ok|okay|can i|may i|go ahead|proceed)/i.test(question);
+  return { question, yes, opts: uniq.length >= 2 ? uniq : [] };
+}
+
+function wavFrom(buf) {
+  const ch = buf.getChannelData(0), rate = buf.sampleRate, out = new DataView(new ArrayBuffer(44 + ch.length * 2));
+  const w = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
+  w(0, "RIFF"); out.setUint32(4, 36 + ch.length * 2, true); w(8, "WAVE"); w(12, "fmt ");
+  out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true); out.setUint32(24, rate, true);
+  out.setUint32(28, rate * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); w(36, "data"); out.setUint32(40, ch.length * 2, true);
+  ch.forEach((v, i) => out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, v)) * 0x7fff, true));
+  return new Blob([out], { type: "audio/wav" });
+}
+
+function useDictation(onText, say) {
+  const [state, setState] = useState("idle");
+  const rec = useRef(null);
+  const start = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const r = new MediaRecorder(stream), chunks = [];
+      r.ondataavailable = (e) => chunks.push(e.data);
+      r.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        setState("busy");
+        try {
+          const ctx = new AudioContext();
+          const buf = await ctx.decodeAudioData(await new Blob(chunks).arrayBuffer());
+          ctx.close();
+          const res = await fetch("/api/voice/stt", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wavFrom(buf) });
+          if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+          const text = (await res.json()).text?.trim();
+          if (text) onText(text);
+        } catch (e) { say(`Couldn't transcribe: ${e.message}`); }
+        setState("idle");
+      };
+      r.start();
+      rec.current = r;
+      setState("rec");
+    } catch (e) { say(`The microphone isn't available: ${e.message}`); }
+  };
+  const stop = () => rec.current?.state === "recording" && rec.current.stop();
+  return { state, toggle: () => (state === "rec" ? stop() : state === "idle" && start()) };
+}
+
+function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, ask, focusRef, working }) {
+  const ta = useRef();
+  const [busy, setBusy] = useState(false);
+  const [drag, setDrag] = useState(false);
+  focusRef.current = () => ta.current?.focus();
+  const dict = useDictation((t) => setDraft((d) => (d ? `${d.trimEnd()} ${t}` : t)), say);
+  useLayoutEffect(() => { const el = ta.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, innerHeight * 0.4) + "px"; } }, [draft]);
   const go = async () => {
-    if (!text.trim() || busy) return;
+    const text = [...quotes.map((q) => q.split("\n").map((l) => `> ${l}`).join("\n")), draft.trim()].filter(Boolean).join("\n\n");
+    if (!text || busy) return;
     setBusy(true);
-    const quoted = quote.text ? quote.text.split("\n").map((l) => `> ${l}`).join("\n") + "\n\n" : "";
-    if (await send(quoted + text.trim())) close();
+    setDraft("");
+    setQuotes([]);
+    await send(text);
     setBusy(false);
   };
-  return html`<div class="composer"><div class="in">
-    ${quote.text && html`<blockquote>${quote.text}</blockquote>`}
-    <div class="row">
-      <textarea ref=${ref} rows="1" value=${text} placeholder=${quote.text ? "Your reply about this part" : "Reply to Claude"}
-        onInput=${(e) => { setText(e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; }}
-        onKeyDown=${(e) => { if (e.key === "Enter" && !e.shiftKey && !touch) { e.preventDefault(); go(); } if (e.key === "Escape") close(); }}></textarea>
-      <button class="x" onClick=${close}>Cancel</button>
-      <button class="send" disabled=${!text.trim() || busy} onClick=${go}>${busy ? "Sending" : "Send"}</button>
+  const upload = async (files) => {
+    for (const f of files) {
+      const fd = new FormData();
+      fd.append("file", f, f.name);
+      try {
+        const res = await fetch(`/api/sessions/${s.sessionId}/upload`, { method: "POST", body: fd });
+        if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+        const p = (await res.json()).path;
+        setDraft((d) => `${d}${d && !d.endsWith("\n") ? "\n" : ""}${/\s/.test(p) ? `"${p}"` : p}`);
+      } catch (e) { say(`Uploading ${f.name} failed: ${e.message}`); }
+    }
+    ta.current?.focus();
+  };
+  const fill = (text) => { setDraft(text); requestAnimationFrame(() => { const el = ta.current; el?.focus(); el?.setSelectionRange(text.length, text.length); }); };
+  const ready = (draft.trim() || quotes.length) && !busy;
+  const hint = working ? "Queue a message for Claude" : s.state === "needs-you" ? "Claude is waiting on you" : "Reply to Claude";
+  const root = useRef();
+  useLayoutEffect(() => {
+    const el = root.current, wrap = el?.parentElement;
+    if (!el) return;
+    const ro = new ResizeObserver(() => wrap.style.setProperty("--dock", `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => { ro.disconnect(); wrap.style.removeProperty("--dock"); };
+  }, []);
+  return html`<div class="composer ${drag ? "drag" : ""}" ref=${root} onDragOver=${(e) => { e.preventDefault(); setDrag(true); }} onDragLeave=${() => setDrag(false)} onDrop=${(e) => { e.preventDefault(); setDrag(false); upload([...e.dataTransfer.files]); }}>
+    <div class="in">
+      ${ask && !draft && !quotes.length && html`<div class="ask-card">
+        <p class="aq">${ask.question}</p>
+        <div class="quick">
+          ${ask.yes && html`<button onClick=${() => fill("yes, go ahead")}>Yes, go ahead</button>`}
+          ${ask.opts.map((o) => html`<button title=${o.label} onClick=${() => fill(`go with ${o.n}`)}><b>${o.n}</b> ${o.label.length > 36 ? o.label.slice(0, 34) + "…" : o.label}</button>`)}
+          ${ask.yes && html`<button onClick=${() => fill("no, ")}>No…</button>`}
+        </div>
+      </div>`}
+      ${quotes.length > 0 && html`<div class="quotes">${quotes.map((q, j) => html`<div class="qchip"><span>${q}</span><button aria-label="Remove quote" onClick=${() => setQuotes(quotes.filter((_, k) => k !== j))}>✕</button></div>`)}</div>`}
+      <div class="box" onClick=${(e) => e.target === e.currentTarget && ta.current?.focus()}>
+        <textarea ref=${ta} rows="1" value=${draft} placeholder=${hint} enterkeyhint=${touch ? "enter" : "send"}
+          onInput=${(e) => setDraft(e.target.value)}
+          onPaste=${(e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); upload(fs); } }}
+          onKeyDown=${(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !touch) { e.preventDefault(); go(); }
+            else if (e.key === "Escape") e.target.blur();
+          }}></textarea>
+        <div class="tools">
+          <label class="tool" title="Attach a file"><input type="file" multiple hidden onChange=${(e) => { upload([...e.target.files]); e.target.value = ""; }} /><svg width="16" height="16" viewBox="0 0 16 16"><path d="M10.5 4.5l-5 5a1.5 1.5 0 0 0 2.1 2.1l5.3-5.3a3 3 0 0 0-4.2-4.2L3.4 7.4a4.5 4.5 0 0 0 6.4 6.4l3.7-3.7" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></label>
+          ${VOICE_OK && html`<button class="tool ${dict.state}" title=${dict.state === "rec" ? "Stop and transcribe" : "Dictate"} onClick=${dict.toggle} disabled=${dict.state === "busy"}><svg width="16" height="16" viewBox="0 0 16 16"><rect x="5.5" y="1.5" width="5" height="9" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M3 8a5 5 0 0 0 10 0M8 13v2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>`}
+          <button class="send" disabled=${!ready} onClick=${go} title="Send (Enter)" aria-label="Send">${busy ? html`<span class="spin"></span>` : html`<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`}</button>
+        </div>
+      </div>
     </div>
-  </div></div>`;
+  </div>`;
+}
+
+function Pending({ p, retry, drop }) {
+  return html`<section class="turn pending">
+    <div class="prompt">${p.text}</div>
+    <p class="pend ${p.state}">${p.state === "sending" ? "Sending…" : p.state === "failed" ? html`Not sent: ${p.err} <button onClick=${retry}>Try again</button><button onClick=${drop}>Discard</button>` : p.queued ? "Sent. Claude reads it after its current step" : "Sent. Waiting for Claude"}</p>
+  </section>`;
+}
+
+const SEL_ASKS = [["Explain", "explain this part:"], ["Push back", "i'm not sure about this:"], ["Do this", "go ahead with this:"]];
+
+function SelBar({ sel, live, act }) {
+  return html`<div class="selbar" style=${`left:${sel.x}px;top:${sel.y}px`} onMouseDown=${(e) => e.preventDefault()}>
+    ${live && html`<button onClick=${() => act("quote")}>Quote</button>`}
+    ${live && SEL_ASKS.map(([label, lead]) => html`<button onClick=${() => act("ask", lead)}>${label}</button>`)}
+    <button onClick=${() => act("copy")}>Copy</button>
+    <button onClick=${() => act("find")}>Find</button>
+  </div>`;
 }
 
 function copyText(text) {
@@ -2489,71 +2772,95 @@ function copyText(text) {
 }
 
 function Transcript({ s, say }) {
-  const [msgs, setMsgs] = useState(null);
-  const [start, setStart] = useState(0);
+  const [idx, setIdx] = useState(null);
+  const [bodies, setBodies] = useState({});
   const [err, setErr] = useState(null);
   const [level, setLevelRaw] = useState(() => txStore.get("level", 2));
   const [prefs, setPrefsRaw] = useState(() => ({ face: "news", size: 1, width: 1, ...txStore.get("prefs", {}) }));
-  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [pop, setPop] = useState(null);
   const [opened, setOpened] = useState(() => new Set());
   const [inView, setInView] = useState(() => new Set());
-  const [quote, setQuote] = useState(null);
-  const [quoteBtn, setQuoteBtn] = useState(null);
+  const [sel, setSel] = useState(null);
   const [shot, setShot] = useState(null);
-  const box = useRef();
-  const landed = useRef(false);
-  const atEnd = useRef(false);
+  const [pending, setPending] = useState([]);
+  const [draft, setDraftRaw] = useState(() => txStore.get(`draft.${s.sessionId}`, ""));
+  const [quotes, setQuotes] = useState([]);
+  const box = useRef(), landed = useRef(false), atEnd = useRef(false), loading = useRef(new Set()), focusInput = useRef(() => {}), findQ = useRef("");
   const seenAt = useRef(txStore.get(`seen.${s.sessionId}`, null));
   const live = s.attachable || s.harness === "opencode";
+  const working = s.state === "working";
+  const turns = idx || [];
 
-  const load = async (before) => {
+  const setDraft = (v) => setDraftRaw((d) => { const n = typeof v === "function" ? v(d) : v; txStore.set(`draft.${s.sessionId}`, n || null); return n; });
+
+  const loadIdx = async () => {
     try {
-      const page = (b) => api(`/api/sessions/${s.sessionId}/transcript${b ? `?before=${b}` : ""}`);
-      let p = await page(before), got = p.messages || [];
-      for (let n = 0; p.start > 0 && !got.some((m) => m.role === "user") && n < 4; n++) {
-        p = await page(p.start);
-        got = [...(p.messages || []), ...got];
-      }
-      setStart(p.start);
-      setMsgs((m) => (before ? [...got, ...(m || [])] : got));
+      const r = await api(`/api/sessions/${s.sessionId}/turns`);
+      setIdx(r.turns || []);
       setErr(null);
-    } catch (e) {
-      setErr(e.message);
-    }
+    } catch (e) { setErr(e.message); setIdx((x) => x || []); }
   };
-  useEffect(() => { landed.current = false; setOpened(new Set()); setMsgs(null); seenAt.current = txStore.get(`seen.${s.sessionId}`, null); load(0); }, [s.sessionId]);
-  useEffect(() => { if (landed.current) load(0); }, [s.updated]);
+  const need = async (i) => {
+    const t = turns[i];
+    if (!t) return;
+    const have = bodies[t.from];
+    const key = `${t.from}:${t.to}`;
+    if ((have && have.to === t.to) || loading.current.has(key)) return;
+    loading.current.add(key);
+    try {
+      const p = await api(`/api/sessions/${s.sessionId}/transcript?from=${t.from}&to=${t.to}`);
+      setBodies((b) => ({ ...b, [t.from]: { to: t.to, ...bodyOf(p.messages || []) } }));
+    } catch (e) { setErr(e.message); }
+    loading.current.delete(key);
+  };
 
-  const turns = useMemo(() => turnsOf(msgs || []), [msgs]);
+  useEffect(() => { landed.current = false; setIdx(null); setBodies({}); setOpened(new Set()); setPending([]); setQuotes([]); setDraftRaw(txStore.get(`draft.${s.sessionId}`, "")); seenAt.current = txStore.get(`seen.${s.sessionId}`, null); loadIdx(); }, [s.sessionId]);
+  useEffect(() => { if (idx) loadIdx(); }, [s.updated, s.state]);
+
   const firstOpen = useMemo(() => {
     if (!turns.length) return 0;
-    const i = seenAt.current ? turns.findIndex((t) => t.at > seenAt.current) : -1;
+    const i = seenAt.current ? turns.findIndex((t) => !t.partial && t.at > seenAt.current) : -1;
     return i < 0 ? turns.length - 1 : i;
   }, [turns.length > 0, s.sessionId]);
-  const folded = (i) => level === 2 && i < firstOpen && !opened.has(i);
+  const isOpen = (i) => level === 3 || i >= firstOpen || opened.has(i);
+  const folded = (i) => level === 2 && !isOpen(i);
   const openTurn = (i) => setOpened((o) => new Set(o).add(i));
 
+  useEffect(() => { for (let i = firstOpen; i < turns.length; i++) if (level !== 1) need(i); }, [idx, level]);
+  useEffect(() => { opened.forEach((i) => need(i)); }, [opened]);
   useEffect(() => {
-    const p = { ...prefs }, f = TX_FACES[p.face] || TX_FACES.news, st = box.current?.style;
+    if (!pending.length || !idx) return;
+    setPending((ps) => ps.filter((p) => !(p.state === "sent" && turns.some((t) => t.at && new Date(t.at) >= p.at - 60000 && plain(t.prompt).startsWith(plain(p.text).slice(0, 24))))));
+  }, [idx]);
+
+  useEffect(() => {
+    const f = TX_FACES[prefs.face] || TX_FACES.news, st = box.current?.parentElement?.style;
     if (!st) return;
     st.setProperty("--rf", f.css);
-    st.setProperty("--rs", `${f.sizes[p.size]}px`);
+    st.setProperty("--rs", `${f.sizes[prefs.size]}px`);
     st.setProperty("--rl", f.lh);
-    st.setProperty("--measure", `${[600, 660, 740][p.width]}px`);
-    txStore.set("prefs", p);
-  }, [prefs, msgs === null]);
+    st.setProperty("--measure", `${[600, 660, 740][prefs.width]}px`);
+    txStore.set("prefs", prefs);
+  }, [prefs]);
   const setPrefs = (p) => setPrefsRaw((cur) => ({ ...cur, ...p }));
 
   const topTurn = () => {
     const el = box.current, top = el?.getBoundingClientRect().top || 0;
-    const rows = [...(el?.querySelectorAll(".turn, .folded") || [])];
+    const rows = [...(el?.querySelectorAll("[data-i]") || [])];
     const r = rows.find((e) => e.getBoundingClientRect().bottom > top + 60) || rows[0];
     return r ? { i: +r.dataset.i, off: r.getBoundingClientRect().top } : null;
   };
-  const go = (i, instant) => {
+  const go = (i, instant, q) => {
     if (level === 1) setLevelRaw(2);
-    if (i < firstOpen) openTurn(i);
-    requestAnimationFrame(() => box.current?.querySelector(`#tx${i}`)?.scrollIntoView({ behavior: instant || level === 1 ? "instant" : "smooth", block: "start" }));
+    if (!isOpen(i)) openTurn(i);
+    need(i);
+    const jump = (n = 0) => requestAnimationFrame(() => {
+      const el = box.current?.querySelector(`#tx${i}`);
+      if (!el) return;
+      el.scrollIntoView({ behavior: instant || level === 1 ? "instant" : "smooth", block: "start" });
+      if (q) { if (el.querySelector(".prose, .story") || n > 20) highlight(el, q); else setTimeout(() => jump(n + 1), 150); }
+    });
+    jump();
   };
   const anchor = useRef(null);
   const setLevel = (l) => { anchor.current = level === 1 ? null : topTurn(); setLevelRaw(l); txStore.set("level", l); };
@@ -2564,10 +2871,12 @@ function Transcript({ s, say }) {
     if (el) box.current.scrollTop += el.getBoundingClientRect().top - a.off;
   }, [level]);
 
+  const openBodies = turns.filter((_, i) => i >= firstOpen).map((t) => bodies[t.from]);
+  const ready = idx && (level === 1 || openBodies.every(Boolean));
   useLayoutEffect(() => {
     const el = box.current;
-    if (!el || !turns.length) return;
-    if (!landed.current) {
+    if (!el || !idx) return;
+    if (!landed.current && ready) {
       landed.current = true;
       const land = () => {
         if (level === 1) return;
@@ -2576,97 +2885,133 @@ function Transcript({ s, say }) {
       };
       land();
       document.fonts.ready.then(() => requestAnimationFrame(land));
-    } else if (atEnd.current) el.scrollTop = el.scrollHeight;
-    txStore.set(`seen.${s.sessionId}`, turns[turns.length - 1].at);
-  }, [turns]);
+      if (turns.length) txStore.set(`seen.${s.sessionId}`, turns[turns.length - 1].at);
+    } else if (landed.current && atEnd.current) el.scrollTop = el.scrollHeight;
+    if (landed.current && turns.length) txStore.set(`seen.${s.sessionId}`, turns[turns.length - 1].at);
+  }, [idx, bodies, ready, pending]);
 
   useEffect(() => {
     const el = box.current;
     if (!el) return;
-    const io = new IntersectionObserver((es) => setInView((prev) => {
-      const n = new Set(prev);
-      for (const e of es) e.isIntersecting ? n.add(+e.target.dataset.i) : n.delete(+e.target.dataset.i);
-      return n;
-    }), { root: el, rootMargin: "-40px 0px -30% 0px" });
-    el.querySelectorAll(".turn, .folded").forEach((x) => io.observe(x));
+    const io = new IntersectionObserver((es) => {
+      setInView((prev) => {
+        const n = new Set(prev);
+        for (const e of es) e.isIntersecting ? n.add(+e.target.dataset.i) : n.delete(+e.target.dataset.i);
+        return n;
+      });
+      for (const e of es) if (e.isIntersecting && e.target.matches(".turn")) need(+e.target.dataset.i);
+    }, { root: el, rootMargin: "200px 0px 200px 0px" });
+    el.querySelectorAll("[data-i]").forEach((x) => io.observe(x));
     return () => io.disconnect();
-  }, [turns, level, opened]);
+  }, [idx, level, opened, bodies]);
 
   useEffect(() => {
-    if (!prefsOpen) return;
-    const off = (e) => !e.target.closest(".prefs, .aa") && setPrefsOpen(false);
+    if (!pop) return;
+    const off = (e) => !e.target.closest(".pop, .tx-bar button") && setPop(null);
     document.addEventListener("pointerdown", off);
     return () => document.removeEventListener("pointerdown", off);
-  }, [prefsOpen]);
+  }, [pop]);
 
   useEffect(() => {
     const onKey = (e) => {
       const t = e.target;
       if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
       if (["1", "2", "3"].includes(e.key)) { e.preventDefault(); setLevel(+e.key); }
-      else if (e.key === "r" && live) { e.preventDefault(); setQuote({ text: "" }); }
-      else if (e.key === "Escape") { setQuote(null); setShot(null); setPrefsOpen(false); }
+      else if (e.key === "r" && live) { e.preventDefault(); focusInput.current(); }
+      else if (e.key === "f") { e.preventDefault(); findQ.current = ""; setPop("find"); }
+      else if (e.key === "Escape") { setPop(null); setShot(null); setSel(null); CSS.highlights?.delete("tx-find"); }
     };
     const onSel = () => {
-      const sel = getSelection(), txt = sel?.toString().trim();
-      const node = sel?.anchorNode?.parentElement?.closest?.(".tx .prose[data-answer]");
-      if (!live || !txt || txt.length < 3 || !node) return setQuoteBtn(null);
-      const r = sel.getRangeAt(0).getBoundingClientRect(), b = box.current.getBoundingClientRect();
-      setQuoteBtn({ text: txt, x: Math.min(b.width - 130, Math.max(8, r.left - b.left + r.width / 2 - 56)), y: r.top - b.top - 42 });
+      const g = getSelection(), txt = g?.toString().trim();
+      const node = g?.anchorNode?.parentElement?.closest?.(".tx .col");
+      if (!txt || txt.length < 2 || !node || g.anchorNode.parentElement.closest(".composer")) return setSel(null);
+      const r = g.getRangeAt(0).getBoundingClientRect(), b = box.current.parentElement.getBoundingClientRect();
+      const below = touch || r.top - b.top < 60;
+      setSel({ text: txt, x: Math.min(b.width - 330, Math.max(8, r.left - b.left + r.width / 2 - 160)), y: below ? r.bottom - b.top + 10 : r.top - b.top - 46 });
     };
     addEventListener("keydown", onKey);
     document.addEventListener("selectionchange", onSel);
     return () => { removeEventListener("keydown", onKey); document.removeEventListener("selectionchange", onSel); };
   }, [level, live]);
 
+  const quote = (text) => { setQuotes((q) => [...q, text]); requestAnimationFrame(() => focusInput.current()); };
+  const selAct = (what, lead) => {
+    const text = sel.text;
+    getSelection().removeAllRanges();
+    setSel(null);
+    if (what === "copy") return copyText(text);
+    if (what === "find") { findQ.current = text; return setPop("find"); }
+    setQuotes((q) => [...q, text]);
+    if (what === "ask") setDraft((d) => d || lead + " ");
+    requestAnimationFrame(() => focusInput.current());
+  };
+
+  const send = async (text, retryId) => {
+    const id = retryId || Math.random().toString(36).slice(2);
+    const p = { id, text, at: Date.now(), state: "sending", queued: working };
+    setPending((ps) => [...ps.filter((x) => x.id !== id), p]);
+    atEnd.current = true;
+    try {
+      await api(`/api/sessions/${s.id || s.sessionId}/send`, { method: "POST", body: { text } });
+      setPending((ps) => ps.map((x) => (x.id === id ? { ...x, state: "sent" } : x)));
+      setTimeout(loadIdx, 1500);
+      return true;
+    } catch (e) {
+      setPending((ps) => ps.map((x) => (x.id === id ? { ...x, state: "failed", err: e.message } : x)));
+      return true;
+    }
+  };
+
   const onClick = (e) => {
     const j = e.target.closest("a[data-jump]");
     if (j) { e.preventDefault(); box.current.querySelector(j.getAttribute("href"))?.scrollIntoView({ behavior: "smooth", block: "start" }); }
   };
 
-  const send = async (text) => {
-    try {
-      await api(`/api/sessions/${s.id || s.sessionId}/send`, { method: "POST", body: { text } });
-      atEnd.current = true;
-      return true;
-    } catch (e) {
-      say(e.message);
-      return false;
-    }
-  };
-
-  const working = s.state === "working";
+  const last = turns[turns.length - 1], lastBody = last && bodies[last.from];
+  const running = working && lastBody && txSteps(lastBody.items).some((x) => !x.out);
+  const ask = live && !working && !pending.length && lastBody?.answer ? askOf(lastBody.answer) : null;
   const nFolded = turns.filter((_, i) => folded(i)).length;
+  const cost = turns.reduce((a, t) => a + (t.cost || 0), 0);
+  const files = new Set(turns.flatMap((t) => (t.files || []).filter((f) => !scratch(f.path)).map((f) => f.path))).size;
   return html`<div class="tx-wrap">
-    <div class="tx" ref=${box} onClick=${onClick} onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; }}>
+    <div class="tx" ref=${box} onClick=${onClick} onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; setSel(null); }}>
       <div class="tx-bar">
-        <span class="count">${turns.length > 0 && `${turns.length} turn${turns.length > 1 ? "s" : ""}${start > 0 ? " shown" : ""}`}</span>
+        <span class="count">${turns.length > 0 && `${turns.length} turn${turns.length > 1 ? "s" : ""}${txUsd(cost) ? ` · ${txUsd(cost)}` : ""}`}</span>
+        <button class="tb" aria-pressed=${pop === "find"} onClick=${() => { findQ.current = ""; setPop(pop === "find" ? null : "find"); }} title="Find in this session (f)"><svg width="15" height="15" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
+        <button class="tb" aria-pressed=${pop === "results"} onClick=${() => setPop(pop === "results" ? null : "results")} title="What this session produced"><svg width="15" height="15" viewBox="0 0 16 16"><path d="M3 2.5h7l3 3v8H3z M10 2.5v3h3 M5.5 8.5h5M5.5 11h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>${files > 0 && html`<span class="n">${files}</span>`}</button>
         <${Zoom} level=${level} set=${setLevel} />
-        <button class="aa" aria-expanded=${prefsOpen} onClick=${() => setPrefsOpen(!prefsOpen)} title="Reading settings" aria-label="Reading settings">Aa</button>
-        ${prefsOpen && html`<${Prefs} prefs=${prefs} set=${setPrefs} />`}
+        <button class="tb aa" aria-pressed=${pop === "prefs"} onClick=${() => setPop(pop === "prefs" ? null : "prefs")} title="Reading settings">Aa</button>
+        ${pop === "prefs" && html`<${Prefs} prefs=${prefs} set=${setPrefs} />`}
+        ${pop === "find" && html`<${Find} turns=${turns} s=${s} go=${go} close=${() => setPop(null)} init=${findQ.current} key=${findQ.current} />`}
+        ${pop === "results" && html`<${Results} turns=${turns} s=${s} bodies=${bodies} need=${need} go=${go} close=${() => setPop(null)} />`}
       </div>
       <div class="frame">
         <main class="col">
           ${err && html`<p class="err">${err}</p>`}
-          ${msgs === null && !err && html`<p class="cont">Reading the transcript…</p>`}
-          ${msgs && turns.length === 0 && html`<p class="cont">No messages yet.</p>`}
-          ${start > 0 && html`<button class="earlier-load" onClick=${() => { atEnd.current = false; load(start); }}>Load earlier turns</button>`}
+          ${idx === null && !err && html`<div class="skeleton big"><i></i><i></i><i></i><i></i></div>`}
+          ${idx && turns.length === 0 && !pending.length && html`<p class="cont empty">No messages yet.${live ? " Write the first one below." : ""}</p>`}
           ${level === 1 ? html`<${Outline} turns=${turns} go=${go} />` : html`
             ${nFolded > 0 && html`<div class="earlier"><span>${nFolded} earlier turn${nFolded > 1 ? "s" : ""} you've read</span><button onClick=${() => setOpened(new Set(turns.map((_, i) => i)))}>Open all</button></div>`}
             ${turns.map((t, i) => folded(i)
-              ? html`<${Folded} key=${`f${i}`} t=${t} i=${i} open=${openTurn} />`
-              : html`${i === firstOpen && firstOpen > 0 && html`<div class="since">${firstOpen === turns.length - 1 ? "Latest" : `${turns.length - firstOpen} new since you last read`}</div>`}<${Turn} key=${`t${i}`} t=${t} i=${i} s=${s} level=${level} zoom=${setShot} reply=${live ? setQuote : null} latest=${i === turns.length - 1} live=${working && i === turns.length - 1} />`)}
-            ${working && !txSteps(turns[turns.length - 1] || { items: [] }).some((x) => !x.out) && html`<p class="live-line"><span class="dot"></span>${s.activity || "Working"}</p>`}
+              ? html`<${Folded} key=${`f${t.from}`} t=${t} i=${i} open=${openTurn} />`
+              : html`${i === firstOpen && firstOpen > 0 && html`<div class="since">${firstOpen === turns.length - 1 ? "Latest" : `${turns.length - firstOpen} new since you last read`}</div>`}<${Turn} key=${`t${t.from}`} t=${t} i=${i} s=${s} body=${bodies[t.from]} level=${level} zoom=${setShot} quote=${live ? quote : null} latest=${i === turns.length - 1} live=${working && i === turns.length - 1} />`)}
+            ${pending.map((p) => html`<${Pending} key=${p.id} p=${p} retry=${() => send(p.text, p.id)} drop=${() => setPending((ps) => ps.filter((x) => x.id !== p.id))} />`)}
+            ${working && !running && html`<${Thinking} since=${last?.end} />`}
           `}
         </main>
       </div>
-      ${quoteBtn && !quote && html`<button class="quote-btn" style=${`left:${quoteBtn.x}px;top:${quoteBtn.y + box.current.scrollTop}px`} onMouseDown=${(e) => e.preventDefault()} onClick=${() => { setQuote(quoteBtn); setQuoteBtn(null); }}>Reply to this</button>`}
+      ${sel && html`<${SelBar} sel=${{ ...sel, y: sel.y + (box.current?.scrollTop || 0) - 0 }} live=${live} act=${selAct} />`}
     </div>
     ${level !== 1 && html`<${Scrub} turns=${turns} inView=${inView} go=${go} />`}
-    ${live && level !== 1 && (quote ? html`<${Composer} quote=${quote} send=${send} close=${() => setQuote(null)} />`
-      : html`<button class="dock" onClick=${() => setQuote({ text: "" })}><span>Reply to Claude</span>${!touch && html`<kbd>r</kbd>`}</button>`)}
+    ${live && level !== 1 && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} ask=${ask} focusRef=${focusInput} working=${working} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
   </div>`;
+}
+
+function Thinking({ since }) {
+  useNow(1000);
+  const ms = since ? Date.now() - new Date(since) : 0;
+  return html`<p class="live-line"><span class="dot"></span>${ms > 3000 ? `Thinking · ${txSpan(ms)}` : "Working"}</p>`;
 }
 
 const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);

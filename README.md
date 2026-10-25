@@ -79,12 +79,28 @@ needs the token either way.
 - Open one to get its terminal. Close the tab whenever you like; the session keeps going.
 - **Transcript** is the conversation as something to read, and it opens at the end: your last
   prompt at the top, Claude's reply below it, and the turns you have already read folded into one
-  line each above (the ones that arrived since you last looked stay open). What Claude did between
-  your prompt and its reply folds into one line too ("Ran 12 commands, changed 3 files"); open it
-  for each step: commands with their output, edits as diffs, screenshots it looked at, pages it
-  searched, and the questions it asked you with the answer you picked. **Outline**, **Story** and
-  **Everything** (`1` `2` `3`) choose how much to show, **Aa** sets the typeface, size and line
-  length, and the bar at the bottom (`r`) replies to the session, quoting any passage you select.
+  line each above (the ones that arrived since you last looked stay open). It covers the whole
+  session however long it is: atc keeps an index of every turn and loads a turn only when you open
+  it. What Claude did between your prompt and its reply reads as a short story told in its own
+  words, one line per part of the work, with what came out of it as badges: tests passed or
+  failed, commits, pushes, deploys, published pages. Open it for each step: commands with their
+  output, edits as diffs, screenshots it looked at, pages it searched, agents it started (as their
+  own thread), and the questions it asked you with the answer you picked; reading and searching
+  steps fold into one "Looked at" line. While a session works, its latest steps stay open with a
+  timer on the running one.
+  - **Outline**, **Story** and **Everything** (`1` `2` `3`) choose how much to show; **Aa** sets
+    the typeface, size and line length.
+  - **Find** (`f`) searches the whole session (prompts, replies, commands, file names) and filters
+    to the turns with failures, commits, changed files, deploys or questions.
+  - **What this session produced** lists the files it changed (open one for all its edits as one
+    diff), its commits, pushes, deploys, published pages and running servers.
+  - The box at the bottom (`r`) writes to the session: Enter sends, Shift+Enter is a new line, and
+    a draft is kept per session. Attach files with the clip, by pasting or by dropping them;
+    dictate with the mic. A message shows in the transcript the moment you send it, and stays
+    there with "Try again" if it could not be sent. When the reply ends on a question, the box
+    offers one-tap answers from it, and a long reply gets its summary on top.
+  - Select any text for **Quote**, **Explain**, **Push back** or **Do this** (each quotes it into
+    the box with a start you can edit), **Copy** or **Find**.
 - **New session** starts Claude in any folder, with an optional name and first message.
 - **Earlier** lists past conversations. Open one and press **Resume** to continue it.
 - On a phone, a row of keys above the keyboard gives you Esc, Tab, Shift+Tab, Ctrl and arrows.

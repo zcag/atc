@@ -109,6 +109,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sessions/{sid}/transcript", s.transcript)
 	mux.HandleFunc("GET /api/sessions/{sid}/turns", s.turns)
 	mux.HandleFunc("GET /api/sessions/{sid}/search", s.search)
+	mux.HandleFunc("GET /api/sessions/{sid}/agents/{tool}", s.agent)
 	mux.HandleFunc("GET /api/sessions/{sid}/summary", s.summary)
 	mux.HandleFunc("POST /api/sessions/{sid}/summary", s.summary)
 	mux.HandleFunc("POST /api/sessions/{sid}/upload", s.upload)
@@ -347,6 +348,25 @@ func (s *Server) turns(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, map[string]any{"turns": turns, "size": size})
+}
+
+func (s *Server) agent(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.M.Index.Find(r.PathValue("sid"))
+	if !ok {
+		http.Error(w, "no transcript", http.StatusNotFound)
+		return
+	}
+	p, err := history.ReadAgent(t.Path, r.PathValue("tool"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusNotFound)
+		return
+	}
+	for i, m := range p.Messages {
+		if u := m.Usage; u != nil {
+			p.Messages[i].Cost = Priced(m.Model, *u)
+		}
+	}
+	reply(w, p)
 }
 
 func (s *Server) search(w http.ResponseWriter, r *http.Request) {
