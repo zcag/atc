@@ -40,7 +40,7 @@ const tilde = (p) => {
   const m = p.match(/^\/(home|Users)\/[^/]+(\/.*)?$/);
   return m ? "~" + (m[2] || "") : p;
 };
-let MULTI = false;
+let MULTI = false, HERE = "";
 let VOICE = {};
 let VOICE_OK = false;
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -99,6 +99,15 @@ function App() {
   const route = useRoute();
   const [stale, setStale] = useState(null);
   const [starting, setStarting] = useState(false);
+  const [view, setViewRaw] = useState(() => ({ list: "classic", rail: false, ...stored(VIEW, {}) }));
+  const setView = (v) => { setViewRaw(v); store(VIEW, v); };
+  const wide = useWide();
+  const railed = view.rail && !!route && wide;
+  const [fly, setFly] = useState(false);
+  const flyT = useRef(0);
+  const flyIn = (ms) => { clearTimeout(flyT.current); flyT.current = setTimeout(() => setFly(true), ms); };
+  const flyOut = (ms) => { clearTimeout(flyT.current); flyT.current = setTimeout(() => setFly(false), ms); };
+  useEffect(() => setFly(false), [route]);
   useNow(30000);
 
   useEffect(() => {
@@ -223,10 +232,12 @@ function App() {
     .concat((live || []).filter((x) => x.parked))
     .concat(bay("stopped"));
   const keys = useRef({});
-  keys.current = { ordered, route, cursor, creating };
+  keys.current = { ordered, route, cursor, creating, list: view.list, fly, setFly };
   useEffect(() => {
     const step = (from, d) => {
-      const list = keys.current.ordered;
+      const k = keys.current;
+      const shown = [...document.querySelectorAll(".board [data-sid]:not(.row)")].map((el) => k.ordered.find((x) => x.sessionId === el.dataset.sid)).filter(Boolean);
+      const list = k.list === "classic" ? k.ordered : [...new Set(shown)];
       if (!list.length) return null;
       const i = list.findIndex((x) => keyOf(x) === from || x.sessionId === from);
       return list[Math.max(0, Math.min(list.length - 1, i < 0 ? (d > 0 ? 0 : list.length - 1) : i + d))];
@@ -264,7 +275,7 @@ function App() {
       } else if (e.key === "?") {
         setHelp((h) => !h);
       } else if (e.key === "Escape") {
-        setHelp(false); setCursor(null); setUsage(false);
+        setHelp(false); setCursor(null); setUsage(false); k.setFly(false);
       }
     };
     addEventListener("keydown", onKey, true);
@@ -276,6 +287,7 @@ function App() {
   HOME = me.home || HOME;
   CLAUDE_THEME = me.claudeTheme || CLAUDE_THEME;
   MULTI = (me.hosts || []).length > 1;
+  HERE = me.host || "";
   VOICE = me.voice || {};
   VOICE_OK = !!VOICE.stt;
   const down = (me.peers || []).filter((p) => p.error);
@@ -291,20 +303,28 @@ function App() {
   };
 
   return html`
-    <div class="shell ${route ? "open" : ""}">
-      <aside class="side">
+    <div class="shell ${route ? "open" : ""} ${railed ? "railed" : ""} ${railed && fly ? "fly" : ""}">
+      <aside class="side" onPointerEnter=${railed ? () => fly && clearTimeout(flyT.current) : null} onPointerLeave=${railed ? () => flyOut(350) : null}>
+        ${railed && html`<${Rail} live=${all} sel=${sel} onHover=${() => flyIn(180)} onPick=${(name) => { TABS.set(name); clearTimeout(flyT.current); setFly(true); }} />`}
+        <div class="sidebody">
         <header class="top">
           <span class="mark">atc</span>
           <span class="host">${me.host ? `on ${(me.hosts || [me.host]).join(" + ")}` : ""}</span>
           <span class="conn ${up ? "" : "down"}" title=${up ? "Live" : "Reconnecting"}></span>
           ${down.length > 0 && html`<span class="tag" title=${down.map((p) => `${p.name}: ${p.error}`).join("\n")}>${down.map((p) => p.name).join(", ")} unreachable</span>`}
           <span class="grow"></span>
+          <${Menu} cls="btn talk" aria="List style" width=${230} label=${html`<span class="mi">${ICON.layout}</span>`} items=${[
+            ...LISTS.map(([k, label, hint]) => ({ cls: `viewitem ${view.list === k ? "on" : ""}`, title: hint, run: () => setView({ ...view, list: k }), label: html`<span>${label}</span>${view.list === k && "✓"}` })),
+            { cls: `viewitem ${view.rail ? "on" : ""}`, title: "While a session is open on a wide screen, the list folds into a strip of projects; hover or click it to bring the list back",
+              run: () => setView({ ...view, rail: !view.rail }), label: html`<span>Fold into a rail while reading</span>${view.rail && "✓"}` },
+          ]} />
           <button class="btn talk" onClick=${() => setPalette(true)} title=${`Search and commands (${MAC ? "⌘" : "Ctrl+"}K)`} aria-label="Search and commands"><span class="mi">${ICON.search}</span></button>
           ${VOICE_OK && html`<button class="btn talk" onClick=${() => (location.hash = "#/assist")} title="Talk to Claude (t)"><span class="mi">${MIC}</span></button>`}
           <button class="btn talk" onClick=${() => setCreating(true)} title="New session (n)" aria-label="New session"><span class="mi">${ICON.plus}</span></button>
         </header>
-        <${Board} live=${live} sel=${sel} cursor=${cursor} onPast=${remember} />
+        <${Board} live=${live} sel=${sel} cursor=${cursor} onPast=${remember} mode=${view.list} />
         <${UsageFoot} limits=${limits} onOpen=${() => setUsage(true)} />
+        </div>
       </aside>
       <main class="main">
         ${sel
@@ -353,6 +373,46 @@ function App() {
         </div>
       </div>`}
   `;
+}
+
+const VIEW = "atc.view";
+const LISTS = [
+  ["classic", "Classic", "Cards grouped by state"],
+  ["triage", "Triage", "What waits on you first, as cards you can answer from; the rest as one-line rows"],
+  ["lanes", "Project lanes", "Grouped by project, with each project's recent sessions and a day of activity"],
+];
+
+function monograms(names) {
+  const out = new Map(), used = new Set();
+  for (const n of [...names].sort((a, b) => a.length - b.length)) {
+    let m = n === "~" ? "~" : n.slice(0, 2);
+    if (used.has(m)) m = n[0] + n.at(-1);
+    used.add(m);
+    out.set(n, m);
+  }
+  return out;
+}
+
+function Rail({ live, sel, onHover, onPick }) {
+  const cur = sel && project(sel.cwd).name;
+  const tabs = projectTabs(live, cur);
+  const mono = monograms(tabs.map((t) => t.name));
+  return html`
+    <nav class="rail" aria-label="Projects">
+      <button class="rmark" title="Every project" onPointerEnter=${onHover} onClick=${() => onPick(null)}>atc</button>
+      ${tabs.map((t) => {
+        const wait = t.pips.filter((p) => p !== "working");
+        return html`
+          <button class="av ${t.name === cur ? "on" : ""}" style=${`--ph: ${hueOf(t.name)}`} title=${`${t.name}${t.summary ? `: ${t.summary}` : ""}`}
+            onPointerEnter=${onHover} onClick=${() => onPick(t.name)}>
+            ${mono.get(t.name)}
+            ${t.pips.includes("working") && html`<i class="busy"></i>`}
+            ${wait.length > 0 && html`<span class="badge ${wait[0]}">${wait.length}</span>`}
+          </button>`;
+      })}
+      <span class="grow"></span>
+      <button class="icon" title="Search and commands" aria-label="Search and commands" onClick=${() => PALETTE_OPEN()}>${ICON.search}</button>
+    </nav>`;
 }
 
 function Assist({ live, busy, onTalk, onOpen }) {
@@ -409,7 +469,7 @@ function Login({ onDone }) {
   `;
 }
 
-function Board({ live: all, sel, cursor, onPast }) {
+function Board({ live: all, sel, cursor, onPast, mode = "classic" }) {
   const [q, setQ] = useState("");
   const [only, setOnlyRaw] = useState(() => { try { return localStorage.getItem("atc.project") || null; } catch { return null; } });
   const setOnly = (v) => setOnlyRaw((o) => {
@@ -438,13 +498,13 @@ function Board({ live: all, sel, cursor, onPast }) {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      api(`/api/history?limit=${limit}&q=${encodeURIComponent(q)}`).then((list) => {
+      api(`/api/history?limit=${mode === "lanes" ? limit + 30 : limit}&q=${encodeURIComponent(q)}`).then((list) => {
         setHist(list || []);
         onPast(list || []);
       }, () => setHist([]));
     }, q ? 200 : 0);
     return () => clearTimeout(t);
-  }, [q, limit]);
+  }, [q, limit, mode === "lanes"]);
 
   const boardRef = useRef();
   useFlip(boardRef, all);
@@ -458,8 +518,29 @@ function Board({ live: all, sel, cursor, onPast }) {
   const waiting = active.filter((s) => s.state !== "working").length;
   const working = active.length - waiting;
 
+  const search = html`
+    <div class="search">
+      <input type="search" placeholder="Search titles, prompts and folders  /" value=${q} onInput=${(e) => setQ(e.target.value)} />
+    </div>`;
+  const past = html`
+    ${dayGroups(earlier).map(([label, list]) => html`
+      <h3>${label}</h3>
+      <div class="rack rows">${list.map((s) => html`<${Strip} key=${s.sessionId} s=${s} sel=${sel} size="row" />`)}</div>`)}
+    ${hist && hist.length >= limit && html`<button class="btn more" onClick=${() => setLimit(limit + 30)}>Show more</button>`}
+    ${hist && earlier.length === 0 && html`<p class="calm">${q ? "No earlier sessions match." : only ? `No earlier sessions in ${only} yet.` : "No earlier sessions."}</p>`}`;
+  const earlierBay = html`<section class="bay earlier"><h2>Earlier</h2>${search}${past}</section>`;
+  const classic = html`
+    ${live.length === 0
+      ? html`<p class="calm">${only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below."}</p>`
+      : !waiting && html`<p class="calm">${working ? `Nothing needs you. ${working} working.` : "All quiet."}</p>`}
+    ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
+    ${BAYS.filter(([st]) => st !== "stopped").map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
+    <${Bay} title="Parked" list=${parked} sel=${sel} cursor=${cursor} size="slim" dim />
+    <${Bay} title="Stopped" list=${rest.filter((s) => s.state === "stopped")} sel=${sel} cursor=${cursor} size="slim" />
+    ${earlierBay}`;
+
   return html`
-    <div class="board" ref=${boardRef} style=${tabs.length > 1 ? "--stick: 40px" : "--stick: 0px"}>
+    <div class="board ${mode === "classic" ? "" : "v2"}" ref=${boardRef} style=${tabs.length > 1 ? "--stick: 40px" : "--stick: 0px"}>
       ${tabs.length > 1 && html`
         <nav class="projtabs" aria-label="Projects">
           <button class=${only ? "" : "on"} onClick=${() => setOnly(null)}>All</button>
@@ -470,26 +551,90 @@ function Board({ live: all, sel, cursor, onPast }) {
               ${t.pips.length > 0 && html`<span class="pips">${t.pips.slice(0, 5).map((st) => html`<i class=${st}></i>`)}${t.pips.length > 5 && html`<em>+${t.pips.length - 5}</em>`}</span>`}
             </button>`)}
         </nav>`}
-      ${live.length === 0
-        ? html`<p class="calm">${only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below."}</p>`
-        : !waiting && html`<p class="calm">${working ? `Nothing needs you. ${working} working.` : "All quiet."}</p>`}
-      ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
-      ${BAYS.filter(([st]) => st !== "stopped").map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
-      <${Bay} title="Parked" list=${parked} sel=${sel} cursor=${cursor} size="slim" dim />
-      <${Bay} title="Stopped" list=${rest.filter((s) => s.state === "stopped")} sel=${sel} cursor=${cursor} size="slim" />
-      <section class="bay earlier">
-        <h2>Earlier</h2>
-        <div class="search">
-          <input type="search" placeholder="Search titles, prompts and folders  /" value=${q} onInput=${(e) => setQ(e.target.value)} />
-        </div>
-        ${dayGroups(earlier).map(([label, list]) => html`
-          <h3>${label}</h3>
-          <div class="rack rows">${list.map((s) => html`<${Strip} key=${s.sessionId} s=${s} sel=${sel} size="row" />`)}</div>`)}
-        ${hist && hist.length >= limit && html`<button class="btn more" onClick=${() => setLimit(limit + 30)}>Show more</button>`}
-        ${hist && earlier.length === 0 && html`<p class="calm">${q ? "No earlier sessions match." : only ? `No earlier sessions in ${only} yet.` : "No earlier sessions."}</p>`}
-      </section>
+      ${mode === "triage" ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />${earlierBay}`
+        : mode === "lanes" ? html`${search}${q ? past : html`<${Lanes} live=${live} earlier=${earlier} only=${only} setOnly=${setOnly} sel=${sel} cursor=${cursor}
+            more=${hist && hist.length >= limit + 30 && (() => setLimit(limit + 30))} />`}`
+        : classic}
     </div>
   `;
+}
+
+const byRecent = (a, b) => (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
+
+function Triage({ live, only, sel, cursor }) {
+  const wait = live.filter((s) => !s.parked && (s.state === "needs-you" || s.state === "your-turn"))
+    .sort((a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1));
+  const work = live.filter((s) => s.state === "working");
+  const rest = live.filter((s) => !wait.includes(s) && !work.includes(s)).sort((a, b) => !!b.pinned - !!a.pinned || !!a.parked - !!b.parked);
+  const name = (s) => html`<b>${s.title || "Untitled"}</b>`;
+  const busy = work.length ? ` ${work.length} working.` : "";
+  const brief = wait.length > 1 ? html`${name(wait[0])} and ${wait.length - 1} more are waiting on you.${busy}`
+    : wait.length ? html`${name(wait[0])} is waiting on you.${busy}`
+    : work.length ? `Nothing needs you.${busy}`
+    : live.length ? "All quiet."
+    : only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below.";
+  return html`
+    <p class="brief">${brief}</p>
+    <${Bay} title="Your turn" list=${wait} sel=${sel} cursor=${cursor} size="card" />
+    <${Bay} title="Working" list=${work} sel=${sel} cursor=${cursor} size="work" />
+    <${Bay} title=${rest.some((s) => s.state !== "stopped") ? "Parked and stopped" : "Stopped"} list=${rest} sel=${sel} cursor=${cursor} size="line" />`;
+}
+
+function lanesOf(live, earlier) {
+  const by = new Map();
+  const add = (s, k) => {
+    const n = project(s.cwd).name;
+    if (!by.has(n)) by.set(n, { name: n, live: [], past: [] });
+    by.get(n)[k].push(s);
+  };
+  live.forEach((s) => add(s, "live"));
+  earlier.forEach((s) => add(s, "past"));
+  return [...by.values()].map((l) => ({ ...l,
+    rank: Math.min(9, ...l.live.filter((s) => !s.parked).map((s) => RANK[s.state] ?? 9)),
+    recent: Math.max(0, ...[...l.live, ...l.past].map((s) => Date.parse(s.updated || 0) || 0)),
+  })).sort((a, b) => a.rank - b.rank || b.recent - a.recent);
+}
+
+function Ribbon({ list }) {
+  const n = 48, now = Date.now(), span = 864e5, t0 = now - span, slots = Array(n).fill(0);
+  const at = (t) => Math.floor(((t - t0) / span) * n);
+  for (const s of list) {
+    const b = s.state === "working" ? now : Date.parse(s.updated || 0) || 0;
+    const a = Math.min(b, Date.parse(s.promptAt || 0) || b);
+    if (b < t0) continue;
+    for (let i = Math.max(0, at(a)); i <= Math.min(n - 1, at(b)); i++) slots[i]++;
+  }
+  const max = Math.max(1, ...slots);
+  return html`<span class="ribbon" title="Activity over the last 24 hours" aria-hidden="true">${slots.map((v) => html`<i class=${v ? "on" : ""} style=${`height: ${v ? 4 + (8 * v) / max : 2}px`}></i>`)}</span>`;
+}
+
+function Lanes({ live, earlier, only, setOnly, sel, cursor, more }) {
+  const [opened, setOpened] = useState({});
+  const lanes = lanesOf(live, earlier);
+  if (!lanes.length) return html`<p class="calm">${only ? `Nothing in ${only} yet.` : "No sessions yet."}</p>`;
+  const recent = Date.now() - 6 * 3600e3;
+  return lanes.map((l) => {
+    const all = [...l.live, ...l.past];
+    const warm = only === l.name || opened[l.name] || l.live.some((s) => !s.parked && s.state !== "stopped") || l.recent > recent;
+    if (!warm) return html`
+      <button class="lane cold" style=${`--ph: ${hueOf(l.name)}`} onClick=${() => setOpened({ ...opened, [l.name]: true })}>
+        <span class="nm">${l.name}</span><span class="sum">${all.length} · ${ago([...all].sort(byRecent)[0])}</span>
+      </button>`;
+    const count = (f) => l.live.filter((s) => !s.parked && f(s)).length;
+    const sum = [[count((s) => s.state === "needs-you" || s.state === "your-turn"), "your turn"], [count((s) => s.state === "working"), "working"]]
+      .filter(([k]) => k).map(([k, w]) => `${k} ${w}`).join(" · ") || `${all.length} session${all.length > 1 ? "s" : ""}`;
+    const past = only === l.name ? l.past : l.past.slice(0, l.live.length ? 2 : 3);
+    const hidden = l.past.length - past.length;
+    return html`
+      <section class="lane" style=${`--ph: ${hueOf(l.name)}`}>
+        <button class="lh" title=${only === l.name ? "Show every project" : `Show only ${l.name}`} onClick=${() => setOnly(only === l.name ? null : l.name)}>
+          <span class="nm">${l.name}</span><span class="sum">${sum}</span><${Ribbon} list=${all} />
+        </button>
+        ${[...l.live, ...past].map((s) => html`<${Strip} key=${s.sessionId} s=${s} sel=${sel} cursor=${cursor} size="lrow" />`)}
+        ${hidden > 0 && html`<button class="lmore" onClick=${() => setOnly(l.name)}>${hidden} earlier</button>`}
+        ${only === l.name && more && html`<button class="lmore" onClick=${more}>Show more</button>`}
+      </section>`;
+  });
 }
 
 function Bay({ title, list, sel, cursor, dim, size = "full" }) {
@@ -497,7 +642,7 @@ function Bay({ title, list, sel, cursor, dim, size = "full" }) {
   return html`
     <section class="bay ${dim ? "parked" : ""}">
       <h2>${title} <span class="n">${list.length}</span></h2>
-      <div class="rack">${list.map((s) => html`<${Strip} key=${s.sessionId} s=${s} sel=${sel} cursor=${cursor} size=${size} />`)}</div>
+      <div class="rack r-${size}">${list.map((s) => html`<${Strip} key=${s.sessionId} s=${s} sel=${sel} cursor=${cursor} size=${size} />`)}</div>
     </section>
   `;
 }
@@ -526,7 +671,7 @@ function useFlip(ref, list) {
     if (!root) return;
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
     const next = new Map(), moved = [];
-    for (const el of root.querySelectorAll(".strip[data-sid]:not(.row)")) {
+    for (const el of root.querySelectorAll("[data-sid]:not(.row)")) {
       const sid = el.dataset.sid, r = el.getBoundingClientRect(), prev = rects.current.get(sid);
       const t = new DOMMatrixReadOnly(getComputedStyle(el).transform);
       const at = { left: r.left - t.m41, top: r.top - t.m42 };
@@ -571,6 +716,7 @@ const ICON = {
   pin: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 1.5l5 5-2 .5-2.5 2.5.5 3-1.5 1.5L6 10l-3.5 3.5M6 10L2.5 6.5 4 5l3 .5L9.5 3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   park: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 106.5 6.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   play: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z" fill="currentColor"/></svg>`,
+  layout: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 2.5v11M8.5 6h3M8.5 9h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
   more: html`<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="12.5" cy="8" r="1.3" fill="currentColor"/></svg>`,
 };
 
@@ -586,10 +732,45 @@ function HoverActions({ s, menu }) {
     </span>`;
 }
 
-function said(s) {
-  if (s.state === "working") return html`<div class="said doing" key=${s.activity}>${oneLine(s.activity) || "Working…"}</div>`;
+const cmdName = (c) => {
+  const seg = c.split(/&&|\|\||;|\|/).map((x) => x.trim()).find((x) => x && !/^(cd|export|set|[A-Z_]+=\S*)(\s|$)/.test(x)) || c;
+  return seg.replace(/^((sudo|env|time|nohup|timeout\s+\S+)\s+)+/, "").split(/\s+/)[0].split("/").pop();
+};
+
+function doing(s) {
+  const a = oneLine(s.activity), m = a.match(/^(\w+)\s+(.+)$/);
+  if (!m) return a || "Working…";
+  const [, tool, rest] = m, file = rest.split("/").filter(Boolean).pop();
+  if (tool === "Bash") return /[&|;$<>`]|^(cd|cat|sed|grep|ls|find|curl|git|ssh|python3?|node|go|make|npm|uv)\s/.test(rest) ? `Running ${cmdName(rest)}` : rest;
+  return { Read: `Reading ${file}`, Edit: `Editing ${file}`, MultiEdit: `Editing ${file}`, Write: `Writing ${file}`, Grep: `Searching for ${rest}`,
+    Glob: `Looking for ${rest}`, WebFetch: `Reading ${rest}`, WebSearch: `Searching the web for ${rest}`, Agent: `Agent: ${rest}`, Task: `Agent: ${rest}` }[tool]
+    || `${toolName(tool)}: ${rest}`;
+}
+
+const headline = (s) => {
+  if (s.state === "needs-you" && s.activity) return `Waiting on you: ${oneLine(s.activity)}`;
+  const t = s.summary?.status?.replace(/^[A-Z][a-z]+:\s+/, "") || oneLine(s.lastReply) || oneLine(s.lastPrompt);
+  return t ? t[0].toUpperCase() + t.slice(1) : "";
+};
+const replyable = (s) => s.attachable && s.state === "your-turn" && !s.asks?.length && s.summary?.replies?.length > 0;
+const elsewhere = (s) => MULTI && s.host && s.host !== HERE && html`<span class="host">${s.host}</span>`;
+
+function CardReplies({ s }) {
+  const [busy, setBusy] = useState(false);
+  const pick = (e, text) => {
+    e.stopPropagation();
+    setBusy(true);
+    api(`/api/sessions/${s.id}/send`, { method: "POST", body: { text, suggested: true } }).catch(() => setBusy(false));
+  };
+  return html`<div class="chips" role="group" aria-label="Quick replies" onPointerDown=${(e) => e.stopPropagation()}>
+    ${s.summary.replies.map((t) => html`<button disabled=${busy} title=${`Send “${t}”`} onClick=${(e) => pick(e, t)}>${t}</button>`)}
+  </div>`;
+}
+
+function said(s, human) {
+  if (s.state === "working") return html`<div class="said doing" key=${s.activity}>${human ? doing(s) : oneLine(s.activity) || "Working…"}</div>`;
   if (s.state === "needs-you" && s.activity) return html`<div class="said ask">Waiting on you: ${oneLine(s.activity)}</div>`;
-  if ((s.state === "your-turn" || s.state === "needs-you") && s.summary) return html`<div class="said reply">${s.summary.status}</div>`;
+  if ((s.state === "your-turn" || s.state === "needs-you") && s.summary) return html`<div class="said reply">${human ? headline(s) : s.summary.status}</div>`;
   if ((s.state === "your-turn" || s.state === "needs-you") && s.lastReply) return html`<div class="said reply">${oneLine(s.lastReply)}</div>`;
   return s.lastPrompt ? html`<div class="said">${oneLine(s.lastPrompt)}</div>` : null;
 }
@@ -617,6 +798,36 @@ function Strip({ s, sel, cursor, size = "full" }) {
   };
   const tip = [s.title, [WORD[s.state] || s.state, s.id || s.sessionId.slice(0, 8), model(s.model)].filter(Boolean).join(" · ")].join("\n");
   const cls = `strip ${size} ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}`;
+  if (["card", "work", "line", "lrow"].includes(size)) {
+    const c = `it ${size} ${s.state} ${s.parked ? "parked" : ""} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}`;
+    const attrs = { class: c, style: `--ph: ${hueOf(project(s.cwd).name)}`, "data-sid": s.sessionId, "data-state": s.state, title: tip, "aria-current": on ? "true" : null, ...events };
+    const glyph = html`<i class="g ${s.parked && s.state !== "working" ? "parked" : s.state} ${unread(s) ? "unread" : ""}" aria-hidden="true"></i>`;
+    const acts = s.state !== "past" && html`<${HoverActions} s=${s} menu=${menu} />`;
+    const when = html`<span class="when" title=${new Date(s.updated || 0).toLocaleString()}>${s.state === "working" ? html`<${Elapsed} s=${s} />` : ago(s)}</span>`;
+    if (size === "card") return html`
+      <div ...${attrs} role="button" tabindex="0" onKeyDown=${(e) => e.key === "Enter" && e.target === e.currentTarget && go(keyOf(s))}>
+        ${acts}
+        <div class="c1">${glyph}<span class="title">${s.title || "Untitled"}</span><${ProjectTag} path=${s.cwd} />${elsewhere(s)}${when}</div>
+        <div class="hl">${headline(s)}</div>
+        ${s.summary?.gist?.length > 0 && html`<ul class="gist">${s.summary.gist.slice(0, 2).map((g) => html`<li>${g}</li>`)}</ul>`}
+        ${replyable(s) && html`<${CardReplies} s=${s} />`}
+      </div>`;
+    if (size === "work") return html`
+      <button ...${attrs}>
+        ${acts}
+        <span class="ring"><${Elapsed} s=${s} /></span>
+        <span class="title">${s.title || "Untitled"}</span>
+        <span class="tags"><${ProjectTag} path=${s.cwd} />${elsewhere(s)}</span>
+        <span class="doing" key=${s.activity}>${doing(s)}</span>
+      </button>`;
+    return html`
+      <button ...${attrs}>
+        ${acts}
+        ${glyph}<span class="title">${s.title || "Untitled"}</span>
+        ${size === "line" && html`<${ProjectTag} path=${s.cwd} />`}${elsewhere(s)}${when}
+        ${size === "lrow" && said(s, true)}
+      </button>`;
+  }
   if (size === "row") return html`
     <button class=${cls} data-sid=${s.sessionId} data-state=${s.state} title=${tip} aria-current=${on ? "true" : null} ...${events}>
       <span class="title">${s.title || "Untitled"}</span>
@@ -906,7 +1117,7 @@ function SummaryBar({ s, say, onFull }) {
   };
   const again = () => api(`/api/sessions/${s.sessionId}/summary`, { method: "POST" }).then(() => say("Summarizing again…"), (e) => say(e.message));
   const full = () => { setSheet(false); onFull(); };
-  const chips = s.attachable && s.state === "your-turn" && !s.asks?.length && x.replies?.length > 0;
+  const chips = replyable(s);
   const pick = (text) => {
     setSending(true);
     api(`/api/sessions/${s.id}/send`, { method: "POST", body: { text, suggested: true } }).catch((e) => say(e.message)).finally(() => setSending(false));
