@@ -21,12 +21,12 @@ import (
 var Prompt string
 
 const (
-	verbatimUpTo  = 160
-	overviewFrom  = 1200
-	keep          = 400
-	retryAfter    = 10 * time.Minute
-	maxAttempts   = 3
-	verbatimModel = "verbatim"
+	verbatimUpTo = 160
+	overviewFrom = 1200
+	maxReplies   = 3
+	keep         = 400
+	retryAfter   = 10 * time.Minute
+	maxAttempts  = 3
 )
 
 type Summary struct {
@@ -34,6 +34,7 @@ type Summary struct {
 	Status   string    `json:"status"`
 	Gist     []string  `json:"gist,omitempty"`
 	Overview []string  `json:"overview,omitempty"`
+	Replies  []string  `json:"replies,omitempty"`
 	Model    string    `json:"model"`
 	At       time.Time `json:"at"`
 }
@@ -186,18 +187,21 @@ func (s *Summarizer) make(j job) (Summary, error) {
 		return Summary{}, err
 	}
 	text = strings.TrimSpace(text)
-	if line := clean(text); len([]rune(line)) <= verbatimUpTo {
-		return Summary{Reply: j.reply, Status: line, Model: verbatimModel, At: time.Now()}, nil
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	out, err := s.complete(ctx, Prompt, fmt.Sprintf("The person asked:\n%s\n\nThe assistant's final message:\n%s", j.prompt, text))
-	if err != nil {
+	x, perr := Parse(out)
+	line := clean(text)
+	short := len([]rune(line)) <= verbatimUpTo
+	switch {
+	case short && (err != nil || perr != nil):
+		x = Summary{Status: line}
+	case err != nil:
 		return Summary{}, err
-	}
-	x, err := Parse(out)
-	if err != nil {
-		return Summary{}, err
+	case perr != nil:
+		return Summary{}, perr
+	case short:
+		x.Status, x.Gist = line, nil
 	}
 	if len([]rune(text)) < overviewFrom {
 		x.Overview = nil
@@ -208,16 +212,27 @@ func (s *Summarizer) make(j job) (Summary, error) {
 
 var object = regexp.MustCompile(`(?s)\{.*\}`)
 
+var thanks = regexp.MustCompile(`(?i)\bthank`)
+
 func Parse(out string) (Summary, error) {
 	var raw struct {
 		Status   string `json:"status"`
 		Gist     any    `json:"gist"`
 		Overview any    `json:"overview"`
+		Replies  any    `json:"replies"`
 	}
 	if err := json.Unmarshal([]byte(object.FindString(out)), &raw); err != nil {
 		return Summary{}, fmt.Errorf("unreadable answer: %.200s", out)
 	}
 	x := Summary{Status: clean(raw.Status), Gist: lines(raw.Gist), Overview: lines(raw.Overview)}
+	for _, r := range lines(raw.Replies) {
+		if !thanks.MatchString(r) {
+			x.Replies = append(x.Replies, r)
+		}
+	}
+	if len(x.Replies) > maxReplies {
+		x.Replies = x.Replies[:maxReplies]
+	}
 	if x.Status == "" {
 		return Summary{}, fmt.Errorf("answer has no status: %.200s", out)
 	}

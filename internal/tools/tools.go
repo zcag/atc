@@ -77,7 +77,7 @@ type done struct {
 	Ref     string           `json:"ref,omitempty"`
 	Title   string           `json:"title,omitempty"`
 	State   string           `json:"state,omitempty"`
-	Summary *summary.Summary `json:"summary,omitempty" jsonschema:"the reply in short: status, gist lines and, for long replies, an overview"`
+	Summary *summary.Summary `json:"summary,omitempty" jsonschema:"the reply in short: status, gist lines, for long replies an overview, and what the person would likely send next"`
 	Replied string           `json:"replied,omitempty"`
 	Note    string           `json:"note,omitempty"`
 }

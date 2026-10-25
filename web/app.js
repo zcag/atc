@@ -890,6 +890,7 @@ function SummaryBar({ s, say, onFull }) {
   const [open, setOpen] = useState(() => stored(SUM_OPEN, false));
   const [sheet, setSheet] = useState(false);
   const [hidden, setHidden] = useState(() => stored(SUM_HIDDEN, []));
+  const [sending, setSending] = useState(false);
   const x = s.summary;
   const done = s.state !== "working";
   if (!done || (x ? hidden.includes(x.reply) : !s.summarizing)) return null;
@@ -905,6 +906,11 @@ function SummaryBar({ s, say, onFull }) {
   };
   const again = () => api(`/api/sessions/${s.sessionId}/summary`, { method: "POST" }).then(() => say("Summarizing again…"), (e) => say(e.message));
   const full = () => { setSheet(false); onFull(); };
+  const chips = s.attachable && s.state === "your-turn" && !s.asks?.length && x.replies?.length > 0;
+  const pick = (text) => {
+    setSending(true);
+    api(`/api/sessions/${s.id}/send`, { method: "POST", body: { text, suggested: true } }).catch((e) => say(e.message)).finally(() => setSending(false));
+  };
   return html`
     <div class="sumbar ${open && !phone ? "open" : ""}">
       <div class="sumrow" role=${more ? "button" : null} tabindex=${more ? 0 : null} aria-expanded=${more ? (phone ? sheet : open) : null}
@@ -913,6 +919,7 @@ function SummaryBar({ s, say, onFull }) {
         ${more && html`<span class="summore">${phone ? "More" : open ? "Less" : "More"}<i class="caret ${open && !phone ? "up" : ""}"></i></span>`}
         <button class="icon sumx" onClick=${hide} title="Hide until the next reply" aria-label="Hide the summary">✕</button>
       </div>
+      ${chips && html`<${Replies} list=${x.replies} pick=${pick} busy=${sending} />`}
       ${open && !phone && more && html`<div class="sumbody"><${SummaryParts} x=${x} /><${SummaryFoot} onFull=${full} again=${again} /></div>`}
     </div>
     ${sheet && html`
@@ -925,6 +932,12 @@ function SummaryBar({ s, say, onFull }) {
         </div>
       </div>`}
   `;
+}
+
+function Replies({ list, pick, busy }) {
+  return html`<div class="quick" role="group" aria-label="Quick replies">
+    ${list.map((t) => html`<button disabled=${busy} title=${`Send “${t}”`} onClick=${() => pick(t)}>${t}</button>`)}
+  </div>`;
 }
 
 function AskBar({ s, say }) {
@@ -2633,18 +2646,6 @@ function highlight(el, q) {
   ranges[0]?.startContainer.parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
-function askOf(answer) {
-  const paras = answer.trim().split(/\n\s*\n/);
-  const last = plain(paras[paras.length - 1] || "");
-  const qs = last.match(/[^.!?]*\?/g);
-  if (!qs) return null;
-  const question = qs[qs.length - 1].trim();
-  const opts = [...answer.matchAll(/^(?:#{1,4}\s*|\s*)(\d+)[.)]\s+(?:\*\*)?([^*\n]{3,80})/gm)].map((m) => ({ n: m[1], label: plain(m[2]) }));
-  const uniq = [...new Map(opts.map((o) => [o.n, o])).values()].slice(0, 5);
-  const yes = /^(want|should|shall|do you want|ready|ok|okay|can i|may i|go ahead|proceed)/i.test(question);
-  return { question, yes, opts: uniq.length >= 2 ? uniq : [] };
-}
-
 function wavFrom(buf) {
   const ch = buf.getChannelData(0), rate = buf.sampleRate, out = new DataView(new ArrayBuffer(44 + ch.length * 2));
   const w = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
@@ -2686,7 +2687,7 @@ function useDictation(onText, say) {
   return { state, toggle: () => (state === "rec" ? stop() : state === "idle" && start()) };
 }
 
-function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, ask, focusRef, working }) {
+function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, focusRef, working }) {
   const ta = useRef();
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -2715,7 +2716,6 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, ask, focus
     }
     ta.current?.focus();
   };
-  const fill = (text) => { setDraft(text); requestAnimationFrame(() => { const el = ta.current; el?.focus(); el?.setSelectionRange(text.length, text.length); }); };
   const ready = (draft.trim() || quotes.length) && !busy;
   const hint = working ? "Queue a message for Claude" : s.state === "needs-you" ? "Claude is waiting on you" : "Reply to Claude";
   const root = useRef();
@@ -2728,14 +2728,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, ask, focus
   }, []);
   return html`<div class="composer ${drag ? "drag" : ""}" ref=${root} onDragOver=${(e) => { e.preventDefault(); setDrag(true); }} onDragLeave=${() => setDrag(false)} onDrop=${(e) => { e.preventDefault(); setDrag(false); upload([...e.dataTransfer.files]); }}>
     <div class="in">
-      ${ask && !draft && !quotes.length && html`<div class="ask-card">
-        <p class="aq">${ask.question}</p>
-        <div class="quick">
-          ${ask.yes && html`<button onClick=${() => fill("yes, go ahead")}>Yes, go ahead</button>`}
-          ${ask.opts.map((o) => html`<button title=${o.label} onClick=${() => fill(`go with ${o.n}`)}><b>${o.n}</b> ${o.label.length > 36 ? o.label.slice(0, 34) + "…" : o.label}</button>`)}
-          ${ask.yes && html`<button onClick=${() => fill("no, ")}>No…</button>`}
-        </div>
-      </div>`}
+      ${replies?.length > 0 && !draft && !quotes.length && html`<div class="ask-card"><${Replies} list=${replies} pick=${(text) => send(text, { suggested: true })} /></div>`}
       ${quotes.length > 0 && html`<div class="quotes">${quotes.map((q, j) => html`<div class="qchip"><span>${q}</span><button aria-label="Remove quote" onClick=${() => setQuotes(quotes.filter((_, k) => k !== j))}>✕</button></div>`)}</div>`}
       <div class="box ${ready ? "ready" : ""}" onClick=${(e) => e.target === e.currentTarget && ta.current?.focus()}>
         <textarea ref=${ta} rows="1" value=${draft} placeholder=${hint} enterkeyhint=${touch ? "enter" : "send"}
@@ -2958,13 +2951,13 @@ function Transcript({ s, say, slot }) {
     requestAnimationFrame(() => focusInput.current());
   };
 
-  const send = async (text, retryId) => {
+  const send = async (text, { retryId, suggested } = {}) => {
     const id = retryId || Math.random().toString(36).slice(2);
     const p = { id, text, at: Date.now(), state: "sending", queued: working };
     setPending((ps) => [...ps.filter((x) => x.id !== id), p]);
     atEnd.current = true;
     try {
-      await api(`/api/sessions/${s.id || s.sessionId}/send`, { method: "POST", body: { text } });
+      await api(`/api/sessions/${s.id || s.sessionId}/send`, { method: "POST", body: { text, suggested } });
       setPending((ps) => ps.map((x) => (x.id === id ? { ...x, state: "sent" } : x)));
       setTimeout(loadIdx, 1500);
       return true;
@@ -2981,7 +2974,7 @@ function Transcript({ s, say, slot }) {
 
   const last = turns[turns.length - 1], lastBody = last && bodies[last.from];
   const running = working && lastBody && txSteps(lastBody.items).some((x) => !x.out);
-  const ask = live && !working && !pending.length && lastBody?.answer ? askOf(lastBody.answer) : null;
+  const replies = live && !working && !pending.length && s.state === "your-turn" && !s.asks?.length ? s.summary?.replies : null;
   const nFolded = turns.filter((_, i) => folded(i)).length;
   const cost = turns.reduce((a, t) => a + (t.cost || 0), 0);
   const files = new Set(turns.flatMap((t) => (t.files || []).filter((f) => !scratch(f.path)).map((f) => f.path))).size;
@@ -3014,7 +3007,7 @@ function Transcript({ s, say, slot }) {
               ${folded(i)
                 ? html`<${Folded} key=${`f${t.from}`} t=${t} i=${i} open=${openTurn} />`
                 : html`${i === firstOpen && firstOpen > 0 && html`<div class="since">${firstOpen === turns.length - 1 ? "Latest" : `${turns.length - firstOpen} new since you last read`}</div>`}<${Turn} key=${`t${t.from}`} t=${t} i=${i} s=${s} body=${bodies[t.from]} level=${level} zoom=${setShot} quote=${live ? quote : null} latest=${i === turns.length - 1} live=${working && i === turns.length - 1} fresh=${opened.has(i)} />`}`)}
-            ${pending.map((p) => html`<${Pending} key=${p.id} p=${p} retry=${() => send(p.text, p.id)} drop=${() => setPending((ps) => ps.filter((x) => x.id !== p.id))} />`)}
+            ${pending.map((p) => html`<${Pending} key=${p.id} p=${p} retry=${() => send(p.text, { retryId: p.id })} drop=${() => setPending((ps) => ps.filter((x) => x.id !== p.id))} />`)}
             ${working && !running && !pending.some((p) => p.state !== "failed") && html`<${Thinking} since=${last?.end} />`}
           `}
         </main>
@@ -3022,7 +3015,7 @@ function Transcript({ s, say, slot }) {
       ${sel && html`<${SelBar} sel=${{ ...sel, y: sel.y + (box.current?.scrollTop || 0) - 0 }} live=${live} act=${selAct} />`}
     </div>
     ${level !== 1 && html`<${Scrub} turns=${turns} inView=${inView} go=${go} />`}
-    ${live && level !== 1 && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} ask=${ask} focusRef=${focusInput} working=${working} />`}
+    ${live && level !== 1 && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies} focusRef=${focusInput} working=${working} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
   </div>`;
 }

@@ -12,11 +12,12 @@ import (
 )
 
 func TestParse(t *testing.T) {
-	x, err := Parse("Here:\n```json\n{\"status\": \"Plan: **two** PRs\", \"gist\": [\"- parser first\", \"\", \"ui after\"], \"overview\": \"Plan: A\\nOpen: B\"}\n```")
+	x, err := Parse("Here:\n```json\n{\"status\": \"Plan: **two** PRs\", \"gist\": [\"- parser first\", \"\", \"ui after\"], \"overview\": \"Plan: A\\nOpen: B\", \"replies\": [\"ok thanks\", \"ok go\", \"- ok do all\", \"status/eta?\", \"ok we can wrap\"]}\n```")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if x.Status != "Plan: two PRs" || strings.Join(x.Gist, "|") != "parser first|ui after" || strings.Join(x.Overview, "|") != "Plan: A|Open: B" {
+	if x.Status != "Plan: two PRs" || strings.Join(x.Gist, "|") != "parser first|ui after" || strings.Join(x.Overview, "|") != "Plan: A|Open: B" ||
+		strings.Join(x.Replies, "|") != "ok go|ok do all|status/eta?" {
 		t.Fatalf("%+v", x)
 	}
 	if got := clean("## Saved\n\nAll 8 `fixtures` saved, see [the PR](https://x/1)."); got != "Saved All 8 fixtures saved, see the PR." {
@@ -87,17 +88,25 @@ func TestSummarizesFinalMessageOnce(t *testing.T) {
 	}
 }
 
-func TestShortReplyNeedsNoModel(t *testing.T) {
-	tr := transcript(t, "Done, all green.")
+func TestShortReplyKeepsItsText(t *testing.T) {
+	tr := transcript(t, "Done, all green. Merge it?")
 	s, _ := Open(filepath.Join(t.TempDir(), "s.json"), "test", func(context.Context, string, string) (string, error) {
-		t.Fatal("model called for a short reply")
-		return "", nil
+		return `{"status": "Done: tests green", "gist": ["All tests pass"], "replies": ["ok go"]}`, nil
 	})
 	s.Want(tr)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if x := s.Wait(ctx, tr); x == nil || x.Status != "Done, all green." || x.Model != verbatimModel {
+	if x := s.Wait(ctx, tr); x == nil || x.Status != "Done, all green. Merge it?" || x.Gist != nil || strings.Join(x.Replies, "|") != "ok go" {
 		t.Fatalf("%+v", x)
+	}
+
+	tr = transcript(t, "Done, all green.")
+	s, _ = Open(filepath.Join(t.TempDir(), "s.json"), "test", func(context.Context, string, string) (string, error) {
+		return "", context.DeadlineExceeded
+	})
+	s.Want(tr)
+	if x := s.Wait(ctx, tr); x == nil || x.Status != "Done, all green." || x.Replies != nil {
+		t.Fatalf("a short reply needs no model: %+v", x)
 	}
 }
 

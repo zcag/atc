@@ -97,8 +97,8 @@ needs the token either way.
   - The box at the bottom (`r`) writes to the session: Enter sends, Shift+Enter is a new line, and
     a draft is kept per session. Attach files with the clip, by pasting or by dropping them;
     dictate with the mic. A message shows in the transcript the moment you send it, and stays
-    there with "Try again" if it could not be sent. When the reply ends on a question, the box
-    offers one-tap answers from it, and a long reply gets its summary on top.
+    there with "Try again" if it could not be sent. Above the box, the summary's suggested replies
+    send with one tap.
   - Select any text for **Quote**, **Explain**, **Push back** or **Do this** (each quotes it into
     the box with a start you can edit), **Copy** or **Find**.
 - **New session** starts Claude in any folder, with an optional name and first message.
@@ -312,6 +312,12 @@ When a session finishes a turn, atc summarizes its final message at three length
   session's strip, in `atc ls` and in the notification.
 - **Gist**, one short line per topic the message covers.
 - **Overview**, for long messages: the content grouped as Answer, Found, Plan, Proposes, Open.
+- **Replies**, up to three messages you would likely send next, in your own phrasing: "ok go" for a
+  go-ahead, the option it recommends, "did the login" when it asked you to do something,
+  "status/eta?" while something still runs, "ok we can wrap" when the work is done. None when the
+  next message can't be guessed. They show as buttons under the summary line and above the
+  transcript's box, only when it is your turn and Claude isn't asking its own question; a tap sends
+  it, and the server log notes each one used (`suggested reply`).
 
 A session shows its summary in a line under its header. On a computer, **More** opens the gist
 and overview in place; on a phone it opens them in a sheet, with a button to the full message. The
@@ -320,8 +326,8 @@ A notification for a finished turn waits up to 25 seconds for the summary, then 
 start of the reply instead.
 
 Summaries come from `claude -p` with haiku and a fixed prompt, with no tools, no CLAUDE.md and no
-saved session, so each costs about 2,500 tokens of your plan. Replies of a line or two are used as
-they are, without a model. Each machine summarizes its own sessions and keeps the result in
+saved session, so each costs about 2,500 tokens of your plan. Replies of a line or two keep their
+own text as the status; the model only suggests what to send back. Each machine summarizes its own sessions and keeps the result in
 `summaries.json` in its config folder. Set `ATC_SUMMARY_MODEL` for another Claude model,
 `ATC_SUMMARY_URL` (with `ATC_SUMMARY_MODEL`) for an OpenAI-compatible endpoint such as a local
 model, or `ATC_SUMMARY=off` to turn it off. The prompt is `internal/summary/prompt.md`.

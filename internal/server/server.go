@@ -572,12 +572,18 @@ func worktreeName(name string) string {
 }
 
 func (s *Server) send(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Text string }
+	var req struct {
+		Text      string
+		Suggested bool
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Text) == "" {
 		http.Error(w, "text is required", http.StatusBadRequest)
 		return
 	}
 	id := r.PathValue("id")
+	if req.Suggested {
+		log.Printf("send %s: suggested reply %q", id, req.Text)
+	}
 	if s.M.OpenCode(id) {
 		s.done(w, id, s.sendOpenCode(r.Context(), id, req.Text))
 		return
