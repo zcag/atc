@@ -18,6 +18,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zcag/atc/internal/claude"
 )
 
 type Window struct {
@@ -145,14 +147,6 @@ func (c *LimitsClient) cached() ([]byte, time.Time, error) {
 	return ReadCached()
 }
 
-func configDir() string {
-	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
-		return d
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".claude")
-}
-
 func ReadCreds() (Creds, error) {
 	var b []byte
 	var err error
@@ -160,7 +154,7 @@ func ReadCreds() (Creds, error) {
 		b, err = exec.Command("security", "find-generic-password", "-s", "Claude Code-credentials", "-w").Output()
 	}
 	if runtime.GOOS != "darwin" || err != nil {
-		b, err = os.ReadFile(filepath.Join(configDir(), ".credentials.json"))
+		b, err = os.ReadFile(filepath.Join(claude.ConfigDir(), ".credentials.json"))
 	}
 	if err != nil {
 		return Creds{}, errors.New("no Claude Code sign-in found on this machine")

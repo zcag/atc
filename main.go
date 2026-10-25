@@ -182,7 +182,7 @@ func serve(args []string) error {
 		Host: strings.Split(host, ".")[0],
 		M: &sessions.Manager{
 			CLI:     cli,
-			Index:   history.New(filepath.Join(home, ".claude", "projects")),
+			Index:   history.New(filepath.Join(claude.ConfigDir(), "projects")),
 			Store:   st,
 			Summary: sum,
 		},

@@ -683,8 +683,18 @@ func (s *Server) watch(list []sessions.Session) {
 	if s.rv == nil {
 		return
 	}
-	if lost := s.rv.observe(runningOf(list, s.Host)); len(lost) > 0 {
+	now := runningOf(list, s.Host)
+	if lost := s.rv.observe(now); len(lost) > 0 {
 		go s.revive(lost, "Claude's background service on "+s.Host+" stopped")
+	}
+	var ids []string
+	for _, r := range now {
+		if r.Harness == "" {
+			ids = append(ids, r.ID)
+		}
+	}
+	if err := claude.KeepAlive(ids); err != nil {
+		log.Printf("keep alive: %v", err)
 	}
 }
 
