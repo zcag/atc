@@ -327,8 +327,8 @@ button { cursor: pointer; }
 .txc { display: flex; align-items: center; gap: 2px; }
 .tx-top .txc { flex: 1; }
 .tx-slot .txc { margin-right: 6px; }
-.tx-slot .zoom { background: color-mix(in srgb, var(--ink) 6%, transparent); }
-.tx-slot .zoom .knob { background: var(--strip-hi); box-shadow: 0 0 0 1px var(--line); }
+.tx-slot .txc .zoom { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.tx-slot .txc .zoom .knob { background: var(--strip-hi); box-shadow: 0 0 0 1px var(--line); }
 .txc .tb { height: 30px; min-width: 30px; padding: 0 8px; border-radius: 8px; color: var(--quiet); display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 13px; font-weight: 500; }
 .txc .tb:hover, .txc .tb[aria-pressed="true"] { background: var(--sunk); color: var(--ink); }
 .txc .tb .n { font-size: 11.5px; font-variant-numeric: tabular-nums; }
