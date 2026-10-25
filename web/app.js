@@ -2113,7 +2113,11 @@ function Table({ text, tsv }) {
     </div>`;
 }
 
-const TX_LEVELS = [[1, "Outline", "Outline"], [2, "Story", "Story"], [3, "Everything", "All"]];
+const TX_LEVELS = [
+  [1, "Outline", "Outline", "One line per turn: what you asked and how it was answered"],
+  [2, "Story", "Story", "Replies in full, the work between them told in a few lines"],
+  [3, "Everything", "All", "Every turn open with every step, command and diff"],
+];
 const TX_FACES = {
   news: { name: "Newsreader", css: "Newsreader, Georgia, serif", sizes: [17, 19, 21], lh: 1.6 },
   lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [15.5, 17, 19], lh: 1.66 },
@@ -2525,13 +2529,11 @@ function Scrub({ turns, inView, go }) {
 }
 const t0 = (t) => (t.partial ? "Continued from earlier" : plain(t.prompt)).slice(0, 90);
 
-function Zoom({ level, set }) {
-  const ref = useRef();
-  const [knob, setKnob] = useState(null);
-  useLayoutEffect(() => { const b = ref.current?.querySelector(`[aria-pressed="true"]`); if (b) setKnob({ left: b.offsetLeft, width: b.offsetWidth }); }, [level]);
-  return html`<div class="zoom" ref=${ref} role="group" aria-label="How much to show">
-    ${knob && html`<span class="knob" style=${`left:${knob.left}px;width:${knob.width}px`}></span>`}
-    ${TX_LEVELS.map(([l, name, short]) => html`<button aria-pressed=${level === l} onClick=${() => set(l)} title=${`${name} (${l})`}><span class="full">${name}</span><span class="short">${short}</span></button>`)}
+function Levels({ level, set }) {
+  return html`<div class="pop levels" role="menu" aria-label="How much to show">
+    ${TX_LEVELS.map(([l, name, , what]) => html`<button role="menuitemradio" aria-checked=${level === l} onClick=${() => set(l)}>
+      <span class="l">${name}</span><kbd>${l}</kbd><span class="d">${what}</span>
+    </button>`)}
   </div>`;
 }
 
@@ -2980,7 +2982,7 @@ function Transcript({ s, say, slot }) {
   const cost = turns.reduce((a, t) => a + (t.cost || 0), 0);
   const files = new Set(turns.flatMap((t) => (t.files || []).filter((f) => !scratch(f.path)).map((f) => f.path))).size;
   const controls = html`<div class="txc">
-    <${Zoom} level=${level} set=${setLevel} />
+    <button class="tb lv" aria-pressed=${pop === "level"} onClick=${() => setPop(pop === "level" ? null : "level")} title=${`Showing: ${TX_LEVELS[level - 1][1]} (1 2 3)`}><svg width="15" height="15" viewBox="0 0 16 16">${level === 1 ? html`<path d="M3 4h10M3 8h10M3 12h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>` : level === 2 ? html`<path d="M3 3.5h10M3 7h7M3 10.5h10M3 13h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>` : html`<path d="M3 3h10M5 5.5h8M5 8h8M3 10.5h10M5 13h8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>`}</svg>${level !== 2 && html`<span class="lv-n">${TX_LEVELS[level - 1][2]}</span>`}</button>
     <button class="tb" aria-pressed=${pop === "find"} onClick=${() => { findQ.current = ""; setPop(pop === "find" ? null : "find"); }} title="Find in this session (f)"><svg width="15" height="15" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button>
     <button class="tb" aria-pressed=${pop === "results"} onClick=${() => setPop(pop === "results" ? null : "results")} title="What this session produced"><svg width="15" height="15" viewBox="0 0 16 16"><path d="M3 2.5h7l3 3v8H3z M10 2.5v3h3 M5.5 8.5h5M5.5 11h3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>${files > 0 && html`<span class="n">${files}</span>`}</button>
     <button class="tb aa" aria-pressed=${pop === "prefs"} onClick=${() => setPop(pop === "prefs" ? null : "prefs")} title="Reading settings">Aa</button>
@@ -2992,6 +2994,7 @@ function Transcript({ s, say, slot }) {
       <div class="tx-top ${inHeader ? "bare" : ""}">
         ${!inHeader && controls}
         ${pop === "prefs" && html`<${Prefs} prefs=${prefs} set=${setPrefs} />`}
+        ${pop === "level" && html`<${Levels} level=${level} set=${(l) => { setLevel(l); setPop(null); }} />`}
         ${pop === "find" && html`<${Find} turns=${turns} s=${s} go=${go} close=${() => setPop(null)} init=${findQ.current} key=${findQ.current} />`}
         ${pop === "results" && html`<${Results} turns=${turns} s=${s} bodies=${bodies} need=${need} go=${go} close=${() => setPop(null)} />`}
       </div>
