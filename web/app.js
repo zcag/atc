@@ -3062,7 +3062,7 @@ function Transcript({ s, say, slot }) {
   const firstOpen = useMemo(() => {
     if (!turns.length) return 0;
     const i = seenAt.current ? turns.findIndex((t) => !t.partial && t.at > seenAt.current) : -1;
-    return i < 0 ? turns.length - 1 : i;
+    return i < 0 ? turns.length - 1 : Math.max(i, turns.length - 2);
   }, [turns.length > 0, s.sessionId]);
   const isOpen = (i) => level === 3 || i >= firstOpen || opened.has(i);
   const folded = (i) => level === 2 && !isOpen(i);
@@ -3124,21 +3124,22 @@ function Transcript({ s, say, slot }) {
     if (!el || !idx) return;
     if (!landed.current && ready) {
       landed.current = true;
-      const land = () => {
-        if (level === 1) return;
-        const mark = el.querySelector(".since") || el.querySelector(`#tx${firstOpen}`);
-        if (!mark) return;
-        const max = el.scrollHeight - el.clientHeight;
-        let to = firstOpen === 0 ? 0 : mark.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 12;
-        if (max - to < el.clientHeight * 0.85) to = max;
-        el.scrollTop = Math.min(to, max);
-      };
+      atEnd.current = level !== 1;
+      const land = () => { if (atEnd.current) el.scrollTop = el.scrollHeight; };
       land();
       document.fonts.ready.then(() => requestAnimationFrame(land));
       if (turns.length) txStore.set(`seen.${s.sessionId}`, turns[turns.length - 1].at);
     } else if (landed.current && atEnd.current) el.scrollTop = el.scrollHeight;
     if (landed.current && turns.length) txStore.set(`seen.${s.sessionId}`, turns[turns.length - 1].at);
   }, [idx, bodies, ready, pending]);
+
+  useEffect(() => {
+    const el = box.current, inner = el?.querySelector(".frame");
+    if (!inner) return;
+    const ro = new ResizeObserver(() => { if (landed.current && atEnd.current) el.scrollTop = el.scrollHeight; });
+    ro.observe(inner);
+    return () => ro.disconnect();
+  }, [idx !== null]);
 
   useEffect(() => {
     const el = box.current;
