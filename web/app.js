@@ -3465,7 +3465,8 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
   }, [level]);
 
   const settle = () => {
-    const el = box.current, mark = hold.current !== null && el?.querySelector(`#tx${hold.current}`);
+    const el = box.current, turn = hold.current !== null && el?.querySelector(`#tx${hold.current}`);
+    const mark = turn && ([...turn.querySelectorAll(".prompt, .note-you")].pop() || turn);
     if (!el) return;
     if (!mark) { if (atEnd.current) el.scrollTop = el.scrollHeight; return; }
     const max = el.scrollHeight - el.clientHeight, to = mark.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 12;
