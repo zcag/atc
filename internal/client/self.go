@@ -51,12 +51,12 @@ func From(pool []sessions.Session, started bool) string {
 	return fmt.Sprintf("[from %s · %s]", who, how)
 }
 
-func Headed(pool []sessions.Session, started bool, text string) string {
+func Signed(pool []sessions.Session, started bool, text string) string {
 	if h := From(pool, started); h != "" {
 		if text == "" {
 			return h
 		}
-		return h + "\n" + text
+		return text + "\n\n" + h
 	}
 	return text
 }
