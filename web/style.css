@@ -1205,6 +1205,7 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .board.v2 { overflow-x: hidden; }
 .board.v2 .it { touch-action: pan-y pinch-zoom; }
 .zoomed .board.v2 .it { touch-action: auto; }
+.zoomed * { overscroll-behavior: auto !important; }
 .it.swiping { z-index: 2; }
 .it.swiping::after { content: attr(data-swipe); position: absolute; top: 0; bottom: 0; width: 100vw; display: flex; align-items: center; padding: 0 16px; font: 600 13px var(--sans); color: #fff; border-radius: inherit; white-space: nowrap; overflow: hidden; transition: background .12s; }
 .it.swiping[data-dir="r"]::after { right: 100%; justify-content: flex-end; background: color-mix(in srgb, var(--turn) 45%, var(--board)); }
