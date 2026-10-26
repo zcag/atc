@@ -115,8 +115,11 @@ func TestFindFallsBackToTheForkedConversation(t *testing.T) {
 	if _, ok := x.Find("new"); ok {
 		t.Fatal("found a transcript for a session that has none")
 	}
-	x.ForkedFrom = func(sid string) string { return map[string]string{"new": "old"}[sid] }
+	x.Forks = func() map[string]string { return map[string]string{"new": "old"} }
 	if tr, ok := x.Find("new"); !ok || tr.SessionID != "old" {
 		t.Fatalf("got %+v %v", tr, ok)
+	}
+	if r := x.Resumed(); !r["old"] || r["new"] {
+		t.Fatalf("resumed %v", r)
 	}
 }

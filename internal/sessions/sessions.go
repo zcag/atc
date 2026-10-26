@@ -81,7 +81,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 	out := make([]Session, 0, len(agents))
 	for _, a := range agents {
 		t, ok := byID[a.SessionID]
-		if !ok && m.Index.ForkedFrom != nil {
+		if !ok {
 			t = byID[m.Index.ForkedFrom(a.SessionID)]
 		}
 		s := m.build(t)
@@ -119,7 +119,11 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 func (m *Manager) History(q, dir string, limit int) []Session {
 	q = strings.ToLower(q)
 	var out []Session
+	resumed := m.Index.Resumed()
 	for _, t := range m.transcripts() {
+		if resumed[t.SessionID] {
+			continue
+		}
 		s := m.build(t)
 		if dir != "" && s.StartCwd != dir && s.Cwd != dir {
 			continue

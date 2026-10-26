@@ -108,7 +108,7 @@ func (x *Index) Find(sid string) (Transcript, bool) {
 			return t, true
 		}
 	}
-	if from := x.forked(sid); from != "" {
+	if from := x.ForkedFrom(sid); from != "" {
 		for _, t := range all {
 			if t.SessionID == from {
 				return t, true
@@ -118,11 +118,21 @@ func (x *Index) Find(sid string) (Transcript, bool) {
 	return Transcript{}, false
 }
 
-func (x *Index) forked(sid string) string {
-	if x.ForkedFrom == nil {
+func (x *Index) ForkedFrom(sid string) string {
+	if x.Forks == nil {
 		return ""
 	}
-	return x.ForkedFrom(sid)
+	return x.Forks()[sid]
+}
+
+func (x *Index) Resumed() map[string]bool {
+	out := map[string]bool{}
+	if x.Forks != nil {
+		for _, parent := range x.Forks() {
+			out[parent] = true
+		}
+	}
+	return out
 }
 
 func ReadPage(path string, before, window int64) (Page, error) {

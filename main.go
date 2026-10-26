@@ -177,7 +177,7 @@ func serve(args []string) error {
 	}
 	host, _ := os.Hostname()
 	index := history.New(filepath.Join(claude.ConfigDir(), "projects"))
-	index.ForkedFrom, index.Price = claude.ForkedFrom, server.Priced
+	index.Forks, index.Price = claude.Forks, server.Priced
 	srv := &server.Server{
 		Term: &attach.Hub{Bin: bin},
 		Web:  web.FS,

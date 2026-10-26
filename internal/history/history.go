@@ -63,12 +63,12 @@ type entry struct {
 }
 
 type Index struct {
-	Root       string
-	ForkedFrom func(sid string) string
-	Price      func(model string, u Usage) float64
-	mu         sync.Mutex
-	turns      map[string]*turnCache
-	cache      map[string]*Transcript
+	Root  string
+	Forks func() map[string]string
+	Price func(model string, u Usage) float64
+	mu    sync.Mutex
+	turns map[string]*turnCache
+	cache map[string]*Transcript
 }
 
 func New(root string) *Index { return &Index{Root: root, cache: map[string]*Transcript{}} }

@@ -7,10 +7,10 @@ import (
 	"strings"
 )
 
-func ForkedFrom(sid string) string {
+func Forks() map[string]string {
 	b, err := os.ReadFile(filepath.Join(ConfigDir(), "daemon", "roster.json"))
 	if err != nil {
-		return ""
+		return nil
 	}
 	var r struct {
 		Workers map[string]struct {
@@ -24,14 +24,15 @@ func ForkedFrom(sid string) string {
 		} `json:"workers"`
 	}
 	if json.Unmarshal(b, &r) != nil {
-		return ""
+		return nil
 	}
+	out := map[string]string{}
 	for _, w := range r.Workers {
-		if l := w.Dispatch.Launch; w.SessionID == sid && l.Mode == "resume" && l.SessionID != sid {
-			return l.SessionID
+		if l := w.Dispatch.Launch; l.Mode == "resume" && l.SessionID != "" && l.SessionID != w.SessionID {
+			out[w.SessionID] = l.SessionID
 		}
 	}
-	return ""
+	return out
 }
 
 type Question struct {
