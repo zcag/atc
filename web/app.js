@@ -2951,7 +2951,7 @@ const readMin = (t) => Math.round(plain(t).split(" ").length / 230);
 
 function Margin({ t, i, s, answer }) {
   const files = (t.files || []).filter((f) => !scratch(f.path));
-  return html`<aside class="margin"><div class="rail">
+  return html`<aside class="margin"><div class="follow">
     <div><span class="k">${txClock(t.at)}</span>${txDur(t) && html` · worked <span class="k">${txDur(t)}</span>`}</div>
     ${txUsd(t.cost) && html`<div><span class="k">${txUsd(t.cost)}</span> at API prices</div>`}
     ${readMin(answer) > 1 && html`<div><span class="k">${readMin(answer)} min</span> to read</div>`}
