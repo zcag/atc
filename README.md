@@ -102,6 +102,8 @@ needs the token either way.
   - Select any text for **Quote**, **Explain**, **Push back** or **Do this** (each quotes it into
     the box with a start you can edit), **Copy** or **Find**.
 - **New session** starts Claude in any folder, with an optional name and first message.
+- **Assistant** (the chat button, or `a`) opens one session with the atc tools, for asking about
+  your other sessions or driving them. It is the same session the phone's side key opens.
 - **Earlier** lists past conversations. Open one and press **Resume** to continue it.
 - On a phone, a row of keys above the keyboard gives you Esc, Tab, Shift+Tab, Ctrl and arrows.
 - Press `?` for keyboard shortcuts.
@@ -395,7 +397,8 @@ Sessions open in a terminal can be read but not typed into. A session never send
 
 ## Voice
 
-Open a session and press **Voice** to talk to it. atc listens through the browser, decides when
+Open a session and press **Voice** to talk to it. It opens on the transcript, with the voice controls
+in place of the reply box (it also works over the terminal). atc listens through the browser, decides when
 you have finished speaking (a pause of about a second and a half), transcribes what you said and
 types it into the session. When the session finishes its turn, atc reads its final message back in
 full, leaving out what Claude wrote between tool calls; code and tables are mentioned rather than

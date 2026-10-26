@@ -87,7 +87,7 @@ function useNow(ms) {
 
 const APP = window.AtcApp || null;
 const APP_VERSION = +((navigator.userAgent.match(/AtcApp\/(\d+)/) || [])[1] || 0);
-let AUTO_VOICE = false;
+let AUTO_VOICE = false, AUTO_PANE = null;
 let appSent = "";
 const FEED_STATES = ["needs-you", "your-turn", "working"];
 
@@ -162,11 +162,12 @@ function App() {
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
-  const talk = async (fresh) => {
+  const talk = async (fresh, voice = true) => {
     setStarting(true);
     try {
       const r = await api(`/api/assist${fresh ? "?new=1" : ""}`, { method: "POST" });
-      AUTO_VOICE = true;
+      AUTO_VOICE = voice;
+      AUTO_PANE = "chat";
       go(r.id);
     } catch (e) {
       say(`Could not open the assistant: ${e.message}`);
@@ -274,6 +275,8 @@ function App() {
         e.preventDefault();
         const x = k.ordered.find((x) => x.sessionId === k.cursor);
         if (x) go(keyOf(x));
+      } else if (e.key === "a") {
+        e.preventDefault(); talk(false, false);
       } else if (e.key === "t" && VOICE_OK) {
         e.preventDefault(); location.hash = "#/assist";
       } else if (e.key === "n") {
@@ -328,7 +331,7 @@ function App() {
               run: () => setView({ ...view, rail: !view.rail }), label: html`<span>Fold into a rail while reading</span>${view.rail && "✓"}` },
           ]} />
           <button class="btn talk" onClick=${() => setPalette(true)} title=${`Search and commands (${MAC ? "⌘" : "Ctrl+"}K)`} aria-label="Search and commands"><span class="mi">${ICON.search}</span></button>
-          ${VOICE_OK && html`<button class="btn talk" onClick=${() => (location.hash = "#/assist")} title="Talk to Claude (t)"><span class="mi">${MIC}</span></button>`}
+          <button class="btn talk" onClick=${() => talk(false, false)} title="Assistant: ask about or drive your sessions (a)" aria-label="Assistant"><span class="mi">${ICON.chat}</span></button>
           <button class="btn talk" onClick=${() => setCreating(true)} title="New session (n)" aria-label="New session"><span class="mi">${ICON.plus}</span></button>
         </header>
         <${Board} live=${live} sel=${sel} cursor=${cursor} onPast=${remember} mode=${view.list} />
@@ -343,7 +346,7 @@ function App() {
     </div>
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} start=${creating} />`}
     ${palette && html`<${Palette} live=${live || []} sel=${sel} say=${say} home=${me.host} onClose=${() => setPalette(false)}
-      actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: () => (location.hash = "#/assist") }} />`}
+      actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: () => (location.hash = "#/assist"), ask: () => talk(false, false) }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
     ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
@@ -369,6 +372,7 @@ function App() {
             <dt>Alt + ↑ / ↓</dt><dd>Previous or next session, even from inside a terminal</dd>
             <dt>${MAC ? "⌘" : "Ctrl"} K</dt><dd>Command palette: jump to anything, run any action</dd>
             <dt>n</dt><dd>New session</dd>
+            <dt>a</dt><dd>Assistant: ask about or drive your sessions</dd>
             <dt>t</dt><dd>Talk: a voice session with Claude</dd>
             <dt>/</dt><dd>Search earlier sessions</dd>
             <dt>u</dt><dd>Usage: limits, spend by day, projects and sessions</dd>
@@ -721,6 +725,7 @@ const unread = (s) => (s.state === "your-turn" || s.state === "needs-you") && !s
 const oneLine = (t) => (t || "").replace(/\*\*|__|`+|^#+\s*|^>\s*/gm, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
 
 const ICON = {
+  chat: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2.5 3.5h11v7.5H7l-3 2.5V11H2.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
   plus: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
   search: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
   pin: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 1.5l5 5-2 .5-2.5 2.5.5 3-1.5 1.5L6 10l-3.5 3.5M6 10L2.5 6.5 4 5l3 .5L9.5 3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
@@ -1042,14 +1047,15 @@ function paneFor(s) {
 
 function Session({ s, say, live }) {
   const canAttach = s.attachable;
-  const [mode, setMode] = useState(() => paneFor(s));
+  const auto = useRef(AUTO_PANE);
+  const [mode, setMode] = useState(() => { AUTO_PANE = null; return auto.current || paneFor(s); });
   const [slot, setSlot] = useState(null);
   const choose = (m) => { setMode(m); try { localStorage.setItem(PANE, m); } catch {} };
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [voice, setVoice] = useState(() => { const v = AUTO_VOICE && canAttach; if (v) AUTO_VOICE = false; return v; });
   useEffect(() => {
-    if (canAttach && paneFor(s) === "term") setMode("term");
+    if (canAttach && !auto.current && paneFor(s) === "term" && !voice) setMode("term");
   }, [canAttach]);
 
   const act = async (fn, done) => {
@@ -1071,7 +1077,7 @@ function Session({ s, say, live }) {
   const outs = useOutputs(s, mode === "out" ? 10000 : 60000);
   const [showUse, setShowUse] = useState(false);
   useEffect(() => {
-    SESSION_API = { s, canAttach, mode: choose, voice: () => canAttach && (setVoice((v) => !v), setMode("term")), usage: () => setShowUse(true), rename: () => setRenaming(true) };
+    SESSION_API = { s, canAttach, mode: choose, voice: () => canAttach && setVoice((v) => (v || setMode("chat"), !v)), usage: () => setShowUse(true), rename: () => setRenaming(true) };
     return () => { SESSION_API = null; };
   });
   const use = useSessionUsage(s, showUse || s.state === "working" ? 15000 : 90000);
@@ -1111,7 +1117,7 @@ function Session({ s, say, live }) {
       </div>
       ${pages.length > 0 && html`<${Published} links=${pages} />`}
       ${VOICE.stt && html`<button class="btn voice-btn ${voice ? "on" : ""} ${canAttach ? "" : "off"}" aria-pressed=${voice}
-        onClick=${() => canAttach ? (setVoice(!voice), setMode("term"))
+        onClick=${() => canAttach ? (voice || setMode("chat"), setVoice(!voice))
           : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
       ${mode === "chat" && html`<div class="tx-slot" ref=${setSlot}></div>`}
       <div class="seg" role="tablist">
@@ -1127,7 +1133,7 @@ function Session({ s, say, live }) {
       ? canAttach
         ? html`<${Term} key=${s.id} s=${s} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} />`
         : html`<div class="stage"><div class="cover">${Unattachable(s, () => resume(), busy, setMode)}</div></div>`
-      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} />` : html`<${Transcript} s=${s} say=${say} slot=${slot} resume=${() => resume("chat")} busy=${busy} />`}
+      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} />` : html`<${Transcript} s=${s} say=${say} slot=${slot} resume=${() => resume("chat")} busy=${busy} voice=${voice && canAttach} onVoiceOff=${() => setVoice(false)} />`}
     ${showUse && html`<${SessionUsage} s=${s} use=${use} onClose=${() => setShowUse(false)} />`}
   `;
 }
@@ -1649,7 +1655,7 @@ function Term({ s, say, voice, onVoiceOff }) {
           </div>
         </div>`}
       ${pasted && html`<${PasteConfirm} files=${pasted} onClose=${(ok) => { setPasted(null); ok ? upload.current(pasted) : api_.current.focus?.(); }} />`}
-      ${voice && !cover && html`<${VoiceBar} s=${s} say=${say} send=${(d) => api_.current.send?.(d)} onClose=${onVoiceOff} />`}
+      ${voice && !cover && html`<${VoiceBar} s=${s} say=${say} type=${(t) => { api_.current.send?.(t); setTimeout(() => api_.current.send?.("\r"), 150); }} key=${(k) => api_.current.send?.(k)} onClose=${onVoiceOff} />`}
       <div class="keys ${keyboard ? "show" : ""}" onPointerDown=${(e) => e.preventDefault()}>
         ${KEYS.map(([label, seq]) => html`<button class=${label === "ctrl" && ctrl ? "on" : ""} onClick=${() => key(label, seq)}>${label}</button>`)}
         <button onClick=${() => picker.current.click()}>file</button>
@@ -1728,7 +1734,7 @@ function finalReplies(msgs) {
   return out.filter((t) => t.trim());
 }
 
-function VoiceBar({ s, say, send, onClose }) {
+function VoiceBar({ s, say, type, key, onClose }) {
   const who = s.harness || "Claude";
   const [phase, setPhase] = useState("starting");
   const [heard, setHeard] = useState("");
@@ -1840,13 +1846,12 @@ function VoiceBar({ s, say, send, onClose }) {
     if (!text || PHANTOM.test(text)) return rest();
     setHeard(text);
     const bare = text.toLowerCase().replace(/[.!?,]/g, "").trim();
-    if (/^(stop|cancel|dur|durdur|iptal|bekle)$/.test(bare)) { send("\x1b"); st.current.awaiting = false; return rest(); }
+    if (/^(stop|cancel|dur|durdur|iptal|bekle)$/.test(bare)) { key("\x1b"); st.current.awaiting = false; return rest(); }
     if (/^(repeat|again|say (that|it) again|tekrar|tekrarla|bir daha)$/.test(bare)) return replay();
     if (/^(read (it )?all|read the whole (thing|reply)|full|hepsini oku|tamamını oku|tamamı)$/.test(bare)) return full();
     if (/^(previous|earlier|go back|önceki|öncekini oku|geri)$/.test(bare)) return earlier();
-    if (st.current.permission && /^(yes|yeah|yep|evet|tamam|olur|okay|ok)\b/.test(bare)) { st.current.permission = false; send("\r"); st.current.awaiting = true; st.current.sentAt = Date.now(); return rest(); }
-    send(text);
-    setTimeout(() => send("\r"), 150);
+    if (st.current.permission && /^(yes|yeah|yep|evet|tamam|olur|okay|ok)\b/.test(bare)) { st.current.permission = false; key("\r"); st.current.awaiting = true; st.current.sentAt = Date.now(); return rest(); }
+    type(text);
     st.current.awaiting = true;
     st.current.sentAt = Date.now();
     setPhase("waiting");
@@ -3230,7 +3235,7 @@ function copyText(text) {
   try { navigator.clipboard.writeText(text); } catch { const ta = Object.assign(document.createElement("textarea"), { value: text }); document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
 }
 
-function Transcript({ s, say, slot, resume, busy }) {
+function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
   const wide = useWide();
   const [idx, setIdx] = useState(null);
   const [bodies, setBodies] = useState({});
@@ -3504,7 +3509,9 @@ function Transcript({ s, say, slot, resume, busy }) {
       ${fresh > 0 && html`<span>${working ? "New activity" : "New reply"}</span>`}<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>`}
     ${!live && resume && s.kind !== "interactive" && level !== 1 && html`<${ResumeBar} s=${s} resume=${resume} busy=${busy} />`}
-    ${live && level !== 1 && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies} focusRef=${focusInput} working=${working} />`}
+    ${live && voice && html`<${VoiceBar} s=${s} say=${say} type=${(t) => send(t)} onClose=${onVoiceOff}
+      key=${(k) => api(`/api/sessions/${s.id || s.sessionId}/keys`, { method: "POST", body: { keys: k } }).catch((e) => say(e.message))} />`}
+    ${live && !voice && level !== 1 && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies} focusRef=${focusInput} working=${working} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
   </div>`;
 }
@@ -3761,6 +3768,7 @@ function Palette({ live, sel, say, home, actions, onClose }) {
   }
   add("Actions", "New session", { glyph: "+", hint: "n", run: run(() => actions.create()) });
   for (const p of presets) add("Actions", `Start ${p.name}`, { proj: p.name, kw: `preset ${p.dir}`, sub: tilde(p.dir), run: run(() => api(`/api/sessions${hostQ(p.host, home)}`, { method: "POST", body: { preset: p.name } }).then((r) => { say(`Started ${p.name}.`); go(r.id); }, (e) => say(e.message))) });
+  add("Actions", "Assistant", { glyph: "◇", hint: "a", kw: "ask chat switchboard", run: run(actions.ask) });
   if (VOICE_OK) add("Actions", "Talk to Claude", { glyph: "◉", hint: "t", kw: "voice assistant", run: run(actions.talk) });
   add("Actions", "Usage and limits", { glyph: "%", hint: "u", kw: "tokens cost week", run: run(actions.usage) });
   add("Actions", "Keyboard shortcuts", { glyph: "?", hint: "?", kw: "help keys", run: run(actions.help) });

@@ -115,6 +115,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/sessions/{sid}/upload", s.upload)
 	mux.HandleFunc("POST /api/uploads", s.upload)
 	mux.HandleFunc("POST /api/sessions/{id}/send", s.send)
+	mux.HandleFunc("POST /api/sessions/{id}/keys", s.keys)
 	mux.HandleFunc("POST /api/sessions/{sid}/asks/{ask}", s.answer)
 	mux.HandleFunc("POST /api/guess", s.guess)
 	mux.HandleFunc("GET /api/widget", s.widget)
@@ -589,6 +590,17 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.done(w, id, s.Term.Send(r.Context(), id, req.Text))
+}
+
+func (s *Server) keys(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Keys string }
+	json.NewDecoder(r.Body).Decode(&req)
+	if req.Keys != "\x1b" && req.Keys != "\r" {
+		http.Error(w, "keys is Esc or Enter", http.StatusBadRequest)
+		return
+	}
+	id := r.PathValue("id")
+	s.done(w, id, s.Term.Keys(r.Context(), id, req.Keys))
 }
 
 func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
