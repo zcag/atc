@@ -3307,9 +3307,9 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
     const landed = (p) => turns.some((t) => (t.at && new Date(t.at) >= p.at - 60000 && plain(t.prompt).startsWith(head(p))) || (t.notes || []).some((n) => plain(n).startsWith(head(p))));
     const passed = (p) => turns.some((t) => t.at && new Date(t.at) > p.at + 60000);
     const stale = (p) => passed(p) || (!working && Date.now() - p.at > 5 * 60e3);
-    const gone = (p) => p.state === "sent" && (landed(p) || stale(p));
+    const gone = (p) => p.state !== "failed" && landed(p) || p.state === "sent" && stale(p);
     if (pending.some(gone)) setPending((ps) => ps.filter((p) => !gone(p)));
-  }, [idx]);
+  }, [idx, pending]);
 
   useEffect(() => {
     const f = TX_FACES[prefs.face] || TX_FACES.news, st = box.current?.parentElement?.style;
