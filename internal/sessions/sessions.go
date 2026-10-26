@@ -97,6 +97,12 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		} else if s.State == NeedsYou && a.Kind == "background" && byID[a.SessionID].Pending == "" {
 			s.State = YourTurn
 		}
+		if s.State == Working && t.Ended && a.Kind == "background" {
+			s.State = YourTurn
+			if n := claude.Background(a.ID); n > 0 {
+				s.Activity = fmt.Sprintf("%d in the background", n)
+			}
+		}
 		if s.State == Working && t.Path != "" {
 			if turns, _, err := m.Index.Turns(t.Path); err == nil && len(turns) > 0 {
 				last := turns[len(turns)-1]

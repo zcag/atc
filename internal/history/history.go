@@ -31,6 +31,7 @@ type Transcript struct {
 	ReplyID        string    `json:"replyId,omitempty"`
 	Pending        string    `json:"pending,omitempty"`
 	pendingID      string
+	Ended          bool      `json:"ended,omitempty"`
 	Harness        string    `json:"harness,omitempty"`
 	Context        int       `json:"context"`
 	Updated        time.Time `json:"updated"`
@@ -40,6 +41,7 @@ type Transcript struct {
 
 type entry struct {
 	Type           string    `json:"type"`
+	Subtype        string    `json:"subtype"`
 	Cwd            string    `json:"cwd"`
 	GitBranch      string    `json:"gitBranch"`
 	Timestamp      time.Time `json:"timestamp"`
@@ -184,7 +186,12 @@ func apply(t *Transcript, e *entry, custom *string) {
 		t.LastPrompt = e.LastPrompt
 	case "permission-mode":
 		t.PermissionMode = e.PermissionMode
+	case "system":
+		if e.Subtype == "turn_duration" && !e.IsSidechain {
+			t.Ended = true
+		}
 	case "user":
+		t.Ended = false
 		if e.PromptID != "" && !e.Timestamp.IsZero() {
 			t.PromptAt, t.Activity, t.Pending, t.pendingID = e.Timestamp, "", "", ""
 		}
@@ -197,6 +204,7 @@ func apply(t *Transcript, e *entry, custom *string) {
 			}
 		}
 	case "assistant":
+		t.Ended = t.Ended && e.IsSidechain
 		var blocks []block
 		if !e.IsSidechain && json.Unmarshal(e.Message.Content, &blocks) == nil {
 			for _, b := range blocks {

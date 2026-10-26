@@ -50,6 +50,20 @@ type Block struct {
 	Approve   string
 }
 
+func Background(id string) int {
+	b, err := os.ReadFile(filepath.Join(ConfigDir(), "jobs", id, "state.json"))
+	if err != nil {
+		return 0
+	}
+	var st struct {
+		InFlight struct {
+			Tasks int `json:"tasks"`
+		} `json:"inFlight"`
+	}
+	json.Unmarshal(b, &st)
+	return st.InFlight.Tasks
+}
+
 func Asking(id string) Block {
 	b, err := os.ReadFile(filepath.Join(ConfigDir(), "jobs", id, "state.json"))
 	if err != nil {
