@@ -47,6 +47,9 @@ type Session struct {
 	Context        int              `json:"context,omitempty"`
 	PromptAt       time.Time        `json:"promptAt,omitzero"`
 	Activity       string           `json:"activity,omitempty"`
+	Steps          int              `json:"steps,omitempty"`
+	Failed         int              `json:"failed,omitempty"`
+	Files          int              `json:"files,omitempty"`
 	LastReply      string           `json:"lastReply,omitempty"`
 	Summary        *summary.Summary `json:"summary,omitempty"`
 	Summarizing    bool             `json:"summarizing,omitempty"`
@@ -89,6 +92,12 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 			s.Activity = s.Asks[0].Activity()
 		} else if s.State == NeedsYou && a.Kind == "background" && byID[a.SessionID].Pending == "" {
 			s.State = YourTurn
+		}
+		if s.State == Working && t.Path != "" {
+			if turns, _, err := m.Index.Turns(t.Path); err == nil && len(turns) > 0 {
+				last := turns[len(turns)-1]
+				s.Steps, s.Failed, s.Files = last.Steps, last.Failed, len(last.Files)
+			}
 		}
 		if s.State == YourTurn && s.Summary == nil {
 			s.Summarizing = m.Summary.Want(byID[a.SessionID])

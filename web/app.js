@@ -99,7 +99,7 @@ function App() {
   const route = useRoute();
   const [stale, setStale] = useState(null);
   const [starting, setStarting] = useState(false);
-  const [view, setViewRaw] = useState(() => ({ list: "classic", rail: false, ...stored(VIEW, {}) }));
+  const [view, setViewRaw] = useState(() => ({ list: "triage", rail: false, ...stored(VIEW, {}) }));
   const setView = (v) => { setViewRaw(v); store(VIEW, v); };
   const wide = useWide();
   const railed = view.rail && !!route && wide;
@@ -377,9 +377,9 @@ function App() {
 
 const VIEW = "atc.view";
 const LISTS = [
-  ["classic", "Classic", "Cards grouped by state"],
   ["triage", "Triage", "What waits on you first, as cards you can answer from; the rest as one-line rows"],
   ["lanes", "Project lanes", "Grouped by project, with each project's recent sessions and a day of activity"],
+  ["classic", "Classic", "Cards grouped by state"],
 ];
 
 function monograms(names) {
@@ -575,7 +575,7 @@ function Triage({ live, only, sel, cursor }) {
     : only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below.";
   return html`
     <p class="brief">${brief}</p>
-    <${Bay} title="Your turn" list=${wait} sel=${sel} cursor=${cursor} size="card" />
+    <${Bay} title="Your turn" list=${wait} sel=${sel} cursor=${cursor} size="tcard" />
     <${Bay} title="Working" list=${work} sel=${sel} cursor=${cursor} size="work" />
     <${Bay} title="Parked" list=${rest.filter((s) => s.parked)} sel=${sel} cursor=${cursor} size="lrow" />
     <${Bay} title="Stopped" list=${rest.filter((s) => !s.parked)} sel=${sel} cursor=${cursor} size="line" />`;
@@ -755,6 +755,22 @@ const headline = (s) => {
 };
 const replyable = (s) => s.attachable && s.state === "your-turn" && !s.asks?.length && s.summary?.replies?.length > 0;
 const elsewhere = (s) => MULTI && s.host && s.host !== HERE && html`<span class="host">${s.host}</span>`;
+const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
+const Steps = ({ s }) => s.steps > 0 && html`<span class="steps">${plural(s.steps, "step")}${s.files > 0 && ` · ${plural(s.files, "file")}`}${s.failed > 0 && html` · <b>${s.failed} failed</b>`}</span>`;
+
+function Meta({ s, quiet }) {
+  return html`
+    <div class="l3">
+      <${ProjectTag} path=${s.cwd} full />
+      ${s.branch && !["HEAD", "main", "master"].includes(s.branch) && html`<span class="br">${s.branch}</span>`}
+      ${MULTI && s.host && !(quiet && s.host === HERE) && html`<span class="host">${s.host}</span>`}
+      ${engineTag(s)}
+      ${s.kind === "interactive" && html`<span class="interm" title="Open in a terminal window: readable here, not attachable">terminal</span>`}
+      ${(s.servers || []).slice(0, 2).map((p) => html`<span class="srv" role="link" title=${`Open ${serverURL(s, p)}`} onClick=${(e) => { e.stopPropagation(); openOut(serverURL(s, p)); }}>:${p}</span>`)}
+      ${s.pages?.length > 0 && html`<span class="pg" role="link" title=${s.pages.map((l) => `${pageLabel(l)}  ${l.url}`).join("\n")}
+        onClick=${(e) => { e.stopPropagation(); openOut(s.pages[0].url); }}><span>${pageLabel(s.pages[0])}</span>${s.pages.length > 1 ? ` +${s.pages.length - 1}` : ""} ↗</span>`}
+    </div>`;
+}
 
 function CardReplies({ s }) {
   const [busy, setBusy] = useState(false);
@@ -781,6 +797,11 @@ function Strip({ s, sel, cursor, size = "full" }) {
   const press = useRef({ t: 0, fired: false, x: 0, y: 0 });
   const menu = (e) => { e?.preventDefault(); e?.stopPropagation(); QUICK(s, e?.currentTarget?.getBoundingClientRect()); };
   const hover = useRef(0);
+  const swipe = useRef(null);
+  const swipes = ["tcard", "work", "line", "lrow"].includes(size) && s.state !== "past";
+  const swipeAct = (dx) => dx > 0
+    ? { label: s.parked ? "Unpark" : "Park", run: () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { parked: !s.parked } }) }
+    : replyable(s) && { label: `Send “${s.summary.replies[0]}”`, run: () => api(`/api/sessions/${s.id}/send`, { method: "POST", body: { text: s.summary.replies[0], suggested: true } }) };
   const down = (e) => {
     prewarm(s);
     if (e.pointerType !== "touch") return;
@@ -788,9 +809,35 @@ function Strip({ s, sel, cursor, size = "full" }) {
     p.fired = false; p.x = e.clientX; p.y = e.clientY;
     const el = e.currentTarget;
     p.t = setTimeout(() => { p.fired = true; navigator.vibrate?.(15); QUICK(s, el.getBoundingClientRect()); }, 450);
+    if (swipes) swipe.current = { x: e.clientX, y: e.clientY, on: false, armed: false };
   };
-  const move = (e) => { const p = press.current; if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) clearTimeout(p.t); };
-  const up = () => clearTimeout(press.current.t);
+  const move = (e) => {
+    const p = press.current, w = swipe.current, el = e.currentTarget;
+    if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 10) clearTimeout(p.t);
+    if (!w) return;
+    const dx = e.clientX - w.x, dy = e.clientY - w.y;
+    if (!w.on && Math.abs(dx) > 12 && Math.abs(dx) > 1.5 * Math.abs(dy)) { w.on = true; el.setPointerCapture?.(e.pointerId); el.classList.add("swiping"); }
+    if (!w.on) return;
+    const act = swipeAct(dx), armed = !!act && Math.abs(dx) > 90;
+    el.style.transform = `translateX(${act ? dx : dx / 4}px)`;
+    el.dataset.swipe = act ? act.label : "";
+    el.dataset.dir = dx > 0 ? "r" : "l";
+    if (armed !== w.armed) { w.armed = armed; el.classList.toggle("armed", armed); if (armed) navigator.vibrate?.(10); }
+  };
+  const up = (e) => {
+    clearTimeout(press.current.t);
+    const w = swipe.current, el = e.currentTarget;
+    swipe.current = null;
+    if (!w?.on) return;
+    const act = w.armed && e.type === "pointerup" && swipeAct(e.clientX - w.x);
+    press.current.fired = true;
+    setTimeout(() => (press.current.fired = false), 400);
+    el.classList.remove("swiping", "armed");
+    el.style.transition = "transform .2s ease-out";
+    el.style.transform = "";
+    setTimeout(() => (el.style.transition = ""), 220);
+    if (act) act.run().catch(() => {});
+  };
   const events = {
     onClick: (e) => { if (press.current.fired) { press.current.fired = false; return e.preventDefault(); } go(keyOf(s)); },
     onContextMenu: menu, onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: up,
@@ -799,18 +846,19 @@ function Strip({ s, sel, cursor, size = "full" }) {
   };
   const tip = [s.title, [WORD[s.state] || s.state, s.id || s.sessionId.slice(0, 8), model(s.model)].filter(Boolean).join(" · ")].join("\n");
   const cls = `strip ${size} ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}`;
-  if (["card", "work", "line", "lrow"].includes(size)) {
+  if (["tcard", "work", "line", "lrow"].includes(size)) {
     const c = `it ${size} ${s.state} ${s.parked ? "parked" : ""} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}`;
     const attrs = { class: c, style: `--ph: ${hueOf(project(s.cwd).name)}`, "data-sid": s.sessionId, "data-state": s.state, title: tip, "aria-current": on ? "true" : null, ...events };
     const glyph = html`<i class="g ${s.parked && s.state !== "working" ? "parked" : s.state} ${unread(s) ? "unread" : ""}" aria-hidden="true"></i>`;
     const acts = s.state !== "past" && html`<${HoverActions} s=${s} menu=${menu} />`;
     const when = html`<span class="when" title=${new Date(s.updated || 0).toLocaleString()}>${s.state === "working" ? html`<${Elapsed} s=${s} />` : ago(s)}</span>`;
-    if (size === "card") return html`
+    if (size === "tcard") return html`
       <div ...${attrs} role="button" tabindex="0" onKeyDown=${(e) => e.key === "Enter" && e.target === e.currentTarget && go(keyOf(s))}>
         ${acts}
-        <div class="c1">${glyph}<span class="title">${s.title || "Untitled"}</span><${ProjectTag} path=${s.cwd} />${elsewhere(s)}${when}</div>
+        <div class="c1">${glyph}<span class="title">${s.title || "Untitled"}</span>${when}</div>
         <div class="hl">${headline(s)}</div>
         ${s.summary?.gist?.length > 0 && html`<ul class="gist">${s.summary.gist.slice(0, 2).map((g) => html`<li>${g}</li>`)}</ul>`}
+        <${Meta} s=${s} quiet />
         ${replyable(s) && html`<${CardReplies} s=${s} />`}
       </div>`;
     if (size === "work") return html`
@@ -818,15 +866,17 @@ function Strip({ s, sel, cursor, size = "full" }) {
         ${acts}
         <span class="ring"><${Elapsed} s=${s} /></span>
         <span class="title">${s.title || "Untitled"}</span>
-        <span class="tags"><${ProjectTag} path=${s.cwd} />${elsewhere(s)}</span>
+        <${Steps} s=${s} />
         <span class="doing" key=${s.activity}>${doing(s)}</span>
+        <${Meta} s=${s} quiet />
       </button>`;
     return html`
       <button ...${attrs}>
         ${acts}
         ${glyph}<span class="title">${s.title || "Untitled"}</span>
-        ${size === "line" && html`<${ProjectTag} path=${s.cwd} />`}${elsewhere(s)}${when}
+        ${size === "line" && html`<${ProjectTag} path=${s.cwd} full />`}${size === "line" && elsewhere(s)}${when}
         ${size === "lrow" && said(s, true)}
+        ${size === "lrow" && s.state !== "past" && html`<${Meta} s=${s} quiet />`}
       </button>`;
   }
   if (size === "row") return html`
@@ -844,16 +894,7 @@ function Strip({ s, sel, cursor, size = "full" }) {
         <span class="when" title=${new Date(s.updated || 0).toLocaleString()}>${s.state === "working" ? html`<i class="pulse"></i><${Elapsed} s=${s} />` : ago(s)}</span>
       </div>
       ${said(s)}
-      <div class="l3">
-        <${ProjectTag} path=${s.cwd} full />
-        ${s.branch && !["HEAD", "main", "master"].includes(s.branch) && html`<span class="br">${s.branch}</span>`}
-        ${MULTI && s.host && html`<span class="host">${s.host}</span>`}
-        ${engineTag(s)}
-        ${s.kind === "interactive" && html`<span class="interm" title="Open in a terminal window: readable here, not attachable">terminal</span>`}
-        ${(s.servers || []).slice(0, 2).map((p) => html`<span class="srv" role="link" title=${`Open ${serverURL(s, p)}`} onClick=${(e) => { e.stopPropagation(); openOut(serverURL(s, p)); }}>:${p}</span>`)}
-        ${s.pages?.length > 0 && html`<span class="pg" role="link" title=${s.pages.map((l) => `${pageLabel(l)}  ${l.url}`).join("\n")}
-          onClick=${(e) => { e.stopPropagation(); openOut(s.pages[0].url); }}><span>${pageLabel(s.pages[0])}</span>${s.pages.length > 1 ? ` +${s.pages.length - 1}` : ""} ↗</span>`}
-      </div>
+      <${Meta} s=${s} />
     </button>
   `;
 }
