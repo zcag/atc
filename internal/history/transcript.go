@@ -37,6 +37,7 @@ type Output struct {
 	Error  bool           `json:"error,omitempty"`
 	Images []string       `json:"images,omitempty"`
 	Meta   map[string]any `json:"meta,omitempty"`
+	Time   time.Time      `json:"time,omitzero"`
 }
 
 type Usage struct {
@@ -258,6 +259,7 @@ func (rd *reader) results(m rawMsg) bool {
 		if i, ok := rd.tools[b.ToolUseID]; ok && b.Type == "tool_result" {
 			x := &rd.msgs[i]
 			x.Out = output(b, m.ToolUseResult)
+			x.Out.Time = m.Timestamp
 			x.Badge, x.Look = classify(*x)
 			if rd.noImages {
 				x.Out.Images = nil

@@ -3111,13 +3111,18 @@ function Transcript({ s, say, slot, resume, busy }) {
     loading.current.add(key);
     try {
       const p = await api(`/api/sessions/${s.sessionId}/transcript?from=${t.from}&to=${t.to}`);
-      setBodies((b) => ({ ...b, [t.from]: { to: t.to, ...bodyOf(p.messages || []) } }));
+      setBodies((b) => (b[t.from]?.to > t.to ? b : { ...b, [t.from]: { to: t.to, ...bodyOf(p.messages || []) } }));
     } catch (e) { setErr(e.message); }
     loading.current.delete(key);
   };
 
   useEffect(() => { landed.current = false; setIdx(null); setBodies({}); setOpened(new Set()); setPendingRaw(pendingOf(s.sessionId)); setQuotes([]); setDraftRaw(txStore.get(`draft.${s.sessionId}`, "")); seenAt.current = txStore.get(`seen.${s.sessionId}`, null); loadIdx(); }, [s.sessionId]);
   useEffect(() => { if (idx) loadIdx(); }, [s.updated, s.state]);
+  useEffect(() => {
+    if (!working) return;
+    const t = setInterval(loadIdx, 10000);
+    return () => clearInterval(t);
+  }, [working, s.sessionId]);
 
   const firstOpen = useMemo(() => {
     if (!turns.length) return 0;
@@ -3290,7 +3295,7 @@ function Transcript({ s, say, slot, resume, busy }) {
   };
 
   const last = turns[turns.length - 1], lastBody = last && bodies[last.from];
-  const running = working && lastBody && txSteps(lastBody.items).some((x) => !x.out);
+  const running = working && lastBody ? txSteps(lastBody.items).findLast((x) => !x.out) : null;
   const replies = live && !working && !pending.length && s.state === "your-turn" && !s.asks?.length ? s.summary?.replies : null;
   const nFolded = turns.filter((_, i) => folded(i)).length;
   const cost = turns.reduce((a, t) => a + (t.cost || 0), 0);
@@ -3325,7 +3330,7 @@ function Transcript({ s, say, slot, resume, busy }) {
                 ? html`<${Folded} key=${`f${t.from}`} t=${t} i=${i} open=${openTurn} />`
                 : html`${i === firstOpen && firstOpen > 0 && html`<div class="since">${firstOpen === turns.length - 1 ? "Latest" : `${turns.length - firstOpen} new since you last read`}</div>`}<${Turn} key=${`t${t.from}`} t=${t} i=${i} s=${s} body=${bodies[t.from]} level=${level} zoom=${setShot} quote=${live ? quote : null} latest=${i === turns.length - 1} live=${working && i === turns.length - 1} fresh=${opened.has(i)} />`}`)}
             ${pending.map((p) => html`<${Pending} key=${p.id} p=${p} retry=${() => send(p.text, { retryId: p.id })} drop=${() => setPending((ps) => ps.filter((x) => x.id !== p.id))} />`)}
-            ${working && !running && !pending.some((p) => p.state !== "failed") && html`<${Thinking} since=${last?.end} />`}
+            ${working && !pending.some((p) => p.state !== "failed") && html`<${Thinking} since=${lastAt(lastBody) || last?.end} step=${running} />`}
           `}
         </main>
       </div>
@@ -3367,10 +3372,13 @@ function Lapse({ a, b }) {
 const shipped = (t) => (t.badges || []).some((b) => b.ok && (b.kind === "commit" || b.kind === "push" || b.kind === "deploy" || b.kind === "publish"));
 const Node = ({ t, live }) => html`<span class="node ${shipped(t) ? "ship" : ""} ${live ? "live" : ""}" aria-hidden="true"><span class="node-t">${txClock(t.at)}</span></span>`;
 
-function Thinking({ since }) {
+const lastAt = (body) => (body?.items || []).map((it) => it.out?.time || it.time).filter(Boolean).sort().pop();
+
+function Thinking({ since, step }) {
   useNow(1000);
-  const ms = since ? Date.now() - new Date(since) : 0;
-  return html`<p class="live-line"><span class="dot"></span>${ms > 3000 ? `Thinking · ${txSpan(ms)}` : "Working"}</p>`;
+  const ms = Date.now() - new Date(step?.time || since || Date.now());
+  const what = step ? `Running ${step.tool}` : "Thinking";
+  return html`<p class="live-line"><span class="dot"></span>${ms > 3000 ? `${what} · ${txSpan(ms)}` : step ? what : "Working"}</p>`;
 }
 
 const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
