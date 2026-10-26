@@ -1053,7 +1053,9 @@ function Session({ s, say, live }) {
   const choose = (m) => { setMode(m); try { localStorage.setItem(PANE, m); } catch {} };
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const [voice, setVoice] = useState(() => { const v = AUTO_VOICE && canAttach; if (v) AUTO_VOICE = false; return v; });
+  const voiceKey = `atc.voice.${s.sessionId}`;
+  const [voice, setVoice] = useState(() => { const v = AUTO_VOICE && canAttach; if (v) AUTO_VOICE = false; return v || (canAttach && pref(voiceKey, "") === "on"); });
+  useEffect(() => setPref(voiceKey, voice ? "on" : ""), [voice]);
   useEffect(() => {
     if (canAttach && !auto.current && paneFor(s) === "term" && !voice) setMode("term");
   }, [canAttach]);
@@ -2893,6 +2895,7 @@ const Note = ({ n }) => html`<div class="note-you" title=${`You, while Claude wa
 function Prompt({ text, images, partial }) {
   const [all, setAll] = useState(false);
   if (partial) return html`<p class="partial">This turn started before what is loaded here.</p>`;
+  if (images?.length) text = text.replace(/\[Image #\d+\]\s*/g, "");
   const long = text.length > 480 || text.split("\n").length > 6;
   return html`<div class="prompt">${text && html`<div class=${long && !all ? "clamp" : ""}>${text}</div>`}${long && html`<button class="fold" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}${(images || []).map((src) => html`<img src=${src} alt="Image you attached" />`)}</div>`;
 }
@@ -3152,15 +3155,18 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   const ta = useRef();
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
+  const [atts, setAtts] = useState([]);
   focusRef.current = () => ta.current?.focus();
   const dict = useDictation((t) => setDraft((d) => (d ? `${d.trimEnd()} ${t}` : t)), say);
   useLayoutEffect(() => { const el = ta.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, innerHeight * 0.4) + "px"; } }, [draft]);
   const go = async () => {
-    const text = [...quotes.map((q) => q.split("\n").map((l) => `> ${l}`).join("\n")), draft.trim()].filter(Boolean).join("\n\n");
-    if (!text || busy) return;
+    const paths = atts.map((a) => (/\s/.test(a.path) ? `"${a.path}"` : a.path)).join("\n");
+    const text = [...quotes.map((q) => q.split("\n").map((l) => `> ${l}`).join("\n")), draft.trim(), paths].filter(Boolean).join("\n\n");
+    if (!text || busy || atts.some((a) => !a.path)) return;
     setBusy(true);
     setDraft("");
     setQuotes([]);
+    setAtts([]);
     await send(text);
     setBusy(false);
   };
@@ -3168,18 +3174,23 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
     for (const f of files) {
       const fd = new FormData();
       fd.append("file", f, f.name);
+      const id = Math.random().toString(36).slice(2);
+      setAtts((as) => [...as, { id, name: f.name, url: f.type.startsWith("image/") ? URL.createObjectURL(f) : null }]);
       try {
         const res = await fetch(`/api/sessions/${s.sessionId}/upload`, { method: "POST", body: fd });
         if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
-        const p = (await res.json()).path;
-        setDraft((d) => `${d}${d && !d.endsWith("\n") ? "\n" : ""}${/\s/.test(p) ? `"${p}"` : p}`);
-      } catch (e) { say(`Uploading ${f.name} failed: ${e.message}`); }
+        const path = (await res.json()).path;
+        setAtts((as) => as.map((a) => (a.id === id ? { ...a, path } : a)));
+      } catch (e) {
+        setAtts((as) => as.filter((a) => a.id !== id));
+        say(`Uploading ${f.name} failed: ${e.message}`);
+      }
     }
     ta.current?.focus();
   };
   const press = useRef(), held = useRef(false);
   const fill = (text) => { setDraft(text); requestAnimationFrame(() => { const el = ta.current; el?.focus(); el?.setSelectionRange(text.length, text.length); }); };
-  const ready = (draft.trim() || quotes.length) && !busy;
+  const ready = (draft.trim() || quotes.length || atts.length) && !busy && !atts.some((a) => !a.path);
   const asked = s.asks?.[0]?.questions;
   const hint = asked ? (asked.length === 1 ? "Or type your own answer" : "Answer the questions above") : working ? "Queue a message for Claude" : s.state === "needs-you" ? "Claude is waiting on you" : "Reply to Claude";
   const root = useDock();
@@ -3192,6 +3203,9 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
           onPointerUp=${() => clearTimeout(press.current)} onPointerLeave=${() => clearTimeout(press.current)} onContextMenu=${(e) => touch && e.preventDefault()}>${t}</button>${!touch && html`<button class="edit" title="Edit before sending" aria-label=${`Edit “${t}” before sending`} onClick=${() => fill(t)}><svg width="13" height="13" viewBox="0 0 16 16"><path d="M10.5 2.5l3 3-8 8H2.5v-3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></button>`}</span>`)}
       </div></div>`}
       ${quotes.length > 0 && html`<div class="quotes">${quotes.map((q, j) => html`<div class="qchip"><span>${q}</span><button aria-label="Remove quote" onClick=${() => setQuotes(quotes.filter((_, k) => k !== j))}>✕</button></div>`)}</div>`}
+      ${atts.length > 0 && html`<div class="atts">${atts.map((a) => html`<div class="att ${a.path ? "" : "up"}" title=${a.name}>
+        ${a.url ? html`<img src=${a.url} alt=${a.name} />` : html`<span>${a.name}</span>`}
+        <button aria-label=${`Remove ${a.name}`} onClick=${() => setAtts(atts.filter((x) => x.id !== a.id))}>✕</button></div>`)}</div>`}
       <div class="box ${ready ? "ready" : ""}" onClick=${(e) => e.target === e.currentTarget && ta.current?.focus()}>
         <textarea ref=${ta} rows="1" value=${draft} placeholder=${hint} enterkeyhint=${touch ? "enter" : "send"}
           onInput=${(e) => setDraft(e.target.value)}
@@ -3212,10 +3226,14 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
 
 const pendingOf = (sid) => txStore.get(`pending.${sid}`, []).filter((p) => Date.now() - p.at < 6 * 3600e3).map((p) => (p.state === "sending" ? { ...p, state: "sent" } : p));
 
+const UPLOADED = /^"?[^\n"]*\/\.cache\/atc\/uploads\/[^\n]*$/gm;
+const unpathed = (t) => t.replace(UPLOADED, "").trim();
+
 function Pending({ p, retry, drop }) {
+  const text = unpathed(p.text), n = (p.text.match(UPLOADED) || []).length;
   return html`<section class="turn pending">
     <span class="node live" aria-hidden="true"></span>
-    <div class="prompt">${p.text}</div>
+    <div class="prompt">${text}${n > 0 && html`<div class="att-note">${n === 1 ? "1 attachment" : `${n} attachments`}</div>`}</div>
     <p class="live-line pend ${p.state}"><span class="dot"></span>${p.state === "sending" ? "Sending" : p.state === "failed" ? html`Not sent: ${p.err} <button onClick=${retry}>Try again</button><button onClick=${drop}>Discard</button>` : p.queued ? "Queued. Claude reads it after its current step" : "Sent. Waiting for Claude"}</p>
   </section>`;
 }
@@ -3303,8 +3321,9 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
   useEffect(() => { opened.forEach((i) => need(i)); }, [opened]);
   useEffect(() => {
     if (!pending.length || !idx) return;
-    const head = (p) => plain(p.text).slice(0, 24);
-    const landed = (p) => turns.some((t) => (t.at && new Date(t.at) >= p.at - 60000 && plain(t.prompt).startsWith(head(p))) || (t.notes || []).some((n) => plain(n).startsWith(head(p))));
+    const head = (p) => plain(unpathed(p.text)).slice(0, 24);
+    const said = (t) => plain(t.prompt.replace(/\[Image #\d+\]\s*/g, ""));
+    const landed = (p) => turns.some((t) => (t.at && new Date(t.at) >= p.at - 60000 && (head(p) ? said(t).startsWith(head(p)) : t.images > 0 || /\[Image #\d+\]/.test(t.prompt))) || (head(p) && (t.notes || []).some((n) => plain(n).startsWith(head(p)))));
     const passed = (p) => turns.some((t) => t.at && new Date(t.at) > p.at + 60000);
     const stale = (p) => passed(p) || (!working && Date.now() - p.at > 5 * 60e3);
     const gone = (p) => p.state !== "failed" && landed(p) || p.state === "sent" && stale(p);
