@@ -1841,7 +1841,7 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
 
   const heardSpeech = async (audio) => {
     st.current.talking = false;
-    if (st.current.speaking && !live.current.bargeIn) return;
+    if (live.current.muted || (st.current.speaking && !live.current.bargeIn)) return;
     setPhase("thinking");
     let text = "";
     try {
@@ -1915,9 +1915,11 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
           positiveSpeechThreshold: 0.6,
           negativeSpeechThreshold: 0.4,
           redemptionMs: 1200,
+          startOnLoad: false,
           minSpeechMs: 300,
           getStream: () => navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }),
           onSpeechStart: () => {
+            if (live.current.muted) return;
             if (st.current.speaking) { if (!live.current.bargeIn) return; stopSpeaking(); }
             clearTimeout(st.current.hold);
             st.current.talking = true;
