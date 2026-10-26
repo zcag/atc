@@ -1736,17 +1736,20 @@ function finalReplies(msgs) {
   return out.filter((t) => t.trim());
 }
 
+const VOICE_LEFT = new Map();
+
 function VoiceBar({ s, say, type, press, onClose }) {
+  const sid = s.sessionId, left = VOICE_LEFT.get(sid) || {}, muteKey = `atc.mute.${sid}`;
   const who = s.harness || "Claude";
   const [phase, setPhase] = useState("starting");
-  const [heard, setHeard] = useState("");
-  const [spoken, setSpoken] = useState("");
-  const [muted, setMuted] = useState(false);
+  const [heard, setHeard] = useState(left.heard || "");
+  const [spoken, setSpoken] = useState(left.spoken || "");
+  const [muted, setMuted] = useState(() => pref(muteKey, "") === "on");
   const [source, setSource] = useState(() => pref("atc.voicesrc", VOICE.tts ? "mine" : "device"));
   const [bargeIn, setBargeIn] = useState(() => pref("atc.bargein", "off") === "on");
-  const st = useRef({ awaiting: false, sentAt: 0, permission: false, speaking: false, audio: null, vad: null, turns: [], at: -1 });
+  const st = useRef({ awaiting: !!left.awaiting, sentAt: left.sentAt || 0, permission: false, speaking: false, audio: null, vad: null, turns: [], at: -1 });
   const live = useRef({});
-  live.current = { s, source, muted, bargeIn };
+  live.current = { s, source, muted, bargeIn, heard, spoken };
 
   const listen = (on) => { const v = st.current.vad; if (!v) return; on ? v.start() : v.pause(); };
   const rest = () => {
@@ -1891,8 +1894,7 @@ function VoiceBar({ s, say, type, press, onClose }) {
         });
         if (dead) return v.destroy();
         st.current.vad = v;
-        v.start();
-        setPhase("listening");
+        if (!st.current.speaking) rest();
         if (APP) APP.keepScreenOn(true);
         else lock = await navigator.wakeLock?.request("screen").catch(() => null);
       } catch (e) {
@@ -1900,13 +1902,16 @@ function VoiceBar({ s, say, type, press, onClose }) {
         say(e.name === "NotAllowedError" ? "Allow the microphone to use voice." : `Voice failed to start: ${e.message}`);
       }
     })();
-    return () => { dead = true; st.current.vad?.destroy(); stopSpeaking(); lock?.release?.(); APP?.keepScreenOn(false); };
+    return () => {
+      VOICE_LEFT.set(sid, { heard: live.current.heard, spoken: live.current.spoken, awaiting: st.current.awaiting, sentAt: st.current.sentAt });
+      dead = true; st.current.vad?.destroy(); stopSpeaking(); lock?.release?.(); APP?.keepScreenOn(false); };
   }, []);
 
   const tapMic = () => {
     if (phase === "speaking") { stopSpeaking(); return rest(); }
     const m = !muted;
     setMuted(m);
+    setPref(muteKey, m ? "on" : "");
     live.current.muted = m;
     listen(!m);
     setPhase(m ? "muted" : st.current.awaiting ? "waiting" : "listening");
