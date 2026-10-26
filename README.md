@@ -360,14 +360,36 @@ not billed per token.
 
 ## One session that runs the others
 
-`atc mcp` gives Claude tools to see and drive your other sessions: list them with what each is
-doing, read a conversation, type a message into one (resuming it first if it was stopped), wait
-for its answer, start new ones (optionally in their own git worktree) and stop them. The voice
-assistant session has these tools from the start, so you can say "what is the deploy session up
-to?" or "tell the docs session to also cover the CLI" without opening either. To give them to any
-session, add atc as an MCP server once:
+`atc mcp` gives Claude tools to see and drive your other sessions:
 
-    claude mcp add atc -- atc mcp
+- `sessions`: every open session with what it is doing, what it is asking you (the question and
+  its options, or the permission it wants), and its last reply in short (status and gist).
+- `read`: a session's last reply in short, one line per turn (what was asked, files changed,
+  tests, commits, pushes, deploys, failures, how long), then its last messages in full.
+- `start` a session in a folder on any machine (optionally in its own worktree), `send` a
+  message to one (resuming it first if it was stopped), `wait` for its answer, `outputs` for the
+  servers, pages and files it produced, `stop`, `history`, `presets`.
+
+The voice assistant session has these tools from the start, so you can say "what is the deploy
+session up to?" or "tell the docs session to also cover the CLI" without opening either. To give
+them to every session on a machine, add atc as an MCP server once:
+
+    claude mcp add -s user atc -- atc mcp
+
+The tools' instructions tell Claude to use them whenever you ask to start a session or hand work
+to another agent, even without naming atc.
+
+**Sessions talking to each other.** A message one session sends another, or the first message of
+a session it starts, is headed with a line naming the sender:
+
+    [started by session "docs rewrite" (a8f3c2d1 on desktop) · when done or blocked, report back: answer with atc's send tool to a8f3c2d1]
+
+so the receiver knows it came from an agent rather than from you, and where to report back. A
+message without that line is yours. `atc send` and `atc new` add it too when they run inside a
+Claude session (they read `CLAUDE_CODE_SESSION_ID`). A sender that cannot take messages (open in a
+terminal, or on a machine atc does not run on) asks for the answer in the final message instead,
+which it reads with `wait`. A request from another session is not your approval: your rules for
+outward actions still apply, and the instructions say so.
 
 Sessions open in a terminal can be read but not typed into. A session never sends to itself.
 

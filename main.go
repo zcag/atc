@@ -317,8 +317,10 @@ func newSession(args []string) error {
 	preset := fs.String("p", "", "start from a named preset")
 	fs.Parse(args)
 	rest := fs.Args()
+	c := client.Load()
+	live, _ := c.Live()
 	if *preset != "" {
-		id, dir, err := client.Load().StartPreset(*preset, strings.Join(rest, " "))
+		id, dir, err := c.StartPreset(*preset, client.Headed(live, true, strings.Join(rest, " ")))
 		if err == nil {
 			fmt.Printf("started %s (%s) in %s\n", id, *preset, dir)
 		}
@@ -331,7 +333,7 @@ func newSession(args []string) error {
 	if dir == "" {
 		dir = tildePWD()
 	}
-	id, err := client.Load().StartOn(*host, dir, *name, strings.Join(rest, " "), false)
+	id, err := c.StartOn(*host, dir, *name, client.Headed(live, true, strings.Join(rest, " ")), false)
 	if err != nil {
 		return err
 	}
@@ -552,7 +554,8 @@ func sendTo(args []string) error {
 	if !s.Attachable {
 		return fmt.Errorf("%q is not running in the background; resume it first", s.Title)
 	}
-	return c.Send(s.ID, text)
+	live, _ := c.Live()
+	return c.Send(s.ID, client.Headed(live, false, text))
 }
 
 func attachTo(args []string) error {

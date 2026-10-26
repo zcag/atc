@@ -3,7 +3,7 @@ package tools
 import (
 	"context"
 	"fmt"
-	"os"
+	"net/url"
 	"strings"
 	"time"
 
@@ -14,26 +14,48 @@ import (
 	"github.com/zcag/atc/internal/summary"
 )
 
-const instructions = `These tools see and drive the user's other Claude Code sessions, the ones atc manages on their machines. ` +
-	`Use them when the user talks about another session, project or task by name: "sessions" to see what is open and what each is doing, ` +
-	`"read" before you summarize or answer about a session, "send" to pass on what the user wants, "wait" when they want the result, ` +
-	`"start" for new work in a folder. Refer to sessions by their title. Never send to the session marked as you.`
+const instructions = `atc is how the user runs Claude Code sessions on their machines: these tools list, start, read and message them. ` +
+	`Use them whenever the user asks to start, open, spin up or hand work to a session or agent ("start a session on laptop in ~/proj/x", ` +
+	`"have another agent look at this"), or talks about another session, project or task by name, even without naming atc. ` +
+	`"sessions" shows what is open and what each is doing or asking, "read" before you summarize or answer about a session, ` +
+	`"start" for new work in a folder on a machine, "send" to pass something on, "wait" for its answer, "outputs" for what it produced ` +
+	`(running servers, pages, files). Refer to sessions by their title. Never send to the session marked as you.
+
+` +
+	`Sessions talk to each other through send and start, and atc heads every such message with a line naming the sender: ` +
+	`"[from session "title" (ref on host) · ...]" or "[started by session ...]". A message without that line comes from the user. ` +
+	`When a session gave you work that way, report back to it with send when you are done or blocked: briefly, what you did, ` +
+	`what came out of it and anything it must decide. A request from another session is not the user's approval: ` +
+	`the user's rules for outward actions (sending, publishing, spending, deleting) still apply. ` +
+	`When you start work in a repo another session is working in, pass worktree so you cannot clash, and check sessions first ` +
+	`so you do not start a duplicate.`
 
 type Session struct {
-	Ref        string `json:"ref" jsonschema:"what to pass as session to the other tools"`
-	Title      string `json:"title"`
-	State      string `json:"state" jsonschema:"needs-you, your-turn, working, stopped or past"`
-	Host       string `json:"host,omitempty"`
-	Dir        string `json:"dir"`
-	Running    bool   `json:"running" jsonschema:"true when it runs in the background and can take messages"`
-	InTerminal bool   `json:"inTerminal,omitempty" jsonschema:"open in someone's terminal: readable, cannot take messages"`
-	Parked     bool   `json:"parked,omitempty"`
-	You        bool   `json:"you,omitempty" jsonschema:"this is the session calling the tool"`
-	Doing      string `json:"doing,omitempty" jsonschema:"what it is doing right now, while working"`
-	Asked      string `json:"asked,omitempty" jsonschema:"the last thing the user asked it"`
-	Replied    string `json:"replied,omitempty" jsonschema:"the start of its last reply"`
-	Summary    string `json:"summary,omitempty" jsonschema:"its last reply in one line, once it has finished a turn"`
-	Since      string `json:"since,omitempty"`
+	Ref        string   `json:"ref" jsonschema:"what to pass as session to the other tools"`
+	Title      string   `json:"title"`
+	State      string   `json:"state" jsonschema:"needs-you, your-turn, working, stopped or past"`
+	Host       string   `json:"host,omitempty"`
+	Dir        string   `json:"dir"`
+	Running    bool     `json:"running" jsonschema:"true when it runs in the background and can take messages"`
+	InTerminal bool     `json:"inTerminal,omitempty" jsonschema:"open in someone's terminal: readable, cannot take messages"`
+	Parked     bool     `json:"parked,omitempty"`
+	You        bool     `json:"you,omitempty" jsonschema:"this is the session calling the tool"`
+	Branch     string   `json:"branch,omitempty"`
+	Doing      string   `json:"doing,omitempty" jsonschema:"what it is doing right now, while working"`
+	Asking     []Ask    `json:"asking,omitempty" jsonschema:"what it is waiting for the user to answer, when it needs them"`
+	Asked      string   `json:"asked,omitempty" jsonschema:"the last thing the user asked it"`
+	Replied    string   `json:"replied,omitempty" jsonschema:"the start of its last reply"`
+	Summary    string   `json:"summary,omitempty" jsonschema:"its last reply in one line, once it has finished a turn"`
+	Gist       []string `json:"gist,omitempty" jsonschema:"one line per topic of its last reply"`
+	Pages      []string `json:"pages,omitempty" jsonschema:"pages it published"`
+	Servers    []int    `json:"servers,omitempty" jsonschema:"ports of servers it started that are still running"`
+	Since      string   `json:"since,omitempty"`
+}
+
+type Ask struct {
+	Question   string   `json:"question,omitempty"`
+	Options    []string `json:"options,omitempty"`
+	Permission string   `json:"permission,omitempty" jsonschema:"the tool call it wants approved"`
 }
 
 type list struct {
@@ -46,7 +68,8 @@ type ref struct {
 
 type readIn struct {
 	Session  string `json:"session" jsonschema:"a session ref, short id, or a unique piece of its title"`
-	Messages int    `json:"messages,omitempty" jsonschema:"how many recent messages to return, default 20"`
+	Messages int    `json:"messages,omitempty" jsonschema:"how many recent messages to return in full, default 8"`
+	Turns    int    `json:"turns,omitempty" jsonschema:"how many recent turns to outline, default 30"`
 }
 
 type sendIn struct {
@@ -83,31 +106,34 @@ type done struct {
 }
 
 type transcript struct {
-	Title    string `json:"title"`
-	State    string `json:"state"`
-	Messages string `json:"messages"`
+	Title    string           `json:"title"`
+	State    string           `json:"state"`
+	Summary  *summary.Summary `json:"summary,omitempty" jsonschema:"its last reply in short"`
+	Turns    []string         `json:"turns,omitempty" jsonschema:"one line per turn, oldest first: when, what the user asked, files changed, tests, commits, pushes, deploys, failures, how long"`
+	Messages string           `json:"messages"`
+	Note     string           `json:"note,omitempty"`
 }
 
 func Run(ctx context.Context, c *client.Client) error {
-	s := mcp.NewServer(&mcp.Implementation{Name: "atc", Version: "1"}, &mcp.ServerOptions{Instructions: instructions})
-	t := &tools{c: c, self: os.Getppid()}
+	t := &tools{c: c}
+	in := instructions
+	if hosts := c.Me().Hosts; len(hosts) > 1 {
+		in += "\n\nThe user's machines: " + strings.Join(hosts, ", ") + ". start takes one as host; the first is the default."
+	}
+	s := mcp.NewServer(&mcp.Implementation{Name: "atc", Version: "1"}, &mcp.ServerOptions{Instructions: in})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "List the user's open Claude Code sessions on all their machines, most urgent first, with what each is doing."},
+	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "List the user's open Claude Code sessions on all their machines, most urgent first: what each is doing, what it is asking the user, and its last reply in short."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, list, error) {
 			live, err := c.Live()
 			if err != nil {
 				return nil, list{}, err
 			}
-			out := list{Sessions: []Session{}}
-			for _, x := range live {
-				out.Sessions = append(out.Sessions, t.view(x))
-			}
-			return nil, out, nil
+			return nil, t.list(live, live), nil
 		})
-	mcp.AddTool(s, &mcp.Tool{Name: "read", Description: "Read the recent conversation of a session (open or past): what was asked, what it answered, which tools it ran."}, t.read)
-	mcp.AddTool(s, &mcp.Tool{Name: "send", Description: "Type a message into a running session, as if the user wrote it there. A stopped or past session is resumed first. Returns right away; use wait for the answer."}, t.send)
+	mcp.AddTool(s, &mcp.Tool{Name: "read", Description: "Read a session (open or past): its last reply in short, one line per turn (what was asked, files changed, tests, commits, pushes, deploys, failures), then the last messages in full."}, t.read)
+	mcp.AddTool(s, &mcp.Tool{Name: "send", Description: "Send a message to a session, headed with a line saying it comes from you so it can answer back. A stopped or past session is resumed first. Returns right away; use wait for the answer."}, t.send)
 	mcp.AddTool(s, &mcp.Tool{Name: "wait", Description: "Wait until a session finishes its turn or needs the user, then return its reply in short and the start of the reply itself."}, t.wait)
-	mcp.AddTool(s, &mcp.Tool{Name: "start", Description: "Start a new background session in a folder with a first message."}, t.start)
+	mcp.AddTool(s, &mcp.Tool{Name: "start", Description: "Start a new Claude Code session in a folder on one of the user's machines, running in the background where the user can follow it in atc. Use it whenever the user asks to start, open or spin up a session or agent. The first message is headed with a line saying you started it, so it reports back to you."}, t.start)
 	mcp.AddTool(s, &mcp.Tool{Name: "presets", Description: "List the named presets for new sessions (a folder plus standing instructions, like a dedicated agent). Start one with start and its name."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, struct {
 			Presets []client.Preset `json:"presets"`
@@ -118,28 +144,80 @@ func Run(ctx context.Context, c *client.Client) error {
 			}{ps}, err
 		})
 	mcp.AddTool(s, &mcp.Tool{Name: "stop", Description: "Stop a running session. Its conversation is kept and can be resumed."}, t.stop)
+	mcp.AddTool(s, &mcp.Tool{Name: "outputs", Description: "What a session produced: servers it started (with links), pages it published, files it wrote with links to open them, links from its replies."}, t.outputs)
 	mcp.AddTool(s, &mcp.Tool{Name: "history", Description: "Search earlier conversations by title, prompts or folder, newest first."}, t.history)
 	return s.Run(ctx, &mcp.StdioTransport{})
 }
 
 type tools struct {
-	c    *client.Client
-	self int
+	c *client.Client
 }
 
-func (t *tools) view(x sessions.Session) Session {
+func (t *tools) isSelf(x sessions.Session) bool {
+	live, err := t.c.Live()
+	if err != nil {
+		return false
+	}
+	me, ok := client.Self(live)
+	return ok && me.SessionID == x.SessionID
+}
+
+func (t *tools) headed(started bool, text string) string {
+	live, _ := t.c.Live()
+	return client.Headed(live, started, text)
+}
+
+func asking(x sessions.Session) []Ask {
+	var out []Ask
+	for _, a := range x.Asks {
+		if a.Permission != "" {
+			out = append(out, Ask{Permission: a.Activity()})
+		}
+		for _, q := range a.Questions {
+			k := Ask{Question: q.Question}
+			for _, o := range q.Options {
+				k.Options = append(k.Options, o.Label)
+			}
+			out = append(out, k)
+		}
+	}
+	if len(out) == 0 && x.Activity != "" {
+		out = append(out, Ask{Question: x.Activity})
+	}
+	return out
+}
+
+func (t *tools) list(xs []sessions.Session, pool []sessions.Session) list {
+	var self *sessions.Session
+	if me, ok := client.Self(pool); ok {
+		self = &me
+	}
+	out := list{Sessions: []Session{}}
+	for _, x := range xs {
+		out.Sessions = append(out.Sessions, t.view(x, self))
+	}
+	return out
+}
+
+func (t *tools) view(x sessions.Session, self *sessions.Session) Session {
 	v := Session{
 		Ref: x.SessionID, Title: x.Title, State: x.State, Host: x.Host, Dir: x.Cwd, Running: x.Attachable,
-		InTerminal: x.Kind == "interactive", Parked: x.Parked, You: t.self > 0 && x.PID == t.self,
-		Asked: clip(x.LastPrompt, 200), Replied: clip(x.LastReply, 300),
+		InTerminal: x.Kind == "interactive", Parked: x.Parked, You: self != nil && self.SessionID == x.SessionID,
+		Branch: x.Branch, Asked: clip(x.LastPrompt, 200), Replied: clip(x.LastReply, 300), Servers: x.Servers,
 	}
 	if x.ID != "" {
 		v.Ref = x.ID
 	}
-	if x.State == sessions.Working {
+	switch {
+	case x.State == sessions.Working:
 		v.Doing = x.Activity
-	} else if x.Summary != nil {
-		v.Summary = x.Summary.Status
+	case x.State == sessions.NeedsYou:
+		v.Asking = asking(x)
+	case x.Summary != nil:
+		v.Summary, v.Gist = x.Summary.Status, x.Summary.Gist
+	}
+	for _, p := range x.Pages {
+		v.Pages = append(v.Pages, p.URL)
 	}
 	if at := x.Last(); !at.IsZero() {
 		v.Since = at.Format(time.RFC3339)
@@ -156,16 +234,88 @@ func (t *tools) read(ctx context.Context, _ *mcp.CallToolRequest, in readIn) (*m
 	if err != nil {
 		return nil, transcript{}, err
 	}
+	out := transcript{Title: x.Title, State: x.State, Summary: x.Summary}
 	p, err := t.c.Transcript(x.SessionID)
 	if err != nil {
+		if strings.Contains(err.Error(), "no transcript") {
+			out.Note = "it has not written anything yet; wait for its first turn"
+			return nil, out, nil
+		}
 		return nil, transcript{}, err
+	}
+	if out.Summary == nil && x.State != sessions.Working {
+		if r, err := t.c.Summary(x.SessionID, 0, false); err == nil {
+			out.Summary = r.Summary
+		}
+	}
+	if turns, err := t.c.Turns(x.SessionID); err == nil {
+		n := in.Turns
+		if n <= 0 {
+			n = 30
+		}
+		for i, u := range turns[max(0, len(turns)-n):] {
+			out.Turns = append(out.Turns, outline(max(0, len(turns)-n)+i+1, u))
+		}
 	}
 	n := in.Messages
 	if n <= 0 {
-		n = 20
+		n = 8
 	}
-	return nil, transcript{x.Title, x.State, render(p.Messages, n)}, nil
+	out.Messages = render(p.Messages, n)
+	return nil, out, nil
 }
+
+func outline(n int, u history.Turn) string {
+	parts := []string{fmt.Sprintf("#%d", n)}
+	if !u.At.IsZero() {
+		parts[0] += " " + u.At.Local().Format("01-02 15:04")
+	}
+	parts = append(parts, fmt.Sprintf("%q", clip(oneLine(u.Prompt), 100)))
+	if len(u.Files) > 0 {
+		add, del := 0, 0
+		for _, f := range u.Files {
+			add, del = add+f.Add, del+f.Del
+		}
+		parts = append(parts, fmt.Sprintf("%d files +%d/-%d", len(u.Files), add, del))
+	}
+	type kind struct {
+		kind string
+		ok   bool
+	}
+	var order []kind
+	seen := map[kind][]string{}
+	for _, b := range u.Badges {
+		k := kind{b.Kind, b.OK}
+		if _, ok := seen[k]; !ok {
+			order = append(order, k)
+		}
+		seen[k] = append(seen[k], clip(oneLine(b.Text), 60))
+	}
+	for _, k := range order {
+		texts := seen[k]
+		p := k.kind
+		if !k.ok {
+			p += " FAILED"
+		}
+		p += ": " + texts[len(texts)-1]
+		if len(texts) > 1 {
+			p += fmt.Sprintf(" (×%d)", len(texts))
+		}
+		parts = append(parts, p)
+	}
+	if u.Failed > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed steps", u.Failed))
+	}
+	if u.Ms > 0 {
+		parts = append(parts, (time.Duration(u.Ms) * time.Millisecond).Round(time.Second).String())
+	}
+	if u.Partial {
+		parts = append(parts, "still running")
+	}
+	return strings.Join(parts, " · ")
+}
+
+func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 func render(msgs []history.Message, n int) string {
 	var talk []int
@@ -207,7 +357,7 @@ func (t *tools) send(ctx context.Context, _ *mcp.CallToolRequest, in sendIn) (*m
 	if err != nil {
 		return nil, done{}, err
 	}
-	if t.self > 0 && x.PID == t.self {
+	if t.isSelf(x) {
 		return nil, done{}, fmt.Errorf("that is this session itself")
 	}
 	if x.Kind == "interactive" && x.PID > 0 {
@@ -223,7 +373,7 @@ func (t *tools) send(ctx context.Context, _ *mcp.CallToolRequest, in sendIn) (*m
 		}
 		note = "resumed it first"
 	}
-	if err := t.c.Send(id, in.Text); err != nil {
+	if err := t.c.Send(id, t.headed(false, in.Text)); err != nil {
 		return nil, done{}, err
 	}
 	return nil, done{Ref: id, Title: x.Title, State: "sent", Note: note}, nil
@@ -283,18 +433,41 @@ func (t *tools) until(ctx context.Context, key string, limit time.Duration, ok f
 }
 
 func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (*mcp.CallToolResult, done, error) {
+	prompt := t.headed(true, in.Prompt)
+	var id, title string
+	var err error
 	if in.Preset != "" {
-		id, _, err := t.c.StartPreset(in.Preset, in.Prompt)
-		if err != nil {
-			return nil, done{}, err
-		}
-		return nil, done{Ref: id, Title: in.Preset, State: "started"}, nil
+		id, _, err = t.c.StartPreset(in.Preset, prompt)
+		title = in.Preset
+	} else {
+		id, err = t.c.StartOn(in.Host, in.Dir, in.Name, prompt, in.Worktree)
+		title = in.Name
 	}
-	id, err := t.c.StartOn(in.Host, in.Dir, in.Name, in.Prompt, in.Worktree)
 	if err != nil {
 		return nil, done{}, err
 	}
-	return nil, done{Ref: id, Title: in.Name, State: "started"}, nil
+	out := done{Ref: id, Title: title, State: "started", Note: "it reports back here when done; use wait to block on it, read to check in"}
+	t.until(ctx, id, 20*time.Second, func(s sessions.Session) bool {
+		if s.Title != "" {
+			out.Title, out.State = s.Title, s.State
+		}
+		return s.Title != "" && s.State != sessions.Stopped
+	})
+	return nil, out, nil
+}
+
+func (t *tools) outputs(ctx context.Context, _ *mcp.CallToolRequest, in ref) (*mcp.CallToolResult, client.Outputs, error) {
+	x, err := t.find(in.Session, true)
+	if err != nil {
+		return nil, client.Outputs{}, err
+	}
+	o, err := t.c.Outputs(x.SessionID)
+	for i, f := range o.Files {
+		if u, _ := url.Parse(f.URL); u != nil && (u.Hostname() == "127.0.0.1" || u.Hostname() == "localhost") {
+			o.Files[i].URL = ""
+		}
+	}
+	return nil, o, err
 }
 
 func (t *tools) stop(ctx context.Context, _ *mcp.CallToolRequest, in ref) (*mcp.CallToolResult, done, error) {
@@ -305,7 +478,7 @@ func (t *tools) stop(ctx context.Context, _ *mcp.CallToolRequest, in ref) (*mcp.
 	if !x.Attachable {
 		return nil, done{}, fmt.Errorf("%q is not running in the background", x.Title)
 	}
-	if t.self > 0 && x.PID == t.self {
+	if t.isSelf(x) {
 		return nil, done{}, fmt.Errorf("that is this session itself")
 	}
 	return nil, done{Ref: x.ID, Title: x.Title, State: "stopped"}, t.c.Stop(x.ID)
@@ -320,11 +493,8 @@ func (t *tools) history(ctx context.Context, _ *mcp.CallToolRequest, in historyI
 	if err != nil {
 		return nil, list{}, err
 	}
-	out := list{Sessions: []Session{}}
-	for _, x := range past {
-		out.Sessions = append(out.Sessions, t.view(x))
-	}
-	return nil, out, nil
+	live, _ := t.c.Live()
+	return nil, t.list(past, live), nil
 }
 
 func clip(s string, n int) string {

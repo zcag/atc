@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/zcag/atc/internal/history"
@@ -78,15 +80,24 @@ func (c *Client) do(method, path string, body, out any) error {
 		b, _ := json.Marshal(body)
 		rd = bytes.NewReader(b)
 	}
-	req, err := http.NewRequest(method, c.URL+path, rd)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.Token)
-	req.Header.Set("Content-Type", "application/json")
-	res, err := c.http.Do(req)
-	if err != nil {
-		return fmt.Errorf("cannot reach atc at %s: %w", c.URL, err)
+	var res *http.Response
+	for try := 0; ; try++ {
+		if s, ok := rd.(*bytes.Reader); ok {
+			s.Seek(0, io.SeekStart)
+		}
+		req, err := http.NewRequest(method, c.URL+path, rd)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+		req.Header.Set("Content-Type", "application/json")
+		if res, err = c.http.Do(req); err == nil {
+			break
+		}
+		if try == 5 || !(method == "GET" || errors.Is(err, syscall.ECONNREFUSED)) {
+			return fmt.Errorf("cannot reach atc at %s: %w", c.URL, err)
+		}
+		time.Sleep(1500 * time.Millisecond)
 	}
 	defer res.Body.Close()
 	if res.StatusCode >= 300 {
@@ -203,6 +214,14 @@ func (c *Client) Send(id, text string) error {
 
 func (c *Client) Transcript(sid string) (p history.Page, err error) {
 	return p, c.do("GET", "/api/sessions/"+sid+"/transcript", nil, &p)
+}
+
+func (c *Client) Turns(sid string) (turns []history.Turn, err error) {
+	var r struct {
+		Turns []history.Turn `json:"turns"`
+	}
+	err = c.do("GET", "/api/sessions/"+url.PathEscape(sid)+"/turns", nil, &r)
+	return r.Turns, err
 }
 
 type Summary struct {
