@@ -1655,7 +1655,7 @@ function Term({ s, say, voice, onVoiceOff }) {
           </div>
         </div>`}
       ${pasted && html`<${PasteConfirm} files=${pasted} onClose=${(ok) => { setPasted(null); ok ? upload.current(pasted) : api_.current.focus?.(); }} />`}
-      ${voice && !cover && html`<${VoiceBar} s=${s} say=${say} type=${(t) => { api_.current.send?.(t); setTimeout(() => api_.current.send?.("\r"), 150); }} key=${(k) => api_.current.send?.(k)} onClose=${onVoiceOff} />`}
+      ${voice && !cover && html`<${VoiceBar} s=${s} say=${say} type=${(t) => { api_.current.send?.(t); setTimeout(() => api_.current.send?.("\r"), 150); }} press=${(k) => api_.current.send?.(k)} onClose=${onVoiceOff} />`}
       <div class="keys ${keyboard ? "show" : ""}" onPointerDown=${(e) => e.preventDefault()}>
         ${KEYS.map(([label, seq]) => html`<button class=${label === "ctrl" && ctrl ? "on" : ""} onClick=${() => key(label, seq)}>${label}</button>`)}
         <button onClick=${() => picker.current.click()}>file</button>
@@ -1734,7 +1734,7 @@ function finalReplies(msgs) {
   return out.filter((t) => t.trim());
 }
 
-function VoiceBar({ s, say, type, key, onClose }) {
+function VoiceBar({ s, say, type, press, onClose }) {
   const who = s.harness || "Claude";
   const [phase, setPhase] = useState("starting");
   const [heard, setHeard] = useState("");
@@ -1846,11 +1846,11 @@ function VoiceBar({ s, say, type, key, onClose }) {
     if (!text || PHANTOM.test(text)) return rest();
     setHeard(text);
     const bare = text.toLowerCase().replace(/[.!?,]/g, "").trim();
-    if (/^(stop|cancel|dur|durdur|iptal|bekle)$/.test(bare)) { key("\x1b"); st.current.awaiting = false; return rest(); }
+    if (/^(stop|cancel|dur|durdur|iptal|bekle)$/.test(bare)) { press("\x1b"); st.current.awaiting = false; return rest(); }
     if (/^(repeat|again|say (that|it) again|tekrar|tekrarla|bir daha)$/.test(bare)) return replay();
     if (/^(read (it )?all|read the whole (thing|reply)|full|hepsini oku|tamamını oku|tamamı)$/.test(bare)) return full();
     if (/^(previous|earlier|go back|önceki|öncekini oku|geri)$/.test(bare)) return earlier();
-    if (st.current.permission && /^(yes|yeah|yep|evet|tamam|olur|okay|ok)\b/.test(bare)) { st.current.permission = false; key("\r"); st.current.awaiting = true; st.current.sentAt = Date.now(); return rest(); }
+    if (st.current.permission && /^(yes|yeah|yep|evet|tamam|olur|okay|ok)\b/.test(bare)) { st.current.permission = false; press("\r"); st.current.awaiting = true; st.current.sentAt = Date.now(); return rest(); }
     type(text);
     st.current.awaiting = true;
     st.current.sentAt = Date.now();
@@ -3510,7 +3510,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
     </button>`}
     ${!live && resume && s.kind !== "interactive" && level !== 1 && html`<${ResumeBar} s=${s} resume=${resume} busy=${busy} />`}
     ${live && voice && html`<${VoiceBar} s=${s} say=${say} type=${(t) => send(t)} onClose=${onVoiceOff}
-      key=${(k) => api(`/api/sessions/${s.id || s.sessionId}/keys`, { method: "POST", body: { keys: k } }).catch((e) => say(e.message))} />`}
+      press=${(k) => api(`/api/sessions/${s.id || s.sessionId}/keys`, { method: "POST", body: { keys: k } }).catch((e) => say(e.message))} />`}
     ${live && !voice && level !== 1 && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies} focusRef=${focusInput} working=${working} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
   </div>`;
