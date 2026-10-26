@@ -1053,9 +1053,9 @@ function Session({ s, say, live }) {
     }
     setBusy(false);
   };
-  const resume = () =>
+  const resume = (pane = "term") =>
     act(() => api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" }), (r) => {
-      setMode("term");
+      setMode(pane);
       go(r.id);
     });
   const patch = (body) => act(() => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body }));
@@ -1117,8 +1117,8 @@ function Session({ s, say, live }) {
     ${mode === "term"
       ? canAttach
         ? html`<${Term} key=${s.id} s=${s} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} />`
-        : html`<div class="stage"><div class="cover">${Unattachable(s, resume, busy, setMode)}</div></div>`
-      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} />` : html`<${Transcript} s=${s} say=${say} slot=${slot} />`}
+        : html`<div class="stage"><div class="cover">${Unattachable(s, () => resume(), busy, setMode)}</div></div>`
+      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} />` : html`<${Transcript} s=${s} say=${say} slot=${slot} resume=${() => resume("chat")} busy=${busy} />`}
     ${showUse && html`<${SessionUsage} s=${s} use=${use} onClose=${() => setShowUse(false)} />`}
   `;
 }
@@ -2958,6 +2958,30 @@ function useDictation(onText, say) {
   return { state, toggle: () => (state === "rec" ? stop() : state === "idle" && start()) };
 }
 
+function useDock() {
+  const root = useRef();
+  useLayoutEffect(() => {
+    const el = root.current, wrap = el?.parentElement;
+    if (!el) return;
+    const ro = new ResizeObserver(() => wrap.style.setProperty("--dock", `${el.offsetHeight}px`));
+    ro.observe(el);
+    return () => { ro.disconnect(); wrap.style.removeProperty("--dock"); };
+  }, []);
+  return root;
+}
+
+function ResumeBar({ s, resume, busy }) {
+  const root = useDock();
+  return html`<div class="composer" ref=${root}>
+    <div class="in">
+      <div class="box resumebar">
+        <span>${s.state === "stopped" ? "Stopped." : "Not running."} Resume it to pick up where it left off.</span>
+        <button class="go" disabled=${busy} onClick=${resume}>${busy ? "Resuming…" : "Resume"}</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, focusRef, working }) {
   const ta = useRef();
   const [busy, setBusy] = useState(false);
@@ -2992,14 +3016,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   const ready = (draft.trim() || quotes.length) && !busy;
   const asked = s.asks?.[0]?.questions;
   const hint = asked ? (asked.length === 1 ? "Or type your own answer" : "Answer the questions above") : working ? "Queue a message for Claude" : s.state === "needs-you" ? "Claude is waiting on you" : "Reply to Claude";
-  const root = useRef();
-  useLayoutEffect(() => {
-    const el = root.current, wrap = el?.parentElement;
-    if (!el) return;
-    const ro = new ResizeObserver(() => wrap.style.setProperty("--dock", `${el.offsetHeight}px`));
-    ro.observe(el);
-    return () => { ro.disconnect(); wrap.style.removeProperty("--dock"); };
-  }, []);
+  const root = useDock();
   return html`<div class="composer ${drag ? "drag" : ""}" ref=${root} onDragOver=${(e) => { e.preventDefault(); setDrag(true); }} onDragLeave=${() => setDrag(false)} onDrop=${(e) => { e.preventDefault(); setDrag(false); upload([...e.dataTransfer.files]); }}>
     <div class="in">
       ${s.asks?.length > 0 && html`<div class="ask-card asking"><${AskBar} s=${s} say=${say} /></div>`}
@@ -3052,7 +3069,7 @@ function copyText(text) {
   try { navigator.clipboard.writeText(text); } catch { const ta = Object.assign(document.createElement("textarea"), { value: text }); document.body.append(ta); ta.select(); document.execCommand("copy"); ta.remove(); }
 }
 
-function Transcript({ s, say, slot }) {
+function Transcript({ s, say, slot, resume, busy }) {
   const wide = useWide();
   const [idx, setIdx] = useState(null);
   const [bodies, setBodies] = useState({});
@@ -3318,6 +3335,7 @@ function Transcript({ s, say, slot }) {
     ${level !== 1 && below && html`<button class="to-end ${fresh ? "fresh" : ""}" onClick=${() => { atEnd.current = true; setFresh(0); box.current?.scrollTo({ top: box.current.scrollHeight, behavior: "smooth" }); }} aria-label="Jump to the latest">
       ${fresh > 0 && html`<span>${working ? "New activity" : "New reply"}</span>`}<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>`}
+    ${!live && resume && s.kind !== "interactive" && level !== 1 && html`<${ResumeBar} s=${s} resume=${resume} busy=${busy} />`}
     ${live && level !== 1 && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies} focusRef=${focusInput} working=${working} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
   </div>`;

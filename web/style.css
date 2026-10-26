@@ -1211,3 +1211,7 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .it.swiping.armed[data-dir="r"]::after { background: var(--turn); }
 .it.swiping.armed[data-dir="l"]::after { background: var(--work); }
 .it.swiping[data-swipe=""]::after { display: none; }
+.tx-wrap .composer .resumebar { align-items: center; gap: 12px; padding: 8px 8px 8px 20px; cursor: default; font: 14.5px/1.4 var(--sans); color: var(--quiet); }
+.tx-wrap .composer .resumebar span { flex: 1; min-width: 0; }
+.tx-wrap .composer .resumebar .go { flex: none; padding: 9px 18px; border-radius: 999px; background: var(--hue); color: var(--on-hue); font: 600 14px var(--sans); text-align: center; }
+.tx-wrap .composer .resumebar .go:disabled { opacity: .6; }
