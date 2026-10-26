@@ -3127,7 +3127,11 @@ function Transcript({ s, say, slot }) {
       const land = () => {
         if (level === 1) return;
         const mark = el.querySelector(".since") || el.querySelector(`#tx${firstOpen}`);
-        if (mark) el.scrollTop = Math.min(firstOpen === 0 ? 0 : mark.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 12, el.scrollHeight - el.clientHeight);
+        if (!mark) return;
+        const max = el.scrollHeight - el.clientHeight;
+        let to = firstOpen === 0 ? 0 : mark.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 12;
+        if (max - to < el.clientHeight * 0.85) to = max;
+        el.scrollTop = Math.min(to, max);
       };
       land();
       document.fonts.ready.then(() => requestAnimationFrame(land));
