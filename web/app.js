@@ -2951,13 +2951,13 @@ const readMin = (t) => Math.round(plain(t).split(" ").length / 230);
 
 function Margin({ t, i, s, answer }) {
   const files = (t.files || []).filter((f) => !scratch(f.path));
-  return html`<aside class="margin">
+  return html`<aside class="margin"><div class="rail">
     <div><span class="k">${txClock(t.at)}</span>${txDur(t) && html` · worked <span class="k">${txDur(t)}</span>`}</div>
     ${txUsd(t.cost) && html`<div><span class="k">${txUsd(t.cost)}</span> at API prices</div>`}
     ${readMin(answer) > 1 && html`<div><span class="k">${readMin(answer)} min</span> to read</div>`}
     ${headsOf(answer).length > 1 && html`<ul class="toc">${headsOf(answer).map((h, j) => html`<li><a href=${`#tx${i}h${j}`} data-jump>${h}</a></li>`)}</ul>`}
     ${files.length > 0 && html`<ul class="flist">${files.slice(0, 8).map((f) => html`<li><span class="p"><bdi>${relPath(f.path, s)}</bdi></span><span class="n"><span class="plus">+${f.add}</span>${f.del > 0 && html` <span class="minus">−${f.del}</span>`}</span></li>`)}${files.length > 8 && html`<li>and ${files.length - 8} more</li>`}</ul>`}
-  </aside>`;
+  </div></aside>`;
 }
 
 function Acts({ answer, quote }) {
