@@ -1895,11 +1895,11 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
   };
 
   useEffect(() => {
-    if (!st.current.awaiting || s.state === "working") return;
+    if (!st.current.awaiting || (s.state === "working" && !s.turnDone)) return;
     if (Date.parse(s.promptAt || 0) < st.current.sentAt - 5000) return;
     st.current.awaiting = false;
     answer(s.state);
-  }, [s.state, s.promptAt, s.updated]);
+  }, [s.state, s.turnDone, s.promptAt, s.updated]);
 
   useEffect(() => {
     let dead = false, lock = null;
@@ -3357,7 +3357,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
   const box = useRef(), landed = useRef(false), atEnd = useRef(false), loading = useRef(new Set()), focusInput = useRef(() => {}), findQ = useRef("");
   const seenAt = useRef(txStore.get(`seen.${s.sessionId}`, null));
   const live = s.attachable || s.harness === "opencode";
-  const working = s.state === "working";
+  const working = s.state === "working" && !s.turnDone;
   const turns = idx || [];
 
   const setDraft = (v) => setDraftRaw((d) => { const n = typeof v === "function" ? v(d) : v; txStore.set(`draft.${s.sessionId}`, n || null); return n; });

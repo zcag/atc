@@ -43,6 +43,7 @@ type Session struct {
 	Harness        string           `json:"harness,omitempty"`
 	Asks           []opencode.Ask   `json:"asks,omitempty"`
 	Background     []claude.Task    `json:"background,omitempty"`
+	TurnDone       bool             `json:"turnDone,omitempty"`
 	PermissionMode string           `json:"permissionMode,omitempty"`
 	LastPrompt     string           `json:"lastPrompt,omitempty"`
 	Context        int              `json:"context,omitempty"`
@@ -102,9 +103,10 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 			s.Background = claude.Background(a.ID)
 		}
 		if s.State == Working && t.Ended && a.Kind == "background" {
-			s.State = YourTurn
 			if n := running(s.Background); n > 0 {
-				s.Activity = fmt.Sprintf("%d in the background", n)
+				s.TurnDone, s.Activity = true, fmt.Sprintf("%d in the background", n)
+			} else {
+				s.State = YourTurn
 			}
 		}
 		if s.State == Working && t.Path != "" {
