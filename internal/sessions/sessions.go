@@ -42,6 +42,7 @@ type Session struct {
 	Engine         string           `json:"engine,omitempty"`
 	Harness        string           `json:"harness,omitempty"`
 	Asks           []opencode.Ask   `json:"asks,omitempty"`
+	Background     []claude.Task    `json:"background,omitempty"`
 	PermissionMode string           `json:"permissionMode,omitempty"`
 	LastPrompt     string           `json:"lastPrompt,omitempty"`
 	Context        int              `json:"context,omitempty"`
@@ -97,9 +98,12 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		} else if s.State == NeedsYou && a.Kind == "background" && byID[a.SessionID].Pending == "" {
 			s.State = YourTurn
 		}
+		if a.Kind == "background" && a.PID > 0 {
+			s.Background = claude.Background(a.ID)
+		}
 		if s.State == Working && t.Ended && a.Kind == "background" {
 			s.State = YourTurn
-			if n := claude.Background(a.ID); n > 0 {
+			if n := running(s.Background); n > 0 {
 				s.Activity = fmt.Sprintf("%d in the background", n)
 			}
 		}
@@ -175,6 +179,15 @@ func (m *Manager) Briefs(want map[string]bool) map[string]Brief {
 		}
 	}
 	return out
+}
+
+func running(ts []claude.Task) (n int) {
+	for _, t := range ts {
+		if t.DoneAt == 0 {
+			n++
+		}
+	}
+	return n
 }
 
 func state(a claude.Agent) string {

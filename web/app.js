@@ -1738,7 +1738,7 @@ function finalReplies(msgs) {
 
 const VOICE_LEFT = new Map();
 
-function VoiceBar({ s, say, type, press, onClose }) {
+function VoiceBar({ s, say, type, press, onClose, top }) {
   const sid = s.sessionId, left = VOICE_LEFT.get(sid) || {}, muteKey = `atc.mute.${sid}`;
   const who = s.harness || "Claude";
   const [phase, setPhase] = useState("starting");
@@ -1921,6 +1921,7 @@ function VoiceBar({ s, say, type, press, onClose }) {
 
   return html`
     <div class="voicebar" role="region" aria-label="Voice">
+      ${top}
       <div class="vtext" aria-live="polite">
         ${heard && html`<div class="vline"><b>You</b> ${heard}</div>`}
         ${spoken && html`<div class="vline said"><b>${who}</b> ${spoken}</div>`}
@@ -3156,7 +3157,35 @@ function ResumeBar({ s, resume, busy }) {
   </div>`;
 }
 
-function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, focusRef, working }) {
+function BgStrip({ s }) {
+  const seen = useRef(new Map());
+  const [open, setOpen] = useState(() => pref("atc.bgopen", "on") === "on");
+  useNow(1000);
+  const now = Date.now(), cur = s.background || [], ids = new Set(cur.map((t) => t.id));
+  for (const t of cur) seen.current.set(t.id, { ...t, done: t.doneAt || 0 });
+  for (const [id, t] of seen.current) if (!ids.has(id) && !t.done) t.done = now;
+  const all = [...seen.current.values()].sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
+  const running = all.filter((t) => !t.done).length;
+  if (!all.length) return null;
+  if (!running && now - Math.max(...all.map((t) => t.done)) > 60e3) { seen.current.clear(); return null; }
+  const word = (n) => (all.every((t) => t.kind === "agent") ? (n === 1 ? "agent" : "agents") : n === 1 ? "task" : "tasks");
+  const toggle = () => { setOpen(!open); setPref("atc.bgopen", open ? "off" : "on"); };
+  return html`<div class="bgstrip ${running ? "" : "finished"}">
+    <button class="bg-head" onClick=${toggle} aria-expanded=${open && running > 0}>
+      <span class="bg-dot ${running ? "run" : ""}"></span>
+      <span>${running ? `${running} ${word(running)} running in the background` : `${all.length} background ${word(all.length)} finished`}</span>
+      ${running > 0 && all.length > running && html`<span class="bg-sub">${all.length - running} done</span>`}
+      ${running > 0 && html`<svg class="bg-chev ${open ? "open" : ""}" width="12" height="12" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
+    </button>
+    ${open && running > 0 && html`<ul>${all.map((t) => html`<li class=${t.done ? "done" : ""}>
+      <span class="bg-k">${t.kind === "shell" ? "shell" : "agent"}</span>
+      <span class="bg-l" title=${t.label}>${t.kind === "shell" ? t.label.replace(/^cd \S+ && /, "") : t.label}</span>
+      <span class="bg-t">${t.done ? "done" : t.startedAt ? txSpan(now - t.startedAt) : "running"}</span>
+    </li>`)}</ul>`}
+  </div>`;
+}
+
+function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, focusRef, working, top }) {
   const ta = useRef();
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
@@ -3201,6 +3230,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   const root = useDock();
   return html`<div class="composer ${drag ? "drag" : ""}" ref=${root} onDragOver=${(e) => { e.preventDefault(); setDrag(true); }} onDragLeave=${() => setDrag(false)} onDrop=${(e) => { e.preventDefault(); setDrag(false); upload([...e.dataTransfer.files]); }}>
     <div class="in">
+      ${top}
       ${s.asks?.length > 0 && html`<div class="ask-card asking"><${AskBar} s=${s} say=${say} /></div>`}
       ${replies?.length > 0 && !s.asks?.length && !draft && !quotes.length && html`<div class="ask-card"><div class="quick" role="group" aria-label="Suggested replies">
         ${replies.map((t) => html`<span class="sugg"><button title=${touch ? "Tap to send, hold to edit first" : `Send “${t}”`} onClick=${() => !held.current && send(t, { suggested: true })}
@@ -3533,9 +3563,9 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
       ${fresh > 0 && html`<span>${working ? "New activity" : "New reply"}</span>`}<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>`}
     ${!live && resume && s.kind !== "interactive" && level !== 1 && html`<${ResumeBar} s=${s} resume=${resume} busy=${busy} />`}
-    ${live && voice && html`<${VoiceBar} s=${s} say=${say} type=${(t) => send(t)} onClose=${onVoiceOff}
+    ${live && voice && html`<${VoiceBar} s=${s} say=${say} type=${(t) => send(t)} onClose=${onVoiceOff} top=${html`<${BgStrip} s=${s} />`}
       press=${(k) => api(`/api/sessions/${s.id || s.sessionId}/keys`, { method: "POST", body: { keys: k } }).catch((e) => say(e.message))} />`}
-    ${live && !voice && level !== 1 && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies} focusRef=${focusInput} working=${working} />`}
+    ${live && !voice && level !== 1 && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies} focusRef=${focusInput} working=${working} top=${html`<${BgStrip} s=${s} />`} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
   </div>`;
 }

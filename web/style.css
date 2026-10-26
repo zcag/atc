@@ -659,6 +659,21 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .tx-wrap .composer .qchip span { flex: 1; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; border-left: 2px solid var(--accent); padding-left: 10px; }
 .tx-wrap .composer .qchip button { color: var(--faint); font: 12px var(--sans); padding: 2px 4px; }
 .att-note { font: 12px var(--sans); color: var(--faint); margin-top: 4px; }
+.bgstrip { margin: 0 0 6px; border-radius: 12px; background: var(--raised); box-shadow: var(--shadow); font: 13px/1.4 var(--sans); color: var(--quiet); overflow: hidden; animation: tx-fade .2s; }
+.bgstrip .bg-head { background: none; border: 0; border-radius: 0; box-shadow: none; display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; text-align: left; color: var(--ink); font: inherit; font-weight: 500; }
+.bgstrip.finished .bg-head { color: var(--quiet); font-weight: 400; }
+.bgstrip .bg-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+.bgstrip .bg-dot.run { background: var(--live); animation: tx-breathe 1.6s ease-in-out infinite; }
+.bgstrip .bg-sub { color: var(--faint); font-weight: 400; }
+.bgstrip .bg-chev { margin-left: auto; color: var(--faint); transform: rotate(-90deg); transition: transform .15s; flex: none; }
+.bgstrip .bg-chev.open { transform: none; }
+.bgstrip ul { list-style: none; margin: 0; padding: 0 12px 9px; display: flex; flex-direction: column; gap: 5px; max-height: 28vh; overflow-y: auto; }
+.bgstrip li { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
+.bgstrip .bg-k { font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--faint); }
+.bgstrip .bg-l { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bgstrip li.done .bg-l { color: var(--faint); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--faint) 50%, transparent); }
+.bgstrip .bg-t { font-variant-numeric: tabular-nums; color: var(--faint); font-size: 12px; }
+.voicebar .bgstrip { margin: 0; box-shadow: none; border: 1px solid var(--line); }
 .tx-wrap .composer .atts { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 6px; }
 .tx-wrap .composer .att { position: relative; height: 64px; max-width: 160px; border-radius: 10px; overflow: hidden; background: var(--raised); box-shadow: var(--shadow); }
 .tx-wrap .composer .att.up { opacity: .5; }

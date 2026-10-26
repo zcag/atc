@@ -50,18 +50,30 @@ type Block struct {
 	Approve   string
 }
 
-func Background(id string) int {
+type Task struct {
+	ID        string `json:"id"`
+	Kind      string `json:"kind"`
+	Label     string `json:"label"`
+	StartedAt int64  `json:"startedAt,omitempty"`
+	DoneAt    int64  `json:"doneAt,omitempty"`
+}
+
+func Background(id string) []Task {
 	b, err := os.ReadFile(filepath.Join(ConfigDir(), "jobs", id, "state.json"))
 	if err != nil {
-		return 0
+		return nil
 	}
 	var st struct {
-		InFlight struct {
-			Tasks int `json:"tasks"`
-		} `json:"inFlight"`
+		Fan []Task `json:"fan"`
 	}
 	json.Unmarshal(b, &st)
-	return st.InFlight.Tasks
+	var out []Task
+	for _, t := range st.Fan {
+		if t.Kind == "agent" || t.Kind == "shell" {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 func Asking(id string) Block {
