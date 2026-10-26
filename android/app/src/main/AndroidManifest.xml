@@ -96,6 +96,10 @@
         </service>
 
         <receiver
+            android:name=".Reply"
+            android:exported="false" />
+
+        <receiver
             android:name=".SessionsWidget"
             android:exported="false"
             android:label="@string/app_name">

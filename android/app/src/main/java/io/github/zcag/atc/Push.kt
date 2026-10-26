@@ -109,21 +109,24 @@ class Push : PushService() {
                 .show()
         }
 
-        private fun notify(c: Context, note: Note) {
+        fun notify(c: Context, note: Note, quiet: Boolean = false, timeout: Long = 0) {
             val nm = c.getSystemService(NotificationManager::class.java)
             nm.createNotificationChannel(NotificationChannel("atc", "Sessions", NotificationManager.IMPORTANCE_HIGH))
             val open = Intent(c, MainActivity::class.java)
                 .putExtra(MainActivity.EXTRA_PATH, note.url)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             val pi = PendingIntent.getActivity(c, note.id, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-            nm.notify(note.id, Notification.Builder(c, "atc")
+            val b = Notification.Builder(c, "atc")
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(note.title)
                 .setContentText(note.body)
                 .setStyle(Notification.BigTextStyle().bigText(note.body))
                 .setContentIntent(pi)
                 .setAutoCancel(true)
-                .build())
+                .setOnlyAlertOnce(quiet)
+            if (timeout > 0) b.setTimeoutAfter(timeout)
+            if (note.session.isNotEmpty()) Reply.actions(c, note).forEach { b.addAction(it) }
+            nm.notify(note.id, b.build())
         }
     }
 }

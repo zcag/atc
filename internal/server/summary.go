@@ -50,6 +50,12 @@ func pushBody(x *summary.Summary) string {
 	return strings.Join(append([]string{x.Status}, x.Gist...), "\n")
 }
 
+func answerable(m *push.Message, x sessions.Session) {
+	if x.Attachable && x.ID != "" && len(x.Asks) == 0 && x.Summary != nil && len(x.Summary.Replies) > 0 {
+		m.Session, m.Replies = x.ID, x.Summary.Replies
+	}
+}
+
 type held struct {
 	m     push.Message
 	until time.Time
@@ -66,6 +72,7 @@ func (s *Server) release(list []sessions.Session) []push.Message {
 			if b := pushBody(x.Summary); b != "" {
 				h.m.Body = b
 			}
+			answerable(&h.m, x)
 			out = append(out, h.m)
 			delete(s.held, sid)
 		}

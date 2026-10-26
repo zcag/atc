@@ -932,6 +932,7 @@ func alerts(prev map[string]string, list []sessions.Session, viewing func(sessio
 			}
 		case x.State == sessions.YourTurn && was == sessions.Working:
 			m.Body = cmp.Or(pushBody(x.Summary), x.LastReply, "Finished. Your turn.")
+			answerable(&m, x)
 			if x.Summary == nil && x.Summarizing {
 				later = append(later, m)
 				continue

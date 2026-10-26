@@ -12,10 +12,12 @@ import (
 )
 
 type Message struct {
-	Title string `json:"title"`
-	Body  string `json:"body"`
-	Tag   string `json:"tag"`
-	URL   string `json:"url"`
+	Title   string   `json:"title"`
+	Body    string   `json:"body"`
+	Tag     string   `json:"tag"`
+	URL     string   `json:"url"`
+	Session string   `json:"session,omitempty"`
+	Replies []string `json:"replies,omitempty"`
 }
 
 type Device struct {

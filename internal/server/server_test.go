@@ -173,7 +173,8 @@ func TestAlerts(t *testing.T) {
 		{SessionID: "e", Title: "E", State: sessions.Working},
 		{SessionID: "f", Title: "F", State: sessions.NeedsYou, Parked: true},
 		{SessionID: "g", Title: "G", State: sessions.YourTurn, LastReply: "A long report…", Summarizing: true},
-		{SessionID: "h", Title: "H", State: sessions.YourTurn, LastReply: "A long report…", Summary: &summary.Summary{Status: "Found: the cache is stale", Gist: []string{"Clearing it fixes the test"}}},
+		{SessionID: "h", Title: "H", State: sessions.YourTurn, LastReply: "A long report…", ID: "hhhh0001", Attachable: true,
+			Summary: &summary.Summary{Status: "Found: the cache is stale", Gist: []string{"Clearing it fixes the test"}, Replies: []string{"clear it", "why stale?"}}},
 	}
 	got, later := alerts(prev, list, func(s sessions.Session) bool { return s.ID == "open0001" })
 	if len(got) != 3 {
@@ -187,6 +188,9 @@ func TestAlerts(t *testing.T) {
 	}
 	if got[2].Body != "Found: the cache is stale\nClearing it fixes the test" {
 		t.Errorf("summary as the body: %q", got[2].Body)
+	}
+	if got[2].Session != "hhhh0001" || strings.Join(got[2].Replies, "|") != "clear it|why stale?" || got[0].Replies != nil {
+		t.Errorf("suggested replies ride along only with a summary that has them: %+v", got)
 	}
 	if len(later) != 1 || later[0].Tag != "g" {
 		t.Fatalf("a turn still being summarized waits: %+v", later)

@@ -25,14 +25,19 @@ class Release(val versionCode: Int, val versionName: String, val apk: String, va
     }
 }
 
-class Note(val title: String, val body: String, val tag: String, val url: String) {
+class Note(
+    val title: String, val body: String, val tag: String, val url: String,
+    val session: String = "", val replies: List<String> = emptyList(),
+) {
     val id get() = tag.hashCode()
 
     companion object {
         fun parse(bytes: ByteArray) = runCatching {
             JSONObject(String(bytes)).run {
                 val url = optString("url").takeIf { it.startsWith("/") && !it.startsWith("//") } ?: "/"
-                Note(optString("title", "atc"), optString("body"), optString("tag"), url)
+                val session = optString("session").takeIf { Regex("^[A-Za-z0-9_-]{1,64}$").matches(it) } ?: ""
+                val replies = optJSONArray("replies")?.let { a -> List(a.length()) { a.optString(it).trim() } }.orEmpty().filter { it.isNotEmpty() }
+                Note(optString("title", "atc"), optString("body"), optString("tag"), url, session, if (session.isEmpty()) emptyList() else replies)
             }
         }.getOrNull()
     }

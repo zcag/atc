@@ -46,6 +46,15 @@ class CoreTest {
         assertEquals(n.id, Note.parse("""{"tag":"s1"}""".toByteArray())!!.id)
     }
 
+    @Test fun noteCarriesReplies() {
+        val n = Note.parse("""{"tag":"s1","session":"ab12cd34","replies":["ok go"," ","status?"]}""".toByteArray())!!
+        assertEquals("ab12cd34", n.session)
+        assertEquals(listOf("ok go", "status?"), n.replies)
+        val bad = Note.parse("""{"tag":"s1","session":"../usage","replies":["ok go"]}""".toByteArray())!!
+        assertEquals("", bad.session)
+        assertEquals(emptyList<String>(), bad.replies)
+    }
+
     @Test fun noteKeepsLinksOnTheServer() {
         assertEquals("/", Note.parse("""{"tag":"s","url":"https://evil.example"}""".toByteArray())!!.url)
         assertEquals("/", Note.parse("""{"tag":"s","url":"//evil.example"}""".toByteArray())!!.url)
