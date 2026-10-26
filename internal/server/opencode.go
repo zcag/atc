@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zcag/atc/internal/attach"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/opencode"
@@ -137,6 +138,12 @@ func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string
 			qs[i].MultiSelect = qs[i].MultiSelect || multi[qs[i].Question]
 		}
 	}
+	for _, x := range a.Answers {
+		if len(x) == 0 {
+			http.Error(w, "every question needs an answer", http.StatusBadRequest)
+			return
+		}
+	}
 	if a.Reject {
 		s.done(w, id, s.Term.Keys(r.Context(), id, "\x1b"))
 		return
@@ -145,19 +152,27 @@ func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string
 		http.Error(w, "one answer per question", http.StatusBadRequest)
 		return
 	}
-	keys, err := claudeKeys(qs, a.Answers)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	log.Printf("answer %s: %q", id, keys)
-	s.done(w, id, s.Term.Keys(r.Context(), id, keys...))
+	log.Printf("answer %s: %q", id, a.Answers)
+	s.done(w, id, s.Term.Drive(r.Context(), id, func(t *attach.Typist) error { return claudeAnswer(t, qs, a.Answers) }))
 }
 
-var pickAny = regexp.MustCompile(`(?i)\b(pick|choose|select) (any|all|one or more)\b|all that apply`)
+type typist interface {
+	Key(string) error
+	Screen() string
+}
 
-func claudeKeys(qs []claude.Question, answers [][]string) ([]string, error) {
-	var keys []string
+var checkbox = regexp.MustCompile(`\[[ ✔✓x]\]`)
+
+func claudeAnswer(t typist, qs []claude.Question, answers [][]string) error {
+	key := func(ks ...string) error {
+		for _, k := range ks {
+			if err := t.Key(k); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	review := len(qs) > 1
 	for i, q := range qs {
 		labels := map[string]int{}
 		for j, o := range q.Options {
@@ -173,33 +188,42 @@ func claudeKeys(qs []claude.Question, answers [][]string) ([]string, error) {
 			}
 		}
 		if len(picked) == 0 && typed == "" {
-			return nil, fmt.Errorf("no answer for %q", q.Question)
+			return fmt.Errorf("no answer for %q", q.Question)
 		}
-		other := strconv.Itoa(len(q.Options) + 1)
-		q.MultiSelect = q.MultiSelect || len(picked) > 1 || pickAny.MatchString(q.Question)
-		switch {
-		case !q.MultiSelect && typed != "":
-			keys = append(keys, other, typed, "\r")
-		case !q.MultiSelect:
-			keys = append(keys, strconv.Itoa(picked[0]))
-		default:
-			for _, n := range picked {
-				keys = append(keys, strconv.Itoa(n))
-			}
+		down := func(n int) string { return strings.Repeat("\x1b[B", n) }
+		if !(q.MultiSelect || checkbox.MatchString(t.Screen())) {
+			var err error
 			if typed != "" {
-				keys = append(keys, other, typed, "\r")
-			}
-			if len(qs) > 1 {
-				keys = append(keys, "\x1b[C")
+				err = key(strconv.Itoa(len(q.Options)+1), typed, "\r")
 			} else {
-				keys = append(keys, strings.Repeat("\x1b[B", len(q.Options)+1), "\r")
+				err = key(strconv.Itoa(picked[0]))
+			}
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		for _, n := range picked {
+			if err := key(strconv.Itoa(n)); err != nil {
+				return err
 			}
 		}
+		row := 1
+		if typed != "" {
+			if err := key(down(len(q.Options)), typed); err != nil {
+				return err
+			}
+			row = len(q.Options) + 1
+		}
+		if err := key(down(len(q.Options)+2-row), "\r"); err != nil {
+			return err
+		}
+		review = true
 	}
-	if len(qs) > 1 {
-		keys = append(keys, "1")
+	if review {
+		return key("1")
 	}
-	return keys, nil
+	return nil
 }
 
 func (s *Server) agentID(ctx context.Context, sid string) string {

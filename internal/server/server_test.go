@@ -423,9 +423,24 @@ func TestStartFromPreset(t *testing.T) {
 	}
 }
 
-func TestClaudeAnswerKeys(t *testing.T) {
-	q := func(text string, multi bool, opts ...string) claude.Question {
-		x := claude.Question{Question: text, MultiSelect: multi}
+type fakeTypist struct {
+	keys    []string
+	screens []string
+}
+
+func (f *fakeTypist) Key(k string) error { f.keys = append(f.keys, k); return nil }
+func (f *fakeTypist) Screen() string {
+	if len(f.screens) == 0 {
+		return ""
+	}
+	s := f.screens[0]
+	f.screens = f.screens[1:]
+	return s
+}
+
+func TestClaudeAnswerTypesWhatTheScreenShows(t *testing.T) {
+	q := func(text string, opts ...string) claude.Question {
+		x := claude.Question{Question: text}
 		for _, o := range opts {
 			x.Options = append(x.Options, struct {
 				Label       string `json:"label"`
@@ -434,19 +449,22 @@ func TestClaudeAnswerKeys(t *testing.T) {
 		}
 		return x
 	}
+	single, multi := "❯ 1. Red", "❯ 1. [ ] Small"
 	cases := []struct {
-		qs   []claude.Question
-		ans  [][]string
-		want string
+		qs      []claude.Question
+		screens []string
+		ans     [][]string
+		want    string
 	}{
-		{[]claude.Question{q("Which?", false, "Apple", "Pear")}, [][]string{{"Pear"}}, `["2"]`},
-		{[]claude.Question{q("Which?", false, "Apple", "Pear")}, [][]string{{"banana"}}, `["3","banana","\r"]`},
-		{[]claude.Question{q("Colour?", false, "Red", "Blue"), q("Sizes?", true, "S", "M", "L")}, [][]string{{"Blue"}, {"S", "L"}}, `["2","1","3","\u001b[C","1"]`},
-		{[]claude.Question{q("Sizes?", true, "S", "M")}, [][]string{{"M"}}, `["2","\u001b[B\u001b[B\u001b[B","\r"]`},
+		{[]claude.Question{q("Fruit?", "Apple", "Pear")}, []string{single}, [][]string{{"Pear"}}, `["2"]`},
+		{[]claude.Question{q("Fruit?", "Apple", "Pear")}, []string{single}, [][]string{{"banana"}}, `["3","banana","\r"]`},
+		{[]claude.Question{q("Sizes?", "S", "M", "L"), q("Colour?", "Red", "Blue")}, []string{multi, single}, [][]string{{"S", "xl"}, {"Blue"}}, `["1","\u001b[B\u001b[B\u001b[B","xl","\u001b[B","\r","2","1"]`},
+		{[]claude.Question{q("Sizes?", "S", "M")}, []string{multi}, [][]string{{"M"}}, `["2","\u001b[B\u001b[B\u001b[B","\r","1"]`},
 	}
 	for _, c := range cases {
-		keys, err := claudeKeys(c.qs, c.ans)
-		got, _ := json.Marshal(keys)
+		f := &fakeTypist{screens: c.screens}
+		err := claudeAnswer(f, c.qs, c.ans)
+		got, _ := json.Marshal(f.keys)
 		if err != nil || string(got) != c.want {
 			t.Errorf("%v: got %s %v, want %s", c.ans, got, err, c.want)
 		}

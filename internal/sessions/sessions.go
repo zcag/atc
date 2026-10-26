@@ -259,12 +259,10 @@ func first(s ...string) string {
 	return ""
 }
 
-var pickAny = regexp.MustCompile(`(?i)\b(pick|choose|select) (any|all|one or more)\b|all that apply`)
-
 func claudeAsk(id string, qs []claude.Question, multi map[string]bool) opencode.Ask {
 	a := opencode.Ask{ID: "claude", SessionID: id}
 	for _, q := range qs {
-		x := opencode.Question{Question: q.Question, Header: q.Header, Multiple: q.MultiSelect || multi[q.Question] || pickAny.MatchString(q.Question), Custom: true}
+		x := opencode.Question{Question: q.Question, Header: q.Header, Multiple: q.MultiSelect || multi[q.Question], Custom: true}
 		for _, o := range q.Options {
 			x.Options = append(x.Options, struct {
 				Label       string `json:"label"`

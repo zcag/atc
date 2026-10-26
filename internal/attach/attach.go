@@ -1,6 +1,7 @@
 package attach
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -426,6 +427,63 @@ func (h *Hub) Keys(ctx context.Context, id string, keys ...string) error {
 		return nil
 	}
 
+	return h.drive(ctx, id, cols, rows, func(t *Typist) error {
+		for _, k := range keys {
+			if err := t.Key(k); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+type Typist struct {
+	f    *os.File
+	mu   sync.Mutex
+	seen bytes.Buffer
+	out  chan struct{}
+	gone chan struct{}
+}
+
+var ansi = regexp.MustCompile(`\x1b(\[[0-9;?]*[ -/]*[@-~]|\][^\x07\x1b]*(\x07|\x1b\\)|[()][0-9A-B]|[=>78])`)
+
+func (t *Typist) settle(quiet, limit time.Duration) error {
+	end := time.After(limit)
+	for {
+		select {
+		case <-t.out:
+		case <-time.After(quiet):
+			return nil
+		case <-end:
+			return nil
+		case <-t.gone:
+			return errors.New("the session ended")
+		}
+	}
+}
+
+func (t *Typist) Key(k string) error {
+	t.mu.Lock()
+	t.seen.Reset()
+	t.mu.Unlock()
+	if _, err := t.f.Write([]byte(k)); err != nil {
+		return err
+	}
+	t.settle(keyGap, 3*time.Second)
+	return nil
+}
+
+func (t *Typist) Screen() string {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return ansi.ReplaceAllString(t.seen.String(), " ")
+}
+
+func (h *Hub) Drive(ctx context.Context, id string, fn func(*Typist) error) error {
+	return h.drive(ctx, id, 120, 40, fn)
+}
+
+func (h *Hub) drive(ctx context.Context, id string, cols, rows uint16, fn func(*Typist) error) error {
 	cmd := exec.CommandContext(ctx, h.Bin, "attach", id)
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
 	f, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: cols, Rows: rows})
@@ -437,41 +495,30 @@ func (h *Hub) Keys(ctx context.Context, id string, keys ...string) error {
 		f.Close()
 		cmd.Wait()
 	}()
-	out, gone := make(chan struct{}, 1), make(chan struct{})
+	t := &Typist{f: f, out: make(chan struct{}, 1), gone: make(chan struct{})}
 	go func() {
-		defer close(gone)
+		defer close(t.gone)
 		buf := make([]byte, 32<<10)
 		for {
-			if _, err := f.Read(buf); err != nil {
+			n, err := f.Read(buf)
+			if err != nil {
 				return
 			}
+			t.mu.Lock()
+			t.seen.Write(buf[:n])
+			t.mu.Unlock()
 			select {
-			case out <- struct{}{}:
+			case t.out <- struct{}{}:
 			default:
 			}
 		}
 	}()
-	settle := func(quiet, limit time.Duration) error {
-		end := time.After(limit)
-		for {
-			select {
-			case <-out:
-			case <-time.After(quiet):
-				return nil
-			case <-end:
-				return nil
-			case <-gone:
-				return errors.New("the session ended")
-			}
-		}
-	}
-	if err := settle(700*time.Millisecond, 8*time.Second); err != nil {
+	if err := t.settle(700*time.Millisecond, 8*time.Second); err != nil {
 		return err
 	}
-	for _, k := range keys {
-		f.Write([]byte(k))
-		settle(keyGap, 3*time.Second)
+	if err := fn(t); err != nil {
+		return err
 	}
-	settle(time.Second, 4*time.Second)
+	t.settle(time.Second, 4*time.Second)
 	return nil
 }

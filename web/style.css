@@ -682,6 +682,10 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .tx-wrap .composer .sugg:hover .edit, .tx-wrap .composer .edit:focus-visible { opacity: 1; }
 .tx-wrap .composer .quick .edit:hover { color: var(--ink); background: var(--raised); }
 .tx-wrap .composer .quick b { font-weight: 600; margin-right: 4px; }
+.tx-wrap .to-end { position: absolute; left: 50%; bottom: calc(var(--dock, 70px) + 14px); transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 8px; height: 38px; min-width: 38px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--raised); color: var(--ink); box-shadow: var(--lift); font: 500 13px var(--sans); cursor: pointer; animation: tx-end-in .22s cubic-bezier(.2,.7,.2,1); }
+@keyframes tx-end-in { from { opacity: 0; transform: translate(-50%, 10px); } }
+.tx-wrap .to-end:hover { background: color-mix(in srgb, var(--ink) 8%, var(--raised)); }
+.tx-wrap .to-end.fresh { background: var(--hue); color: var(--on-hue); padding: 0 12px 0 16px; }
 .tx-wrap .lightbox { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: #000d; cursor: zoom-out; padding: 20px; }
 .tx-wrap .lightbox img { max-width: 100%; max-height: 100%; border-radius: 10px; }
 

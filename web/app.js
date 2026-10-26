@@ -3022,6 +3022,8 @@ function Transcript({ s, say, slot }) {
   const [opened, setOpened] = useState(() => new Set());
   const [inView, setInView] = useState(() => new Set());
   const [sel, setSel] = useState(null);
+  const [below, setBelow] = useState(false);
+  const [fresh, setFresh] = useState(0);
   const [shot, setShot] = useState(null);
   const [pending, setPendingRaw] = useState(() => pendingOf(s.sessionId));
   const setPending = (f) => setPendingRaw((ps) => { const n = typeof f === "function" ? f(ps) : f; txStore.set(`pending.${s.sessionId}`, n.length ? n : null); return n; });
@@ -3136,7 +3138,12 @@ function Transcript({ s, say, slot }) {
   useEffect(() => {
     const el = box.current, inner = el?.querySelector(".frame");
     if (!inner) return;
-    const ro = new ResizeObserver(() => { if (landed.current && atEnd.current) el.scrollTop = el.scrollHeight; });
+    let h = 0;
+    const ro = new ResizeObserver(() => {
+      if (landed.current && atEnd.current) el.scrollTop = el.scrollHeight;
+      else if (landed.current && el.scrollHeight > h + 40) setFresh((n) => n + 1);
+      h = el.scrollHeight;
+    });
     ro.observe(inner);
     return () => ro.disconnect();
   }, [idx !== null]);
@@ -3239,7 +3246,7 @@ function Transcript({ s, say, slot }) {
   const inHeader = slot && wide;
   return html`<div class="tx-wrap" style=${`--ph: ${hueOf(project(s.cwd || "").name)}`}>
     ${inHeader && html`<${Into} node=${slot}>${controls}<//>`}
-    <div class="tx" ref=${box} onClick=${onClick} onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; setSel(null); }}>
+    <div class="tx" ref=${box} onClick=${onClick} onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; setBelow(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight * 0.6); if (atEnd.current) setFresh(0); setSel(null); }}>
       <div class="tx-top ${inHeader ? "bare" : ""}">
         ${!inHeader && controls}
         ${pop === "prefs" && html`<${Prefs} prefs=${prefs} set=${setPrefs} />`}
@@ -3267,6 +3274,9 @@ function Transcript({ s, say, slot }) {
       ${sel && html`<${SelBar} sel=${{ ...sel, y: sel.y + (box.current?.scrollTop || 0) - 0 }} live=${live} act=${selAct} />`}
     </div>
     ${level !== 1 && html`<${Scrub} turns=${turns} inView=${inView} go=${go} />`}
+    ${level !== 1 && below && html`<button class="to-end ${fresh ? "fresh" : ""}" onClick=${() => { atEnd.current = true; setFresh(0); box.current?.scrollTo({ top: box.current.scrollHeight, behavior: "smooth" }); }} aria-label="Jump to the latest">
+      ${fresh > 0 && html`<span>${working ? "New activity" : "New reply"}</span>`}<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>`}
     ${live && level !== 1 && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies} focusRef=${focusInput} working=${working} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
   </div>`;
