@@ -130,7 +130,7 @@ function App() {
     if (!me) return;
     const es = new EventSource("/api/events");
     es.addEventListener("sessions", (e) => {
-      setLive(JSON.parse(e.data) || []);
+      setLive(steady(JSON.parse(e.data) || []));
       setUp(true);
     });
     es.onerror = () => {
@@ -571,6 +571,16 @@ function Board({ live: all, sel, cursor, onPast, mode = "classic" }) {
     </div>
   `;
 }
+
+const entered = new Map();
+const steady = (list) => {
+  const phase = (st) => (st === "needs-you" || st === "your-turn" ? "wait" : st);
+  for (const s of list) {
+    const e = entered.get(s.sessionId);
+    if (!e || e.phase !== phase(s.state)) entered.set(s.sessionId, { phase: phase(s.state), at: Date.parse(s.updated || 0) || 0 });
+  }
+  return [...list].sort((a, b) => entered.get(b.sessionId).at - entered.get(a.sessionId).at);
+};
 
 const byRecent = (a, b) => (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
 
@@ -3356,7 +3366,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
   const setPending = (f) => setPendingRaw((ps) => { const n = typeof f === "function" ? f(ps) : f; txStore.set(`pending.${s.sessionId}`, n.length ? n : null); return n; });
   const [draft, setDraftRaw] = useState(() => txStore.get(`draft.${s.sessionId}`, ""));
   const [quotes, setQuotes] = useState([]);
-  const box = useRef(), landed = useRef(false), atEnd = useRef(false), loading = useRef(new Set()), focusInput = useRef(() => {}), findQ = useRef("");
+  const box = useRef(), landed = useRef(false), atEnd = useRef(false), hold = useRef(null), loading = useRef(new Set()), focusInput = useRef(() => {}), findQ = useRef("");
   const seenAt = useRef(txStore.get(`seen.${s.sessionId}`, null));
   const live = s.attachable || s.harness === "opencode";
   const working = s.state === "working" && !s.turnDone;
@@ -3433,6 +3443,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
     return r ? { i: +r.dataset.i, off: r.getBoundingClientRect().top } : null;
   };
   const go = (i, instant, q) => {
+    letGo();
     if (level === 1) setLevelRaw(2);
     if (!isOpen(i)) openTurn(i);
     need(i);
@@ -3445,13 +3456,23 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
     jump();
   };
   const anchor = useRef(null);
-  const setLevel = (l) => { anchor.current = level === 1 ? null : topTurn(); setLevelRaw(l); txStore.set("level", l); };
+  const setLevel = (l) => { letGo(); anchor.current = level === 1 ? null : topTurn(); setLevelRaw(l); txStore.set("level", l); };
   useLayoutEffect(() => {
     const a = anchor.current;
     anchor.current = null;
     const el = a && box.current?.querySelector(`#tx${a.i}`);
     if (el) box.current.scrollTop += el.getBoundingClientRect().top - a.off;
   }, [level]);
+
+  const settle = () => {
+    const el = box.current, mark = hold.current !== null && el?.querySelector(`#tx${hold.current}`);
+    if (!el) return;
+    if (!mark) { if (atEnd.current) el.scrollTop = el.scrollHeight; return; }
+    const max = el.scrollHeight - el.clientHeight, to = mark.getBoundingClientRect().top - el.getBoundingClientRect().top + el.scrollTop - 12;
+    el.scrollTop = Math.min(to, max);
+    atEnd.current = to >= max - 60;
+  };
+  const letGo = () => { hold.current = null; };
 
   const openBodies = turns.filter((_, i) => i >= firstOpen).map((t) => bodies[t.from]);
   const ready = idx && (level === 1 || openBodies.every(Boolean));
@@ -3460,12 +3481,11 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
     if (!el || !idx) return;
     if (!landed.current && ready) {
       landed.current = true;
-      atEnd.current = level !== 1;
-      const land = () => { if (atEnd.current) el.scrollTop = el.scrollHeight; };
-      land();
-      document.fonts.ready.then(() => requestAnimationFrame(land));
+      hold.current = level !== 1 && turns.length ? turns.length - 1 : null;
+      settle();
+      document.fonts.ready.then(() => requestAnimationFrame(settle));
       if (turns.length) txStore.set(`seen.${s.sessionId}`, turns[turns.length - 1].at);
-    } else if (landed.current && atEnd.current) el.scrollTop = el.scrollHeight;
+    } else if (landed.current) settle();
     if (landed.current && turns.length) txStore.set(`seen.${s.sessionId}`, turns[turns.length - 1].at);
   }, [idx, bodies, ready, pending]);
 
@@ -3474,7 +3494,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
     if (!inner) return;
     let h = 0;
     const ro = new ResizeObserver(() => {
-      if (landed.current && atEnd.current) el.scrollTop = el.scrollHeight;
+      if (landed.current && (hold.current !== null || atEnd.current)) settle();
       else if (landed.current && el.scrollHeight > h + 40) setFresh((n) => n + 1);
       h = el.scrollHeight;
     });
@@ -3549,6 +3569,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
     const id = retryId || Math.random().toString(36).slice(2);
     const p = { id, text, at: Date.now(), state: "sending", queued: working };
     setPending((ps) => [...ps.filter((x) => x.id !== id), p]);
+    letGo();
     atEnd.current = true;
     try {
       await api(`/api/sessions/${s.id || s.sessionId}/send`, { method: "POST", body: { text, suggested } });
@@ -3581,7 +3602,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
   const inHeader = slot && wide;
   return html`<div class="tx-wrap" style=${`--ph: ${hueOf(project(s.cwd || "").name)}`}>
     ${inHeader && html`<${Into} node=${slot}>${controls}<//>`}
-    <div class="tx" ref=${box} onClick=${onClick} onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; setBelow(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight * 0.6); if (atEnd.current) setFresh(0); setSel(null); }}>
+    <div class="tx" ref=${box} onClick=${onClick} onWheel=${letGo} onTouchStart=${letGo} onPointerDown=${letGo} onKeyDown=${letGo} onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; setBelow(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight * 0.6); if (atEnd.current) setFresh(0); setSel(null); }}>
       <div class="tx-top ${inHeader ? "bare" : ""}">
         ${!inHeader && controls}
         ${pop === "prefs" && html`<${Prefs} prefs=${prefs} set=${setPrefs} />`}
@@ -3609,7 +3630,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
       ${sel && html`<${SelBar} sel=${{ ...sel, y: sel.y + (box.current?.scrollTop || 0) - 0 }} live=${live} act=${selAct} />`}
     </div>
     ${level !== 1 && html`<${Scrub} turns=${turns} inView=${inView} go=${go} />`}
-    ${level !== 1 && below && html`<button class="to-end ${fresh ? "fresh" : ""}" onClick=${() => { atEnd.current = true; setFresh(0); box.current?.scrollTo({ top: box.current.scrollHeight, behavior: "smooth" }); }} aria-label="Jump to the latest">
+    ${level !== 1 && below && html`<button class="to-end ${fresh ? "fresh" : ""}" onClick=${() => { letGo(); atEnd.current = true; setFresh(0); box.current?.scrollTo({ top: box.current.scrollHeight, behavior: "smooth" }); }} aria-label="Jump to the latest">
       ${fresh > 0 && html`<span>${working ? "New activity" : "New reply"}</span>`}<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>`}
     ${!live && resume && s.kind !== "interactive" && level !== 1 && html`<${ResumeBar} s=${s} resume=${resume} busy=${busy} />`}
