@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 )
 
 type Agent struct {
@@ -33,6 +35,8 @@ type CLI struct {
 
 var shortID = regexp.MustCompile(`\b[0-9a-f]{8}\b`)
 
+var printing sync.Map
+
 func (c CLI) run(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, c.Bin, args...)
 	cmd.Dir = dir
@@ -55,7 +59,8 @@ func (c CLI) Agents(ctx context.Context) ([]Agent, error) {
 		return nil, err
 	}
 	var as []Agent
-	return as, json.Unmarshal([]byte(out), &as)
+	err = json.Unmarshal([]byte(out), &as)
+	return slices.DeleteFunc(as, func(a Agent) bool { _, ok := printing.Load(a.PID); return ok }), err
 }
 
 func (c CLI) Start(ctx context.Context, dir, name, prompt string, extra ...string) (string, error) {
@@ -99,7 +104,12 @@ func (c CLI) Print(ctx context.Context, model, system, input string) (string, er
 	cmd.Stdin = strings.NewReader(input)
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut
-	if err := cmd.Run(); err != nil {
+	if err := cmd.Start(); err != nil {
+		return "", fmt.Errorf("claude -p: %v", err)
+	}
+	printing.Store(cmd.Process.Pid, true)
+	defer printing.Delete(cmd.Process.Pid)
+	if err := cmd.Wait(); err != nil {
 		return "", fmt.Errorf("claude -p: %v: %s", err, strings.TrimSpace(errOut.String()+out.String()))
 	}
 	var r struct {
