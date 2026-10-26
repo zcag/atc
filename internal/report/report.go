@@ -135,6 +135,8 @@ func LimitsNote(l usage.Limits, now time.Time) string {
 		s = "Checked " + Ago(l.FetchedAt, now) + " with your Claude account."
 	case "cached":
 		s = "Not current: from Claude Code's last check, " + Ago(l.FetchedAt, now) + "."
+	case "statusline":
+		s = "From Claude Code's status line, " + Ago(l.FetchedAt, now) + "."
 	}
 	if l.Error != "" {
 		s = strings.TrimSpace(s + " " + l.Error + ".")

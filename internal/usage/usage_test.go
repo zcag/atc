@@ -166,16 +166,22 @@ func TestLimitsClient(t *testing.T) {
 			return
 		}
 		w.WriteHeader(status)
-		w.Write([]byte(usageBody))
+		w.Write([]byte(strings.ReplaceAll(usageBody, "2026-10-2", "2999-10-2")))
 	}))
 	defer srv.Close()
 	creds := Creds{AccessToken: "tok", ExpiresAt: time.Now().Add(time.Hour).UnixMilli(), SubscriptionType: "max"}
+	none := func() ([]byte, time.Time, error) { return nil, time.Time{}, os.ErrNotExist }
 	cached := func() ([]byte, time.Time, error) {
 		return []byte(strings.ReplaceAll(usageBody, "2026-10-2", "2999-10-2")), time.Unix(1, 0), nil
 	}
-	c := &LimitsClient{URL: srv.URL, Creds: func() (Creds, error) { return creds, nil }, Cached: cached}
+	saved := filepath.Join(t.TempDir(), "limits.json")
+	client := func(cached func() ([]byte, time.Time, error)) *LimitsClient {
+		return &LimitsClient{URL: srv.URL, Creds: func() (Creds, error) { return creds, nil }, Cached: cached, Tapped: none, Saved: saved}
+	}
+
+	c := client(cached)
 	l := c.Get(context.Background())
-	if l.Source != "live" || l.Plan != "Max" || l.Error != "" || calls != 1 {
+	if l.Source != "live" || l.Plan != "Max" || l.Error != "" || len(l.Windows) != 3 || calls != 1 {
 		t.Fatalf("live %+v (calls %d)", l, calls)
 	}
 	c.Get(context.Background())
@@ -183,15 +189,47 @@ func TestLimitsClient(t *testing.T) {
 		t.Fatal("second read within the cache window should not call out")
 	}
 
-	creds.ExpiresAt = time.Now().Add(-time.Minute).UnixMilli()
-	c = &LimitsClient{URL: srv.URL, Creds: func() (Creds, error) { return creds, nil }, Cached: cached}
-	if l := c.Get(context.Background()); l.Source != "cached" || len(l.Windows) != 3 || l.Error == "" || calls != 1 {
-		t.Fatalf("expired sign-in should fall back to the cached copy without calling: %+v", l)
+	status = 429
+	c = client(none)
+	if l := c.Get(context.Background()); l.Source != "live" || len(l.Windows) != 3 || l.Error == "" || calls != 2 {
+		t.Fatalf("rate limited after a restart should show the saved result: %+v", l)
+	}
+	first := c.until
+	c.until = time.Time{}
+	c.Get(context.Background())
+	if c.until.Sub(first) < 4*time.Minute {
+		t.Fatalf("a second 429 should wait longer: %v then %v", first, c.until)
 	}
 
-	creds.ExpiresAt, status = 0, 429
-	c = &LimitsClient{URL: srv.URL, Creds: func() (Creds, error) { return creds, nil }, Cached: cached}
-	if l := c.Get(context.Background()); l.Source != "cached" || c.until.Before(time.Now().Add(4*time.Minute)) {
-		t.Fatalf("rate limited: %+v until %v", l, c.until)
+	c.Tapped = func() ([]byte, time.Time, error) {
+		return []byte(`{"five_hour":{"utilization":42,"resets_at":"2999-01-01T00:00:00Z"}}`), time.Now(), nil
+	}
+	if l := c.Get(context.Background()); l.Source != "statusline" || l.Error != "" || len(l.Windows) != 3 || l.Windows[0].Percent != 42 {
+		t.Fatalf("status line should update its windows and keep the rest: %+v", l)
+	}
+
+	os.Remove(saved)
+	creds.ExpiresAt = time.Now().Add(-time.Minute).UnixMilli()
+	c = client(cached)
+	if l := c.Get(context.Background()); l.Source != "cached" || len(l.Windows) != 3 || l.Error == "" || calls != 3 {
+		t.Fatalf("expired sign-in should fall back to the cached copy without calling: %+v", l)
+	}
+}
+
+func TestTap(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := Tap(strings.NewReader(`{"model":{}}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := ReadTapped(); err == nil {
+		t.Fatal("input without rate limits should record nothing")
+	}
+	if err := Tap(strings.NewReader(`{"rate_limits":{"five_hour":{"used_percentage":5,"resets_at":32503680000},"seven_day":{"used_percentage":8,"resets_at":32503680000000}}}`)); err != nil {
+		t.Fatal(err)
+	}
+	b, at, err := ReadTapped()
+	ws := ParseWindows(b, time.Now())
+	if err != nil || time.Since(at) > time.Minute || len(ws) != 2 || ws[0].Percent != 5 || ws[1].ResetsAt.Year() != 3000 {
+		t.Fatalf("%s %v %+v", b, err, ws)
 	}
 }

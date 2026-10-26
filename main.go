@@ -34,6 +34,7 @@ import (
 	"github.com/zcag/atc/internal/summary"
 	"github.com/zcag/atc/internal/tools"
 	"github.com/zcag/atc/internal/tui"
+	limits "github.com/zcag/atc/internal/usage"
 	"github.com/zcag/atc/web"
 )
 
@@ -74,6 +75,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc usage [-json] [session]    plan limits and tokens per day; with a session, its tokens,
                                  models, turns and working time, with an estimated API cost
   atc limits [-json] [-short]    plan limits, one line each; -short fits a status line
+  atc limits -tap                record the limits from Claude Code's status line input (stdin),
+                                 so atc shows them without asking Anthropic
 
 <session> is a row number from ls, a short id, a session id prefix, or a
 unique piece of the title.
@@ -513,7 +516,11 @@ func showUsage(args []string) error {
 func showLimits(args []string) error {
 	fs, asJSON := jsonFlag("limits", args)
 	short := fs.Bool("short", false, "one line, for a status line or prompt")
+	tap := fs.Bool("tap", false, "record the limits in Claude Code's status line input on stdin")
 	fs.Parse(args)
+	if *tap {
+		return limits.Tap(os.Stdin)
+	}
 	l, err := client.Load().Limits()
 	if err != nil {
 		return err

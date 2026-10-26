@@ -2256,7 +2256,8 @@ function UsagePage({ limits, multi, onClose, onOpen }) {
   const shown = all ? sessions : sessions.slice(0, 12);
   const src = !limits ? "Checking…"
     : limits.source === "live" ? `Checked ${agoLong(limits.fetchedAt)} with your Claude account.`
-    : limits.source === "cached" ? `Not current: from Claude Code's last check, ${agoLong(limits.fetchedAt)}.` : "";
+    : limits.source === "cached" ? `Not current: from Claude Code's last check, ${agoLong(limits.fetchedAt)}.`
+    : limits.source === "statusline" ? `From Claude Code's status line, ${agoLong(limits.fetchedAt)}.` : "";
   const kpis = rep && !rep.failed && [
     [usd(sum.cost), since ? `spent since ${since}` : `spent in ${n} days`, perPct(week) ? `≈${(sum.cost / (perPct(week) * 100)).toFixed(1)}× a full week's limit` : ""],
     [usd(active ? sum.cost / active : 0), "per active day", `${active} of ${days.length} days active`],

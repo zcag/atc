@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -55,10 +56,15 @@ type LimitsClient struct {
 	HTTP   *http.Client
 	Creds  func() (Creds, error)
 	Cached func() ([]byte, time.Time, error)
+	Tapped func() ([]byte, time.Time, error)
+	Saved  string
 
-	mu    sync.Mutex
-	last  Limits
-	until time.Time
+	mu      sync.Mutex
+	loaded  bool
+	last    Limits
+	err     string
+	until   time.Time
+	backoff time.Duration
 }
 
 type Creds struct {
@@ -73,27 +79,77 @@ var errExpired = errors.New("Claude Code's sign-in has expired; it renews the ne
 func (c *LimitsClient) Get(ctx context.Context) Limits {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if time.Now().Before(c.until) {
-		return c.last
-	}
-	l, wait, err := c.fetch(ctx)
-	if err == nil {
-		c.last, c.until = l, time.Now().Add(3*time.Minute)
-		return l
-	}
-	c.until = time.Now().Add(cmp.Or(wait, time.Minute))
-	if c.last.Source == "live" && time.Since(c.last.FetchedAt) < time.Hour {
-		c.last.Error = err.Error()
-		return c.last
-	}
-	l = Limits{Error: err.Error(), Windows: []Window{}, Plan: l.Plan}
-	if b, at, cerr := c.cached(); cerr == nil {
-		if ws := ParseWindows(b, time.Now()); len(ws) > 0 {
-			l.Windows, l.FetchedAt, l.Source = ws, at, "cached"
+	if !c.loaded {
+		c.loaded = true
+		if b, err := os.ReadFile(c.savedPath()); err == nil {
+			json.Unmarshal(b, &c.last)
 		}
 	}
-	c.last = l
+	if now := time.Now(); now.After(c.until) {
+		l, wait, err := c.fetch(ctx)
+		c.last.Plan = cmp.Or(l.Plan, c.last.Plan)
+		if err == nil {
+			c.last, c.err, c.backoff, c.until = l, "", 0, now.Add(10*time.Minute)
+			if b, err := json.Marshal(l); err == nil && os.MkdirAll(filepath.Dir(c.savedPath()), 0o755) == nil {
+				os.WriteFile(c.savedPath(), b, 0o600)
+			}
+		} else {
+			c.err = err.Error()
+			if wait > 0 {
+				c.backoff = min(max(2*c.backoff, wait), time.Hour)
+			}
+			c.until = now.Add(cmp.Or(c.backoff, time.Minute))
+		}
+	}
+	return c.merged(time.Now())
+}
+
+func (c *LimitsClient) merged(now time.Time) Limits {
+	l := c.last
+	l.Windows = []Window{}
+	for _, w := range c.last.Windows {
+		if w.ResetsAt.IsZero() || w.ResetsAt.After(now) {
+			l.Windows = append(l.Windows, w)
+		}
+	}
+	for _, src := range []struct {
+		name string
+		read func() ([]byte, time.Time, error)
+	}{{"cached", c.cached}, {"statusline", c.tapped}} {
+		b, at, err := src.read()
+		if err != nil || !at.After(l.FetchedAt) {
+			continue
+		}
+		ws := ParseWindows(b, now)
+		if len(ws) == 0 {
+			continue
+		}
+		for _, w := range ws {
+			if i := slices.IndexFunc(l.Windows, func(o Window) bool { return o.Key == w.Key }); i >= 0 {
+				l.Windows[i] = w
+			} else {
+				l.Windows = append(l.Windows, w)
+			}
+		}
+		l.FetchedAt, l.Source = at, src.name
+	}
+	sort.SliceStable(l.Windows, func(i, j int) bool { return l.Windows[i].Key == "session" && l.Windows[j].Key != "session" })
+	if l.Source != "statusline" || now.Sub(l.FetchedAt) > 10*time.Minute {
+		l.Error = c.err
+	}
 	return l
+}
+
+func (c *LimitsClient) savedPath() string {
+	if c.Saved != "" {
+		return c.Saved
+	}
+	return cachePath("limits.json")
+}
+
+func cachePath(name string) string {
+	dir, _ := os.UserCacheDir()
+	return filepath.Join(dir, "atc", name)
 }
 
 func (c *LimitsClient) fetch(ctx context.Context) (Limits, time.Duration, error) {
@@ -145,6 +201,59 @@ func (c *LimitsClient) cached() ([]byte, time.Time, error) {
 		return c.Cached()
 	}
 	return ReadCached()
+}
+
+func (c *LimitsClient) tapped() ([]byte, time.Time, error) {
+	if c.Tapped != nil {
+		return c.Tapped()
+	}
+	return ReadTapped()
+}
+
+func ReadTapped() ([]byte, time.Time, error) {
+	p := cachePath("statusline-limits.json")
+	st, err := os.Stat(p)
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	b, err := os.ReadFile(p)
+	return b, st.ModTime(), err
+}
+
+func Tap(r io.Reader) error {
+	var in struct {
+		RateLimits map[string]struct {
+			UsedPercentage *float64 `json:"used_percentage"`
+			ResetsAt       float64  `json:"resets_at"`
+		} `json:"rate_limits"`
+	}
+	if err := json.NewDecoder(r).Decode(&in); err != nil {
+		return err
+	}
+	out := map[string]window{}
+	for k, v := range in.RateLimits {
+		if k != "five_hour" && k != "seven_day" || v.UsedPercentage == nil {
+			continue
+		}
+		secs := int64(v.ResetsAt)
+		if secs > 1e12 {
+			secs /= 1000
+		}
+		out[k] = window{v.UsedPercentage, time.Unix(secs, 0).UTC().Format(time.RFC3339)}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	b, _ := json.Marshal(out)
+	p := cachePath("statusline-limits.json")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
+	tmp := fmt.Sprintf("%s.%d", p, os.Getpid())
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, p)
 }
 
 func ReadCreds() (Creds, error) {
