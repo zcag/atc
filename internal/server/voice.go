@@ -84,6 +84,29 @@ func (s *Server) condense(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]string{"text": text})
 }
 
+const finishedPrompt = `You judge live speech-to-text from someone talking to an AI assistant. They paused. ` +
+	`Decide if what they said so far is a finished message they would send now, or if they stopped mid-thought and will keep talking. ` +
+	`Mid-thought: the sentence is cut off, ends on a connecting word (and, but, so, because, the, a, to, with, when, if, that, like, um), ` +
+	`or asks something only half-stated. Finished: a complete request, question, answer or reply, even a short one like yes, ok, stop, go ahead. ` +
+	`Reply with exactly one word: finished or continuing.`
+
+func (s *Server) finished(w http.ResponseWriter, r *http.Request) {
+	var in struct{ Text string }
+	json.NewDecoder(r.Body).Decode(&in)
+	if s.Voice.LLM == "" {
+		http.Error(w, "no speech model configured", http.StatusNotImplemented)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 1500*time.Millisecond)
+	defer cancel()
+	out, err := llm.Chat(ctx, s.Voice.LLM, s.Voice.LLMModel, finishedPrompt, in.Text, 4, false)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]bool{"finished": !strings.Contains(strings.ToLower(out), "continu")})
+}
+
 func (s *Server) chat(ctx context.Context, system, user string, maxTokens int) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()

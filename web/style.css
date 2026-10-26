@@ -246,6 +246,10 @@ button { cursor: pointer; }
 .mic.thinking, .mic.waiting { background: var(--turn); }
 .mic.speaking { background: var(--needs); animation: talk 1s ease-in-out infinite alternate; }
 .mic.off { background: var(--sunk); color: var(--dim); }
+.mic.holding { background: var(--turn); box-shadow: 0 0 0 6px color-mix(in srgb, var(--turn) 22%, transparent); }
+.vhold { width: 64px; height: 3px; border-radius: 2px; background: var(--turn); transform-origin: left; animation: vhold linear forwards; }
+@keyframes vhold { to { transform: scaleX(0); } }
+.vline.more::after { content: " …"; color: var(--turn); }
 .mic.error, .mic.starting { background: var(--stop); }
 .mic:active { transform: scale(.95); }
 @keyframes talk { from { box-shadow: 0 0 0 0 color-mix(in srgb, var(--needs) 30%, transparent); } to { box-shadow: 0 0 0 12px color-mix(in srgb, var(--needs) 0%, transparent); } }
@@ -660,15 +664,18 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .tx-wrap .composer .qchip button { color: var(--faint); font: 12px var(--sans); padding: 2px 4px; }
 .att-note { font: 12px var(--sans); color: var(--faint); margin-top: 4px; }
 .bgstrip { margin: 0 0 6px; border-radius: 12px; background: var(--raised); box-shadow: var(--shadow); font: 13px/1.4 var(--sans); color: var(--quiet); overflow: hidden; animation: tx-fade .2s; }
-.bgstrip .bg-head { background: none; border: 0; border-radius: 0; box-shadow: none; display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; text-align: left; color: var(--ink); font: inherit; font-weight: 500; }
+.bgstrip button.bg-head { background: none; border: 0; border-radius: 0; box-shadow: none; display: flex; align-items: center; gap: 9px; width: 100%; padding: 10px 14px; text-align: left; color: var(--ink); font: inherit; font-weight: 500; }
 .bgstrip.finished .bg-head { color: var(--quiet); font-weight: 400; }
 .bgstrip .bg-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
 .bgstrip .bg-dot.run { background: var(--live); animation: tx-breathe 1.6s ease-in-out infinite; }
 .bgstrip .bg-sub { color: var(--faint); font-weight: 400; }
 .bgstrip .bg-chev { margin-left: auto; color: var(--faint); transform: rotate(-90deg); transition: transform .15s; flex: none; }
 .bgstrip .bg-chev.open { transform: none; }
-.bgstrip ul { list-style: none; margin: 0; padding: 0 12px 9px; display: flex; flex-direction: column; gap: 5px; max-height: 28vh; overflow-y: auto; }
-.bgstrip li { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
+.bgstrip ul { list-style: none; margin: 0; padding: 0 14px 11px; display: flex; flex-direction: column; gap: 5px; max-height: 28vh; overflow-y: auto; }
+.bgstrip li.more .bg-l b { display: block; font: 600 13px/1.4 var(--sans); margin-bottom: 4px; }
+.tx-wrap .composer .att img { cursor: zoom-in; }
+.bgstrip li.more .bg-l { white-space: pre-wrap; word-break: break-word; max-height: 22vh; overflow-y: auto; font: 12px/1.45 var(--mono); }
+.bgstrip li { cursor: pointer; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
 .bgstrip .bg-k { font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--faint); }
 .bgstrip .bg-l { color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bgstrip li.done .bg-l { color: var(--faint); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--faint) 50%, transparent); }
@@ -679,7 +686,8 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .tx-wrap .composer .att.up { opacity: .5; }
 .tx-wrap .composer .att img { height: 100%; width: auto; max-width: 160px; object-fit: cover; display: block; }
 .tx-wrap .composer .att span { display: flex; align-items: center; height: 100%; padding: 0 28px 0 12px; font: 13px var(--sans); color: var(--quiet); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tx-wrap .composer .att button { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; background: rgb(0 0 0 / .55); color: #fff; font: 11px var(--sans); line-height: 20px; padding: 0; }
+.tx-wrap .composer .att button { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; background: rgb(0 0 0 / .6); color: #fff; padding: 0; display: grid; place-items: center; }
+.tx-wrap .composer .att button svg { display: block; }
 .tx-wrap .composer .ask-card { position: relative; margin: 0 14px -18px; padding: 12px 16px 28px; border-radius: 18px 18px 0 0; background: color-mix(in srgb, var(--hue) 9%, var(--raised)); box-shadow: 0 0 0 1px var(--hair); animation: tx-rise .3s cubic-bezier(.2,.7,.2,1); }
 .tx-wrap .composer .ask-card.asking { padding: 4px 4px 22px; background: color-mix(in srgb, var(--needs) 9%, var(--raised)); max-height: 55vh; overflow: auto; }
 .tx-wrap .composer .asking .askbar { border: 0; background: none; padding: 10px 12px 4px; }

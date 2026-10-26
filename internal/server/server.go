@@ -108,6 +108,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/sessions/{sid}", s.patch)
 	mux.HandleFunc("GET /api/sessions/{sid}/transcript", s.transcript)
 	mux.HandleFunc("GET /api/sessions/{sid}/turns", s.turns)
+	mux.HandleFunc("GET /api/sessions/{sid}/tasks/{task}", s.task)
 	mux.HandleFunc("GET /api/sessions/{sid}/search", s.search)
 	mux.HandleFunc("GET /api/sessions/{sid}/agents/{tool}", s.agent)
 	mux.HandleFunc("GET /api/sessions/{sid}/summary", s.summary)
@@ -140,6 +141,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/voice/stt", s.stt)
 	mux.HandleFunc("POST /api/voice/condense", s.condense)
+	mux.HandleFunc("POST /api/voice/finished", s.finished)
 	mux.HandleFunc("POST /api/voice/tts", s.tts)
 	mux.HandleFunc("POST /api/push/register", s.pushRegister)
 	mux.HandleFunc("POST /api/push/unregister", s.pushUnregister)
@@ -323,6 +325,20 @@ func (s *Server) findTranscript(w http.ResponseWriter, r *http.Request) (history
 		}
 	}
 	return t, ok
+}
+
+func (s *Server) task(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.M.Index.Find(r.PathValue("sid"))
+	if !ok {
+		http.Error(w, "no transcript", http.StatusNotFound)
+		return
+	}
+	src, ok := history.FindTask(t.Path, r.PathValue("task"))
+	if !ok {
+		http.Error(w, "that task is not in the transcript", http.StatusNotFound)
+		return
+	}
+	reply(w, src)
 }
 
 func (s *Server) turns(w http.ResponseWriter, r *http.Request) {

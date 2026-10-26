@@ -1719,8 +1719,9 @@ const speakable = (t) =>
     .trim();
 const sentences = (t) => (t.match(/[^.!?…]+[.!?…]+["')]?(\s|$)|[^.!?…]+$/g) || [t]).map((x) => x.trim()).filter(Boolean);
 const turkish = (t) => /[çğıöşüÇĞİÖŞÜ]/.test(t);
+const HOLD_MS = 3000;
 const PHANTOM = /^(thank you|thanks for watching|you|bye|altyazı.*|abone olmayı unutmayın.*|\.+)[.!]?$/i;
-const PHASE = { starting: "Starting the microphone…", listening: "Listening", hearing: "Hearing you…", thinking: "Transcribing…", speaking: "Speaking · tap to stop", muted: "Muted · tap to talk", error: "Voice is not available" };
+const PHASE = { starting: "Starting the microphone…", listening: "Listening", hearing: "Hearing you…", thinking: "Transcribing…", holding: "Keep talking · tap to send now", speaking: "Speaking · tap to stop", muted: "Muted · tap to talk", error: "Voice is not available" };
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 const MIC = html`<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>`;
@@ -1745,6 +1746,7 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
   const [heard, setHeard] = useState(left.heard || "");
   const [spoken, setSpoken] = useState(left.spoken || "");
   const [muted, setMuted] = useState(() => pref(muteKey, "") === "on");
+  const [holdMs, setHoldMs] = useState(0);
   const [source, setSource] = useState(() => pref("atc.voicesrc", VOICE.tts ? "mine" : "device"));
   const [bargeIn, setBargeIn] = useState(() => pref("atc.bargein", "off") === "on");
   const st = useRef({ awaiting: !!left.awaiting, sentAt: left.sentAt || 0, permission: false, speaking: false, audio: null, vad: null, turns: [], at: -1 });
@@ -1838,6 +1840,7 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
   };
 
   const heardSpeech = async (audio) => {
+    st.current.talking = false;
     if (st.current.speaking && !live.current.bargeIn) return;
     setPhase("thinking");
     let text = "";
@@ -1848,7 +1851,13 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
     } catch (e) {
       say(`Could not transcribe: ${e.message}`);
     }
-    if (!text || PHANTOM.test(text)) return rest();
+    const buf = st.current.buf;
+    if (!text || PHANTOM.test(text)) return buf ? hold(HOLD_MS) : rest();
+    if (buf) {
+      st.current.buf = `${buf.replace(/[.…]+$/, "")} ${/^[A-Z][a-z]/.test(text) ? text[0].toLowerCase() + text.slice(1) : text}`;
+      setHeard(st.current.buf);
+      return judge();
+    }
     setHeard(text);
     const bare = text.toLowerCase().replace(/[.!?,]/g, "").trim();
     if (/^(stop|cancel|dur|durdur|iptal|bekle)$/.test(bare)) { press("\x1b"); st.current.awaiting = false; return rest(); }
@@ -1856,6 +1865,29 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
     if (/^(read (it )?all|read the whole (thing|reply)|full|hepsini oku|tamamını oku|tamamı)$/.test(bare)) return full();
     if (/^(previous|earlier|go back|önceki|öncekini oku|geri)$/.test(bare)) return earlier();
     if (st.current.permission && /^(yes|yeah|yep|evet|tamam|olur|okay|ok)\b/.test(bare)) { st.current.permission = false; press("\r"); st.current.awaiting = true; st.current.sentAt = Date.now(); return rest(); }
+    st.current.buf = text;
+    judge();
+  };
+
+  const judge = async () => {
+    const text = st.current.buf;
+    const done = await api("/api/voice/finished", { method: "POST", body: { text } }).then((r) => r.finished, () => null);
+    if (st.current.buf !== text || st.current.talking) return;
+    done ? dispatch() : hold(/[.?!]["')]*$/.test(text) ? 1500 : HOLD_MS);
+  };
+  const hold = (ms) => {
+    clearTimeout(st.current.hold);
+    st.current.hold = setTimeout(dispatch, ms);
+    setHoldMs(ms);
+    if (!live.current.muted) listen(true);
+    setPhase("holding");
+  };
+  const dispatch = () => {
+    clearTimeout(st.current.hold);
+    const text = st.current.buf;
+    st.current.buf = "";
+    setHoldMs(0);
+    if (!text) return rest();
     type(text);
     st.current.awaiting = true;
     st.current.sentAt = Date.now();
@@ -1882,14 +1914,17 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
           ortConfig: (ort) => { ort.env.wasm.numThreads = 1; ort.env.logLevel = "error"; },
           positiveSpeechThreshold: 0.6,
           negativeSpeechThreshold: 0.4,
-          redemptionMs: 1300,
+          redemptionMs: 1200,
           minSpeechMs: 300,
           getStream: () => navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }),
           onSpeechStart: () => {
             if (st.current.speaking) { if (!live.current.bargeIn) return; stopSpeaking(); }
+            clearTimeout(st.current.hold);
+            st.current.talking = true;
             setPhase("hearing");
           },
-          onVADMisfire: () => { if (!st.current.speaking) rest(); },
+          onVADMisfire: () => {
+            st.current.talking = false; if (st.current.buf) hold(HOLD_MS); else if (!st.current.speaking) rest(); },
           onSpeechEnd: heardSpeech,
         });
         if (dead) return v.destroy();
@@ -1909,6 +1944,7 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
 
   const tapMic = () => {
     if (phase === "speaking") { stopSpeaking(); return rest(); }
+    if (st.current.buf) return dispatch();
     const m = !muted;
     setMuted(m);
     setPref(muteKey, m ? "on" : "");
@@ -1923,7 +1959,7 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
     <div class="voicebar" role="region" aria-label="Voice">
       ${top}
       <div class="vtext" aria-live="polite">
-        ${heard && html`<div class="vline"><b>You</b> ${heard}</div>`}
+        ${heard && html`<div class="vline ${phase === "holding" || (phase === "hearing" && st.current.buf) ? "more" : ""}"><b>You</b> ${heard}</div>`}
         ${spoken && html`<div class="vline said"><b>${who}</b> ${spoken}</div>`}
         ${!heard && !spoken && html`<div class="vline">Say what you want ${who} to do. It answers out loud when it is done.</div>`}
       </div>
@@ -1935,10 +1971,11 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
         </div>
         <div class="vmain">
           <button class="mic ${phase} ${muted ? "off" : ""}" onClick=${tapMic} aria-pressed=${!muted}
-            aria-label=${phase === "speaking" ? "Stop speaking" : muted ? "Unmute microphone" : "Mute microphone"}>
+            aria-label=${phase === "speaking" ? "Stop speaking" : phase === "holding" ? "Send now" : muted ? "Unmute microphone" : "Mute microphone"}>
             ${phase === "speaking" ? STOP : muted ? MIC_OFF : MIC}
           </button>
           <div class="vphase">${phase === "waiting" ? `${who} is working` : PHASE[phase]}</div>
+          ${phase === "holding" && holdMs > 0 && html`<div class="vhold" key=${Math.random()} style=${`animation-duration:${holdMs}ms`}></div>`}
         </div>
         <div class="vside right">
           ${phase === "waiting" && html`<button class="vbtn" onClick=${() => send("\x1b")} title=${`Send Esc to ${who} (or say “stop”)`}>Stop ${who}</button>`}
@@ -3160,6 +3197,12 @@ function ResumeBar({ s, resume, busy }) {
 function BgStrip({ s }) {
   const seen = useRef(new Map());
   const [open, setOpen] = useState(() => pref("atc.bgopen", "on") === "on");
+  const [more, setMoreRaw] = useState(null);
+  const [src, setSrc] = useState({});
+  const setMore = (id) => {
+    setMoreRaw(id);
+    if (id && !src[id]) api(`/api/sessions/${s.sessionId}/tasks/${encodeURIComponent(id)}`).then((r) => setSrc((m) => ({ ...m, [id]: r })), () => {});
+  };
   useNow(1000);
   const now = Date.now(), cur = s.background || [], ids = new Set(cur.map((t) => t.id));
   for (const t of cur) seen.current.set(t.id, { ...t, done: t.doneAt || 0 });
@@ -3177,9 +3220,11 @@ function BgStrip({ s }) {
       ${running > 0 && all.length > running && html`<span class="bg-sub">${all.length - running} done</span>`}
       ${running > 0 && html`<svg class="bg-chev ${open ? "open" : ""}" width="12" height="12" viewBox="0 0 16 16"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
     </button>
-    ${open && running > 0 && html`<ul>${all.map((t) => html`<li class=${t.done ? "done" : ""}>
+    ${open && running > 0 && html`<ul>${all.map((t) => html`<li class="${t.done ? "done" : ""} ${more === t.id ? "more" : ""}" onClick=${() => setMore(more === t.id ? null : t.id)}>
       <span class="bg-k">${t.kind === "shell" ? "shell" : "agent"}</span>
-      <span class="bg-l" title=${t.label}>${t.kind === "shell" ? t.label.replace(/^cd \S+ && /, "") : t.label}</span>
+      <span class="bg-l" title=${more === t.id ? null : t.label}>${more === t.id
+        ? html`${src[t.id]?.description && t.kind === "shell" && html`<b>${src[t.id].description}</b>`}${src[t.id]?.detail || t.label}`
+        : t.kind === "shell" ? t.label.replace(/^cd \S+ && /, "") : t.label}</span>
       <span class="bg-t">${t.done ? "done" : t.startedAt ? txSpan(now - t.startedAt) : "running"}</span>
     </li>`)}</ul>`}
   </div>`;
@@ -3190,6 +3235,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
   const [atts, setAtts] = useState([]);
+  const [big, setBig] = useState(null);
   focusRef.current = () => ta.current?.focus();
   const dict = useDictation((t) => setDraft((d) => (d ? `${d.trimEnd()} ${t}` : t)), say);
   useLayoutEffect(() => { const el = ta.current; if (el) { el.style.height = "auto"; el.style.height = Math.min(el.scrollHeight, innerHeight * 0.4) + "px"; } }, [draft]);
@@ -3239,8 +3285,9 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
       </div></div>`}
       ${quotes.length > 0 && html`<div class="quotes">${quotes.map((q, j) => html`<div class="qchip"><span>${q}</span><button aria-label="Remove quote" onClick=${() => setQuotes(quotes.filter((_, k) => k !== j))}>✕</button></div>`)}</div>`}
       ${atts.length > 0 && html`<div class="atts">${atts.map((a) => html`<div class="att ${a.path ? "" : "up"}" title=${a.name}>
-        ${a.url ? html`<img src=${a.url} alt=${a.name} />` : html`<span>${a.name}</span>`}
-        <button aria-label=${`Remove ${a.name}`} onClick=${() => setAtts(atts.filter((x) => x.id !== a.id))}>✕</button></div>`)}</div>`}
+        ${a.url ? html`<img src=${a.url} alt=${a.name} onClick=${() => setBig(a.url)} />` : html`<span>${a.name}</span>`}
+        <button aria-label=${`Remove ${a.name}`} onClick=${() => setAtts(atts.filter((x) => x.id !== a.id))}><svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 2l6 6M8 2L2 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button></div>`)}</div>`}
+      ${big && html`<div class="lightbox" onClick=${() => setBig(null)}><img src=${big} alt="" /></div>`}
       <div class="box ${ready ? "ready" : ""}" onClick=${(e) => e.target === e.currentTarget && ta.current?.focus()}>
         <textarea ref=${ta} rows="1" value=${draft} placeholder=${hint} enterkeyhint=${touch ? "enter" : "send"}
           onInput=${(e) => setDraft(e.target.value)}
