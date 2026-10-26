@@ -57,6 +57,14 @@ const engineTag = (s) => s.harness
   : (s.engine || local(s.model)) && html`<span class="eng" title=${`Runs on ${s.engine || s.model}, not Claude`}>${s.engine || model(s.model)}</span>`;
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
+const USAGE = "#/usage";
+let usageBack = false;
+const openUsage = () => { if (location.hash !== USAGE) { usageBack = true; location.hash = USAGE; } };
+const closeUsage = () => {
+  if (location.hash !== USAGE) return;
+  usageBack ? history.back() : location.replace("#/");
+  usageBack = false;
+};
 
 function useRoute() {
   const read = () => (location.hash.match(/^#\/s\/(.+)$/) || [])[1] || null;
@@ -96,7 +104,6 @@ function App() {
   QUICK = (s, rect) => setQuick({ s, rect });
   const [help, setHelp] = useState(false);
   const [toast, setToast] = useState(null);
-  const [usage, setUsage] = useState(false);
   const [limits, setLimits] = useState(null);
   const route = useRoute();
   const [stale, setStale] = useState(null);
@@ -147,10 +154,11 @@ function App() {
   }, [me]);
 
   const [assisting, setAssisting] = useState(location.hash === "#/assist");
+  const [usage, setUsage] = useState(location.hash === USAGE);
   const shareRoute = () => (location.hash.startsWith("#/share") ? location.hash : null);
   const [sharing, setSharing] = useState(shareRoute);
   useEffect(() => {
-    const f = () => { setAssisting(location.hash === "#/assist"); setSharing(shareRoute()); };
+    const f = () => { setAssisting(location.hash === "#/assist"); setUsage(location.hash === USAGE); setSharing(shareRoute()); };
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
@@ -271,13 +279,13 @@ function App() {
       } else if (e.key === "n") {
         e.preventDefault(); setCreating(true);
       } else if (e.key === "u") {
-        e.preventDefault(); setUsage((u) => !u);
+        e.preventDefault(); location.hash === USAGE ? closeUsage() : openUsage();
       } else if (e.key === "/") {
         e.preventDefault(); document.querySelector('.search input')?.focus();
       } else if (e.key === "?") {
         setHelp((h) => !h);
       } else if (e.key === "Escape") {
-        setHelp(false); setCursor(null); setUsage(false); k.setFly(false);
+        setHelp(false); setCursor(null); closeUsage(); k.setFly(false);
       }
     };
     addEventListener("keydown", onKey, true);
@@ -300,7 +308,6 @@ function App() {
   const openFromUsage = async (x) => {
     if (!all.some((s) => s.sessionId === x.sessionId) && !past[x.sessionId])
       remember((await api(`/api/history?q=${encodeURIComponent(x.title)}&limit=50`).catch(() => [])).filter((s) => s.sessionId === x.sessionId));
-    setUsage(false);
     go(x.sessionId);
   };
 
@@ -325,7 +332,7 @@ function App() {
           <button class="btn talk" onClick=${() => setCreating(true)} title="New session (n)" aria-label="New session"><span class="mi">${ICON.plus}</span></button>
         </header>
         <${Board} live=${live} sel=${sel} cursor=${cursor} onPast=${remember} mode=${view.list} />
-        <${UsageFoot} limits=${limits} onOpen=${() => setUsage(true)} />
+        <${UsageFoot} limits=${limits} onOpen=${openUsage} />
         </div>
       </aside>
       <main class="main">
@@ -336,10 +343,10 @@ function App() {
     </div>
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} start=${creating} />`}
     ${palette && html`<${Palette} live=${live || []} sel=${sel} say=${say} home=${me.host} onClose=${() => setPalette(false)}
-      actions=${{ create: (start) => setCreating(start || true), usage: () => setUsage(true), help: () => setHelp(true), talk: () => (location.hash = "#/assist") }} />`}
+      actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: () => (location.hash = "#/assist") }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
-    ${usage && html`<${UsageSheet} limits=${limits} multi=${MULTI} onClose=${() => setUsage(false)} onOpen=${openFromUsage} />`}
+    ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
     ${notifAsk && me && html`<div class="appbar" role="status">
@@ -364,7 +371,7 @@ function App() {
             <dt>n</dt><dd>New session</dd>
             <dt>t</dt><dd>Talk: a voice session with Claude</dd>
             <dt>/</dt><dd>Search earlier sessions</dd>
-            <dt>u</dt><dd>Usage: plan limits and tokens by day</dd>
+            <dt>u</dt><dd>Usage: limits, spend by day, projects and sessions</dd>
             <dt>[ / ]</dt><dd>Previous or next project tab</dd>
             <dt>Ctrl + Z</dt><dd>In a terminal: detach. The session keeps running.</dd>
             <dt>1 / 2 / 3</dt><dd>In a transcript: outline, story or everything</dd>
@@ -2051,70 +2058,222 @@ const ShareRows = ({ rows, total, w, onPick }) => html`
       </button>`)}
   </div>`;
 
-function UsageSheet({ limits, multi, onClose, onOpen }) {
-  const [days, setDays] = useState(null);
+const RANGES = [7, 14, 30, 90];
+const FAMILIES = ["opus", "fable", "sonnet", "haiku"];
+const SERIES = 5;
+const modelRank = (m) => { const i = FAMILIES.findIndex((f) => m.includes(f)); return i < 0 ? FAMILIES.length : i; };
+const byModel = (a, b) => modelRank(a) - modelRank(b) || b.localeCompare(a, undefined, { numeric: true });
+const dayOf = (d, o) => new Date(d + "T12:00").toLocaleDateString([], o);
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const share = (x, of) => (of > 0 ? pct((x / of) * 100) : "");
+const ofWeek = (cost, w) => { const p = asPct(cost, w); return p != null ? `≈${pct(p)} of a week` : ""; };
+const KINDS = [
+  ["output", "Output", "What Claude wrote, thinking included"],
+  ["cacheRead", "Cache reads", "Earlier context re-read from the prompt cache on every call"],
+  ["cacheWrite", "Cache writes", "New context stored in the prompt cache"],
+  ["input", "Input", "Context sent without caching"],
+];
+
+function useReport(n) {
+  const [rep, setRep] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setRep((r) => r && { ...r, loading: true });
+    api(`/api/usage/report?days=${n}`).then((r) => live && setRep(r), () => live && setRep({ days: [], sessions: [], projects: [], failed: true }));
+    return () => (live = false);
+  }, [n]);
+  return rep;
+}
+
+function LimitCard({ w, x }) {
+  useNow(60000);
+  const rate = perPct(x), p = x && pace(x);
+  const from = Date.parse(x?.from), end = Date.parse(w.resetsAt);
+  const gone = from && end > from ? Math.min(1, Math.max(0, (Date.now() - from) / (end - from))) : null;
+  return html`
+    <div class="ucard ulimit">
+      <div class="ulh"><span>${w.key === "session" ? "5-hour window" : w.label}</span><b class=${level(w.percent)}>${Math.round(w.percent)}%</b></div>
+      <div class="utrack ${level(w.percent)}" title=${gone != null ? `${Math.round(w.percent)}% used, ${Math.round(gone * 100)}% of the window passed` : ""}>
+        <i style=${`width: ${Math.min(100, w.percent)}%`}></i>
+        ${gone != null && html`<u style=${`left: ${gone * 100}%`}></u>`}
+      </div>
+      <div class="ulm">
+        <span>${x?.cost > 0 ? `${usd(x.cost)} used` : "Nothing used yet"}</span>
+        <span>${rate && w.percent < 100 ? `≈${dollars(rate * (100 - w.percent))} left` : ""}</span>
+      </div>
+      ${p ? html`<p class=${p.hot ? "hot" : ""}>${p.text}</p>` : gone != null && html`<p>${Math.round(gone * 100)}% of the window has passed.</p>`}
+      <p class="faint">${resetText(w.resetsAt)}${rate ? ` · ≈${dollars(rate)} per 1%` : ""}</p>
+    </div>`;
+}
+
+function DailyChart({ days, models, color, week }) {
   const [at, setAt] = useState(null);
+  const top = Math.max(...days.map((d) => d.cost), 0);
+  const step = top <= 0 ? 1 : 10 ** Math.floor(Math.log10(top / 3));
+  const tick = [1, 2, 5, 10].map((m) => m * step).find((t) => t * 3 >= top) || step * 10;
+  const ceil = Math.max(tick * Math.ceil(top / tick), 1);
+  const avg = days.reduce((a, d) => a + d.cost, 0) / (days.length || 1);
+  const i = at ?? days.length - 1, pick = days[i];
+  const labelAt = (d) => days.length <= 14 || new Date(d.day + "T12:00").getDay() === 1;
+  return html`
+    <div class="ureadout">
+      ${pick && html`
+        <b>${dayOf(pick.day, { weekday: "short", month: "short", day: "numeric" })}</b>
+        <span class="big">${pick.cost > 0 ? usd(pick.cost) : "No usage"}</span>
+        ${pick.cost > 0 && html`<span>${[ofWeek(pick.cost, week), `${tokens(pick.total)} tokens`, plural(pick.sessions, "session"), plural(pick.messages, "reply")].filter(Boolean).join(" · ")}</span>`}
+        <span class="umix">${models.filter((m) => pick.models?.[m] >= 0.005).map((m) => html`<span><i style=${`background: ${color(m)}`}></i>${modelName(m)} ${dollars(pick.models[m])}</span>`)}</span>`}
+    </div>
+    <div class="uchart" style=${`--cols: ${days.length}`}>
+      <div class="ugrid">
+        ${[3, 2, 1, 0].map((k) => html`<span style=${`bottom: ${(k * tick / ceil) * 100}%`}><em>${k ? dollars(k * tick).replace(".00", "") : "$0"}</em></span>`)}
+        ${avg > 0 && html`<span class="avg" style=${`bottom: ${(avg / ceil) * 100}%`}><em>avg ${dollars(avg)}</em></span>`}
+      </div>
+      <div class="ubars" onPointerLeave=${() => setAt(null)}>
+        ${days.map((d, j) => html`
+          <button class="ubar ${j === i ? "on" : ""}" onPointerEnter=${() => setAt(j)} onFocus=${() => setAt(j)} onClick=${() => setAt(j)}
+            aria-label=${`${d.day}: about ${dollars(d.cost)}, ${tokens(d.total)} tokens`}>
+            <span class="stack" style=${`height: ${(d.cost / ceil) * 100}%`}>
+              ${models.filter((m) => d.models?.[m] > 0).map((m) => html`<i style=${`flex: ${d.models[m]} 1 0; background: ${color(m)}`}></i>`)}
+            </span>
+            ${labelAt(d) && html`<small>${j === 0 || +d.day.slice(8) <= (days.length <= 14 ? 1 : 7) ? dayOf(d.day, { month: "short", day: "numeric" }) : +d.day.slice(8)}</small>`}
+          </button>`)}
+      </div>
+    </div>`;
+}
+
+function Heatmap({ days }) {
+  const [at, setAt] = useState(null);
+  const grid = WEEKDAYS.map(() => Array(24).fill(0)), count = Array(7).fill(0);
+  for (const d of days) {
+    const wd = (new Date(d.day + "T12:00").getDay() + 6) % 7;
+    count[wd]++;
+    d.hours?.forEach((c, h) => (grid[wd][h] += c));
+  }
+  const top = Math.max(...grid.flat(), 0);
+  const hours = Array(24).fill(0).map((_, h) => grid.reduce((a, r) => a + r[h], 0));
+  const busiest = hours.indexOf(Math.max(...hours));
+  const hh = (h) => `${String(h).padStart(2, "0")}:00`;
+  const cell = at && grid[at[0]][at[1]];
+  return html`
+    <div class="ureadout sm">
+      ${at ? html`<b>${WEEKDAYS[at[0]]} ${hh(at[1])}–${hh((at[1] + 1) % 24)}</b><span>${cell > 0 ? `${usd(cell)} over ${plural(count[at[0]], WEEKDAYS[at[0]])}` : "Nothing"}</span>`
+        : top > 0 && html`<span>Busiest hour: <b>${hh(busiest)}–${hh((busiest + 1) % 24)}</b>, ${usd(hours[busiest])} in this range</span>`}
+    </div>
+    <div class="uheat" onPointerLeave=${() => setAt(null)}>
+      ${grid.map((row, r) => html`
+        <span class="rl">${WEEKDAYS[r]}</span>
+        ${row.map((c, h) => html`<i class=${at && at[0] === r && at[1] === h ? "on" : ""} onPointerEnter=${() => setAt([r, h])} onClick=${() => setAt([r, h])}
+          style=${c > 0 ? `--a: ${Math.round(12 + 88 * Math.sqrt(c / top))}%` : ""}></i>`)}`)}
+      <span></span>
+      ${Array(24).fill(0).map((_, h) => html`<span class="cl">${h % 3 ? "" : h}</span>`)}
+    </div>`;
+}
+
+function UsagePage({ limits, multi, onClose, onOpen }) {
+  const [n, setN] = useState(() => { try { return +localStorage.getItem("atc.usage.days") || 30; } catch { return 30; } });
+  const pickN = (v) => { setN(v); try { localStorage.setItem("atc.usage.days", v); } catch {} };
+  const [order, setOrder] = useState("cost");
+  const [all, setAll] = useState(false);
   const [u, setU] = useState(WINS);
-  useEffect(() => { api("/api/usage/days?days=14").then(setDays, () => setDays([])); loadWindows(true).then(setU); }, []);
+  useEffect(() => { loadWindows(true).then(setU); }, []);
+  const rep = useReport(n);
   const ws = limits?.windows || [];
+  const week = winOf(u, "weekly_all");
+  const firstUsed = (rep?.days || []).findIndex((d) => d.cost > 0);
+  const days = (rep?.days || []).slice(Math.max(0, firstUsed));
+  const since = firstUsed > 0 && dayOf(days[0].day, { month: "short", day: "numeric" });
+  const sum = days.reduce((a, d) => {
+    for (const k of ["cost", "total", "messages", "input", "cacheRead", "cacheWrite", "output"]) a[k] += d[k] || 0;
+    for (const [k] of KINDS) a.costs[k] += d.costs?.[k] || 0;
+    for (const [m, c] of Object.entries(d.models || {})) a.models[m] = (a.models[m] || 0) + c;
+    return a;
+  }, { cost: 0, total: 0, messages: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, costs: Object.fromEntries(KINDS.map(([k]) => [k, 0])), models: {} });
+  const models = Object.keys(sum.models).filter((m) => sum.models[m] >= 0.005).sort(byModel);
+  const color = (m) => { const i = models.indexOf(m); return i >= 0 && i < SERIES ? `var(--s${i + 1})` : "var(--faint)"; };
+  const active = days.filter((d) => d.cost > 0).length;
+  const today = days.at(-1);
+  const restAvg = days.length > 1 ? (sum.cost - (today?.cost || 0)) / (days.length - 1) : 0;
+  const cin = sum.input + sum.cacheRead + sum.cacheWrite;
+  const projects = Object.values((rep?.projects || []).reduce((a, p) => {
+    const name = project(p.cwd).name || "other";
+    const x = (a[name] ||= { label: name, cost: 0, sessions: 0, total: 0, hosts: new Set() });
+    x.cost += p.cost; x.sessions += p.sessions; x.total += p.total;
+    p.hosts?.forEach((h) => x.hosts.add(h));
+    return a;
+  }, {})).sort((a, b) => b.cost - a.cost);
+  const nSessions = projects.reduce((a, p) => a + p.sessions, 0);
+  const sessions = [...(rep?.sessions || [])].sort(order === "cost" ? (a, b) => b.cost - a.cost : order === "tokens" ? (a, b) => b.total - a.total : (a, b) => Date.parse(b.last) - Date.parse(a.last));
+  const shown = all ? sessions : sessions.slice(0, 12);
   const src = !limits ? "Checking…"
     : limits.source === "live" ? `Checked ${agoLong(limits.fetchedAt)} with your Claude account.`
     : limits.source === "cached" ? `Not current: from Claude Code's last check, ${agoLong(limits.fetchedAt)}.` : "";
-  const week = winOf(u, "weekly_all");
-  const top = Math.max(...(days || []).map((d) => d.cost), 0.01);
-  const pick = days && days[at ?? days.length - 1];
-  const sum = (days || []).reduce((a, d) => ({ total: a.total + d.total, cost: a.cost + d.cost }), { total: 0, cost: 0 });
-  const models = Object.entries(u?.week?.models || {}).map(([m, c]) => ({ label: modelName(m), cost: c })).filter((r) => r.cost >= 0.005).sort((a, b) => b.cost - a.cost);
-  const split = (d) => Object.entries(d.models || {}).sort((a, b) => b[1] - a[1]).filter(([, c]) => c >= 0.005).slice(0, 3).map(([m, c]) => `${modelName(m)} ${dollars(c)}`).join(" · ");
+  const kpis = rep && !rep.failed && [
+    [usd(sum.cost), since ? `spent since ${since}` : `spent in ${n} days`, perPct(week) ? `≈${(sum.cost / (perPct(week) * 100)).toFixed(1)}× a full week's limit` : ""],
+    [usd(active ? sum.cost / active : 0), "per active day", `${active} of ${days.length} days active`],
+    [usd(today?.cost || 0), "today", restAvg > 0 && today ? `${today.cost >= restAvg ? "+" : "−"}${Math.round(Math.abs(today.cost / restAvg - 1) * 100)}% vs the daily average` : ""],
+    [tokens(sum.total), "tokens", `${tokens(sum.output)} written · ${plural(sum.messages, "reply")}`],
+    [String(nSessions), nSessions === 1 ? "session" : "sessions", plural(projects.length, "project")],
+    [cin ? `${Math.round((sum.cacheRead / cin) * 100)}%` : "–", "context from cache", "cache reads cost a tenth of fresh input"],
+  ];
   return html`
-    <${Sheet} cls="usage" title="Usage" sub=${limits?.plan && `${limits.plan} plan`} onClose=${onClose}>
-      <section>
-        <h4>Plan limits</h4>
-        ${ws.map((w) => {
-          const x = winOf(u, w.key), rate = perPct(x), p = x && pace(x);
-          return html`
-            <div class="win">
-              <div class="wl"><span>${w.key === "session" ? "5-hour window" : w.label}</span><span class="pct">${x?.cost > 0 && html`<small>${usd(x.cost)}</small>`}${Math.round(w.percent)}%</span></div>
-              <${Meter} p=${w.percent} />
-              ${rate && html`<div class="wr">≈${dollars(rate)} of work per 1%${w.percent < 100 ? ` · ${Math.round(100 - w.percent)}% left ≈ ${dollars(rate * (100 - w.percent))}` : ""}</div>`}
-              ${p && html`<div class="wr ${p.hot ? "hot" : ""}">${p.text}</div>`}
-              <div class="wr">${resetText(w.resetsAt)}</div>
-            </div>`;
-        })}
-        ${limits && !ws.length && html`<p class="note">Limits are not available here${limits.error ? `: ${limits.error}` : "."}</p>`}
-        <p class="note">${src}${ws.length && limits?.error ? ` ${limits.error}.` : ""}</p>
-      </section>
-      ${u?.week?.sessions?.length > 0 && html`
-        <section>
-          <h4>Biggest sessions this week${multi ? ", all machines" : ""}</h4>
-          <${ShareRows} w=${week} total=${u.week.sessions[0].cost} onPick=${onOpen}
-            rows=${u.week.sessions.map((x) => ({ ...x, label: x.title || x.sessionId.slice(0, 8), sub: multi && x.host }))} />
-        </section>`}
-      ${models.length > 0 && html`
-        <section>
-          <h4>Models this week</h4>
-          <${ShareRows} w=${week} total=${models[0].cost} rows=${models} />
-        </section>`}
-      <section>
-        <h4>By day${multi ? ", all machines" : ""}</h4>
-        ${!days ? html`<p class="note">Adding up transcripts…</p>` : html`
-          <div class="readout">
-            ${pick && html`<b>${new Date(pick.day + "T12:00").toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" })}</b>
-              <span>${pick.total ? `${usd(pick.cost)}${asPct(pick.cost, week) != null ? `, ${approx(asPct(pick.cost, week))} of a week` : ""} · ${tokens(pick.total)} tokens · ${pick.sessions} session${pick.sessions === 1 ? "" : "s"}` : "No usage"}</span>`}
-          </div>
-          <div class="readout sub">${pick?.total > 0 && split(pick)}</div>
-          <div class="bars" onPointerLeave=${() => setAt(null)}>
-            ${days.map((d, i) => html`
-              <button class="bar ${i === (at ?? days.length - 1) ? "on" : ""}" onPointerEnter=${() => setAt(i)} onFocus=${() => setAt(i)} onClick=${() => setAt(i)}
-                aria-label=${`${d.day}: ${tokens(d.total)} tokens, about ${dollars(d.cost)}`}>
-                <i style=${`height: ${d.cost > 0 ? Math.max(3, (d.cost / top) * 100) : 0}%`}></i>
-                <span>${+d.day.slice(8)}</span>
-              </button>`)}
-          </div>
-          <p class="total">Last ${days.length} days: <b>${usd(sum.cost)}</b> · <b>${tokens(sum.total)} tokens</b>${perPct(week) ? html` · ≈<b>${(sum.cost / (perPct(week) * 100)).toFixed(1)}×</b> a full week's limit` : ""}</p>`}
-      </section>
-      <p class="note">${ESTIMATE()} ${RATE}</p>
-    <//>`;
+    <div class="usepage" role="dialog" aria-label="Usage">
+      <header class="uphead">
+        <button class="icon back" onClick=${onClose} aria-label="Back">←</button>
+        <div class="who"><h2>Usage</h2><span class="sub">${[limits?.plan && `${limits.plan} plan`, multi && "all machines"].filter(Boolean).join(" · ")}</span></div>
+        <div class="seg">${RANGES.map((r) => html`<button class=${r === n ? "on" : ""} onClick=${() => pickN(r)}>${r}d</button>`)}</div>
+        <button class="icon close" onClick=${onClose} aria-label="Close" title="Close (Esc)">✕</button>
+      </header>
+      <div class="upbody ${rep?.loading ? "loading" : ""}">
+        <section class="ulimits">
+          ${ws.map((w) => html`<${LimitCard} w=${w} x=${winOf(u, w.key)} />`)}
+          ${limits && !ws.length && html`<p class="unote">Limits are not available here${limits.error ? `: ${limits.error}` : "."}</p>`}
+        </section>
+        <p class="unote">${src}${ws.length && limits?.error ? ` ${limits.error}.` : ""}${ws.length ? " The bar is what you've used; the tick is how much of the window has passed." : ""}</p>
+        ${!rep ? html`<p class="unote">Adding up transcripts…</p>` : rep.failed ? html`<p class="unote">Couldn't add up the transcripts.</p>` : html`
+          <section class="ukpis">${kpis.map(([v, l, s]) => html`<div><span class="n">${v}</span><span class="l">${l}</span>${s && html`<span class="s">${s}</span>`}</div>`)}</section>
+          <section class="ugrid2">
+            <div class="ucard wide">
+              <h4>Spend by day</h4>
+              <${DailyChart} days=${days} models=${models} color=${color} week=${week} />
+              ${since && html`<p class="unote">Nothing before ${since}: Claude Code deletes transcripts after 30 days unless <code>cleanupPeriodDays</code> in its settings says otherwise.</p>`}
+              <div class="ulegend">${models.map((m, i) => html`<span><i style=${`background: ${color(m)}`}></i>${i < SERIES ? modelName(m) : `${modelName(m)} (other)`}<b>${usd(sum.models[m])}</b><small>${share(sum.models[m], sum.cost)}</small></span>`)}</div>
+            </div>
+            <div class="ucard">
+              <h4>Where the cost goes</h4>
+              <${ShareRows} w=${week} total=${Math.max(...KINDS.map(([k]) => sum.costs[k]), 0.01)}
+                rows=${KINDS.map(([k, label, hint]) => ({ label, hint, cost: sum.costs[k], sub: `${tokens(sum[k])} tokens · ${share(sum.costs[k], sum.cost)}` }))} />
+            </div>
+            <div class="ucard wide">
+              <h4>When you use it</h4>
+              <${Heatmap} days=${days} />
+            </div>
+            <div class="ucard">
+              <h4>Projects</h4>
+              <${ShareRows} w=${week} total=${projects[0]?.cost || 1}
+                rows=${projects.slice(0, 8).map((p) => ({ ...p, sub: `${plural(p.sessions, "session")}${multi ? ` · ${[...p.hosts].join(", ")}` : ""}` }))} />
+            </div>
+          </section>
+          <section class="ucard">
+            <div class="uthead">
+              <h4>Sessions${sessions.length >= 60 ? `, top ${sessions.length}` : ""}</h4>
+              <div class="seg">${[["cost", "Cost"], ["tokens", "Tokens"], ["last", "Recent"]].map(([k, l]) => html`<button class=${order === k ? "on" : ""} onClick=${() => setOrder(k)}>${l}</button>`)}</div>
+            </div>
+            <div class="utable">
+              ${shown.map((x) => html`
+                <button class="urow" onClick=${() => onOpen(x)} title=${tilde(x.cwd)}>
+                  <span class="t">${x.title || x.sessionId.slice(0, 8)}</span>
+                  <span class="p">${x.cwd && html`<span class="proj" style=${`--ph: ${hueOf(project(x.cwd).name)}`}>${project(x.cwd).name}</span>`}${multi && x.host && html`<small>${x.host}</small>`}</span>
+                  <span class="m">${x.model ? modelName(x.model) : ""}</span>
+                  <span class="k">${tokens(x.total || 0)}</span>
+                  <span class="w">${agoLong(x.last)}</span>
+                  <span class="c">${usd(x.cost)}<small>${asPct(x.cost, week) != null ? approx(asPct(x.cost, week)) : ""}</small></span>
+                </button>`)}
+            </div>
+            ${sessions.length > 12 && html`<button class="btn umore" onClick=${() => setAll(!all)}>${all ? "Show fewer" : `Show all ${sessions.length}`}</button>`}
+          </section>`}
+        <p class="unote">${ESTIMATE()} ${RATE}</p>
+      </div>
+    </div>`;
 }
 
 function SessionUsage({ s, use, onClose }) {

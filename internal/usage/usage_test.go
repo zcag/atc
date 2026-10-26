@@ -119,15 +119,15 @@ func TestDays(t *testing.T) {
 	}
 	days := s.Days(root, 7)
 	last := days[len(days)-1]
-	if len(days) != 7 || last.Day != time.Now().Format(time.DateOnly) || last.Messages != 4 || last.Sessions != 2 || last.Total != 8 {
+	if len(days) != 7 || last.Day != time.Now().Format(time.DateOnly) || last.Messages != 4 || last.Sessions != 2 || last.Total != 8 || !near(last.Hours[time.Now().Hour()], last.Cost) {
 		t.Fatalf("days %+v", days)
 	}
 	merged := MergeDays(days, []Day{{Day: last.Day, Part: Part{Tokens: Tokens{Input: 5}, Cost: 1, Messages: 1}, Sessions: 1}})
-	if m := merged[len(merged)-1]; m.Input != 9 || m.Total != 13 || m.Sessions != 3 || len(merged) != 7 {
+	if m := merged[len(merged)-1]; m.Input != 9 || m.Total != 13 || m.Sessions != 3 || len(merged) != 7 || !near(m.Hours[time.Now().Hour()], last.Cost) {
 		t.Fatalf("merged %+v", m)
 	}
 	sp := s.Spend(root, time.Now().Add(-time.Hour))
-	if !near(sp.Cost, last.Cost) || len(sp.Sessions) != 2 || !near(sp.Sessions["s1"], 3*sp.Sessions["s2"]) || len(sp.Models) != 1 {
+	if !near(sp.Cost, last.Cost) || len(sp.Sessions) != 2 || !near(sp.Sessions["s1"].Cost, 3*sp.Sessions["s2"].Cost) || sp.Sessions["s1"].Messages != 3 || len(sp.Models) != 1 {
 		t.Fatalf("spend %+v", sp)
 	}
 }

@@ -159,15 +159,13 @@ func title(name string, t history.Transcript) string {
 	return first(name, t.Title, t.AgentName, base(t.Cwd))
 }
 
-func (m *Manager) Titles(ids []string) map[string]string {
-	want := map[string]bool{}
-	for _, id := range ids {
-		want[id] = true
-	}
-	out := map[string]string{}
+type Brief struct{ Title, Cwd string }
+
+func (m *Manager) Briefs(want map[string]bool) map[string]Brief {
+	out := map[string]Brief{}
 	for _, t := range m.Index.Scan() {
 		if want[t.SessionID] {
-			out[t.SessionID] = title(m.Store.Get(t.SessionID).Name, t)
+			out[t.SessionID] = Brief{title(m.Store.Get(t.SessionID).Name, t), t.Cwd}
 		}
 	}
 	return out

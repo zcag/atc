@@ -341,8 +341,10 @@ in `sessions` and `wait`.
 ## Usage and limits
 
 The bar at the bottom of the session list shows how much of your Claude plan's current 5-hour
-session and weekly limit you have used. Click it (or press `u`) for every limit with its reset
-time, and tokens per day across all your sessions and machines.
+session and weekly limit you have used. Click it (or press `u`) for the usage page, across all
+your sessions and machines: every limit with how far through its window you are, its pace and
+reset time; spend by day and model over 7 to 90 days; which hours of the week you use it; where
+the cost goes (output, cache reads and writes); and the projects and sessions that spent it.
 
 The limits come from the same endpoint Claude Code's `/usage` reads, signed in with Claude Code's
 own login on the machine running atc (the macOS keychain, or `~/.claude/.credentials.json`). atc

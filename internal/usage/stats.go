@@ -78,12 +78,31 @@ type Day struct {
 	Part
 	Sessions int                `json:"sessions"`
 	Models   map[string]float64 `json:"models,omitempty"`
+	Hours    []float64          `json:"hours,omitempty"`
+}
+
+type SessionSpend struct {
+	Cost     float64            `json:"cost"`
+	Total    int64              `json:"total"`
+	Messages int                `json:"messages"`
+	Last     time.Time          `json:"last"`
+	Models   map[string]float64 `json:"models"`
+}
+
+func (s *SessionSpend) add(m msg) {
+	s.Cost += m.cost
+	s.Total += m.t.Total()
+	s.Messages++
+	s.Models[m.model] += m.cost
+	if m.at.After(s.Last) {
+		s.Last = m.at
+	}
 }
 
 type Spend struct {
-	Cost     float64            `json:"cost"`
-	Models   map[string]float64 `json:"models"`
-	Sessions map[string]float64 `json:"sessions"`
+	Cost     float64                  `json:"cost"`
+	Models   map[string]float64       `json:"models"`
+	Sessions map[string]*SessionSpend `json:"sessions"`
 }
 
 type msg struct {
@@ -368,7 +387,7 @@ func costSince(files []*file, from time.Time, seen map[string]bool) float64 {
 
 func (s *Scanner) Spend(root string, from time.Time) Spend {
 	paths, files := s.recent(root, from)
-	sp := Spend{Models: map[string]float64{}, Sessions: map[string]float64{}}
+	sp := Spend{Models: map[string]float64{}, Sessions: map[string]*SessionSpend{}}
 	seen := map[string]bool{}
 	for i, f := range files {
 		sid := sessionOf(paths[i])
@@ -380,7 +399,10 @@ func (s *Scanner) Spend(root string, from time.Time) Spend {
 			seen[id] = true
 			sp.Cost += m.cost
 			sp.Models[m.model] += m.cost
-			sp.Sessions[sid] += m.cost
+			if sp.Sessions[sid] == nil {
+				sp.Sessions[sid] = &SessionSpend{Models: map[string]float64{}}
+			}
+			sp.Sessions[sid].add(m)
 		}
 		f.mu.Unlock()
 	}
@@ -417,9 +439,10 @@ func (s *Scanner) Days(root string, n int) []Day {
 			}
 			d.add(m)
 			if d.Models == nil {
-				d.Models = map[string]float64{}
+				d.Models, d.Hours = map[string]float64{}, make([]float64, 24)
 			}
 			d.Models[m.model] += m.cost
+			d.Hours[m.at.Local().Hour()] += m.cost
 			if k := m.day + "|" + sid; !seen[k] {
 				seen[k] = true
 				d.Sessions++
@@ -466,6 +489,14 @@ func MergeDays(lists ...[]Day) []Day {
 					x.Models = map[string]float64{}
 				}
 				x.Models[m] += c
+			}
+			if len(d.Hours) == 24 {
+				if x.Hours == nil {
+					x.Hours = make([]float64, 24)
+				}
+				for h, c := range d.Hours {
+					x.Hours[h] += c
+				}
 			}
 			x.Messages += d.Messages
 			x.Sessions += d.Sessions

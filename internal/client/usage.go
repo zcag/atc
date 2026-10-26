@@ -45,6 +45,7 @@ func (c *Client) Limits() (l usage.Limits, err error) {
 	return l, c.do("GET", "/api/usage/limits", nil, &l)
 }
 
-func (c *Client) Days(n int) (days []usage.Day, err error) {
-	return days, c.do("GET", fmt.Sprintf("/api/usage/days?days=%d", n), nil, &days)
+func (c *Client) Days(n int) ([]usage.Day, error) {
+	var r struct{ Days []usage.Day }
+	return r.Days, c.do("GET", fmt.Sprintf("/api/usage/report?days=%d", n), nil, &r)
 }
