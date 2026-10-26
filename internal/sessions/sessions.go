@@ -87,8 +87,8 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		s := m.build(t)
 		s.SessionID, s.ID, s.Kind, s.Name = a.SessionID, a.ID, a.Kind, a.Name
 		s.State, s.Attachable, s.PID = state(a), a.Kind == "background" && a.PID > 0, a.PID
-		if qs := claude.Asking(a.ID); a.Kind == "background" && len(qs) > 0 {
-			s.State, s.Asks = NeedsYou, []opencode.Ask{claudeAsk(a.ID, qs, history.LastAsk(t.Path))}
+		if b := claude.Asking(a.ID); a.Kind == "background" && (len(b.Questions) > 0 || b.Approve != "") {
+			s.State, s.Asks = NeedsYou, []opencode.Ask{claudeAsk(a.ID, b, history.LastAsk(t.Path))}
 			s.Activity = s.Asks[0].Activity()
 		} else if s.State == NeedsYou && a.Kind == "background" && byID[a.SessionID].Pending == "" {
 			s.State = YourTurn
@@ -268,9 +268,14 @@ func first(s ...string) string {
 	return ""
 }
 
-func claudeAsk(id string, qs []claude.Question, multi map[string]bool) opencode.Ask {
+func claudeAsk(id string, b claude.Block, multi map[string]bool) opencode.Ask {
 	a := opencode.Ask{ID: "claude", SessionID: id}
-	for _, q := range qs {
+	if b.Approve != "" {
+		tool, cmd, _ := strings.Cut(b.Approve, ": ")
+		a.Permission, a.Patterns = tool, []string{cmd}
+		return a
+	}
+	for _, q := range b.Questions {
 		x := opencode.Question{Question: q.Question, Header: q.Header, Multiple: q.MultiSelect || multi[q.Question], Custom: true}
 		for _, o := range q.Options {
 			x.Options = append(x.Options, struct {

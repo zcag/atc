@@ -1096,7 +1096,7 @@ function Session({ s, say, live }) {
                 <span class="hint">Click for details</span>
               </span>`}
             </span>`}
-          ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first">no permission prompts</span>`}
+          ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first, except where a permission rule says to ask">no permission prompts</span>`}
           ${pages.length > 0 && html`<${Published} links=${pages} inline />`}
         </div>
       </div>
@@ -1206,11 +1206,11 @@ function AskBar({ s, say }) {
   };
   if (a.permission) return html`
     <div class="askbar" role="group" aria-label="Permission request">
-      <p class="asktext">${s.harness} wants to use <b>${a.permission}</b>${a.patterns?.length > 0 && html` <code>${a.patterns.join(" ")}</code>`}</p>
+      <p class="asktext">${s.harness || "Claude"} wants to use <b>${a.permission}</b>${a.patterns?.length > 0 && html` <code title=${a.patterns.join(" ")}>${a.patterns.join(" ")}</code>`}</p>
       <div class="askopts">
-        <button class="btn primary" disabled=${busy} onClick=${() => send({ reply: "once" })}>Allow once</button>
-        <button class="btn" disabled=${busy} onClick=${() => send({ reply: "always" })}>Always allow</button>
-        <button class="btn" disabled=${busy} onClick=${() => send({ reject: true })}>Reject</button>
+        <button class="btn primary" disabled=${busy} onClick=${() => send({ reply: "once" })}>${s.harness ? "Allow once" : "Allow"}</button>
+        ${s.harness && html`<button class="btn" disabled=${busy} onClick=${() => send({ reply: "always" })}>Always allow</button>`}
+        <button class="btn askskip" disabled=${busy} onClick=${() => send({ reject: true })}>Reject</button>
       </div>
     </div>`;
   const qs = a.questions || [];
@@ -3269,6 +3269,7 @@ function Transcript({ s, say, slot, resume, busy }) {
 
   const send = async (text, { retryId, suggested } = {}) => {
     const ask = s.asks?.[0];
+    if (ask?.permission && !s.harness) { say("Allow or reject the request above first."); return false; }
     if (ask && !ask.permission) {
       if (ask.questions?.length !== 1) { say("Answer the questions above first."); return false; }
       try { await api(`/api/sessions/${s.sessionId}/asks/${ask.id}`, { method: "POST", body: { answers: [[text]] } }); return true; }

@@ -1061,7 +1061,7 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .askbar::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--needs); }
 .askq { display: flex; flex-direction: column; gap: 7px; }
 .asktext { margin: 0; font-size: 14px; font-weight: 500; line-height: 1.4; }
-.asktext code { font-size: 13px; overflow-wrap: anywhere; }
+.asktext code { font-size: 13px; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; margin-top: 4px; }
 .askopts { display: flex; flex-wrap: wrap; gap: 6px; }
 .askopts .btn { padding: 5px 11px; font-size: 13px; }
 .askopts .askskip { margin-left: auto; color: var(--dim); }

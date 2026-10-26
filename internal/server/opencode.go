@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -127,7 +128,17 @@ func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string
 		return
 	}
 	id := s.agentID(r.Context(), sid)
-	qs := claude.Asking(id)
+	b := claude.Asking(id)
+	if b.Approve != "" {
+		log.Printf("approve %s: reject=%v %q", id, a.Reject, b.Approve)
+		if a.Reject {
+			s.done(w, id, s.Term.Keys(r.Context(), id, "\x1b"))
+			return
+		}
+		s.done(w, id, s.Term.Drive(r.Context(), id, func(t *attach.Typist) error { return claudeApprove(t) }))
+		return
+	}
+	qs := b.Questions
 	if len(qs) == 0 {
 		http.Error(w, "Claude is not asking anything right now", http.StatusConflict)
 		return
@@ -159,6 +170,16 @@ func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string
 type typist interface {
 	Key(string) error
 	Screen() string
+}
+
+var yesOption = regexp.MustCompile(`(\d)\.\s+Yes\s`)
+
+func claudeApprove(t typist) error {
+	m := yesOption.FindAllStringSubmatch(t.Screen(), -1)
+	if len(m) == 0 {
+		return errors.New("Claude's approval prompt is not on screen")
+	}
+	return t.Key(m[len(m)-1][1])
 }
 
 var checkbox = regexp.MustCompile(`\[[ ✔✓x]\]`)

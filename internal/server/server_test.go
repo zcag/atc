@@ -474,3 +474,18 @@ func TestClaudeAnswerTypesWhatTheScreenShows(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeApprovePicksYesFromTheScreen(t *testing.T) {
+	for screen, want := range map[string]string{
+		"Do you want to proceed?   ❯   1.   Yes    2.   No    Esc to cancel":                                `["1"]`,
+		"1. Yes earlier  Do you want to proceed? ❯ 1. Yes  2. Yes, and don't ask again for git push  3. No": `["1"]`,
+		"nothing asked": `null`,
+	} {
+		f := &fakeTypist{screens: []string{screen}}
+		err := claudeApprove(f)
+		got, _ := json.Marshal(f.keys)
+		if string(got) != want || (err != nil) != (want == "null") {
+			t.Errorf("%q: got %s %v, want %s", screen, got, err, want)
+		}
+	}
+}

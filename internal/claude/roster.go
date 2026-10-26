@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 func ForkedFrom(sid string) string {
@@ -43,19 +44,32 @@ type Question struct {
 	MultiSelect bool `json:"multiSelect"`
 }
 
-func Asking(id string) []Question {
+type Block struct {
+	Questions []Question
+	Approve   string
+}
+
+func Asking(id string) Block {
 	b, err := os.ReadFile(filepath.Join(ConfigDir(), "jobs", id, "state.json"))
 	if err != nil {
-		return nil
+		return Block{}
 	}
 	var st struct {
 		Tempo string `json:"tempo"`
+		Needs string `json:"needs"`
 		Block *struct {
 			Questions []Question `json:"questions"`
 		} `json:"block"`
 	}
-	if json.Unmarshal(b, &st) != nil || st.Tempo != "blocked" || st.Block == nil {
-		return nil
+	if json.Unmarshal(b, &st) != nil || st.Tempo != "blocked" {
+		return Block{}
 	}
-	return st.Block.Questions
+	if st.Block != nil && len(st.Block.Questions) > 0 {
+		return Block{Questions: st.Block.Questions}
+	}
+	approve, _ := strings.CutPrefix(st.Needs, "approve ")
+	if approve == st.Needs {
+		return Block{}
+	}
+	return Block{Approve: approve}
 }
