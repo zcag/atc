@@ -11,6 +11,8 @@ const BAYS = [
 ];
 const WORD = { "needs-you": "needs you", "your-turn": "your turn", working: "working", stopped: "stopped", past: "earlier" };
 const touch = matchMedia("(pointer: coarse)").matches;
+const zoomed = () => (window.visualViewport?.scale || 1) > 1.01;
+window.visualViewport?.addEventListener("resize", () => document.documentElement.classList.toggle("zoomed", zoomed()));
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -809,7 +811,7 @@ function Strip({ s, sel, cursor, size = "full" }) {
     p.fired = false; p.x = e.clientX; p.y = e.clientY;
     const el = e.currentTarget;
     p.t = setTimeout(() => { p.fired = true; navigator.vibrate?.(15); QUICK(s, el.getBoundingClientRect()); }, 450);
-    if (swipes) swipe.current = { x: e.clientX, y: e.clientY, on: false, armed: false };
+    if (swipes && !zoomed()) swipe.current = { x: e.clientX, y: e.clientY, on: false, armed: false };
   };
   const move = (e) => {
     const p = press.current, w = swipe.current, el = e.currentTarget;
@@ -1314,7 +1316,7 @@ function useKeyboard() {
     if (!touch) return;
     let tallest = 0;
     const check = () => {
-      const h = window.visualViewport?.height || innerHeight;
+      const v = window.visualViewport, h = v ? v.height * v.scale : innerHeight;
       tallest = Math.max(tallest, h);
       setOpen(h < tallest - 150);
     };
@@ -1493,9 +1495,9 @@ function makeDock(id) {
   ro.observe(el);
 
   let ty = null, acc = 0;
-  el.addEventListener("touchstart", (e) => { ty = e.touches[0].clientY; acc = 0; }, { passive: true });
+  el.addEventListener("touchstart", (e) => { ty = e.touches.length === 1 ? e.touches[0].clientY : null; acc = 0; }, { passive: true });
   el.addEventListener("touchmove", (e) => {
-    if (ty === null) return;
+    if (ty === null || e.touches.length > 1) return void (ty = null);
     const y = e.touches[0].clientY;
     acc += ty - y;
     ty = y;

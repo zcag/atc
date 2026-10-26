@@ -200,7 +200,7 @@ button { cursor: pointer; }
 .seg button.on { background: var(--sunk); color: var(--ink); font-weight: 600; }
 
 .stage { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--term-bg); }
-.term { flex: 1; min-height: 0; padding: 6px 0 0 8px; touch-action: none; overflow: hidden; }
+.term { flex: 1; min-height: 0; padding: 6px 0 0 8px; touch-action: pinch-zoom; overflow: hidden; }
 .termhost { width: 100%; height: 100%; }
 .termhost.scaled { display: flex; align-items: flex-start; justify-content: center; }
 .termhost .xterm { height: 100%; }
@@ -1203,7 +1203,8 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .it .steps b { color: var(--needs); font-weight: 600; }
 
 .board.v2 { overflow-x: hidden; }
-.board.v2 .it { touch-action: pan-y; }
+.board.v2 .it { touch-action: pan-y pinch-zoom; }
+.zoomed .board.v2 .it { touch-action: auto; }
 .it.swiping { z-index: 2; }
 .it.swiping::after { content: attr(data-swipe); position: absolute; top: 0; bottom: 0; width: 100vw; display: flex; align-items: center; padding: 0 16px; font: 600 13px var(--sans); color: #fff; border-radius: inherit; white-space: nowrap; overflow: hidden; transition: background .12s; }
 .it.swiping[data-dir="r"]::after { right: 100%; justify-content: flex-end; background: color-mix(in srgb, var(--turn) 45%, var(--board)); }
