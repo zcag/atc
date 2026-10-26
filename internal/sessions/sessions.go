@@ -78,8 +78,12 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 	for _, t := range m.Index.Scan() {
 		byID[t.SessionID] = t
 	}
+	resumed := m.Index.Resumed()
 	out := make([]Session, 0, len(agents))
 	for _, a := range agents {
+		if resumed[a.SessionID] && a.PID == 0 {
+			continue
+		}
 		t, ok := byID[a.SessionID]
 		if !ok {
 			t = byID[m.Index.ForkedFrom(a.SessionID)]
