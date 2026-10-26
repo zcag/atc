@@ -9,6 +9,13 @@ import (
 	"time"
 )
 
+func TestUnpaste(t *testing.T) {
+	in := "\n\n<pasted_content id=\"bf9e\">\nhello\nworld\n</pasted_content id=\"bf9e\">\n"
+	if got := strings.TrimSpace(unpaste(in)); got != "hello\nworld" {
+		t.Fatalf("got %q", got)
+	}
+}
+
 func TestSummarizeQuestionAndPlan(t *testing.T) {
 	q := `{"questions":[{"question":"Which version do we cut?","options":[{"label":"2.4"},{"label":"2.5"}]},{"question":"later"}]}`
 	if got := Detail([]byte(q)); got != "Which version do we cut? (2.4 · 2.5)" {

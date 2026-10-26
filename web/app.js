@@ -3300,7 +3300,8 @@ function Transcript({ s, say, slot, resume, busy }) {
     if (!pending.length || !idx) return;
     const head = (p) => plain(p.text).slice(0, 24);
     const landed = (p) => turns.some((t) => (t.at && new Date(t.at) >= p.at - 60000 && plain(t.prompt).startsWith(head(p))) || (t.notes || []).some((n) => plain(n).startsWith(head(p))));
-    const stale = (p) => !working && Date.now() - p.at > 5 * 60e3;
+    const passed = (p) => turns.some((t) => t.at && new Date(t.at) > p.at + 60000);
+    const stale = (p) => passed(p) || (!working && Date.now() - p.at > 5 * 60e3);
     const gone = (p) => p.state === "sent" && (landed(p) || stale(p));
     if (pending.some(gone)) setPending((ps) => ps.filter((p) => !gone(p)));
   }, [idx]);

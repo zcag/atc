@@ -401,8 +401,12 @@ func clipInput(raw json.RawMessage) json.RawMessage {
 
 var notice = regexp.MustCompile(`(?s)<summary>(.*?)</summary>`)
 
+var pastedTag = regexp.MustCompile(`</?pasted_content[^>]*>\n?`)
+
+func unpaste(t string) string { return pastedTag.ReplaceAllString(t, "") }
+
 func queued(text string, at time.Time) (Message, bool) {
-	t := strings.TrimSpace(text)
+	t := strings.TrimSpace(unpaste(text))
 	switch {
 	case t == "":
 		return Message{}, false
@@ -444,7 +448,11 @@ func convert(m rawMsg) []Message {
 			if m.Type == "user" && IsNoise(b.Text) {
 				continue
 			}
-			out = append(out, Message{Role: m.Type, Text: b.Text, Time: m.Timestamp})
+			text := b.Text
+			if m.Type == "user" {
+				text = strings.TrimSpace(unpaste(text))
+			}
+			out = append(out, Message{Role: m.Type, Text: text, Time: m.Timestamp})
 		case b.Type == "image" && m.Type == "user":
 			if img := image(b); img != "" {
 				images = append(images, img)
