@@ -218,6 +218,7 @@ func TestLimitsClient(t *testing.T) {
 
 func TestTap(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
 	if err := Tap(strings.NewReader(`{"model":{}}`)); err != nil {
 		t.Fatal(err)
 	}
