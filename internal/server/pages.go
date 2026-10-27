@@ -1,0 +1,150 @@
+package server
+
+import (
+	"cmp"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/zcag/atc/internal/pages"
+	"github.com/zcag/atc/internal/push"
+	"github.com/zcag/atc/internal/sessions"
+)
+
+const pageWindow = 6 * time.Hour
+
+func (s *Server) pageURLs(list []pages.Page) []pages.Page {
+	exp := time.Now().Truncate(pageWindow).Add(2 * pageWindow).Unix()
+	for i := range list {
+		list[i].Host = s.Host
+		if !list[i].Gone {
+			list[i].URL = s.fileURL(list[i].Session, list[i].Path, exp)
+		}
+	}
+	return list
+}
+
+func (s *Server) sessionPages(w http.ResponseWriter, r *http.Request) {
+	reply(w, s.pageURLs(s.Pages.Of(r.PathValue("sid"))))
+}
+
+func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Path, Name, Title, Note string }
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !filepath.IsAbs(req.Path) {
+		http.Error(w, "path must be absolute", http.StatusBadRequest)
+		return
+	}
+	target, err := pages.Target(filepath.Clean(req.Path))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	name := pages.Name(cmp.Or(req.Name, target))
+	if filepath.Base(target) == "index.html" && req.Name == "" {
+		name = pages.Name(filepath.Dir(target))
+	}
+	if name == "" {
+		http.Error(w, "give the page a name with letters or digits", http.StatusBadRequest)
+		return
+	}
+	p, created, err := s.Pages.Show(pages.Page{Session: r.PathValue("sid"), Name: name, Title: strings.TrimSpace(req.Title), Path: target, Note: strings.TrimSpace(req.Note), Shown: time.Now()})
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	s.refresh()
+	p, _ = s.Pages.Get(p.Session, p.Name)
+	reply(w, map[string]any{"page": s.pageURLs([]pages.Page{p})[0], "created": created})
+}
+
+func (s *Server) hidePage(w http.ResponseWriter, r *http.Request) {
+	ok, err := s.Pages.Remove(r.PathValue("sid"), r.PathValue("name"))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if !ok {
+		http.Error(w, "no page named "+r.PathValue("name"), http.StatusNotFound)
+		return
+	}
+	s.refresh()
+	reply(w, map[string]string{"ok": "removed"})
+}
+
+func (s *Server) pageState(w http.ResponseWriter, r *http.Request) {
+	sid, name := r.PathValue("sid"), r.PathValue("name")
+	if r.Method == http.MethodGet {
+		st := s.Pages.State(sid, name)
+		if st == nil {
+			st = json.RawMessage("null")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(st)
+		return
+	}
+	b, err := io.ReadAll(http.MaxBytesReader(w, r.Body, pages.MaxState))
+	if err != nil || (len(b) > 0 && !json.Valid(b)) {
+		http.Error(w, "state is JSON, at most 256 KB", http.StatusBadRequest)
+		return
+	}
+	if err := s.Pages.SetState(sid, name, b); errors.Is(err, os.ErrNotExist) {
+		http.Error(w, "no page named "+name, http.StatusNotFound)
+		return
+	} else if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]string{"ok": "saved"})
+}
+
+func (s *Server) allPages(w http.ResponseWriter, r *http.Request) {
+	list := s.Pages.All()
+	want := map[string]bool{}
+	for _, p := range list {
+		want[p.Session] = true
+	}
+	briefs := s.M.Briefs(want)
+	for i := range list {
+		b := briefs[list[i].Session]
+		list[i].Of, list[i].Cwd = b.Title, b.Cwd
+	}
+	gather(s, w, r, "/api/pages", s.pageURLs(list), func(p *pages.Page, h string) { p.Host = h })
+}
+
+func (s *Server) attachPages(list []sessions.Session) {
+	for i := range list {
+		if ps := s.Pages.Of(list[i].SessionID); len(ps) > 0 {
+			list[i].Shown = s.pageURLs(ps)
+		}
+	}
+}
+
+func pageAlerts(prev map[string]time.Time, list []sessions.Session, viewing func(sessions.Session) bool) (map[string]time.Time, []push.Message) {
+	now := map[string]time.Time{}
+	var out []push.Message
+	for _, x := range list {
+		for _, p := range x.Shown {
+			key := x.SessionID + "/" + p.Name
+			now[key] = p.Shown
+			was, ok := prev[key]
+			if prev == nil || (ok && !p.Shown.After(was)) || x.Parked || viewing(x) {
+				continue
+			}
+			out = append(out, push.Message{Title: x.Title, Tag: key, URL: "/#/s/" + x.SessionID + "/p/" + p.Name,
+				Body: "Showing you " + cmp.Or(p.Title, p.Name) + prefixed(": ", p.Note)})
+		}
+	}
+	return now, out
+}
+
+func prefixed(pre, s string) string {
+	if s == "" {
+		return ""
+	}
+	return pre + s
+}

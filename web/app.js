@@ -57,7 +57,8 @@ const engineTag = (s) => s.harness
   : (s.engine || local(s.model)) && html`<span class="eng" title=${`Runs on ${s.engine || s.model}, not Claude`}>${s.engine || model(s.model)}</span>`;
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
-const USAGE = "#/usage";
+const USAGE = "#/usage", PAGES = "#/pages";
+const closePages = () => (history.length > 1 ? history.back() : location.replace("#/"));
 let usageBack = false;
 const openUsage = () => { if (location.hash !== USAGE) { usageBack = true; location.hash = USAGE; } };
 const closeUsage = () => {
@@ -67,7 +68,7 @@ const closeUsage = () => {
 };
 
 function useRoute() {
-  const read = () => (location.hash.match(/^#\/s\/(.+)$/) || [])[1] || null;
+  const read = () => (location.hash.match(/^#\/s\/([^/]+)/) || [])[1] || null;
   const [r, set] = useState(read);
   useEffect(() => {
     const f = () => set(read());
@@ -157,8 +158,11 @@ function App() {
   const [usage, setUsage] = useState(location.hash === USAGE);
   const shareRoute = () => (location.hash.startsWith("#/share") ? location.hash : null);
   const [sharing, setSharing] = useState(shareRoute);
+  const aloneRoute = () => { const m = location.hash.match(/^#\/p\/([^/]+)\/(.+)$/); return m && { sid: m[1], name: decodeURIComponent(m[2]) }; };
+  const [alone, setAlone] = useState(aloneRoute);
+  const [pagesHome, setPagesHome] = useState(location.hash === PAGES);
   useEffect(() => {
-    const f = () => { setAssisting(location.hash === "#/assist"); setUsage(location.hash === USAGE); setSharing(shareRoute()); };
+    const f = () => { setAssisting(location.hash === "#/assist"); setUsage(location.hash === USAGE); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesHome(location.hash === PAGES); };
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
@@ -283,6 +287,8 @@ function App() {
         e.preventDefault(); setCreating(true);
       } else if (e.key === "u") {
         e.preventDefault(); location.hash === USAGE ? closeUsage() : openUsage();
+      } else if (e.key === "p") {
+        e.preventDefault(); location.hash === PAGES ? closePages() : (location.hash = PAGES);
       } else if (e.key === "/") {
         e.preventDefault(); document.querySelector('.search input')?.focus();
       } else if (e.key === "?") {
@@ -330,6 +336,7 @@ function App() {
             { cls: `viewitem ${view.rail ? "on" : ""}`, title: "While a session is open on a wide screen, the list folds into a strip of projects; hover or click it to bring the list back",
               run: () => setView({ ...view, rail: !view.rail }), label: html`<span>Fold into a rail while reading</span>${view.rail && "✓"}` },
           ]} />
+          <button class="btn talk" onClick=${() => (location.hash = PAGES)} title="Pages your sessions showed you (p)" aria-label="Pages"><span class="mi">${ICON.page}</span></button>
           <button class="btn talk" onClick=${() => setPalette(true)} title=${`Search and commands (${MAC ? "⌘" : "Ctrl+"}K)`} aria-label="Search and commands"><span class="mi">${ICON.search}</span></button>
           <button class="btn talk" onClick=${() => talk(false, false)} title="Assistant: ask about or drive your sessions (a)" aria-label="Assistant"><span class="mi">${ICON.chat}</span></button>
           <button class="btn talk" onClick=${() => setCreating(true)} title="New session (n)" aria-label="New session"><span class="mi">${ICON.plus}</span></button>
@@ -349,6 +356,8 @@ function App() {
       actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: () => (location.hash = "#/assist"), ask: () => talk(false, false) }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
+    ${pagesHome && html`<${PagesHome} live=${all} say=${say} onClose=${closePages} />`}
+    ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`}
     ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
@@ -376,6 +385,7 @@ function App() {
             <dt>t</dt><dd>Talk: a voice session with Claude</dd>
             <dt>/</dt><dd>Search earlier sessions</dd>
             <dt>u</dt><dd>Usage: limits, spend by day, projects and sessions</dd>
+            <dt>p</dt><dd>Pages: everything your sessions showed you</dd>
             <dt>[ / ]</dt><dd>Previous or next project tab</dd>
             <dt>Ctrl + Z</dt><dd>In a terminal: detach. The session keeps running.</dd>
             <dt>1 / 2 / 3</dt><dd>In a transcript: outline, story or everything</dd>
@@ -742,6 +752,9 @@ const ICON = {
   park: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 106.5 6.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   play: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z" fill="currentColor"/></svg>`,
   layout: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 2.5v11M8.5 6h3M8.5 9h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+  page: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2" width="11" height="12" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 5.5h6M5 8h6M5 10.5h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+  split: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 2.5v11" stroke="currentColor" stroke-width="1.4"/></svg>`,
+  expand: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9 7M2.5 13.5L7 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   more: html`<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="12.5" cy="8" r="1.3" fill="currentColor"/></svg>`,
 };
 
@@ -791,6 +804,8 @@ function Meta({ s, quiet }) {
       ${engineTag(s)}
       ${s.kind === "interactive" && html`<span class="interm" title="Open in a terminal window: readable here, not attachable">terminal</span>`}
       ${(s.servers || []).slice(0, 2).map((p) => html`<span class="srv" role="link" title=${`Open ${serverURL(s, p)}`} onClick=${(e) => { e.stopPropagation(); openOut(serverURL(s, p)); }}>:${p}</span>`)}
+      ${s.shown?.length > 0 && html`<span class="pg shownpg" role="link" title=${s.shown.map((p) => `${pageTitle(p)}  ${pageInfo(p)}`).join("\n")}
+        onClick=${(e) => { e.stopPropagation(); location.hash = pageLink(keyOf(s), s.shown[0].name); }}>${ICON.page}<span>${pageTitle(s.shown[0])}</span>${s.shown.length > 1 ? ` +${s.shown.length - 1}` : ""}</span>`}
       ${s.pages?.length > 0 && html`<span class="pg" role="link" title=${s.pages.map((l) => `${pageLabel(l)}  ${l.url}`).join("\n")}
         onClick=${(e) => { e.stopPropagation(); openOut(s.pages[0].url); }}><span>${pageLabel(s.pages[0])}</span>${s.pages.length > 1 ? ` +${s.pages.length - 1}` : ""} ↗</span>`}
     </div>`;
@@ -1058,16 +1073,41 @@ function paneFor(s) {
 function Session({ s, say, live }) {
   const canAttach = s.attachable;
   const auto = useRef(AUTO_PANE);
-  const [mode, setMode] = useState(() => { AUTO_PANE = null; return auto.current || paneFor(s); });
+  const [mode, setMode] = useState(() => { AUTO_PANE = null; return auto.current || (routePage() ? "page" : paneFor(s)); });
+  const shown = usePages(s);
+  const [pg, setPg] = useState(routePage);
+  const [split, setSplitRaw] = useState(() => stored(PAGE_SPLIT, true));
+  const setSplit = (v) => { setSplitRaw(v); store(PAGE_SPLIT, v); };
+  const wideNow = useWide();
+  const sideBySide = mode === "page" && split && wideNow && shown.length > 0;
+  const base = () => location.hash.replace(/\/p\/.*$/, "");
+  const openPage = (name) => { setPg(name); setMode("page"); history.replaceState(null, "", `${base()}/p/${encodeURIComponent(name)}`); };
+  const leavePage = (m) => { setMode(m); history.replaceState(null, "", base()); };
   const [slot, setSlot] = useState(null);
-  const choose = (m) => { setMode(m); try { localStorage.setItem(PANE, m); } catch {} };
+  const choose = (m) => { if (m === "page") return openPage(pg || shown[0]?.name); leavePage(m); try { localStorage.setItem(PANE, m); } catch {} };
+  useEffect(() => {
+    const f = () => { const n = routePage(); if (n) openPage(n); };
+    addEventListener("hashchange", f);
+    return () => removeEventListener("hashchange", f);
+  }, []);
+  const known = useRef(null);
+  useEffect(() => {
+    const now = Object.fromEntries(shown.map((p) => [p.name, p.shown]));
+    const prev = known.current;
+    known.current = now;
+    const p = prev && shown.find((x) => prev[x.name] !== x.shown);
+    if (!p || (mode === "page" && (pg === p.name || sideBySide))) return;
+    const idle = Date.now() - LAST_KEY > 8000 && !document.activeElement?.closest?.("textarea, input, .xterm");
+    if (idle && wideNow && split && mode !== "page") openPage(p.name);
+    else say(`Showing you “${pageTitle(p)}”. It's on the page button up top.`);
+  }, [shown.map((p) => p.name + p.shown).join()]);
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const voiceKey = `atc.voice.${s.sessionId}`;
   const [voice, setVoice] = useState(() => { const v = AUTO_VOICE && canAttach; if (v) AUTO_VOICE = false; return v || (canAttach && pref(voiceKey, "") === "on"); });
   useEffect(() => setPref(voiceKey, voice ? "on" : ""), [voice]);
   useEffect(() => {
-    if (canAttach && !auto.current && paneFor(s) === "term" && !voice) setMode("term");
+    if (canAttach && !auto.current && !routePage() && paneFor(s) === "term" && !voice) setMode("term");
   }, [canAttach]);
 
   const act = async (fn, done) => {
@@ -1089,7 +1129,7 @@ function Session({ s, say, live }) {
   const outs = useOutputs(s, mode === "out" ? 10000 : 60000);
   const [showUse, setShowUse] = useState(false);
   useEffect(() => {
-    SESSION_API = { s, canAttach, mode: choose, voice: () => canAttach && setVoice((v) => (v || setMode("chat"), !v)), usage: () => setShowUse(true), rename: () => setRenaming(true) };
+    SESSION_API = { s, canAttach, mode: choose, page: openPage, pages: shown, voice: () => canAttach && setVoice((v) => (v || setMode("chat"), !v)), usage: () => setShowUse(true), rename: () => setRenaming(true) };
     return () => { SESSION_API = null; };
   });
   const use = useSessionUsage(s, showUse || s.state === "working" ? 15000 : 90000);
@@ -1128,26 +1168,53 @@ function Session({ s, say, live }) {
         </div>
       </div>
       ${pages.length > 0 && html`<${Published} links=${pages} />`}
+      ${shown.length > 0 && html`<${PagesButton} list=${shown} open=${openPage} on=${mode === "page"} />`}
       ${VOICE.stt && html`<button class="btn voice-btn ${voice ? "on" : ""} ${canAttach ? "" : "off"}" aria-pressed=${voice}
         onClick=${() => canAttach ? (voice || setMode("chat"), setVoice(!voice))
           : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
-      ${mode === "chat" && html`<div class="tx-slot" ref=${setSlot}></div>`}
+      ${(mode === "chat" || sideBySide) && html`<div class="tx-slot" ref=${setSlot}></div>`}
       <div class="seg" role="tablist">
         <button class=${mode === "term" ? "on" : ""} onClick=${() => choose("term")}>Terminal</button>
         <button class=${mode === "chat" ? "on" : ""} onClick=${() => choose("chat")}>Transcript</button>
+        ${shown.length > 0 && html`<${PagesTab} list=${shown} on=${mode === "page"} onClick=${() => choose("page")} />`}
         <button class=${mode === "out" ? "on" : ""} onClick=${() => choose("out")}>Outputs${outCount > 0 && html`<span class="count">${outCount}</span>`}</button>
       </div>
       <${Menu} busy=${busy} items=${[...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "Usage", run: () => setShowUse(true) }]} />
     </div>
-    ${mode !== "chat" && html`<${AskBar} s=${s} say=${say} />`}
-    ${mode !== "chat" && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
-    ${mode === "term"
+    ${mode !== "chat" && !sideBySide && html`<${AskBar} s=${s} say=${say} />`}
+    ${mode !== "chat" && !sideBySide && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
+    ${mode === "page" && shown.length > 0
+      ? (() => {
+          const pane = html`<${PagePane} s=${s} list=${shown} cur=${pg} pick=${openPage} split=${sideBySide} setSplit=${wideNow ? setSplit : null} say=${say}
+            onClose=${() => leavePage(paneFor(s))} />`;
+          return sideBySide
+            ? html`<${PageSplit}><${Transcript} s=${s} say=${say} slot=${slot} resume=${() => resume("chat")} busy=${busy} voice=${voice && canAttach} onVoiceOff=${() => setVoice(false)} />${pane}<//>`
+            : pane;
+        })()
+    : mode === "term"
       ? canAttach
         ? html`<${Term} key=${s.id} s=${s} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} />`
         : html`<div class="stage"><div class="cover">${Unattachable(s, () => resume(), busy, setMode)}</div></div>`
-      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} />` : html`<${Transcript} s=${s} say=${say} slot=${slot} resume=${() => resume("chat")} busy=${busy} voice=${voice && canAttach} onVoiceOff=${() => setVoice(false)} />`}
+      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} pages=${shown} open=${openPage} />` : html`<${Transcript} s=${s} say=${say} slot=${slot} resume=${() => resume("chat")} busy=${busy} voice=${voice && canAttach} onVoiceOff=${() => setVoice(false)} />`}
     ${showUse && html`<${SessionUsage} s=${s} use=${use} onClose=${() => setShowUse(false)} />`}
   `;
+}
+
+const PAGE_SPLIT = "atc.pages.split", CHAT_W = "atc.pages.chatw";
+function PageSplit({ children }) {
+  const [w, setW] = useState(() => stored(CHAT_W, 400));
+  const box = useRef();
+  const drag = (e) => {
+    e.preventDefault();
+    const left = box.current.getBoundingClientRect().left, max = box.current.clientWidth * 0.6;
+    const move = (ev) => setW(Math.round(Math.max(300, Math.min(max, ev.clientX - left))));
+    const up = () => { removeEventListener("pointermove", move); removeEventListener("pointerup", up); box.current?.classList.remove("dragging"); setW((v) => (store(CHAT_W, v), v)); };
+    box.current.classList.add("dragging");
+    addEventListener("pointermove", move);
+    addEventListener("pointerup", up);
+  };
+  const [chat, pane] = children;
+  return html`<div class="pgsplit" ref=${box} style=${`--chat: ${w}px`}><div class="pgchat">${chat}</div><div class="pggrip" onPointerDown=${drag} title="Drag to resize"></div>${pane}</div>`;
 }
 
 const SUM_OPEN = "atc.summary.open", SUM_HIDDEN = "atc.summary.hidden";
@@ -2423,20 +2490,25 @@ const KIND_LABEL = { table: "Table", image: "Image", html: "Page", markdown: "No
 const baseName = (p) => p.split("/").pop();
 const dirName = (p) => tilde(p.slice(0, p.lastIndexOf("/")) || "/");
 
-function Outputs({ s, data }) {
+function Outputs({ s, data, pages = [], open: openPage }) {
   const [open, setOpen] = useState(null);
   if (!data) return html`<div class="outputs"><p class="empty">Looking through this session…</p></div>`;
   const made = data.files.filter((f) => f.kind !== "text");
   const code = data.files.filter((f) => f.kind === "text");
   const viewable = [...made, ...code];
-  const nothing = !data.servers.length && !data.featured.length && !data.links.length && !data.files.length;
+  const nothing = !pages.length && !data.servers.length && !data.featured.length && !data.links.length && !data.files.length;
   return html`
     <div class="outputs">
       <div class="inner">
         ${nothing && html`<div class="none">
           <p>${data.failed ? "Couldn't read this session's outputs." : "Nothing here yet."}</p>
-          <p class="sub">Files this session writes, pages it publishes and servers it starts show up here as it works.</p>
+          <p class="sub">Pages it shows you, files it writes and servers it starts show up here as it works.</p>
         </div>`}
+        ${pages.length > 0 && html`
+          <section>
+            <h4>Pages it showed you</h4>
+            <div class="cards">${pages.map((p) => html`<${PageCard} key=${pkey(p)} p=${p} onOpen=${() => openPage(p.name)} />`)}</div>
+          </section>`}
         ${data.servers.length > 0 && html`
           <section>
             <h4>Running</h4>
@@ -2525,14 +2597,6 @@ function Peek({ kind, text, tsv }) {
 
 function Viewer({ list, at, setAt, onClose }) {
   const f = list[at];
-  const [text, setText] = useState(null);
-  useEffect(() => {
-    setText(null);
-    if (f.kind !== "markdown" && f.kind !== "text" && f.kind !== "table") return;
-    if (f.size > 2 << 20) return setText({ big: true });
-    fetch(f.url).then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.status === 410 ? "This link expired. Close and reopen." : r.statusText))))
-      .then((t) => setText({ t }), (e) => setText({ err: e.message }));
-  }, [f.url]);
   useEffect(() => {
     const k = (e) => {
       if (e.key === "Escape") onClose();
@@ -2544,7 +2608,6 @@ function Viewer({ list, at, setAt, onClose }) {
     addEventListener("keydown", k, true);
     return () => removeEventListener("keydown", k, true);
   }, [at, list.length]);
-  const pdfInline = f.kind === "pdf" && !APP;
   return html`
     <div class="viewer" role="dialog" aria-label=${baseName(f.path)}>
       <header>
@@ -2554,20 +2617,309 @@ function Viewer({ list, at, setAt, onClose }) {
         <button class="icon" disabled=${at === list.length - 1} onClick=${() => setAt(at + 1)} aria-label="Next">›</button>
         <button class="btn" onClick=${() => openOut(f.url)}>${APP ? "Open outside" : "New tab"}</button>
       </header>
-      <div class="body ${f.kind}">
-        ${f.kind === "image" ? html`<img src=${f.url} alt=${baseName(f.path)} />`
-          : f.kind === "html" ? html`<iframe src=${f.url} sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>`
-          : f.kind === "video" ? html`<video src=${f.url} controls autoplay playsinline></video>`
-          : f.kind === "audio" ? html`<audio src=${f.url} controls autoplay></audio>`
-          : pdfInline ? html`<iframe src=${f.url}></iframe>`
-          : f.kind === "pdf" ? html`<div class="none"><p>PDFs open in your browser.</p><button class="btn primary" onClick=${() => openOut(f.url)}>Open PDF</button></div>`
-          : !text ? html`<p class="empty">Loading…</p>`
-          : text.big ? html`<div class="none"><p>Too large to show here.</p><button class="btn" onClick=${() => openOut(f.url)}>Open it</button></div>`
-          : text.err ? html`<p class="empty">${text.err}</p>`
-          : f.kind === "markdown" ? html`<article class="md" dangerouslySetInnerHTML=${{ __html: md(text.t) }}></article>`
-          : f.kind === "table" ? html`<${Table} text=${text.t} tsv=${f.path.endsWith(".tsv")} />`
-          : html`<pre class="code">${text.t}</pre>`}
+      <${FileBody} f=${f} />
+    </div>`;
+}
+
+function FileBody({ f, frame }) {
+  const [text, setText] = useState(null);
+  const textual = f.kind === "markdown" || f.kind === "text" || f.kind === "table";
+  useEffect(() => {
+    if (!textual) return;
+    if (f.size > 2 << 20) return setText({ big: true });
+    let live = true;
+    fetch(f.url).then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.status === 410 ? "This link expired. Close and reopen." : r.statusText))))
+      .then((t) => live && setText({ t }), (e) => live && setText({ err: e.message }));
+    return () => { live = false; };
+  }, [f.url]);
+  const pdfInline = f.kind === "pdf" && !APP;
+  return html`
+    <div class="fbody ${f.kind}">
+      ${f.kind === "image" ? html`<img src=${f.url} alt=${baseName(f.path)} />`
+        : f.kind === "html" ? frame || html`<iframe src=${f.url} sandbox="allow-scripts allow-forms allow-popups allow-modals"></iframe>`
+        : f.kind === "video" ? html`<video src=${f.url} controls autoplay playsinline></video>`
+        : f.kind === "audio" ? html`<audio src=${f.url} controls autoplay></audio>`
+        : pdfInline ? html`<iframe src=${f.url}></iframe>`
+        : f.kind === "pdf" ? html`<div class="none"><p>PDFs open in your browser.</p><button class="btn primary" onClick=${() => openOut(f.url)}>Open PDF</button></div>`
+        : !text ? html`<p class="empty">Loading…</p>`
+        : text.big ? html`<div class="none"><p>Too large to show here.</p><button class="btn" onClick=${() => openOut(f.url)}>Open it</button></div>`
+        : text.err ? html`<p class="empty">${text.err}</p>`
+        : f.kind === "markdown" ? html`<article class="md" dangerouslySetInnerHTML=${{ __html: md(text.t) }}></article>`
+        : f.kind === "table" ? html`<${Table} text=${text.t} tsv=${f.path.endsWith(".tsv")} />`
+        : html`<pre class="code">${text.t}</pre>`}
+    </div>`;
+}
+
+const PSEEN_KEY = "atc.pages.seen";
+let PSEEN = null;
+const pkey = (p) => `${p.session}/${p.name}`;
+const pageAt = (p) => Math.max(Date.parse(p.updated || 0) || 0, Date.parse(p.shown || 0) || 0);
+const pseen = () => (PSEEN ||= stored(PSEEN_KEY, {}));
+const pageFresh = (p) => !p.gone && pageAt(p) > (pseen()[pkey(p)] || 0);
+const pageTitle = (p) => p.title || p.name;
+const pageSrc = (p) => p.url && `${p.url}?v=${pageAt(p)}`;
+const pageInfo = (p) => p.gone ? "file is gone" : `${KIND_LABEL[p.kind] || "Page"} · updated ${agoLong(p.updated || p.shown)}`;
+const pageLink = (sid, name) => `#/s/${sid}/p/${encodeURIComponent(name)}`;
+const aloneLink = (sid, name) => `#/p/${sid}/${encodeURIComponent(name)}`;
+const routePage = () => { const m = location.hash.match(/^#\/s\/[^/]+\/p\/(.+)$/); return m ? decodeURIComponent(m[1]) : null; };
+let LAST_KEY = 0;
+addEventListener("keydown", () => { LAST_KEY = Date.now(); }, true);
+
+function markPage(p) {
+  const m = pseen();
+  if (!p || p.gone || (m[pkey(p)] || 0) >= pageAt(p)) return;
+  m[pkey(p)] = pageAt(p);
+  store(PSEEN_KEY, m);
+  dispatchEvent(new Event("atc-pseen"));
+}
+
+function useSeenTick() {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const f = () => tick((n) => n + 1);
+    addEventListener("atc-pseen", f);
+    return () => removeEventListener("atc-pseen", f);
+  }, []);
+}
+
+function usePages(s) {
+  const past = s.state === "past";
+  const [got, setGot] = useState(null);
+  useEffect(() => {
+    if (!past) return;
+    let live = true;
+    const load = () => api(`/api/sessions/${s.sessionId}/pages`).then((l) => live && setGot(l || []), () => {});
+    load();
+    const t = setInterval(load, 10000);
+    return () => { live = false; clearInterval(t); };
+  }, [s.sessionId, past]);
+  return past ? got || [] : s.shown || [];
+}
+
+async function takeDown(p, say) {
+  try {
+    await api(`/api/sessions/${p.session}/pages/${encodeURIComponent(p.name)}${p.host ? `?host=${p.host}` : ""}`, { method: "DELETE" });
+    say?.(`Took down “${pageTitle(p)}”.`);
+    return true;
+  } catch (e) { say?.(e.message); return false; }
+}
+
+function PageFrame({ p, onSend, say }) {
+  const src = pageSrc(p);
+  const [cur, setCur] = useState(src);
+  const [next, setNext] = useState(null);
+  const frames = useRef({});
+  const scroll = useRef(0);
+  useEffect(() => { if (src !== cur) setNext(src); }, [src]);
+  useEffect(() => {
+    const base = `/api/sessions/${p.session}/pages/${encodeURIComponent(p.name)}/state`;
+    const ops = {
+      "state.get": () => api(base),
+      "state.set": (v) => api(base, { method: "PUT", body: v }).then(() => null),
+      copy: (t) => { copyText(t); say(t.length < 60 ? `Copied “${t}”.` : "Copied."); },
+      open: (u) => openOut(u),
+      send: (t) => onSend(t),
+    };
+    const f = (e) => {
+      const m = e.data;
+      if (!m || m.atc !== 1 || !Object.values(frames.current).some((w) => w && w.contentWindow === e.source)) return;
+      if (m.op === "hello") return e.source.postMessage({ atc: 1, op: "scroll", y: scroll.current }, "*");
+      if (m.op === "at") { scroll.current = m.arg; return; }
+      const op = ops[m.op];
+      Promise.resolve().then(() => (op ? op(m.arg) : Promise.reject(new Error(`atc has no ${m.op}`))))
+        .then((value) => e.source.postMessage({ atc: 1, id: m.id, value: value ?? null }, "*"),
+          (err) => e.source.postMessage({ atc: 1, id: m.id, error: err.message || String(err) }, "*"));
+    };
+    addEventListener("message", f);
+    return () => removeEventListener("message", f);
+  }, [p.session, p.name, onSend]);
+  const frame = (u, hidden) => html`<iframe key=${u} ref=${(el) => { frames.current[u] = el; }} src=${u} class=${hidden ? "next" : ""}
+    sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
+    onLoad=${hidden ? () => { delete frames.current[cur]; setCur(u); setNext(null); } : null}></iframe>`;
+  return html`<div class="pframe">${frame(cur, false)}${next && frame(next, true)}</div>`;
+}
+
+function PageBody({ p, onSend, say }) {
+  if (p.gone) return html`<div class="fbody"><div class="none"><p>The file behind this page is gone.</p><p class="sub">${tilde(p.path)}</p></div></div>`;
+  return html`<${FileBody} f=${{ ...p, url: pageSrc(p) }} frame=${p.kind === "html" && html`<${PageFrame} key=${pkey(p)} p=${p} onSend=${onSend} say=${say} />`} />`;
+}
+
+function useNote(s, say) {
+  const [note, setNote] = useState(null);
+  const ask = useCallback((p) => (text) => new Promise((done) => setNote({ text: `On the page “${pageTitle(p)}”:\n${text}`, done })), []);
+  const sheet = note && html`<${SendNote} s=${s} note=${note} say=${say} onClose=${(sent) => { note.done(sent); setNote(null); }} />`;
+  return [ask, sheet];
+}
+
+function SendNote({ s, note, say, onClose }) {
+  const [text, setText] = useState(note.text);
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    setBusy(true);
+    try {
+      let id = s.id || s.sessionId;
+      if (!s.attachable) id = (await api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" })).id;
+      await api(`/api/sessions/${id}/send`, { method: "POST", body: { text } });
+      say(`Sent to ${s.title || "the session"}.`);
+      onClose(true);
+    } catch (e) { say(e.message); setBusy(false); }
+  };
+  return html`
+    <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose(false)}>
+      <div class="sheet pnote-sheet" role="dialog" aria-label="Send a note">
+        <h3>Send to ${s.title || "the session"}</h3>
+        <textarea ref=${focusOnMount} value=${text} onInput=${(e) => setText(e.target.value)}
+          onKeyDown=${(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); if (e.key === "Escape") onClose(false); }}></textarea>
+        <div class="row">
+          <span class="hint">${s.attachable ? "Goes in as your message." : "Resumes the session, then sends it."}</span>
+          <button class="btn" onClick=${() => onClose(false)}>Cancel</button>
+          <button class="btn primary" disabled=${busy || !text.trim()} onClick=${send}>Send</button>
+        </div>
       </div>
+    </div>`;
+}
+
+function PagePane({ s, list, cur, pick, split, setSplit, onClose, say, alone }) {
+  useNow(15000);
+  useSeenTick();
+  const p = list.find((x) => x.name === cur) || list[0];
+  const [ask, sheet] = useNote(s, say);
+  const [nonce, setNonce] = useState(0);
+  const onSend = useMemo(() => p && ask(p), [p && pkey(p), p?.title]);
+  useEffect(() => {
+    const f = () => p && document.visibilityState === "visible" && markPage(p);
+    f();
+    addEventListener("visibilitychange", f);
+    return () => removeEventListener("visibilitychange", f);
+  }, [p && pkey(p), p && pageAt(p)]);
+  if (!p) return html`<div class="ppane"><div class="fbody"><p class="empty">No pages.</p></div></div>`;
+  const full = () => APP ? (location.hash = aloneLink(p.session, p.name)) : openOut(`/${aloneLink(p.session, p.name)}`);
+  return html`
+    <div class="ppane">
+      <div class="pbar">
+        <div class="ptabs" role="tablist">
+          ${list.map((x) => html`<button role="tab" aria-selected=${x === p} ref=${x === p ? (el) => el?.scrollIntoView({ block: "nearest", inline: "nearest" }) : null} class="ptab ${x === p ? "on" : ""} ${x.gone ? "gone" : ""}" title=${`${pageTitle(x)}\n${pageInfo(x)}`} onClick=${() => pick(x.name)}>
+            ${x !== p && pageFresh(x) && html`<i class="dot"></i>`}<span>${pageTitle(x)}</span></button>`)}
+        </div>
+        <span class="pupd" title=${tilde(p.path)}>${p.gone ? "gone" : agoLong(p.updated || p.shown)}</span>
+        ${setSplit && html`<button class="icon wide" title=${split ? "Page only" : "Side by side with the conversation"} aria-label="Layout" onClick=${() => setSplit(!split)}>${split ? ICON.expand : ICON.split}</button>`}
+        <button class="icon" title="Reload" aria-label="Reload" onClick=${() => setNonce((n) => n + 1)}>⟳</button>
+        ${!alone && html`<button class="icon" title="Open full page" aria-label="Open full page" onClick=${full}>↗</button>`}
+        <${Menu} items=${[
+          { label: "Open the file in a new tab", run: () => openOut(p.url) },
+          { label: "Copy a link to this page", run: () => { copyText(`${location.origin}/${aloneLink(p.session, p.name)}`); say("Link copied."); } },
+          { label: "All pages", run: () => (location.hash = "#/pages") },
+          { label: "Take down", danger: true, run: () => confirm(`Take down “${pageTitle(p)}”? The file stays where it is.`) && takeDown(p, say) },
+        ]} />
+        ${onClose && html`<button class="icon" title="Close" aria-label="Close" onClick=${onClose}>✕</button>`}
+      </div>
+      ${p.note && html`<div class="pnote">${p.note}</div>`}
+      <${PageBody} key=${`${pkey(p)}:${nonce}`} p=${p} onSend=${onSend} say=${say} />
+      ${sheet}
+    </div>`;
+}
+
+function PagesButton({ list, open, on }) {
+  useSeenTick();
+  const top = list[0], fresh = list.some(pageFresh);
+  const face = html`<span class="mi">${ICON.page}</span><span class="t">${pageTitle(top)}</span>${fresh && html`<i class="dot"></i>`}${list.length > 1 && html`<em>+${list.length - 1}</em>`}`;
+  if (list.length === 1) return html`<span class="pgwrap"><button class="btn pgbtn ${on ? "on" : ""}" title=${`${pageTitle(top)}\n${pageInfo(top)}`} onClick=${() => open(top.name)}>${face}</button></span>`;
+  return html`<span class="pgwrap"><${Menu} cls=${`btn pgbtn ${on ? "on" : ""}`} aria="Pages" width="min(320px, calc(100vw - 24px))" label=${html`${face}<i class="caret">▾</i>`}
+    items=${list.map((p) => ({ cls: "pubitem pgitem", title: tilde(p.path), run: () => open(p.name),
+      label: html`<i class="dot ${pageFresh(p) ? "" : "off"}"></i><span class="tx"><b>${pageTitle(p)}</b><small>${pageInfo(p)}</small></span>` }))} /></span>`;
+}
+
+function PagesTab({ list, on, onClick }) {
+  useSeenTick();
+  return html`<button class=${on ? "on" : ""} onClick=${onClick}>Pages${list.some(pageFresh) ? html`<i class="dot"></i>` : html`<span class="count">${list.length}</span>`}</button>`;
+}
+
+function PageThumb({ p }) {
+  const u = pageSrc(p);
+  return p.gone ? html`<span class="ext">gone</span>`
+    : p.kind === "html" ? html`<iframe src=${u} sandbox="allow-scripts" loading="lazy" tabindex="-1" aria-hidden="true"></iframe>`
+    : p.kind === "image" ? html`<${Pic} src=${u} fallback=${html`<span class="ext">img</span>`} />`
+    : p.kind === "markdown" || p.kind === "table" ? html`<${FilePeek} f=${{ ...p, url: u }} ext=${p.kind} />`
+    : html`<span class="ext">${(p.path.split(".").pop() || "").slice(0, 4)}</span>`;
+}
+
+function PageCard({ p, onOpen, sub, onDown }) {
+  return html`
+    <div class="card pcard ${p.kind}">
+      <button class="pv" onClick=${onOpen} title=${tilde(p.path)}><${PageThumb} p=${p} /></button>
+      <button class="cap" onClick=${onOpen}>
+        <span class="n">${pageFresh(p) && html`<i class="dot"></i>`}${pageTitle(p)}</span>
+        <span class="m">${sub ? html`${sub} · ` : ""}${pageInfo(p)}</span>
+      </button>
+      ${onDown && html`<button class="icon down" title="Take down" aria-label="Take down" onClick=${onDown}>✕</button>`}
+    </div>`;
+}
+
+function ShownStep({ b, s }) {
+  useSeenTick();
+  const p = (s.shown || []).find((x) => x.name === b.ref);
+  return html`<button class="shown ${p && pageFresh(p) ? "fresh" : ""}" onClick=${() => SESSION_API?.page(b.ref)} title=${p ? tilde(p.path) : ""}>
+    <span class="th">${ICON.page}</span>
+    <span class="tx"><b>${p ? pageTitle(p) : b.text}</b><small>${p ? `Showed you a page · ${pageInfo(p)}` : s.state === "past" ? "Showed you a page" : "Page taken down"}</small></span>
+    <i>›</i></button>`;
+}
+
+function PagesHome({ live, say, onClose }) {
+  useSeenTick();
+  useNow(30000);
+  const [list, setList] = useState(null);
+  const [q, setQ] = useState("");
+  const load = () => api("/api/pages").then((l) => setList(l || []), (e) => { say(e.message); setList((x) => x || []); });
+  useEffect(() => { load(); const t = setInterval(load, 10000); return () => clearInterval(t); }, []);
+  useEffect(() => {
+    const k = (e) => e.key === "Escape" && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName) && onClose();
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, []);
+  const ql = q.trim().toLowerCase();
+  const owner = (p) => live.find((x) => x.sessionId === p.session);
+  const shown = (list || []).filter((p) => !ql || `${pageTitle(p)} ${p.name} ${owner(p)?.title || p.of || ""} ${p.path} ${p.host || ""}`.toLowerCase().includes(ql))
+    .sort((a, b) => pageAt(b) - pageAt(a));
+  const gone = (list || []).filter((p) => p.gone);
+  const open = (p) => (location.hash = owner(p) ? pageLink(p.session, p.name) : aloneLink(p.session, p.name));
+  const down = async (p) => { if (await takeDown(p, say)) load(); };
+  return html`
+    <div class="pghome" role="dialog" aria-label="Pages">
+      <header class="pghead">
+        <button class="icon" onClick=${onClose} aria-label="Back">←</button>
+        <div class="who"><h2>Pages</h2><span class="sub">${list ? `${plural(list.length, "page")} your sessions showed you${MULTI ? ", on every machine" : ""}` : "Loading…"}</span></div>
+        <input class="pgfind" type="search" placeholder="Filter" value=${q} onInput=${(e) => setQ(e.target.value)} />
+        ${gone.length > 0 && html`<button class="btn wide" onClick=${async () => { for (const p of gone) await takeDown(p); say(`Cleared ${plural(gone.length, "page")} whose file is gone.`); load(); }}>Clear ${gone.length} gone</button>`}
+      </header>
+      <div class="pgbody">
+        ${list && !list.length && html`<div class="none"><p>No pages yet.</p><p class="sub">When an agent runs <code>atc show</code>, its page opens next to the conversation and lands here too.</p></div>`}
+        <div class="cards">
+          ${shown.map((p) => html`<${PageCard} key=${pkey(p)} p=${p} onOpen=${() => open(p)} onDown=${() => confirm(`Take down “${pageTitle(p)}”? The file stays where it is.`) && down(p)}
+            sub=${html`${owner(p)?.title || p.of || "Earlier session"}${MULTI && p.host ? ` · ${p.host}` : ""}`} />`)}
+        </div>
+      </div>
+    </div>`;
+}
+
+function PageAlone({ sid, name, live, say }) {
+  const [got, setGot] = useState(null);
+  const s = live.find((x) => x.sessionId === sid);
+  useEffect(() => {
+    if (s) return;
+    const load = () => api(`/api/sessions/${sid}/pages`).then(setGot, (e) => setGot({ err: e.message }));
+    load();
+    const t = setInterval(load, 5000);
+    return () => clearInterval(t);
+  }, [sid, !!s]);
+  const list = s ? s.shown || [] : Array.isArray(got) ? got : [];
+  const owner = s || { sessionId: sid, title: list[0]?.of || "", state: "past" };
+  const back = () => (s ? (location.hash = pageLink(sid, name)) : (location.hash = "#/pages"));
+  return html`
+    <div class="palone">
+      ${got?.err ? html`<div class="fbody"><p class="empty">${got.err}</p></div>`
+        : !s && !got ? html`<div class="fbody"><p class="empty">Loading…</p></div>`
+        : list.some((p) => p.name === name) ? html`<${PagePane} s=${owner} list=${list} cur=${name} pick=${(n) => location.replace(aloneLink(sid, n))} say=${say} onClose=${back} alone />`
+        : html`<div class="fbody"><div class="none"><p>This page was taken down.</p><button class="btn" onClick=${() => (location.hash = "#/pages")}>All pages</button></div></div>`}
     </div>`;
 }
 
@@ -2733,12 +3085,14 @@ const TX_ICON = {
   push: () => "M8 13V3M4 7l4-4 4 4",
   deploy: () => "M3 13h10M8 10V2M5 5l3-3 3 3",
   publish: () => "M6 3H3v10h10v-3M9 3h4v4M13 3L7 9",
+  show: () => "M4 2.5h8v11H4zM6.5 6h3M6.5 8.5h3",
 };
 const Ico = ({ d, cls = "" }) => html`<svg class="ico ${cls}" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d=${d} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 function BadgeChip({ b }) {
   const label = b.kind === "commit" ? b.text : b.kind === "deploy" ? (b.ok ? `Deployed · ${b.ref}` : b.text) : b.kind === "test" && b.ref ? `${b.text} · ${b.ref}` : b.text;
   const chip = html`<span class="chip ${b.kind} ${b.ok ? "ok" : "bad"}" title=${b.ref || label}><${Ico} d=${TX_ICON[b.kind]?.(b.ok) || ""} />${b.kind === "commit" && html`<code>${b.ref}</code>`}<span class="l">${label}</span></span>`;
+  if (b.kind === "show") return html`<span class="chiplink" role="link" onClick=${(e) => { e.stopPropagation(); SESSION_API?.page(b.ref); }}>${chip}</span>`;
   return b.kind === "publish" && b.ref ? html`<a class="chiplink" href=${b.ref} data-out>${chip}</a>` : chip;
 }
 const Chips = ({ badges, max = 6 }) => {
@@ -2837,6 +3191,7 @@ function Step({ st, s, zoom, pin }) {
       return html`<div class="qcard"><p class="q">${q.question}</p><div class="opts">${q.options?.map((o) => html`<div class="opt ${hits.includes(o) ? "chosen" : ""}"><b>${o.label}</b>${o.description !== o.label && o.description}</div>`)}</div>${a && rest && html`<p class="said">${rest}</p>`}${!a && !st.out && html`<p class="said wait">${s.asks?.length ? "Answer below" : "Waiting for your answer in the terminal"}</p>`}</div>`;
     })}</div>`;
   }
+  if (st.tool === "Bash" && st.badge?.kind === "show") return html`<div class=${cls}><${ShownStep} b=${st.badge} s=${s} /></div>`;
   if (st.tool === "Bash") {
     const cmd = i.command || st.detail || "";
     const b = st.badge;
@@ -3877,6 +4232,7 @@ function Palette({ live, sel, say, home, actions, onClose }) {
     if (cur.canAttach) act("Terminal", () => cur.mode("term"), "shell attach");
     act("Transcript", () => cur.mode("chat"), "read conversation");
     act("Outputs", () => cur.mode("out"), "files servers links");
+    for (const p of cur.pages || []) act(`Page: ${pageTitle(p)}`, () => cur.page(p.name), `show ${p.name}`);
     if (cur.canAttach && VOICE_OK) act("Voice", cur.voice, "talk speak mic");
     act("Usage", cur.usage, "tokens cost limit");
     act("Rename", cur.rename, "title name");
@@ -3896,6 +4252,7 @@ function Palette({ live, sel, say, home, actions, onClose }) {
   for (const p of presets) add("Actions", `Start ${p.name}`, { proj: p.name, kw: `preset ${p.dir}`, sub: tilde(p.dir), run: run(() => api(`/api/sessions${hostQ(p.host, home)}`, { method: "POST", body: { preset: p.name } }).then((r) => { say(`Started ${p.name}.`); go(r.id); }, (e) => say(e.message))) });
   add("Actions", "Assistant", { glyph: "◇", hint: "a", kw: "ask chat switchboard", run: run(actions.ask) });
   if (VOICE_OK) add("Actions", "Talk to Claude", { glyph: "◉", hint: "t", kw: "voice assistant", run: run(actions.talk) });
+  add("Actions", "All pages", { glyph: "▣", hint: "p", kw: "shown html reports gallery", run: run(() => (location.hash = PAGES)) });
   add("Actions", "Usage and limits", { glyph: "%", hint: "u", kw: "tokens cost week", run: run(actions.usage) });
   add("Actions", "Keyboard shortcuts", { glyph: "?", hint: "?", kw: "help keys", run: run(actions.help) });
   if (q.length > 1) for (const d of dirs.slice(0, 60)) add("New session in", tilde(d.path), { glyph: "+", kw: "folder", run: run(() => actions.create({ dir: d.path })) });

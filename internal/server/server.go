@@ -27,6 +27,7 @@ import (
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/outputs"
+	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
@@ -41,6 +42,7 @@ type Server struct {
 	Roots   []string
 	Host    string
 	Push    *push.Pusher
+	Pages   *pages.Store
 	Peers   []Peer
 	Presets []Preset
 	Engines []Engine
@@ -63,12 +65,13 @@ type Server struct {
 	limits  usage.LimitsClient
 	unfurl  unfurler
 
-	mu   sync.Mutex
-	subs map[chan []byte]bool
-	last []byte
-	kick chan struct{}
-	seen map[string]string
-	held map[string]held
+	mu    sync.Mutex
+	subs  map[chan []byte]bool
+	last  []byte
+	kick  chan struct{}
+	seen  map[string]string
+	shown map[string]time.Time
+	held  map[string]held
 
 	widgetSent string
 	widgetAt   time.Time
@@ -82,6 +85,9 @@ func (s *Server) Handler() http.Handler {
 	}
 	s.fleet = &fleet{peers: s.Peers, client: &http.Client{}, owner: map[string]string{}, status: map[string]string{}, views: map[string]int{}}
 	s.kick = make(chan struct{}, 1)
+	if s.Pages == nil {
+		s.Pages, _ = pages.Open("")
+	}
 	if s.StateDir != "" {
 		s.rv = &reviver{path: revivePath(s.StateDir)}
 		if lost := s.rv.afterReboot(); len(lost) > 0 {
@@ -132,6 +138,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/usage/spend", s.usageSpend)
 	mux.HandleFunc("GET /api/usage/report", s.usageReport)
 	mux.HandleFunc("GET /api/sessions/{sid}/o/{tok}/{path...}", s.outputFile)
+	mux.HandleFunc("GET /api/sessions/{sid}/pages", s.sessionPages)
+	mux.HandleFunc("POST /api/sessions/{sid}/pages", s.showPage)
+	mux.HandleFunc("DELETE /api/sessions/{sid}/pages/{name}", s.hidePage)
+	mux.HandleFunc("GET /api/sessions/{sid}/pages/{name}/state", s.pageState)
+	mux.HandleFunc("PUT /api/sessions/{sid}/pages/{name}/state", s.pageState)
+	mux.HandleFunc("GET /api/pages", s.allPages)
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) {
 		s.nameViewer(r)
 		s.Term.Serve(w, r, r.PathValue("id"))
@@ -451,6 +463,7 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 			}
 		}
 	}
+	s.attachPages(list)
 	if localOnly || len(s.Peers) == 0 {
 		return list, nil
 	}
@@ -790,7 +803,7 @@ func (s *Server) poll() {
 		n := len(s.subs)
 		s.mu.Unlock()
 		if n == 0 && (s.Push == nil || s.Push.Count() == 0) {
-			s.seen = nil
+			s.seen, s.shown = nil, nil
 			if idle++; s.rv == nil || idle%8 != 0 {
 				continue
 			}
@@ -848,11 +861,14 @@ func (s *Server) watch(list []sessions.Session) {
 func (s *Server) notify(list []sessions.Session) {
 	prev := s.seen
 	s.seen = states(list)
+	viewing := func(x sessions.Session) bool { return s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) }
+	shown, showing := pageAlerts(s.shown, list, viewing)
+	s.shown = shown
 	if prev == nil || s.Push == nil {
 		return
 	}
-	viewing := func(x sessions.Session) bool { return s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) }
 	ms, later := alerts(prev, list, viewing)
+	ms = append(ms, showing...)
 	for _, m := range later {
 		s.held[m.Tag] = held{m, time.Now().Add(holdForSummary)}
 	}

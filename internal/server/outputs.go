@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/outputs"
+	"github.com/zcag/atc/internal/pages"
 )
 
 var outputPath = regexp.MustCompile(`^/api/sessions/[^/]+/o/`)
@@ -77,11 +78,12 @@ func (s *Server) outputs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out := struct {
+		Pages    []pages.Page   `json:"pages"`
 		Servers  []server       `json:"servers"`
 		Featured []outputs.Link `json:"featured"`
 		Links    []outputs.Link `json:"links"`
 		Files    []outputFile   `json:"files"`
-	}{Servers: servers}
+	}{Pages: s.Pages.Of(sid), Servers: servers}
 	for _, l := range links {
 		dup := false
 		for _, v := range servers {

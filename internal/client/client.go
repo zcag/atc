@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/history"
+	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/summary"
 )
@@ -210,6 +211,25 @@ func (c *Client) Resume(sid string) (string, error) {
 
 func (c *Client) Send(id, text string) error {
 	return c.do("POST", "/api/sessions/"+id+"/send", map[string]string{"text": text}, nil)
+}
+
+func (c *Client) Show(sid string, req map[string]string) (r struct {
+	Page    pages.Page `json:"page"`
+	Created bool       `json:"created"`
+}, err error) {
+	return r, c.do("POST", "/api/sessions/"+url.PathEscape(sid)+"/pages", req, &r)
+}
+
+func (c *Client) Pages(sid string) (list []pages.Page, err error) {
+	return list, c.do("GET", "/api/sessions/"+url.PathEscape(sid)+"/pages", nil, &list)
+}
+
+func (c *Client) HidePage(sid, name string) error {
+	return c.do("DELETE", "/api/sessions/"+url.PathEscape(sid)+"/pages/"+url.PathEscape(name), nil, nil)
+}
+
+func (c *Client) PageState(sid, name string) (st json.RawMessage, err error) {
+	return st, c.do("GET", "/api/sessions/"+url.PathEscape(sid)+"/pages/"+url.PathEscape(name)+"/state", nil, &st)
 }
 
 func (c *Client) Transcript(sid string) (p history.Page, err error) {

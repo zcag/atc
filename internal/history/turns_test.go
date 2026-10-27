@@ -27,6 +27,7 @@ func TestClassifyCommands(t *testing.T) {
 		{bash("go test ./internal/history", "--- FAIL: TestReadPage (0.00s)\nFAIL", true), "test", false, "Tests failed", false},
 		{bash("make install 2>&1 | tail -4", "", false), "deploy", true, "Deployed", false},
 		{bash("publish-cmd out/x.html", "http://pages.example/x.html", false), "publish", true, "Published", false},
+		{bash("atc show out/handover.html --note 'look at the screens'", "Showing \"PR handover\" (handover) in atc, live from ~/out/handover.html.\n", false), "show", true, "PR handover", false},
 		{bash("grep -n foo internal/*.go | head; sed -n 1,20p main.go", "", false), "", false, "", true},
 		{bash("cd /tmp && ls -la && git log --oneline -3", "", false), "", false, "", true},
 		{bash("sed -i 's/a/b/' x.go", "", false), "", false, "", false},

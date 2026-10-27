@@ -1,0 +1,274 @@
+package pages
+
+import (
+	"encoding/json"
+	"errors"
+	"html"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/zcag/atc/internal/outputs"
+)
+
+type Page struct {
+	Session string    `json:"session"`
+	Name    string    `json:"name"`
+	Title   string    `json:"title,omitempty"`
+	Path    string    `json:"path"`
+	Note    string    `json:"note,omitempty"`
+	Shown   time.Time `json:"shown"`
+	Kind    string    `json:"kind,omitempty"`
+	Updated time.Time `json:"updated,omitzero"`
+	Size    int64     `json:"size,omitempty"`
+	Gone    bool      `json:"gone,omitempty"`
+	URL     string    `json:"url,omitempty"`
+	Host    string    `json:"host,omitempty"`
+	Of      string    `json:"of,omitempty"`
+	Cwd     string    `json:"cwd,omitempty"`
+}
+
+type saved struct {
+	Pages map[string][]Page          `json:"pages"`
+	State map[string]json.RawMessage `json:"state,omitempty"`
+}
+
+type Store struct {
+	path   string
+	mu     sync.Mutex
+	s      saved
+	titles map[string]titled
+}
+
+type titled struct {
+	mod   time.Time
+	title string
+}
+
+const MaxState = 256 << 10
+
+var (
+	nameRe  = regexp.MustCompile(`[^a-z0-9]+`)
+	titleRe = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
+	h1Re    = regexp.MustCompile(`(?m)^#\s+(.+)$`)
+)
+
+func Open(path string) (*Store, error) {
+	st := &Store{path: path, s: saved{Pages: map[string][]Page{}, State: map[string]json.RawMessage{}}, titles: map[string]titled{}}
+	if path == "" {
+		return st, nil
+	}
+	b, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return st, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(b, &st.s); err != nil {
+		return nil, err
+	}
+	if st.s.Pages == nil {
+		st.s.Pages = map[string][]Page{}
+	}
+	if st.s.State == nil {
+		st.s.State = map[string]json.RawMessage{}
+	}
+	return st, nil
+}
+
+func Name(s string) string {
+	s = strings.TrimSuffix(filepath.Base(s), filepath.Ext(s))
+	return strings.Trim(nameRe.ReplaceAllString(strings.ToLower(s), "-"), "-")
+}
+
+func Target(path string) (string, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return "", err
+	}
+	if !st.IsDir() {
+		return path, nil
+	}
+	for _, f := range []string{"index.html", "index.htm", "index.md", "README.md"} {
+		if p := filepath.Join(path, f); exists(p) {
+			return p, nil
+		}
+	}
+	return "", errors.New(path + " is a folder without an index.html")
+}
+
+func (st *Store) Show(p Page) (Page, bool, error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	list := st.s.Pages[p.Session]
+	created := true
+	for i, old := range list {
+		if old.Name == p.Name {
+			created = false
+			p.Note = cmpOr(p.Note, old.Note)
+			if p.Path == old.Path {
+				p.Title = cmpOr(p.Title, old.Title)
+			}
+			list = append(list[:i], list[i+1:]...)
+			break
+		}
+	}
+	st.s.Pages[p.Session] = append(list, p)
+	return p, created, st.save()
+}
+
+func (st *Store) Remove(sid, name string) (bool, error) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	list := st.s.Pages[sid]
+	for i, p := range list {
+		if p.Name == name {
+			st.s.Pages[sid] = append(list[:i], list[i+1:]...)
+			if len(st.s.Pages[sid]) == 0 {
+				delete(st.s.Pages, sid)
+			}
+			delete(st.s.State, sid+"/"+name)
+			return true, st.save()
+		}
+	}
+	return false, nil
+}
+
+func (st *Store) Of(sid string) []Page {
+	st.mu.Lock()
+	list := append([]Page(nil), st.s.Pages[sid]...)
+	st.mu.Unlock()
+	return st.fill(list)
+}
+
+func (st *Store) Get(sid, name string) (Page, bool) {
+	for _, p := range st.Of(sid) {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return Page{}, false
+}
+
+func (st *Store) All() []Page {
+	st.mu.Lock()
+	var list []Page
+	for _, ps := range st.s.Pages {
+		list = append(list, ps...)
+	}
+	st.mu.Unlock()
+	return st.fill(list)
+}
+
+func (st *Store) State(sid, name string) json.RawMessage {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return st.s.State[sid+"/"+name]
+}
+
+func (st *Store) SetState(sid, name string, v json.RawMessage) error {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if !st.has(sid, name) {
+		return os.ErrNotExist
+	}
+	if len(v) == 0 || string(v) == "null" {
+		delete(st.s.State, sid+"/"+name)
+	} else {
+		st.s.State[sid+"/"+name] = v
+	}
+	return st.save()
+}
+
+func (st *Store) has(sid, name string) bool {
+	for _, p := range st.s.Pages[sid] {
+		if p.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (st *Store) fill(list []Page) []Page {
+	for i := range list {
+		p := &list[i]
+		p.Kind = outputs.Kind(p.Path)
+		fi, err := os.Stat(p.Path)
+		if err != nil {
+			p.Gone = true
+			continue
+		}
+		p.Updated, p.Size = fi.ModTime(), fi.Size()
+		if p.Title == "" {
+			p.Title = st.title(p.Path, p.Kind, fi.ModTime())
+		}
+	}
+	sort.SliceStable(list, func(i, j int) bool { return list[i].Last().After(list[j].Last()) })
+	return list
+}
+
+func (p Page) Last() time.Time {
+	if p.Updated.After(p.Shown) {
+		return p.Updated
+	}
+	return p.Shown
+}
+
+func (st *Store) title(path, kind string, mod time.Time) string {
+	if kind != "html" && kind != "markdown" {
+		return ""
+	}
+	st.mu.Lock()
+	c, ok := st.titles[path]
+	st.mu.Unlock()
+	if ok && c.mod.Equal(mod) {
+		return c.title
+	}
+	t := ""
+	if f, err := os.Open(path); err == nil {
+		b, _ := io.ReadAll(io.LimitReader(f, 64<<10))
+		f.Close()
+		re := titleRe
+		if kind == "markdown" {
+			re = h1Re
+		}
+		if m := re.FindSubmatch(b); m != nil {
+			t = strings.Join(strings.Fields(html.UnescapeString(string(m[1]))), " ")
+		}
+	}
+	st.mu.Lock()
+	st.titles[path] = titled{mod, t}
+	st.mu.Unlock()
+	return t
+}
+
+func (st *Store) save() error {
+	if st.path == "" {
+		return nil
+	}
+	b, err := json.MarshalIndent(st.s, "", "  ")
+	if err != nil {
+		return err
+	}
+	os.MkdirAll(filepath.Dir(st.path), 0o755)
+	tmp := st.path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, st.path)
+}
+
+func exists(p string) bool { _, err := os.Stat(p); return err == nil }
+
+func cmpOr(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}

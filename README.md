@@ -290,10 +290,41 @@ no cost), send, voice and the MCP tools. What maps differently:
 - Sessions from a plain `opencode` in a terminal run their own server: they show in history, not
   as live.
 
+## Pages
+
+An agent shows you something to look at (a report, a handover, a diagram, a screenshot) with
+`atc show <file>`, and it opens next to the conversation that made it:
+
+- **Live.** atc serves the file where it is and redraws it every time it changes, keeping your
+  scroll position, so the agent updates a page by editing the file. A session can show any number
+  of pages; each has a name (the file's, or `--as name`), and showing a name again replaces that
+  page.
+- **In the session.** A button on the session's header lists its pages, newest change first, with
+  a dot on the ones that changed since you looked. A page opens beside the conversation on a wide
+  screen, or full width (toggle in the page's bar; atc remembers which), and in a **Pages** tab on
+  a phone. Each `atc show` is also a card in the transcript, and the session's row in the list
+  carries the page. A new page opens by itself beside the conversation unless you are typing;
+  otherwise you get a note. You get a push when a session shows you a page, unless you are
+  watching it.
+- **Full size.** ↗ opens the page on its own at `/#/p/<session>/<name>`, a link that works on any
+  of your devices for as long as the page is up. **Pages** (`p`, or the page button above the
+  list) shows every page from every session and machine, with previews, a filter and take-down.
+- **Talking back.** A page that loads `/atc.js` gets `window.atc`: `atc.state.get()` and
+  `atc.state.set(obj)` keep what you did on the page (ticks, notes) on the server, across
+  devices, and the agent reads it with `atc show --state <name>`; `atc.send(text)` sends a note to
+  the session after you confirm it; `atc.copy(text)` copies, in the browser and the app. Links to
+  other sites open outside atc. Outside atc the same calls fall back to localStorage and the
+  clipboard.
+
+A folder shows its `index.html`, with the files beside it loading by relative path. HTML, images,
+Markdown, PDF, CSV/TSV, video and audio render. Pages run sandboxed, away from atc's own login.
+`atc show -h` is the reference agents read; atc's MCP instructions point every agent at it.
+
 ## Outputs
 
 Each session has an **Outputs** tab with what it produced, so you can check its work from a phone:
 
+- **Pages** it showed you, with previews.
 - **Running:** servers the session started (a dev server, a preview), as links on the machine's
   name. A server that listens only on localhost is marked as such, since it opens only on that
   machine. Running servers also show on the session's strip.

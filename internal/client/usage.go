@@ -5,6 +5,7 @@ import (
 	"net/url"
 
 	"github.com/zcag/atc/internal/outputs"
+	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/usage"
 )
 
@@ -21,6 +22,7 @@ type File struct {
 }
 
 type Outputs struct {
+	Pages    []pages.Page   `json:"pages"`
 	Servers  []Server       `json:"servers"`
 	Featured []outputs.Link `json:"featured"`
 	Links    []outputs.Link `json:"links"`

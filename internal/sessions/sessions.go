@@ -13,6 +13,7 @@ import (
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/outputs"
+	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/summary"
 )
@@ -59,6 +60,7 @@ type Session struct {
 	Updated        time.Time        `json:"updated,omitzero"`
 	Servers        []int            `json:"servers,omitempty"`
 	Pages          []outputs.Link   `json:"pages,omitempty"`
+	Shown          []pages.Page     `json:"shown,omitempty"`
 	Pinned         bool             `json:"pinned,omitempty"`
 	Parked         bool             `json:"parked,omitempty"`
 }

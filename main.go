@@ -26,6 +26,7 @@ import (
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/llm"
 	"github.com/zcag/atc/internal/opencode"
+	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/report"
 	"github.com/zcag/atc/internal/server"
@@ -70,6 +71,10 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc summary [-json] [-again] <session>
                                  its final message in short: a status line, the gist and
                                  an overview; -again summarizes it anew
+  atc show <file> [--as name] [--title T] [--note N]
+                                 from inside a session: show the user a page (HTML, image,
+                                 markdown, PDF) beside the conversation, live as the file
+                                 changes; atc show -h for the full reference
   atc outputs [-json] <session>  what it produced: running servers, files (with a link to
                                  open each in a browser), links, code it touched
   atc usage [-json] [session]    plan limits and tokens per day; with a session, its tokens,
@@ -121,6 +126,8 @@ func main() {
 		err = sendTo(args)
 	case "mcp":
 		err = tools.Run(context.Background(), client.Load())
+	case "show":
+		err = show(args)
 	case "outputs":
 		err = showOutputs(args)
 	case "summary":
@@ -222,6 +229,9 @@ func serve(args []string) error {
 		return err
 	}
 	if srv.Push, err = push.Open(filepath.Join(client.ConfigDir(), "devices.json")); err != nil {
+		return err
+	}
+	if srv.Pages, err = pages.Open(filepath.Join(client.ConfigDir(), "pages.json")); err != nil {
 		return err
 	}
 	if !*noAuth {

@@ -275,8 +275,8 @@ func Size(n int64) string {
 }
 
 func Outputs(o client.Outputs, host string, now time.Time) []string {
-	if len(o.Servers)+len(o.Featured)+len(o.Links)+len(o.Files) == 0 {
-		return []string{"Nothing here yet. Files this session writes, pages it publishes and servers it starts show up here."}
+	if len(o.Pages)+len(o.Servers)+len(o.Featured)+len(o.Links)+len(o.Files) == 0 {
+		return []string{"Nothing here yet. Pages this session shows, files it writes and servers it starts show up here."}
 	}
 	var out []string
 	section := func(title string) {
@@ -284,6 +284,16 @@ func Outputs(o client.Outputs, host string, now time.Time) []string {
 			out = append(out, "")
 		}
 		out = append(out, title)
+	}
+	if len(o.Pages) > 0 {
+		section("Pages it showed the user (atc show)")
+		for _, p := range o.Pages {
+			state := "updated " + Ago(p.Updated, now)
+			if p.Gone {
+				state = "file is gone"
+			}
+			out = append(out, "  "+p.Name+"  "+cmp.Or(p.Title, p.Name)+" · "+state, "    "+p.Path)
+		}
 	}
 	if len(o.Servers) > 0 {
 		section("Running")
