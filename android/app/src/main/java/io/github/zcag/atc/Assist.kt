@@ -8,7 +8,9 @@ import android.service.voice.VoiceInteractionSessionService
 import android.speech.RecognitionService
 import android.speech.SpeechRecognizer
 
-class AssistService : VoiceInteractionService()
+class AssistService : VoiceInteractionService() {
+    override fun onLaunchVoiceAssistFromKeyguard() = startActivity(Live.assist(this))
+}
 
 class AssistSessionService : VoiceInteractionSessionService() {
     override fun onNewSession(args: Bundle?) = object : VoiceInteractionSession(this) {
