@@ -104,6 +104,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	go s.poll()
 	s.watchOpenCode()
+	s.schedule()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
@@ -527,21 +528,35 @@ func (s *Server) route(next http.Handler) http.Handler {
 	})
 }
 
+type startReq struct {
+	Dir, Name, Prompt, Preset, Engine string
+	Worktree                          bool
+}
+
+type badRequest struct{ error }
+
+func badf(format string, a ...any) error { return badRequest{fmt.Errorf(format, a...)} }
+
 func (s *Server) start(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Dir, Name, Prompt, Preset, Engine string
-		Worktree                          bool
-	}
+	var req startReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	id, err := s.startSession(r.Context(), req)
+	if errors.As(err, new(badRequest)) {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	s.done(w, id, err)
+}
+
+func (s *Server) startSession(ctx context.Context, req startReq) (string, error) {
 	var p Preset
 	if req.Preset != "" {
 		var ok bool
 		if p, ok = s.preset(req.Preset); !ok {
-			http.Error(w, "no preset named "+req.Preset, http.StatusBadRequest)
-			return
+			return "", badf("no preset named %s", req.Preset)
 		}
 		req.Dir, req.Name, req.Worktree = cmp.Or(req.Dir, p.Dir), cmp.Or(req.Name, p.Name), req.Worktree || p.Worktree
 	}
@@ -553,34 +568,28 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		return "", badRequest{err}
 	}
 	extra, err := p.extra(dir)
 	if err != nil {
-		fail(w, err)
-		return
+		return "", err
 	}
 	var e Engine
 	if req.Engine != "" {
 		var ok bool
 		if e, ok = s.engine(req.Engine); !ok {
-			http.Error(w, "no engine named "+req.Engine, http.StatusBadRequest)
-			return
+			return "", badf("no engine named %s", req.Engine)
 		}
 	}
 	if e.Harness == opencode.Harness {
 		if req.Worktree {
-			http.Error(w, "a git worktree needs Claude; opencode sessions start in the folder itself", http.StatusBadRequest)
-			return
+			return "", badf("a git worktree needs Claude; opencode sessions start in the folder itself")
 		}
 		var pp *Preset
 		if req.Preset != "" {
 			pp = &p
 		}
-		id, err := s.startOpenCode(r.Context(), dir, req.Name, req.Prompt, e, pp)
-		s.done(w, id, err)
-		return
+		return s.startOpenCode(ctx, dir, req.Name, req.Prompt, e, pp)
 	}
 	if req.Worktree {
 		extra = append(extra, "--worktree="+worktreeName(req.Name))
@@ -588,11 +597,11 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 	if req.Engine != "" {
 		extra = append(extra, e.args()...)
 	}
-	id, err := s.M.CLI.Start(r.Context(), dir, req.Name, req.Prompt, extra...)
+	id, err := s.M.CLI.Start(ctx, dir, req.Name, req.Prompt, extra...)
 	if err == nil {
-		s.tagEngine(r.Context(), id, req.Engine)
+		s.tagEngine(ctx, id, req.Engine)
 	}
-	s.done(w, id, err)
+	return id, err
 }
 
 func worktreeName(name string) string {

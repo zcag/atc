@@ -204,6 +204,25 @@ read fresh at each start and given to Claude as instructions rather than as your
 the session's title comes from what you actually ask. `args` adds Claude Code flags; `worktree`
 starts it in its own git worktree.
 
+A preset can also start itself. With `every` (a Go duration: `90s`, `5m`, `1h`) the atc that
+loads it starts a run on that interval, its first message being `prompt`. Add `check`, a shell
+command run in `dir`, and a run starts only when it exits 0 and prints something; the first message
+is then `prompt` followed by what it printed:
+
+```json
+{ "name": "inbox", "dir": "~/mail", "every": "5m", "check": "ls new/", "prompt": "File these:" }
+```
+
+A check gets a minute. While the previous run it started is still working or needs you, a tick is
+skipped, so runs never pile up. Each tick's decision is logged to the journal (`preset inbox: …`).
+The first run comes one interval after atc starts.
+
+Anything else can start one too, with the same `POST /api/sessions` the New session screen uses:
+
+```sh
+curl -H "Authorization: Bearer $TOKEN" -d '{"preset":"inbox","prompt":"New mail from Ana"}' https://atc.example/api/sessions
+```
+
 ## Other models
 
 Claude Code runs on any model served through Anthropic's Messages API (`/v1/messages`): Ollama
