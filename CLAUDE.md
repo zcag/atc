@@ -16,7 +16,7 @@ phone too. A web change is not done until it works there:
   If it changes what a session row carries, consider the home-screen widget feed (`APP.setSessions`,
   `Widget.kt`) and push (`internal/push`).
 - Kotlin changes need a new APK: `make android && make android-publish` on laptop (the app updates
-  itself from `https://atc.example/app/`). Web-only changes reach the app on `make install`.
+  itself from `https://atc.example/app/`). Web-only changes reach the app on `make install`: an open page notices the new build (`web` in `/api/me`) and reloads when you come back to it, or offers Reload.
 
 ## Shipping
 
