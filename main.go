@@ -75,6 +75,10 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
                                  from inside a session: show the user a page (HTML, image,
                                  markdown, PDF) beside the conversation, live as the file
                                  changes; atc show -h for the full reference
+  atc state [-set] <session> [page]
+                                 a page's state, as JSON; -set merges the JSON on stdin into
+                                 it by top-level key (null deletes a key). page can be left
+                                 out when the session shows one
   atc notify [--urgent] [--reply TEXT]... [message...]
                                  from inside a session: a push to the user's phone that opens
                                  the session; --urgent buzzes even while they use atc
@@ -139,6 +143,8 @@ func main() {
 		err = showOutputs(args)
 	case "summary":
 		err = showSummary(args)
+	case "state":
+		err = stateCmd(args)
 	case "usage":
 		err = showUsage(args)
 	case "limits":

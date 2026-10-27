@@ -19,7 +19,12 @@
   });
   const local = {
     get: () => { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } },
-    set: (v) => { try { localStorage.setItem(KEY, JSON.stringify(v)); } catch {} },
+    set: (v) => {
+      const obj = (x) => x && typeof x === "object" && !Array.isArray(x);
+      const cur = local.get();
+      if (obj(v) && (cur == null || obj(cur))) v = Object.fromEntries(Object.entries({ ...cur, ...v }).filter(([, x]) => x !== null));
+      try { localStorage.setItem(KEY, JSON.stringify(v)); } catch {}
+    },
   };
   const copy = (text) => {
     if (navigator.clipboard && isSecureContext) return navigator.clipboard.writeText(text);

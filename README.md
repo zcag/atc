@@ -124,6 +124,7 @@ atc resume "auth bug"                            # continue one
 atc stop 2 · atc rm 2 · atc rename 2 "name" · atc pin 2
 atc summary 2                                    # its final message in short
 atc outputs 2                                    # what it produced, with links to open its files
+atc state 2 inbox                                # a page's state as JSON; -set merges stdin into it
 atc usage                                        # plan limits and tokens per day
 atc usage 2                                      # one session's tokens, turns and estimated cost
 atc limits -short                                # session 4% · week 73% · resets 28m
@@ -309,11 +310,19 @@ An agent shows you something to look at (a report, a handover, a diagram, a scre
   of your devices for as long as the page is up. **Pages** (`p`, or the page button above the
   list) shows every page from every session and machine, with previews, a filter and take-down.
 - **Talking back.** A page that loads `/atc.js` gets `window.atc`: `atc.state.get()` and
-  `atc.state.set(obj)` keep what you did on the page (ticks, notes) on the server, across
-  devices, and the agent reads it with `atc show --state <name>`; `atc.send(text)` sends a note to
-  the session after you confirm it; `atc.copy(text)` copies, in the browser and the app. Links to
-  other sites open outside atc. Outside atc the same calls fall back to localStorage and the
-  clipboard.
+  `atc.state.set(obj)` keep the page's data on the server, across devices; `atc.send(text)` sends
+  a note to the session after you confirm it; `atc.copy(text)` copies, in the browser and the app.
+  Links to other sites open outside atc. Outside atc the same calls fall back to localStorage and
+  the clipboard.
+- **State.** A page's state is one JSON value that the agent, the page and other tools share, so
+  an agent can write its results there and let the page only draw them. A write that is an object
+  replaces only the top-level keys it has, and a key set to `null` is deleted: the agent can own
+  `mail` while the page keeps what you ticked under `handled`, and neither overwrites the other.
+  Any other write (an array, a string, `null`) replaces the whole state, as does an object written
+  over a state that is not one. It is at most 256 KB. The agent reads it with
+  `atc show --state <name>` and writes it by piping JSON in; anywhere else
+  `atc state <session> [page]` prints it and `atc state -set <session> [page]` merges stdin into it;
+  over HTTP it is `GET` and `PUT /api/sessions/<session>/pages/<name>/state`.
 
 A folder shows its `index.html`, with the files beside it loading by relative path. HTML, images,
 Markdown, PDF, CSV/TSV, video and audio render. Pages run sandboxed, away from atc's own login.
