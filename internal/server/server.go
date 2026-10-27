@@ -14,6 +14,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -172,8 +173,26 @@ func (s *Server) Handler() http.Handler {
 	return s.auth(s.route(mux))
 }
 
+func crossSite(r *http.Request) bool {
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return false
+	}
+	o := r.Header.Get("Origin")
+	if o == "" {
+		return false
+	}
+	u, err := url.Parse(o)
+	return err != nil || u.Host != r.Host
+}
+
 func (s *Server) auth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") && crossSite(r) {
+			log.Printf("auth: refused cross-site %s %s from %s", r.Method, r.URL.Path, r.Header.Get("Origin"))
+			http.Error(w, "cross-site request refused", http.StatusForbidden)
+			return
+		}
 		if s.Token == "" || r.URL.Path == "/api/login" || r.URL.Path == "/healthz" || outputPath.MatchString(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return

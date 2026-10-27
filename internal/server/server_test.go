@@ -100,6 +100,32 @@ func TestAuth(t *testing.T) {
 	}
 }
 
+func TestCrossSiteRefused(t *testing.T) {
+	ts := newTestServer(t, nil, Voice{})
+	post := func(origin string) int {
+		req, _ := http.NewRequest("POST", ts.URL+"/api/sessions", strings.NewReader(`{}`))
+		req.Header.Set("Authorization", "Bearer tok")
+		if origin != "" {
+			req.Header.Set("Origin", origin)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.StatusCode
+	}
+	for _, o := range []string{"null", "https://evil.example"} {
+		if c := post(o); c != http.StatusForbidden {
+			t.Fatalf("origin %s: %d", o, c)
+		}
+	}
+	for _, o := range []string{"", ts.URL} {
+		if c := post(o); c == http.StatusForbidden {
+			t.Fatalf("origin %q refused", o)
+		}
+	}
+}
+
 type seen struct {
 	mu   sync.Mutex
 	reqs []*http.Request
