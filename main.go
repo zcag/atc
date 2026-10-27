@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -212,11 +211,6 @@ func serve(args []string) error {
 		srv.M.OC = opencode.New(u, cmp.Or(os.Getenv("ATC_OPENCODE_BIN"), "opencode"))
 		if sum != nil {
 			sum.Read = map[string]func(sid, reply string) (string, error){opencode.Harness: srv.M.OC.Reply}
-		}
-	}
-	if f := os.Getenv("ATC_FEATURED"); f != "" {
-		if srv.Featured, err = regexp.Compile(f); err != nil {
-			return fmt.Errorf("ATC_FEATURED: %w", err)
 		}
 	}
 	if srv.Presets, err = server.LoadPresets(filepath.Join(client.ConfigDir(), "presets.json")); err != nil {

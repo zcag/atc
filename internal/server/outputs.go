@@ -51,7 +51,7 @@ func (s *Server) outputs(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		home, _ := os.UserHomeDir()
-		files, links, seen = s.scanner.Scan(t.Path, home, s.Featured)
+		files, links, seen = s.scanner.Scan(t.Path, home)
 	}
 	pid := 0
 	if live, err := s.M.Live(r.Context()); err == nil {
@@ -78,25 +78,20 @@ func (s *Server) outputs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out := struct {
-		Pages    []pages.Page   `json:"pages"`
-		Servers  []server       `json:"servers"`
-		Featured []outputs.Link `json:"featured"`
-		Links    []outputs.Link `json:"links"`
-		Files    []outputFile   `json:"files"`
+		Pages   []pages.Page   `json:"pages"`
+		Servers []server       `json:"servers"`
+		Links   []outputs.Link `json:"links"`
+		Files   []outputFile   `json:"files"`
 	}{Pages: s.Pages.Of(sid), Servers: servers}
 	for _, l := range links {
 		dup := false
 		for _, v := range servers {
 			dup = dup || strings.HasPrefix(l.URL, strings.TrimSuffix(v.URL, "/"))
 		}
-		switch {
-		case s.Featured != nil && s.Featured.MatchString(l.URL):
-			out.Featured = append(out.Featured, l)
-		case !dup:
+		if !dup {
 			out.Links = append(out.Links, l)
 		}
 	}
-	s.unfurl.fill(out.Featured, true)
 	exp := time.Now().Add(12 * time.Hour).Unix()
 	for _, f := range files[:min(len(files), 300)] {
 		out.Files = append(out.Files, outputFile{f, s.fileURL(sid, f.Path, exp)})

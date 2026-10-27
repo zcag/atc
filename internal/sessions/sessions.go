@@ -59,7 +59,6 @@ type Session struct {
 	StartedAt      time.Time        `json:"startedAt,omitzero"`
 	Updated        time.Time        `json:"updated,omitzero"`
 	Servers        []int            `json:"servers,omitempty"`
-	Pages          []outputs.Link   `json:"pages,omitempty"`
 	Shown          []pages.Page     `json:"shown,omitempty"`
 	Pinned         bool             `json:"pinned,omitempty"`
 	Parked         bool             `json:"parked,omitempty"`

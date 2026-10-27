@@ -83,27 +83,6 @@ type block struct {
 	Content json.RawMessage `json:"content"`
 }
 
-func (s *Scanner) Matching(transcript, home string, re *regexp.Regexp) []Link {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	var all []Link
-	for _, l := range s.read(transcript, home, re).found.links {
-		all = append(all, l)
-	}
-	return Featured(all, re)
-}
-
-func Featured(all []Link, re *regexp.Regexp) []Link {
-	var links []Link
-	for _, l := range all {
-		if re.MatchString(l.URL) {
-			links = append(links, l)
-		}
-	}
-	sortLinks(links)
-	return links
-}
-
 func sortLinks(links []Link) {
 	sort.Slice(links, func(i, j int) bool {
 		if !links[i].At.Equal(links[j].At) {
@@ -113,7 +92,7 @@ func sortLinks(links []Link) {
 	})
 }
 
-func (s *Scanner) read(transcript, home string, featured *regexp.Regexp) *entry {
+func (s *Scanner) read(transcript, home string) *entry {
 	if s.cache == nil {
 		s.cache = map[string]*entry{}
 	}
@@ -134,17 +113,17 @@ func (s *Scanner) read(transcript, home string, featured *regexp.Regexp) *entry 
 				break
 			}
 			e.off += int64(len(line))
-			e.found.add(line, home, featured)
+			e.found.add(line, home)
 		}
 		f.Close()
 	}
 	return e
 }
 
-func (s *Scanner) Scan(transcript, home string, featured *regexp.Regexp) ([]File, []Link, map[string]time.Time) {
+func (s *Scanner) Scan(transcript, home string) ([]File, []Link, map[string]time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.read(transcript, home, featured).results()
+	return s.read(transcript, home).results()
 }
 
 func (e *entry) results() ([]File, []Link, map[string]time.Time) {
@@ -170,7 +149,7 @@ func (e *entry) results() ([]File, []Link, map[string]time.Time) {
 	return files, links, ports
 }
 
-func (f *found) add(line []byte, home string, featured *regexp.Regexp) {
+func (f *found) add(line []byte, home string) {
 	var m raw
 	if json.Unmarshal(line, &m) != nil || (m.Type != "assistant" && m.Type != "user") {
 		return
@@ -188,13 +167,13 @@ func (f *found) add(line []byte, home string, featured *regexp.Regexp) {
 				Command      string `json:"command"`
 			}
 			json.Unmarshal(b.Input, &in)
-			f.step(Step{At: m.Timestamp, Tool: b.Name, Path: cmpOr(in.FilePath, in.NotebookPath), Command: in.Command}, home, featured)
+			f.step(Step{At: m.Timestamp, Tool: b.Name, Path: cmpOr(in.FilePath, in.NotebookPath), Command: in.Command}, home)
 		case "text":
 			if m.Type == "assistant" {
-				f.step(Step{At: m.Timestamp, Text: b.Text}, home, featured)
+				f.step(Step{At: m.Timestamp, Text: b.Text}, home)
 			}
 		case "tool_result":
-			f.step(Step{At: m.Timestamp, Result: resultText(b.Content)}, home, featured)
+			f.step(Step{At: m.Timestamp, Result: resultText(b.Content)}, home)
 		}
 	}
 }
@@ -208,15 +187,15 @@ type Step struct {
 	Result  string
 }
 
-func Collect(steps []Step, home string, featured *regexp.Regexp) ([]File, []Link, map[string]time.Time) {
+func Collect(steps []Step, home string) ([]File, []Link, map[string]time.Time) {
 	e := &entry{found: found{map[string]File{}, map[string]Link{}, map[string]time.Time{}}}
 	for _, s := range steps {
-		e.found.step(s, home, featured)
+		e.found.step(s, home)
 	}
 	return e.results()
 }
 
-func (f *found) step(s Step, home string, featured *regexp.Regexp) {
+func (f *found) step(s Step, home string) {
 	at := s.At
 	if s.Tool != "" {
 		for _, m := range cmdPortRe.FindAllStringSubmatch(s.Command, -1) {
@@ -238,8 +217,7 @@ func (f *found) step(s Step, home string, featured *regexp.Regexp) {
 		}
 	}
 	f.scanText(s.Text, at, home, func(string) bool { return true })
-	t := s.Result
-	f.scanText(t, at, home, func(u string) bool { return featured != nil && featured.MatchString(u) && ownLine(t, u) })
+	f.scanText(s.Result, at, home, func(string) bool { return false })
 }
 
 func (f *found) scanText(t string, at time.Time, home string, keep func(string) bool) {
@@ -274,15 +252,6 @@ func (f *found) seen(p string, at time.Time) {
 		return
 	}
 	f.files[p] = File{Path: p, Kind: Kind(p), Op: "seen", At: at}
-}
-
-func ownLine(t, u string) bool {
-	for _, l := range strings.Split(t, "\n") {
-		if strings.TrimSpace(l) == u {
-			return true
-		}
-	}
-	return false
 }
 
 func trimURL(u string) string {

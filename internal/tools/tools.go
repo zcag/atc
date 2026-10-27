@@ -53,7 +53,7 @@ type Session struct {
 	Replied    string   `json:"replied,omitempty" jsonschema:"the start of its last reply"`
 	Summary    string   `json:"summary,omitempty" jsonschema:"its last reply in one line, once it has finished a turn"`
 	Gist       []string `json:"gist,omitempty" jsonschema:"one line per topic of its last reply"`
-	Pages      []string `json:"pages,omitempty" jsonschema:"pages it published"`
+	Pages      []string `json:"pages,omitempty" jsonschema:"pages it showed the user with atc show, by name"`
 	Servers    []int    `json:"servers,omitempty" jsonschema:"ports of servers it started that are still running"`
 	Since      string   `json:"since,omitempty"`
 }
@@ -222,8 +222,8 @@ func (t *tools) view(x sessions.Session, self *sessions.Session) Session {
 	case x.Summary != nil:
 		v.Summary, v.Gist = x.Summary.Status, x.Summary.Gist
 	}
-	for _, p := range x.Pages {
-		v.Pages = append(v.Pages, p.URL)
+	for _, p := range x.Shown {
+		v.Pages = append(v.Pages, p.Name)
 	}
 	if at := x.Last(); !at.IsZero() {
 		v.Since = at.Format(time.RFC3339)

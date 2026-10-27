@@ -6,7 +6,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"regexp"
 	"sync"
 	"time"
 
@@ -199,7 +198,7 @@ func (b *Backend) All(ctx context.Context, sid string) ([]Message, error) {
 	return b.messages(ctx, s, true, false)
 }
 
-func (b *Backend) Outputs(ctx context.Context, sid, home string, featured *regexp.Regexp) ([]outputs.File, []outputs.Link, map[string]time.Time, error) {
+func (b *Backend) Outputs(ctx context.Context, sid, home string) ([]outputs.File, []outputs.Link, map[string]time.Time, error) {
 	if _, err := b.All(ctx, sid); err != nil {
 		return nil, nil, nil, err
 	}
@@ -207,7 +206,7 @@ func (b *Backend) Outputs(ctx context.Context, sid, home string, featured *regex
 	defer b.mu.Unlock()
 	snap := b.snaps[sid]
 	if snap.found == nil {
-		files, links, seen := outputs.Collect(Steps(snap.msgs), home, featured)
+		files, links, seen := outputs.Collect(Steps(snap.msgs), home)
 		snap.found = &found{files, links, seen}
 	}
 	return snap.found.files, snap.found.links, snap.found.seen, nil

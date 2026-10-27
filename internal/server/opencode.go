@@ -19,7 +19,6 @@ import (
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/outputs"
-	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
 )
 
@@ -111,14 +110,7 @@ func (s *Server) remove(ctx context.Context, id string) error {
 
 func (s *Server) openCodeFound(ctx context.Context, sid string) ([]outputs.File, []outputs.Link, map[string]time.Time, error) {
 	home, _ := os.UserHomeDir()
-	return s.M.OC.Outputs(ctx, sid, home, s.Featured)
-}
-
-func (s *Server) openCodePages(ctx context.Context, x *sessions.Session) {
-	if _, links, _, err := s.openCodeFound(ctx, x.SessionID); err == nil {
-		x.Pages = outputs.Featured(links, s.Featured)
-		s.unfurl.fill(x.Pages, false)
-	}
+	return s.M.OC.Outputs(ctx, sid, home)
 }
 
 func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string) {

@@ -57,7 +57,6 @@ it. Settings go in `~/.config/atc/env`:
 ATC_ADDR=127.0.0.1:7272                 # where to listen
 ATC_CLAUDE_ARGS=--model opus            # extra flags for sessions atc starts
 ATC_ROOTS=/home/you/code:/home/you      # folders whose subfolders are offered for new sessions
-ATC_FEATURED=^https?://pages\.example/     # links matching this go on a session's header, one click to open
 ```
 
 The unit uses `KillMode=process` on purpose. When atc starts Claude Code's background service,
@@ -83,7 +82,7 @@ needs the token either way.
   session however long it is: atc keeps an index of every turn and loads a turn only when you open
   it. What Claude did between your prompt and its reply reads as a short story told in its own
   words, one line per part of the work, with what came out of it as badges: tests passed or
-  failed, commits, pushes, deploys, published pages. Open it for each step: commands with their
+  failed, commits, pushes, deploys, pages it showed you. Open it for each step: commands with their
   output, edits as diffs, screenshots it looked at, pages it searched, agents it started (as their
   own thread), and the questions it asked you with the answer you picked; reading and searching
   steps fold into one "Looked at" line. While a session works, its latest steps stay open with a
@@ -93,7 +92,7 @@ needs the token either way.
   - **Find** (`f`) searches the whole session (prompts, replies, commands, file names) and filters
     to the turns with failures, commits, changed files, deploys or questions.
   - **What this session produced** lists the files it changed (open one for all its edits as one
-    diff), its commits, pushes, deploys, published pages and running servers.
+    diff), its commits, pushes, deploys, the pages it showed you and running servers.
   - The box at the bottom (`r`) writes to the session: Enter sends, Shift+Enter is a new line, and
     a draft is kept per session. Attach files with the clip, by pasting or by dropping them;
     dictate with the mic. A message shows in the transcript the moment you send it, and stays
@@ -331,7 +330,7 @@ Each session has an **Outputs** tab with what it produced, so you can check its 
 - **Files** it wrote, plus images, pages, notes, PDFs and media it mentioned or looked at, with
   previews. Tap one to view it: images, pages (with their stylesheets and scripts, sandboxed),
   rendered Markdown, video and audio, and plain text for code.
-- **Links** it gave in its replies, such as a page it published.
+- **Links** it gave in its replies.
 - **Code it touched**, newest first, readable in place.
 
 Files open through links that are signed for that session and folder and expire after 12 hours,

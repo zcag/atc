@@ -806,8 +806,6 @@ function Meta({ s, quiet }) {
       ${(s.servers || []).slice(0, 2).map((p) => html`<span class="srv" role="link" title=${`Open ${serverURL(s, p)}`} onClick=${(e) => { e.stopPropagation(); openOut(serverURL(s, p)); }}>:${p}</span>`)}
       ${s.shown?.length > 0 && html`<span class="pg shownpg" role="link" title=${s.shown.map((p) => `${pageTitle(p)}  ${pageInfo(p)}`).join("\n")}
         onClick=${(e) => { e.stopPropagation(); location.hash = pageLink(keyOf(s), s.shown[0].name); }}>${ICON.page}<span>${pageTitle(s.shown[0])}</span>${s.shown.length > 1 ? ` +${s.shown.length - 1}` : ""}</span>`}
-      ${s.pages?.length > 0 && html`<span class="pg" role="link" title=${s.pages.map((l) => `${pageLabel(l)}  ${l.url}`).join("\n")}
-        onClick=${(e) => { e.stopPropagation(); openOut(s.pages[0].url); }}><span>${pageLabel(s.pages[0])}</span>${s.pages.length > 1 ? ` +${s.pages.length - 1}` : ""} ↗</span>`}
     </div>`;
 }
 
@@ -938,34 +936,10 @@ function Strip({ s, sel, cursor, size = "full" }) {
   `;
 }
 
-const pageName = (url) => {
-  const u = new URL(url);
-  return decodeURIComponent(u.pathname.replace(/^\/+|\/+$/g, "")) || u.host;
-};
-
-const pageLabel = (l) => l.title || pageName(l.url);
-
-const pageMeta = (l) => `${l.title ? `${pageName(l.url)} · ` : ""}${agoLong(l.at)}`;
-
 function Pic({ src, alt = "", fallback }) {
   const [bad, setBad] = useState(false);
   useEffect(() => setBad(false), [src]);
   return !src || bad ? fallback : html`<img loading="lazy" src=${src} alt=${alt} onError=${() => setBad(true)} />`;
-}
-
-function Shot({ l }) {
-  return html`<span class="shot"><${Pic} src=${l.image} fallback=${html`<i>↗</i>`} /></span>`;
-}
-
-function Published({ links, inline }) {
-  const cls = inline ? "pub inline" : "btn pub";
-  const one = links[0];
-  return html`<span class="pubwrap ${inline ? "inline" : ""}">${links.length === 1
-    ? html`<button class=${cls} onClick=${() => openOut(one.url)}><span>${pageLabel(one)}</span><i>↗</i></button>
-        ${!inline && html`<span class="pubcard" role="tooltip"><${Shot} l=${one} /><b>${pageLabel(one)}</b><small>${one.url.replace(/^https?:\/\//, "")} · ${agoLong(one.at)}</small></span>`}`
-    : html`<${Menu} cls=${cls} left=${inline} aria="Published pages" width=${inline ? "min(320px, calc(100vw - 80px))" : 320} label=${html`<span>${links.length} pages</span><i>▾</i>`}
-        items=${links.map((l) => ({ cls: "pubitem", title: l.url, run: () => openOut(l.url),
-          label: html`<${Shot} l=${l} /><span class="tx"><b>${pageLabel(l)}</b><small>${pageMeta(l)}</small></span>` }))} />`}</span>`;
 }
 
 function Elapsed({ s }) {
@@ -1133,8 +1107,7 @@ function Session({ s, say, live }) {
     return () => { SESSION_API = null; };
   });
   const use = useSessionUsage(s, showUse || s.state === "working" ? 15000 : 90000);
-  const pages = s.pages?.length ? s.pages : outs?.featured || [];
-  const outCount = outs ? outs.servers.length + outs.featured.length + outs.files.filter((f) => f.kind !== "text").length + outs.links.length : 0;
+  const outCount = outs ? outs.servers.length + outs.files.filter((f) => f.kind !== "text").length + outs.links.length : 0;
 
   return html`
     <div class="head">
@@ -1164,10 +1137,8 @@ function Session({ s, say, live }) {
               </span>`}
             </span>`}
           ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first, except where a permission rule says to ask">no permission prompts</span>`}
-          ${pages.length > 0 && html`<${Published} links=${pages} inline />`}
         </div>
       </div>
-      ${pages.length > 0 && html`<${Published} links=${pages} />`}
       ${shown.length > 0 && html`<${PagesButton} list=${shown} open=${openPage} on=${mode === "page"} />`}
       ${VOICE.stt && html`<button class="btn voice-btn ${voice ? "on" : ""} ${canAttach ? "" : "off"}" aria-pressed=${voice}
         onClick=${() => canAttach ? (voice || setMode("chat"), setVoice(!voice))
@@ -2476,8 +2447,8 @@ function useOutputs(s, every) {
   useEffect(() => {
     let live = true;
     const load = () => api(`/api/sessions/${s.sessionId}/outputs`).then(
-      (d) => live && setData({ servers: d.servers || [], featured: d.featured || [], links: d.links || [], files: d.files || [] }),
-      () => live && setData((d) => d || { servers: [], featured: [], links: [], files: [], failed: true }));
+      (d) => live && setData({ servers: d.servers || [], links: d.links || [], files: d.files || [] }),
+      () => live && setData((d) => d || { servers: [], links: [], files: [], failed: true }));
     load();
     const t = setInterval(load, every);
     return () => { live = false; clearInterval(t); };
@@ -2496,7 +2467,7 @@ function Outputs({ s, data, pages = [], open: openPage }) {
   const made = data.files.filter((f) => f.kind !== "text");
   const code = data.files.filter((f) => f.kind === "text");
   const viewable = [...made, ...code];
-  const nothing = !pages.length && !data.servers.length && !data.featured.length && !data.links.length && !data.files.length;
+  const nothing = !pages.length && !data.servers.length && !data.links.length && !data.files.length;
   return html`
     <div class="outputs">
       <div class="inner">
@@ -2518,17 +2489,6 @@ function Outputs({ s, data, pages = [], open: openPage }) {
                 <span class="u">${v.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>
                 <span class="note">${v.localOnly ? `Listens on localhost only, so it opens on ${s.host || "that machine"} itself, not here.` : "Started by this session"}</span>
               </button>`)}
-          </section>`}
-        ${data.featured.length > 0 && html`
-          <section>
-            <h4>Published</h4>
-            <div class="cards">
-              ${data.featured.map((l) => html`<button class="card ${l.kind || "page"}" title=${l.url} onClick=${() => openOut(l.url)}>
-                <div class="pv"><${Pic} src=${l.image} fallback=${l.text ? html`<${Peek} kind=${l.kind} text=${l.text} tsv=${l.url.endsWith(".tsv")} />`
-                  : html`<span class="ext">${l.kind || "page"}</span>`} /></div>
-                <div class="cap"><span class="n">${pageLabel(l)}</span><span class="m">${pageMeta(l)}</span></div>
-              </button>`)}
-            </div>
           </section>`}
         ${made.length > 0 && html`
           <section>
@@ -3072,7 +3032,7 @@ function squash(badges) {
   if (build && !build.ok) out.push(build);
   for (const b of badges) {
     if (b.kind === "test" || b.kind === "build") continue;
-    const key = b.kind + (b.kind === "commit" ? b.ref : b.kind === "publish" ? b.ref : b.text + (b.ref || ""));
+    const key = b.kind + (b.kind === "commit" ? b.ref : b.text + (b.ref || ""));
     if (!seen.has(key)) { seen.add(key); out.push(b); }
   }
   return out;
@@ -3084,7 +3044,6 @@ const TX_ICON = {
   commit: () => "M8 2v4M8 10v4M8 6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
   push: () => "M8 13V3M4 7l4-4 4 4",
   deploy: () => "M3 13h10M8 10V2M5 5l3-3 3 3",
-  publish: () => "M6 3H3v10h10v-3M9 3h4v4M13 3L7 9",
   show: () => "M4 2.5h8v11H4zM6.5 6h3M6.5 8.5h3",
 };
 const Ico = ({ d, cls = "" }) => html`<svg class="ico ${cls}" width="14" height="14" viewBox="0 0 16 16" aria-hidden="true"><path d=${d} fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
@@ -3093,7 +3052,7 @@ function BadgeChip({ b }) {
   const label = b.kind === "commit" ? b.text : b.kind === "deploy" ? (b.ok ? `Deployed · ${b.ref}` : b.text) : b.kind === "test" && b.ref ? `${b.text} · ${b.ref}` : b.text;
   const chip = html`<span class="chip ${b.kind} ${b.ok ? "ok" : "bad"}" title=${b.ref || label}><${Ico} d=${TX_ICON[b.kind]?.(b.ok) || ""} />${b.kind === "commit" && html`<code>${b.ref}</code>`}<span class="l">${label}</span></span>`;
   if (b.kind === "show") return html`<span class="chiplink" role="link" onClick=${(e) => { e.stopPropagation(); SESSION_API?.page(b.ref); }}>${chip}</span>`;
-  return b.kind === "publish" && b.ref ? html`<a class="chiplink" href=${b.ref} data-out>${chip}</a>` : chip;
+  return chip;
 }
 const Chips = ({ badges, max = 6 }) => {
   const list = squash(badges || []);
@@ -3414,14 +3373,13 @@ function Prefs({ prefs, set }) {
 }
 
 function Results({ turns, s, bodies, need, go, close }) {
-  const files = new Map(), commits = [], deploys = [], pushes = [], pubs = [];
+  const files = new Map(), commits = [], deploys = [], pushes = [];
   turns.forEach((t, i) => {
     for (const f of t.files || []) { const cur = files.get(f.path) || { path: f.path, add: 0, del: 0, turns: [] }; cur.add += f.add; cur.del += f.del; cur.turns.push(i); files.set(f.path, cur); }
     for (const b of t.badges || []) {
       if (b.kind === "commit") commits.push({ ...b, i });
       if (b.kind === "deploy" && b.ok) deploys.push({ ...b, i });
       if (b.kind === "push" && b.ok) pushes.push({ ...b, i });
-      if (b.kind === "publish" && b.ref) pubs.push({ ...b, i });
     }
   });
   const [file, setFile] = useState(null);
@@ -3430,7 +3388,7 @@ function Results({ turns, s, bodies, need, go, close }) {
   const fileRow = (f) => html`<li><button onClick=${() => setFile(f)}><span class="p"><bdi>${relPath(f.path, s)}</bdi></span><span class="n"><span class="plus">+${f.add}</span>${f.del > 0 && html` <span class="minus">−${f.del}</span>`}</span></button></li>`;
   useEffect(() => { if (file) file.turns.forEach((i) => need(i)); }, [file]);
   const fileEdits = file && file.turns.flatMap((i) => txSteps(bodies[turns[i].from]?.items || []).filter((x) => txKind(x) === "edit" && x.input.file_path === file.path && !x.out?.error).flatMap((x) => x.tool === "Write" ? [{ old: "", new: x.input.content || "" }] : txEdits(x)));
-  const pages = [...(s.pages || []).map((p) => ({ url: p.url, title: p.title })), ...pubs.filter((p) => !(s.pages || []).some((x) => x.url === p.ref)).map((p) => ({ url: p.ref }))];
+  const pages = s.shown || [];
   const sec = (title, n, body) => n > 0 && html`<section><h4>${title}<span>${n}</span></h4>${body}</section>`;
   return html`<div class="pop results" role="dialog" aria-label="What this session produced">
     <div class="pop-head"><b>What this session produced</b><button class="x" onClick=${close} aria-label="Close">✕</button></div>
@@ -3443,14 +3401,14 @@ function Results({ turns, s, bodies, need, go, close }) {
       ${sec("Commits", commits.length, html`<ul class="rlist">${commits.map((c) => html`<li><button onClick=${() => { go(c.i); close(); }}><code>${c.ref}</code><span class="l">${c.text}</span></button></li>`)}</ul>`)}
       ${sec("Pushed", new Set(pushes.map((p) => p.text)).size, html`<ul class="rlist">${[...new Set(pushes.map((p) => p.text))].map((t) => html`<li><span class="l">${t}</span></li>`)}</ul>`)}
       ${sec("Deployed", deploys.length, html`<ul class="rlist">${deploys.map((d) => html`<li><button onClick=${() => { go(d.i); close(); }}><span class="l">${d.ref}</span><span class="n">${txClock(turns[d.i].at)}</span></button></li>`)}</ul>`)}
-      ${sec("Pages", pages.length, html`<ul class="rlist">${pages.map((p) => html`<li><a href=${p.url} data-out><span class="l">${p.title || hostOf(p.url)}</span></a></li>`)}</ul>`)}
+      ${sec("Pages", pages.length, html`<ul class="rlist">${pages.map((p) => html`<li><button onClick=${() => { SESSION_API?.page(p.name); close(); }}><span class="l">${pageTitle(p)}</span><span class="n">${agoLong(p.updated || p.shown)}</span></button></li>`)}</ul>`)}
       ${sec("Running", (s.servers || []).length, html`<ul class="rlist">${(s.servers || []).map((p) => html`<li><a href=${serverURL(s, p)} data-out><span class="l">:${p}</span></a></li>`)}</ul>`)}
       ${!files.size && !commits.length && !deploys.length && !pages.length && html`<p class="cont">Nothing yet: no files changed, commits, deploys or pages.</p>`}
     `}
   </div>`;
 }
 
-const TX_FILTERS = [["failed", "Failures", (t) => t.failed > 0], ["commit", "Commits", (t) => (t.badges || []).some((b) => b.kind === "commit")], ["files", "Changed files", (t) => (t.files || []).length > 0], ["deploy", "Deploys", (t) => (t.badges || []).some((b) => b.kind === "deploy" || b.kind === "publish")], ["asks", "Questions", (t) => t.asks > 0]];
+const TX_FILTERS = [["failed", "Failures", (t) => t.failed > 0], ["commit", "Commits", (t) => (t.badges || []).some((b) => b.kind === "commit")], ["files", "Changed files", (t) => (t.files || []).length > 0], ["deploy", "Deploys", (t) => (t.badges || []).some((b) => b.kind === "deploy")], ["asks", "Questions", (t) => t.asks > 0]];
 
 function Find({ turns, s, go, close, init }) {
   const [q, setQ] = useState(init || "");
@@ -4020,7 +3978,7 @@ function Lapse({ a, b }) {
   return html`<div class="lapse"><span>${newDay ? txDay(b.at) : `${txSpan(gap).replace(/ \d+s$/, "")} later`}</span></div>`;
 }
 
-const shipped = (t) => (t.badges || []).some((b) => b.ok && (b.kind === "commit" || b.kind === "push" || b.kind === "deploy" || b.kind === "publish"));
+const shipped = (t) => (t.badges || []).some((b) => b.ok && (b.kind === "commit" || b.kind === "push" || b.kind === "deploy"));
 const Node = ({ t, live }) => html`<span class="node ${shipped(t) ? "ship" : ""} ${live ? "live" : ""}" aria-hidden="true"><span class="node-t">${txClock(t.at)}</span></span>`;
 
 const lastAt = (body) => (body?.items || []).map((it) => it.out?.time || it.time).filter(Boolean).sort().pop();

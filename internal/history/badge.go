@@ -17,7 +17,6 @@ var (
 	testCmd    = regexp.MustCompile(`\b(go test|(npm|pnpm|yarn|bun)( run)? test|pytest|cargo test|make test|vitest|jest|rspec|rails test|gradle\w* test|\./gradlew test)\b`)
 	buildCmd   = regexp.MustCompile(`\b(go build|(npm|pnpm|yarn|bun) run build|make build|cargo build|tsc\b|gradle\w* assemble|make android)\b`)
 	deployCmd  = regexp.MustCompile(`\b(make install(-\w+)?|systemctl (--user )?(restart|reload)|docker compose up|kubectl (apply|rollout)|make deploy\S*|deploy-\w+|make android-publish)\b`)
-	publishCmd = regexp.MustCompile(`\bpublish-cmd\b`)
 	showCmd    = regexp.MustCompile(`\batc show\b`)
 	showLine   = regexp.MustCompile(`(?m)^(?:Showing|Updated) "(.*)" \(([^)]+)\) in atc`)
 	commitLine = regexp.MustCompile(`(?m)^\[([^\s\]]+)(?: \(root-commit\))? ([0-9a-f]{7,40})\] (.+)$`)
@@ -82,11 +81,6 @@ func classify(m Message) (*Badge, bool) {
 		if sm := showLine.FindStringSubmatch(out); sm != nil {
 			return &Badge{Kind: "show", OK: true, Text: sm[1], Ref: sm[2]}, false
 		}
-	case publishCmd.MatchString(cmd):
-		if failed {
-			return &Badge{Kind: "publish", Text: "Publish failed"}, false
-		}
-		return &Badge{Kind: "publish", OK: true, Text: "Published", Ref: strings.TrimSpace(firstURL.FindString(out))}, false
 	case deployCmd.MatchString(cmd):
 		what := deployCmd.FindString(cmd)
 		if failed {

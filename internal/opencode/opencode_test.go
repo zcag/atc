@@ -66,12 +66,12 @@ func TestMessages(t *testing.T) {
 
 func TestStepsFeedOutputs(t *testing.T) {
 	_, ms := decode(t)
-	_, links, ports := outputs.Collect(Steps(ms), "/home/u", nil)
+	_, links, ports := outputs.Collect(Steps(ms), "/home/u")
 	if _, ok := ports["8123"]; !ok {
 		t.Fatalf("server port not seen: %v", ports)
 	}
 	if len(links) != 0 {
-		t.Fatalf("tool output links need a featured match: %v", links)
+		t.Fatalf("tool output gives no links: %v", links)
 	}
 	steps := Steps(ms)
 	if steps[1].Tool != "Write" || steps[1].Path != "/home/u/app/shot.png" {

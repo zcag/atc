@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -54,7 +53,6 @@ type Server struct {
 
 	TrustTailnet   string
 	TrustedProxies *Proxies
-	Featured       *regexp.Regexp
 	tailnet        *tailnet
 
 	fleet   *fleet
@@ -63,7 +61,6 @@ type Server struct {
 	scanner outputs.Scanner
 	stats   usage.Scanner
 	limits  usage.LimitsClient
-	unfurl  unfurler
 
 	mu    sync.Mutex
 	subs  map[chan []byte]bool
@@ -131,7 +128,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/termlog", s.termLog)
 	mux.HandleFunc("GET /api/presence", s.presenceGet)
 	mux.HandleFunc("GET /api/sessions/{sid}/outputs", s.outputs)
-	mux.HandleFunc("GET /api/page-image", s.pageImage)
 	mux.HandleFunc("GET /api/sessions/{sid}/usage", s.sessionUsage)
 	mux.HandleFunc("GET /api/usage/limits", s.usageLimits)
 	mux.HandleFunc("GET /api/usage/windows", s.usageWindows)
@@ -439,22 +435,8 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 	if err != nil {
 		return nil, err
 	}
-	paths := map[string]string{}
-	if s.Featured != nil {
-		for _, t := range s.M.Index.Scan() {
-			paths[t.SessionID] = t.Path
-		}
-	}
-	home, _ := os.UserHomeDir()
 	for i := range list {
 		list[i].Host = s.Host
-		if s.Featured != nil && list[i].Harness == opencode.Harness {
-			s.openCodePages(ctx, &list[i])
-		}
-		if p := paths[list[i].SessionID]; p != "" {
-			list[i].Pages = s.scanner.Matching(p, home, s.Featured)
-			s.unfurl.fill(list[i].Pages, false)
-		}
 		if list[i].PID > 0 {
 			for _, l := range s.M.Ports.Of(list[i].PID) {
 				if !l.LocalOnly {

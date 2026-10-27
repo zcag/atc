@@ -3,17 +3,15 @@ package outputs
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"testing"
 )
 
-func TestFeaturedFromToolResults(t *testing.T) {
+func TestToolResultsGiveNoLinks(t *testing.T) {
 	tr := filepath.Join(t.TempDir(), "t.jsonl")
-	os.WriteFile(tr, []byte(`{"type":"user","timestamp":"2026-10-01T10:02:00Z","message":{"content":[{"type":"tool_result","content":"fetched https://docs.example.com/x\n  http://pages.example/report\nconst u = \"http://pages.example/fixture\"\necho http://pages.example/$name"}]}}
+	os.WriteFile(tr, []byte(`{"type":"user","timestamp":"2026-10-01T10:02:00Z","message":{"content":[{"type":"tool_result","content":"fetched https://docs.example.com/x\n  http://pages.example/report"}]}}
 `), 0o644)
 	var s Scanner
-	_, links, _ := s.Scan(tr, t.TempDir(), regexp.MustCompile(`^http://pages\.example/`))
-	if len(links) != 1 || links[0].URL != "http://pages.example/report" {
+	if _, links, _ := s.Scan(tr, t.TempDir()); len(links) != 0 {
 		t.Errorf("links %v", links)
 	}
 }
@@ -31,7 +29,7 @@ func TestScan(t *testing.T) {
 `
 	os.WriteFile(tr, []byte(lines), 0o644)
 	var s Scanner
-	files, links, ports := s.Scan(tr, home, nil)
+	files, links, ports := s.Scan(tr, home)
 	got := map[string]string{}
 	for _, f := range files {
 		got[filepath.Base(f.Path)] = f.Op + " " + f.Kind
@@ -53,7 +51,7 @@ func TestScan(t *testing.T) {
 	}
 	os.WriteFile(tr, []byte(lines+`{"type":"assistant","timestamp":"2026-10-01T10:04:00Z","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"`+home+`/report.md"}}]}}
 `), 0o644)
-	files, _, _ = s.Scan(tr, home, nil)
+	files, _, _ = s.Scan(tr, home)
 	if files[0].Op != "edited" || filepath.Base(files[0].Path) != "report.md" {
 		t.Errorf("incremental rescan: %+v", files[0])
 	}

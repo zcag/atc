@@ -22,11 +22,10 @@ type File struct {
 }
 
 type Outputs struct {
-	Pages    []pages.Page   `json:"pages"`
-	Servers  []Server       `json:"servers"`
-	Featured []outputs.Link `json:"featured"`
-	Links    []outputs.Link `json:"links"`
-	Files    []File         `json:"files"`
+	Pages   []pages.Page   `json:"pages"`
+	Servers []Server       `json:"servers"`
+	Links   []outputs.Link `json:"links"`
+	Files   []File         `json:"files"`
 }
 
 func (c *Client) Outputs(sid string) (o Outputs, err error) {
