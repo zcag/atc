@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -70,6 +72,7 @@ type Server struct {
 	shown map[string]time.Time
 	held  map[string]held
 
+	web        string
 	widgetSent string
 	widgetAt   time.Time
 }
@@ -80,6 +83,7 @@ func (s *Server) Handler() http.Handler {
 	if s.TrustTailnet != "" {
 		s.tailnet = &tailnet{bin: s.TrustTailnet}
 	}
+	s.web = webVersion(s.Web)
 	s.fleet = &fleet{peers: s.Peers, client: &http.Client{}, owner: map[string]string{}, status: map[string]string{}, views: map[string]int{}}
 	s.kick = make(chan struct{}, 1)
 	if s.Pages == nil {
@@ -213,7 +217,20 @@ func (s *Server) me() map[string]any {
 		hosts = append(hosts, p.Name)
 	}
 	return map[string]any{"host": s.Host, "home": home, "claudeTheme": theme, "hosts": hosts, "peers": s.fleet.statuses(),
-		"voice": map[string]bool{"stt": s.Voice.STT != "", "tts": s.Voice.TTS != "", "condense": s.Voice.LLM != ""}}
+		"voice": map[string]bool{"stt": s.Voice.STT != "", "tts": s.Voice.TTS != "", "condense": s.Voice.LLM != ""}, "web": s.web}
+}
+
+func webVersion(web fs.FS) string {
+	h := sha256.New()
+	fs.WalkDir(web, ".", func(p string, d fs.DirEntry, err error) error {
+		if err == nil && !d.IsDir() {
+			b, _ := fs.ReadFile(web, p)
+			fmt.Fprintf(h, "%s %d\n", p, len(b))
+			h.Write(b)
+		}
+		return nil
+	})
+	return hex.EncodeToString(h.Sum(nil))[:12]
 }
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {

@@ -89,6 +89,7 @@ function useNow(ms) {
 const APP = window.AtcApp || null;
 const APP_VERSION = +((navigator.userAgent.match(/AtcApp\/(\d+)/) || [])[1] || 0);
 let AUTO_VOICE = false, AUTO_PANE = null;
+const WEB = { at: null, fresh: false, shown: Date.now() };
 let appSent = "";
 const FEED_STATES = ["needs-you", "your-turn", "working"];
 
@@ -121,11 +122,25 @@ function App() {
   useNow(30000);
 
   useEffect(() => {
-    const load = () => api("/api/me").then(setMe, (e) => setMe((m) => (e.auth ? null : m || { host: "" })));
+    const load = () => api("/api/me").then((m) => { setMe(m); newWeb(m.web); }, (e) => setMe((m) => (e.auth ? null : m || { host: "" })));
     load();
     const t = setInterval(load, 20000);
-    return () => clearInterval(t);
+    const back = () => {
+      if (document.visibilityState !== "visible") return;
+      if (WEB.fresh) return location.reload();
+      WEB.shown = Date.now();
+      load();
+    };
+    addEventListener("visibilitychange", back);
+    return () => { clearInterval(t); removeEventListener("visibilitychange", back); };
   }, []);
+  const [updated, setUpdated] = useState(false);
+  const newWeb = (v) => {
+    if (!v || v === (WEB.at ||= v)) return;
+    WEB.fresh = true;
+    if (document.visibilityState !== "visible" || Date.now() - WEB.shown < 3000) location.reload();
+    else setUpdated(true);
+  };
 
   useEffect(() => {
     if (!me) return;
@@ -361,10 +376,15 @@ function App() {
     ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
-    ${notifAsk && me && html`<div class="appbar" role="status">
+    ${notifAsk && me && !updated && html`<div class="appbar" role="status">
       <span>Get a desktop notification when a session finishes or needs you, while this tab is in the background?</span>
       <button class="btn primary" onClick=${() => notifDone(true)}>Turn on</button>
       <button class="btn" onClick=${() => notifDone(false)}>Not now</button>
+    </div>`}
+    ${updated && html`<div class="appbar" role="status">
+      <span>atc was updated. Reload to get the new version.</span>
+      <button class="btn primary" onClick=${() => location.reload()}>Reload</button>
+      <button class="icon" aria-label="Dismiss" onClick=${() => setUpdated(false)}>✕</button>
     </div>`}
     ${stale && html`<div class="appbar" role="status">
       <span>A newer atc app is available (${stale}).</span>
