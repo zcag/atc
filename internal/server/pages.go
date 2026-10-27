@@ -1,12 +1,17 @@
 package server
 
 import (
+	"bytes"
 	"cmp"
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -34,7 +39,10 @@ func (s *Server) sessionPages(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
-	var req struct{ Path, Name, Title, Note string }
+	var req struct {
+		Path, Name, Title, Note string
+		Actions                 map[string][]string
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !filepath.IsAbs(req.Path) {
 		http.Error(w, "path must be absolute", http.StatusBadRequest)
 		return
@@ -52,7 +60,13 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "give the page a name with letters or digits", http.StatusBadRequest)
 		return
 	}
-	p, created, err := s.Pages.Show(pages.Page{Session: r.PathValue("sid"), Name: name, Title: strings.TrimSpace(req.Title), Path: target, Note: strings.TrimSpace(req.Note), Shown: time.Now()})
+	for a, argv := range req.Actions {
+		if a == "" || len(argv) == 0 {
+			http.Error(w, "an action needs a name and a command: --action name='command'", http.StatusBadRequest)
+			return
+		}
+	}
+	p, created, err := s.Pages.Show(pages.Page{Session: r.PathValue("sid"), Name: name, Title: strings.TrimSpace(req.Title), Path: target, Note: strings.TrimSpace(req.Note), Shown: time.Now(), Actions: req.Actions})
 	if err != nil {
 		fail(w, err)
 		return
@@ -100,6 +114,59 @@ func (s *Server) pageState(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, map[string]string{"ok": "saved"})
+}
+
+const (
+	runTimeout = 30 * time.Second
+	runOutput  = 256 << 10
+)
+
+func (s *Server) runAction(w http.ResponseWriter, r *http.Request) {
+	sid, name := r.PathValue("sid"), r.PathValue("name")
+	var req struct {
+		Action string
+		Args   []string
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&req); err != nil {
+		http.Error(w, "send {action, args}: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	p, ok := s.Pages.Get(sid, name)
+	if !ok {
+		http.Error(w, "no page named "+name, http.StatusNotFound)
+		return
+	}
+	argv, ok := p.Actions[req.Action]
+	if !ok {
+		http.Error(w, fmt.Sprintf("page %s has no action %q; declare it with atc show --action %s='command'", name, req.Action, cmp.Or(req.Action, "name")), http.StatusNotFound)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), runTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, argv[0], append(argv[1:len(argv):len(argv)], req.Args...)...)
+	cmd.Dir, cmd.WaitDelay = filepath.Dir(p.Path), 2*time.Second
+	var out, errb capped
+	cmd.Stdout, cmd.Stderr = &out, &errb
+	err := cmd.Run()
+	code := cmd.ProcessState.ExitCode()
+	if ctx.Err() == context.DeadlineExceeded {
+		errb.Write([]byte("\natc: stopped after " + runTimeout.String()))
+	} else if err != nil && code == -1 {
+		errb.Write([]byte(err.Error()))
+	}
+	log.Printf("page %s/%s: ran %s with %d args, exit %d", sid[:min(8, len(sid))], name, req.Action, len(req.Args), code)
+	reply(w, map[string]any{"code": code, "stdout": out.String(), "stderr": errb.String()})
+}
+
+type capped struct{ bytes.Buffer }
+
+func (c *capped) Write(b []byte) (int, error) {
+	if room := runOutput - c.Len(); room < len(b) {
+		c.Buffer.Write(b[:max(room, 0)])
+	} else {
+		c.Buffer.Write(b)
+	}
+	return len(b), nil
 }
 
 func (s *Server) allPages(w http.ResponseWriter, r *http.Request) {

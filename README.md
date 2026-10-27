@@ -314,6 +314,13 @@ An agent shows you something to look at (a report, a handover, a diagram, a scre
   the session after you confirm it; `atc.copy(text)` copies, in the browser and the app. Links to
   other sites open outside atc. Outside atc the same calls fall back to localStorage and the
   clipboard.
+- **Actions.** `atc show mail.html --action mark-read='mail-cli markread'` lets the page run that
+  command: `atc.run("mark-read", [id])` runs `mail-cli markread <id>` on the page's machine, in
+  its folder, for up to 30 seconds, and gives back `{code, stdout, stderr}`. Only whoever shows
+  the page declares actions; showing it again replaces them. The command is split on spaces, and
+  the page's args are passed as separate arguments without a shell, so `;` or `$(...)` in them is
+  just text. Pages show text nobody vetted (mail, web pages), so declare only commands that are
+  safe to run with any args. Each run is logged with the session, page, action and exit code.
 
 A folder shows its `index.html`, with the files beside it loading by relative path. HTML, images,
 Markdown, PDF, CSV/TSV, video and audio render. Pages run sandboxed, away from atc's own login.
