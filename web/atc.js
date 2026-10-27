@@ -36,8 +36,23 @@
     t.remove();
     return ok ? Promise.resolve() : Promise.reject(new Error("copy failed"));
   };
+  let shown;
+  const toast = (text, label, fn, ms = 4000) => {
+    shown && shown.remove();
+    const t = shown = Object.assign(document.createElement("div"), { className: "toast", role: "status" });
+    t.append(String(text));
+    const end = () => { t.classList.add("out"); setTimeout(() => t.remove(), 200); if (shown === t) shown = null; };
+    if (label && fn) {
+      const b = Object.assign(document.createElement("button"), { textContent: label });
+      b.onclick = () => { clearTimeout(t.timer); end(); fn(); };
+      t.append(b);
+    }
+    t.timer = setTimeout(end, ms);
+    document.body.append(t);
+  };
   window.atc = {
     inAtc,
+    toast,
     state: {
       get: () => (inAtc ? ask("state.get") : Promise.resolve(local.get())),
       set: (v) => (inAtc ? ask("state.set", v) : Promise.resolve(local.set(v))),

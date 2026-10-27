@@ -277,6 +277,9 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 func (s *Server) static() http.Handler {
 	files := http.FileServerFS(s.Web)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/vendor/fonts/") {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 		if strings.HasPrefix(r.URL.Path, "/vendor/") {
 			w.Header().Set("Cache-Control", "public, max-age=86400")
 		} else {

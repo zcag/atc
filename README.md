@@ -360,6 +360,11 @@ An agent shows you something to look at (a report, a handover, a diagram, a scre
   a note to the session after you confirm it; `atc.copy(text)` copies, in the browser and the app.
   Links to other sites open outside atc. Outside atc the same calls fall back to localStorage and
   the clipboard.
+- **Looking like atc.** A page that links `/atc.css` gets atc's fonts, colors (light and dark)
+  and a small kit: page header, section headers with counts, cards with a colored edge, list
+  rows, buttons, pills, link chips, calm callouts, empty and all-clear states, loading
+  skeletons and a sticky action bar for phones. `atc.toast(text, label, fn)` shows a toast with
+  an optional button such as Undo. `atc show -h` lists the class names.
 - **Actions.** `atc show mail.html --action mark-read='mail-cli markread'` lets the page run that
   command: `atc.run("mark-read", [id])` runs `mail-cli markread <id>` on the page's machine, in
   its folder, for up to 30 seconds, and gives back `{code, stdout, stderr}`. Only whoever shows
