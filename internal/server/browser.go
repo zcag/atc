@@ -1,6 +1,10 @@
 package server
 
-import "net/http"
+import (
+	"net/http"
+
+	"github.com/zcag/atc/internal/sessions"
+)
 
 func (s *Server) browserCDP(w http.ResponseWriter, r *http.Request) {
 	if s.Browser == nil {
@@ -10,15 +14,19 @@ func (s *Server) browserCDP(w http.ResponseWriter, r *http.Request) {
 	s.Browser.Proxy(w, r, r.PathValue("sid"))
 }
 
-func (s *Server) browserTabs(w http.ResponseWriter, r *http.Request) {
+func (s *Server) attachTabs(list []sessions.Session) {
 	if s.Browser == nil {
-		reply(w, []any{})
 		return
 	}
-	tabs, err := s.Browser.Tabs(r.Context(), r.PathValue("sid"))
-	if err != nil {
-		fail(w, err)
+	for i := range list {
+		list[i].Tabs = s.Browser.Of(list[i].SessionID)
+	}
+}
+
+func (s *Server) browserView(w http.ResponseWriter, r *http.Request) {
+	if s.Browser == nil {
+		http.Error(w, s.Host+" has no browser for sessions (ATC_BROWSER)", http.StatusNotFound)
 		return
 	}
-	reply(w, tabs)
+	s.Browser.View(w, r, r.PathValue("sid"), r.PathValue("tab"))
 }

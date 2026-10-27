@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
 	"sync"
 	"time"
 
@@ -200,16 +199,6 @@ func (c *conn) own() *int64 {
 }
 
 func (c *conn) filter(m message) (*message, []message) {
-	keep, extra := c.filter0(m)
-	if keep == nil && debug {
-		log.Printf("DBG %s drop %s sess=%s params=%.200s", c.sid, m.Method, m.SessionID, m.Params)
-	}
-	return keep, extra
-}
-
-var debug = os.Getenv("ATC_BROWSER_DEBUG") != ""
-
-func (c *conn) filter0(m message) (*message, []message) {
 	if m.SessionID != "" && c.hidden[m.SessionID] {
 		return nil, nil
 	}

@@ -319,6 +319,35 @@ A folder shows its `index.html`, with the files beside it loading by relative pa
 Markdown, PDF, CSV/TSV, video and audio render. Pages run sandboxed, away from atc's own login.
 `atc show -h` is the reference agents read; atc's MCP instructions point every agent at it.
 
+## Notify
+
+An agent tells you something with `atc notify <message>` from inside its session: a push that
+opens that session when you tap it. It follows the same rules as a finished turn (no push while
+you are in atc, or the session is open or parked); `--urgent` buzzes regardless, and `--reply TEXT`
+(up to three) adds buttons that send the text back to the session. A session on another machine
+works the same way: its note travels with the session list to the machine your phone is
+registered with.
+
+## A browser for sessions
+
+One Chrome can be shared by every session on a machine, each seeing only its own tabs. Point
+`ATC_BROWSER` at Chrome's debugging address (`ATC_BROWSER=http://127.0.0.1:9222`) and give
+sessions Playwright's MCP server through atc:
+
+```sh
+claude mcp add -s user browser -- atc browser mcp
+```
+
+`atc browser mcp` runs `@playwright/mcp` against atc instead of Chrome. atc relays it as that
+session: tabs the session opens (and popups they open) are its own, every other tab is hidden
+from it, and the profile, so the logins, stay shared. Which session owns which tab is kept in
+`browser.json`.
+
+A session with tabs gets a **Browser** entry next to its pages. It shows the tab live, and you
+can click, scroll, type and go to an address in it, which is how you step in for a login or a
+captcha; on a phone the tab takes the phone's size while you watch, and goes back when you leave.
+Chrome can run headless for this, since atc is the screen.
+
 ## Outputs
 
 Each session has an **Outputs** tab with what it produced, so you can check its work from a phone:

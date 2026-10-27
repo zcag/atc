@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zcag/atc/internal/browser"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/opencode"
@@ -61,6 +62,7 @@ type Session struct {
 	Servers        []int            `json:"servers,omitempty"`
 	Shown          []pages.Page     `json:"shown,omitempty"`
 	Note           *Note            `json:"note,omitempty"`
+	Tabs           []browser.Tab    `json:"tabs,omitempty"`
 	Pinned         bool             `json:"pinned,omitempty"`
 	Parked         bool             `json:"parked,omitempty"`
 }

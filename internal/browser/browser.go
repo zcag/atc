@@ -18,11 +18,21 @@ type Browser struct {
 	Endpoint string
 	path     string
 	mu       sync.Mutex
-	owner    map[string]string
+	owner    map[string]owned
+
+	cmu      sync.Mutex
+	cached   map[string][]Tab
+	cachedAt time.Time
+	loading  bool
+}
+
+type owned struct {
+	Session string    `json:"session"`
+	At      time.Time `json:"at"`
 }
 
 func Open(endpoint, path string) (*Browser, error) {
-	b := &Browser{Endpoint: endpoint, path: path, owner: map[string]string{}}
+	b := &Browser{Endpoint: endpoint, path: path, owner: map[string]owned{}}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return b, nil
@@ -30,22 +40,25 @@ func Open(endpoint, path string) (*Browser, error) {
 	if err != nil {
 		return nil, err
 	}
-	return b, json.Unmarshal(data, &b.owner)
+	if err := json.Unmarshal(data, &b.owner); err != nil {
+		b.owner = map[string]owned{}
+	}
+	return b, nil
 }
 
 func (b *Browser) Owner(target string) string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.owner[target]
+	return b.owner[target].Session
 }
 
 func (b *Browser) claim(target, sid string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.owner[target] == sid {
+	if b.owner[target].Session == sid {
 		return
 	}
-	b.owner[target] = sid
+	b.owner[target] = owned{sid, time.Now()}
 	b.save()
 }
 
@@ -70,9 +83,10 @@ func (b *Browser) save() {
 }
 
 type Tab struct {
-	ID    string `json:"id"`
-	Title string `json:"title"`
-	URL   string `json:"url"`
+	ID     string    `json:"id"`
+	Title  string    `json:"title"`
+	URL    string    `json:"url"`
+	Opened time.Time `json:"opened"`
 }
 
 type listed struct {
@@ -88,28 +102,53 @@ func (b *Browser) list(ctx context.Context) ([]listed, error) {
 	return out, b.get(ctx, "/json/list", &out)
 }
 
-func (b *Browser) Tabs(ctx context.Context, sid string) ([]Tab, error) {
+func (b *Browser) Tabs(ctx context.Context) (map[string][]Tab, error) {
 	all, err := b.list(ctx)
 	if err != nil {
 		return nil, err
 	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	open := map[string]bool{}
-	var tabs []Tab
+	tabs := map[string][]Tab{}
 	for _, t := range all {
 		open[t.ID] = true
-		if t.Type == "page" && b.Owner(t.ID) == sid {
-			tabs = append(tabs, Tab{t.ID, t.Title, t.URL})
+		if o, ok := b.owner[t.ID]; ok && t.Type == "page" {
+			tabs[o.Session] = append(tabs[o.Session], Tab{t.ID, t.Title, t.URL, o.At})
 		}
 	}
-	b.mu.Lock()
+	gone := false
 	for id := range b.owner {
 		if !open[id] {
 			delete(b.owner, id)
+			gone = true
 		}
 	}
-	b.save()
-	b.mu.Unlock()
+	if gone {
+		b.save()
+	}
 	return tabs, nil
+}
+
+// Of is the session's tabs as of the last look, never waiting on Chrome; a stale
+// answer starts a new look in the background.
+func (b *Browser) Of(sid string) []Tab {
+	b.cmu.Lock()
+	defer b.cmu.Unlock()
+	if !b.loading && time.Since(b.cachedAt) > time.Second {
+		b.loading = true
+		go func() {
+			tabs, err := b.Tabs(context.Background())
+			b.cmu.Lock()
+			defer b.cmu.Unlock()
+			b.loading, b.cachedAt = false, time.Now()
+			if err != nil {
+				tabs = nil
+			}
+			b.cached = tabs
+		}()
+	}
+	return b.cached[sid]
 }
 
 func (b *Browser) wsURL(ctx context.Context) (string, error) {

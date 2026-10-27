@@ -150,7 +150,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/pages", s.allPages)
 	mux.HandleFunc("POST /api/sessions/{sid}/notify", s.postNote)
 	mux.HandleFunc("GET /api/browser/{sid}/cdp", s.browserCDP)
-	mux.HandleFunc("GET /api/sessions/{sid}/tabs", s.browserTabs)
+	mux.HandleFunc("GET /api/sessions/{sid}/tabs/{tab}/view", s.browserView)
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) {
 		s.nameViewer(r)
 		s.Term.Serve(w, r, r.PathValue("id"))
@@ -471,6 +471,7 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 	}
 	s.attachPages(list)
 	s.notes.attach(list)
+	s.attachTabs(list)
 	if localOnly || len(s.Peers) == 0 {
 		return list, nil
 	}

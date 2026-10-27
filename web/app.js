@@ -1032,7 +1032,8 @@ function sessionActions(s, say, { rename, open, after } = {}) {
   if (!s.attachable && s.kind !== "interactive")
     items.push({ label: "Resume", run: run(() => api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" }), (r) => go(r.id)) });
   if (s.id)
-    items.push({ label: "Delete", danger: true, run: run(() => confirm(`Delete "${s.title}"? Its conversation stays in history.`) ? api(`/api/sessions/${s.id}`, { method: "DELETE" }) : null) });
+    items.push({ label: "Delete", danger: true, run: run(() => confirm(`Delete "${s.title}"? Its conversation stays in history.`) ? api(`/api/sessions/${s.id}`, { method: "DELETE" }) : null,
+      (r) => r && [s.id, s.sessionId].some((k) => location.hash.startsWith(`#/s/${k}`)) && location.replace("#/")) });
   return items;
 }
 
@@ -2476,7 +2477,7 @@ function useOutputs(s, every) {
 }
 
 const agoLong = (at) => { const a = ago({ updated: at }); return a === "now" ? "just now" : a ? `${a} ago` : ""; };
-const KIND_LABEL = { table: "Table", image: "Image", html: "Page", markdown: "Notes", pdf: "PDF", video: "Video", audio: "Audio", text: "File" };
+const KIND_LABEL = { browser: "Browser", table: "Table", image: "Image", html: "Page", markdown: "Notes", pdf: "PDF", video: "Video", audio: "Audio", text: "File" };
 const baseName = (p) => p.split("/").pop();
 const dirName = (p) => tilde(p.slice(0, p.lastIndexOf("/")) || "/");
 
@@ -2672,7 +2673,9 @@ function usePages(s) {
     const t = setInterval(load, 10000);
     return () => { live = false; clearInterval(t); };
   }, [s.sessionId, past]);
-  return past ? got || [] : s.shown || [];
+  const list = past ? got || [] : s.shown || [];
+  const b = browserPage(s);
+  return b ? [b, ...list] : list;
 }
 
 async function takeDown(p, say) {
@@ -2719,8 +2722,159 @@ function PageFrame({ p, onSend, say }) {
 }
 
 function PageBody({ p, onSend, say }) {
+  if (p.kind === "browser") return html`<${BrowserView} p=${p} say=${say} />`;
   if (p.gone) return html`<div class="fbody"><div class="none"><p>The file behind this page is gone.</p><p class="sub">${tilde(p.path)}</p></div></div>`;
   return html`<${FileBody} f=${{ ...p, url: pageSrc(p) }} frame=${p.kind === "html" && html`<${PageFrame} key=${pkey(p)} p=${p} onSend=${onSend} say=${say} />`} />`;
+}
+
+const BROWSER_KEYS = { Enter: 13, Backspace: 8, Tab: 9, Escape: 27, Delete: 46, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Home: 36, End: 35, PageUp: 33, PageDown: 34 };
+const mods = (e) => (e.altKey ? 1 : 0) | (e.ctrlKey ? 2 : 0) | (e.metaKey ? 4 : 0) | (e.shiftKey ? 8 : 0);
+
+function browserPage(s) {
+  const tabs = s.tabs || [];
+  if (!tabs.length) return null;
+  const at = tabs.reduce((m, t) => (t.opened > m ? t.opened : m), "");
+  return { session: s.sessionId, name: "browser", title: tabs.length > 1 ? `Browser · ${tabs.length} tabs` : "Browser", kind: "browser", path: "", shown: at, updated: at, tabs };
+}
+
+function useTab(sid, tab, stage) {
+  const [frame, setFrame] = useState(null);
+  const [info, setInfo] = useState(null);
+  const [gone, setGone] = useState(false);
+  const sock = useRef(null);
+  const calls = useRef({ n: 0, wait: {} });
+  useEffect(() => {
+    if (!tab) return;
+    let live = true, ws, retry;
+    setFrame(null); setInfo(null); setGone(false);
+    const open = () => {
+      const proto = location.protocol === "https:" ? "wss:" : "ws:";
+      ws = new WebSocket(`${proto}//${location.host}/api/sessions/${sid}/tabs/${tab}/view`);
+      sock.current = ws;
+      ws.onopen = start;
+      ws.onmessage = (e) => {
+        const m = JSON.parse(e.data);
+        if (m.t === "frame") setFrame(m);
+        else if (m.t === "info") setInfo({ title: m.title, url: m.url });
+        else if (m.t === "gone") { live = false; setGone(true); }
+        else if (m.t === "r") { const f = calls.current.wait[m.id]; delete calls.current.wait[m.id]; f && f(m); }
+      };
+      ws.onclose = () => { if (live) retry = setTimeout(open, 1000); };
+    };
+    const start = () => {
+      const box = stage.current?.getBoundingClientRect(), dpr = devicePixelRatio || 1;
+      const cw = Math.round(box?.width || 800), ch = Math.round(box?.height || 600);
+      if (PHONE.matches) send("Emulation.setDeviceMetricsOverride", { width: cw, height: ch, deviceScaleFactor: dpr, mobile: true });
+      send("Page.startScreencast", { format: "jpeg", quality: 70, maxWidth: Math.min(1600, cw * dpr), maxHeight: Math.min(1600, ch * dpr), everyNthFrame: 1 });
+    };
+    let resized;
+    const ro = new ResizeObserver(() => { clearTimeout(resized); resized = setTimeout(() => sock.current?.readyState === 1 && start(), 300); });
+    stage.current && ro.observe(stage.current);
+    open();
+    return () => { live = false; clearTimeout(retry); clearTimeout(resized); ro.disconnect(); ws && ws.close(); sock.current = null; };
+  }, [sid, tab]);
+  const send = useCallback((m, p) => new Promise((done) => {
+    const ws = sock.current;
+    if (!ws || ws.readyState !== 1) return done({ e: "not connected" });
+    const id = ++calls.current.n;
+    calls.current.wait[id] = done;
+    ws.send(JSON.stringify({ id, m, p }));
+  }), []);
+  return { frame, info, gone, send };
+}
+
+function BrowserView({ p, say }) {
+  const tabs = p.tabs || [];
+  const [cur, setCur] = useState(null);
+  const tab = tabs.find((t) => t.id === cur) || tabs.reduce((a, t) => (!a || t.opened > a.opened ? t : a), null);
+  const known = useRef(null);
+  useEffect(() => {
+    const ids = tabs.map((t) => t.id), fresh = known.current && ids.find((id) => !known.current.includes(id));
+    known.current = ids;
+    fresh && setCur(fresh);
+  }, [tabs.map((t) => t.id).join()]);
+  const stage = useRef(), img = useRef(), keys = useRef(), drag = useRef(null);
+  const { frame, info, gone, send } = useTab(p.session, tab?.id, stage);
+  const url = info?.url ?? tab?.url ?? "";
+  const [typed, setTyped] = useState(null);
+  const at = (e) => {
+    const r = img.current.getBoundingClientRect(), meta = frame.meta;
+    return { x: ((e.clientX - r.left) * meta.deviceWidth) / r.width, y: ((e.clientY - r.top) * meta.deviceHeight) / r.height };
+  };
+  const mouse = (type, e, extra = {}) => frame && send("Input.dispatchMouseEvent", { type, ...at(e), modifiers: mods(e), ...extra });
+  const down = (e) => {
+    if (!frame) return;
+    if (e.pointerType === "touch") { drag.current = { x: e.clientX, y: e.clientY, moved: false }; return; }
+    keys.current?.focus({ preventScroll: true });
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const button = ["left", "middle", "right"][e.button] || "left";
+    mouse("mouseMoved", e);
+    mouse("mousePressed", e, { button, buttons: e.buttons, clickCount: e.detail || 1 });
+  };
+  const move = (e) => {
+    const d = drag.current;
+    if (e.pointerType === "touch") {
+      if (!d) return;
+      const dx = d.x - e.clientX, dy = d.y - e.clientY;
+      if (!d.moved && Math.hypot(dx, dy) < 8) return;
+      d.moved = true; d.x = e.clientX; d.y = e.clientY;
+      const k = frame.meta.deviceWidth / img.current.getBoundingClientRect().width;
+      return mouse("mouseWheel", e, { deltaX: dx * k, deltaY: dy * k });
+    }
+    if (e.buttons || (e.timeStamp - (move.last || 0) > 60)) { move.last = e.timeStamp; mouse("mouseMoved", e, { buttons: e.buttons, button: e.buttons ? "left" : "none" }); }
+  };
+  const up = (e) => {
+    if (e.pointerType === "touch") {
+      const d = drag.current;
+      drag.current = null;
+      if (d && !d.moved) { mouse("mouseMoved", e); mouse("mousePressed", e, { button: "left", buttons: 1, clickCount: 1 }); mouse("mouseReleased", e, { button: "left", clickCount: 1 }); }
+      return;
+    }
+    mouse("mouseReleased", e, { button: ["left", "middle", "right"][e.button] || "left", clickCount: e.detail || 1 });
+  };
+  const wheel = (e) => { e.preventDefault(); mouse("mouseWheel", e, { deltaX: e.deltaX, deltaY: e.deltaY }); };
+  const key = (e) => {
+    const code = BROWSER_KEYS[e.key];
+    const combo = (e.ctrlKey || e.metaKey) && e.key.length === 1;
+    if (!code && !combo) return;
+    e.preventDefault();
+    const base = { key: e.key, code: e.code, windowsVirtualKeyCode: code || e.key.toUpperCase().charCodeAt(0), modifiers: mods(e) };
+    send("Input.dispatchKeyEvent", { type: "keyDown", ...base, ...(e.key === "Enter" ? { text: "\r" } : {}) });
+    send("Input.dispatchKeyEvent", { type: "keyUp", ...base });
+  };
+  const text = (e) => { const t = e.target.value; e.target.value = ""; t && send("Input.insertText", { text: t }); };
+  const nav = async (step) => {
+    const r = await send("Page.getNavigationHistory");
+    const h = r.r, entry = h && h.entries[h.currentIndex + step];
+    entry && send("Page.navigateToHistoryEntry", { entryId: entry.id });
+  };
+  const go = (e) => {
+    e.preventDefault();
+    let u = (typed ?? url).trim();
+    if (!u) return;
+    if (!/^[a-z]+:/i.test(u)) u = (/^[^\s]+\.[^\s]+$/.test(u) ? "https://" : "https://www.google.com/search?q=") + (u.includes(".") ? u : encodeURIComponent(u));
+    setTyped(null);
+    send("Page.navigate", { url: u }).then((r) => r.e && say(r.e));
+  };
+  if (!tab) return html`<div class="fbody"><div class="none"><p>This session has no tabs open.</p></div></div>`;
+  return html`
+    <div class="bview">
+      ${tabs.length > 1 && html`<div class="btabs" role="tablist">${tabs.map((t) => html`<button role="tab" aria-selected=${t === tab} class="ptab ${t === tab ? "on" : ""}" title=${t.url} onClick=${() => setCur(t.id)}><span>${t.title || t.url || "New tab"}</span></button>`)}</div>`}
+      <form class="bbar" onSubmit=${go}>
+        <button type="button" class="icon" title="Back" aria-label="Back" onClick=${() => nav(-1)}>←</button>
+        <button type="button" class="icon wide" title="Forward" aria-label="Forward" onClick=${() => nav(1)}>→</button>
+        <button type="button" class="icon" title="Reload" aria-label="Reload" onClick=${() => send("Page.reload")}>⟳</button>
+        <input class="burl" value=${typed ?? url} onInput=${(e) => setTyped(e.target.value)} onFocus=${(e) => e.target.select()} onBlur=${() => setTyped(null)} spellcheck="false" autocapitalize="off" enterkeyhint="go" aria-label="Address" />
+        <button type="button" class="icon" title="Type into the page" aria-label="Keyboard" onClick=${() => keys.current?.focus()}>⌨</button>
+      </form>
+      <div class="bstage" ref=${stage}>
+        ${frame
+          ? html`<img ref=${img} src=${`data:image/jpeg;base64,${frame.data}`} alt=${info?.title || tab.title} draggable="false"
+              onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${() => (drag.current = null)} onWheel=${wheel} onContextMenu=${(e) => e.preventDefault()} />`
+          : html`<p class="sub">${gone ? "This tab is closed." : "Connecting to the tab…"}</p>`}
+        <textarea ref=${keys} class="bkeys" aria-label="Type into the page" autocapitalize="off" autocomplete="off" spellcheck="false" onKeyDown=${key} onInput=${text}></textarea>
+      </div>
+    </div>`;
 }
 
 function useNote(s, say) {
@@ -2782,14 +2936,14 @@ function PagePane({ s, list, cur, pick, split, setSplit, onClose, say, alone }) 
         </div>
         <span class="pupd" title=${tilde(p.path)}>${p.gone ? "gone" : agoLong(p.updated || p.shown)}</span>
         ${setSplit && html`<button class="icon wide" title=${split ? "Page only" : "Side by side with the conversation"} aria-label="Layout" onClick=${() => setSplit(!split)}>${split ? ICON.expand : ICON.split}</button>`}
-        <button class="icon" title="Reload" aria-label="Reload" onClick=${() => setNonce((n) => n + 1)}>⟳</button>
+        ${p.kind !== "browser" && html`<button class="icon" title="Reload" aria-label="Reload" onClick=${() => setNonce((n) => n + 1)}>⟳</button>`}
         ${!alone && html`<button class="icon" title="Open full page" aria-label="Open full page" onClick=${full}>↗</button>`}
-        <${Menu} items=${[
+        ${p.kind !== "browser" && html`<${Menu} items=${[
           { label: "Open the file in a new tab", run: () => openOut(p.url) },
           { label: "Copy a link to this page", run: () => { copyText(`${location.origin}/${aloneLink(p.session, p.name)}`); say("Link copied."); } },
           { label: "All pages", run: () => (location.hash = "#/pages") },
           { label: "Take down", danger: true, run: () => confirm(`Take down “${pageTitle(p)}”? The file stays where it is.`) && takeDown(p, say) },
-        ]} />
+        ]} />`}
         ${onClose && html`<button class="icon" title="Close" aria-label="Close" onClick=${onClose}>✕</button>`}
       </div>
       ${p.note && html`<div class="pnote">${p.note}</div>`}
@@ -2890,7 +3044,7 @@ function PageAlone({ sid, name, live, say }) {
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, [sid, !!s]);
-  const list = s ? s.shown || [] : Array.isArray(got) ? got : [];
+  const list = s ? [browserPage(s), ...(s.shown || [])].filter(Boolean) : Array.isArray(got) ? got : [];
   const owner = s || { sessionId: sid, title: list[0]?.of || "", state: "past" };
   const back = () => (s ? (location.hash = pageLink(sid, name)) : (location.hash = "#/pages"));
   return html`
