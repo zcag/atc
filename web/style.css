@@ -905,7 +905,6 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
   .assist > .choice { width: min(520px, 100%); }
   .assist .choice.talk { min-height: 300px; }
 }
-.top .host { white-space: nowrap; flex: none; }
 .top .tag { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .top .btn { flex: none; }
 
@@ -1089,6 +1088,9 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 
 .viewitem { display: flex; justify-content: space-between; gap: 10px; text-align: left; font-weight: 400; }
 .viewitem.on { font-weight: 600; }
+.viewitem .mi { display: inline-flex; color: var(--dim); }
+.viewitem .grow { flex: 1; }
+.viewitem kbd { font: 12px var(--mono); color: var(--faint); }
 
 .board.v2 .bay h2 { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
 .brief { margin: 14px 4px 0; font: 400 16px/1.4 Newsreader, Georgia, serif; color: var(--dim); text-wrap: pretty; }
