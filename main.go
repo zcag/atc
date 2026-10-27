@@ -74,6 +74,9 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
                                  from inside a session: show the user a page (HTML, image,
                                  markdown, PDF) beside the conversation, live as the file
                                  changes; atc show -h for the full reference
+  atc notify [--urgent] [--reply TEXT]... [message...]
+                                 from inside a session: a push to the user's phone that opens
+                                 the session; --urgent buzzes even while they use atc
   atc outputs [-json] <session>  what it produced: running servers, files (with a link to
                                  open each in a browser), links, code it touched
   atc usage [-json] [session]    plan limits and tokens per day; with a session, its tokens,
@@ -127,6 +130,8 @@ func main() {
 		err = tools.Run(context.Background(), client.Load())
 	case "show":
 		err = show(args)
+	case "notify":
+		err = notify(args)
 	case "outputs":
 		err = showOutputs(args)
 	case "summary":

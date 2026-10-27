@@ -34,7 +34,13 @@ const instructions = `atc is how the user runs Claude Code sessions on their mac
 	`To show the user something to look at (a report, handover, diagram, screenshot, dashboard: anything visual), run ` +
 	"`atc show <file>`" + ` in the shell: it opens next to your conversation in atc, live, and redraws every time you edit the file. ` +
 	`Keep one page per thing and update it rather than showing copies; don't publish it anywhere else. ` +
-	"`atc show -h`" + ` has the rest: names, notes, folders with images, and window.atc for pages that save state or send the user's notes back to you.`
+	"`atc show -h`" + ` has the rest: names, notes, folders with images, and window.atc for pages that save state or send the user's notes back to you.
+
+` +
+	`To tell the user something while they are away (a long task finished, you are blocked on them), run ` +
+	"`atc notify <message>`" + `: a push to their phone that opens this session. It follows atc's rules (no push while they ` +
+	`are in atc); --urgent buzzes regardless, --reply TEXT adds a one-tap answer. Your turn ending already pushes, so ` +
+	`notify only for what that push would not say. ` + "`atc notify -h`" + ` has the rest.`
 
 type Session struct {
 	Ref        string   `json:"ref" jsonschema:"what to pass as session to the other tools"`

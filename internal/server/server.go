@@ -70,7 +70,9 @@ type Server struct {
 	kick  chan struct{}
 	seen  map[string]string
 	shown map[string]time.Time
+	noted map[string]time.Time
 	held  map[string]held
+	notes notes
 
 	web        string
 	widgetSent string
@@ -144,6 +146,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sessions/{sid}/pages/{name}/state", s.pageState)
 	mux.HandleFunc("PUT /api/sessions/{sid}/pages/{name}/state", s.pageState)
 	mux.HandleFunc("GET /api/pages", s.allPages)
+	mux.HandleFunc("POST /api/sessions/{sid}/notify", s.postNote)
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) {
 		s.nameViewer(r)
 		s.Term.Serve(w, r, r.PathValue("id"))
@@ -463,6 +466,7 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 		}
 	}
 	s.attachPages(list)
+	s.notes.attach(list)
 	if localOnly || len(s.Peers) == 0 {
 		return list, nil
 	}
@@ -802,7 +806,7 @@ func (s *Server) poll() {
 		n := len(s.subs)
 		s.mu.Unlock()
 		if n == 0 && (s.Push == nil || s.Push.Count() == 0) {
-			s.seen, s.shown = nil, nil
+			s.seen, s.shown, s.noted = nil, nil, nil
 			if idle++; s.rv == nil || idle%8 != 0 {
 				continue
 			}
@@ -863,24 +867,22 @@ func (s *Server) notify(list []sessions.Session) {
 	viewing := func(x sessions.Session) bool { return s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) }
 	shown, showing := pageAlerts(s.shown, list, viewing)
 	s.shown = shown
+	noted, normal, urgent := noteAlerts(s.noted, list, viewing)
+	s.noted = noted
 	if prev == nil || s.Push == nil {
 		return
 	}
+	if len(urgent) > 0 {
+		go s.pushAll(urgent, true)
+	}
 	ms, later := alerts(prev, list, viewing)
 	ms = append(ms, showing...)
+	ms = append(ms, normal...)
 	for _, m := range later {
 		s.held[m.Tag] = held{m, time.Now().Add(holdForSummary)}
 	}
 	if ms = append(ms, s.release(list)...); len(ms) > 0 {
-		go func() {
-			if ok, where := s.userActive(context.Background()); ok {
-				log.Printf("push: held %d, you are active (%s)", len(ms), where)
-				return
-			}
-			for _, m := range ms {
-				s.Push.Send(m)
-			}
-		}()
+		go s.pushAll(ms, false)
 	}
 	s.syncWidgets(list)
 }
@@ -957,6 +959,18 @@ func states(list []sessions.Session) map[string]string {
 		m[x.SessionID] = x.State
 	}
 	return m
+}
+
+func (s *Server) pushAll(ms []push.Message, urgent bool) {
+	if !urgent {
+		if ok, where := s.userActive(context.Background()); ok {
+			log.Printf("push: held %d, you are active (%s)", len(ms), where)
+			return
+		}
+	}
+	for _, m := range ms {
+		s.Push.Send(m)
+	}
 }
 
 func alerts(prev map[string]string, list []sessions.Session, viewing func(sessions.Session) bool) (out, later []push.Message) {

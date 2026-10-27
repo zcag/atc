@@ -60,8 +60,16 @@ type Session struct {
 	Updated        time.Time        `json:"updated,omitzero"`
 	Servers        []int            `json:"servers,omitempty"`
 	Shown          []pages.Page     `json:"shown,omitempty"`
+	Note           *Note            `json:"note,omitempty"`
 	Pinned         bool             `json:"pinned,omitempty"`
 	Parked         bool             `json:"parked,omitempty"`
+}
+
+type Note struct {
+	Text    string    `json:"text"`
+	Urgent  bool      `json:"urgent,omitempty"`
+	Replies []string  `json:"replies,omitempty"`
+	At      time.Time `json:"at"`
 }
 
 type Manager struct {
