@@ -57,7 +57,7 @@ const engineTag = (s) => s.harness
   : (s.engine || local(s.model)) && html`<span class="eng" title=${`Runs on ${s.engine || s.model}, not Claude`}>${s.engine || model(s.model)}</span>`;
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
-const USAGE = "#/usage", PAGES = "#/pages", APPS = "#/apps";
+const USAGE = "#/usage", PAGES = "#/pages";
 const closePages = () => (history.length > 1 ? history.back() : location.replace("#/"));
 let usageBack = false;
 const openUsage = () => { if (location.hash !== USAGE) { usageBack = true; location.hash = USAGE; } };
@@ -178,9 +178,8 @@ function App() {
   const aloneRoute = () => { const m = location.hash.match(/^#\/p\/([^/]+)(?:\/(.+))?$/); return m && (m[2] || m[1].startsWith(APP_REF)) && { sid: decodeURIComponent(m[1]), name: m[2] && decodeURIComponent(m[2]) }; };
   const [alone, setAlone] = useState(aloneRoute);
   const [pagesHome, setPagesHome] = useState(location.hash === PAGES);
-  const [appsHome, setAppsHome] = useState(location.hash === APPS);
   useEffect(() => {
-    const f = () => { setAssisting(location.hash === "#/assist"); setUsage(location.hash === USAGE); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesHome(location.hash === PAGES); setAppsHome(location.hash === APPS); };
+    const f = () => { setAssisting(location.hash === "#/assist"); setUsage(location.hash === USAGE); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesHome(location.hash === PAGES); };
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
@@ -356,7 +355,7 @@ function App() {
           <span class="conn ${up ? "" : "down"}" title=${up ? `Live${me.hosts?.length > 1 ? `: ${me.hosts.join(" + ")}` : me.host ? ` on ${me.host}` : ""}` : "Reconnecting"}></span>
           ${down.length > 0 && html`<span class="tag" title=${down.map((p) => `${p.name}: ${p.error}`).join("\n")}>${down.map((p) => p.name).join(", ")} unreachable</span>`}
           <span class="grow"></span>
-          ${apps?.length > 0 && html`<button class="btn talk appsbtn" onClick=${() => (location.hash = APPS)} title="Apps" aria-label="Apps"><span class="mi">${ICON.apps}</span>${apps.some((a) => a.badge != null || appState(a, all) === "needs-you") && html`<i class="dot"></i>`}</button>`}
+          ${apps?.length > 0 && html`<${AppsMenu} apps=${apps} live=${all} say=${say} reload=${loadApps} />`}
           <button class="btn talk" onClick=${() => talk(false, false)} title="Assistant: ask about or drive your sessions (a)" aria-label="Assistant"><span class="mi">${ICON.chat}</span></button>
           <button class="btn talk" onClick=${() => setCreating(true)} title="New session (n)" aria-label="New session"><span class="mi">${ICON.plus}</span></button>
           <${Menu} cls="btn talk" aria="More" width=${250} label=${html`<span class="mi">${ICON.more}</span>`} items=${[
@@ -383,7 +382,6 @@ function App() {
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
     ${pagesHome && html`<${PagesHome} live=${all} say=${say} onClose=${closePages} />`}
-    ${appsHome && html`<${AppsHome} apps=${apps} live=${all} say=${say} reload=${loadApps} />`}
     ${alone && (appOpen
       ? html`<${AppView} key=${alone.sid} name=${alone.sid.slice(APP_REF.length)} page=${alone.name} apps=${apps} live=${all} say=${say} reload=${loadApps} />`
       : html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`)}
@@ -1388,7 +1386,10 @@ function Menu({ busy, items, label = "•••", cls = "icon", aria = "More act
       <button class=${cls} aria-label=${aria} aria-expanded=${open} onClick=${() => setOpen(!open)}>${label}</button>
       ${open && html`
         <div class="sheet" style="position: absolute; ${left ? "left" : "right"}: 0; top: calc(100% + 6px); width: ${typeof width === "number" ? `${width}px` : width}; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
-          ${items.map((it) => html`<button class="btn ${it.danger ? "danger" : ""} ${it.cls || ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`)}
+          ${items.map((it) => {
+            const b = html`<button class="btn ${it.danger ? "danger" : ""} ${it.cls || ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`;
+            return it.side ? html`<div class="mrow">${b}${it.side}</div>` : b;
+          })}
         </div>`}
     </div>
   `;
@@ -3073,36 +3074,17 @@ const startRun = async (a, say, reload) => {
   } catch (e) { say(e.message); }
 };
 
-function AppsHome({ apps, live, say, reload }) {
-  useNow(30000);
+function AppsMenu({ apps, live, say, reload }) {
   const [busy, setBusy] = useState("");
-  useEffect(() => {
-    const k = (e) => e.key === "Escape" && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName) && closePages();
-    addEventListener("keydown", k);
-    return () => removeEventListener("keydown", k);
-  }, []);
-  const run = async (e, a) => { e.stopPropagation(); setBusy(a.name); await startRun(a, say, reload); setBusy(""); };
-  return html`
-    <div class="pghome" role="dialog" aria-label="Apps">
-      <header class="pghead">
-        <button class="icon" onClick=${closePages} aria-label="Back">←</button>
-        <div class="who"><h2>Apps</h2><span class="sub">${apps ? plural(apps.length, "app") : "Loading…"}</span></div>
-      </header>
-      <div class="pgbody">
-        <div class="applist">
-          ${(apps || []).map((a) => {
-            const st = appState(a, live), at = a.pages.reduce((t, p) => Math.max(t, pageAt(p)), 0);
-            const when = at && agoLong(new Date(at).toISOString());
-            return html`<div key=${`${a.host}/${a.name}`} class="appcard ${st}" role="button" tabindex="0" onClick=${() => (location.hash = appLink(a))} onKeyDown=${(e) => e.key === "Enter" && (location.hash = appLink(a))}>
-              <span class="ai" aria-hidden="true">${a.icon || "▢"}</span>
-              <div class="who"><b>${a.name}</b>${elsewhere(a)}<span class="sub">${APP_WORD[st]}${when ? ` · updated ${when}` : ""}</span></div>
-              ${a.badge != null && html`<span class="bdg">${a.badge}</span>`}
-              <button class="btn" disabled=${busy === a.name || st === "working"} onClick=${(e) => run(e, a)}>Run</button>
-            </div>`;
-          })}
-        </div>
-      </div>
-    </div>`;
+  const run = async (a) => { setBusy(a.name); await startRun(a, say, reload); setBusy(""); };
+  return html`<${Menu} cls="btn talk" aria="Apps" width=${280} label=${html`<span class="mi">${ICON.apps}</span>`} items=${apps.map((a) => {
+    const st = appState(a, live);
+    return {
+      cls: `appitem ${st}`, title: `Open ${a.name}`, run: () => (location.hash = appLink(a)),
+      label: html`<span class="ai" aria-hidden="true">${a.icon || "▢"}</span><span class="grow"><b>${a.name}</b>${elsewhere(a)}<small>${APP_WORD[st]}</small></span>`,
+      side: html`<button class="btn" disabled=${busy === a.name || st === "working"} title=${`Run ${a.name}`} onClick=${() => run(a)}>Run</button>`,
+    };
+  })} />`;
 }
 
 function AppView({ name, page, apps, live, say, reload }) {
