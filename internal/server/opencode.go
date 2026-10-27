@@ -123,11 +123,11 @@ func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string
 	b := claude.Asking(id)
 	if b.Approve != "" {
 		log.Printf("approve %s: reject=%v %q", id, a.Reject, b.Approve)
-		if a.Reject {
-			s.done(w, id, s.Term.Keys(r.Context(), id, "\x1b"))
-			return
+		err := s.Term.Drive(r.Context(), id, func(t *attach.Typist) error { return claudeApprove(t, a.Reject) })
+		if errors.Is(err, errNoDialog) {
+			err = s.Term.Send(r.Context(), id, map[bool]string{false: "yes", true: "no"}[a.Reject])
 		}
-		s.done(w, id, s.Term.Drive(r.Context(), id, func(t *attach.Typist) error { return claudeApprove(t) }))
+		s.done(w, id, err)
 		return
 	}
 	qs := b.Questions
@@ -166,10 +166,15 @@ type typist interface {
 
 var yesOption = regexp.MustCompile(`(\d)\.\s+Yes\s`)
 
-func claudeApprove(t typist) error {
+var errNoDialog = errors.New("Claude's approval prompt is not on screen")
+
+func claudeApprove(t typist, reject bool) error {
 	m := yesOption.FindAllStringSubmatch(t.Screen(), -1)
 	if len(m) == 0 {
-		return errors.New("Claude's approval prompt is not on screen")
+		return errNoDialog
+	}
+	if reject {
+		return t.Key("\x1b")
 	}
 	return t.Key(m[len(m)-1][1])
 }

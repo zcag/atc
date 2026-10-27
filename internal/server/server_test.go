@@ -482,7 +482,7 @@ func TestClaudeApprovePicksYesFromTheScreen(t *testing.T) {
 		"nothing asked": `null`,
 	} {
 		f := &fakeTypist{screens: []string{screen}}
-		err := claudeApprove(f)
+		err := claudeApprove(f, false)
 		got, _ := json.Marshal(f.keys)
 		if string(got) != want || (err != nil) != (want == "null") {
 			t.Errorf("%q: got %s %v, want %s", screen, got, err, want)
