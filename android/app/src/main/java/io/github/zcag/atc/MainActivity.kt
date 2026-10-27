@@ -58,6 +58,7 @@ class MainActivity : Activity() {
     private var mic: PermissionRequest? = null
     private val sslWaiting = mutableListOf<SslErrorHandler>()
     private var lastBack = 0L
+    private var unlockThen: Intent? = null
     private var root: FrameLayout? = null
     private var offline: View? = null
     private var failed: String? = null
@@ -87,6 +88,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         web?.onResume()
+        unlockThen?.let { i -> unlockThen = null; ui.post { unlock(i) } }
         if (prefs.server == null) return
         Push.sync(this)
         Live.refresh(this)
@@ -153,17 +155,22 @@ class MainActivity : Activity() {
         val assist = intent.getBooleanExtra(EXTRA_ASSIST, false) || intent.action == Intent.ACTION_ASSIST
         setShowWhenLocked(assist)
         setTurnScreenOn(assist)
-        val keyguard = getSystemService(KeyguardManager::class.java)
-        if (assist && keyguard.isKeyguardLocked) {
-            keyguard.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
-                override fun onDismissSucceeded() = open(intent, true)
-                override fun onDismissCancelled() = finish()
-                override fun onDismissError() = finish()
-            })
+        if (assist && getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
+            unlockThen = intent
             return
         }
         open(intent, assist)
     }
+
+    private fun unlock(intent: Intent) = getSystemService(KeyguardManager::class.java)
+        .requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
+            override fun onDismissSucceeded() = open(intent, true)
+            override fun onDismissCancelled() = finish()
+            override fun onDismissError() {
+                Toast.makeText(this@MainActivity, "Could not ask to unlock", Toast.LENGTH_LONG).show()
+                finish()
+            }
+        })
 
     private fun open(intent: Intent, assist: Boolean) {
         val server = prefs.server ?: return setup()
