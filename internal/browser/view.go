@@ -177,6 +177,7 @@ func (b *Browser) View(w http.ResponseWriter, r *http.Request, sid, tab string) 
 	session = att.SessionID
 	c.call(ctx, "", "Target.setDiscoverTargets", map[string]bool{"discover": true})
 	c.call(ctx, session, "Page.enable", nil)
+	c.call(ctx, session, "Page.bringToFront", nil)
 
 	for {
 		var in viewIn
