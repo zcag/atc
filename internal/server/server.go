@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/attach"
+	"github.com/zcag/atc/internal/browser"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/opencode"
@@ -44,6 +45,7 @@ type Server struct {
 	Host    string
 	Push    *push.Pusher
 	Pages   *pages.Store
+	Browser *browser.Browser
 	Peers   []Peer
 	Presets []Preset
 	Engines []Engine
@@ -147,6 +149,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/sessions/{sid}/pages/{name}/state", s.pageState)
 	mux.HandleFunc("GET /api/pages", s.allPages)
 	mux.HandleFunc("POST /api/sessions/{sid}/notify", s.postNote)
+	mux.HandleFunc("GET /api/browser/{sid}/cdp", s.browserCDP)
+	mux.HandleFunc("GET /api/sessions/{sid}/tabs", s.browserTabs)
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) {
 		s.nameViewer(r)
 		s.Term.Serve(w, r, r.PathValue("id"))

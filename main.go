@@ -20,6 +20,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/zcag/atc/internal/attach"
+	"github.com/zcag/atc/internal/browser"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/history"
@@ -232,6 +233,11 @@ func serve(args []string) error {
 	}
 	if srv.Pages, err = pages.Open(filepath.Join(client.ConfigDir(), "pages.json")); err != nil {
 		return err
+	}
+	if u := os.Getenv("ATC_BROWSER"); u != "" {
+		if srv.Browser, err = browser.Open(strings.TrimRight(u, "/"), filepath.Join(client.ConfigDir(), "browser.json")); err != nil {
+			return err
+		}
 	}
 	if !*noAuth {
 		if srv.Token, err = serverToken(); err != nil {
