@@ -43,6 +43,16 @@ path, so keep screenshots as files instead of inlining them. HTML, images, markd
 PDF, CSV/TSV, video and audio render. Make HTML work at phone width, in light and
 dark (prefers-color-scheme).
 
+To look like atc, link its kit: <link rel="stylesheet" href="/atc.css">. It sets
+atc's fonts and colors in light and dark, styles plain markup, and has classes:
+.page (the reading column); .head with h1, .lede, .meta; .sec (a section header,
+.n for its count); .card (.edge adds a colored left bar); .rows of .row with .main
+and .aside; .btn with .primary .quiet .danger .sm .icon .wide, .done (copied) and
+aria-busy; .pill, .tag, .dot; .chip (a link: <b>#123</b><span>repo</span>);
+.callout; .empty (.done when all is clear); .skel; .bar (actions stuck to the
+bottom); .edit on contenteditable. A tone class (t-needs t-hot t-turn t-work t-live
+t-stop) colors .edge, .dot, .pill and .callout.
+
   atc show --list              this session's pages
   atc show --off <name>        take a page down
   atc show --state <name>      the page's data, as JSON (see atc.state)
@@ -64,6 +74,7 @@ promise, and outside atc they fall back to localStorage and the clipboard:
                            like --state: set a key to null to delete it
   atc.send(text)           a note from the user to this session; they confirm it first
   atc.copy(text)           copy to the clipboard, in the browser and the phone app
+  atc.toast(text, label, fn)  a toast; with label and fn it has a button (Undo)
   atc.run(name, args)      run a declared action with args (strings) appended, in
                            the page's folder, 30s at most; gives {code, stdout, stderr}
                            (a nonzero code still resolves); fails outside atc

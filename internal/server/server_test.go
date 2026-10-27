@@ -47,12 +47,20 @@ func serverWith(t *testing.T, bin string, peers []Peer, voice Voice, roots ...st
 	s := &Server{
 		M:    &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st},
 		Term: &attach.Hub{Bin: bin}, Roots: roots,
-		Web:   fstest.MapFS{"index.html": {Data: []byte("<!doctype html>atc")}},
+		Web:   fstest.MapFS{"index.html": {Data: []byte("<!doctype html>atc")}, "vendor/fonts/f.woff2": {Data: []byte("font")}},
 		Token: "tok", Host: "here", Peers: peers, Voice: voice,
 	}
 	ts := httptest.NewServer(s.Handler())
 	t.Cleanup(ts.Close)
 	return ts
+}
+
+func TestFontsLoadFromPages(t *testing.T) {
+	ts := newTestServer(t, nil, Voice{})
+	res, body := get(t, ts.URL+"/vendor/fonts/f.woff2", "")
+	if res.StatusCode != 200 || body != "font" || res.Header.Get("Access-Control-Allow-Origin") != "*" {
+		t.Fatalf("a sandboxed page can't load atc's fonts: %d %q %v", res.StatusCode, body, res.Header)
+	}
 }
 
 func get(t *testing.T, url, token string) (*http.Response, string) {
