@@ -237,6 +237,10 @@ func (c *Client) PageState(sid, name string) (st json.RawMessage, err error) {
 	return st, c.do("GET", "/api/sessions/"+url.PathEscape(sid)+"/pages/"+url.PathEscape(name)+"/state", nil, &st)
 }
 
+func (c *Client) SetPageState(sid, name string, st json.RawMessage) error {
+	return c.do("PUT", "/api/sessions/"+url.PathEscape(sid)+"/pages/"+url.PathEscape(name)+"/state", st, nil)
+}
+
 func (c *Client) Transcript(sid string) (p history.Page, err error) {
 	return p, c.do("GET", "/api/sessions/"+sid+"/transcript", nil, &p)
 }

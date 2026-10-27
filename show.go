@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"cmp"
+	"encoding/json"
+	"flag"
 	"fmt"
+	"io"
 	"maps"
 	"os"
 	"path/filepath"
@@ -10,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/zcag/atc/internal/client"
+	"github.com/zcag/atc/internal/pages"
 )
 
 const showHelp = `atc show: put a page in front of the user, in the session they are reading.
@@ -40,14 +45,23 @@ dark (prefers-color-scheme).
 
   atc show --list              this session's pages
   atc show --off <name>        take a page down
-  atc show --state <name>      what the user left on the page (see atc.state), as JSON
+  atc show --state <name>      the page's data, as JSON (see atc.state)
+  echo '{"k":1}' | atc show --state <name>
+                               write it: an object replaces only the top-level keys
+                               it has, a key set to null is deleted, anything else
+                               replaces the whole state
+
+A page's state is its data: write your results there as JSON and let the page
+only draw them, while the page keeps what the user does on it under its own keys.
+Other tools read it too, with atc state <session> [page].
 
 Pages that talk back load atc's bridge and use window.atc; every call returns a
 promise, and outside atc they fall back to localStorage and the clipboard:
 
   <script src="/atc.js"></script>
   atc.state.get()          what the page saved, for this user on every device
-  atc.state.set(obj)       save it (JSON, up to 256 KB); you read it with --state
+  atc.state.set(obj)       save it (JSON, up to 256 KB), merged by top-level key
+                           like --state: set a key to null to delete it
   atc.send(text)           a note from the user to this session; they confirm it first
   atc.copy(text)           copy to the clipboard, in the browser and the phone app
   atc.run(name, args)      run a declared action with args (strings) appended, in
@@ -158,11 +172,7 @@ func show(args []string) error {
 			fmt.Printf("Took down %s.\n", name)
 			return nil
 		}
-		st, err := c.PageState(sid, name)
-		if err == nil {
-			fmt.Println(string(st))
-		}
-		return err
+		return pageState(c, sid, name, piped())
 	}
 	if path == "" {
 		fmt.Print(showHelp)
@@ -189,6 +199,63 @@ func show(args []string) error {
 		fmt.Printf("  atc.run(%q, args) runs %s\n", k, strings.Join(p.Actions[k], " "))
 	}
 	return nil
+}
+
+func pageState(c *client.Client, sid, name string, write bool) error {
+	if !write {
+		st, err := c.PageState(sid, name)
+		if err == nil {
+			fmt.Println(string(st))
+		}
+		return err
+	}
+	b, err := io.ReadAll(io.LimitReader(os.Stdin, pages.MaxState+1))
+	if err != nil {
+		return err
+	}
+	if b = bytes.TrimSpace(b); !json.Valid(b) {
+		return fmt.Errorf("state is JSON; stdin is not")
+	}
+	return c.SetPageState(sid, name, b)
+}
+
+func piped() bool {
+	fi, _ := os.Stdin.Stat()
+	return fi != nil && fi.Mode()&os.ModeCharDevice == 0
+}
+
+func stateCmd(args []string) error {
+	fs := flag.NewFlagSet("state", flag.ExitOnError)
+	set := fs.Bool("set", false, "merge the JSON on stdin into the state")
+	fs.Parse(args)
+	if fs.NArg() < 1 || fs.NArg() > 2 {
+		return fmt.Errorf("usage: atc state [-set] <session> [page]")
+	}
+	c := client.Load()
+	s, err := c.Find(fs.Arg(0), true)
+	if err != nil {
+		return err
+	}
+	name := fs.Arg(1)
+	if name == "" {
+		list, err := c.Pages(s.SessionID)
+		if err != nil {
+			return err
+		}
+		switch len(list) {
+		case 0:
+			return fmt.Errorf("%q shows no pages", s.Title)
+		case 1:
+			name = list[0].Name
+		default:
+			msg := fmt.Sprintf("%q shows %d pages; name one:", s.Title, len(list))
+			for _, p := range list {
+				msg += "\n  " + p.Name
+			}
+			return fmt.Errorf("%s", msg)
+		}
+	}
+	return pageState(c, s.SessionID, name, *set)
 }
 
 func tilde(p string) string {

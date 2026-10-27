@@ -53,6 +53,8 @@ type titled struct {
 
 const MaxState = 256 << 10
 
+var ErrTooBig = errors.New("state is at most 256 KB")
+
 var (
 	nameRe  = regexp.MustCompile(`[^a-z0-9]+`)
 	titleRe = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
@@ -179,12 +181,34 @@ func (st *Store) SetState(sid, name string, v json.RawMessage) error {
 	if !st.has(sid, name) {
 		return os.ErrNotExist
 	}
+	key := sid + "/" + name
+	v = Merge(st.s.State[key], v)
+	if len(v) > MaxState {
+		return ErrTooBig
+	}
 	if len(v) == 0 || string(v) == "null" {
-		delete(st.s.State, sid+"/"+name)
+		delete(st.s.State, key)
 	} else {
-		st.s.State[sid+"/"+name] = v
+		st.s.State[key] = v
 	}
 	return st.save()
+}
+
+func Merge(old, v json.RawMessage) json.RawMessage {
+	var patch map[string]json.RawMessage
+	cur := map[string]json.RawMessage{}
+	if json.Unmarshal(v, &patch) != nil || patch == nil || len(old) > 0 && (json.Unmarshal(old, &cur) != nil || cur == nil) {
+		return v
+	}
+	for k, x := range patch {
+		if string(x) == "null" {
+			delete(cur, k)
+		} else {
+			cur[k] = x
+		}
+	}
+	b, _ := json.Marshal(cur)
+	return b
 }
 
 func (st *Store) has(sid, name string) bool {

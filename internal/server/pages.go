@@ -109,6 +109,9 @@ func (s *Server) pageState(w http.ResponseWriter, r *http.Request) {
 	if err := s.Pages.SetState(sid, name, b); errors.Is(err, os.ErrNotExist) {
 		http.Error(w, "no page named "+name, http.StatusNotFound)
 		return
+	} else if errors.Is(err, pages.ErrTooBig) {
+		http.Error(w, err.Error(), http.StatusRequestEntityTooLarge)
+		return
 	} else if err != nil {
 		fail(w, err)
 		return
