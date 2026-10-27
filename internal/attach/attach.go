@@ -150,9 +150,9 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 	why := "closed by the browser"
 	defer func() {
 		cancel()
+		h.leave(id, v)
 		cmd.Process.Signal(syscall.SIGHUP)
 		v.pty.Close()
-		h.leave(id, v)
 		v.logf("gone after %s, %s, %dKB sent", time.Since(v.since).Round(time.Second), why, sent.Load()>>10)
 	}()
 
@@ -408,25 +408,33 @@ func (h *Hub) Send(ctx context.Context, id, text string) error {
 const keyGap = 1200 * time.Millisecond
 
 func (h *Hub) Keys(ctx context.Context, id string, keys ...string) error {
-	h.mu.Lock()
-	var cols, rows uint16 = 120, 40
-	var live *os.File
-	if g := h.groups[id]; g != nil {
-		live, cols, rows = g.owner.pty, g.owner.cols, g.owner.rows
-	}
-	h.mu.Unlock()
-	if live != nil {
-		for i, k := range keys {
-			if i > 0 {
-				time.Sleep(keyGap)
-			}
-			if _, err := live.Write([]byte(k)); err != nil {
-				return err
-			}
+	for i, k := range keys {
+		if i > 0 {
+			time.Sleep(keyGap)
 		}
-		return nil
+		live, cols, rows := h.owner(id)
+		if live == nil {
+			return h.typeIn(ctx, id, cols, rows, keys[i:])
+		}
+		if _, err := live.Write([]byte(k)); errors.Is(err, os.ErrClosed) {
+			return h.typeIn(ctx, id, cols, rows, keys[i:])
+		} else if err != nil {
+			return err
+		}
 	}
+	return nil
+}
 
+func (h *Hub) owner(id string) (*os.File, uint16, uint16) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if g := h.groups[id]; g != nil {
+		return g.owner.pty, g.owner.cols, g.owner.rows
+	}
+	return nil, 120, 40
+}
+
+func (h *Hub) typeIn(ctx context.Context, id string, cols, rows uint16, keys []string) error {
 	return h.drive(ctx, id, cols, rows, func(t *Typist) error {
 		for _, k := range keys {
 			if err := t.Key(k); err != nil {
