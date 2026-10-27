@@ -61,7 +61,6 @@ type Server struct {
 	scanner outputs.Scanner
 	stats   usage.Scanner
 	limits  usage.LimitsClient
-	ports   outputs.Ports
 	unfurl  unfurler
 
 	mu   sync.Mutex
@@ -445,7 +444,7 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 			s.unfurl.fill(list[i].Pages, false)
 		}
 		if list[i].PID > 0 {
-			for _, l := range s.ports.Of(list[i].PID) {
+			for _, l := range s.M.Ports.Of(list[i].PID) {
 				if !l.LocalOnly {
 					list[i].Servers = append(list[i].Servers, l.Port)
 				}

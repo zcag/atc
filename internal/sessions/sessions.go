@@ -69,6 +69,7 @@ type Manager struct {
 	Store   *store.Store
 	Summary *summary.Summarizer
 	OC      *opencode.Backend
+	Ports   outputs.Ports
 }
 
 func (m *Manager) Live(ctx context.Context) ([]Session, error) {
@@ -103,7 +104,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 			s.Background = claude.Background(a.ID)
 		}
 		if s.State == Working && t.Ended && a.Kind == "background" {
-			if n := running(s.Background); n > 0 {
+			if n := running(s.Background); n > 0 && !m.serving(a.PID, s.Background) {
 				s.TurnDone, s.Activity = true, fmt.Sprintf("%d in the background", n)
 			} else {
 				s.State = YourTurn
@@ -190,6 +191,15 @@ func running(ts []claude.Task) (n int) {
 		}
 	}
 	return n
+}
+
+func (m *Manager) serving(pid int, ts []claude.Task) bool {
+	for _, t := range ts {
+		if t.DoneAt == 0 && t.Kind != "shell" {
+			return false
+		}
+	}
+	return len(m.Ports.Serving(pid)) > 0
 }
 
 func state(a claude.Agent) string {

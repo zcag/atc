@@ -21,10 +21,11 @@ type Listener struct {
 }
 
 type Ports struct {
-	mu   sync.Mutex
-	at   time.Time
-	list []Listener
-	tree map[int]int
+	mu     sync.Mutex
+	at     time.Time
+	list   []Listener
+	tree   map[int]int
+	shells map[int]bool
 }
 
 var ssPid = regexp.MustCompile(`pid=(\d+)`)
@@ -34,7 +35,8 @@ func (p *Ports) refresh() {
 		return
 	}
 	p.at = time.Now()
-	p.list, p.tree = listeners(), parents()
+	p.list = listeners()
+	p.tree, p.shells = processes()
 }
 
 func (p *Ports) Of(pids ...int) []Listener {
@@ -47,6 +49,10 @@ func (p *Ports) Of(pids ...int) []Listener {
 			roots[pid] = true
 		}
 	}
+	return p.under(roots)
+}
+
+func (p *Ports) under(roots map[int]bool) []Listener {
 	var out []Listener
 	seen := map[int]bool{}
 	for _, l := range p.list {
@@ -60,6 +66,24 @@ func (p *Ports) Of(pids ...int) []Listener {
 				break
 			}
 		}
+	}
+	return out
+}
+
+func (p *Ports) Serving(pid int) []Listener {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.refresh()
+	var out []Listener
+	for sh := range p.shells {
+		if p.tree[sh] != pid {
+			continue
+		}
+		ls := p.under(map[int]bool{sh: true})
+		if len(ls) == 0 {
+			return nil
+		}
+		out = append(out, ls...)
 	}
 	return out
 }
@@ -175,19 +199,22 @@ func elapsed(s string) (time.Duration, bool) {
 	return time.Duration(days*86400+secs) * time.Second, true
 }
 
-func parents() map[int]int {
-	out, _ := exec.Command("ps", "-axo", "pid=,ppid=").Output()
-	tree := map[int]int{}
+func processes() (tree map[int]int, shells map[int]bool) {
+	out, _ := exec.Command("ps", "-axwwo", "pid=,ppid=,args=").Output()
+	tree, shells = map[int]int{}, map[int]bool{}
 	for _, line := range strings.Split(string(out), "\n") {
 		f := strings.Fields(line)
-		if len(f) != 2 {
+		if len(f) < 2 {
 			continue
 		}
 		pid, _ := strconv.Atoi(f[0])
 		ppid, _ := strconv.Atoi(f[1])
 		tree[pid] = ppid
+		if strings.Contains(line, "/shell-snapshots/snapshot-") {
+			shells[pid] = true
+		}
 	}
-	return tree
+	return tree, shells
 }
 
 func bin(name, fallback string) string {

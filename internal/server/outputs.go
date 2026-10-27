@@ -63,7 +63,7 @@ func (s *Server) outputs(w http.ResponseWriter, r *http.Request) {
 	host := s.Host
 	var servers []server
 	have := map[int]bool{}
-	for _, l := range s.ports.Of(pid) {
+	for _, l := range s.M.Ports.Of(pid) {
 		have[l.Port] = true
 		servers = append(servers, server{fmt.Sprintf("http://%s:%d/", host, l.Port), l.Port, l.LocalOnly, true, seen[strconv.Itoa(l.Port)]})
 	}
@@ -72,7 +72,7 @@ func (s *Server) outputs(w http.ResponseWriter, r *http.Request) {
 		if have[port] {
 			continue
 		}
-		if l, ok := s.ports.Listening(port); ok && !l.Started.IsZero() && l.Started.Sub(at).Abs() < 10*time.Minute {
+		if l, ok := s.M.Ports.Listening(port); ok && !l.Started.IsZero() && l.Started.Sub(at).Abs() < 10*time.Minute {
 			servers = append(servers, server{fmt.Sprintf("http://%s:%d/", host, port), port, l.LocalOnly, true, at})
 		}
 	}
