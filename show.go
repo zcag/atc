@@ -46,7 +46,7 @@ dark (prefers-color-scheme).
   atc show --list              this session's pages
   atc show --off <name>        take a page down
   atc show --state <name>      the page's data, as JSON (see atc.state)
-  echo '{"k":1}' | atc show --state <name>
+  echo '{"k":1}' | atc show --state <name> --set
                                write it: an object replaces only the top-level keys
                                it has, a key set to null is deleted, anything else
                                replaces the whole state
@@ -85,7 +85,7 @@ run: the next run shows and reads the same pages and state (atc state app:<name>
 
 func show(args []string) error {
 	var path, name, title, note, ref, mode string
-	actions := map[string][]string{}
+	actions, set := map[string][]string{}, false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		val := func() (string, error) {
@@ -124,6 +124,8 @@ func show(args []string) error {
 					err = fmt.Errorf("--action wants name='command args', got %q", v)
 				}
 			}
+		case flag == "set":
+			set = true
 		case flag == "list" || flag == "l" || flag == "off" || flag == "state":
 			mode = flag
 		default:
@@ -174,7 +176,7 @@ func show(args []string) error {
 			fmt.Printf("Took down %s.\n", name)
 			return nil
 		}
-		return pageState(c, sid, name, piped())
+		return pageState(c, sid, name, set)
 	}
 	if path == "" {
 		fmt.Print(showHelp)
@@ -219,11 +221,6 @@ func pageState(c *client.Client, sid, name string, write bool) error {
 		return fmt.Errorf("state is JSON; stdin is not")
 	}
 	return c.SetPageState(sid, name, b)
-}
-
-func piped() bool {
-	fi, _ := os.Stdin.Stat()
-	return fi != nil && fi.Mode()&os.ModeCharDevice == 0
 }
 
 func stateCmd(args []string) error {

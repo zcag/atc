@@ -154,6 +154,9 @@ func (m *Manager) History(q, dir string, limit int) []Session {
 			continue
 		}
 		s := m.build(t)
+		if s.App != "" && q == "" {
+			continue
+		}
 		if dir != "" && s.StartCwd != dir && s.Cwd != dir {
 			continue
 		}

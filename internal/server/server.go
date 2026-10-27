@@ -623,6 +623,7 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 	id, err := s.M.CLI.Start(ctx, dir, req.Name, req.Prompt, extra...)
 	if err == nil {
 		s.tag(ctx, id, req.Engine, p.appName())
+		s.pruneRuns(ctx, p.appName(), id)
 	}
 	return id, err
 }

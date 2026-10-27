@@ -373,8 +373,8 @@ An agent shows you something to look at (a report, a handover, a diagram, a scre
   `mail` while the page keeps what you ticked under `handled`, and neither overwrites the other.
   Any other write (an array, a string, `null`) replaces the whole state, as does an object written
   over a state that is not one. It is at most 256 KB. The agent reads it with
-  `atc show --state <name>` and writes it by piping JSON in; anywhere else
-  `atc state <session> [page]` prints it and `atc state -set <session> [page]` merges stdin into it;
+  `atc show --state <name>` and writes it with `atc show --state <name> --set` and JSON on
+  stdin; anywhere else `atc state <session> [page]` prints it and `atc state -set <session> [page]` merges stdin into it;
   over HTTP it is `GET` and `PUT /api/sessions/<session>/pages/<name>/state`.
 
 A folder shows its `index.html`, with the files beside it loading by relative path. HTML, images,
