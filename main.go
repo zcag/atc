@@ -133,6 +133,8 @@ func main() {
 		err = show(args)
 	case "notify":
 		err = notify(args)
+	case "browser":
+		err = browserCmd(args)
 	case "outputs":
 		err = showOutputs(args)
 	case "summary":
