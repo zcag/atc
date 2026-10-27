@@ -65,6 +65,7 @@ type Session struct {
 	Tabs           []browser.Tab    `json:"tabs,omitempty"`
 	Pinned         bool             `json:"pinned,omitempty"`
 	Parked         bool             `json:"parked,omitempty"`
+	App            string           `json:"app,omitempty"`
 }
 
 type Note struct {
@@ -136,7 +137,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		}
 		meta := m.Store.Get(a.SessionID)
 		s.Title = first(meta.Name, s.Title, a.Name, base(s.Cwd))
-		s.Pinned, s.Parked, s.Engine = meta.Pinned, meta.Parked, meta.Engine
+		s.Pinned, s.Parked, s.Engine, s.App = meta.Pinned, meta.Parked, meta.Engine, meta.App
 		out = append(out, s)
 	}
 	out = append(out, m.openCode(ctx)...)
@@ -175,7 +176,7 @@ func (m *Manager) build(t history.Transcript) Session {
 		Cwd: t.Cwd, StartCwd: t.StartCwd, Branch: t.Branch, Model: t.Model,
 		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, Context: t.Context, PromptAt: t.PromptAt,
 		Activity: t.Activity, LastReply: t.LastReply, Summary: m.Summary.Get(t),
-		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine, Harness: t.Harness,
+		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine, Harness: t.Harness, App: meta.App,
 	}
 }
 
@@ -255,6 +256,8 @@ func less(a, b Session) bool {
 	}
 	return a.Last().After(b.Last())
 }
+
+func (s Session) Hidden() bool { return s.App != "" && s.State != NeedsYou }
 
 func (s Session) Last() time.Time {
 	if s.Updated.After(s.StartedAt) {

@@ -78,7 +78,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc state [-set] <session> [page]
                                  a page's state, as JSON; -set merges the JSON on stdin into
                                  it by top-level key (null deletes a key). page can be left
-                                 out when the session shows one
+                                 out when the session shows one; app:<name> in place of
+                                 <session> is an app's pages
   atc notify [--urgent] [--reply TEXT]... [message...]
                                  from inside a session: a push to the user's phone that opens
                                  the session; --urgent buzzes even while they use atc

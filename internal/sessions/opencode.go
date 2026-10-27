@@ -44,7 +44,7 @@ func (m *Manager) openCode(ctx context.Context) []Session {
 	}
 	ctx, cancel := context.WithTimeout(ctx, openCodeWait)
 	defer cancel()
-	live, gone := m.OC.Live(ctx, m.Store.Live(opencode.IsID))
+	live, gone := m.OC.Live(ctx, m.Store.Find(func(id string, x store.Meta) bool { return x.Live != "" && opencode.IsID(id) }))
 	for _, sid := range gone {
 		m.Keep(sid, "")
 	}

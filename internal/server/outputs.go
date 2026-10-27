@@ -82,7 +82,7 @@ func (s *Server) outputs(w http.ResponseWriter, r *http.Request) {
 		Servers []server       `json:"servers"`
 		Links   []outputs.Link `json:"links"`
 		Files   []outputFile   `json:"files"`
-	}{Pages: s.Pages.Of(sid), Servers: servers}
+	}{Pages: s.Pages.Of(s.owner(sid)), Servers: servers}
 	for _, l := range links {
 		dup := false
 		for _, v := range servers {

@@ -50,18 +50,18 @@ func (s *Server) engine(name string) (Engine, bool) {
 	return Engine{}, false
 }
 
-func (s *Server) tagEngine(ctx context.Context, id, engine string) {
-	if engine == "" {
+func (s *Server) tag(ctx context.Context, id, engine, app string) {
+	if engine == "" && app == "" {
 		return
 	}
 	agents, err := s.M.CLI.Agents(ctx)
 	if err != nil {
-		log.Printf("engine %s for %s: %v", engine, id, err)
+		log.Printf("tag %s: %v", id, err)
 		return
 	}
 	for _, a := range agents {
 		if a.ID == id {
-			s.M.Store.Update(a.SessionID, func(m *store.Meta) { m.Engine = engine })
+			s.M.Store.Update(a.SessionID, func(m *store.Meta) { m.Engine, m.App = cmp.Or(engine, m.Engine), cmp.Or(app, m.App) })
 			return
 		}
 	}

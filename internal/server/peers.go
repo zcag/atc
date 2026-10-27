@@ -65,6 +65,19 @@ func (f *fleet) remember(host string, list []sessions.Session) {
 		if s.ID != "" {
 			f.owner[s.ID] = host
 		}
+		if s.App != "" {
+			f.owner[appRef+s.App] = host
+		}
+	}
+}
+
+func (f *fleet) claim(host string, keys ...string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, k := range keys {
+		if k != "" {
+			f.owner[k] = host
+		}
 	}
 }
 

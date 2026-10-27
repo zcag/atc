@@ -224,6 +224,33 @@ Anything else can start one too, with the same `POST /api/sessions` the New sess
 curl -H "Authorization: Bearer $TOKEN" -d '{"preset":"inbox","prompt":"New mail from Ana"}' https://atc.example/api/sessions
 ```
 
+## Apps
+
+An app is a preset with `"app": true`, and optionally an `icon` (an emoji or a few letters):
+
+```json
+{ "name": "mail", "icon": "✉", "app": true, "dir": "~/mail", "brief": "MAIL.md",
+  "every": "15m", "check": "mail-cli new", "prompt": "Triage these:" }
+```
+
+There is no standing session. Each run is an ordinary session started from the preset: by its
+`every` and `check`, by anything that `POST`s to `/api/sessions` with the preset, or by hand with
+**Run**, which starts one with `prompt` and skips the check.
+
+- **Pages.** A page a run shows with `atc show` belongs to the app, filed under `app:<name>`
+  instead of the run, so the next run shows and updates the same page and reads the same state.
+  Anywhere else it is `atc state app:<name> [page]`.
+- **Badge.** A number or a short string under the top-level `badge` key of the page's state shows
+  on the app's chip.
+- **Quiet runs.** Runs stay out of the session list and the widget unless one needs you, and a
+  finished run sends no push. A run that needs you, and `atc notify` from a run, push as usual.
+- **In the UI.** Apps are a strip of chips above the session list, with a dot while a run is
+  working and red when one needs you. A chip opens the app's page full width, with **Run** and
+  **Chat**, which opens the latest run beside the page. `atc.send` from the page goes to the
+  latest run, resuming it if it stopped.
+
+`GET /api/apps` lists the apps of every machine with their pages, badge and latest run.
+
 ## Other models
 
 Claude Code runs on any model served through Anthropic's Messages API (`/v1/messages`): Ollama

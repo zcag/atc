@@ -35,7 +35,7 @@ func (s *Server) pageURLs(list []pages.Page) []pages.Page {
 }
 
 func (s *Server) sessionPages(w http.ResponseWriter, r *http.Request) {
-	reply(w, s.pageURLs(s.Pages.Of(r.PathValue("sid"))))
+	reply(w, s.pageURLs(s.Pages.Of(s.owner(r.PathValue("sid")))))
 }
 
 func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
@@ -66,7 +66,7 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	p, created, err := s.Pages.Show(pages.Page{Session: r.PathValue("sid"), Name: name, Title: strings.TrimSpace(req.Title), Path: target, Note: strings.TrimSpace(req.Note), Shown: time.Now(), Actions: req.Actions})
+	p, created, err := s.Pages.Show(pages.Page{Session: s.owner(r.PathValue("sid")), Name: name, Title: strings.TrimSpace(req.Title), Path: target, Note: strings.TrimSpace(req.Note), Shown: time.Now(), Actions: req.Actions})
 	if err != nil {
 		fail(w, err)
 		return
@@ -77,7 +77,7 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) hidePage(w http.ResponseWriter, r *http.Request) {
-	ok, err := s.Pages.Remove(r.PathValue("sid"), r.PathValue("name"))
+	ok, err := s.Pages.Remove(s.owner(r.PathValue("sid")), r.PathValue("name"))
 	if err != nil {
 		fail(w, err)
 		return
@@ -91,7 +91,7 @@ func (s *Server) hidePage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) pageState(w http.ResponseWriter, r *http.Request) {
-	sid, name := r.PathValue("sid"), r.PathValue("name")
+	sid, name := s.owner(r.PathValue("sid")), r.PathValue("name")
 	if r.Method == http.MethodGet {
 		st := s.Pages.State(sid, name)
 		if st == nil {
@@ -125,7 +125,7 @@ const (
 )
 
 func (s *Server) runAction(w http.ResponseWriter, r *http.Request) {
-	sid, name := r.PathValue("sid"), r.PathValue("name")
+	sid, name := s.owner(r.PathValue("sid")), r.PathValue("name")
 	var req struct {
 		Action string
 		Args   []string
@@ -181,14 +181,14 @@ func (s *Server) allPages(w http.ResponseWriter, r *http.Request) {
 	briefs := s.M.Briefs(want)
 	for i := range list {
 		b := briefs[list[i].Session]
-		list[i].Of, list[i].Cwd = b.Title, b.Cwd
+		list[i].Of, list[i].Cwd = cmp.Or(b.Title, strings.TrimPrefix(list[i].Session, appRef)), b.Cwd
 	}
 	gather(s, w, r, "/api/pages", s.pageURLs(list), func(p *pages.Page, h string) { p.Host = h })
 }
 
 func (s *Server) attachPages(list []sessions.Session) {
 	for i := range list {
-		if ps := s.Pages.Of(list[i].SessionID); len(ps) > 0 {
+		if ps := s.Pages.Of(s.owner(list[i].SessionID)); len(ps) > 0 {
 			list[i].Shown = s.pageURLs(ps)
 		}
 	}
@@ -202,7 +202,7 @@ func pageAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 			key := x.SessionID + "/" + p.Name
 			now[key] = p.Shown
 			was, ok := prev[key]
-			if prev == nil || (ok && !p.Shown.After(was)) || x.Parked || viewing(x) {
+			if prev == nil || (ok && !p.Shown.After(was)) || x.Parked || x.App != "" || viewing(x) {
 				continue
 			}
 			out = append(out, push.Message{Title: x.Title, Tag: key, URL: "/#/s/" + x.SessionID + "/p/" + p.Name,

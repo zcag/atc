@@ -79,6 +79,8 @@ any args: declare only commands whose worst case with arbitrary args is acceptab
 Links to other sites open outside atc on their own.
 
 Inside a session atc knows which one it is; anywhere else add --session <session>.
+Inside a run of an app (a preset with "app": true) pages belong to the app, not the
+run: the next run shows and reads the same pages and state (atc state app:<name>).
 `
 
 func show(args []string) error {
@@ -232,30 +234,34 @@ func stateCmd(args []string) error {
 		return fmt.Errorf("usage: atc state [-set] <session> [page]")
 	}
 	c := client.Load()
-	s, err := c.Find(fs.Arg(0), true)
-	if err != nil {
-		return err
+	sid, title := fs.Arg(0), fs.Arg(0)
+	if !strings.HasPrefix(sid, "app:") {
+		s, err := c.Find(sid, true)
+		if err != nil {
+			return err
+		}
+		sid, title = s.SessionID, s.Title
 	}
 	name := fs.Arg(1)
 	if name == "" {
-		list, err := c.Pages(s.SessionID)
+		list, err := c.Pages(sid)
 		if err != nil {
 			return err
 		}
 		switch len(list) {
 		case 0:
-			return fmt.Errorf("%q shows no pages", s.Title)
+			return fmt.Errorf("%q shows no pages", title)
 		case 1:
 			name = list[0].Name
 		default:
-			msg := fmt.Sprintf("%q shows %d pages; name one:", s.Title, len(list))
+			msg := fmt.Sprintf("%q shows %d pages; name one:", title, len(list))
 			for _, p := range list {
 				msg += "\n  " + p.Name
 			}
 			return fmt.Errorf("%s", msg)
 		}
 	}
-	return pageState(c, s.SessionID, name, *set)
+	return pageState(c, sid, name, *set)
 }
 
 func tilde(p string) string {

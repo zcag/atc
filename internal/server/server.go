@@ -133,6 +133,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/guess", s.guess)
 	mux.HandleFunc("GET /api/widget", s.widget)
 	mux.HandleFunc("GET /api/presets", s.presets)
+	mux.HandleFunc("GET /api/apps", s.apps)
 	mux.HandleFunc("GET /api/engines", s.engines)
 	mux.HandleFunc("POST /api/presence", s.presencePost)
 	mux.HandleFunc("POST /api/termlog", s.termLog)
@@ -528,7 +529,9 @@ func (s *Server) route(next http.Handler) http.Handler {
 		}
 		parts := strings.Split(r.URL.Path, "/")
 		host := r.URL.Query().Get("host")
-		if host == "" && len(parts) >= 4 && parts[2] == "sessions" {
+		if host == "" && len(parts) >= 4 && parts[2] == "sessions" && s.localApp(parts[3]) {
+			host = s.Host
+		} else if host == "" && len(parts) >= 4 && parts[2] == "sessions" {
 			if host = s.fleet.ownerOf(parts[3]); host == "" {
 				s.fleet.gather(r.Context(), "/api/sessions?local=1")
 				host = s.fleet.ownerOf(parts[3])
@@ -619,7 +622,7 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 	}
 	id, err := s.M.CLI.Start(ctx, dir, req.Name, req.Prompt, extra...)
 	if err == nil {
-		s.tagEngine(ctx, id, req.Engine)
+		s.tag(ctx, id, req.Engine, p.appName())
 	}
 	return id, err
 }
@@ -941,7 +944,7 @@ type widgetSession struct {
 func widgetList(list []sessions.Session) []widgetSession {
 	out := []widgetSession{}
 	for _, x := range list {
-		if x.Parked || x.State == sessions.Stopped || x.State == sessions.Past {
+		if x.Parked || x.Hidden() || x.State == sessions.Stopped || x.State == sessions.Past {
 			continue
 		}
 		since := x.Last()
@@ -1020,7 +1023,7 @@ func alerts(prev map[string]string, list []sessions.Session, viewing func(sessio
 			if x.Activity != "" {
 				m.Body += ": " + x.Activity
 			}
-		case x.State == sessions.YourTurn && was == sessions.Working:
+		case x.State == sessions.YourTurn && was == sessions.Working && x.App == "":
 			m.Body = cmp.Or(pushBody(x.Summary), x.LastReply, "Finished. Your turn.")
 			answerable(&m, x)
 			if x.Summary == nil && x.Summarizing {
@@ -1118,8 +1121,8 @@ func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, e
 		extra = append(extra, e.args()...)
 	}
 	id, err := s.M.CLI.Resume(ctx, dir, sid, extra...)
-	if err == nil && ok {
-		s.tagEngine(ctx, id, e.Name)
+	if err == nil {
+		s.tag(ctx, id, e.Name, s.M.Store.Get(sid).App)
 	}
 	return id, err
 }

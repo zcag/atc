@@ -95,7 +95,9 @@ const FEED_STATES = ["needs-you", "your-turn", "working"];
 
 function App() {
   const [me, setMe] = useState(undefined);
-  const [live, setLive] = useState(null);
+  const [runs, setLive] = useState(null);
+  const live = useMemo(() => runs && runs.filter((x) => !hiddenRun(x)), [runs]);
+  const [apps, setApps] = useState(null);
   const [up, setUp] = useState(true);
   const [past, setPast] = useState({});
   const [creating, setCreating] = useState(false);
@@ -173,7 +175,7 @@ function App() {
   const [usage, setUsage] = useState(location.hash === USAGE);
   const shareRoute = () => (location.hash.startsWith("#/share") ? location.hash : null);
   const [sharing, setSharing] = useState(shareRoute);
-  const aloneRoute = () => { const m = location.hash.match(/^#\/p\/([^/]+)\/(.+)$/); return m && { sid: m[1], name: decodeURIComponent(m[2]) }; };
+  const aloneRoute = () => { const m = location.hash.match(/^#\/p\/([^/]+)(?:\/(.+))?$/); return m && (m[2] || m[1].startsWith(APP_REF)) && { sid: decodeURIComponent(m[1]), name: m[2] && decodeURIComponent(m[2]) }; };
   const [alone, setAlone] = useState(aloneRoute);
   const [pagesHome, setPagesHome] = useState(location.hash === PAGES);
   useEffect(() => {
@@ -181,6 +183,14 @@ function App() {
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
+  const loadApps = useCallback(() => api("/api/apps").then((l) => setApps(l || []), () => {}), []);
+  const appOpen = !!alone?.sid.startsWith(APP_REF);
+  useEffect(() => {
+    if (!me) return;
+    loadApps();
+    const t = setInterval(() => document.visibilityState === "visible" && loadApps(), appOpen ? 5000 : 20000);
+    return () => clearInterval(t);
+  }, [!!me, appOpen]);
   const talk = async (fresh, voice = true) => {
     setStarting(true);
     try {
@@ -326,7 +336,7 @@ function App() {
   VOICE_OK = !!VOICE.stt;
   const down = (me.peers || []).filter((p) => p.error);
 
-  const all = live || [];
+  const all = runs || [];
   const sel = route && (all.find((s) => s.id === route || s.sessionId === route) || past[route]);
   const remember = (list) => setPast((p) => Object.fromEntries([...Object.entries(p), ...list.map((s) => [s.sessionId, s])]));
   const openFromUsage = async (x) => {
@@ -338,7 +348,7 @@ function App() {
   return html`
     <div class="shell ${route ? "open" : ""} ${railed ? "railed" : ""} ${railed && fly ? "fly" : ""}">
       <aside class="side" onPointerEnter=${railed ? () => fly && clearTimeout(flyT.current) : null} onPointerLeave=${railed ? () => flyOut(350) : null}>
-        ${railed && html`<${Rail} live=${all} sel=${sel} onHover=${() => flyIn(180)} onPick=${(name) => { TABS.set(name); clearTimeout(flyT.current); setFly(true); }} />`}
+        ${railed && html`<${Rail} live=${live || []} sel=${sel} onHover=${() => flyIn(180)} onPick=${(name) => { TABS.set(name); clearTimeout(flyT.current); setFly(true); }} />`}
         <div class="sidebody">
         <header class="top">
           <span class="mark">atc</span>
@@ -355,6 +365,7 @@ function App() {
               run: () => setView({ ...view, rail: !view.rail }), label: html`<span>Fold into a rail while reading</span>${view.rail && "✓"}` },
           ]} />
         </header>
+        ${apps?.length > 0 && html`<${AppStrip} apps=${apps} live=${all} />`}
         <${Board} live=${live} sel=${sel} cursor=${cursor} onPast=${remember} mode=${view.list} />
         <${UsageFoot} limits=${limits} onOpen=${openUsage} />
         </div>
@@ -371,7 +382,9 @@ function App() {
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
     ${pagesHome && html`<${PagesHome} live=${all} say=${say} onClose=${closePages} />`}
-    ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`}
+    ${alone && (appOpen
+      ? html`<${AppView} key=${alone.sid} name=${alone.sid.slice(APP_REF.length)} page=${alone.name} apps=${apps} live=${all} say=${say} reload=${loadApps} />`
+      : html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`)}
     ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
@@ -2697,11 +2710,11 @@ function PageFrame({ p, onSend, say }) {
   const scroll = useRef(0);
   useEffect(() => { if (src !== cur) setNext(src); }, [src]);
   useEffect(() => {
-    const base = `/api/sessions/${p.session}/pages/${encodeURIComponent(p.name)}/state`;
+    const base = `/api/sessions/${p.session}/pages/${encodeURIComponent(p.name)}`, q = hostQ(p.host, HERE);
     const ops = {
-      "state.get": () => api(base),
-      "state.set": (v) => api(base, { method: "PUT", body: v }).then(() => null),
-      run: (a) => api(base.replace(/state$/, "run"), { method: "POST", body: a }),
+      "state.get": () => api(`${base}/state${q}`),
+      "state.set": (v) => api(`${base}/state${q}`, { method: "PUT", body: v }).then(() => null),
+      run: (a) => api(`${base}/run${q}`, { method: "POST", body: a }),
       copy: (t) => { copyText(t); say(t.length < 60 ? `Copied “${t}”.` : "Copied."); },
       open: (u) => openOut(u),
       send: (t) => onSend(t),
@@ -2718,7 +2731,7 @@ function PageFrame({ p, onSend, say }) {
     };
     addEventListener("message", f);
     return () => removeEventListener("message", f);
-  }, [p.session, p.name, onSend]);
+  }, [p.session, p.name, p.host, onSend]);
   const frame = (u, hidden) => html`<iframe key=${u} ref=${(el) => { frames.current[u] = el; }} src=${u} class=${hidden ? "next" : ""}
     sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
     onLoad=${hidden ? () => { delete frames.current[cur]; setCur(u); setNext(null); } : null}></iframe>`;
@@ -3035,6 +3048,74 @@ function PagesHome({ live, say, onClose }) {
             sub=${html`${owner(p)?.title || p.of || "Earlier session"}${MULTI && p.host ? ` · ${p.host}` : ""}`} />`)}
         </div>
       </div>
+    </div>`;
+}
+
+const APP_REF = "app:";
+const hiddenRun = (s) => !!s.app && s.state !== "needs-you";
+const appLink = (a, page) => `#/p/${APP_REF}${encodeURIComponent(a.name)}${page ? `/${encodeURIComponent(page)}` : ""}`;
+const appRun = (a, live) => live.filter((s) => s.app === a.name && (s.host || HERE) === (a.host || HERE))
+  .sort((x, y) => (Date.parse(y.startedAt || 0) || 0) - (Date.parse(x.startedAt || 0) || 0))[0];
+const appState = (a, live) => {
+  const st = appRun(a, live)?.state || a.run?.state;
+  return st === "working" || st === "needs-you" ? st : st ? "done" : "";
+};
+const APP_WORD = { working: "Running", "needs-you": "A run needs you", done: "Idle", "": "No runs yet" };
+
+function AppStrip({ apps, live }) {
+  return html`<nav class="appstrip" aria-label="Apps">${apps.map((a) => {
+    const st = appState(a, live);
+    return html`<button key=${`${a.host}/${a.name}`} class="appchip ${st}" title=${`${a.name}${MULTI && a.host ? ` on ${a.host}` : ""}: ${APP_WORD[st].toLowerCase()}`} onClick=${() => (location.hash = appLink(a))}>
+      ${a.icon && html`<span class="ai" aria-hidden="true">${a.icon}</span>`}<span class="nm">${a.name}</span>${elsewhere(a)}
+      ${a.badge != null && html`<span class="bdg">${a.badge}</span>`}${(st === "working" || st === "needs-you") && html`<i class="st"></i>`}
+    </button>`;
+  })}</nav>`;
+}
+
+function AppView({ name, page, apps, live, say, reload }) {
+  const [busy, setBusy] = useState(false);
+  const a = apps && (apps.find((x) => x.name === name && x.host === HERE) || apps.find((x) => x.name === name));
+  useEffect(() => {
+    const k = (e) => e.key === "Escape" && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName) && closePages();
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, []);
+  if (!a) return html`<div class="palone"><div class="fbody"><p class="empty">${apps ? `No app named ${name}.` : "Loading…"}</p></div></div>`;
+  const x = appRun(a, live), st = appState(a, live), q = hostQ(a.host, HERE);
+  const run = async () => {
+    setBusy(true);
+    try {
+      await api(`/api/sessions${q}`, { method: "POST", body: { preset: a.name, prompt: a.prompt || "" } });
+      say(`Started a run of ${a.name}.`);
+      reload();
+    } catch (e) { say(e.message); }
+    setBusy(false);
+  };
+  const chat = async () => {
+    let key = x && keyOf(x);
+    if (!key) {
+      try { key = (await api(`/api/sessions/${a.run.sessionId}/resume${q}`, { method: "POST" })).id; } catch (e) { return say(e.message); }
+    }
+    const pg = page || a.pages[0]?.name;
+    if (pg && !PHONE.matches) location.hash = pageLink(key, pg);
+    else { AUTO_PANE = "chat"; go(key); }
+  };
+  const s = x || (a.run ? { sessionId: a.run.sessionId, id: a.run.id, title: a.name, state: "past", host: a.host } : { title: a.name });
+  const runBtn = html`<button class="btn" disabled=${busy || st === "working"} onClick=${run}>Run</button>`;
+  return html`
+    <div class="palone appview">
+      <header class="pghead">
+        <button class="icon" onClick=${closePages} aria-label="Back">←</button>
+        <div class="who">
+          <h2>${a.icon && html`<span class="ai" aria-hidden="true">${a.icon}</span>`}${a.name}${a.badge != null && html`<span class="bdg">${a.badge}</span>`}</h2>
+          <span class="sub ${st}">${APP_WORD[st]}${MULTI && a.host ? ` · ${a.host}` : ""}</span>
+        </div>
+        ${runBtn}
+        <button class="btn" disabled=${!x && !a.run} onClick=${chat}>Chat</button>
+      </header>
+      ${a.pages.length
+        ? html`<${PagePane} s=${s} list=${a.pages} cur=${page} pick=${(n) => location.replace(appLink(a, n))} say=${say} alone />`
+        : html`<div class="fbody"><div class="none"><p>${a.name} has no page yet.</p><p class="sub">A run shows one with <code>atc show</code>, and it stays here across runs.</p>${runBtn}</div></div>`}
     </div>`;
 }
 

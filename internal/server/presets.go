@@ -21,6 +21,8 @@ type Preset struct {
 	Every    string   `json:"every,omitempty"`
 	Check    string   `json:"check,omitempty"`
 	Prompt   string   `json:"prompt,omitempty"`
+	App      bool     `json:"app,omitempty"`
+	Icon     string   `json:"icon,omitempty"`
 }
 
 func LoadPresets(path string) ([]Preset, error) {

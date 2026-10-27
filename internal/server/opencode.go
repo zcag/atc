@@ -61,7 +61,7 @@ func (s *Server) startOpenCode(ctx context.Context, dir, name, prompt string, e 
 	}
 	sid, err := s.M.OC.Start(ctx, dir, name, op)
 	if sid != "" {
-		s.M.Store.Update(sid, func(m *store.Meta) { m.Live, m.Engine = store.Running, e.Name })
+		s.M.Store.Update(sid, func(m *store.Meta) { m.Live, m.Engine, m.App = store.Running, e.Name, p.appName() })
 	}
 	return sid, err
 }
