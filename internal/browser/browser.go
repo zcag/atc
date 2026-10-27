@@ -24,7 +24,12 @@ type Browser struct {
 	cached   map[string][]Tab
 	cachedAt time.Time
 	loading  bool
+
+	seen     map[string]time.Time
+	reapedAt time.Time
 }
+
+const abandoned = time.Hour
 
 type owned struct {
 	Session string    `json:"session"`
@@ -32,7 +37,7 @@ type owned struct {
 }
 
 func Open(endpoint, path string) (*Browser, error) {
-	b := &Browser{Endpoint: endpoint, path: path, owner: map[string]owned{}}
+	b := &Browser{Endpoint: endpoint, path: path, owner: map[string]owned{}, seen: map[string]time.Time{}}
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return b, nil
@@ -149,6 +154,32 @@ func (b *Browser) Of(sid string) []Tab {
 		}()
 	}
 	return b.cached[sid]
+}
+
+// Reap closes the tabs of sessions that have been out of atc's list for an hour.
+func (b *Browser) Reap(live []string) {
+	now := time.Now()
+	b.mu.Lock()
+	for _, sid := range live {
+		b.seen[sid] = now
+	}
+	if now.Sub(b.reapedAt) < time.Minute {
+		b.mu.Unlock()
+		return
+	}
+	b.reapedAt = now
+	var gone []string
+	for id, o := range b.owner {
+		if now.Sub(b.seen[o.Session]) > abandoned && now.Sub(o.At) > abandoned {
+			gone = append(gone, id)
+		}
+	}
+	b.mu.Unlock()
+	for _, id := range gone {
+		var ignored any
+		b.get(context.Background(), "/json/close/"+id, &ignored)
+		b.forget(id)
+	}
 }
 
 func (b *Browser) wsURL(ctx context.Context) (string, error) {

@@ -40,7 +40,14 @@ const instructions = `atc is how the user runs Claude Code sessions on their mac
 	`To tell the user something while they are away (a long task finished, you are blocked on them), run ` +
 	"`atc notify <message>`" + `: a push to their phone that opens this session. It follows atc's rules (no push while they ` +
 	`are in atc); --urgent buzzes regardless, --reply TEXT adds a one-tap answer. Your turn ending already pushes, so ` +
-	`notify only for what that push would not say. ` + "`atc notify -h`" + ` has the rest.`
+	`notify only for what that push would not say. ` + "`atc notify -h`" + ` has the rest.
+
+` +
+	`A browser MCP server that runs through ` + "`atc browser mcp`" + ` gives this session its own tabs in a browser atc shares: ` +
+	`you see only the tabs you opened, and the user sees the same tabs live in atc beside this conversation, where they can ` +
+	`click and type in them. So when a page needs the user (a login, 2FA, a captcha, a payment to confirm), leave the tab ` +
+	`where it is, tell them with atc notify what to do in it, and wait for their reply; don't ask them to open the site ` +
+	`anywhere else. Close tabs you are done with.`
 
 type Session struct {
 	Ref        string   `json:"ref" jsonschema:"what to pass as session to the other tools"`

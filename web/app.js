@@ -771,6 +771,7 @@ const ICON = {
   park: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 106.5 6.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
   play: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z" fill="currentColor"/></svg>`,
   layout: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 2.5v11M8.5 6h3M8.5 9h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+  globe: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.4 8h11.2M8 2.2c1.8 1.6 2.6 3.6 2.6 5.8S9.8 12.2 8 13.8C6.2 12.2 5.4 10.2 5.4 8S6.2 3.8 8 2.2z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`,
   page: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2" width="11" height="12" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 5.5h6M5 8h6M5 10.5h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   split: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 2.5v11" stroke="currentColor" stroke-width="1.4"/></svg>`,
   expand: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9 7M2.5 13.5L7 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -825,6 +826,8 @@ function Meta({ s, quiet }) {
       ${(s.servers || []).slice(0, 2).map((p) => html`<span class="srv" role="link" title=${`Open ${serverURL(s, p)}`} onClick=${(e) => { e.stopPropagation(); openOut(serverURL(s, p)); }}>:${p}</span>`)}
       ${s.shown?.length > 0 && html`<span class="pg shownpg" role="link" title=${s.shown.map((p) => `${pageTitle(p)}  ${pageInfo(p)}`).join("\n")}
         onClick=${(e) => { e.stopPropagation(); location.hash = pageLink(keyOf(s), s.shown[0].name); }}>${ICON.page}<span>${pageTitle(s.shown[0])}</span>${s.shown.length > 1 ? ` +${s.shown.length - 1}` : ""}</span>`}
+      ${s.tabs?.length > 0 && html`<span class="pg shownpg" role="link" title=${`Its browser tabs:\n${s.tabs.map((t) => t.title || t.url).join("\n")}`}
+        onClick=${(e) => { e.stopPropagation(); location.hash = pageLink(keyOf(s), "browser"); }}>${ICON.globe}<span>${s.tabs[0].title || "Browser"}</span>${s.tabs.length > 1 ? ` +${s.tabs.length - 1}` : ""}</span>`}
     </div>`;
 }
 
