@@ -1374,7 +1374,13 @@ function Unattachable(s, resume, busy, setMode) {
 
 function Menu({ busy, items, label = "•••", cls = "icon", aria = "More actions", width = 190, left }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef();
+  const ref = useRef(), sheet = useRef();
+  useLayoutEffect(() => {
+    const el = sheet.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect(), shift = r.left < 8 ? 8 - r.left : r.right > innerWidth - 8 ? innerWidth - 8 - r.right : 0;
+    if (shift) el.style.transform = `translateX(${shift}px)`;
+  }, [open]);
   useEffect(() => {
     if (!open) return;
     const f = (e) => !ref.current?.contains(e.target) && setOpen(false);
@@ -1385,7 +1391,7 @@ function Menu({ busy, items, label = "•••", cls = "icon", aria = "More act
     <div ref=${ref} style="position: relative">
       <button class=${cls} aria-label=${aria} aria-expanded=${open} onClick=${() => setOpen(!open)}>${label}</button>
       ${open && html`
-        <div class="sheet" style="position: absolute; ${left ? "left" : "right"}: 0; top: calc(100% + 6px); width: ${typeof width === "number" ? `${width}px` : width}; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
+        <div ref=${sheet} class="sheet" style="position: absolute; ${left ? "left" : "right"}: 0; top: calc(100% + 6px); width: ${typeof width === "number" ? `min(${width}px, calc(100vw - 16px))` : width}; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
           ${items.map((it) => {
             const b = html`<button class="btn ${it.danger ? "danger" : ""} ${it.cls || ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`;
             return it.side ? html`<div class="mrow">${b}${it.side}</div>` : b;
