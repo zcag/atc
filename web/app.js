@@ -2701,6 +2701,7 @@ function PageFrame({ p, onSend, say }) {
     const ops = {
       "state.get": () => api(base),
       "state.set": (v) => api(base, { method: "PUT", body: v }).then(() => null),
+      run: (a) => api(base.replace(/state$/, "run"), { method: "POST", body: a }),
       copy: (t) => { copyText(t); say(t.length < 60 ? `Copied “${t}”.` : "Copied."); },
       open: (u) => openOut(u),
       send: (t) => onSend(t),

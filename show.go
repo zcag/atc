@@ -3,8 +3,10 @@ package main
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/zcag/atc/internal/client"
@@ -13,12 +15,13 @@ import (
 const showHelp = `atc show: put a page in front of the user, in the session they are reading.
 
   atc show <file|folder> [--as name] [--title T] [--note "what to look at"]
+           [--action name='command args']...
 
 The user sees the page in atc next to this conversation (a button on the session's
 header lists its pages), gets a push on their phone, and can open it full size.
 It is live: atc serves the file where it is and redraws it every time it changes,
 so to update a page, edit the file. Run show again only to point a page at another
-file or to change its title or note. Reports, handovers, diagrams, screenshots and
+file or to change its title, note or actions. Reports, handovers, diagrams, screenshots and
 dashboards all go here; don't publish them anywhere else.
 
   --as name    which page this is; defaults to the file's name (a folder's for its
@@ -26,6 +29,9 @@ dashboards all go here; don't publish them anywhere else.
                thing its own name and keep it current, rather than a copy per change.
   --title T    defaults to the page's <title> or first # heading
   --note N     one line on what to look at or decide; it goes in the push
+  --action name='command args'
+               a command the page may run with atc.run (repeatable). Showing the page
+               again replaces its actions, so repeat every --action you still want.
 
 A folder shows its index.html, and files beside it (img/, css) load by relative
 path, so keep screenshots as files instead of inlining them. HTML, images, markdown,
@@ -44,6 +50,17 @@ promise, and outside atc they fall back to localStorage and the clipboard:
   atc.state.set(obj)       save it (JSON, up to 256 KB); you read it with --state
   atc.send(text)           a note from the user to this session; they confirm it first
   atc.copy(text)           copy to the clipboard, in the browser and the phone app
+  atc.run(name, args)      run a declared action with args (strings) appended, in
+                           the page's folder, 30s at most; gives {code, stdout, stderr}
+                           (a nonzero code still resolves); fails outside atc
+
+  atc show mail.html --action mark-read='mail-cli markread'
+  atc.run("mark-read", [id])           runs: mail-cli markread <id>
+
+The command is split on spaces (no quotes, no shell), and args are passed as separate
+arguments, never through a shell, so ; $() and * in them are just text. A page shows
+text you don't control (mail, web content) and can be made to call its actions with
+any args: declare only commands whose worst case with arbitrary args is acceptable.
 
 Links to other sites open outside atc on their own.
 
@@ -52,6 +69,7 @@ Inside a session atc knows which one it is; anywhere else add --session <session
 
 func show(args []string) error {
 	var path, name, title, note, ref, mode string
+	actions := map[string][]string{}
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		val := func() (string, error) {
@@ -82,6 +100,14 @@ func show(args []string) error {
 			note, err = val()
 		case flag == "session":
 			ref, err = val()
+		case flag == "action":
+			var v string
+			if v, err = val(); err == nil {
+				k, cmd, _ := strings.Cut(v, "=")
+				if actions[k] = strings.Fields(cmd); k == "" || len(actions[k]) == 0 {
+					err = fmt.Errorf("--action wants name='command args', got %q", v)
+				}
+			}
 		case flag == "list" || flag == "l" || flag == "off" || flag == "state":
 			mode = flag
 		default:
@@ -146,7 +172,7 @@ func show(args []string) error {
 	if err != nil {
 		return err
 	}
-	r, err := c.Show(sid, map[string]string{"path": abs, "name": name, "title": title, "note": note})
+	r, err := c.Show(sid, map[string]any{"path": abs, "name": name, "title": title, "note": note, "actions": actions})
 	if err != nil {
 		return err
 	}
@@ -158,6 +184,9 @@ func show(args []string) error {
 	fmt.Printf("%s %q (%s) in atc, live from %s.\n", verb, cmp.Or(p.Title, p.Name), p.Name, tilde(p.Path))
 	if r.Created {
 		fmt.Println("Edit the file to update it; the user's view redraws on every change.")
+	}
+	for _, k := range slices.Sorted(maps.Keys(p.Actions)) {
+		fmt.Printf("  atc.run(%q, args) runs %s\n", k, strings.Join(p.Actions[k], " "))
 	}
 	return nil
 }

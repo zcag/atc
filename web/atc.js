@@ -39,6 +39,8 @@
     },
     send: (text) => (inAtc ? ask("send", String(text)) : copy(String(text)).then(() => false)),
     copy: (text) => (inAtc ? ask("copy", String(text)) : copy(String(text))),
+    run: (name, args = []) => (inAtc ? ask("run", { action: String(name), args: [].concat(args).map(String) })
+      : Promise.reject(new Error("atc.run works only inside atc, where the page was shown with atc show --action"))),
     open: (url) => (inAtc ? ask("open", new URL(url, location.href).href) : Promise.resolve(void open(url, "_blank", "noopener"))),
   };
   if (!inAtc) return;

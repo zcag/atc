@@ -17,20 +17,21 @@ import (
 )
 
 type Page struct {
-	Session string    `json:"session"`
-	Name    string    `json:"name"`
-	Title   string    `json:"title,omitempty"`
-	Path    string    `json:"path"`
-	Note    string    `json:"note,omitempty"`
-	Shown   time.Time `json:"shown"`
-	Kind    string    `json:"kind,omitempty"`
-	Updated time.Time `json:"updated,omitzero"`
-	Size    int64     `json:"size,omitempty"`
-	Gone    bool      `json:"gone,omitempty"`
-	URL     string    `json:"url,omitempty"`
-	Host    string    `json:"host,omitempty"`
-	Of      string    `json:"of,omitempty"`
-	Cwd     string    `json:"cwd,omitempty"`
+	Session string              `json:"session"`
+	Name    string              `json:"name"`
+	Title   string              `json:"title,omitempty"`
+	Path    string              `json:"path"`
+	Note    string              `json:"note,omitempty"`
+	Shown   time.Time           `json:"shown"`
+	Kind    string              `json:"kind,omitempty"`
+	Updated time.Time           `json:"updated,omitzero"`
+	Size    int64               `json:"size,omitempty"`
+	Gone    bool                `json:"gone,omitempty"`
+	URL     string              `json:"url,omitempty"`
+	Host    string              `json:"host,omitempty"`
+	Of      string              `json:"of,omitempty"`
+	Cwd     string              `json:"cwd,omitempty"`
+	Actions map[string][]string `json:"actions,omitempty"`
 }
 
 type saved struct {

@@ -213,7 +213,7 @@ func (c *Client) Send(id, text string) error {
 	return c.do("POST", "/api/sessions/"+id+"/send", map[string]string{"text": text}, nil)
 }
 
-func (c *Client) Show(sid string, req map[string]string) (r struct {
+func (c *Client) Show(sid string, req map[string]any) (r struct {
 	Page    pages.Page `json:"page"`
 	Created bool       `json:"created"`
 }, err error) {
