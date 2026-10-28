@@ -3082,6 +3082,21 @@ const appState = (a, live) => {
 };
 const APP_WORD = { working: "Running", "needs-you": "A run needs you", failed: "Last run failed", done: "Idle", "": "No runs yet" };
 
+const openAppChat = async (a, live, say, page) => {
+  const x = appRun(a, live), q = hostQ(a.host, HERE);
+  let key = x && keyOf(x);
+  if (!key) {
+    try {
+      key = (a.run?.sessionId
+        ? await api(`/api/sessions/${a.run.sessionId}/resume${q}`, { method: "POST" })
+        : await api(`/api/sessions${q}`, { method: "POST", body: { preset: a.name, prompt: "" } })).id;
+    } catch (e) { return say(e.message); }
+  }
+  const pg = page || a.pages[0]?.name;
+  if (pg && !PHONE.matches) { AUTO_SPLIT = true; location.hash = pageLink(key, pg); }
+  else { AUTO_PANE = "chat"; go(key); }
+};
+
 const startRun = async (a, say, reload) => {
   try {
     await api(`/api/presets/${encodeURIComponent(a.name)}/run${hostQ(a.host, HERE)}`, { method: "POST" });
@@ -3129,7 +3144,7 @@ function AppsMenu({ apps, live, say, reload }) {
   const quiet = rows.filter((r) => !loud.includes(r));
   const dotOf = (st) => (st === "working" ? "work" : st === "needs-you" || st === "failed" ? "needs" : null);
   return html`<${Menu} cls="btn talk" aria="Apps" width=${340} sheetCls="appsheet" label=${html`<span class="mi">${ICON.apps}</span>`} render=${(close) => {
-    const open = (a) => { close(); location.hash = appLink(a); };
+    const open = (a) => { close(); a.open === "chat" && a.chat ? openAppChat(a, live, say) : (location.hash = appLink(a)); };
     return html`
       ${loud.map(({ a, st }) => html`
         <div key=${`${a.host}/${a.name}`} class="abrief" role="button" tabindex="0" onClick=${() => open(a)} onKeyDown=${(e) => e.key === "Enter" && open(a)}>
@@ -3157,19 +3172,7 @@ function AppView({ name, page, apps, live, say, reload }) {
   if (!a) return html`<div class="palone"><div class="fbody"><p class="empty">${apps ? `No app named ${name}.` : "Loading…"}</p></div></div>`;
   const x = appRun(a, live), st = appState(a, live), q = hostQ(a.host, HERE);
   const run = async () => { setBusy(true); await startRun(a, say, reload); setBusy(false); };
-  const chat = async () => {
-    let key = x && keyOf(x);
-    if (!key) {
-      try {
-        key = (a.run?.sessionId
-          ? await api(`/api/sessions/${a.run.sessionId}/resume${q}`, { method: "POST" })
-          : await api(`/api/sessions${q}`, { method: "POST", body: { preset: a.name, prompt: "" } })).id;
-      } catch (e) { return say(e.message); }
-    }
-    const pg = page || a.pages[0]?.name;
-    if (pg && !PHONE.matches) { AUTO_SPLIT = true; location.hash = pageLink(key, pg); }
-    else { AUTO_PANE = "chat"; go(key); }
-  };
+  const chat = () => openAppChat(a, live, say, page);
   const s = x || (a.run?.sessionId ? { sessionId: a.run.sessionId, id: a.run.id, title: a.name, state: "past", host: a.host } : { title: a.name });
   const runBtn = html`<button class="btn" disabled=${busy || st === "working"} onClick=${run}>Run</button>`;
   return html`

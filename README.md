@@ -264,6 +264,7 @@ preset, app or not; its last run (exit code and output) shows as the app's state
   (a badge, a run working, needing you or failed) as cards with their page's `headline` and **Run**,
   the rest as a row of chips. An app opens its page full width, with **Run** and **Chat**, which opens the latest run
   beside the page. `atc.send` from the page goes to the latest run, resuming it if it stopped.
+  With `"open": "chat"` the app opens straight into that view, for apps you mostly talk to.
 - **From other sessions.** An agent starts a run with atc's `start` tool and the app's preset, and
   reaches the app's latest run as `app:<name>` wherever a session is named: `send`, `read`, `wait`,
   `atc attach app:<name>`.

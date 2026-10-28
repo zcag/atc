@@ -25,6 +25,7 @@ type Preset struct {
 	Command  string   `json:"command,omitempty"`
 	App      bool     `json:"app,omitempty"`
 	Title    string   `json:"title,omitempty"`
+	Open     string   `json:"open,omitempty"`
 	Icon     string   `json:"icon,omitempty"`
 	Color    string   `json:"color,omitempty"`
 }
