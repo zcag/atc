@@ -562,6 +562,7 @@ voice other than the device's own:
 
 ```sh
 ATC_STT_URL=http://localhost:8000/v1/audio/transcriptions
+ATC_STT_LANGUAGE=en                                             # optional, else Whisper guesses per clip
 ATC_SPEECH_LLM_URL=http://localhost:8001/v1/chat/completions   # optional
 ATC_SPEECH_LLM_MODEL=qwen
 ATC_TTS_URL=http://localhost:8002/v1/audio/speech                # optional

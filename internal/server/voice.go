@@ -17,14 +17,14 @@ import (
 )
 
 type Voice struct {
-	STT, STTModel, STTPrompt string
-	TTS, TTSModel, TTSVoice  string
-	LLM, LLMModel            string
+	STT, STTModel, STTPrompt, STTLanguage string
+	TTS, TTSModel, TTSVoice               string
+	LLM, LLMModel                         string
 }
 
 func VoiceFromEnv() Voice {
 	return Voice{
-		STT: os.Getenv("ATC_STT_URL"), STTModel: cmp.Or(os.Getenv("ATC_STT_MODEL"), "whisper-1"), STTPrompt: os.Getenv("ATC_STT_PROMPT"),
+		STT: os.Getenv("ATC_STT_URL"), STTModel: cmp.Or(os.Getenv("ATC_STT_MODEL"), "whisper-1"), STTPrompt: os.Getenv("ATC_STT_PROMPT"), STTLanguage: os.Getenv("ATC_STT_LANGUAGE"),
 		TTS: os.Getenv("ATC_TTS_URL"), TTSModel: cmp.Or(os.Getenv("ATC_TTS_MODEL"), "tts-1"), TTSVoice: cmp.Or(os.Getenv("ATC_TTS_VOICE"), "alloy"),
 		LLM: os.Getenv("ATC_SPEECH_LLM_URL"), LLMModel: os.Getenv("ATC_SPEECH_LLM_MODEL"),
 	}
@@ -61,6 +61,9 @@ func (s *Server) transcribe(ctx context.Context, audio []byte, filename string) 
 	fw.Write(audio)
 	mw.WriteField("model", s.Voice.STTModel)
 	mw.WriteField("response_format", "verbose_json")
+	if s.Voice.STTLanguage != "" {
+		mw.WriteField("language", s.Voice.STTLanguage)
+	}
 	if s.Voice.STTPrompt != "" {
 		mw.WriteField("prompt", s.Voice.STTPrompt)
 	}

@@ -261,7 +261,7 @@ func TestVoice(t *testing.T) {
 		switch r.URL.Path {
 		case "/stt":
 			f, _, err := r.FormFile("file")
-			if err != nil || r.FormValue("model") != "whisper-1" || r.FormValue("response_format") != "verbose_json" {
+			if err != nil || r.FormValue("model") != "whisper-1" || r.FormValue("response_format") != "verbose_json" || r.FormValue("language") != "en" {
 				http.Error(w, "bad form", 400)
 				return
 			}
@@ -288,7 +288,7 @@ func TestVoice(t *testing.T) {
 	if res, _ := do(t, "POST", newTestServer(t, nil, Voice{}).URL+"/api/voice/stt", "tok", "RIFFfake"); res.StatusCode != http.StatusNotImplemented {
 		t.Fatalf("unconfigured stt: %d", res.StatusCode)
 	}
-	ts := newTestServer(t, nil, Voice{STT: up.URL + "/stt", STTModel: "whisper-1", LLM: up.URL + "/llm"})
+	ts := newTestServer(t, nil, Voice{STT: up.URL + "/stt", STTModel: "whisper-1", STTLanguage: "en", LLM: up.URL + "/llm"})
 	if res, body := do(t, "POST", ts.URL+"/api/voice/stt", "tok", "RIFFfake"); res.StatusCode != 200 || !strings.Contains(body, `"text":"merhaba dünya"`) {
 		t.Fatalf("stt: %d %s", res.StatusCode, body)
 	}
