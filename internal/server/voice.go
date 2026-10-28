@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 
 type Voice struct {
 	STT, STTModel, STTPrompt, STTLanguage string
+	STTLanguages                          []string
 	TTS, TTSModel, TTSVoice               string
 	LLM, LLMModel                         string
 }
@@ -25,7 +28,8 @@ type Voice struct {
 func VoiceFromEnv() Voice {
 	return Voice{
 		STT: os.Getenv("ATC_STT_URL"), STTModel: cmp.Or(os.Getenv("ATC_STT_MODEL"), "whisper-1"), STTPrompt: os.Getenv("ATC_STT_PROMPT"), STTLanguage: os.Getenv("ATC_STT_LANGUAGE"),
-		TTS: os.Getenv("ATC_TTS_URL"), TTSModel: cmp.Or(os.Getenv("ATC_TTS_MODEL"), "tts-1"), TTSVoice: cmp.Or(os.Getenv("ATC_TTS_VOICE"), "alloy"),
+		STTLanguages: strings.FieldsFunc(os.Getenv("ATC_STT_LANGUAGES"), func(r rune) bool { return r == ',' || r == ' ' }),
+		TTS:          os.Getenv("ATC_TTS_URL"), TTSModel: cmp.Or(os.Getenv("ATC_TTS_MODEL"), "tts-1"), TTSVoice: cmp.Or(os.Getenv("ATC_TTS_VOICE"), "alloy"),
 		LLM: os.Getenv("ATC_SPEECH_LLM_URL"), LLMModel: os.Getenv("ATC_SPEECH_LLM_MODEL"),
 	}
 }
@@ -54,14 +58,30 @@ func (s *Server) stt(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]string{"text": text, "language": lang})
 }
 
+// transcribe turns speech into text in lang when the caller names one. Otherwise, with
+// ATC_STT_LANGUAGES set, Whisper detects the language but only those count: a detection outside
+// them (short English heard as Icelandic) is transcribed again in the first one. Without it,
+// ATC_STT_LANGUAGE pins every clip.
 func (s *Server) transcribe(ctx context.Context, audio []byte, filename, lang string) (string, string, error) {
+	if allowed := s.Voice.STTLanguages; lang == "" && len(allowed) > 0 {
+		text, got, err := s.whisper(ctx, audio, filename, "")
+		if err != nil || slices.Contains(allowed, got) {
+			return text, got, err
+		}
+		log.Printf("stt: heard %s, outside %s; again in %s", got, strings.Join(allowed, ","), allowed[0])
+		return s.whisper(ctx, audio, filename, allowed[0])
+	}
+	return s.whisper(ctx, audio, filename, cmp.Or(lang, s.Voice.STTLanguage))
+}
+
+func (s *Server) whisper(ctx context.Context, audio []byte, filename, lang string) (string, string, error) {
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
 	fw, _ := mw.CreateFormFile("file", filename)
 	fw.Write(audio)
 	mw.WriteField("model", s.Voice.STTModel)
 	mw.WriteField("response_format", "verbose_json")
-	if lang := cmp.Or(lang, s.Voice.STTLanguage); lang != "" {
+	if lang != "" {
 		mw.WriteField("language", lang)
 	}
 	if s.Voice.STTPrompt != "" {

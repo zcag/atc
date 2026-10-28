@@ -563,12 +563,18 @@ voice other than the device's own:
 ```sh
 ATC_STT_URL=http://localhost:8000/v1/audio/transcriptions
 ATC_STT_LANGUAGE=en                                             # optional, else Whisper guesses per clip
+ATC_STT_LANGUAGES=en,tr                                         # optional: guess, but only among these
 ATC_SPEECH_LLM_URL=http://localhost:8001/v1/chat/completions   # optional
 ATC_SPEECH_LLM_MODEL=qwen
 ATC_TTS_URL=http://localhost:8002/v1/audio/speech                # optional
 ATC_TTS_MODEL=tts-1
 ATC_TTS_VOICE=alloy
 ```
+
+A language picked in the voice bar is used as is. Otherwise `ATC_STT_LANGUAGES` lets Whisper detect
+the language but keeps only those it lists: a clip heard as anything else (short English comes
+back as Icelandic or Portuguese) is transcribed again in the first one. It takes the place of
+`ATC_STT_LANGUAGE` when both are set, and WhatsApp voice notes go the same way.
 
 Without `ATC_TTS_URL`, replies are read by the device's built-in voice, which is instant. The
 microphone needs HTTPS. On a phone, keep the screen on: browsers stop the microphone when the

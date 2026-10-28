@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -302,6 +303,25 @@ func TestVoice(t *testing.T) {
 	_, me := get(t, ts.URL+"/api/me", "tok")
 	if !strings.Contains(me, `"stt":true`) || !strings.Contains(me, `"tts":false`) {
 		t.Fatalf("me voice flags: %s", me)
+	}
+}
+
+func TestVoiceLanguages(t *testing.T) {
+	var asked []string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		lang := r.FormValue("language")
+		asked = append(asked, lang)
+		heard := map[string]string{"": "is", "en": "en"}[lang]
+		fmt.Fprintf(w, `{"text":"heard as %s","language":%q}`, cmp.Or(heard, lang), cmp.Or(heard, lang))
+	}))
+	defer up.Close()
+	ts := newTestServer(t, nil, Voice{STT: up.URL, STTModel: "whisper-1", STTLanguage: "tr", STTLanguages: []string{"en", "tr"}})
+	if _, body := do(t, "POST", ts.URL+"/api/voice/stt", "tok", "RIFF"); !strings.Contains(body, `"language":"en"`) || strings.Join(asked, ",") != ",en" {
+		t.Fatalf("a detection outside en,tr is not redone in en: %s (asked %q)", body, asked)
+	}
+	asked = nil
+	if _, body := do(t, "POST", ts.URL+"/api/voice/stt?lang=tr", "tok", "RIFF"); !strings.Contains(body, `"language":"tr"`) || strings.Join(asked, ",") != "tr" {
+		t.Fatalf("an explicit language is not used as is: %s (asked %q)", body, asked)
 	}
 }
 
