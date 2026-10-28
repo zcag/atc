@@ -53,6 +53,7 @@ aria-busy; .pill, .tag, .dot; .chip (a link: <b>#123</b><span>repo</span>);
 bottom); .edit on contenteditable. A tone class (t-needs t-hot t-turn t-work t-live
 t-stop) colors .edge, .dot, .pill and .callout.
 
+  atc show <file> --app <name> show it as that app's page, from any script (no session)
   atc show --list              this session's pages
   atc show --off <name>        take a page down
   atc show --state <name>      the page's data, as JSON (see atc.state)
@@ -127,6 +128,11 @@ func show(args []string) error {
 			note, err = val()
 		case flag == "session":
 			ref, err = val()
+		case flag == "app":
+			var app string
+			if app, err = val(); err == nil {
+				ref = "app:" + app
+			}
 		case flag == "action":
 			var v string
 			if v, err = val(); err == nil {
@@ -148,7 +154,9 @@ func show(args []string) error {
 	}
 	c := client.Load()
 	sid := os.Getenv("CLAUDE_CODE_SESSION_ID")
-	if ref != "" {
+	if strings.HasPrefix(ref, "app:") {
+		sid = ref
+	} else if ref != "" {
 		s, err := c.Find(ref, true)
 		if err != nil {
 			return err
@@ -156,7 +164,7 @@ func show(args []string) error {
 		sid = s.SessionID
 	}
 	if sid == "" {
-		return fmt.Errorf("not inside a Claude session, so atc can't tell whose page this is; add --session <session>")
+		return fmt.Errorf("not inside a Claude session, so atc can't tell whose page this is; add --session <session> or --app <name>")
 	}
 	switch mode {
 	case "list", "l":

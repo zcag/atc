@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zcag/atc/internal/attach"
 	"github.com/zcag/atc/internal/claude"
@@ -102,4 +103,36 @@ func TestBusy(t *testing.T) {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+func TestCommandPreset(t *testing.T) {
+	dir := t.TempDir()
+	s := &Server{}
+	p := Preset{Name: "reports", Dir: dir, Command: "cat > got.txt; echo done", Check: "echo fresh"}
+	wait := func() *CommandRun {
+		for i := 0; i < 100; i++ {
+			if c := s.commandRun("reports"); c != nil && !c.Running {
+				return c
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		return s.commandRun("reports")
+	}
+	s.tick(context.Background(), p, "")
+	if c := wait(); c == nil || c.Code != 0 || c.Output != "done" || commandState(c) != "done" {
+		t.Fatalf("run: %+v", c)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "got.txt")); string(b) != "fresh" {
+		t.Errorf("command should get the check's output on stdin, got %q", b)
+	}
+	p.Command, p.Check = "sleep 0.2; exit 3", ""
+	if !s.runCommand(p, "") {
+		t.Fatal("a finished command should run again")
+	}
+	if s.runCommand(p, "") {
+		t.Error("a running command should not start twice")
+	}
+	if c := wait(); commandState(c) != "failed" {
+		t.Errorf("exit 3: %+v", c)
+	}
 }

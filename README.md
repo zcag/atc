@@ -234,8 +234,16 @@ An app is a preset with `"app": true`, and optionally an `icon` (an emoji or a f
 ```
 
 There is no standing session. Each run is an ordinary session started from the preset: by its
-`every` and `check`, by anything that `POST`s to `/api/sessions` with the preset, or by hand with
-**Run**, which starts one with `prompt` and skips the check.
+`every` and `check`, by anything that `POST`s to `/api/sessions` with the preset or to
+`/api/presets/<name>/run`, or by hand with **Run**, which starts one with `prompt` and skips the
+check.
+
+An app that needs no agent to refresh gives its preset a `command` instead: on `every` (after
+`check`, if any), on **Run** and on `POST /api/presets/<name>/run`, atc runs that command in the
+preset's folder and starts no session. The command keeps the page current itself, with
+`atc show <file> --app <name>` and `atc state -set app:<name> <page>`. If the preset also has a
+`brief`, **Chat** still starts a session for whatever needs judgment. `command` works on any
+preset, app or not; its last run (exit code and output) shows as the app's state.
 
 - **Pages.** A page a run shows with `atc show` belongs to the app, filed under `app:<name>`
   instead of the run, so the next run shows and updates the same page and reads the same state.

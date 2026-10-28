@@ -3075,14 +3075,15 @@ const appLink = (a, page) => `#/p/${APP_REF}${encodeURIComponent(a.name)}${page 
 const appRun = (a, live) => live.filter((s) => s.app === a.name && (s.host || HERE) === (a.host || HERE))
   .sort((x, y) => (Date.parse(y.startedAt || 0) || 0) - (Date.parse(x.startedAt || 0) || 0))[0];
 const appState = (a, live) => {
-  const st = appRun(a, live)?.state || a.run?.state;
-  return st === "working" || st === "needs-you" ? st : st ? "done" : "";
+  const st = appRun(a, live)?.state, r = a.run?.state;
+  if (st === "working" || st === "needs-you") return st;
+  return r === "working" || r === "failed" ? r : st || r ? "done" : "";
 };
-const APP_WORD = { working: "Running", "needs-you": "A run needs you", done: "Idle", "": "No runs yet" };
+const APP_WORD = { working: "Running", "needs-you": "A run needs you", failed: "Last run failed", done: "Idle", "": "No runs yet" };
 
 const startRun = async (a, say, reload) => {
   try {
-    await api(`/api/sessions${hostQ(a.host, HERE)}`, { method: "POST", body: { preset: a.name, prompt: a.prompt || "" } });
+    await api(`/api/presets/${encodeURIComponent(a.name)}/run${hostQ(a.host, HERE)}`, { method: "POST" });
     say(`Started a run of ${a.name}.`);
     reload();
   } catch (e) { say(e.message); }
@@ -3115,13 +3116,17 @@ function AppView({ name, page, apps, live, say, reload }) {
   const chat = async () => {
     let key = x && keyOf(x);
     if (!key) {
-      try { key = (await api(`/api/sessions/${a.run.sessionId}/resume${q}`, { method: "POST" })).id; } catch (e) { return say(e.message); }
+      try {
+        key = (a.run?.sessionId
+          ? await api(`/api/sessions/${a.run.sessionId}/resume${q}`, { method: "POST" })
+          : await api(`/api/sessions${q}`, { method: "POST", body: { preset: a.name, prompt: "" } })).id;
+      } catch (e) { return say(e.message); }
     }
     const pg = page || a.pages[0]?.name;
     if (pg && !PHONE.matches) location.hash = pageLink(key, pg);
     else { AUTO_PANE = "chat"; go(key); }
   };
-  const s = x || (a.run ? { sessionId: a.run.sessionId, id: a.run.id, title: a.name, state: "past", host: a.host } : { title: a.name });
+  const s = x || (a.run?.sessionId ? { sessionId: a.run.sessionId, id: a.run.id, title: a.name, state: "past", host: a.host } : { title: a.name });
   const runBtn = html`<button class="btn" disabled=${busy || st === "working"} onClick=${run}>Run</button>`;
   return html`
     <div class="palone appview">
@@ -3132,7 +3137,7 @@ function AppView({ name, page, apps, live, say, reload }) {
           <span class="sub ${st}">${APP_WORD[st]}${MULTI && a.host ? ` · ${a.host}` : ""}</span>
         </div>
         ${runBtn}
-        <button class="btn" disabled=${!x && !a.run} onClick=${chat}>Chat</button>
+        ${a.chat && html`<button class="btn" onClick=${chat}>Chat</button>`}
       </header>
       ${a.pages.length
         ? html`<${PagePane} s=${s} list=${a.pages} cur=${page} pick=${(n) => location.replace(appLink(a, n))} say=${say} alone />`

@@ -60,6 +60,10 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "give the page a name with letters or digits", http.StatusBadRequest)
 		return
 	}
+	if sid := r.PathValue("sid"); strings.HasPrefix(sid, appRef) && !s.localApp(sid) {
+		http.Error(w, "no app named "+strings.TrimPrefix(sid, appRef)+" on "+s.Host, http.StatusNotFound)
+		return
+	}
 	for a, argv := range req.Actions {
 		if a == "" || len(argv) == 0 {
 			http.Error(w, "an action needs a name and a command: --action name='command'", http.StatusBadRequest)

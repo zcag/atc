@@ -21,6 +21,7 @@ type Preset struct {
 	Every    string   `json:"every,omitempty"`
 	Check    string   `json:"check,omitempty"`
 	Prompt   string   `json:"prompt,omitempty"`
+	Command  string   `json:"command,omitempty"`
 	App      bool     `json:"app,omitempty"`
 	Icon     string   `json:"icon,omitempty"`
 }

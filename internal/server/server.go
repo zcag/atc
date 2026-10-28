@@ -38,6 +38,8 @@ import (
 )
 
 type Server struct {
+	cmdMu   sync.Mutex
+	cmds    map[string]*CommandRun
 	M       *sessions.Manager
 	Term    *attach.Hub
 	Web     fs.FS
@@ -133,6 +135,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/guess", s.guess)
 	mux.HandleFunc("GET /api/widget", s.widget)
 	mux.HandleFunc("GET /api/presets", s.presets)
+	mux.HandleFunc("POST /api/presets/{name}/run", s.runPreset)
 	mux.HandleFunc("GET /api/apps", s.apps)
 	mux.HandleFunc("GET /api/engines", s.engines)
 	mux.HandleFunc("POST /api/presence", s.presencePost)
