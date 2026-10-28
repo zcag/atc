@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -84,8 +85,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc notify [--urgent] [--reply TEXT]... [message...]
                                  from inside a session: a push to the user's phone that opens
                                  the session; --urgent buzzes even while they use atc
-  atc wa [--file F]... [--render F.html]... [--voice TEXT] [text...]
-                                 send the user files, a rendered page, a voice note or text on
+  atc wa [--file F]... [--render F.html]... [--voice TEXT] [--poll Q --option A...] [text...]
+                                 send the user files, a rendered page, a voice note, a poll or text on
                                  WhatsApp, from the account atc answers them on; atc wa -h
   atc outputs [-json] <session>  what it produced: running servers, files (with a link to
                                  open each in a browser), links, code it touched
@@ -221,7 +222,9 @@ func serve(args []string) error {
 		Roots: roots,
 		Voice: server.VoiceFromEnv(),
 
-		WhatsApp: whatsapp.FromEnv(),
+		WhatsApp:  whatsapp.FromEnv(),
+		PublicURL: strings.TrimRight(os.Getenv("ATC_PUBLIC_URL"), "/"),
+		LocalURL:  loopback(*addr),
 
 		AppDir:    os.Getenv("ATC_APP_DIR"),
 		StateDir:  client.ConfigDir(),
@@ -285,6 +288,17 @@ func summarizer(cli claude.CLI) (*summary.Summarizer, error) {
 	return summary.Open(path, model, func(ctx context.Context, system, user string) (string, error) {
 		return cli.Print(ctx, model, system, user)
 	})
+}
+
+func loopback(addr string) string {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		return ""
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port)
 }
 
 func tailscaleBin(v string) string {

@@ -193,9 +193,11 @@ func (c *Client) Verify(body []byte, sig string) bool {
 	return hmac.Equal([]byte(want), []byte(strings.TrimSpace(sig)))
 }
 
-// EnsureHook registers the webhook that brings the owner's messages to atc, or brings the one
-// already registered at the same URL up to date. The secret is write-only in OpenWA, so it
-// is set on every start rather than compared.
+// EnsureHook registers the two webhooks that bring the owner's side of the chat to atc, or
+// brings the ones already registered at the same URLs up to date: messages, filtered by
+// sender, and reactions, edits and poll votes, filtered by chat (a sender condition drops
+// reactions, which carry no sender field). The secret is write-only in OpenWA, so it is set
+// on every start rather than compared.
 func (c *Client) EnsureHook(ctx context.Context) error {
 	if c.Hook == "" {
 		return nil
@@ -204,51 +206,101 @@ func (c *Client) EnsureHook(ctx context.Context) error {
 	if err := c.do(ctx, "GET", "/webhooks", nil, &hooks); err != nil {
 		return err
 	}
-	body := map[string]any{
-		"url": c.Hook, "events": []string{"message.received"}, "secret": c.Secret, "retryCount": 3,
-		"filters": map[string]any{"conditions": []map[string]any{
-			{"field": "sender", "operator": "is", "value": c.OwnerIDs},
-			{"field": "isGroup", "operator": "is", "value": false},
-			{"field": "fromMe", "operator": "is", "value": false},
-		}},
+	sep := "?"
+	if strings.Contains(c.Hook, "?") {
+		sep = "&"
 	}
-	for _, h := range hooks {
-		if h.URL == c.Hook {
-			return c.do(ctx, "PUT", "/webhooks/"+h.ID, body, nil)
+	want := []struct {
+		url    string
+		events []string
+		match  map[string]any
+	}{
+		{c.Hook, []string{"message.received"}, map[string]any{"field": "sender", "operator": "is", "value": c.OwnerIDs}},
+		{c.Hook + sep + "changes=1", []string{"message.reaction", "message.edited", "poll.vote"}, map[string]any{"field": "chatId", "operator": "is", "value": c.OwnerIDs}},
+	}
+	for _, w := range want {
+		body := map[string]any{
+			"url": w.url, "events": w.events, "secret": c.Secret, "retryCount": 3,
+			"filters": map[string]any{"conditions": []map[string]any{
+				w.match,
+				{"field": "isGroup", "operator": "is", "value": false},
+				{"field": "fromMe", "operator": "is", "value": false},
+			}},
+		}
+		method, path := "POST", "/webhooks"
+		for _, h := range hooks {
+			if h.URL == w.url {
+				method, path = "PUT", "/webhooks/"+h.ID
+			}
+		}
+		if err := c.do(ctx, method, path, body, nil); err != nil {
+			return err
 		}
 	}
-	return c.do(ctx, "POST", "/webhooks", body, nil)
+	return nil
 }
 
-// Event is the part of a message.received delivery atc reads.
+func (c *Client) Poll(ctx context.Context, question string, options []string, multi bool) (string, error) {
+	var s Sent
+	body := map[string]any{"chatId": c.OwnerChat(), "name": question, "options": options, "allowMultipleAnswers": multi}
+	return s.MessageID, c.do(ctx, "POST", "/messages/send-poll", body, &s)
+}
+
 type Event struct {
-	Event          string `json:"event"`
-	IdempotencyKey string `json:"idempotencyKey"`
-	Data           struct {
-		ID          string `json:"id"`
-		From        string `json:"from"`
-		ChatID      string `json:"chatId"`
-		Body        string `json:"body"`
-		Type        string `json:"type"`
-		Kind        string `json:"kind"`
-		IsGroup     bool   `json:"isGroup"`
-		FromMe      bool   `json:"fromMe"`
-		SenderPhone string `json:"senderPhone"`
-		Media       *struct {
-			Mimetype string `json:"mimetype"`
-			Filename string `json:"filename"`
-			Data     string `json:"data"`
-			Omitted  bool   `json:"omitted"`
-		} `json:"media"`
-		Quoted *struct {
-			ID   string `json:"id"`
-			Body string `json:"body"`
-		} `json:"quotedMessage"`
-		Location *struct {
-			Latitude    float64 `json:"latitude"`
-			Longitude   float64 `json:"longitude"`
-			Description string  `json:"description"`
-			Address     string  `json:"address"`
-		} `json:"location"`
-	} `json:"data"`
+	Event string          `json:"event"`
+	Data  json.RawMessage `json:"data"`
+}
+
+type Message struct {
+	ID          string `json:"id"`
+	From        string `json:"from"`
+	ChatID      string `json:"chatId"`
+	Body        string `json:"body"`
+	Type        string `json:"type"`
+	Kind        string `json:"kind"`
+	IsGroup     bool   `json:"isGroup"`
+	FromMe      bool   `json:"fromMe"`
+	SenderPhone string `json:"senderPhone"`
+	Media       *struct {
+		Mimetype string `json:"mimetype"`
+		Filename string `json:"filename"`
+		Data     string `json:"data"`
+		Omitted  bool   `json:"omitted"`
+	} `json:"media"`
+	Quoted *struct {
+		ID   string `json:"id"`
+		Body string `json:"body"`
+	} `json:"quotedMessage"`
+	Location *struct {
+		Latitude    float64 `json:"latitude"`
+		Longitude   float64 `json:"longitude"`
+		Description string  `json:"description"`
+		Address     string  `json:"address"`
+	} `json:"location"`
+}
+
+type Reaction struct {
+	MessageID string `json:"messageId"`
+	ChatID    string `json:"chatId"`
+	Reaction  string `json:"reaction"`
+	SenderID  string `json:"senderId"`
+}
+
+type Edit struct {
+	MessageID string `json:"messageId"`
+	ChatID    string `json:"chatId"`
+	Body      string `json:"body"`
+	SenderID  string `json:"senderId"`
+	From      string `json:"from"`
+	FromMe    bool   `json:"fromMe"`
+	IsGroup   bool   `json:"isGroup"`
+}
+
+type Vote struct {
+	PollMessageID   string   `json:"pollMessageId"`
+	ChatID          string   `json:"chatId"`
+	VoterID         string   `json:"voterId"`
+	SelectedOptions []string `json:"selectedOptions"`
+	PollName        string   `json:"pollName"`
+	TimestampMs     int64    `json:"timestampMs"`
 }

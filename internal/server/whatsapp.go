@@ -6,22 +6,19 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"html"
 	"io"
 	"log"
 	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/sessions"
-	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/whatsapp"
 )
 
@@ -33,31 +30,53 @@ const waPrompt = `This conversation happens over WhatsApp: the user writes to yo
 	`when something really is tabular, and long code is sent as a file. Every text you write while working goes out as its own message ` +
 	`as soon as you write it, so don't narrate each step; write when there is something worth reading. ` +
 	"To send a file, image, screenshot, PDF, a rendered HTML page or a voice note, run `atc wa` (`atc wa -h`); never use it for plain " +
-	`text, which your reply delivers anyway. What the user sends arrives as text: photos, documents and other files as the path of the ` +
-	`saved file (read it), voice notes already transcribed (they may hear a spoken summary of your reply back), locations as coordinates, ` +
-	`and a reply to an earlier message with that message quoted first. Nobody can answer a dialog from WhatsApp, so ask in plain text, ` +
-	`and when you offer choices, number them so a number answers. The user can send /new for a fresh conversation and /stop to interrupt you. ` +
-	switchboard
+	"text, which your reply delivers anyway. A page you show with `atc show` is sent to them as a screenshot with a link. " +
+	`
 
+When you offer the user a choice, send it as a poll they answer with a tap: ` + "`atc wa --poll \"Question?\" --option A --option B`" +
+	` (2 to 12 options, --multi to allow several). Write any context first, run the poll last, don't list the options again in text, and end ` +
+	`your turn; their vote comes back as a "[poll vote]" message. Nobody can answer a dialog from WhatsApp, so never wait on one.
+
+` +
+	`What the user sends arrives as text: photos, documents and other files as the path of the saved file (read it), voice notes already ` +
+	`transcribed (they hear a spoken summary of your reply back), locations as coordinates, a reply to an earlier message with that message ` +
+	`quoted first, "[reacted 👍 to your message]" when they react to one of your questions (👍 is yes, 👎 is no), and "[edited a message]" ` +
+	`with their correction. They have /new for a fresh conversation, /stop to interrupt you and /status for their sessions.
+
+` +
+	`Keep this conversation quick: it is a switchboard, not a workbench. Answer questions, look things up and do small one-step things ` +
+	`yourself. Anything bigger (changing code or config, deploying, research or work that takes more than a couple of minutes) goes to a ` +
+	`session of its own: start one with the atc start tool (worktree when it works in a git repo), tell the user in a line what you ` +
+	`started, and end your turn. Never enter a worktree or change folders in this session. A session you started reports back into this ` +
+	`conversation; pass the outcome on to the user in a few lines, follow up with send when something is missing or wrong, and once its ` +
+	`work is done and nothing more is expected of it, stop it with the stop tool and say so. Use the sessions and read tools when the ` +
+	`user asks how things stand. ` + switchboard
+
+// waChat is the one conversation: which messages were seen, the turn being relayed, where in
+// the session's transcript relaying stopped, and what atc said, so a reaction can be read.
 type waChat struct {
-	mu   sync.Mutex
-	seen map[string]time.Time
-	turn *waTurn
+	mu    sync.Mutex
+	seen  map[string]time.Time
+	turn  *waTurn
+	mark  waMark
+	path  string
+	said  map[string]string
+	order []string
+	heard map[string]string
+	votes map[string]*time.Timer
 
 	out    sync.Mutex
 	sentAt time.Time
 }
 
-type waTurn struct {
-	id, sid, path string
-	off           int64
-	asks          []waMsg
-	typed         int
-	typedAt       time.Time
-	voice         bool
+type waMark struct {
+	SID string `json:"session"`
+	Off int64  `json:"offset"`
 }
 
 type waMsg struct{ chat, id string }
+
+const waMemory = 300
 
 func (c *waChat) first(id string) bool {
 	c.mu.Lock()
@@ -74,15 +93,54 @@ func (c *waChat) first(id string) bool {
 	return true
 }
 
+func (c *waChat) remember(m map[string]string, id, text string) {
+	if id == "" || text == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, ok := m[id]; !ok {
+		c.order = append(c.order, id)
+	}
+	m[id] = text
+	for len(c.order) > 2*waMemory {
+		delete(c.said, c.order[0])
+		delete(c.heard, c.order[0])
+		c.order = c.order[1:]
+	}
+}
+
+func (c *waChat) recall(m map[string]string, id string) string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return m[id]
+}
+
+func (c *waChat) setMark(m waMark) {
+	c.mu.Lock()
+	c.mark = m
+	c.mu.Unlock()
+	if b, err := json.Marshal(m); err == nil && c.path != "" {
+		os.WriteFile(c.path, b, 0o644)
+	}
+}
+
 func (s *Server) startWhatsApp() {
-	s.wa = &waChat{seen: map[string]time.Time{}}
+	s.wa = &waChat{seen: map[string]time.Time{}, said: map[string]string{}, heard: map[string]string{}, votes: map[string]*time.Timer{}}
+	if s.StateDir != "" {
+		s.wa.path = filepath.Join(s.StateDir, "whatsapp.json")
+		if b, err := os.ReadFile(s.wa.path); err == nil {
+			json.Unmarshal(b, &s.wa.mark)
+		}
+	}
+	go s.waWatch()
 	go func() {
 		for try := range 10 {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			err := s.WhatsApp.EnsureHook(ctx)
 			cancel()
 			if err == nil {
-				log.Printf("whatsapp: webhook ready at %s", cmp.Or(s.WhatsApp.Hook, "(not registered by atc)"))
+				log.Printf("whatsapp: webhooks ready at %s", cmp.Or(s.WhatsApp.Hook, "(not registered by atc)"))
 				return
 			}
 			log.Printf("whatsapp: webhook: %v", err)
@@ -112,15 +170,45 @@ func (s *Server) waHook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	if ev.Event == "message.received" {
-		go s.waReceive(ev)
+	decode := func(v any) bool {
+		if err := json.Unmarshal(ev.Data, v); err != nil {
+			log.Printf("whatsapp: %s: %v", ev.Event, err)
+			return false
+		}
+		return true
+	}
+	switch ev.Event {
+	case "message.received":
+		var m whatsapp.Message
+		if decode(&m) {
+			go s.waReceive(m)
+		}
+	case "message.reaction":
+		var x whatsapp.Reaction
+		if decode(&x) {
+			go s.waReaction(x)
+		}
+	case "message.edited":
+		var x whatsapp.Edit
+		if decode(&x) {
+			go s.waEdited(x)
+		}
+	case "poll.vote":
+		var x whatsapp.Vote
+		if decode(&x) {
+			go s.waVote(x)
+		}
 	}
 }
 
-func (s *Server) waReceive(ev whatsapp.Event) {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+func waContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.Background(), 3*time.Minute)
+}
+
+func (s *Server) waReceive(d whatsapp.Message) {
+	ctx, cancel := waContext()
 	defer cancel()
-	d, wa := ev.Data, s.WhatsApp
+	wa := s.WhatsApp
 	if d.FromMe || d.IsGroup || d.Kind != "" && d.Kind != "individual" || !wa.IsOwner(ctx, d.From, d.SenderPhone) {
 		log.Printf("whatsapp: ignored a %s message from %s", d.Type, d.From)
 		return
@@ -133,6 +221,7 @@ func (s *Server) waReceive(ev whatsapp.Event) {
 		return
 	}
 	msg := waMsg{cmp.Or(d.ChatID, d.From), d.ID}
+	s.wa.remember(s.wa.heard, d.ID, d.Body)
 	wa.Read(ctx, msg.chat)
 	var err error
 	switch strings.ToLower(strings.TrimSpace(d.Body)) {
@@ -140,29 +229,120 @@ func (s *Server) waReceive(ev whatsapp.Event) {
 		err = s.waNew(ctx, msg)
 	case "/stop":
 		err = s.waStop(ctx, msg)
+	case "/status":
+		err = s.waStatus(ctx)
+	case "/help":
+		_, err = s.waText(ctx, waHelpText)
 	default:
 		wa.React(ctx, msg.chat, msg.id, "⏳")
 		var text string
 		var voice bool
-		if text, voice, err = s.waPrompt(ctx, ev); err == nil {
+		if text, voice, err = s.waPrompt(ctx, d); err == nil {
 			err = s.waType(ctx, msg, text, voice)
 		}
 	}
-	if err != nil {
-		log.Printf("whatsapp: %v", err)
-		wa.React(ctx, msg.chat, msg.id, "❗")
-		s.waText(ctx, "⚠️ "+err.Error())
-	}
+	s.waFailed(ctx, msg, err)
 }
 
-func (s *Server) waPrompt(ctx context.Context, ev whatsapp.Event) (string, bool, error) {
-	d := ev.Data
+func (s *Server) waFailed(ctx context.Context, msg waMsg, err error) {
+	if err == nil {
+		return
+	}
+	log.Printf("whatsapp: %v", err)
+	if msg.id != "" {
+		s.WhatsApp.React(ctx, msg.chat, msg.id, "❗")
+	}
+	s.waText(ctx, "⚠️ "+err.Error())
+}
+
+const waHelpText = "*What you can send*\n" +
+	"- text, photos, files, voice notes, locations\n" +
+	"- a reply to one of my messages, quoting it\n" +
+	"- 👍 or 👎 on one of my questions, or a tap on a poll\n\n" +
+	"*Commands*\n" +
+	"- /status: your sessions, what each is doing\n" +
+	"- /stop: interrupt me\n" +
+	"- /new: start a fresh conversation\n" +
+	"- /help: this"
+
+// waReaction passes on a reaction to one of atc's questions; one on anything else (a 👍 on an
+// answer) is acknowledgement and starts nothing.
+func (s *Server) waReaction(x whatsapp.Reaction) {
+	ctx, cancel := waContext()
+	defer cancel()
+	if x.Reaction == "" || !s.WhatsApp.IsOwner(ctx, x.SenderID, "") {
+		return
+	}
+	said := s.wa.recall(s.wa.said, x.MessageID)
+	if !strings.Contains(said, "?") {
+		return
+	}
+	text := fmt.Sprintf("[reacted %s to your message]\n%s", x.Reaction, quoted(said, 400))
+	s.waFailed(ctx, waMsg{}, s.waType(ctx, waMsg{}, text, false))
+}
+
+func (s *Server) waEdited(x whatsapp.Edit) {
+	ctx, cancel := waContext()
+	defer cancel()
+	if x.FromMe || x.IsGroup || strings.TrimSpace(x.Body) == "" || !s.WhatsApp.IsOwner(ctx, cmp.Or(x.SenderID, x.From), "") {
+		return
+	}
+	text := "[edited a message]\n"
+	if was := s.wa.recall(s.wa.heard, x.MessageID); was != "" {
+		text += "It said:\n" + quoted(was, 400) + "\nNow:\n"
+	}
+	s.wa.remember(s.wa.heard, x.MessageID, x.Body)
+	msg := waMsg{cmp.Or(x.ChatID, s.WhatsApp.OwnerChat()), x.MessageID}
+	s.WhatsApp.React(ctx, msg.chat, msg.id, "⏳")
+	s.waFailed(ctx, msg, s.waType(ctx, msg, text+x.Body, false))
+}
+
+const waVoteWait = 4 * time.Second
+
+// waVote passes on a poll vote once the voter has settled: each change of selection arrives as
+// its own event, so the last one within a few seconds is the answer.
+func (s *Server) waVote(x whatsapp.Vote) {
+	ctx, cancel := waContext()
+	ok := s.WhatsApp.IsOwner(ctx, x.VoterID, "")
+	cancel()
+	if !ok {
+		return
+	}
+	s.wa.mu.Lock()
+	defer s.wa.mu.Unlock()
+	if t := s.wa.votes[x.PollMessageID]; t != nil {
+		t.Stop()
+	}
+	if len(x.SelectedOptions) == 0 {
+		delete(s.wa.votes, x.PollMessageID)
+		return
+	}
+	s.wa.votes[x.PollMessageID] = time.AfterFunc(waVoteWait, func() {
+		s.wa.mu.Lock()
+		delete(s.wa.votes, x.PollMessageID)
+		s.wa.mu.Unlock()
+		ctx, cancel := waContext()
+		defer cancel()
+		question := cmp.Or(x.PollName, s.wa.recall(s.wa.said, x.PollMessageID))
+		text := fmt.Sprintf("[poll vote] %s\n→ %s", question, strings.Join(x.SelectedOptions, ", "))
+		msg := waMsg{cmp.Or(x.ChatID, s.WhatsApp.OwnerChat()), x.PollMessageID}
+		s.WhatsApp.React(ctx, msg.chat, msg.id, "⏳")
+		s.waFailed(ctx, msg, s.waType(ctx, msg, text, false))
+	})
+}
+
+func quoted(text string, n int) string {
+	var b strings.Builder
+	for _, l := range strings.Split(clipRunes(strings.TrimSpace(text), n), "\n") {
+		b.WriteString("> " + l + "\n")
+	}
+	return b.String()
+}
+
+func (s *Server) waPrompt(ctx context.Context, d whatsapp.Message) (string, bool, error) {
 	var b strings.Builder
 	if q := d.Quoted; q != nil && strings.TrimSpace(q.Body) != "" {
-		for _, l := range strings.Split(clipRunes(strings.TrimSpace(q.Body), 600), "\n") {
-			b.WriteString("> " + l + "\n")
-		}
-		b.WriteString("\n")
+		b.WriteString(quoted(q.Body, 600) + "\n")
 	}
 	voice := false
 	switch {
@@ -170,7 +350,7 @@ func (s *Server) waPrompt(ctx context.Context, ev whatsapp.Event) (string, bool,
 		l := d.Location
 		fmt.Fprintf(&b, "[location: %.6f,%.6f %s]\n", l.Latitude, l.Longitude, strings.TrimSpace(l.Description+" "+l.Address))
 	case d.Media != nil:
-		data, mt, err := s.waMedia(ctx, ev)
+		data, mt, err := s.waMedia(ctx, d)
 		if err != nil {
 			return "", false, fmt.Errorf("could not fetch the %s: %w", d.Type, err)
 		}
@@ -192,20 +372,16 @@ func (s *Server) waPrompt(ctx context.Context, ev whatsapp.Event) (string, bool,
 	if d.Type != "location" {
 		b.WriteString(d.Body)
 	}
-	text := strings.TrimSpace(b.String())
-	if text == "" {
-		return "", false, fmt.Errorf("a %s message atc can't pass on", d.Type)
-	}
-	return text, voice, nil
+	return strings.TrimSpace(b.String()), voice, nil
 }
 
-func (s *Server) waMedia(ctx context.Context, ev whatsapp.Event) ([]byte, string, error) {
-	m := ev.Data.Media
+func (s *Server) waMedia(ctx context.Context, d whatsapp.Message) ([]byte, string, error) {
+	m := d.Media
 	if m.Data != "" && !m.Omitted {
 		b, err := base64.StdEncoding.DecodeString(m.Data)
 		return b, m.Mimetype, err
 	}
-	b, mt, err := s.WhatsApp.Download(ctx, cmp.Or(ev.Data.ChatID, ev.Data.From), ev.Data.ID)
+	b, mt, err := s.WhatsApp.Download(ctx, cmp.Or(d.ChatID, d.From), d.ID)
 	return b, cmp.Or(m.Mimetype, mt), err
 }
 
@@ -223,385 +399,65 @@ func extFor(mt string) string {
 	return ""
 }
 
-// waType types a message into the whatsapp session and makes sure a pump is relaying what
-// it writes back; messages sent while it works join the turn already being relayed.
-func (s *Server) waType(ctx context.Context, msg waMsg, text string, voice bool) error {
-	id, err := s.keep(ctx, waName, false)
-	if err != nil {
-		return fmt.Errorf("could not open the whatsapp session: %w", err)
-	}
-	x, err := s.waReady(ctx, id)
+var waStateMark = map[string]string{sessions.NeedsYou: "🟠", sessions.Working: "🔵", sessions.YourTurn: "✅", sessions.Stopped: "⚪"}
+
+func (s *Server) waStatus(ctx context.Context) error {
+	list, err := s.liveAll(ctx, false)
 	if err != nil {
 		return err
 	}
-	if s.M.Store.Get(x.SessionID).Name == "" {
-		s.M.Store.Update(x.SessionID, func(m *store.Meta) { m.Name, m.Parked = waName, true })
-	}
-	s.wa.mu.Lock()
-	t := s.wa.turn
-	if t == nil || t.id != id {
-		t = &waTurn{id: id, sid: x.SessionID}
-		if tr, ok := s.M.Index.Find(x.SessionID); ok {
-			t.path = tr.Path
-			if st, err := os.Stat(tr.Path); err == nil {
-				t.off = st.Size()
-			}
-		}
-		s.wa.turn = t
-		go s.waPump(t)
-	}
-	t.asks, t.voice, t.typedAt, t.typed = append(t.asks, msg), t.voice || voice, time.Now(), t.typed+1
-	s.wa.mu.Unlock()
-	return s.Term.Send(ctx, id, text)
-}
-
-func (s *Server) waReady(ctx context.Context, id string) (sessions.Session, error) {
-	for range 40 {
-		if x, ok := s.waSession(ctx, id); ok && x.Attachable && x.SessionID != "" {
-			return x, nil
-		}
-		time.Sleep(1500 * time.Millisecond)
-	}
-	return sessions.Session{}, errors.New("the whatsapp session did not come up")
-}
-
-func (s *Server) waSession(ctx context.Context, id string) (sessions.Session, bool) {
-	list, err := s.M.Live(ctx)
-	if err != nil {
-		return sessions.Session{}, false
-	}
+	sessions.Sort(list)
+	var lines []string
+	stopped := 0
 	for _, x := range list {
-		if x.ID == id {
-			return x, true
-		}
-	}
-	return sessions.Session{}, false
-}
-
-const (
-	waTick     = 1500 * time.Millisecond
-	waTyping   = 20 * time.Second
-	waQuiet    = 45 * time.Second
-	waSettle   = 30 * time.Second
-	waLongest  = 6 * time.Hour
-	waGap      = 800 * time.Millisecond
-	waRenderPx = 480
-)
-
-// waPump follows one turn of the whatsapp session: it sends each reply text as it lands in
-// the transcript, keeps the typing indicator up, shows a status line edited in place while
-// a turn runs quiet for long, and ticks the user's messages when the turn ends.
-func (s *Server) waPump(t *waTurn) {
-	ctx := context.Background()
-	wa := s.WhatsApp
-	began := time.Now()
-	var typingAt, statusAt, lastOut, doneAt, idleSince, askedAt time.Time
-	seen := 0
-	var status, shown, last string
-	lastOut = began
-	for {
-		time.Sleep(waTick)
-		x, ok := s.waSession(ctx, t.id)
-		if tr, found := s.M.Index.Find(t.sid); found && tr.Path != t.path {
-			t.path = tr.Path
-		}
-		if t.path != "" {
-			if p, err := history.ReadRange(t.path, t.off, 0); err == nil {
-				t.off = p.End
-				for _, m := range p.Messages {
-					switch {
-					case m.Role == "assistant" && strings.TrimSpace(m.Text) != "":
-						s.waReply(ctx, m.Text)
-						last, lastOut = m.Text, time.Now()
-					case m.Role == "user":
-						seen, askedAt = seen+1, cmp.Or(m.Time, time.Now())
-					case m.Role == "done":
-						doneAt = cmp.Or(m.Time, time.Now())
-					}
-				}
-			}
-		}
-		working := ok && x.State == sessions.Working
-		if working {
-			idleSince = time.Time{}
-			if time.Since(typingAt) > waTyping {
-				wa.Typing(ctx, "typing")
-				typingAt = time.Now()
-			}
-			if act := clipRunes(oneLine(x.Activity), 120); act != "" && time.Since(lastOut) > waQuiet {
-				line := "⏳ " + act
-				switch {
-				case status == "":
-					status, _ = s.waText(ctx, line)
-					shown, statusAt = act, time.Now()
-				case act != shown && time.Since(statusAt) > 15*time.Second:
-					wa.Edit(ctx, status, line)
-					shown, statusAt = act, time.Now()
-				}
-			}
-		} else if idleSince.IsZero() {
-			idleSince = time.Now()
-		}
-		s.wa.mu.Lock()
-		needs := ok && x.State == sessions.NeedsYou
-		finished := needs || !working && seen >= t.typed && doneAt.After(askedAt) ||
-			!working && time.Since(idleSince) > waSettle && time.Since(t.typedAt) > waSettle ||
-			time.Since(t.typedAt) > waLongest
-		if !finished {
-			s.wa.mu.Unlock()
+		if x.Hidden() || x.Kind == "interactive" && x.PID == 0 || cmp.Or(s.M.Store.Get(x.SessionID).Name, x.Name) == waName {
 			continue
 		}
-		asks, voice := t.asks, t.voice
-		s.wa.turn = nil
-		s.wa.mu.Unlock()
-
-		wa.Typing(ctx, "paused")
-		mark := "✅"
-		if needs {
-			mark = "❓"
-			s.waText(ctx, "⚠️ The session is waiting on something only atc can answer: "+clipRunes(oneLine(x.Activity), 300)+"\nOpen it in atc.")
+		if x.State == sessions.Stopped {
+			stopped++
+			continue
 		}
-		if status != "" {
-			wa.Edit(ctx, status, "✓ worked "+time.Since(began).Round(time.Second).String())
+		line := cmp.Or(waStateMark[x.State], "▫️") + " *" + clipRunes(x.Title, 60) + "*"
+		if x.Host != "" && x.Host != s.Host {
+			line += " (" + x.Host + ")"
 		}
-		if voice && last != "" {
-			if err := s.waVoice(ctx, last, true); err != nil {
-				log.Printf("whatsapp: voice reply: %v", err)
-			}
-		}
-		for _, a := range asks {
-			wa.React(ctx, a.chat, a.id, mark)
-		}
-		return
-	}
-}
-
-// waSend paces everything sent to WhatsApp, so a long reply goes out as a steady trickle.
-func (s *Server) waSend(f func() (string, error)) (string, error) {
-	s.wa.out.Lock()
-	defer s.wa.out.Unlock()
-	if d := waGap - time.Since(s.wa.sentAt); d > 0 {
-		time.Sleep(d)
-	}
-	id, err := f()
-	s.wa.sentAt = time.Now()
-	if err != nil {
-		log.Printf("whatsapp: send: %v", err)
-	}
-	return id, err
-}
-
-func (s *Server) waText(ctx context.Context, text string) (string, error) {
-	return s.waSend(func() (string, error) { return s.WhatsApp.Text(ctx, text, "") })
-}
-
-func (s *Server) waReply(ctx context.Context, md string) error {
-	var errs []error
-	for _, p := range whatsapp.Format(md) {
-		var err error
 		switch {
-		case p.Text != "":
-			_, err = s.waText(ctx, p.Text)
-		case p.Table != nil:
-			err = s.waTable(ctx, p.Table)
-		case p.Code != "":
-			name := "code" + cmp.Or(langExt[p.Lang], "."+cmp.Or(p.Lang, "txt"))
-			_, err = s.waFile(ctx, []byte(p.Code), "text/plain", name, "")
-		}
-		errs = append(errs, err)
-	}
-	return errors.Join(errs...)
-}
-
-var langExt = map[string]string{"bash": ".sh", "shell": ".sh", "python": ".py", "golang": ".go", "javascript": ".js", "typescript": ".ts", "ruby": ".rb", "markdown": ".md", "yaml": ".yml"}
-
-func (s *Server) waFile(ctx context.Context, data []byte, mt, name, caption string) (string, error) {
-	return s.waSend(func() (string, error) { return s.WhatsApp.Media(ctx, data, mt, name, caption, false) })
-}
-
-func (s *Server) waTable(ctx context.Context, rows [][]string) error {
-	if s.Browser != nil {
-		png, err := s.Browser.Render(ctx, tableHTML(rows), waRenderPx)
-		if err == nil {
-			_, err = s.waFile(ctx, png, "image/png", "table.png", "")
-			return err
-		}
-		log.Printf("whatsapp: render table: %v", err)
-	}
-	_, err := s.waText(ctx, whatsapp.TableText(rows))
-	return err
-}
-
-func tableHTML(rows [][]string) string {
-	var b strings.Builder
-	b.WriteString(`<!doctype html><meta charset="utf-8"><style>` +
-		`body{margin:0;padding:14px;display:inline-block;background:#fff;color:#1f2328;font:15px/1.4 -apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif}` +
-		`table{border-collapse:collapse}th,td{padding:7px 12px;text-align:left;vertical-align:top;max-width:280px;border-bottom:1px solid #e3e6ea}` +
-		`th{background:#f3f5f7;font-weight:600;white-space:nowrap;border-bottom:2px solid #d0d5db}tr:nth-child(even) td{background:#fafbfc}` +
-		`td:not(:first-child),th:not(:first-child){border-left:1px solid #eef0f2}</style><table>`)
-	for i, r := range rows {
-		cell := "td"
-		if i == 0 {
-			cell = "th"
-		}
-		b.WriteString("<tr>")
-		for _, c := range r {
-			b.WriteString("<" + cell + ">" + html.EscapeString(c) + "</" + cell + ">")
-		}
-		b.WriteString("</tr>")
-	}
-	b.WriteString("</table>")
-	return b.String()
-}
-
-// waVoice sends text as a voice note, spoken by atc's TTS; condensed first when it is a
-// written reply rather than something meant to be said.
-func (s *Server) waVoice(ctx context.Context, text string, condense bool) error {
-	if s.Voice.TTS == "" {
-		return errors.New("text-to-speech is not configured")
-	}
-	if condense && s.Voice.LLM != "" {
-		if short, err := s.chat(ctx, condensePrompt, text, 160); err == nil && short != "" {
-			text = short
-		}
-	}
-	res, err := s.speak(ctx, text)
-	if err != nil {
-		return err
-	}
-	wav, err := io.ReadAll(res.Body)
-	res.Body.Close()
-	if err != nil {
-		return err
-	}
-	ogg, err := s.WhatsApp.Voice(ctx, wav)
-	if err != nil {
-		return err
-	}
-	_, err = s.waSend(func() (string, error) { return s.WhatsApp.Media(ctx, ogg, "audio/ogg; codecs=opus", "", "", true) })
-	return err
-}
-
-func (s *Server) waNew(ctx context.Context, msg waMsg) error {
-	list, err := s.M.Live(ctx)
-	if err != nil {
-		return err
-	}
-	for _, x := range list {
-		if x.Kind == "background" && cmp.Or(s.M.Store.Get(x.SessionID).Name, x.Name) == waName {
-			s.M.Store.Update(x.SessionID, func(m *store.Meta) { m.Name = waName + " " + x.Last().Format("01-02 15:04") })
-			if x.Attachable {
-				s.M.CLI.Stop(ctx, x.ID)
+		case x.State == sessions.Working && x.Activity != "":
+			line += "\n   " + clipRunes(oneLine(x.Activity), 90)
+		case x.State == sessions.NeedsYou:
+			if a := asks(x); a != "" {
+				line += "\n   asks: " + clipRunes(a, 120)
 			}
+		case x.Summary != nil && x.Summary.Status != "":
+			line += "\n   " + clipRunes(x.Summary.Status, 120)
 		}
+		lines = append(lines, line)
 	}
-	s.wa.mu.Lock()
-	s.wa.turn = nil
-	s.wa.mu.Unlock()
-	id, err := s.keep(ctx, waName, true)
-	if err != nil {
-		return err
+	if len(lines) == 0 {
+		lines = append(lines, "Nothing open right now.")
 	}
-	x, err := s.waReady(ctx, id)
-	if err != nil {
-		return err
+	if len(lines) > 15 {
+		lines = append(lines[:15], fmt.Sprintf("…and %d more", len(lines)-15))
 	}
-	s.M.Store.Update(x.SessionID, func(m *store.Meta) { m.Name, m.Parked = waName, true })
-	s.refresh()
-	s.WhatsApp.React(ctx, msg.chat, msg.id, "🆕")
-	_, err = s.waText(ctx, "🆕 Fresh conversation. The last one is kept in atc as _"+waName+" "+time.Now().Format("01-02")+"…_")
+	if stopped > 0 {
+		lines = append(lines, fmt.Sprintf("⚪ %d stopped", stopped))
+	}
+	_, err = s.waText(ctx, strings.Join(lines, "\n"))
 	return err
 }
 
-func (s *Server) waStop(ctx context.Context, msg waMsg) error {
-	s.wa.mu.Lock()
-	t := s.wa.turn
-	s.wa.mu.Unlock()
-	if t == nil {
-		return s.WhatsApp.React(ctx, msg.chat, msg.id, "🤷")
+func asks(x sessions.Session) string {
+	var out []string
+	for _, a := range x.Asks {
+		for _, q := range a.Questions {
+			out = append(out, q.Question)
+		}
+		if a.Permission != "" {
+			out = append(out, a.Activity())
+		}
 	}
-	if err := s.Term.Keys(ctx, t.id, "\x1b"); err != nil {
-		return err
+	if len(out) == 0 {
+		return x.Activity
 	}
-	return s.WhatsApp.React(ctx, msg.chat, msg.id, "🛑")
+	return strings.Join(slices.Compact(out), " · ")
 }
-
-// waOut is what `atc wa` asks for: files, rendered pages, a voice note or text, always to
-// the owner and nobody else.
-type waOut struct {
-	Text    string   `json:"text"`
-	Files   []string `json:"files"`
-	Render  []string `json:"render"`
-	Voice   string   `json:"voice"`
-	Caption string   `json:"caption"`
-}
-
-func (s *Server) waPost(w http.ResponseWriter, r *http.Request) {
-	if s.WhatsApp == nil {
-		http.Error(w, "WhatsApp is not set up on "+s.Host+" (ATC_WHATSAPP_* in ~/.config/atc/env)", http.StatusNotImplemented)
-		return
-	}
-	var in waOut
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	ctx := r.Context()
-	var sent []string
-	send := func(what string, err error) bool {
-		if err != nil {
-			http.Error(w, fmt.Sprintf("%s: %v (sent before it: %s)", what, err, cmp.Or(strings.Join(sent, ", "), "nothing")), http.StatusBadGateway)
-			return false
-		}
-		sent = append(sent, what)
-		return true
-	}
-	for _, p := range in.Files {
-		data, err := os.ReadFile(p)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		mt := mime.TypeByExtension(strings.ToLower(filepath.Ext(p)))
-		if mt == "" {
-			mt = http.DetectContentType(data)
-		}
-		if _, err := s.waFile(ctx, data, mt, filepath.Base(p), in.Caption); !send(filepath.Base(p), err) {
-			return
-		}
-	}
-	for _, p := range in.Render {
-		page, err := os.ReadFile(p)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if s.Browser == nil {
-			http.Error(w, "rendering needs atc's browser (ATC_BROWSER)", http.StatusNotImplemented)
-			return
-		}
-		png, err := s.Browser.Render(ctx, string(page), waRenderPx)
-		if err == nil {
-			_, err = s.waFile(ctx, png, "image/png", strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))+".png", in.Caption)
-		}
-		if !send(filepath.Base(p), err) {
-			return
-		}
-	}
-	if in.Voice != "" && !send("voice note", s.waVoice(ctx, in.Voice, false)) {
-		return
-	}
-	if in.Text != "" && !send("text", s.waReply(ctx, in.Text)) {
-		return
-	}
-	reply(w, map[string][]string{"sent": sent})
-}
-
-func clipRunes(s string, n int) string {
-	if r := []rune(s); len(r) > n {
-		return string(r[:n-1]) + "…"
-	}
-	return s
-}
-
-func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }

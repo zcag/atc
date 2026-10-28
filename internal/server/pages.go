@@ -77,6 +77,9 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 	}
 	s.refresh()
 	p, _ = s.Pages.Get(p.Session, p.Name)
+	if s.waShows(p.Session) {
+		go s.waPage(p)
+	}
 	reply(w, map[string]any{"page": s.pageURLs([]pages.Page{p})[0], "created": created})
 }
 

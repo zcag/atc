@@ -56,7 +56,10 @@ type Server struct {
 	Voice   Voice
 
 	WhatsApp *whatsapp.Client
-	wa       *waChat
+	// PublicURL is where the user reaches atc (links in messages), LocalURL where this
+	// machine's own browser does.
+	PublicURL, LocalURL string
+	wa                  *waChat
 
 	AppDir    string
 	AssistDir string
@@ -1112,6 +1115,9 @@ func (s *Server) keep(ctx context.Context, name string, fresh bool) (string, err
 		if last != nil {
 			return s.relaunch(ctx, name, cmp.Or(last.StartCwd, last.Cwd), last.SessionID)
 		}
+		if t, ok := s.lastNamed(name); ok {
+			return s.relaunch(ctx, name, cmp.Or(t.Cwd, t.StartCwd), t.SessionID)
+		}
 	}
 	dir, err := expand(cmp.Or(s.AssistDir, "~"))
 	if err != nil {
@@ -1119,6 +1125,18 @@ func (s *Server) keep(ctx context.Context, name string, fresh bool) (string, err
 	}
 	args, _ := standing(name)
 	return s.M.CLI.Start(ctx, dir, name, "", args...)
+}
+
+// lastNamed is the newest conversation atc named so that Claude's background service no
+// longer lists, so a standing session outlives being dropped from it.
+func (s *Server) lastNamed(name string) (history.Transcript, bool) {
+	var last history.Transcript
+	for _, sid := range s.M.Store.Find(func(_ string, m store.Meta) bool { return m.Name == name }) {
+		if t, ok := s.M.Index.Find(sid); ok && t.Updated.After(last.Updated) {
+			last = t
+		}
+	}
+	return last, last.SessionID != ""
 }
 
 func standing(name string) ([]string, bool) {

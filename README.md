@@ -589,24 +589,39 @@ ATC_WHATSAPP_SESSION=<uuid>                      # the linked account, as an Ope
 ATC_WHATSAPP_OWNER=905551234567,1234567890@lid   # your number first, then other ids you write from
 ATC_WHATSAPP_SECRET=<16+ random characters>      # signs every delivery
 ATC_WHATSAPP_HOOK=http://<this host>:7272/api/whatsapp/hook   # atc registers it on start
+ATC_PUBLIC_URL=https://atc.example                # optional: where links in messages point
 ```
 
+atc registers two webhooks at that URL: messages, filtered by sender, and reactions, edits and poll
+votes, filtered by chat (a sender filter would drop reactions, which carry no sender).
+
 The conversation is one session, kept and resumed like `assistant` (in `ATC_ASSIST_DIR`), parked so
-atc's own pushes don't repeat what WhatsApp already told you. What you send is typed into it:
-text, a reply to an earlier message with that message quoted, photos and files saved to disk with
-their path, voice notes transcribed (`ATC_STT_URL`), locations as coordinates. Messages sent while
-it works join the turn it is on. Your message gets ⏳ while it works and ✅ when the turn is done.
+atc's own pushes don't repeat what WhatsApp already told you. Dropped from Claude's background list,
+it is resumed from its transcript. What you send is typed into it: text, a reply to an earlier
+message with that message quoted, photos and files saved to disk with their path, voice notes
+transcribed (`ATC_STT_URL`), locations as coordinates, an edit with what it said before, a tap on
+one of its polls (votes settle for a few seconds, so changing your mind sends one answer), and a
+reaction to one of its questions (👍 is yes). A reaction to anything else starts nothing. Messages
+sent while it works join the turn it is on. Your message gets ⏳ while it works and ✅ once
+everything you sent has been answered.
 
 Its replies go out as they are written, Markdown turned into WhatsApp's markup. A table is drawn as
 an image by atc's browser (`ATC_BROWSER`; without one it becomes monospace text), long code goes as
-a file, and anything over a message's length is split at paragraphs. While a turn runs quiet, one
-status message shows what it is doing, edited in place, and the typing indicator stays on. A voice
-note gets a spoken summary back as a voice note (`ATC_TTS_URL`).
+a file, and anything over a message's length is split at paragraphs. A long final answer goes out
+with its summary first (📌 the status and the gist), so the notification tells you the outcome, and
+as a `reply.md` document past a couple of screens. While a turn runs quiet, one status message
+shows what it is doing, edited in place, and the typing indicator stays on. A voice note gets a
+spoken summary back as a voice note (`ATC_TTS_URL`, and OpenWA's `MEDIA_CONVERSION_ENABLED`).
 
-The session sends what a reply can't carry with `atc wa`: `--file` (images and videos inline,
-anything else as a document), `--render page.html` (drawn as an image), `--voice TEXT`.
-`/new` starts a fresh conversation (the last one stays in atc under a dated name) and `/stop`
-interrupts it.
+The session works as a switchboard: it answers and looks things up itself, and hands anything bigger
+to a session of its own, relays that session's report, follows up and stops it when it is done.
+Turns nobody started from WhatsApp (such a report, or you typing into the conversation in atc) are
+relayed too. A page it shows with `atc show` arrives as a screenshot (HTML), the file itself
+(image, PDF), or messages (Markdown), with a link to the live page. It sends what a reply can't
+carry with `atc wa`: `--file`, `--render page.html` (drawn as an image), `--voice TEXT`, and
+`--poll QUESTION --option A --option B` (`--multi` for several). `/status` lists your sessions,
+`/stop` interrupts it, `/new` starts a fresh conversation (the last one stays in atc under a dated
+name) and `/help` lists all this.
 
 ## Notes
 

@@ -13,6 +13,7 @@ import (
 const waHelp = `atc wa: send the user something on WhatsApp, from the account atc answers them on.
 
   atc wa [--file PATH]... [--render PAGE.html]... [--caption TEXT] [--voice TEXT] [text...]
+  atc wa --poll QUESTION --option A --option B... [--multi]
 
 It only ever reaches the user. In the whatsapp session your replies are delivered
 already; use this for what a reply can't carry:
@@ -23,6 +24,9 @@ already; use this for what a reply can't carry:
                    a layout that text can't hold. Repeat for more.
   --caption TEXT   a caption under the files and rendered pages
   --voice TEXT     a voice note, TEXT spoken by atc's text-to-speech
+  --poll QUESTION  a poll they answer with a tap, with 2 to 12 --option (each up to 100
+                   characters); --multi lets them pick several. Their vote comes back
+                   into the whatsapp session as a "[poll vote]" message.
   text...          a text message, Markdown converted to WhatsApp's own markup
                    (reads stdin when nothing else is given)
 
@@ -31,7 +35,9 @@ The files must be on the machine atc runs on (desktop).
 
 func wa(args []string) error {
 	var files, render, words []string
-	var caption, voice string
+	var caption, voice, poll string
+	var options []string
+	var multi bool
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		flag, v, inline := strings.Cut(strings.TrimLeft(a, "-"), "=")
@@ -67,6 +73,14 @@ func wa(args []string) error {
 			caption, err = val()
 		case flag == "voice":
 			voice, err = val()
+		case flag == "poll":
+			poll, err = val()
+		case flag == "option" || flag == "o":
+			if x, err = val(); err == nil {
+				options = append(options, x)
+			}
+		case flag == "multi":
+			multi = true
 		default:
 			return fmt.Errorf("unknown flag %s (atc wa -h)", a)
 		}
@@ -75,18 +89,25 @@ func wa(args []string) error {
 		}
 	}
 	text := strings.Join(words, " ")
-	if text == "" && len(files)+len(render) == 0 && voice == "" {
+	if poll == "" && len(options) > 0 {
+		return fmt.Errorf("--option needs --poll")
+	}
+	if text == "" && len(files)+len(render) == 0 && voice == "" && poll == "" {
 		b, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			return err
 		}
 		text = string(b)
 	}
-	if strings.TrimSpace(text) == "" && len(files)+len(render) == 0 && voice == "" {
+	if strings.TrimSpace(text) == "" && len(files)+len(render) == 0 && voice == "" && poll == "" {
 		fmt.Print(waHelp)
 		os.Exit(2)
 	}
-	sent, err := client.Load().WhatsApp(map[string]any{"text": text, "files": files, "render": render, "caption": caption, "voice": voice})
+	req := map[string]any{"text": text, "files": files, "render": render, "caption": caption, "voice": voice}
+	if poll != "" {
+		req["poll"] = map[string]any{"question": poll, "options": options, "multi": multi}
+	}
+	sent, err := client.Load().WhatsApp(req)
 	if err != nil {
 		return err
 	}
