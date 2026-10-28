@@ -205,7 +205,7 @@ read fresh at each start and given to Claude as instructions rather than as your
 the session's title comes from what you actually ask. `args` adds Claude Code flags; `worktree`
 starts it in its own git worktree.
 
-A preset can also start itself. With `every` (a Go duration: `90s`, `5m`, `1h`) the atc that
+A preset can also start itself. With `every` (`90s`, `5m`, `1h`, or whole days and weeks: `1d`, `2w`) the atc that
 loads it starts a run on that interval, its first message being `prompt`. Add `check`, a shell
 command run in `dir`, and a run starts only when it exits 0 and prints something; the first message
 is then `prompt` followed by what it printed:
@@ -217,6 +217,12 @@ is then `prompt` followed by what it printed:
 A check gets a minute. While the previous run it started is still working or needs you, a tick is
 skipped, so runs never pile up. Each tick's decision is logged to the journal (`preset inbox: …`).
 The first run comes one interval after atc starts.
+
+To run at set times, add `from`, a local date and time the schedule counts from: runs land on
+`from` plus whole multiples of `every`, so `"every": "2w", "from": "2026-03-06T09:00"` is every
+second Friday at 07:00, and `"every": "1d", "from": "2026-10-28T07:00"` is every morning at 07:00.
+Day and week steps keep the wall-clock time across daylight saving. A run missed while atc was down
+is not made up; the journal says when the next one is.
 
 Anything else can start one too, with the same `POST /api/sessions` the New session screen uses:
 

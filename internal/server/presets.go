@@ -19,6 +19,7 @@ type Preset struct {
 	Worktree bool     `json:"worktree,omitempty"`
 	Host     string   `json:"host,omitempty"`
 	Every    string   `json:"every,omitempty"`
+	From     string   `json:"from,omitempty"`
 	Check    string   `json:"check,omitempty"`
 	Prompt   string   `json:"prompt,omitempty"`
 	Command  string   `json:"command,omitempty"`

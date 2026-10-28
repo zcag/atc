@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,16 +20,56 @@ func (p Preset) interval() (time.Duration, error) {
 	if p.Every == "" {
 		return 0, nil
 	}
-	d, err := time.ParseDuration(p.Every)
+	d, err := parseEvery(p.Every)
+	_, ferr := p.anchor()
 	switch {
 	case err != nil:
 		return 0, fmt.Errorf("preset %s: every: %w", p.Name, err)
+	case ferr != nil:
+		return 0, fmt.Errorf("preset %s: from: %w", p.Name, ferr)
 	case d <= 0:
 		return 0, fmt.Errorf("preset %s: every must be positive", p.Name)
 	case p.Check == "" && p.Prompt == "" && p.Command == "":
 		return 0, fmt.Errorf("preset %s: every needs a check, a prompt or a command", p.Name)
 	}
 	return d, nil
+}
+
+func parseEvery(s string) (time.Duration, error) {
+	for unit, d := range map[string]time.Duration{"d": 24 * time.Hour, "w": 7 * 24 * time.Hour} {
+		if n, ok := strings.CutSuffix(s, unit); ok {
+			k, err := strconv.Atoi(n)
+			if err != nil {
+				return 0, fmt.Errorf("%q: want a whole number of %s, like 2%s", s, unit, unit)
+			}
+			return time.Duration(k) * d, nil
+		}
+	}
+	return time.ParseDuration(s)
+}
+
+func (p Preset) anchor() (time.Time, error) {
+	if p.From == "" {
+		return time.Time{}, nil
+	}
+	return time.ParseInLocation("2006-01-02T15:04", p.From, time.Local)
+}
+
+func step(t time.Time, d time.Duration) time.Time {
+	if d%(24*time.Hour) == 0 {
+		return t.AddDate(0, 0, int(d/(24*time.Hour)))
+	}
+	return t.Add(d)
+}
+
+func nextRun(from time.Time, d time.Duration, now time.Time) time.Time {
+	if d%(24*time.Hour) != 0 && from.Before(now) {
+		from = from.Add(now.Sub(from) / d * d)
+	}
+	for !from.After(now) {
+		from = step(from, d)
+	}
+	return from
 }
 
 func (p Preset) firstMessage(ctx context.Context) (string, string) {
@@ -83,13 +124,22 @@ func (s *Server) schedule() {
 		if every, err := p.interval(); err != nil {
 			log.Print(err)
 		} else if every > 0 {
-			log.Printf("preset %s: every %s", p.Name, every)
 			go s.every(p, every)
 		}
 	}
 }
 
 func (s *Server) every(p Preset, d time.Duration) {
+	if from, _ := p.anchor(); !from.IsZero() {
+		var last string
+		for {
+			next := nextRun(from, d, time.Now())
+			log.Printf("preset %s: every %s, next %s", p.Name, p.Every, next.Format("Mon Jan 2 15:04"))
+			time.Sleep(time.Until(next))
+			last = s.tick(context.Background(), p, last)
+		}
+	}
+	log.Printf("preset %s: every %s", p.Name, d)
 	t := time.NewTicker(d)
 	defer t.Stop()
 	var last string
