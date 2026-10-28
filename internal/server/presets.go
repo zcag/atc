@@ -25,6 +25,7 @@ type Preset struct {
 	Command  string   `json:"command,omitempty"`
 	App      bool     `json:"app,omitempty"`
 	Icon     string   `json:"icon,omitempty"`
+	Color    string   `json:"color,omitempty"`
 }
 
 func LoadPresets(path string) ([]Preset, error) {

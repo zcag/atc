@@ -1380,7 +1380,7 @@ function Unattachable(s, resume, busy, setMode) {
   return html`<div><p class="h">${s.state === "stopped" ? "Stopped" : "Not running"}</p><p>Resume it to pick up where it left off. The whole conversation comes back.</p><div class="row"><button class="btn primary" disabled=${busy} onClick=${resume}>${busy ? "Resuming…" : "Resume"}</button></div></div>`;
 }
 
-function Menu({ busy, items, label = "•••", cls = "icon", aria = "More actions", width = 190, left }) {
+function Menu({ busy, items, render, label = "•••", cls = "icon", aria = "More actions", width = 190, left, sheetCls = "" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(), sheet = useRef();
   useLayoutEffect(() => {
@@ -1399,8 +1399,8 @@ function Menu({ busy, items, label = "•••", cls = "icon", aria = "More act
     <div ref=${ref} style="position: relative">
       <button class=${cls} aria-label=${aria} aria-expanded=${open} onClick=${() => setOpen(!open)}>${label}</button>
       ${open && html`
-        <div ref=${sheet} class="sheet" style="position: absolute; ${left ? "left" : "right"}: 0; top: calc(100% + 6px); width: ${typeof width === "number" ? `min(${width}px, calc(100vw - 16px))` : width}; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
-          ${items.map((it) => {
+        <div ref=${sheet} class="sheet ${sheetCls}" style="position: absolute; ${left ? "left" : "right"}: 0; top: calc(100% + 6px); width: ${typeof width === "number" ? `min(${width}px, calc(100vw - 16px))` : width}; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
+          ${render ? render(() => setOpen(false)) : items.map((it) => {
             const b = html`<button class="btn ${it.danger ? "danger" : ""} ${it.cls || ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`;
             return it.side ? html`<div class="mrow">${b}${it.side}</div>` : b;
           })}
@@ -2709,7 +2709,7 @@ function usePages(s) {
   }, [s.sessionId, past]);
   const list = past ? got || [] : s.shown || [];
   const b = browserPage(s);
-  return b ? [b, ...list] : list;
+  return b ? [...list, b] : list;
 }
 
 async function takeDown(p, say) {
@@ -3090,17 +3090,60 @@ const startRun = async (a, say, reload) => {
   } catch (e) { say(e.message); }
 };
 
+const APP_ICONS = {
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>',
+  present: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8M7 12l3-3 2 2 4-4"/>',
+  lira: '<path d="M9 4v14.5c4.5 0 8-3 8-7.5"/><path d="M5.5 10.5 13 7M5.5 14.5 13 11"/>',
+  target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>',
+  inbox: '<path d="M3 13h5l1.5 2.5h5L16 13h5"/><path d="M5.5 5h13L21 13v5.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5V13z"/>',
+  calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+  pr: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V9a3 3 0 0 0-3-3h-4m0 0 2.5-2.5M11 6l2.5 2.5"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>',
+  pulse: '<path d="M3 12h4l2.5-6 4 12 2.5-6H21"/>',
+  doc: '<path d="M7 3h7l5 5v11.5A1.5 1.5 0 0 1 17.5 21h-10A1.5 1.5 0 0 1 6 19.5v-15A1.5 1.5 0 0 1 7.5 3z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
+};
+const APP_COLORS = { blue: "#3b82f6", amber: "#f59e0b", violet: "#8b5cf6", green: "#10b981", red: "#ef4444", teal: "#14b8a6", pink: "#ec4899", orange: "#f97316", slate: "#64748b" };
+const appColor = (a) => APP_COLORS[a.color] || (/^#[0-9a-f]{3,8}$/i.test(a.color || "") ? a.color : Object.values(APP_COLORS)[[...a.name].reduce((h, c) => h + c.charCodeAt(0), 0) % 9]);
+
+function AppTile({ a, size = 32, dot }) {
+  const svg = APP_ICONS[a.icon];
+  return html`<span class="atile" style=${`--a: ${appColor(a)}; --s: ${size}px`}>
+    ${svg ? html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" dangerouslySetInnerHTML=${{ __html: svg }}></svg>` : html`<span class="aglyph">${a.icon || a.name[0].toUpperCase()}</span>`}
+    ${dot && html`<i class="adot ${dot}"></i>`}
+  </span>`;
+}
+
+const appLabel = (a) => a.name.replace(/^sa-/, "").replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
+const appWhen = (a) => {
+  const at = Math.max(Date.parse(a.run?.at || 0) || 0, ...a.pages.map(pageAt));
+  return at ? agoLong(new Date(at).toISOString()) : "";
+};
+
 function AppsMenu({ apps, live, say, reload }) {
   const [busy, setBusy] = useState("");
-  const run = async (a) => { setBusy(a.name); await startRun(a, say, reload); setBusy(""); };
-  return html`<${Menu} cls="btn talk" aria="Apps" width=${280} label=${html`<span class="mi">${ICON.apps}</span>`} items=${apps.map((a) => {
-    const st = appState(a, live);
-    return {
-      cls: `appitem ${st}`, title: `Open ${a.name}`, run: () => (location.hash = appLink(a)),
-      label: html`<span class="ai" aria-hidden="true">${a.icon || "▢"}</span><span class="grow"><b>${a.name}</b>${elsewhere(a)}<small>${APP_WORD[st]}</small></span>`,
-      side: html`<button class="btn" disabled=${busy === a.name || st === "working"} title=${`Run ${a.name}`} onClick=${() => run(a)}>Run</button>`,
-    };
-  })} />`;
+  const run = async (e, a) => { e.stopPropagation(); setBusy(a.name); await startRun(a, say, reload); setBusy(""); };
+  const rows = apps.map((a) => ({ a, st: appState(a, live) }));
+  const loud = rows.filter(({ a, st }) => a.badge != null || st === "working" || st === "needs-you" || st === "failed");
+  const quiet = rows.filter((r) => !loud.includes(r));
+  const dotOf = (st) => (st === "working" ? "work" : st === "needs-you" || st === "failed" ? "needs" : null);
+  return html`<${Menu} cls="btn talk" aria="Apps" width=${340} sheetCls="appsheet" label=${html`<span class="mi">${ICON.apps}</span>`} render=${(close) => {
+    const open = (a) => { close(); location.hash = appLink(a); };
+    return html`
+      ${loud.map(({ a, st }) => html`
+        <div key=${`${a.host}/${a.name}`} class="abrief" role="button" tabindex="0" onClick=${() => open(a)} onKeyDown=${(e) => e.key === "Enter" && open(a)}>
+          <${AppTile} a=${a} size=${30} dot=${dotOf(st)} />
+          <div class="abody">
+            <div class="atop"><b>${appLabel(a)}</b>${elsewhere(a)}<small class=${st}>${st === "done" ? appWhen(a) : APP_WORD[st].toLowerCase()}</small></div>
+            ${a.headline ? html`<p>${a.headline}</p>` : html`<p class="dim">${APP_WORD[st]}</p>`}
+          </div>
+          <button class="arun" title=${`Run ${a.name}`} aria-label=${`Run ${a.name}`} disabled=${busy === a.name || st === "working"} onClick=${(e) => run(e, a)}><svg viewBox="0 0 12 12"><path d="M3.5 2.2v7.6L9.8 6z" fill="currentColor"/></svg></button>
+        </div>`)}
+      ${quiet.length > 0 && html`<div class="aquiet ${loud.length ? "" : "only"}">
+        ${quiet.map(({ a }) => html`<button key=${`${a.host}/${a.name}`} class="achip" title=${a.headline || appWhen(a) || APP_WORD[""]} onClick=${() => open(a)}><${AppTile} a=${a} size=${20} />${appLabel(a)}</button>`)}
+      </div>`}`;
+  }} />`;
 }
 
 function AppView({ name, page, apps, live, say, reload }) {
@@ -3134,7 +3177,7 @@ function AppView({ name, page, apps, live, say, reload }) {
       <header class="pghead">
         <button class="icon" onClick=${closePages} aria-label="Back">←</button>
         <div class="who">
-          <h2>${a.icon && html`<span class="ai" aria-hidden="true">${a.icon}</span>`}${a.name}${a.badge != null && html`<span class="bdg">${a.badge}</span>`}</h2>
+          <h2><${AppTile} a=${a} size=${26} />${appLabel(a)}</h2>
           <span class="sub ${st}">${APP_WORD[st]}${MULTI && a.host ? ` · ${a.host}` : ""}</span>
         </div>
         ${runBtn}
