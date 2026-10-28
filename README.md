@@ -569,7 +569,15 @@ ATC_SPEECH_LLM_MODEL=qwen
 ATC_TTS_URL=http://localhost:8002/v1/audio/speech                # optional
 ATC_TTS_MODEL=tts-1
 ATC_TTS_VOICE=alloy
+ATC_TTS_TR_URL=http://localhost:8003/v1/audio/speech            # optional: a voice for Turkish
+ATC_TTS_TR_MODEL=speaches-ai/piper-tr_TR-fahrettin-medium
+ATC_TTS_TR_VOICE=fahrettin
 ```
+
+`ATC_TTS_<LANG>_URL` (with `_MODEL` and `_VOICE`) gives one language its own text-to-speech engine,
+for a language the default voice can't speak: [Speaches](https://github.com/speaches-ai/speaches)
+serving a Piper voice works. Speech goes to it when its language is known (a WhatsApp voice note
+was spoken in it), or when the text has letters only that language uses (ı, ş, ğ for Turkish).
 
 `ATC_STT_LANGUAGES` lets Whisper detect
 the language but keeps only those it lists: a clip heard as anything else (short English, and
@@ -620,7 +628,9 @@ a file, and anything over a message's length is split at paragraphs. A long fina
 with its summary first (📌 the status and the gist), so the notification tells you the outcome, and
 as a `reply.md` document past a couple of screens. While a turn runs quiet, one status message
 shows what it is doing, edited in place, and the typing indicator stays on. A voice note gets a
-spoken summary back as a voice note (`ATC_TTS_URL`, and OpenWA's `MEDIA_CONVERSION_ENABLED`).
+spoken summary back as a voice note, in the language you spoke whatever the written reply is in
+(`ATC_TTS_URL`, a voice for that language such as `ATC_TTS_TR_URL`, and OpenWA's
+`MEDIA_CONVERSION_ENABLED`).
 
 The session works as a switchboard: it answers and looks things up itself, and hands anything bigger
 to a session of its own, relays that session's report, follows up and stops it when it is done.

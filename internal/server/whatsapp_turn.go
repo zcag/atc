@@ -35,13 +35,13 @@ type waTurn struct {
 	asks      []waMsg
 	typed     int
 	typedAt   time.Time
-	voice     bool
+	voice     string
 }
 
 // waType types a message into the whatsapp session and makes sure its answer is relayed;
 // messages sent while it works join the turn already being relayed. A msg without an id
 // (a reaction) gets no ⏳/✅ of its own.
-func (s *Server) waType(ctx context.Context, msg waMsg, text string, voice bool) error {
+func (s *Server) waType(ctx context.Context, msg waMsg, text, voice string) error {
 	if text == "" {
 		return nil
 	}
@@ -61,7 +61,7 @@ func (s *Server) waType(ctx context.Context, msg waMsg, text string, voice bool)
 	if msg.id != "" {
 		t.asks = append(t.asks, msg)
 	}
-	t.voice, t.typedAt, t.typed = t.voice || voice, time.Now(), t.typed+1
+	t.voice, t.typedAt, t.typed = cmp.Or(voice, t.voice), time.Now(), t.typed+1
 	s.wa.mu.Unlock()
 	return s.Term.Send(ctx, id, text)
 }
@@ -240,8 +240,8 @@ func (s *Server) waPump(t *waTurn) {
 		if status != "" {
 			wa.Edit(ctx, status, "✓ worked "+time.Since(began).Round(time.Second).String())
 		}
-		if voice && last != "" {
-			if err := s.waVoice(ctx, last, true); err != nil {
+		if voice != "" && last != "" {
+			if err := s.waVoice(ctx, last, voice, true); err != nil {
 				log.Printf("whatsapp: voice reply: %v", err)
 			}
 		}

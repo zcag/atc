@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -24,7 +25,25 @@ type Voice struct {
 	STT, STTModel, STTPrompt, STTLanguage string
 	STTLanguages                          []string
 	TTS, TTSModel, TTSVoice               string
+	Speakers                              map[string]Speaker
 	LLM, LLMModel                         string
+}
+
+// Speaker is a text-to-speech engine for one language, for one the default voice can't speak.
+type Speaker struct{ URL, Model, Voice string }
+
+var speakerEnv = regexp.MustCompile(`^ATC_TTS_([A-Z]{2})_URL$`)
+
+// speakers reads ATC_TTS_<LANG>_URL (and _MODEL, _VOICE) for each language that has one.
+func speakers() map[string]Speaker {
+	out := map[string]Speaker{}
+	for _, kv := range os.Environ() {
+		name, url, _ := strings.Cut(kv, "=")
+		if m := speakerEnv.FindStringSubmatch(name); m != nil && url != "" {
+			out[strings.ToLower(m[1])] = Speaker{url, os.Getenv("ATC_TTS_" + m[1] + "_MODEL"), os.Getenv("ATC_TTS_" + m[1] + "_VOICE")}
+		}
+	}
+	return out
 }
 
 func VoiceFromEnv() Voice {
@@ -32,7 +51,8 @@ func VoiceFromEnv() Voice {
 		STT: os.Getenv("ATC_STT_URL"), STTModel: cmp.Or(os.Getenv("ATC_STT_MODEL"), "whisper-1"), STTPrompt: os.Getenv("ATC_STT_PROMPT"), STTLanguage: os.Getenv("ATC_STT_LANGUAGE"),
 		STTLanguages: strings.FieldsFunc(os.Getenv("ATC_STT_LANGUAGES"), func(r rune) bool { return r == ',' || r == ' ' }),
 		TTS:          os.Getenv("ATC_TTS_URL"), TTSModel: cmp.Or(os.Getenv("ATC_TTS_MODEL"), "tts-1"), TTSVoice: cmp.Or(os.Getenv("ATC_TTS_VOICE"), "alloy"),
-		LLM: os.Getenv("ATC_SPEECH_LLM_URL"), LLMModel: os.Getenv("ATC_SPEECH_LLM_MODEL"),
+		Speakers: speakers(),
+		LLM:      os.Getenv("ATC_SPEECH_LLM_URL"), LLMModel: os.Getenv("ATC_SPEECH_LLM_MODEL"),
 	}
 }
 
@@ -171,7 +191,7 @@ func (s *Server) tts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "text-to-speech is not configured", http.StatusNotImplemented)
 		return
 	}
-	res, err := s.speak(r.Context(), in.Text)
+	res, err := s.speak(r.Context(), in.Text, "")
 	if err != nil {
 		fail(w, err)
 		return
@@ -181,9 +201,15 @@ func (s *Server) tts(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, res.Body)
 }
 
-func (s *Server) speak(ctx context.Context, text string) (*http.Response, error) {
-	b, _ := json.Marshal(map[string]string{"model": s.Voice.TTSModel, "voice": s.Voice.TTSVoice, "input": text, "response_format": "wav"})
-	req, _ := http.NewRequestWithContext(ctx, "POST", s.Voice.TTS, bytes.NewReader(b))
+// speak says text in lang, or in the language its letters give away when lang is empty, with
+// that language's own engine when there is one (ATC_TTS_TR_URL) and the default voice otherwise.
+func (s *Server) speak(ctx context.Context, text, lang string) (*http.Response, error) {
+	sp := Speaker{s.Voice.TTS, s.Voice.TTSModel, s.Voice.TTSVoice}
+	if x, ok := s.Voice.Speakers[cmp.Or(lang, spokenIn(text))]; ok {
+		sp = Speaker{x.URL, cmp.Or(x.Model, sp.Model), cmp.Or(x.Voice, sp.Voice)}
+	}
+	b, _ := json.Marshal(map[string]string{"model": sp.Model, "voice": sp.Voice, "input": text, "response_format": "wav"})
+	req, _ := http.NewRequestWithContext(ctx, "POST", sp.URL, bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	res, err := voiceClient.Do(req)
 	if err != nil {
@@ -195,4 +221,12 @@ func (s *Server) speak(ctx context.Context, text string) (*http.Response, error)
 		return nil, fmt.Errorf("text-to-speech: %s %s", res.Status, msg)
 	}
 	return res, nil
+}
+
+// spokenIn guesses the language of a text from the letters only Turkish (of tr and en) has.
+func spokenIn(text string) string {
+	if strings.ContainsAny(text, "ıİşŞğĞçÇöÖüÜ") {
+		return "tr"
+	}
+	return ""
 }

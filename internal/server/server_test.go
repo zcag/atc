@@ -2,6 +2,7 @@ package server
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -325,6 +326,36 @@ func TestVoiceLanguages(t *testing.T) {
 	}
 	if _, body := do(t, "POST", ts.URL+"/api/voice/stt?lang=tr", "tok", "english"); !strings.Contains(body, `"language":"en"`) {
 		t.Fatalf("a language asked for overrides detection: %s", body)
+	}
+}
+
+func TestSpeakers(t *testing.T) {
+	engine := func(name string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var in struct{ Model, Voice string }
+			json.NewDecoder(r.Body).Decode(&in)
+			fmt.Fprintf(w, "%s %s %s", name, in.Model, in.Voice)
+		}))
+	}
+	def, tr := engine("kokoro"), engine("piper")
+	defer def.Close()
+	defer tr.Close()
+	s := &Server{Voice: Voice{TTS: def.URL, TTSModel: "kokoro-82m", TTSVoice: "af_heart", Speakers: map[string]Speaker{"tr": {URL: tr.URL, Model: "piper-tr", Voice: "fahrettin"}}}}
+	for _, c := range []struct{ text, lang, want string }{
+		{"Done, the invoice is ready.", "", "kokoro kokoro-82m af_heart"},
+		{"Rapor hazır, cuma günü gönderilecek.", "", "piper piper-tr fahrettin"},
+		{"Tamam", "tr", "piper piper-tr fahrettin"},
+		{"Merhaba dünya", "en", "kokoro kokoro-82m af_heart"},
+	} {
+		res, err := s.speak(context.Background(), c.text, c.lang)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		if string(b) != c.want {
+			t.Errorf("speak(%q, %q) went to %q, want %q", c.text, c.lang, b, c.want)
+		}
 	}
 }
 

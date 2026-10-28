@@ -241,7 +241,7 @@ func (s *Server) waReceive(d whatsapp.Message) {
 	default:
 		wa.React(ctx, msg.chat, msg.id, "⏳")
 		var text string
-		var voice bool
+		var voice string
 		if text, voice, err = s.waPrompt(ctx, d); err == nil {
 			err = s.waType(ctx, msg, text, voice)
 		}
@@ -283,7 +283,7 @@ func (s *Server) waReaction(x whatsapp.Reaction) {
 		return
 	}
 	text := fmt.Sprintf("[reacted %s to your message]\n%s", x.Reaction, quoted(said, 400))
-	s.waFailed(ctx, waMsg{}, s.waType(ctx, waMsg{}, text, false))
+	s.waFailed(ctx, waMsg{}, s.waType(ctx, waMsg{}, text, ""))
 }
 
 func (s *Server) waEdited(x whatsapp.Edit) {
@@ -299,7 +299,7 @@ func (s *Server) waEdited(x whatsapp.Edit) {
 	s.wa.remember(s.wa.heard, x.MessageID, x.Body)
 	msg := waMsg{cmp.Or(x.ChatID, s.WhatsApp.OwnerChat()), x.MessageID}
 	s.WhatsApp.React(ctx, msg.chat, msg.id, "⏳")
-	s.waFailed(ctx, msg, s.waType(ctx, msg, text+x.Body, false))
+	s.waFailed(ctx, msg, s.waType(ctx, msg, text+x.Body, ""))
 }
 
 const waVoteWait = 4 * time.Second
@@ -332,7 +332,7 @@ func (s *Server) waVote(x whatsapp.Vote) {
 		text := fmt.Sprintf("[poll vote] %s\n→ %s", question, strings.Join(x.SelectedOptions, ", "))
 		msg := waMsg{cmp.Or(x.ChatID, s.WhatsApp.OwnerChat()), x.PollMessageID}
 		s.WhatsApp.React(ctx, msg.chat, msg.id, "⏳")
-		s.waFailed(ctx, msg, s.waType(ctx, msg, text, false))
+		s.waFailed(ctx, msg, s.waType(ctx, msg, text, ""))
 	})
 }
 
@@ -344,12 +344,14 @@ func quoted(text string, n int) string {
 	return b.String()
 }
 
-func (s *Server) waPrompt(ctx context.Context, d whatsapp.Message) (string, bool, error) {
+// waPrompt is what the user sent as text for the session, and the language they spoke when it
+// was a voice note, so the spoken reply comes back in it.
+func (s *Server) waPrompt(ctx context.Context, d whatsapp.Message) (string, string, error) {
 	var b strings.Builder
 	if q := d.Quoted; q != nil && strings.TrimSpace(q.Body) != "" {
 		b.WriteString(quoted(q.Body, 600) + "\n")
 	}
-	voice := false
+	voice := ""
 	switch {
 	case d.Location != nil:
 		l := d.Location
@@ -357,12 +359,14 @@ func (s *Server) waPrompt(ctx context.Context, d whatsapp.Message) (string, bool
 	case d.Media != nil:
 		data, mt, err := s.waMedia(ctx, d)
 		if err != nil {
-			return "", false, fmt.Errorf("could not fetch the %s: %w", d.Type, err)
+			return "", "", fmt.Errorf("could not fetch the %s: %w", d.Type, err)
 		}
 		if (d.Type == "voice" || d.Type == "audio") && s.Voice.STT != "" {
-			text, _, err := s.transcribe(ctx, data, "voice"+extFor(mt))
+			text, lang, err := s.transcribe(ctx, data, "voice"+extFor(mt))
 			if err == nil && text != "" {
-				voice = d.Type == "voice"
+				if d.Type == "voice" {
+					voice = cmp.Or(lang, "en")
+				}
 				fmt.Fprintf(&b, "[voice note] %s\n", text)
 				break
 			}
@@ -370,7 +374,7 @@ func (s *Server) waPrompt(ctx context.Context, d whatsapp.Message) (string, bool
 		}
 		path, err := saveUpload(waName, cmp.Or(d.Media.Filename, d.Type+extFor(mt)), bytes.NewReader(data))
 		if err != nil {
-			return "", false, err
+			return "", "", err
 		}
 		fmt.Fprintf(&b, "[%s: %s]\n", d.Type, path)
 	}

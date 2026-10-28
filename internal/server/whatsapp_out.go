@@ -107,18 +107,23 @@ func tableHTML(rows [][]string) string {
 	return b.String()
 }
 
-// waVoice sends text as a voice note, spoken by atc's TTS; condensed first when it is a
-// written reply rather than something meant to be said.
-func (s *Server) waVoice(ctx context.Context, text string, condense bool) error {
+// waVoice sends text as a voice note, spoken by atc's TTS in lang (empty: the text's own);
+// condensed first when it is a written reply rather than something meant to be said, and
+// then in lang whatever language the reply was written in.
+func (s *Server) waVoice(ctx context.Context, text, lang string, condense bool) error {
 	if s.Voice.TTS == "" {
 		return errors.New("text-to-speech is not configured")
 	}
 	if condense && s.Voice.LLM != "" {
-		if short, err := s.chat(ctx, condensePrompt, text, 160); err == nil && short != "" {
+		prompt := condensePrompt
+		if name, ok := langNames[lang]; ok {
+			prompt += " Say it in " + name + ", whatever language the reply is in."
+		}
+		if short, err := s.chat(ctx, prompt, text, 160); err == nil && short != "" {
 			text = short
 		}
 	}
-	res, err := s.speak(ctx, text)
+	res, err := s.speak(ctx, text, lang)
 	if err != nil {
 		return err
 	}
@@ -255,7 +260,7 @@ func (s *Server) waPost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if in.Voice != "" && !send("voice note", s.waVoice(ctx, in.Voice, false)) {
+	if in.Voice != "" && !send("voice note", s.waVoice(ctx, in.Voice, "", false)) {
 		return
 	}
 	if in.Text != "" && !send("text", s.waReply(ctx, in.Text)) {
@@ -269,6 +274,8 @@ func (s *Server) waPost(w http.ResponseWriter, r *http.Request) {
 	}
 	reply(w, map[string][]string{"sent": sent})
 }
+
+var langNames = map[string]string{"tr": "Turkish", "en": "English"}
 
 func clipRunes(s string, n int) string {
 	if r := []rune(s); len(r) > n {
