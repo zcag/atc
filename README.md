@@ -571,7 +571,7 @@ ATC_TTS_MODEL=tts-1
 ATC_TTS_VOICE=alloy
 ```
 
-A language picked in the voice bar is used as is. Otherwise `ATC_STT_LANGUAGES` lets Whisper detect
+`ATC_STT_LANGUAGES` lets Whisper detect
 the language but keeps only those it lists: a clip heard as anything else (short English, and
 Turkish too, come back as Icelandic or Portuguese) is transcribed in each of them, and the first
 whose transcript uses letters plain English lacks (ç, ğ, ı) wins, else the first listed. Pinned to

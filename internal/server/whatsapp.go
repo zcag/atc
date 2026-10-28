@@ -360,7 +360,7 @@ func (s *Server) waPrompt(ctx context.Context, d whatsapp.Message) (string, bool
 			return "", false, fmt.Errorf("could not fetch the %s: %w", d.Type, err)
 		}
 		if (d.Type == "voice" || d.Type == "audio") && s.Voice.STT != "" {
-			text, _, err := s.transcribe(ctx, data, "voice"+extFor(mt), "")
+			text, _, err := s.transcribe(ctx, data, "voice"+extFor(mt))
 			if err == nil && text != "" {
 				voice = d.Type == "voice"
 				fmt.Fprintf(&b, "[voice note] %s\n", text)

@@ -52,7 +52,7 @@ func (s *Server) stt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	text, lang, err := s.transcribe(r.Context(), audio, "speech.wav", r.URL.Query().Get("lang"))
+	text, lang, err := s.transcribe(r.Context(), audio, "speech.wav")
 	if err != nil {
 		fail(w, err)
 		return
@@ -60,16 +60,15 @@ func (s *Server) stt(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]string{"text": text, "language": lang})
 }
 
-// transcribe turns speech into text in lang when the caller names one. Otherwise, with
-// ATC_STT_LANGUAGES set, Whisper detects the language but only those count: a clip heard as
-// anything else (short English as Icelandic, Turkish too) is transcribed in each of them, and
-// the first that writes letters plain English has none (ç, ğ, ı) wins, else the first listed.
-// Pinned to Turkish, English speech still comes out as English, so that tells them apart.
-// Without it, ATC_STT_LANGUAGE pins every clip.
-func (s *Server) transcribe(ctx context.Context, audio []byte, filename, lang string) (string, string, error) {
+// transcribe turns speech into text. With ATC_STT_LANGUAGES set, Whisper detects the language
+// but only those count: a clip heard as anything else (short English as Icelandic, Turkish too)
+// is transcribed in each of them, and the first that writes letters plain English has none
+// (ç, ğ, ı) wins, else the first listed. Pinned to Turkish, English speech still comes out as
+// English, so that tells them apart. Without it, ATC_STT_LANGUAGE pins every clip.
+func (s *Server) transcribe(ctx context.Context, audio []byte, filename string) (string, string, error) {
 	allowed := s.Voice.STTLanguages
-	if lang != "" || len(allowed) == 0 {
-		return s.whisper(ctx, audio, filename, cmp.Or(lang, s.Voice.STTLanguage))
+	if len(allowed) == 0 {
+		return s.whisper(ctx, audio, filename, s.Voice.STTLanguage)
 	}
 	text, got, err := s.whisper(ctx, audio, filename, "")
 	if err != nil || slices.Contains(allowed, got) {

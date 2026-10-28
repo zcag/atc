@@ -294,9 +294,6 @@ func TestVoice(t *testing.T) {
 	if res, body := do(t, "POST", ts.URL+"/api/voice/stt", "tok", "RIFFfake"); res.StatusCode != 200 || !strings.Contains(body, `"text":"merhaba dünya"`) || !strings.Contains(body, `"language":"en"`) {
 		t.Fatalf("stt: %d %s", res.StatusCode, body)
 	}
-	if _, body := do(t, "POST", ts.URL+"/api/voice/stt?lang=tr", "tok", "RIFFfake"); !strings.Contains(body, `"language":"tr"`) {
-		t.Fatalf("lang not passed through: %s", body)
-	}
 	if res, body := do(t, "POST", ts.URL+"/api/voice/condense", "tok", `{"text":"long reply"}`); res.StatusCode != 200 || !strings.Contains(body, `"text":"Short."`) {
 		t.Fatalf("condense: %d %s", res.StatusCode, body)
 	}
@@ -326,9 +323,8 @@ func TestVoiceLanguages(t *testing.T) {
 			t.Errorf("%s heard as Icelandic: %s, want %s", audio, body, want)
 		}
 	}
-	asked = nil
-	if _, body := do(t, "POST", ts.URL+"/api/voice/stt?lang=tr", "tok", "english"); !strings.Contains(body, `"language":"tr"`) || strings.Join(asked, ",") != "tr" {
-		t.Fatalf("an explicit language is not used as is: %s (asked %q)", body, asked)
+	if _, body := do(t, "POST", ts.URL+"/api/voice/stt?lang=tr", "tok", "english"); !strings.Contains(body, `"language":"en"`) {
+		t.Fatalf("a language asked for overrides detection: %s", body)
 	}
 }
 
