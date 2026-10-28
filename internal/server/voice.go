@@ -61,8 +61,8 @@ func (s *Server) transcribe(ctx context.Context, audio []byte, filename string) 
 	fw.Write(audio)
 	mw.WriteField("model", s.Voice.STTModel)
 	mw.WriteField("response_format", "verbose_json")
-	if s.Voice.STTLanguage != "" {
-		mw.WriteField("language", s.Voice.STTLanguage)
+	if lang := cmp.Or(r.URL.Query().Get("lang"), s.Voice.STTLanguage); lang != "" {
+		mw.WriteField("language", lang)
 	}
 	if s.Voice.STTPrompt != "" {
 		mw.WriteField("prompt", s.Voice.STTPrompt)

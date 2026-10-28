@@ -1826,6 +1826,8 @@ const PHANTOM = /^(thank you|thanks for watching|you|bye|altyazı.*|abone olmay�
 const PHASE = { starting: "Starting the microphone…", listening: "Listening", hearing: "Hearing you…", thinking: "Transcribing…", holding: "Keep talking · tap to send now", speaking: "Speaking · tap to stop", muted: "Muted · tap to talk", error: "Voice is not available" };
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+const STT_LANG = "atc.sttlang";
+const transcribe = (wav) => fetch(`/api/voice/stt?lang=${pref(STT_LANG, "")}`, { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav });
 const MIC = html`<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>`;
 const MIC_OFF = html`<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 2l20 20M9 9v1a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.9-.8M5 10a7 7 0 0 0 11.9 5M19 10a7 7 0 0 1-.6 2.9M12 17v5"/></svg>`;
 const STOP = html`<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>`;
@@ -1851,6 +1853,7 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
   const [holdMs, setHoldMs] = useState(0);
   const [source, setSource] = useState(() => pref("atc.voicesrc", VOICE.tts ? "mine" : "device"));
   const [bargeIn, setBargeIn] = useState(() => pref("atc.bargein", "off") === "on");
+  const [lang, setLang] = useState(() => pref(STT_LANG, "en"));
   const st = useRef({ awaiting: !!left.awaiting, sentAt: left.sentAt || 0, permission: false, speaking: false, audio: null, vad: null, turns: [], at: -1 });
   const live = useRef({});
   live.current = { s, source, muted, bargeIn, heard, spoken };
@@ -1947,7 +1950,7 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
     setPhase("thinking");
     let text = "";
     try {
-      const res = await fetch("/api/voice/stt", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: vad.utils.encodeWAV(audio) });
+      const res = await transcribe(vad.utils.encodeWAV(audio));
       if (!res.ok) throw new Error((await res.text()).trim());
       text = (await res.json()).text.trim();
     } catch (e) {
@@ -2057,6 +2060,7 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
     setPhase(m ? "muted" : st.current.awaiting ? "waiting" : "listening");
   };
   const pick = (v) => { setSource(v); setPref("atc.voicesrc", v); };
+  const pickLang = (l) => { setLang(l); setPref(STT_LANG, l); };
   const toggleBarge = () => { setBargeIn(!bargeIn); setPref("atc.bargein", bargeIn ? "off" : "on"); };
 
   return html`
@@ -2087,6 +2091,10 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
             <button class=${source === "device" ? "on" : ""} onClick=${() => pick("device")} title="This device's built-in voice: instant">Device</button>
             <button class=${source === "mine" ? "on" : ""} onClick=${() => pick("mine")} title="The server's voice: slower">Server</button>
           </div>`}
+          <div class="seg" title="The language you speak in">
+            <button class=${lang === "en" ? "on" : ""} onClick=${() => pickLang("en")}>EN</button>
+            <button class=${lang === "tr" ? "on" : ""} onClick=${() => pickLang("tr")}>TR</button>
+          </div>
           <button class="vbtn ${bargeIn ? "on" : ""}" onClick=${toggleBarge} aria-pressed=${bargeIn}
             title="Talking over a reply stops it. Use with headphones: through a speaker, its own sound cuts it off.">Talk over replies</button>
           <button class="icon" onClick=${onClose} aria-label="Turn voice off">✕</button>
@@ -3814,7 +3822,7 @@ function useDictation(onText, say) {
           const ctx = new AudioContext();
           const buf = await ctx.decodeAudioData(await new Blob(chunks).arrayBuffer());
           ctx.close();
-          const res = await fetch("/api/voice/stt", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wavFrom(buf) });
+          const res = await transcribe(wavFrom(buf));
           if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
           const text = (await res.json()).text?.trim();
           if (text) onText(text);
