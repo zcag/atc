@@ -46,7 +46,7 @@ func (s *Server) stt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	text, lang, err := s.transcribe(r.Context(), audio, "speech.wav")
+	text, lang, err := s.transcribe(r.Context(), audio, "speech.wav", r.URL.Query().Get("lang"))
 	if err != nil {
 		fail(w, err)
 		return
@@ -54,14 +54,14 @@ func (s *Server) stt(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]string{"text": text, "language": lang})
 }
 
-func (s *Server) transcribe(ctx context.Context, audio []byte, filename string) (string, string, error) {
+func (s *Server) transcribe(ctx context.Context, audio []byte, filename, lang string) (string, string, error) {
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
 	fw, _ := mw.CreateFormFile("file", filename)
 	fw.Write(audio)
 	mw.WriteField("model", s.Voice.STTModel)
 	mw.WriteField("response_format", "verbose_json")
-	if lang := cmp.Or(r.URL.Query().Get("lang"), s.Voice.STTLanguage); lang != "" {
+	if lang := cmp.Or(lang, s.Voice.STTLanguage); lang != "" {
 		mw.WriteField("language", lang)
 	}
 	if s.Voice.STTPrompt != "" {
