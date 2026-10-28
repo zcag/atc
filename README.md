@@ -380,9 +380,11 @@ An agent shows you something to look at (a report, a handover, a diagram, a scre
   Links to other sites open outside atc. Outside atc the same calls fall back to localStorage and
   the clipboard.
 - **Looking like atc.** A page that links `/atc.css` gets atc's fonts, colors (light and dark)
-  and a small kit: page header, section headers with counts, cards with a colored edge, list
-  rows, buttons, pills, link chips, calm callouts, empty and all-clear states, loading
-  skeletons and a sticky action bar for phones. `atc.toast(text, label, fn)` shows a toast with
+  and a small kit that is dense by default, so a page reads like a dashboard: page header,
+  section headers with counts, cards with a colored edge, list rows, columns, a one-line stat
+  strip, thin progress meters with a pace tick, compact tables, collapsible blocks, buttons,
+  pills, link chips, calm callouts, empty and all-clear states, loading skeletons and a sticky
+  action bar for phones. `atc.toast(text, label, fn)` shows a toast with
   an optional button such as Undo. `atc show -h` lists the class names.
 - **Actions.** `atc show mail.html --action mark-read='mail-cli markread'` lets the page run that
   command: `atc.run("mark-read", [id])` runs `mail-cli markread <id>` on the page's machine, in

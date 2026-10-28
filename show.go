@@ -44,14 +44,19 @@ PDF, CSV/TSV, video and audio render. Make HTML work at phone width, in light an
 dark (prefers-color-scheme).
 
 To look like atc, link its kit: <link rel="stylesheet" href="/atc.css">. It sets
-atc's fonts and colors in light and dark, styles plain markup, and has classes:
-.page (the reading column); .head with h1, .lede, .meta; .sec (a section header,
-.n for its count); .card (.edge adds a colored left bar); .rows of .row with .main
-and .aside; .btn with .primary .quiet .danger .sm .icon .wide, .done (copied) and
-aria-busy; .pill, .tag, .dot; .chip (a link: <b>#123</b><span>repo</span>);
-.callout; .empty (.done when all is clear); .skel; .bar (actions stuck to the
-bottom); .edit on contenteditable. A tone class (t-needs t-hot t-turn t-work t-live
-t-stop) colors .edge, .dot, .pill and .callout.
+atc's fonts and colors in light and dark, styles plain markup, and is dense by
+default (13.5px text, tight rows), so a page reads like a dashboard. Classes:
+.page (the reading column, .wide for a dashboard); .head with h1, .lede, .meta;
+.sec (a section header, .n for its count); .card (.edge adds a colored left bar);
+.rows of .row with .main and .aside; .cols (columns on a wide screen, --cols);
+.stats of .stat (a one-line summary strip: <span class="stat">Day <b>28</b></span>);
+.meter with .fill and .tick (a thin progress bar with a pace mark); .tbl (a compact
+table); details.disclose (a collapsible block); .btn with .primary .quiet .danger
+.sm .icon .wide, .done (copied) and aria-busy; .pill, .tag, .dot; .chip (a link:
+<b>#123</b><span>repo</span>); .callout; .empty (.done when all is clear); .skel;
+.bar (actions stuck to the bottom); .edit on contenteditable. A tone class (t-needs
+t-hot t-turn t-work t-live t-stop) colors .edge, .dot, .pill, .stat, .meter and
+.callout.
 
   atc show <file> --app <name> show it as that app's page, from any script (no session)
   atc show --list              this session's pages
