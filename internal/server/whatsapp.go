@@ -431,7 +431,7 @@ func tableHTML(rows [][]string) string {
 	b.WriteString(`<!doctype html><meta charset="utf-8"><style>` +
 		`body{margin:0;padding:14px;display:inline-block;background:#fff;color:#1f2328;font:15px/1.4 -apple-system,"Segoe UI",Roboto,"Noto Sans",sans-serif}` +
 		`table{border-collapse:collapse}th,td{padding:7px 12px;text-align:left;vertical-align:top;max-width:280px;border-bottom:1px solid #e3e6ea}` +
-		`th{background:#f3f5f7;font-weight:600;border-bottom:2px solid #d0d5db}tr:nth-child(even) td{background:#fafbfc}` +
+		`th{background:#f3f5f7;font-weight:600;white-space:nowrap;border-bottom:2px solid #d0d5db}tr:nth-child(even) td{background:#fafbfc}` +
 		`td:not(:first-child),th:not(:first-child){border-left:1px solid #eef0f2}</style><table>`)
 	for i, r := range rows {
 		cell := "td"
