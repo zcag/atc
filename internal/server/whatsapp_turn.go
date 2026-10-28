@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
@@ -25,13 +27,29 @@ const (
 	waLongest = 6 * time.Hour
 	waLong    = 1800
 	waDoc     = 9000
+	waSkew    = 5 * time.Second
 )
+
+// transcriptOf is the session's own transcript file. The index can answer a session forked on
+// resume with its parent's file until it has seen the new one, so a path that is not named
+// after the session is not taken.
+func (s *Server) transcriptOf(sid string) string {
+	if tr, ok := s.M.Index.Find(sid); ok && filepath.Base(tr.Path) == sid+".jsonl" {
+		return tr.Path
+	}
+	matches, _ := filepath.Glob(filepath.Join(claude.ConfigDir(), "projects", "*", sid+".jsonl"))
+	if len(matches) > 0 {
+		return matches[0]
+	}
+	return ""
+}
 
 // waTurn is one stretch of the session's transcript being relayed: from where the last one
 // stopped until the session has answered everything typed into it.
 type waTurn struct {
 	sid, path string
 	off       int64
+	since     time.Time
 	asks      []waMsg
 	typed     int
 	typedAt   time.Time
@@ -69,10 +87,9 @@ func (s *Server) waBegin(sid string) *waTurn {
 	if t := s.wa.turn; t != nil && t.sid == sid {
 		return t
 	}
-	t := &waTurn{sid: sid}
-	if tr, ok := s.M.Index.Find(sid); ok {
-		t.path = tr.Path
-		if st, err := os.Stat(tr.Path); err == nil {
+	t := &waTurn{sid: sid, since: time.Now()}
+	if t.path = s.transcriptOf(sid); t.path != "" {
+		if st, err := os.Stat(t.path); err == nil {
 			t.off = st.Size()
 			if m := s.wa.mark; m.SID == sid && m.Off <= t.off {
 				t.off = m.Off
@@ -94,11 +111,11 @@ func (s *Server) waWatch() {
 		if busy || m.SID == "" {
 			continue
 		}
-		tr, ok := s.M.Index.Find(m.SID)
-		if !ok {
+		path := s.transcriptOf(m.SID)
+		if path == "" {
 			continue
 		}
-		if st, err := os.Stat(tr.Path); err != nil || st.Size() <= m.Off {
+		if st, err := os.Stat(path); err != nil || st.Size() <= m.Off {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -164,14 +181,18 @@ func (s *Server) waPump(t *waTurn) {
 	for {
 		time.Sleep(waTick)
 		x, ok := s.waSession(ctx, t.sid)
-		if tr, found := s.M.Index.Find(t.sid); found && tr.Path != t.path {
-			t.path = tr.Path
+		if path := s.transcriptOf(t.sid); path != "" && path != t.path {
+			if st, err := os.Stat(path); t.path != "" || err != nil || st.Size() < t.off {
+				t.off = 0
+			}
+			t.path = path
 		}
 		if t.path != "" {
 			if p, err := history.ReadRange(t.path, t.off, 0); err == nil {
 				t.off = p.End
 				for _, m := range p.Messages {
 					switch {
+					case !m.Time.IsZero() && m.Time.Before(t.since.Add(-waSkew)):
 					case m.Role == "assistant" && strings.TrimSpace(m.Text) != "":
 						release(false)
 						text, say := splitSpoken(m.Text)

@@ -1107,10 +1107,16 @@ func (s *Server) keep(ctx context.Context, name string, fresh bool) (string, err
 			return "", err
 		}
 		var last *sessions.Session
-		for i, x := range list {
-			if x.Kind == "background" && cmp.Or(s.M.Store.Get(x.SessionID).Name, x.Name) == name &&
-				(last == nil || x.Last().After(last.Last())) {
-				last = &list[i]
+		for _, ours := range []bool{true, false} {
+			for i, x := range list {
+				named := s.M.Store.Get(x.SessionID).Name
+				if x.Kind == "background" && (ours && named == name || !ours && named == "" && x.Name == name) &&
+					(last == nil || x.Last().After(last.Last())) {
+					last = &list[i]
+				}
+			}
+			if last != nil {
+				break
 			}
 		}
 		if last != nil && last.Attachable {
