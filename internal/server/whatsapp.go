@@ -124,6 +124,10 @@ func (s *Server) waReceive(ev whatsapp.Event) {
 		log.Printf("whatsapp: ignored a %s message from %s", d.Type, d.From)
 		return
 	}
+	if strings.TrimSpace(d.Body) == "" && d.Media == nil && d.Location == nil {
+		log.Printf("whatsapp: skipped an empty %s message", d.Type)
+		return
+	}
 	if !s.wa.first(d.ID) {
 		return
 	}
