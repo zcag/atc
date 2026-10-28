@@ -30,6 +30,7 @@ type Client struct {
 	Secret            string
 	Hook              string
 	Votes             atomic.Bool
+	chat              atomic.Value
 	http              *http.Client
 }
 
@@ -54,7 +55,21 @@ func FromEnv() *Client {
 	return c
 }
 
-func (c *Client) OwnerChat() string { return c.Owner + "@c.us" }
+// OwnerChat is where atc writes to the owner: the chat they last wrote from (WhatsApp files
+// their messages under their @lid, and a reply sent to their number can land in a second chat
+// on their phone), else their number.
+func (c *Client) OwnerChat() string {
+	if id, _ := c.chat.Load().(string); id != "" {
+		return id
+	}
+	return c.Owner + "@c.us"
+}
+
+func (c *Client) UseChat(id string) {
+	if id != "" {
+		c.chat.Store(id)
+	}
+}
 
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
 	var rd io.Reader

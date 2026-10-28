@@ -53,9 +53,6 @@ func (s *Server) waType(ctx context.Context, msg waMsg, text, voice string) erro
 	if err != nil {
 		return err
 	}
-	if s.M.Store.Get(x.SessionID).Name == "" {
-		s.M.Store.Update(x.SessionID, func(m *store.Meta) { m.Name, m.Parked = waName, true })
-	}
 	s.wa.mu.Lock()
 	t := s.waBegin(x.SessionID)
 	if msg.id != "" {
@@ -230,7 +227,7 @@ func (s *Server) waPump(t *waTurn) {
 		asks, voice := t.asks, t.voice
 		s.wa.turn = nil
 		s.wa.mu.Unlock()
-		s.wa.setMark(waMark{t.sid, t.off})
+		s.wa.setMark(waMark{SID: t.sid, Off: t.off})
 
 		release(true)
 		if typingAt != (time.Time{}) {
@@ -323,7 +320,6 @@ func (s *Server) waNew(ctx context.Context, msg waMsg) error {
 	if err != nil {
 		return err
 	}
-	s.M.Store.Update(x.SessionID, func(m *store.Meta) { m.Name, m.Parked = waName, true })
 	s.wa.setMark(waMark{SID: x.SessionID})
 	s.refresh()
 	s.WhatsApp.React(ctx, msg.chat, msg.id, "🆕")

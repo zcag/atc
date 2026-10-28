@@ -174,7 +174,7 @@ func (s *Server) revive(lost []running, why string) {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		id, err := s.relaunch(ctx, r.Name, r.Dir, r.SID)
+		id, err := s.relaunch(ctx, s.standingName(r.SID, r.Name), r.Dir, r.SID)
 		cancel()
 		if err != nil {
 			log.Printf("revive %s: %v", r.Title, err)

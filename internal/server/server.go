@@ -705,7 +705,7 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t, _ := s.M.Index.Find(sid)
-	dir, name := t.StartCwd, t.AgentName
+	dir, name := t.StartCwd, s.standingName(sid, t.AgentName)
 	if dir == "" {
 		http.Error(w, "unknown session "+sid, http.StatusNotFound)
 		return
@@ -1114,18 +1114,54 @@ func (s *Server) keep(ctx context.Context, name string, fresh bool) (string, err
 			}
 		}
 		if last != nil && last.Attachable {
+			s.name(last.SessionID, name)
 			return last.ID, nil
 		}
+		from, dir := "", ""
 		if last != nil {
-			return s.relaunch(ctx, name, existingDir(last.StartCwd, last.Cwd), last.SessionID)
+			from, dir = last.SessionID, existingDir(last.StartCwd, last.Cwd)
+		} else if t, ok := s.lastNamed(name); ok {
+			from, dir = t.SessionID, existingDir(t.StartCwd, t.Cwd)
 		}
-		if t, ok := s.lastNamed(name); ok {
-			return s.relaunch(ctx, name, existingDir(t.StartCwd, t.Cwd), t.SessionID)
+		if from != "" {
+			return s.relaunch(ctx, name, dir, from)
 		}
 	}
-	dir := home
 	args, _ := standing(name)
-	return s.M.CLI.Start(ctx, dir, name, "", args...)
+	id, err := s.M.CLI.Start(ctx, home, name, "", args...)
+	if err == nil {
+		s.claim(ctx, name, id, "")
+	}
+	return id, err
+}
+
+// claim names a standing session in atc's own store once Claude has given it a session id.
+// Claude renames background sessions after their content, so its name can't be what finds
+// the session next time; and a resume can come back under a new id, so the conversation it
+// continued gives the name up, or it would be resumed again.
+func (s *Server) claim(ctx context.Context, name, id, from string) {
+	for range 20 {
+		list, _ := s.M.Live(ctx)
+		for _, x := range list {
+			if x.ID != id || x.SessionID == "" {
+				continue
+			}
+			s.name(x.SessionID, name)
+			if from != "" && from != x.SessionID {
+				s.M.Store.Update(from, func(m *store.Meta) { m.Name = name + " (continued as " + x.SessionID[:min(8, len(x.SessionID))] + ")" })
+			}
+			return
+		}
+		time.Sleep(time.Second)
+	}
+	log.Printf("%s: could not find %s to name it", name, id)
+}
+
+func (s *Server) name(sid, name string) {
+	if s.M.Store.Get(sid).Name == name {
+		return
+	}
+	s.M.Store.Update(sid, func(m *store.Meta) { m.Name, m.Parked = name, m.Parked || name == waName })
 }
 
 // existingDir is the first of dirs still on disk: a session that worked in a git worktree
@@ -1151,6 +1187,17 @@ func (s *Server) lastNamed(name string) (history.Transcript, bool) {
 	return last, last.SessionID != ""
 }
 
+// standingName is the standing name atc gave a session (whatsapp, assistant) when it has one,
+// since Claude's own name for it drifts, and fallback otherwise.
+func (s *Server) standingName(sid, fallback string) string {
+	if n := s.M.Store.Get(sid).Name; n != "" {
+		if _, ok := standing(n); ok {
+			return n
+		}
+	}
+	return fallback
+}
+
 func standing(name string) ([]string, bool) {
 	switch name {
 	case "assistant":
@@ -1174,7 +1221,11 @@ func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, e
 	home, _ := os.UserHomeDir()
 	dir = existingDir(dir, home)
 	if args, ok := standing(name); ok {
-		return s.M.CLI.Resume(ctx, dir, sid, args...)
+		id, err := s.M.CLI.Resume(ctx, dir, sid, args...)
+		if err == nil {
+			s.claim(ctx, name, id, sid)
+		}
+		return id, err
 	}
 	var extra []string
 	if p, ok := s.preset(name); ok {

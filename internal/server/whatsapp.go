@@ -45,10 +45,11 @@ When you offer the user a choice, send it as a poll they answer with a tap: ` + 
 	`with their correction. They have /new for a fresh conversation, /stop to interrupt you and /status for their sessions.
 
 ` +
-	`A voice note arrives as "[voice note, spoken in <language>]" and they hear your answer back as a voice note too: end that reply ` +
-	`with one last line that starts with 🔊 and says the answer out loud, one to three short sentences in the language they spoke, ` +
-	`even when you write the rest in English. atc speaks that line and leaves it out of the text, so make it the answer itself, ` +
-	`not a repeat of their question.
+	`A voice note arrives as "[voice note, spoken in <language>]", and the user asked to hear the answer to one back as a voice note ` +
+	`in the language they spoke. So every reply to a voice note ends with one last line that starts with 🔊: the answer said out ` +
+	`loud, one to three short sentences, in the language of the voice note. That line is speech, not writing: a standing rule to ` +
+	`write to the user in English covers the rest of the reply, not this line, which is always in the language they spoke. atc ` +
+	`speaks it and leaves it out of the text, so make it the answer itself, never a repeat of their question.
 
 ` +
 	`Keep this conversation quick: it is a switchboard, not a workbench. Answer questions, look things up and do small one-step things ` +
@@ -77,8 +78,9 @@ type waChat struct {
 }
 
 type waMark struct {
-	SID string `json:"session"`
-	Off int64  `json:"offset"`
+	SID  string `json:"session"`
+	Off  int64  `json:"offset"`
+	Chat string `json:"chat,omitempty"`
 }
 
 type waMsg struct{ chat, id string }
@@ -125,10 +127,21 @@ func (c *waChat) recall(m map[string]string, id string) string {
 
 func (c *waChat) setMark(m waMark) {
 	c.mu.Lock()
+	m.Chat = cmp.Or(m.Chat, c.mark.Chat)
 	c.mark = m
 	c.mu.Unlock()
 	if b, err := json.Marshal(m); err == nil && c.path != "" {
 		os.WriteFile(c.path, b, 0o644)
+	}
+}
+
+func (c *waChat) setChat(chat string) {
+	c.mu.Lock()
+	m := c.mark
+	c.mu.Unlock()
+	if chat != "" && chat != m.Chat {
+		m.Chat = chat
+		c.setMark(m)
 	}
 }
 
@@ -138,6 +151,7 @@ func (s *Server) startWhatsApp() {
 		s.wa.path = filepath.Join(s.StateDir, "whatsapp.json")
 		if b, err := os.ReadFile(s.wa.path); err == nil {
 			json.Unmarshal(b, &s.wa.mark)
+			s.WhatsApp.UseChat(s.wa.mark.Chat)
 		}
 	}
 	go s.waWatch()
@@ -232,6 +246,8 @@ func (s *Server) waReceive(d whatsapp.Message) {
 		return
 	}
 	msg := waMsg{cmp.Or(d.ChatID, d.From), d.ID}
+	wa.UseChat(msg.chat)
+	s.wa.setChat(msg.chat)
 	s.wa.remember(s.wa.heard, d.ID, d.Body)
 	wa.Read(ctx, msg.chat)
 	var err error
