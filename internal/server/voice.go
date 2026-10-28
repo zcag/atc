@@ -46,9 +46,18 @@ func (s *Server) stt(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	text, lang, err := s.transcribe(r.Context(), audio, "speech.wav")
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]string{"text": text, "language": lang})
+}
+
+func (s *Server) transcribe(ctx context.Context, audio []byte, filename string) (string, string, error) {
 	var body bytes.Buffer
 	mw := multipart.NewWriter(&body)
-	fw, _ := mw.CreateFormFile("file", "speech.wav")
+	fw, _ := mw.CreateFormFile("file", filename)
 	fw.Write(audio)
 	mw.WriteField("model", s.Voice.STTModel)
 	mw.WriteField("response_format", "verbose_json")
@@ -56,17 +65,14 @@ func (s *Server) stt(w http.ResponseWriter, r *http.Request) {
 		mw.WriteField("prompt", s.Voice.STTPrompt)
 	}
 	mw.Close()
-	req, _ := http.NewRequestWithContext(r.Context(), "POST", s.Voice.STT, &body)
+	req, _ := http.NewRequestWithContext(ctx, "POST", s.Voice.STT, &body)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 	var out struct {
 		Text     string `json:"text"`
 		Language string `json:"language"`
 	}
-	if err := llm.Do(req, &out); err != nil {
-		fail(w, err)
-		return
-	}
-	reply(w, map[string]string{"text": strings.TrimSpace(out.Text), "language": out.Language})
+	err := llm.Do(req, &out)
+	return strings.TrimSpace(out.Text), out.Language, err
 }
 
 func (s *Server) condense(w http.ResponseWriter, r *http.Request) {
@@ -120,20 +126,28 @@ func (s *Server) tts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "text-to-speech is not configured", http.StatusNotImplemented)
 		return
 	}
-	b, _ := json.Marshal(map[string]string{"model": s.Voice.TTSModel, "voice": s.Voice.TTSVoice, "input": in.Text, "response_format": "wav"})
-	req, _ := http.NewRequestWithContext(r.Context(), "POST", s.Voice.TTS, bytes.NewReader(b))
-	req.Header.Set("Content-Type", "application/json")
-	res, err := voiceClient.Do(req)
+	res, err := s.speak(r.Context(), in.Text)
 	if err != nil {
 		fail(w, err)
 		return
 	}
 	defer res.Body.Close()
-	if res.StatusCode >= 300 {
-		msg, _ := io.ReadAll(res.Body)
-		http.Error(w, fmt.Sprintf("text-to-speech: %s %s", res.Status, msg), http.StatusBadGateway)
-		return
-	}
 	w.Header().Set("Content-Type", cmp.Or(res.Header.Get("Content-Type"), "audio/wav"))
 	io.Copy(w, res.Body)
+}
+
+func (s *Server) speak(ctx context.Context, text string) (*http.Response, error) {
+	b, _ := json.Marshal(map[string]string{"model": s.Voice.TTSModel, "voice": s.Voice.TTSVoice, "input": text, "response_format": "wav"})
+	req, _ := http.NewRequestWithContext(ctx, "POST", s.Voice.TTS, bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	res, err := voiceClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if res.StatusCode >= 300 {
+		msg, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		return nil, fmt.Errorf("text-to-speech: %s %s", res.Status, msg)
+	}
+	return res, nil
 }

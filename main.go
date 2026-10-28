@@ -36,6 +36,7 @@ import (
 	"github.com/zcag/atc/internal/tools"
 	"github.com/zcag/atc/internal/tui"
 	limits "github.com/zcag/atc/internal/usage"
+	"github.com/zcag/atc/internal/whatsapp"
 	"github.com/zcag/atc/web"
 )
 
@@ -83,6 +84,9 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc notify [--urgent] [--reply TEXT]... [message...]
                                  from inside a session: a push to the user's phone that opens
                                  the session; --urgent buzzes even while they use atc
+  atc wa [--file F]... [--render F.html]... [--voice TEXT] [text...]
+                                 send the user files, a rendered page, a voice note or text on
+                                 WhatsApp, from the account atc answers them on; atc wa -h
   atc outputs [-json] <session>  what it produced: running servers, files (with a link to
                                  open each in a browser), links, code it touched
   atc usage [-json] [session]    plan limits and tokens per day; with a session, its tokens,
@@ -136,6 +140,8 @@ func main() {
 		err = tools.Run(context.Background(), client.Load())
 	case "show":
 		err = show(args)
+	case "wa":
+		err = wa(args)
 	case "notify":
 		err = notify(args)
 	case "browser":
@@ -214,6 +220,8 @@ func serve(args []string) error {
 		},
 		Roots: roots,
 		Voice: server.VoiceFromEnv(),
+
+		WhatsApp: whatsapp.FromEnv(),
 
 		AppDir:    os.Getenv("ATC_APP_DIR"),
 		StateDir:  client.ConfigDir(),

@@ -310,3 +310,8 @@ func (c *Client) Events(ctx context.Context, fn func([]sessions.Session)) error 
 	}
 	return io.ErrUnexpectedEOF
 }
+
+func (c *Client) WhatsApp(req map[string]any) ([]string, error) {
+	var r struct{ Sent []string }
+	return r.Sent, c.do("POST", "/api/whatsapp/send", req, &r)
+}

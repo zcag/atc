@@ -48,6 +48,7 @@ type Page struct {
 	Messages []Message `json:"messages"`
 	Start    int64     `json:"start"`
 	Size     int64     `json:"size"`
+	End      int64     `json:"-"`
 	Done     bool      `json:"done,omitempty"`
 }
 
@@ -171,8 +172,8 @@ func ReadRange(path string, from, to int64) (Page, error) {
 	}
 	f.Seek(from, io.SeekStart)
 	rd := newReader(false)
-	rd.read(bufio.NewReaderSize(io.LimitReader(f, to-from), 1<<20), from)
-	return Page{Messages: rd.msgs, Start: from, Size: st.Size()}, nil
+	end := rd.read(bufio.NewReaderSize(io.LimitReader(f, to-from), 1<<20), from)
+	return Page{Messages: rd.msgs, Start: from, Size: st.Size(), End: end}, nil
 }
 
 func ReadAgent(transcript, toolUseID string) (Page, error) {

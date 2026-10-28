@@ -35,6 +35,7 @@ import (
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/usage"
+	"github.com/zcag/atc/internal/whatsapp"
 )
 
 type Server struct {
@@ -53,6 +54,9 @@ type Server struct {
 	Presets []Preset
 	Engines []Engine
 	Voice   Voice
+
+	WhatsApp *whatsapp.Client
+	wa       *waChat
 
 	AppDir    string
 	AssistDir string
@@ -104,6 +108,9 @@ func (s *Server) Handler() http.Handler {
 				s.revive(lost, s.Host+" restarted")
 			}()
 		}
+	}
+	if s.WhatsApp != nil {
+		s.startWhatsApp()
 	}
 	go s.poll()
 	s.watchOpenCode()
@@ -172,6 +179,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/push/unregister", s.pushUnregister)
 	mux.HandleFunc("GET /api/push/devices", func(w http.ResponseWriter, r *http.Request) { reply(w, s.Push.Devices()) })
 	mux.HandleFunc("POST /api/assist", s.assist)
+	mux.HandleFunc("POST /api/whatsapp/hook", s.waHook)
+	mux.HandleFunc("POST /api/whatsapp/send", s.waPost)
 	mux.Handle("GET /app/", s.app())
 	mux.Handle("GET /", s.static())
 	return s.auth(s.route(mux))
@@ -197,7 +206,7 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		if s.Token == "" || r.URL.Path == "/api/login" || r.URL.Path == "/healthz" || outputPath.MatchString(r.URL.Path) {
+		if s.Token == "" || r.URL.Path == "/api/login" || r.URL.Path == "/healthz" || r.URL.Path == "/api/whatsapp/hook" || outputPath.MatchString(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -300,29 +309,37 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
+	path, err := saveUpload(cmp.Or(r.PathValue("sid"), "shared"), hdr.Filename, f)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]string{"path": path})
+}
+
+func saveUpload(folder, filename string, src io.Reader) (string, error) {
 	cache, _ := os.UserCacheDir()
-	dir := filepath.Join(cache, "atc", "uploads", filepath.Base(cmp.Or(r.PathValue("sid"), "shared")))
+	dir := filepath.Join(cache, "atc", "uploads", filepath.Base(folder))
 	name := strings.Map(func(c rune) rune {
 		if c == '/' || c == '\\' || c < ' ' {
 			return '_'
 		}
 		return c
-	}, filepath.Base(hdr.Filename))
+	}, filepath.Base(filename))
 	if name == "" || name == "." {
 		name = "upload"
 	}
 	path := filepath.Join(dir, time.Now().Format("150405")+"-"+name)
 	os.MkdirAll(dir, 0o755)
 	out, err := os.Create(path)
-	if err == nil {
-		_, err = io.Copy(out, f)
-		out.Close()
-	}
 	if err != nil {
-		fail(w, err)
-		return
+		return "", err
 	}
-	reply(w, map[string]string{"path": path})
+	_, err = io.Copy(out, src)
+	if cerr := out.Close(); err == nil {
+		err = cerr
+	}
+	return path, err
 }
 
 func (s *Server) transcript(w http.ResponseWriter, r *http.Request) {
@@ -1070,41 +1087,52 @@ func (s *Server) pushUnregister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) assist(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Query().Get("new") == "" {
-		list, err := s.M.Live(r.Context())
+	id, err := s.keep(r.Context(), "assistant", r.URL.Query().Get("new") != "")
+	s.done(w, id, err)
+}
+
+// keep returns the running session of a standing name (assistant, whatsapp): the newest one
+// by that name, resumed when it stopped, or a new one when there is none or fresh is set.
+func (s *Server) keep(ctx context.Context, name string, fresh bool) (string, error) {
+	if !fresh {
+		list, err := s.M.Live(ctx)
 		if err != nil {
-			fail(w, err)
-			return
+			return "", err
 		}
 		var last *sessions.Session
 		for i, x := range list {
-			if x.Kind == "background" && (x.Name == "assistant" || s.M.Store.Get(x.SessionID).Name == "assistant") &&
+			if x.Kind == "background" && cmp.Or(s.M.Store.Get(x.SessionID).Name, x.Name) == name &&
 				(last == nil || x.Last().After(last.Last())) {
 				last = &list[i]
 			}
 		}
 		if last != nil && last.Attachable {
-			reply(w, map[string]string{"id": last.ID})
-			return
+			return last.ID, nil
 		}
 		if last != nil {
-			dir := cmp.Or(last.StartCwd, last.Cwd)
-			id, err := s.relaunch(r.Context(), "assistant", dir, last.SessionID)
-			s.done(w, id, err)
-			return
+			return s.relaunch(ctx, name, cmp.Or(last.StartCwd, last.Cwd), last.SessionID)
 		}
 	}
 	dir, err := expand(cmp.Or(s.AssistDir, "~"))
 	if err != nil {
-		fail(w, err)
-		return
+		return "", err
 	}
-	id, err := s.M.CLI.Start(r.Context(), dir, "assistant", "", assistArgs()...)
-	s.done(w, id, err)
+	args, _ := standing(name)
+	return s.M.CLI.Start(ctx, dir, name, "", args...)
 }
 
-func assistArgs() []string {
-	extra := []string{"--append-system-prompt", voicePrompt}
+func standing(name string) ([]string, bool) {
+	switch name {
+	case "assistant":
+		return standingArgs(voicePrompt), true
+	case waName:
+		return append(standingArgs(waPrompt), "--disallowedTools", "AskUserQuestion,EnterPlanMode"), true
+	}
+	return nil, false
+}
+
+func standingArgs(prompt string) []string {
+	extra := []string{"--append-system-prompt", prompt}
 	if exe, err := os.Executable(); err == nil {
 		cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"atc": map[string]any{"command": exe, "args": []string{"mcp"}}}})
 		extra = append(extra, "--mcp-config", string(cfg))
@@ -1113,8 +1141,8 @@ func assistArgs() []string {
 }
 
 func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, error) {
-	if name == "assistant" {
-		return s.M.CLI.Resume(ctx, dir, sid, assistArgs()...)
+	if args, ok := standing(name); ok {
+		return s.M.CLI.Resume(ctx, dir, sid, args...)
 	}
 	var extra []string
 	if p, ok := s.preset(name); ok {
@@ -1137,8 +1165,9 @@ func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, e
 const voicePrompt = `This session is used by voice. The user speaks to you through speech-to-text and hears your replies through text-to-speech. ` +
 	`Answer the way you would say it out loud: short, natural sentences, the important part first. No markdown, no code blocks, no tables, no bullet lists, ` +
 	`no URLs read out; say file and command names plainly. When the work produces something long (code, a report, a list), put it in a file or the session ` +
-	`and tell the user briefly where it is. Transcription can mishear words: if a request is ambiguous, ask a short question. ` +
-	`You are also the user's switchboard for their other Claude Code sessions: with the atc tools you can list them, read what they did, ` +
+	`and tell the user briefly where it is. Transcription can mishear words: if a request is ambiguous, ask a short question. ` + switchboard
+
+const switchboard = `You are also the user's switchboard for their other Claude Code sessions: with the atc tools you can list them, read what they did, ` +
 	`send them instructions, start new ones and wait for results. When the user mentions another session or project, use those tools ` +
 	`rather than doing the work yourself, and match names loosely since speech-to-text mangles them.`
 

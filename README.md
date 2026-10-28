@@ -573,6 +573,41 @@ Without `ATC_TTS_URL`, replies are read by the device's built-in voice, which is
 microphone needs HTTPS. On a phone, keep the screen on: browsers stop the microphone when the
 screen locks.
 
+## WhatsApp
+
+atc can put one standing session, named `whatsapp`, behind a WhatsApp account of its own, so you
+talk to it from your own number and its replies arrive as ordinary messages with ordinary
+notifications. It needs an [OpenWA](https://github.com/rmyndharis/OpenWA) gateway with that second
+account linked as a session. Only your number reaches the session: OpenWA's webhook filter lets
+nothing else through, and atc checks the signature and the sender again (an `@lid` sender is
+resolved to its number through WhatsApp) and ignores anyone else without a word.
+
+```sh
+ATC_WHATSAPP_URL=http://openwa:2785              # the gateway
+ATC_WHATSAPP_KEY=...                             # its API key
+ATC_WHATSAPP_SESSION=<uuid>                      # the linked account, as an OpenWA session id
+ATC_WHATSAPP_OWNER=905551234567,1234567890@lid   # your number first, then other ids you write from
+ATC_WHATSAPP_SECRET=<16+ random characters>      # signs every delivery
+ATC_WHATSAPP_HOOK=http://<this host>:7272/api/whatsapp/hook   # atc registers it on start
+```
+
+The conversation is one session, kept and resumed like `assistant` (in `ATC_ASSIST_DIR`), parked so
+atc's own pushes don't repeat what WhatsApp already told you. What you send is typed into it:
+text, a reply to an earlier message with that message quoted, photos and files saved to disk with
+their path, voice notes transcribed (`ATC_STT_URL`), locations as coordinates. Messages sent while
+it works join the turn it is on. Your message gets ⏳ while it works and ✅ when the turn is done.
+
+Its replies go out as they are written, Markdown turned into WhatsApp's markup. A table is drawn as
+an image by atc's browser (`ATC_BROWSER`; without one it becomes monospace text), long code goes as
+a file, and anything over a message's length is split at paragraphs. While a turn runs quiet, one
+status message shows what it is doing, edited in place, and the typing indicator stays on. A voice
+note gets a spoken summary back as a voice note (`ATC_TTS_URL`).
+
+The session sends what a reply can't carry with `atc wa`: `--file` (images and videos inline,
+anything else as a document), `--render page.html` (drawn as an image), `--voice TEXT`.
+`/new` starts a fresh conversation (the last one stays in atc under a dated name) and `/stop`
+interrupts it.
+
 ## Notes
 
 - Claude Code only starts in folders you have trusted. If atc reports a folder is not trusted,
