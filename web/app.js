@@ -562,7 +562,7 @@ function Board({ live: all, sel, cursor, onPast, mode = "classic" }) {
   }, [q, limit, mode === "lanes"]);
 
   const boardRef = useRef();
-  useFlip(boardRef, all);
+  const remeasure = useFlip(boardRef);
   if (!live) return html`<div class="board"><div class="skeleton"><i></i><i></i><i></i></div></div>`;
   const liveIDs = new Set(live.map((s) => s.sessionId));
   const earlier = (hist || []).filter((s) => !liveIDs.has(s.sessionId) && mine(s));
@@ -595,7 +595,7 @@ function Board({ live: all, sel, cursor, onPast, mode = "classic" }) {
     ${earlierBay}`;
 
   return html`
-    <div class="board ${mode === "classic" ? "" : "v2"}" ref=${boardRef} style=${tabs.length > 1 ? "--stick: 40px" : "--stick: 0px"}>
+    <div class="board ${mode === "classic" ? "" : "v2"}" ref=${boardRef} onScroll=${remeasure} style=${tabs.length > 1 ? "--stick: 40px" : "--stick: 0px"}>
       ${tabs.length > 1 && html`
         <nav class="projtabs" aria-label="Projects">
           <button class=${only ? "" : "on"} onClick=${() => setOnly(null)}>All</button>
@@ -729,34 +729,42 @@ function dayGroups(list) {
   return out;
 }
 
-function useFlip(ref, list) {
+function useFlip(ref) {
   const rects = useRef(new Map());
   const states = useRef(new Map());
+  const measure = (root, each) => {
+    const next = new Map(), o = root.getBoundingClientRect();
+    for (const el of root.querySelectorAll("[data-sid]:not(.row)")) {
+      const r = el.getBoundingClientRect(), t = new DOMMatrixReadOnly(getComputedStyle(el).transform);
+      const at = { left: r.left - o.left - t.m41, top: r.top - o.top - t.m42 };
+      next.set(el.dataset.sid, at);
+      each?.(el, at, t);
+    }
+    rects.current = next;
+  };
+  const raf = useRef(0);
   useLayoutEffect(() => {
     const root = ref.current;
     if (!root) return;
     const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const next = new Map(), moved = [];
-    for (const el of root.querySelectorAll("[data-sid]:not(.row)")) {
-      const sid = el.dataset.sid, r = el.getBoundingClientRect(), prev = rects.current.get(sid);
-      const t = new DOMMatrixReadOnly(getComputedStyle(el).transform);
-      const at = { left: r.left - t.m41, top: r.top - t.m42 };
-      next.set(sid, at);
+    const prevs = rects.current, moved = [];
+    measure(root, (el, at, t) => {
+      const sid = el.dataset.sid, prev = prevs.get(sid);
       const st = el.dataset.state, was = states.current.get(sid);
       if (was && was !== st && st !== "working") { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
       states.current.set(sid, st);
-      if (!prev || reduce) continue;
+      if (!prev || reduce) return;
       const dx = prev.left - at.left, dy = prev.top - at.top;
-      if (Math.abs(dy) < 2 && Math.abs(dx) < 2) continue;
+      if (Math.abs(dy) < 2 && Math.abs(dx) < 2) return;
       el.style.transition = "none";
       el.style.transform = `translate(${dx + t.m41}px, ${dy + t.m42}px)`;
       moved.push(el);
-    }
-    rects.current = next;
+    });
     if (!moved.length) return;
     void root.offsetWidth;
     for (const el of moved) { el.style.transition = "transform .38s cubic-bezier(.2,.7,.2,1)"; el.style.transform = ""; }
   });
+  return () => { cancelAnimationFrame(raf.current); raf.current = requestAnimationFrame(() => ref.current && measure(ref.current)); };
 }
 
 let SEEN = null;
