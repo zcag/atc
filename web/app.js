@@ -1117,8 +1117,8 @@ function Session({ s, say, live }) {
     const p = prev && shown.find((x) => prev[x.name] !== x.shown);
     if (!p || (mode === "page" && (pg === p.name || sideBySide))) return;
     const idle = Date.now() - LAST_KEY > 8000 && !document.activeElement?.closest?.("textarea, input, .xterm");
-    if (idle && wideNow && split && mode !== "page") openPage(p.name);
-    else say(`Showing you “${pageTitle(p)}”. It's on the page button up top.`);
+    if (idle && wideNow && split && mode !== "page" && p.kind !== "browser") openPage(p.name);
+    else say(p.kind === "browser" ? "It opened a browser tab. It's on the page button up top." : `Showing you “${pageTitle(p)}”. It's on the page button up top.`);
   }, [shown.map((p) => p.name + p.shown).join()]);
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
