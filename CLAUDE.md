@@ -23,7 +23,10 @@ phone too. A web change is not done until it works there:
 Own it end to end: merge to master, push, `make install` on desktop (restarting is safe:
 `KillMode=process` keeps every session alive) **and** on laptop
 (`ssh laptop 'cd ~/proj/atc && git pull --ff-only && make install-mac'`). desktop forwards laptop's
-sessions to laptop's atc, so the two must never run different versions. Settings live in
+sessions to laptop's atc, so the two must never run different versions. `make install` ends by
+fast-forwarding desktop's main checkout (`~/proj/atc`) to `origin/master` (`make sync-main`): a push
+from a worktree doesn't move it, and a session started there would otherwise build stale code.
+It leaves the checkout alone when it's off master or has local changes. Settings live in
 `~/.config/atc/env` on each. Don't stop at a branch.
 
 ## Terminal size and rendering problems

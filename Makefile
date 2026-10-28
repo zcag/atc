@@ -12,6 +12,13 @@ install: check build
 	systemctl --user daemon-reload
 	systemctl --user enable --now atc
 	systemctl --user restart atc
+	$(MAKE) --no-print-directory sync-main
+
+sync-main:
+	@main=$$(cd "$$(git rev-parse --git-common-dir)/.." && pwd); git fetch -q origin; \
+	if [ "$$(git -C $$main branch --show-current)" != master ]; then echo "sync-main: $$main is not on master, left alone"; \
+	elif [ -n "$$(git -C $$main status --porcelain)" ]; then echo "sync-main: $$main has local changes, left alone"; \
+	else git -C $$main merge -q --ff-only origin/master && echo "sync-main: $$main at $$(git -C $$main rev-parse --short HEAD)"; fi
 
 install-opencode:
 	install -Dm644 deploy/opencode/agent/atc.md ~/.config/atc/opencode/agent/atc.md
