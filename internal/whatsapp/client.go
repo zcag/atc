@@ -11,12 +11,15 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -26,6 +29,7 @@ type Client struct {
 	OwnerIDs          []string
 	Secret            string
 	Hook              string
+	Votes             atomic.Bool
 	http              *http.Client
 }
 
@@ -233,12 +237,25 @@ func (c *Client) EnsureHook(ctx context.Context) error {
 				method, path = "PUT", "/webhooks/"+h.ID
 			}
 		}
-		if err := c.do(ctx, method, path, body, nil); err != nil {
+		err := c.do(ctx, method, path, body, nil)
+		if voting := slices.Contains(w.events, "poll.vote"); voting && err != nil {
+			body["events"] = slices.DeleteFunc(slices.Clone(w.events), func(e string) bool { return e == "poll.vote" })
+			if c.do(ctx, method, path, body, nil) == nil {
+				return ErrNoVotes
+			}
+		} else if voting {
+			c.Votes.Store(true)
+		}
+		if err != nil {
 			return err
 		}
 	}
 	return nil
 }
+
+// ErrNoVotes is EnsureHook's word that everything else is registered but this OpenWA does not
+// report poll votes (they came in 0.26.0), so a poll could never be answered.
+var ErrNoVotes = errors.New("this OpenWA does not report poll votes (0.26.0 or later does), so polls are off")
 
 func (c *Client) Poll(ctx context.Context, question string, options []string, multi bool) (string, error) {
 	var s Sent

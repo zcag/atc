@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -139,6 +140,10 @@ func (s *Server) startWhatsApp() {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			err := s.WhatsApp.EnsureHook(ctx)
 			cancel()
+			if errors.Is(err, whatsapp.ErrNoVotes) {
+				log.Printf("whatsapp: %v", err)
+				err = nil
+			}
 			if err == nil {
 				log.Printf("whatsapp: webhooks ready at %s", cmp.Or(s.WhatsApp.Hook, "(not registered by atc)"))
 				return

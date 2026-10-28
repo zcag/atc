@@ -213,6 +213,10 @@ func (s *Server) waPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "a poll needs a question and 2 to 12 options", http.StatusBadRequest)
 		return
 	}
+	if in.Poll != nil && !s.WhatsApp.Votes.Load() {
+		http.Error(w, "polls are off: this OpenWA does not report votes (it needs 0.26.0 or later); offer numbered options in text instead", http.StatusNotImplemented)
+		return
+	}
 	ctx := r.Context()
 	var sent []string
 	send := func(what string, err error) bool {
