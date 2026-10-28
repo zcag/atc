@@ -1,7 +1,7 @@
 (() => {
   const inAtc = window.parent !== window;
   const KEY = "atc.page." + location.pathname;
-  const waiting = new Map();
+  const waiting = new Map(), changed = new Set();
   let seq = 0;
   const ask = (op, arg) => new Promise((ok, no) => {
     const id = ++seq;
@@ -12,6 +12,7 @@
     const m = e.data;
     if (!inAtc || e.source !== parent || !m || m.atc !== 1) return;
     if (m.op === "scroll") return scrollTo(0, m.y);
+    if (m.op === "state") return changed.forEach((fn) => fn());
     const w = waiting.get(m.id);
     if (!w) return;
     waiting.delete(m.id);
@@ -62,6 +63,7 @@
     state: {
       get: () => (inAtc ? ask("state.get") : Promise.resolve(local.get())),
       set: (v) => (inAtc ? ask("state.set", v) : Promise.resolve(local.set(v))),
+      onChange: (fn) => { changed.add(fn); return () => changed.delete(fn); },
     },
     send: (text) => (inAtc ? ask("send", String(text)) : copy(String(text)).then(() => false)),
     copy: (text) => (inAtc ? ask("copy", String(text)) : copy(String(text))),

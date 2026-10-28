@@ -80,6 +80,9 @@ promise, and outside atc they fall back to localStorage and the clipboard:
   atc.state.get()          what the page saved, for this user on every device
   atc.state.set(obj)       save it (JSON, up to 256 KB), merged by top-level key
                            like --state: set a key to null to delete it
+  atc.state.onChange(fn)   call fn whenever the state changes (an agent wrote it),
+                           so the page redraws at once; a page that only draws
+                           state should get() again in fn
   atc.send(text)           a note from the user to this session; they confirm it first
   atc.copy(text)           copy to the clipboard, in the browser and the phone app
   atc.toast(text, label, fn)  a toast; with label and fn it has a button (Undo)

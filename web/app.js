@@ -2751,6 +2751,9 @@ function PageFrame({ p, onSend, say }) {
     addEventListener("message", f);
     return () => removeEventListener("message", f);
   }, [p.session, p.name, p.host, onSend]);
+  useEffect(() => {
+    if (p.stateAt) for (const w of Object.values(frames.current)) w?.contentWindow?.postMessage({ atc: 1, op: "state" }, "*");
+  }, [p.stateAt]);
   const frame = (u, hidden) => html`<iframe key=${u} ref=${(el) => { frames.current[u] = el; }} src=${u} class=${hidden ? "next" : ""}
     sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
     onLoad=${hidden ? () => { delete frames.current[cur]; setCur(u); setNext(null); } : null}></iframe>`;

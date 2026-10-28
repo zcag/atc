@@ -120,6 +120,7 @@ func (s *Server) pageState(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	s.refresh()
 	reply(w, map[string]string{"ok": "saved"})
 }
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -25,6 +26,7 @@ type Page struct {
 	Shown   time.Time           `json:"shown"`
 	Kind    string              `json:"kind,omitempty"`
 	Updated time.Time           `json:"updated,omitzero"`
+	StateAt time.Time           `json:"stateAt,omitzero"`
 	Size    int64               `json:"size,omitempty"`
 	Gone    bool                `json:"gone,omitempty"`
 	URL     string              `json:"url,omitempty"`
@@ -178,9 +180,11 @@ func (st *Store) State(sid, name string) json.RawMessage {
 func (st *Store) SetState(sid, name string, v json.RawMessage) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	if !st.has(sid, name) {
+	i := slices.IndexFunc(st.s.Pages[sid], func(p Page) bool { return p.Name == name })
+	if i < 0 {
 		return os.ErrNotExist
 	}
+	st.s.Pages[sid][i].StateAt = time.Now()
 	key := sid + "/" + name
 	v = Merge(st.s.State[key], v)
 	if len(v) > MaxState {
