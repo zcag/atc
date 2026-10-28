@@ -1073,7 +1073,7 @@ function QuickMenu({ quick, say, onClose }) {
   `;
 }
 
-const PANE = "atc.pane";
+const PANE = "atc.pane", SESSION_PAGE = "atc.sessionPage";
 function paneFor(s) {
   let p = null;
   try { p = localStorage.getItem(PANE); } catch {}
@@ -1084,16 +1084,24 @@ function paneFor(s) {
 function Session({ s, say, live }) {
   const canAttach = s.attachable;
   const auto = useRef(AUTO_PANE);
-  const [mode, setMode] = useState(() => { AUTO_PANE = null; return auto.current || (routePage() ? "page" : paneFor(s)); });
   const shown = usePages(s);
-  const [pg, setPg] = useState(routePage);
+  const [kept] = useState(() => { const n = !auto.current && !routePage() && stored(SESSION_PAGE, {})[s.sessionId]; return n && shown.some((p) => p.name === n) ? n : null; });
+  const [mode, setMode] = useState(() => { AUTO_PANE = null; return auto.current || (routePage() || kept ? "page" : paneFor(s)); });
+  const [pg, setPg] = useState(() => routePage() || kept);
   const [split, setSplitRaw] = useState(() => stored(PAGE_SPLIT, true));
   const setSplit = (v) => { setSplitRaw(v); store(PAGE_SPLIT, v); };
   const wideNow = useWide();
   const sideBySide = mode === "page" && split && wideNow && shown.length > 0;
   const base = () => location.hash.replace(/\/p\/.*$/, "");
-  const openPage = (name) => { setPg(name); setMode("page"); history.replaceState(null, "", `${base()}/p/${encodeURIComponent(name)}`); };
-  const leavePage = (m) => { setMode(m); history.replaceState(null, "", base()); };
+  const keep = (name) => {
+    const m = stored(SESSION_PAGE, {});
+    delete m[s.sessionId];
+    if (name) m[s.sessionId] = name;
+    store(SESSION_PAGE, Object.fromEntries(Object.entries(m).slice(-100)));
+  };
+  const openPage = (name) => { setPg(name); setMode("page"); keep(name); history.replaceState(null, "", `${base()}/p/${encodeURIComponent(name)}`); };
+  const leavePage = (m) => { setMode(m); keep(null); history.replaceState(null, "", base()); };
+  useEffect(() => { if (kept) history.replaceState(null, "", `${base()}/p/${encodeURIComponent(kept)}`); }, []);
   const [slot, setSlot] = useState(null);
   const choose = (m) => { if (m === "page") return openPage(pg || shown[0]?.name); leavePage(m); try { localStorage.setItem(PANE, m); } catch {} };
   useEffect(() => {
