@@ -32,7 +32,7 @@ func From(pool []sessions.Session, started bool) string {
 		}
 		host, _ := os.Hostname()
 		if started {
-			return fmt.Sprintf("[started by a Claude session on %s that atc does not run, so it cannot take messages · put your report in your final message]", host)
+			return fmt.Sprintf("[started by a Claude session on %s that atc does not run, so it cannot take messages · if it asks for a report, put it in your final message]", host)
 		}
 		return fmt.Sprintf("[from a Claude session on %s that atc does not run, so it cannot take messages · put your answer in your final message]", host)
 	}
@@ -41,12 +41,12 @@ func From(pool []sessions.Session, started bool) string {
 		who += " on " + me.Host
 	}
 	who += ")"
-	how := "answer with atc's send tool to " + Ref(me)
+	how := "use atc's send tool to " + Ref(me)
 	if !me.Attachable {
-		how = "it is open in a terminal and cannot take messages; put your answer in your final message, it reads it with wait"
+		how = "put it in your final message: it is open in a terminal and cannot take messages, it reads yours with wait"
 	}
 	if started {
-		return fmt.Sprintf("[started by %s · when done or blocked, report back: %s]", who, how)
+		return fmt.Sprintf("[started by %s · to answer it, %s]", who, how)
 	}
 	return fmt.Sprintf("[from %s · %s]", who, how)
 }

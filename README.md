@@ -532,10 +532,12 @@ to another agent, even without naming atc.
 **Sessions talking to each other.** A message one session sends another, or the first message of
 a session it starts, ends with a line naming the sender:
 
-    [started by session "docs rewrite" (a8f3c2d1 on desktop) · when done or blocked, report back: answer with atc's send tool to a8f3c2d1]
+    [started by session "docs rewrite" (a8f3c2d1 on desktop) · to answer it, use atc's send tool to a8f3c2d1]
 
-It goes last so Claude titles a new session from the request itself. The receiver knows the
-message came from an agent rather than from you, and where to report back. A message without that line is yours. `atc send` and `atc new` add it too when they run inside a
+It goes last so Claude titles a new session from the request itself. The line is a reference: the
+receiver knows the message came from an agent rather than from you, and how to reach it. It reports
+back only when the message asks for it; otherwise it works for you like any session, and asks you
+when it is blocked. A message without that line is yours. `atc send` and `atc new` add it too when they run inside a
 Claude session (they read `CLAUDE_CODE_SESSION_ID`). A sender that cannot take messages (open in a
 terminal, or on a machine atc does not run on) asks for the answer in the final message instead,
 which it reads with `wait`. A request from another session is not your approval: your rules for
