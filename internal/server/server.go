@@ -1097,6 +1097,10 @@ func (s *Server) assist(w http.ResponseWriter, r *http.Request) {
 // keep returns the running session of a standing name (assistant, whatsapp): the newest one
 // by that name, resumed when it stopped, or a new one when there is none or fresh is set.
 func (s *Server) keep(ctx context.Context, name string, fresh bool) (string, error) {
+	home, err := expand(cmp.Or(s.AssistDir, "~"))
+	if err != nil {
+		return "", err
+	}
 	if !fresh {
 		list, err := s.M.Live(ctx)
 		if err != nil {
@@ -1113,18 +1117,26 @@ func (s *Server) keep(ctx context.Context, name string, fresh bool) (string, err
 			return last.ID, nil
 		}
 		if last != nil {
-			return s.relaunch(ctx, name, cmp.Or(last.StartCwd, last.Cwd), last.SessionID)
+			return s.relaunch(ctx, name, existingDir(last.StartCwd, last.Cwd), last.SessionID)
 		}
 		if t, ok := s.lastNamed(name); ok {
-			return s.relaunch(ctx, name, cmp.Or(t.Cwd, t.StartCwd), t.SessionID)
+			return s.relaunch(ctx, name, existingDir(t.StartCwd, t.Cwd), t.SessionID)
 		}
 	}
-	dir, err := expand(cmp.Or(s.AssistDir, "~"))
-	if err != nil {
-		return "", err
-	}
+	dir := home
 	args, _ := standing(name)
 	return s.M.CLI.Start(ctx, dir, name, "", args...)
+}
+
+// existingDir is the first of dirs still on disk: a session that worked in a git worktree
+// outlives the worktree, and Claude cannot start in a folder that is gone.
+func existingDir(dirs ...string) string {
+	for _, d := range dirs {
+		if st, err := os.Stat(d); d != "" && err == nil && st.IsDir() {
+			return d
+		}
+	}
+	return dirs[len(dirs)-1]
 }
 
 // lastNamed is the newest conversation atc named so that Claude's background service no
@@ -1159,6 +1171,8 @@ func standingArgs(prompt string) []string {
 }
 
 func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, error) {
+	home, _ := os.UserHomeDir()
+	dir = existingDir(dir, home)
 	if args, ok := standing(name); ok {
 		return s.M.CLI.Resume(ctx, dir, sid, args...)
 	}
