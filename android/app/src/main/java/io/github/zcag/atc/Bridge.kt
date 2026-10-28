@@ -38,6 +38,7 @@ class Bridge(private val a: MainActivity) : TextToSpeech.OnInitListener {
         Targets.update(a, feed.targets().take(8))
     }
     @JavascriptInterface fun openExternal(url: String) { a.openOutside(url) }
+    @JavascriptInterface fun copyImage(url: String) { a.copyImage(url) }
     @JavascriptInterface fun checkUpdate() = a.runOnUiThread { a.updater.check(manual = true) }
 
     @JavascriptInterface

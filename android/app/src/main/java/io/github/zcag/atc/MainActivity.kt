@@ -4,6 +4,8 @@ import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.KeyguardManager
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -11,6 +13,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.Uri
 import android.net.http.SslError
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -130,18 +133,32 @@ class MainActivity : Activity() {
         val uri = Uri.parse(url)
         if (uri.scheme != "http" && uri.scheme != "https") return
         if (uri.host != serverHost()) return runOnUiThread { runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) } }
-        val name = uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "file"
+        downloadOwn(url, "open") { f, type ->
+            val view = Intent(Intent.ACTION_VIEW).setDataAndType(FileProvider.getUriForFile(this, "$packageName.files", f), type)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            runCatching { startActivity(Intent.createChooser(view, f.name)) }
+                .onFailure { Toast.makeText(this, "No app on this phone opens ${f.name}", Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    fun copyImage(url: String) {
+        if (Uri.parse(url).host != serverHost()) return
+        downloadOwn(url, "clip") { f, _ ->
+            val clip = ClipData.newUri(contentResolver, f.name, FileProvider.getUriForFile(this, "$packageName.files", f))
+            getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+            if (Build.VERSION.SDK_INT < 33) Toast.makeText(this, "Image copied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun downloadOwn(url: String, dirName: String, then: (File, String) -> Unit) {
+        val name = Uri.parse(url).lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "file"
         Thread {
-            val dir = File(cacheDir, "open").apply { deleteRecursively(); mkdirs() }
+            val dir = File(cacheDir, dirName).apply { deleteRecursively(); mkdirs() }
             val f = File(dir, name)
             val ok = runCatching { Net.download(this, url, f) }.isSuccess
             runOnUiThread {
                 if (!ok) return@runOnUiThread Toast.makeText(this, "Could not download $name", Toast.LENGTH_LONG).show()
-                val type = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "application/octet-stream"
-                val view = Intent(Intent.ACTION_VIEW).setDataAndType(FileProvider.getUriForFile(this, "$packageName.files", f), type)
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                runCatching { startActivity(Intent.createChooser(view, name)) }
-                    .onFailure { Toast.makeText(this, "No app on this phone opens $name", Toast.LENGTH_LONG).show() }
+                then(f, android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(f.extension.lowercase()) ?: "application/octet-stream")
             }
         }.start()
     }

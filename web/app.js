@@ -2734,6 +2734,7 @@ function PageFrame({ p, onSend, say }) {
       "state.set": (v) => api(`${base}/state${q}`, { method: "PUT", body: v }).then(() => null),
       run: (a) => api(`${base}/run${q}`, { method: "POST", body: a }),
       copy: (t) => { copyText(t); say(t.length < 60 ? `Copied “${t}”.` : "Copied."); },
+      copyImage: (u) => (APP?.copyImage ? APP.copyImage(u) : copyImage(u).then(() => say("Image copied."))),
       open: (u) => openOut(u),
       send: (t) => onSend(t),
     };
@@ -3939,6 +3940,15 @@ function SelBar({ sel, live, act }) {
     <button onClick=${() => act("copy")}>Copy</button>
     <button onClick=${() => act("find")}>Find</button>
   </div>`;
+}
+
+function copyImage(url) {
+  const png = fetch(url).then((r) => r.blob()).then((b) => b.type === "image/png" ? b : createImageBitmap(b).then((i) => {
+    const c = Object.assign(document.createElement("canvas"), { width: i.width, height: i.height });
+    c.getContext("2d").drawImage(i, 0, 0);
+    return new Promise((ok) => c.toBlob(ok, "image/png"));
+  }));
+  return navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
 }
 
 function copyText(text) {

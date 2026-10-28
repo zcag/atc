@@ -36,6 +36,12 @@
     t.remove();
     return ok ? Promise.resolve() : Promise.reject(new Error("copy failed"));
   };
+  const png = (url) => fetch(url).then((r) => r.blob()).then((b) => b.type === "image/png" ? b : createImageBitmap(b).then((i) => {
+    const c = Object.assign(document.createElement("canvas"), { width: i.width, height: i.height });
+    c.getContext("2d").drawImage(i, 0, 0);
+    return new Promise((ok) => c.toBlob(ok, "image/png"));
+  }));
+  const copyImage = (url) => navigator.clipboard.write([new ClipboardItem({ "image/png": png(url) })]);
   let shown;
   const toast = (text, label, fn, ms = 4000) => {
     shown && shown.remove();
@@ -59,6 +65,7 @@
     },
     send: (text) => (inAtc ? ask("send", String(text)) : copy(String(text)).then(() => false)),
     copy: (text) => (inAtc ? ask("copy", String(text)) : copy(String(text))),
+    copyImage: (url) => (inAtc ? ask("copyImage", new URL(url, location.href).href) : copyImage(new URL(url, location.href).href)),
     run: (name, args = []) => (inAtc ? ask("run", { action: String(name), args: [].concat(args).map(String) })
       : Promise.reject(new Error("atc.run works only inside atc, where the page was shown with atc show --action"))),
     open: (url) => (inAtc ? ask("open", new URL(url, location.href).href) : Promise.resolve(void open(url, "_blank", "noopener"))),
