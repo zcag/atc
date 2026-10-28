@@ -3,9 +3,37 @@ package pages
 import (
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestFolderPageFollowsItsFiles(t *testing.T) {
+	dir := t.TempDir()
+	index, data := filepath.Join(dir, "index.html"), filepath.Join(dir, "data.json")
+	os.WriteFile(index, []byte("<h1>x</h1>"), 0o644)
+	os.WriteFile(data, []byte("{}"), 0o644)
+	old := time.Now().Add(-time.Hour).Truncate(time.Second)
+	os.Chtimes(index, old, old)
+	os.Chtimes(data, old, old)
+	st, _ := Open("")
+	if got := st.fill([]Page{{Path: index}})[0].Updated; !got.Equal(old) {
+		t.Fatalf("before: %s", got)
+	}
+	now := time.Now().Truncate(time.Second)
+	os.Chtimes(data, now, now)
+	if got := st.fill([]Page{{Path: index}})[0].Updated; !got.Equal(now) {
+		t.Errorf("a changed data.json should count as the page changing: %s", got)
+	}
+	single := filepath.Join(dir, "report.html")
+	os.WriteFile(single, nil, 0o644)
+	os.Chtimes(single, old, old)
+	if got := st.fill([]Page{{Path: single}})[0].Updated; !got.Equal(old) {
+		t.Errorf("a page that is not a folder's index follows only its own file: %s", got)
+	}
+}
 
 func TestMerge(t *testing.T) {
 	for _, c := range []struct{ old, v, want string }{

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"html"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -224,6 +225,27 @@ func (st *Store) has(sid, name string) bool {
 	return false
 }
 
+func newest(dir string, t time.Time) time.Time {
+	n := 0
+	filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || n > 300 {
+			return filepath.SkipDir
+		}
+		if d.IsDir() {
+			if path != dir && (strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules" || strings.Count(strings.TrimPrefix(path, dir), string(filepath.Separator)) > 2) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		n++
+		if fi, err := d.Info(); err == nil && fi.ModTime().After(t) {
+			t = fi.ModTime()
+		}
+		return nil
+	})
+	return t
+}
+
 func (st *Store) fill(list []Page) []Page {
 	for i := range list {
 		p := &list[i]
@@ -234,6 +256,9 @@ func (st *Store) fill(list []Page) []Page {
 			continue
 		}
 		p.Updated, p.Size = fi.ModTime(), fi.Size()
+		if b := filepath.Base(p.Path); b == "index.html" || b == "index.htm" {
+			p.Updated = newest(filepath.Dir(p.Path), p.Updated)
+		}
 		if p.Title == "" {
 			p.Title = st.title(p.Path, p.Kind, fi.ModTime())
 		}
