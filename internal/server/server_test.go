@@ -307,20 +307,27 @@ func TestVoice(t *testing.T) {
 }
 
 func TestVoiceLanguages(t *testing.T) {
+	var mu sync.Mutex
 	var asked []string
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		f, _, _ := r.FormFile("file")
+		audio, _ := io.ReadAll(f)
 		lang := r.FormValue("language")
+		mu.Lock()
 		asked = append(asked, lang)
-		heard := map[string]string{"": "is", "en": "en"}[lang]
-		fmt.Fprintf(w, `{"text":"heard as %s","language":%q}`, cmp.Or(heard, lang), cmp.Or(heard, lang))
+		mu.Unlock()
+		text := map[string]string{"turkish/tr": "Merhaba, nasılsın?", "turkish/en": "Merhaba nasilsin", "english/tr": "How are you?", "english/en": "How are you?"}[string(audio)+"/"+lang]
+		fmt.Fprintf(w, `{"text":%q,"language":%q}`, cmp.Or(text, "Hvernig"), cmp.Or(lang, "is"))
 	}))
 	defer up.Close()
 	ts := newTestServer(t, nil, Voice{STT: up.URL, STTModel: "whisper-1", STTLanguage: "tr", STTLanguages: []string{"en", "tr"}})
-	if _, body := do(t, "POST", ts.URL+"/api/voice/stt", "tok", "RIFF"); !strings.Contains(body, `"language":"en"`) || strings.Join(asked, ",") != ",en" {
-		t.Fatalf("a detection outside en,tr is not redone in en: %s (asked %q)", body, asked)
+	for audio, want := range map[string]string{"turkish": `"language":"tr","text":"Merhaba, nasılsın?"`, "english": `"language":"en","text":"How are you?"`} {
+		if _, body := do(t, "POST", ts.URL+"/api/voice/stt", "tok", audio); !strings.Contains(body, want) {
+			t.Errorf("%s heard as Icelandic: %s, want %s", audio, body, want)
+		}
 	}
 	asked = nil
-	if _, body := do(t, "POST", ts.URL+"/api/voice/stt?lang=tr", "tok", "RIFF"); !strings.Contains(body, `"language":"tr"`) || strings.Join(asked, ",") != "tr" {
+	if _, body := do(t, "POST", ts.URL+"/api/voice/stt?lang=tr", "tok", "english"); !strings.Contains(body, `"language":"tr"`) || strings.Join(asked, ",") != "tr" {
 		t.Fatalf("an explicit language is not used as is: %s (asked %q)", body, asked)
 	}
 }

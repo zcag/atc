@@ -13,7 +13,9 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"sync"
 	"time"
+	"unicode"
 
 	"github.com/zcag/atc/internal/llm"
 )
@@ -59,19 +61,40 @@ func (s *Server) stt(w http.ResponseWriter, r *http.Request) {
 }
 
 // transcribe turns speech into text in lang when the caller names one. Otherwise, with
-// ATC_STT_LANGUAGES set, Whisper detects the language but only those count: a detection outside
-// them (short English heard as Icelandic) is transcribed again in the first one. Without it,
-// ATC_STT_LANGUAGE pins every clip.
+// ATC_STT_LANGUAGES set, Whisper detects the language but only those count: a clip heard as
+// anything else (short English as Icelandic, Turkish too) is transcribed in each of them, and
+// the first that writes letters plain English has none (ç, ğ, ı) wins, else the first listed.
+// Pinned to Turkish, English speech still comes out as English, so that tells them apart.
+// Without it, ATC_STT_LANGUAGE pins every clip.
 func (s *Server) transcribe(ctx context.Context, audio []byte, filename, lang string) (string, string, error) {
-	if allowed := s.Voice.STTLanguages; lang == "" && len(allowed) > 0 {
-		text, got, err := s.whisper(ctx, audio, filename, "")
-		if err != nil || slices.Contains(allowed, got) {
-			return text, got, err
-		}
-		log.Printf("stt: heard %s, outside %s; again in %s", got, strings.Join(allowed, ","), allowed[0])
-		return s.whisper(ctx, audio, filename, allowed[0])
+	allowed := s.Voice.STTLanguages
+	if lang != "" || len(allowed) == 0 {
+		return s.whisper(ctx, audio, filename, cmp.Or(lang, s.Voice.STTLanguage))
 	}
-	return s.whisper(ctx, audio, filename, cmp.Or(lang, s.Voice.STTLanguage))
+	text, got, err := s.whisper(ctx, audio, filename, "")
+	if err != nil || slices.Contains(allowed, got) {
+		return text, got, err
+	}
+	type heard struct{ text, lang string }
+	tries := make([]heard, len(allowed))
+	errs := make([]error, len(allowed))
+	var wg sync.WaitGroup
+	for i, l := range allowed {
+		wg.Go(func() {
+			tries[i].text, _, errs[i] = s.whisper(ctx, audio, filename, l)
+			tries[i].lang = l
+		})
+	}
+	wg.Wait()
+	pick := 0
+	for i, t := range tries {
+		if errs[i] == nil && t.lang != "en" && strings.ContainsFunc(t.text, func(r rune) bool { return r > unicode.MaxASCII && unicode.IsLetter(r) }) {
+			pick = i
+			break
+		}
+	}
+	log.Printf("stt: heard %s, outside %s; took it as %s", got, strings.Join(allowed, ","), tries[pick].lang)
+	return tries[pick].text, tries[pick].lang, errs[pick]
 }
 
 func (s *Server) whisper(ctx context.Context, audio []byte, filename, lang string) (string, string, error) {

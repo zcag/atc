@@ -572,8 +572,10 @@ ATC_TTS_VOICE=alloy
 ```
 
 A language picked in the voice bar is used as is. Otherwise `ATC_STT_LANGUAGES` lets Whisper detect
-the language but keeps only those it lists: a clip heard as anything else (short English comes
-back as Icelandic or Portuguese) is transcribed again in the first one. It takes the place of
+the language but keeps only those it lists: a clip heard as anything else (short English, and
+Turkish too, come back as Icelandic or Portuguese) is transcribed in each of them, and the first
+whose transcript uses letters plain English lacks (ç, ğ, ı) wins, else the first listed. Pinned to
+Turkish, English speech still comes out as English, which is what tells the two apart. It takes the place of
 `ATC_STT_LANGUAGE` when both are set, and WhatsApp voice notes go the same way.
 
 Without `ATC_TTS_URL`, replies are read by the device's built-in voice, which is instant. The
