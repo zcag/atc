@@ -52,6 +52,7 @@ type waTurn struct {
 	id, sid, path string
 	off           int64
 	asks          []waMsg
+	typed         int
 	typedAt       time.Time
 	voice         bool
 }
@@ -249,7 +250,7 @@ func (s *Server) waType(ctx context.Context, msg waMsg, text string, voice bool)
 		s.wa.turn = t
 		go s.waPump(t)
 	}
-	t.asks, t.voice, t.typedAt = append(t.asks, msg), t.voice || voice, time.Now()
+	t.asks, t.voice, t.typedAt, t.typed = append(t.asks, msg), t.voice || voice, time.Now(), t.typed+1
 	s.wa.mu.Unlock()
 	return s.Term.Send(ctx, id, text)
 }
@@ -294,16 +295,15 @@ func (s *Server) waPump(t *waTurn) {
 	ctx := context.Background()
 	wa := s.WhatsApp
 	began := time.Now()
-	var typingAt, statusAt, lastOut, doneAt, idleSince time.Time
+	var typingAt, statusAt, lastOut, doneAt, idleSince, askedAt time.Time
+	seen := 0
 	var status, shown, last string
 	lastOut = began
 	for {
 		time.Sleep(waTick)
 		x, ok := s.waSession(ctx, t.id)
-		if t.path == "" {
-			if tr, found := s.M.Index.Find(t.sid); found {
-				t.path = tr.Path
-			}
+		if tr, found := s.M.Index.Find(t.sid); found && tr.Path != t.path {
+			t.path = tr.Path
 		}
 		if t.path != "" {
 			if p, err := history.ReadRange(t.path, t.off, 0); err == nil {
@@ -313,6 +313,8 @@ func (s *Server) waPump(t *waTurn) {
 					case m.Role == "assistant" && strings.TrimSpace(m.Text) != "":
 						s.waReply(ctx, m.Text)
 						last, lastOut = m.Text, time.Now()
+					case m.Role == "user":
+						seen, askedAt = seen+1, cmp.Or(m.Time, time.Now())
 					case m.Role == "done":
 						doneAt = cmp.Or(m.Time, time.Now())
 					}
@@ -342,8 +344,8 @@ func (s *Server) waPump(t *waTurn) {
 		}
 		s.wa.mu.Lock()
 		needs := ok && x.State == sessions.NeedsYou
-		finished := needs || !ok && time.Since(t.typedAt) > waSettle ||
-			!working && (doneAt.After(t.typedAt) || time.Since(idleSince) > waSettle && time.Since(t.typedAt) > waSettle) ||
+		finished := needs || !working && seen >= t.typed && doneAt.After(askedAt) ||
+			!working && time.Since(idleSince) > waSettle && time.Since(t.typedAt) > waSettle ||
 			time.Since(t.typedAt) > waLongest
 		if !finished {
 			s.wa.mu.Unlock()
