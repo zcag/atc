@@ -232,7 +232,9 @@ curl -H "Authorization: Bearer $TOKEN" -d '{"preset":"inbox","prompt":"New mail 
 
 ## Apps
 
-An app is a preset with `"app": true`, and optionally an `icon` (an emoji or a few letters):
+An app is a preset with `"app": true`, and optionally a `title`, an `icon` (one of mail, sun, present,
+lira, target, inbox, calendar, chart, pr, globe, pulse, doc, or an emoji) and a `color` (blue, amber,
+violet, green, red, teal, pink, orange, slate, or a hex color) for its tile:
 
 ```json
 { "name": "mail", "icon": "✉", "app": true, "dir": "~/mail", "brief": "MAIL.md",
@@ -258,8 +260,9 @@ preset, app or not; its last run (exit code and output) shows as the app's state
   in the app's own header.
 - **Quiet runs.** Runs stay out of the session list and the widget unless one needs you, and a
   finished run sends no push. A run that needs you, and `atc notify` from a run, push as usual.
-- **In the UI.** The grid button in the header opens a menu of apps, each with its state and
-  **Run**. An app opens its page full width, with **Run** and **Chat**, which opens the latest run
+- **In the UI.** The grid button in the header opens a menu of apps: those with something to say
+  (a badge, a run working, needing you or failed) as cards with their page's `headline` and **Run**,
+  the rest as a row of chips. An app opens its page full width, with **Run** and **Chat**, which opens the latest run
   beside the page. `atc.send` from the page goes to the latest run, resuming it if it stopped.
 - **From other sessions.** An agent starts a run with atc's `start` tool and the app's preset, and
   reaches the app's latest run as `app:<name>` wherever a session is named: `send`, `read`, `wait`,

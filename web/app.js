@@ -3115,7 +3115,7 @@ function AppTile({ a, size = 32, dot }) {
   </span>`;
 }
 
-const appLabel = (a) => a.name.replace(/^sa-/, "").replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
+const appLabel = (a) => a.title || a.name.replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
 const appWhen = (a) => {
   const at = Math.max(Date.parse(a.run?.at || 0) || 0, ...a.pages.map(pageAt));
   return at ? agoLong(new Date(at).toISOString()) : "";
@@ -3135,8 +3135,8 @@ function AppsMenu({ apps, live, say, reload }) {
         <div key=${`${a.host}/${a.name}`} class="abrief" role="button" tabindex="0" onClick=${() => open(a)} onKeyDown=${(e) => e.key === "Enter" && open(a)}>
           <${AppTile} a=${a} size=${30} dot=${dotOf(st)} />
           <div class="abody">
-            <div class="atop"><b>${appLabel(a)}</b>${elsewhere(a)}<small class=${st}>${st === "done" ? appWhen(a) : APP_WORD[st].toLowerCase()}</small></div>
-            ${a.headline ? html`<p>${a.headline}</p>` : html`<p class="dim">${APP_WORD[st]}</p>`}
+            <div class="atop"><b>${appLabel(a)}</b>${elsewhere(a)}<small class=${st}>${st === "done" || st === "" ? appWhen(a) || APP_WORD[st].toLowerCase() : APP_WORD[st].toLowerCase()}</small></div>
+            ${a.headline ? html`<p>${a.headline}</p>` : html`<p class="dim">Nothing new from its last run</p>`}
           </div>
           <button class="arun" title=${`Run ${a.name}`} aria-label=${`Run ${a.name}`} disabled=${busy === a.name || st === "working"} onClick=${(e) => run(e, a)}><svg viewBox="0 0 12 12"><path d="M3.5 2.2v7.6L9.8 6z" fill="currentColor"/></svg></button>
         </div>`)}

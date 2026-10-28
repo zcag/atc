@@ -1004,7 +1004,7 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .atile .adot.work { background: var(--work); animation: pulse 1.6s ease-in-out infinite; }
 .atile .adot.needs { background: var(--needs); }
 .appsheet { padding: 6px !important; gap: 2px !important; border-radius: 14px; box-shadow: 0 16px 40px -14px rgba(15, 23, 42, .45); }
-.abrief { position: relative; display: flex; gap: 11px; align-items: flex-start; padding: 10px 10px 10px 9px; border-radius: 10px; cursor: pointer; }
+.abrief { display: flex; gap: 11px; align-items: flex-start; padding: 10px 8px 10px 9px; border-radius: 10px; cursor: pointer; }
 .abrief:hover, .abrief:focus-visible { background: var(--strip-hi); outline: none; }
 .abrief .abody { flex: 1; min-width: 0; }
 .abrief .atop { display: flex; align-items: baseline; gap: 8px; }
@@ -1014,12 +1014,11 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .abrief .atop small.working { color: var(--work); }
 .abrief p { margin: 3px 0 0; font-family: var(--serif); font-size: 14.5px; line-height: 1.35; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .abrief p.dim { color: var(--dim); font-family: var(--sans); font-size: 12.5px; }
-.abrief .arun { position: absolute; right: 8px; bottom: 8px; width: 26px; height: 26px; border-radius: 50%; border: 0; background: var(--sunk); color: var(--dim); display: grid; place-items: center; opacity: 0; transition: opacity .12s; cursor: pointer; }
+.abrief .arun { flex: none; align-self: center; width: 28px; height: 28px; border-radius: 50%; border: 0; background: transparent; color: var(--faint); display: grid; place-items: center; transition: background .12s, color .12s; cursor: pointer; }
 .abrief .arun svg { width: 10px; height: 10px; }
-.abrief:hover .arun, .abrief:focus-within .arun { opacity: 1; }
+.abrief:hover .arun, .abrief:focus-within .arun { background: var(--sunk); color: var(--dim); }
 .abrief .arun:hover { color: var(--ink); }
-.abrief .arun:disabled { opacity: 0 !important; }
-@media (hover: none) { .abrief .arun { opacity: .9; } }
+.abrief .arun:disabled { visibility: hidden; }
 .aquiet { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 6px 4px; margin-top: 2px; border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent); }
 .aquiet.only { border-top: 0; margin-top: 0; padding-top: 4px; }
 .achip { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px 4px 4px; border: 0; border-radius: 999px; background: transparent; color: var(--ink); font: 500 12.5px var(--sans); cursor: pointer; }
