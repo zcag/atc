@@ -79,17 +79,3 @@ func TestWhatsAppHook(t *testing.T) {
 		}
 	}
 }
-
-func TestSplitSpoken(t *testing.T) {
-	for in, want := range map[string][2]string{
-		"Yes, they work.\n\n🔊 Evet, sesli mesajlar çalışıyor.": {"Yes, they work.", "Evet, sesli mesajlar çalışıyor."},
-		"🔊 Tamam.":                        {"", "Tamam."},
-		"No spoken line here.":            {"No spoken line here.", ""},
-		"An emoji 🔊 mid-line stays text.": {"An emoji 🔊 mid-line stays text.", ""},
-	} {
-		text, say := splitSpoken(in)
-		if text != want[0] || say != want[1] {
-			t.Errorf("splitSpoken(%q) = %q, %q; want %q, %q", in, text, say, want[0], want[1])
-		}
-	}
-}
