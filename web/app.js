@@ -88,7 +88,7 @@ function useNow(ms) {
 
 const APP = window.AtcApp || null;
 const APP_VERSION = +((navigator.userAgent.match(/AtcApp\/(\d+)/) || [])[1] || 0);
-let AUTO_VOICE = false, AUTO_PANE = null;
+let AUTO_VOICE = false, AUTO_PANE = null, AUTO_SPLIT = false;
 const WEB = { at: null, fresh: false, shown: Date.now() };
 let appSent = "";
 const FEED_STATES = ["needs-you", "your-turn", "working"];
@@ -1088,7 +1088,7 @@ function Session({ s, say, live }) {
   const [kept] = useState(() => { const n = !auto.current && !routePage() && stored(SESSION_PAGE, {})[s.sessionId]; return n && shown.some((p) => p.name === n) ? n : null; });
   const [mode, setMode] = useState(() => { AUTO_PANE = null; return auto.current || (routePage() || kept ? "page" : paneFor(s)); });
   const [pg, setPg] = useState(() => routePage() || kept);
-  const [split, setSplitRaw] = useState(() => stored(PAGE_SPLIT, true));
+  const [split, setSplitRaw] = useState(() => { const v = AUTO_SPLIT || stored(PAGE_SPLIT, true); AUTO_SPLIT = false; return v; });
   const setSplit = (v) => { setSplitRaw(v); store(PAGE_SPLIT, v); };
   const wideNow = useWide();
   const sideBySide = mode === "page" && split && wideNow && shown.length > 0;
@@ -3167,7 +3167,7 @@ function AppView({ name, page, apps, live, say, reload }) {
       } catch (e) { return say(e.message); }
     }
     const pg = page || a.pages[0]?.name;
-    if (pg && !PHONE.matches) location.hash = pageLink(key, pg);
+    if (pg && !PHONE.matches) { AUTO_SPLIT = true; location.hash = pageLink(key, pg); }
     else { AUTO_PANE = "chat"; go(key); }
   };
   const s = x || (a.run?.sessionId ? { sessionId: a.run.sessionId, id: a.run.id, title: a.name, state: "past", host: a.host } : { title: a.name });
