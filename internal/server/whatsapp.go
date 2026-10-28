@@ -40,9 +40,15 @@ When you offer the user a choice, send it as a poll they answer with a tap: ` + 
 
 ` +
 	`What the user sends arrives as text: photos, documents and other files as the path of the saved file (read it), voice notes already ` +
-	`transcribed (they hear a spoken summary of your reply back), locations as coordinates, a reply to an earlier message with that message ` +
+	`transcribed, locations as coordinates, a reply to an earlier message with that message ` +
 	`quoted first, "[reacted 👍 to your message]" when they react to one of your questions (👍 is yes, 👎 is no), and "[edited a message]" ` +
 	`with their correction. They have /new for a fresh conversation, /stop to interrupt you and /status for their sessions.
+
+` +
+	`A voice note arrives as "[voice note, spoken in <language>]" and they hear your answer back as a voice note too: end that reply ` +
+	`with one last line that starts with 🔊 and says the answer out loud, one to three short sentences in the language they spoke, ` +
+	`even when you write the rest in English. atc speaks that line and leaves it out of the text, so make it the answer itself, ` +
+	`not a repeat of their question.
 
 ` +
 	`Keep this conversation quick: it is a switchboard, not a workbench. Answer questions, look things up and do small one-step things ` +
@@ -364,10 +370,12 @@ func (s *Server) waPrompt(ctx context.Context, d whatsapp.Message) (string, stri
 		if (d.Type == "voice" || d.Type == "audio") && s.Voice.STT != "" {
 			text, lang, err := s.transcribe(ctx, data, "voice"+extFor(mt))
 			if err == nil && text != "" {
+				label := "voice note"
 				if d.Type == "voice" {
 					voice = cmp.Or(lang, "en")
+					label += ", spoken in " + cmp.Or(langNames[voice], voice)
 				}
-				fmt.Fprintf(&b, "[voice note] %s\n", text)
+				fmt.Fprintf(&b, "[%s] %s\n", label, text)
 				break
 			}
 			log.Printf("whatsapp: transcribe: %v", err)

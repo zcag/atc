@@ -151,7 +151,7 @@ func (s *Server) waPump(t *waTurn) {
 	began := time.Now()
 	var typingAt, statusAt, lastOut, doneAt, idleSince, askedAt time.Time
 	seen := 0
-	var status, shown, last, held string
+	var status, shown, last, held, spoken string
 	lastOut = began
 	release := func(final bool) {
 		if held == "" {
@@ -177,12 +177,16 @@ func (s *Server) waPump(t *waTurn) {
 					switch {
 					case m.Role == "assistant" && strings.TrimSpace(m.Text) != "":
 						release(false)
-						if len(m.Text) > waLong {
-							held = m.Text
-						} else {
-							s.waReply(ctx, m.Text)
+						text, say := splitSpoken(m.Text)
+						spoken = cmp.Or(say, spoken)
+						switch {
+						case text == "":
+						case len(text) > waLong:
+							held = text
+						default:
+							s.waReply(ctx, text)
 						}
-						last, lastOut = m.Text, time.Now()
+						last, lastOut = cmp.Or(text, last), time.Now()
 					case m.Role == "user":
 						release(false)
 						seen, askedAt = seen+1, cmp.Or(m.Time, time.Now())
@@ -240,8 +244,8 @@ func (s *Server) waPump(t *waTurn) {
 		if status != "" {
 			wa.Edit(ctx, status, "✓ worked "+time.Since(began).Round(time.Second).String())
 		}
-		if voice != "" && last != "" {
-			if err := s.waVoice(ctx, last, voice, true); err != nil {
+		if say, condense := cmp.Or(spoken, last), spoken == ""; voice != "" && say != "" {
+			if err := s.waVoice(ctx, say, voice, condense); err != nil {
 				log.Printf("whatsapp: voice reply: %v", err)
 			}
 		}
@@ -250,6 +254,16 @@ func (s *Server) waPump(t *waTurn) {
 		}
 		return
 	}
+}
+
+// splitSpoken takes the 🔊 line the session ends a reply to a voice note with: what atc says
+// out loud, kept out of the text.
+func splitSpoken(text string) (string, string) {
+	i := strings.LastIndex(text, "🔊")
+	if i < 0 || (i > 0 && text[i-1] != '\n') {
+		return text, ""
+	}
+	return strings.TrimSpace(text[:i]), strings.TrimSpace(strings.TrimPrefix(text[i:], "🔊"))
 }
 
 // waFinal sends a long final answer with its gist first, so the notification says the outcome,

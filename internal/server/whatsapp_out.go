@@ -107,20 +107,19 @@ func tableHTML(rows [][]string) string {
 	return b.String()
 }
 
-// waVoice sends text as a voice note, spoken by atc's TTS in lang (empty: the text's own);
-// condensed first when it is a written reply rather than something meant to be said, and
-// then in lang whatever language the reply was written in.
+// waVoice sends text as a voice note, spoken by atc's TTS in lang (empty: the text's own). A
+// written reply (condense) is shortened in its own language: saying it in another is the
+// session's job (its 🔊 line), since the speech model only echoed back what was quoted.
 func (s *Server) waVoice(ctx context.Context, text, lang string, condense bool) error {
 	if s.Voice.TTS == "" {
 		return errors.New("text-to-speech is not configured")
 	}
-	if condense && s.Voice.LLM != "" {
-		prompt := condensePrompt
-		if name, ok := langNames[lang]; ok {
-			prompt += " Say it in " + name + ", whatever language the reply is in."
-		}
-		if short, err := s.chat(ctx, prompt, text, 160); err == nil && short != "" {
-			text = short
+	if condense {
+		lang = ""
+		if s.Voice.LLM != "" {
+			if short, err := s.chat(ctx, condensePrompt, text, 160); err == nil && short != "" {
+				text = short
+			}
 		}
 	}
 	res, err := s.speak(ctx, text, lang)

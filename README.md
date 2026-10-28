@@ -628,9 +628,10 @@ a file, and anything over a message's length is split at paragraphs. A long fina
 with its summary first (📌 the status and the gist), so the notification tells you the outcome, and
 as a `reply.md` document past a couple of screens. While a turn runs quiet, one status message
 shows what it is doing, edited in place, and the typing indicator stays on. A voice note gets a
-spoken summary back as a voice note, in the language you spoke whatever the written reply is in
-(`ATC_TTS_URL`, a voice for that language such as `ATC_TTS_TR_URL`, and OpenWA's
-`MEDIA_CONVERSION_ENABLED`).
+spoken answer back as a voice note, in the language you spoke whatever the written reply is in:
+the session ends that reply with a 🔊 line, which atc speaks and leaves out of the text (without
+one, a short summary of the reply in its own language). It needs `ATC_TTS_URL`, a voice for that
+language such as `ATC_TTS_TR_URL`, and OpenWA's `MEDIA_CONVERSION_ENABLED`.
 
 The session works as a switchboard: it answers and looks things up itself, and hands anything bigger
 to a session of its own, relays that session's report, follows up and stops it when it is done.
