@@ -241,13 +241,15 @@ There is no standing session. Each run is an ordinary session started from the p
   instead of the run, so the next run shows and updates the same page and reads the same state.
   Anywhere else it is `atc state app:<name> [page]`.
 - **Badge.** A number or a short string under the top-level `badge` key of the page's state shows
-  on the app's chip.
+  in the app's own header.
 - **Quiet runs.** Runs stay out of the session list and the widget unless one needs you, and a
   finished run sends no push. A run that needs you, and `atc notify` from a run, push as usual.
-- **In the UI.** Apps are a strip of chips above the session list, with a dot while a run is
-  working and red when one needs you. A chip opens the app's page full width, with **Run** and
-  **Chat**, which opens the latest run beside the page. `atc.send` from the page goes to the
-  latest run, resuming it if it stopped.
+- **In the UI.** The grid button in the header opens a menu of apps, each with its state and
+  **Run**. An app opens its page full width, with **Run** and **Chat**, which opens the latest run
+  beside the page. `atc.send` from the page goes to the latest run, resuming it if it stopped.
+- **From other sessions.** An agent starts a run with atc's `start` tool and the app's preset, and
+  reaches the app's latest run as `app:<name>` wherever a session is named: `send`, `read`, `wait`,
+  `atc attach app:<name>`.
 
 `GET /api/apps` lists the apps of every machine with their pages, badge and latest run.
 

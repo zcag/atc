@@ -82,17 +82,17 @@ type list struct {
 }
 
 type ref struct {
-	Session string `json:"session" jsonschema:"a session ref, short id, or a unique piece of its title"`
+	Session string `json:"session" jsonschema:"a session ref, short id, a unique piece of its title, or app:<name> for that app's latest run"`
 }
 
 type readIn struct {
-	Session  string `json:"session" jsonschema:"a session ref, short id, or a unique piece of its title"`
+	Session  string `json:"session" jsonschema:"a session ref, short id, a unique piece of its title, or app:<name> for that app's latest run"`
 	Messages int    `json:"messages,omitempty" jsonschema:"how many recent messages to return in full, default 8"`
 	Turns    int    `json:"turns,omitempty" jsonschema:"how many recent turns to outline, default 30"`
 }
 
 type sendIn struct {
-	Session string `json:"session" jsonschema:"a session ref, short id, or a unique piece of its title"`
+	Session string `json:"session" jsonschema:"a session ref, short id, a unique piece of its title, or app:<name> for that app's latest run"`
 	Text    string `json:"text" jsonschema:"the message, typed into the session as if the user wrote it"`
 }
 
@@ -106,7 +106,7 @@ type startIn struct {
 }
 
 type waitIn struct {
-	Session string `json:"session" jsonschema:"a session ref, short id, or a unique piece of its title"`
+	Session string `json:"session" jsonschema:"a session ref, short id, a unique piece of its title, or app:<name> for that app's latest run"`
 	Seconds int    `json:"seconds,omitempty" jsonschema:"how long to wait at most, default 300, max 900"`
 }
 
