@@ -41,7 +41,9 @@ dashboards all go here; don't publish them anywhere else.
 A folder shows its index.html, and files beside it (img/, css) load by relative
 path, so keep screenshots as files instead of inlining them. HTML, images, markdown,
 PDF, CSV/TSV, video and audio render. Make HTML work at phone width, in light and
-dark (prefers-color-scheme).
+dark (prefers-color-scheme). Keep it dense, like a dashboard (tables and compact
+rows, not big cards), and on a phone reflow rather than cut: a longer page is fine,
+a hidden column or truncated field is not.
 
 To look like atc, link its kit: <link rel="stylesheet" href="/atc.css">. It sets
 atc's fonts and colors in light and dark, styles plain markup, and is dense by
