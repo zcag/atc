@@ -78,6 +78,7 @@ func (h *Hub) serveWS(w http.ResponseWriter, r *http.Request, channel string, ta
 	defer done()
 	log.Printf("hub: %s connected", nameOf(channel))
 	defer log.Printf("hub: %s left", nameOf(channel))
+	defer h.Left(channel)
 	go func() {
 		defer cancel()
 		ping := time.NewTicker(30 * time.Second)

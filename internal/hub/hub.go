@@ -208,6 +208,17 @@ func newID() string {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
+// Left is a channel's connection going away. A phone connection lives exactly as long as a call, so the next
+// call's first message must carry the phone mode again even though the last message was also the phone's
+// (the previous call's "görüşme bitti").
+func (h *Hub) Left(channel string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if channel == Phone && h.last == Phone {
+		h.last = ""
+	}
+}
+
 // Say hands text from a channel to the session: "sent", or "held" until the running turn ends.
 func (h *Hub) Say(channel, text string) (string, error) {
 	h.mu.Lock()

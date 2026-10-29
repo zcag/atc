@@ -260,6 +260,47 @@ func TestPrefix(t *testing.T) {
 	}
 }
 
+func TestEachCallStartsInPhoneMode(t *testing.T) {
+	r := newRig(t, CallConfig{})
+	var mu sync.Mutex
+	var written []string
+	in := r.h.in
+	r.h.mu.Lock()
+	r.h.in = writerFunc(func(b []byte) (int, error) {
+		mu.Lock()
+		written = append(written, string(b))
+		mu.Unlock()
+		return in.Write(b)
+	})
+	r.h.mu.Unlock()
+	first := r.dial(Phone)
+	first.send("message", "alo")
+	first.until("done")
+	first.ws.Close(websocket.StatusNormalClosure, "")
+	for i := 0; ; i++ {
+		r.h.mu.Lock()
+		last := r.h.last
+		r.h.mu.Unlock()
+		if last == "" {
+			break
+		}
+		if i > 200 {
+			t.Fatal("the hub never noticed the call ended")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	second := r.dial(Phone)
+	second.send("message", "alo again")
+	second.until("done")
+	mu.Lock()
+	defer mu.Unlock()
+	for i, w := range []string{"alo", "alo again"} {
+		if !strings.Contains(written[i], "[talk-mode: phone,") || !strings.Contains(written[i], w) {
+			t.Errorf("call %d's first message: %s", i+1, written[i])
+		}
+	}
+}
+
 type writerFunc func([]byte) (int, error)
 
 func (f writerFunc) Write(b []byte) (int, error) { return f(b) }
