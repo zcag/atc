@@ -1,6 +1,7 @@
 package sessions
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/zcag/atc/internal/claude"
@@ -32,5 +33,23 @@ func TestState(t *testing.T) {
 		if got := state(claude.Agent{Kind: "background", PID: 1, State: c.state, Status: c.status}); got != c.want {
 			t.Errorf("state(%s/%s) = %q, want %q", c.state, c.status, got, c.want)
 		}
+	}
+}
+
+func TestSortAppRunsWithParked(t *testing.T) {
+	list := []Session{
+		{SessionID: "run", App: "email", State: YourTurn},
+		{SessionID: "asks", App: "email", State: NeedsYou},
+		{SessionID: "parked", Parked: true, State: YourTurn},
+		{SessionID: "chat", State: Working},
+		{SessionID: "old", State: Stopped},
+	}
+	Sort(list)
+	var got []string
+	for _, s := range list {
+		got = append(got, s.SessionID)
+	}
+	if want := "asks chat run parked old"; strings.Join(got, " ") != want {
+		t.Errorf("order %v, want %s", got, want)
 	}
 }

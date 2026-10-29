@@ -63,6 +63,7 @@ type Session struct {
 	Running    bool     `json:"running" jsonschema:"true when it runs in the background and can take messages"`
 	InTerminal bool     `json:"inTerminal,omitempty" jsonschema:"open in someone's terminal: readable, cannot take messages"`
 	Parked     bool     `json:"parked,omitempty"`
+	App        string   `json:"app,omitempty" jsonschema:"a run of this app (a scheduled or preset agent), not a conversation the user is having"`
 	You        bool     `json:"you,omitempty" jsonschema:"this is the session calling the tool"`
 	Branch     string   `json:"branch,omitempty"`
 	Doing      string   `json:"doing,omitempty" jsonschema:"what it is doing right now, while working"`
@@ -267,7 +268,7 @@ func (t *tools) list(xs []sessions.Session, pool []sessions.Session) list {
 func (t *tools) view(x sessions.Session, self *sessions.Session) Session {
 	v := Session{
 		Ref: x.SessionID, Title: x.Title, State: x.State, Host: x.Host, Dir: x.Cwd, Running: x.Attachable,
-		InTerminal: x.Kind == "interactive", Parked: x.Parked, You: self != nil && self.SessionID == x.SessionID,
+		InTerminal: x.Kind == "interactive", Parked: x.Parked, App: x.App, You: self != nil && self.SessionID == x.SessionID,
 		Branch: x.Branch, Asked: clip(x.LastPrompt, 200), Replied: clip(x.LastReply, 300), Servers: x.Servers,
 	}
 	if x.ID != "" {

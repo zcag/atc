@@ -691,6 +691,12 @@ func printRows(list []sessions.Session) {
 		if s.Pinned {
 			tags = append(tags, "pinned")
 		}
+		if s.Parked {
+			tags = append(tags, "parked")
+		}
+		if s.App != "" {
+			tags = append(tags, "app "+s.App)
+		}
 		where := sessions.Tilde(s.Cwd, home)
 		if s.Host != "" && len(hostsOf(list)) > 1 {
 			where = s.Host + ":" + where

@@ -244,7 +244,7 @@ func Sort(list []Session) {
 var rank = map[string]int{NeedsYou: 0, YourTurn: 1, Working: 2, Stopped: 4, Past: 5}
 
 func group(s Session) int {
-	if s.Parked && s.State != Past {
+	if (s.Parked || s.Hidden()) && s.State != Past {
 		return 3
 	}
 	return rank[s.State]
