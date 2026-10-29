@@ -3286,7 +3286,7 @@ function BacklogRow({ it, stage, run, tag, patch, remove, start }) {
 }
 
 const APP_REF = "app:";
-const hiddenRun = (s) => !!s.app && s.state !== "needs-you";
+const hiddenRun = (s) => (!!s.app || s.kind === "hub") && s.state !== "needs-you";
 const appLink = (a, page) => `#/p/${APP_REF}${encodeURIComponent(a.name)}${page ? `/${encodeURIComponent(page)}` : ""}`;
 const appRun = (a, live) => live.filter((s) => s.app === a.name && (s.host || HERE) === (a.host || HERE))
   .sort((x, y) => (Date.parse(y.startedAt || 0) || 0) - (Date.parse(x.startedAt || 0) || 0))[0];
