@@ -20,7 +20,7 @@ import (
 const showHelp = `atc show: put a page in front of the user, in the session they are reading.
 
   atc show <file|folder> [--as name] [--title T] [--note "what to look at"]
-           [--action name='command args']...
+           [--action name='command args']... [--open]
 
 The user sees the page in atc next to this conversation (a button on the session's
 header lists its pages), gets a push on their phone, and can open it full size.
@@ -37,6 +37,9 @@ dashboards all go here; don't publish them anywhere else.
   --action name='command args'
                a command the page may run with atc.run (repeatable). Showing the page
                again replaces its actions, so repeat every --action you still want.
+  --open       the assistant only: also open the page on the user's phone screen right
+               away, over whatever is there (a call). Only when they asked to see it, or
+               must; never as a way to get attention.
 
 A folder shows its index.html, and files beside it (img/, css) load by relative
 path, so keep screenshots as files instead of inlining them. HTML, images, markdown,
@@ -107,7 +110,7 @@ run: the next run shows and reads the same pages and state (atc state app:<name>
 
 func show(args []string) error {
 	var path, name, title, note, ref, mode string
-	actions, set := map[string][]string{}, false
+	actions, set, open := map[string][]string{}, false, false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		val := func() (string, error) {
@@ -153,6 +156,8 @@ func show(args []string) error {
 			}
 		case flag == "set":
 			set = true
+		case flag == "open":
+			open = true
 		case flag == "list" || flag == "l" || flag == "off" || flag == "state":
 			mode = flag
 		default:
@@ -215,7 +220,7 @@ func show(args []string) error {
 	if err != nil {
 		return err
 	}
-	r, err := c.Show(sid, map[string]any{"path": abs, "name": name, "title": title, "note": note, "actions": actions})
+	r, err := c.Show(sid, map[string]any{"path": abs, "name": name, "title": title, "note": note, "actions": actions, "open": open})
 	if err != nil {
 		return err
 	}

@@ -27,10 +27,9 @@ class Release(val versionCode: Int, val versionName: String, val apk: String, va
 
 class Note(
     val title: String, val body: String, val tag: String, val url: String,
-    val session: String = "", val replies: List<String> = emptyList(),
+    val session: String = "", val replies: List<String> = emptyList(), val open: Boolean = false,
 ) {
     val id get() = tag.hashCode()
-    val page get() = Regex("^/#/s/[^/]+/p/").containsMatchIn(url)
 
     companion object {
         fun parse(bytes: ByteArray) = runCatching {
@@ -38,7 +37,7 @@ class Note(
                 val url = optString("url").takeIf { it.startsWith("/") && !it.startsWith("//") } ?: "/"
                 val session = optString("session").takeIf { Regex("^[A-Za-z0-9_-]{1,64}$").matches(it) } ?: ""
                 val replies = optJSONArray("replies")?.let { a -> List(a.length()) { a.optString(it).trim() } }.orEmpty().filter { it.isNotEmpty() }
-                Note(optString("title", "atc"), optString("body"), optString("tag"), url, session, if (session.isEmpty()) emptyList() else replies)
+                Note(optString("title", "atc"), optString("body"), optString("tag"), url, session, if (session.isEmpty()) emptyList() else replies, optBoolean("open"))
             }
         }.getOrNull()
     }

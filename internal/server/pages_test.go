@@ -69,6 +69,9 @@ func TestShowPage(t *testing.T) {
 	if res, _ := do(t, "POST", ts.URL+"/api/sessions/l1/pages", "tok", `{"path":"`+t.TempDir()+`"}`); res.StatusCode != 400 {
 		t.Fatalf("a folder without index.html: %d", res.StatusCode)
 	}
+	if res, _ := do(t, "POST", ts.URL+"/api/sessions/l1/pages", "tok", `{"path":"`+dir+`","open":true}`); res.StatusCode != 403 {
+		t.Fatalf("a session other than the assistant opened a page on the phone: %d", res.StatusCode)
+	}
 }
 
 type ran struct {
@@ -140,16 +143,5 @@ func TestPageAlerts(t *testing.T) {
 	}
 	if _, ms = pageAlerts(seen, list(at.Add(time.Minute)), func(sessions.Session) bool { return true }); len(ms) != 0 {
 		t.Fatalf("pushed while you watch the session: %v", ms)
-	}
-	parked := func(kind string) []sessions.Session {
-		l := list(at.Add(time.Minute))
-		l[0].Parked, l[0].Kind = true, kind
-		return l
-	}
-	if _, ms = pageAlerts(seen, parked(""), never); len(ms) != 0 {
-		t.Fatalf("pushed for a parked session: %v", ms)
-	}
-	if _, ms = pageAlerts(seen, parked("hub"), never); len(ms) != 1 {
-		t.Fatalf("the assistant's page must push even when parked: %v", ms)
 	}
 }

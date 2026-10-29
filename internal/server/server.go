@@ -987,9 +987,10 @@ func (s *Server) watch(list []sessions.Session) {
 func (s *Server) notify(list []sessions.Session) {
 	prev := s.seen
 	s.seen = states(list)
-	watching := func(x sessions.Session) bool { return s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) }
-	viewing := func(x sessions.Session) bool { return watching(x) || s.hub != nil && s.hubQuiet(x) }
-	shown, showing := pageAlerts(s.shown, list, watching)
+	viewing := func(x sessions.Session) bool {
+		return s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) || s.hub != nil && s.hubQuiet(x)
+	}
+	shown, showing := pageAlerts(s.shown, list, viewing)
 	s.shown = shown
 	noted, normal, urgent := noteAlerts(s.noted, list, viewing)
 	s.noted = noted

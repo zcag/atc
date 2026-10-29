@@ -42,6 +42,7 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Path, Name, Title, Note string
 		Actions                 map[string][]string
+		Open                    bool
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !filepath.IsAbs(req.Path) {
 		http.Error(w, "path must be absolute", http.StatusBadRequest)
@@ -64,6 +65,10 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no app named "+strings.TrimPrefix(sid, appRef)+" on "+s.Host, http.StatusNotFound)
 		return
 	}
+	if req.Open && r.PathValue("sid") != s.hubSID() {
+		http.Error(w, "only the assistant opens pages on the phone's screen", http.StatusForbidden)
+		return
+	}
 	for a, argv := range req.Actions {
 		if a == "" || len(argv) == 0 {
 			http.Error(w, "an action needs a name and a command: --action name='command'", http.StatusBadRequest)
@@ -79,6 +84,10 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 	p, _ = s.Pages.Get(p.Session, p.Name)
 	if s.waShows(p.Session) {
 		go s.waPage(p)
+	}
+	if req.Open && s.Push != nil {
+		go s.Push.Send(push.Message{Title: hubName, Tag: p.Session + "/" + p.Name, URL: "/#/s/" + p.Session + "/p/" + p.Name,
+			Body: "Showing you " + cmp.Or(p.Title, p.Name) + prefixed(": ", p.Note), Open: true})
 	}
 	reply(w, map[string]any{"page": s.pageURLs([]pages.Page{p})[0], "created": created})
 }
@@ -210,7 +219,7 @@ func pageAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 			key := x.SessionID + "/" + p.Name
 			now[key] = p.Shown
 			was, ok := prev[key]
-			if prev == nil || (ok && !p.Shown.After(was)) || x.Parked && x.Kind != "hub" || x.App != "" || viewing(x) {
+			if prev == nil || (ok && !p.Shown.After(was)) || x.Parked || x.App != "" || viewing(x) {
 				continue
 			}
 			out = append(out, push.Message{Title: x.Title, Tag: key, URL: "/#/s/" + x.SessionID + "/p/" + p.Name,

@@ -18,6 +18,7 @@ type Message struct {
 	URL     string   `json:"url"`
 	Session string   `json:"session,omitempty"`
 	Replies []string `json:"replies,omitempty"`
+	Open    bool     `json:"open,omitempty"`
 }
 
 type Device struct {
