@@ -594,6 +594,7 @@ function Board({ live: all, sel, cursor, onPast, mode = "classic" }) {
     ${live.length === 0
       ? html`<p class="calm">${only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below."}</p>`
       : !waiting && html`<p class="calm">${working ? `Nothing needs you. ${working} working.` : "All quiet."}</p>`}
+    <${BacklogLine} only=${only} />
     ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
     ${BAYS.filter(([st]) => st !== "stopped").map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
     <${Bay} title="Parked" list=${parked} sel=${sel} cursor=${cursor} size="slim" dim />
@@ -646,6 +647,7 @@ function Triage({ live, only, sel, cursor }) {
     : only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below.";
   return html`
     <p class="brief">${brief}</p>
+    <${BacklogLine} only=${only} />
     <${Bay} title="Your turn" list=${wait} sel=${sel} cursor=${cursor} size="tcard" />
     <${Bay} title="Working" list=${work} sel=${sel} cursor=${cursor} size="work" />
     <${Bay} title="Parked" list=${rest.filter((s) => s.parked)} sel=${sel} cursor=${cursor} size="lrow" />
@@ -3105,20 +3107,38 @@ const STAGES = [
 ];
 const FOLDED = new Set(["suggested", "done"]);
 const baseDir = (d) => (d || "").replace(/\/\.claude\/worktrees\/[^/]+$/, "");
-let BACKLOG_RELOAD = () => {};
+let BL = null, blTimer = 0;
+const blSubs = new Set();
+const loadBacklog = (onErr) => api("/api/backlog").then((l) => { BL = l || []; blSubs.forEach((f) => f(BL)); },
+  (e) => { if (!BL) { BL = []; blSubs.forEach((f) => f(BL)); } onErr?.(e); });
+function useBacklog() {
+  const [list, set] = useState(BL);
+  useEffect(() => {
+    blSubs.add(set);
+    if (!BL) loadBacklog();
+    blTimer ||= setInterval(() => document.visibilityState === "visible" && loadBacklog(), 20000);
+    return () => { blSubs.delete(set); if (!blSubs.size) blTimer = clearInterval(blTimer) || 0; };
+  }, []);
+  return list;
+}
+const backlogCounts = (items, only) => {
+  const n = {};
+  for (const it of items || []) if (!only || project(it.dir).name === only) n[itemStage(it)] = (n[itemStage(it)] || 0) + 1;
+  return STAGES.filter(([k]) => k !== "done" && n[k]).map(([k]) => `${n[k]} ${k}`).join(" · ");
+};
+
+function BacklogLine({ only }) {
+  const counts = backlogCounts(useBacklog(), only);
+  return counts && html`<button class="blline" onClick=${() => (location.hash = BACKLOG)} title="Open the backlog (b)"><span class="mi">${ICON.list}</span>Backlog${only ? ` in ${only}` : ""}: ${counts}</button>`;
+}
 
 function BacklogPage({ live, say, onClose, onAdd }) {
   useNow(30000);
-  const [list, setList] = useState(null);
+  const list = useBacklog();
   const [only, setOnly] = useState(TABS.only);
   const [open, setOpen] = useState({});
-  const load = () => api("/api/backlog").then((l) => setList(l || []), (e) => { say(e.message); setList((x) => x || []); });
-  BACKLOG_RELOAD = load;
-  useEffect(() => {
-    load();
-    const t = setInterval(() => document.visibilityState === "visible" && load(), 10000);
-    return () => { clearInterval(t); BACKLOG_RELOAD = () => {}; };
-  }, []);
+  const load = () => loadBacklog((e) => say(e.message));
+  useEffect(() => { load(); }, []);
   useEffect(() => {
     const k = (e) => e.key === "Escape" && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName) && !document.querySelector(".veil") && onClose();
     addEventListener("keydown", k);
@@ -3145,7 +3165,7 @@ function BacklogPage({ live, say, onClose, onAdd }) {
     const at = only && known.find((x) => project(x.dir).name === only);
     onAdd({ dir: at?.dir, host: at?.host, later: true });
   };
-  const counts = STAGES.filter(([k]) => k !== "done" && by[k].length).map(([k]) => `${by[k].length} ${k}`).join(" · ");
+  const counts = backlogCounts(list, only);
   return html`
     <div class="pghome backlog" role="dialog" aria-label="Backlog">
       <header class="pghead">
@@ -4623,7 +4643,7 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
       await api(`/api/backlog${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), title: name, prompt, worktree: worktree && !harness } });
       onClose();
       say("On the backlog.");
-      BACKLOG_RELOAD();
+      loadBacklog();
     } catch (e) {
       setErr(e.message);
     }

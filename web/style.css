@@ -1126,6 +1126,10 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 
 .board.v2 .bay h2 { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); }
 .brief { margin: 14px 4px 0; font: 400 16px/1.4 Newsreader, Georgia, serif; color: var(--dim); text-wrap: pretty; }
+.blline { display: inline-flex; align-items: center; gap: 6px; margin: 6px 4px 0; padding: 0; border: 0; background: none; color: var(--faint); font: 400 13px var(--sans); cursor: pointer; text-align: left; }
+.blline:hover { color: var(--ink); }
+.blline .mi { display: inline-flex; width: 14px; height: 14px; }
+.blline .mi svg { width: 14px; height: 14px; }
 .brief b { font-weight: 600; color: var(--ink); }
 .it, .lane, .rail .av { --pc: hsl(var(--ph, 220) 50% 36%); --pcs: hsl(var(--ph, 220) 45% 50% / .13); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) :is(.it, .lane, .rail .av) { --pc: hsl(var(--ph, 220) 60% 72%); --pcs: hsl(var(--ph, 220) 45% 60% / .15); } }
