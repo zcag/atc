@@ -1016,7 +1016,7 @@ const RANK = { "needs-you": 0, "your-turn": 1, working: 2 };
 function projectTabs(live, keep) {
   const by = new Map();
   for (const x of live) {
-    if (x.state === "past") continue;
+    if (x.state === "past" || x.state === "stopped") continue;
     const n = project(x.cwd).name;
     if (!by.has(n)) by.set(n, { name: n, pips: [] });
     if (!x.parked && RANK[x.state] !== undefined) by.get(n).pips.push(x.state);
