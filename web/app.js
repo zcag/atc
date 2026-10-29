@@ -368,7 +368,7 @@ function App() {
               run: () => setView({ ...view, rail: !view.rail }), label: html`<span>Fold into a rail while reading</span>${view.rail && "✓"}` },
           ]} />
         </header>
-        <${Board} live=${live} sel=${sel} cursor=${cursor} onPast=${remember} mode=${view.list} />
+        <${Board} live=${live} runs=${runs} sel=${sel} cursor=${cursor} onPast=${remember} mode=${view.list} />
         <${UsageFoot} limits=${limits} onOpen=${openUsage} />
         </div>
       </aside>
@@ -379,7 +379,7 @@ function App() {
       </main>
     </div>
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} start=${creating} />`}
-    ${palette && html`<${Palette} live=${live || []} sel=${sel} say=${say} home=${me.host} onClose=${() => setPalette(false)}
+    ${palette && html`<${Palette} live=${reach || []} sel=${sel} say=${say} home=${me.host} onClose=${() => setPalette(false)}
       actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: () => (location.hash = "#/assist"), ask: () => talk(false, false) }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${reach} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
@@ -545,7 +545,7 @@ function Login({ onDone }) {
   `;
 }
 
-function Board({ live: all, sel, cursor, onPast, mode = "classic" }) {
+function Board({ live: all, runs, sel, cursor, onPast, mode = "classic" }) {
   const [q, setQ] = useState("");
   const [only, setOnlyRaw] = useState(() => { try { return localStorage.getItem("atc.project") || null; } catch { return null; } });
   const setOnly = (v) => setOnlyRaw((o) => {
@@ -585,7 +585,7 @@ function Board({ live: all, sel, cursor, onPast, mode = "classic" }) {
   const boardRef = useRef();
   const remeasure = useFlip(boardRef);
   if (!live) return html`<div class="board"><div class="skeleton"><i></i><i></i><i></i></div></div>`;
-  const liveIDs = new Set(live.map((s) => s.sessionId));
+  const liveIDs = new Set((runs || live).map((s) => s.sessionId));
   const earlier = (hist || []).filter((s) => !liveIDs.has(s.sessionId) && mine(s));
   const pinned = live.filter((s) => s.pinned && !s.parked);
   const rest = live.filter((s) => !s.pinned && !s.parked);
