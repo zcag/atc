@@ -3094,6 +3094,7 @@ const closeBacklog = () => (history.length > 1 ? history.back() : location.repla
 const itemQ = (it) => hostQ(it.host, HERE);
 const itemRun = (it, live) => it.session && live.find((s) => (it.sid && s.sessionId === it.sid) || s.id === it.session);
 const suggested = (it) => !!it.by && !it.accepted;
+const itemTitle = (it) => it.title || (it.prompt || "").split("\n")[0];
 const itemStage = (it) => it.status === "done" ? "done" : suggested(it) ? "suggested" : it.session ? "started" : it.status;
 const STAGES = [
   ["started", "Started"],
@@ -3181,15 +3182,18 @@ function BacklogPage({ live, say, onClose, onAdd }) {
 
 function BacklogRow({ it, stage, run, tag, patch, remove, start }) {
   const [edit, setEdit] = useState(null);
-  const [text, setText] = useState("");
-  const begin = (mode) => { setEdit(mode); setText(mode === "why" ? it.why || "" : it.text); };
+  const [why, setWhy] = useState("");
+  const [title, setTitle] = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [showPrompt, setShowPrompt] = useState(false);
+  const begin = (mode) => { setEdit(mode); setWhy(it.why || ""); setTitle(it.title || ""); setPrompt(it.prompt || ""); };
   const save = () => {
-    if (edit === "why") patch(it, { status: "blocked", why: text });
-    else if (text.trim()) patch(it, { text });
+    if (edit === "why") patch(it, { status: "blocked", why });
+    else if (title.trim() || prompt.trim()) patch(it, { title, prompt });
     setEdit(null);
   };
-  const [head, ...rest] = it.text.split("\n");
-  const more = rest.join(" ").trim();
+  const head = itemTitle(it);
+  const extra = it.title && it.prompt && it.prompt !== it.title;
   const ended = stage === "started" && (!run || run.state === "stopped");
   const menu = [
     stage !== "blocked" && stage !== "done" && { label: "Blocked…", run: () => begin("why") },
@@ -3205,13 +3209,15 @@ function BacklogRow({ it, stage, run, tag, patch, remove, start }) {
         ${edit ? html`
           <form onSubmit=${(e) => { e.preventDefault(); save(); }}>
             ${edit === "why"
-              ? html`<input value=${text} onInput=${(e) => setText(e.target.value)} placeholder="Waiting on what?" ref=${focusOnMount} />`
-              : html`<textarea rows="4" value=${text} onInput=${(e) => setText(e.target.value)} ref=${focusOnMount}
+              ? html`<input value=${why} onInput=${(e) => setWhy(e.target.value)} placeholder="Waiting on what?" ref=${focusOnMount} />`
+              : html`<input value=${title} onInput=${(e) => setTitle(e.target.value)} placeholder="Title: what the backlog shows" ref=${focusOnMount} />
+                <textarea rows="5" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} placeholder="Prompt: the session's first message. Empty: the title."
                   onKeyDown=${(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && save()}></textarea>`}
             <div class="actions"><button type="button" class="btn" onClick=${() => setEdit(null)}>Cancel</button><button class="btn primary">${edit === "why" ? "Mark blocked" : "Save"}</button></div>
           </form>`
         : html`
-          <button class="txt" title="Edit" onClick=${() => begin("text")}><b>${head}</b>${more && html`<span class="more">${more}</span>`}</button>
+          <button class="txt" title="Edit" onClick=${() => begin("text")}><b>${head}</b></button>
+          ${showPrompt && html`<pre class="prompt">${it.prompt}</pre>`}
           ${it.why && html`<p class="why">Waiting on ${it.why}</p>`}
           <p class="m">
             ${tag && html`<${ProjectTag} path=${it.dir} />`}
@@ -3220,6 +3226,7 @@ function BacklogRow({ it, stage, run, tag, patch, remove, start }) {
             ${run
               ? html`<a class="run" href=${`#/s/${keyOf(run)}`}><i class="st ${run.state}"></i>${run.title || "Session"}</a><span>${ended ? "ended" : WORD[run.state] || run.state}</span>`
               : html`<span>${stage === "started" ? "session ended" : agoLong(stage === "done" ? it.updated : it.created)}${it.worktree && !it.session ? " · worktree" : ""}</span>`}
+            ${extra && html`<button class="pr" aria-expanded=${showPrompt} onClick=${() => setShowPrompt(!showPrompt)}>prompt ${showPrompt ? "▾" : "▸"}</button>`}
           </p>`}
       </div>
       ${!edit && html`<div class="acts">
@@ -4613,7 +4620,7 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
     setBusy(true);
     setErr(null);
     try {
-      await api(`/api/backlog${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), text: prompt, worktree: worktree && !harness } });
+      await api(`/api/backlog${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), title: name, prompt, worktree: worktree && !harness } });
       onClose();
       say("On the backlog.");
       BACKLOG_RELOAD();
@@ -4650,9 +4657,11 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
           <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDir("~"); }} />
           <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} autofocus />
           ${!harness && html`<${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />`}`}
-        ${!later && html`<label class="field"><span>Name</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder=${preset ? preset.name : "Optional"} />${!preset && html`<small>Without one, ${harness || "Claude"} titles the session from what you ask.</small>`}</label>`}
-        <label class="field"><span>${later ? "What should the session do?" : "First message"}</span><textarea rows=${later ? 5 : 3} value=${prompt} onInput=${(e) => setPrompt(e.target.value)}
-          placeholder=${later ? "Its first message when you start it. The first line is what the backlog shows." : "Optional. You can also type it in the terminal."}></textarea></label>
+        <label class="field"><span>${later ? "Title" : "Name"}</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder=${later ? "What the backlog shows, in a few words" : preset ? preset.name : "Optional"} />${later
+          ? html`<small>It also names the session when you start it.</small>`
+          : !preset && html`<small>Without one, ${harness || "Claude"} titles the session from what you ask. Also the title if you put it on the backlog.</small>`}</label>
+        <label class="field"><span>${later ? "Prompt" : "First message"}</span><textarea rows=${later ? 5 : 3} value=${prompt} onInput=${(e) => setPrompt(e.target.value)}
+          placeholder=${later ? "The session's first message when you start it. Optional: without one it gets the title." : "Optional. You can also type it in the terminal."}></textarea></label>
         ${err && html`<p class="err">${err}</p>`}
         ${!later && usable.length > 0 && html`
           <p class="presetline">Model:${[{ name: "" }, ...usable].map((e) => html` <button type="button" class="pick ${e.name === engine ? "on" : ""}" title=${e.harness ? `${e.harness}${e.model ? ` on ${e.model}` : ""}` : e.model || "Claude, as configured"}
@@ -4661,8 +4670,8 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
           <p class="presetline">Or use a preset:${presets.map((p) => html` <button type="button" class="proj" style=${`--ph: ${hueOf(p.name)}`} title=${`${MULTI && p.host ? p.host + ": " : ""}${tilde(p.dir)}`} onClick=${() => setPreset(p)}>${p.name}</button>`)}</p>`}
         <div class="actions">
           <button type="button" class="btn" onClick=${onClose}>Cancel</button>
-          ${!later && !preset && html`<button type="button" class="btn" title="Put it on the backlog to start later" disabled=${!dir.trim() || !prompt.trim() || busy} onClick=${putAside}>Later</button>`}
-          <button class="btn primary" disabled=${(!preset && !dir.trim()) || (later && !prompt.trim()) || busy}>${later ? "Add to backlog" : busy ? "Starting…" : "Start session"}</button>
+          ${!later && !preset && html`<button type="button" class="btn" title="Put it on the backlog to start later" disabled=${!dir.trim() || !(name.trim() || prompt.trim()) || busy} onClick=${putAside}>Later</button>`}
+          <button class="btn primary" disabled=${(!preset && !dir.trim()) || (later && !(name.trim() || prompt.trim())) || busy}>${later ? "Add to backlog" : busy ? "Starting…" : "Start session"}</button>
         </div>
       </form>
     </div>

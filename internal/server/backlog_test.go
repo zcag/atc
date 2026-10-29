@@ -15,14 +15,17 @@ func TestBacklog(t *testing.T) {
 	wt := filepath.Join(repo, ".claude", "worktrees", "x")
 	os.MkdirAll(wt, 0o755)
 
-	res, body := do(t, "POST", ts.URL+"/api/backlog", "tok", `{"dir":"`+wt+`","text":"  try it  ","by":"helper","from":"s1","status":"blocked","why":"the release"}`)
+	res, body := do(t, "POST", ts.URL+"/api/backlog", "tok", `{"dir":"`+wt+`","title":"  try   it ","prompt":" Try it, then report. ","by":"helper","from":"s1","status":"blocked","why":"the release"}`)
 	var it backlog.Item
 	json.Unmarshal([]byte(body), &it)
-	if res.StatusCode != 200 || it.Dir != repo || it.Text != "try it" || !it.Suggested() || it.Status != backlog.Blocked || it.Why != "the release" {
+	if res.StatusCode != 200 || it.Dir != repo || it.Title != "try it" || it.Prompt != "Try it, then report." || !it.Suggested() || it.Status != backlog.Blocked || it.Why != "the release" {
 		t.Fatalf("add: %d %s", res.StatusCode, body)
 	}
-	if res, _ := do(t, "POST", ts.URL+"/api/backlog", "tok", `{"dir":"`+repo+`/nope","text":"x"}`); res.StatusCode != 400 {
+	if res, _ := do(t, "POST", ts.URL+"/api/backlog", "tok", `{"dir":"`+repo+`/nope","title":"x"}`); res.StatusCode != 400 {
 		t.Fatalf("a missing folder is refused: %d", res.StatusCode)
+	}
+	if res, _ := do(t, "POST", ts.URL+"/api/backlog", "tok", `{"dir":"`+repo+`","title":" ","prompt":""}`); res.StatusCode != 400 {
+		t.Fatalf("an item needs a title or a prompt: %d", res.StatusCode)
 	}
 	if res, _ := do(t, "PATCH", ts.URL+"/api/backlog/"+it.ID, "tok", `{"status":"someday"}`); res.StatusCode != 400 {
 		t.Fatalf("unknown status: %d", res.StatusCode)

@@ -1,6 +1,7 @@
 package backlog
 
 import (
+	"cmp"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -23,7 +24,8 @@ var ErrNotFound = errors.New("no such backlog item")
 type Item struct {
 	ID       string    `json:"id"`
 	Dir      string    `json:"dir"`
-	Text     string    `json:"text"`
+	Title    string    `json:"title,omitempty"`
+	Prompt   string    `json:"prompt,omitempty"`
 	Status   string    `json:"status"`
 	Why      string    `json:"why,omitempty"`
 	By       string    `json:"by,omitempty"`
@@ -38,6 +40,8 @@ type Item struct {
 }
 
 func (it Item) Suggested() bool { return it.By != "" && !it.Accepted }
+
+func (it Item) FirstMessage() string { return cmp.Or(it.Prompt, it.Title) }
 
 type Store struct {
 	path  string

@@ -18,7 +18,8 @@ var worktreeDir = regexp.MustCompile(`/\.claude/worktrees/[^/]+$`)
 
 type backlogReq struct {
 	Dir      *string `json:"dir"`
-	Text     *string `json:"text"`
+	Title    *string `json:"title"`
+	Prompt   *string `json:"prompt"`
 	Status   *string `json:"status"`
 	Why      *string `json:"why"`
 	Accepted *bool   `json:"accepted"`
@@ -39,11 +40,14 @@ func (q backlogReq) apply(it *backlog.Item) error {
 		}
 		it.Dir = dir
 	}
-	if q.Text != nil {
-		if strings.TrimSpace(*q.Text) == "" {
-			return badf("text is required")
-		}
-		it.Text = strings.TrimSpace(*q.Text)
+	if q.Title != nil {
+		it.Title = strings.Join(strings.Fields(*q.Title), " ")
+	}
+	if q.Prompt != nil {
+		it.Prompt = strings.TrimSpace(*q.Prompt)
+	}
+	if it.FirstMessage() == "" {
+		return badf("a title or a prompt is required")
 	}
 	if q.Status != nil {
 		switch *q.Status {
@@ -95,8 +99,8 @@ func (s *Server) backlogAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	it := backlog.Item{By: strings.TrimSpace(q.By), From: q.From}
-	if q.Dir == nil || q.Text == nil {
-		http.Error(w, "dir and text are required", http.StatusBadRequest)
+	if q.Dir == nil {
+		http.Error(w, "dir is required", http.StatusBadRequest)
 		return
 	}
 	if err := q.apply(&it); err != nil {
@@ -139,7 +143,7 @@ func (s *Server) backlogStart(w http.ResponseWriter, r *http.Request) {
 		backlogFail(w, backlog.ErrNotFound)
 		return
 	}
-	sid, err := s.startSession(r.Context(), startReq{Dir: it.Dir, Prompt: it.Text, Worktree: it.Worktree})
+	sid, err := s.startSession(r.Context(), startReq{Dir: it.Dir, Name: it.Title, Prompt: it.FirstMessage(), Worktree: it.Worktree})
 	if err != nil {
 		backlogFail(w, err)
 		return

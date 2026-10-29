@@ -413,8 +413,10 @@ Markdown, PDF, CSV/TSV, video and audio render. Pages run sandboxed, away from a
 Work you want an agent to do, but not now. **Backlog** (`b`, or the header's menu) is its own
 screen, filtered by project like the list:
 
-- **Add** an item there, or press **Later** in the new session dialog: the same folder and first
-  message, put aside instead of started. The first line is what the backlog shows.
+- **Add** an item there, or press **Later** in the new session dialog: the same folder, name and
+  first message, put aside instead of started. An item has a **title** (what the backlog shows,
+  and the session's name once started) and a **prompt** (the session's first message, hidden
+  behind *prompt* on the row; without one the session gets the title).
 - Items are **ready** or **blocked** (with what they wait on). **Start** turns one into a session
   with that first message (in its own worktree if you set that), and the item follows the
   session's state until you mark it **done**.

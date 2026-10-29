@@ -111,7 +111,8 @@ type startIn struct {
 }
 
 type laterIn struct {
-	Text    string `json:"text" jsonschema:"the task, written as the first message a session will get when the user starts it"`
+	Title   string `json:"title" jsonschema:"what the backlog shows: the task in a few words, like a ticket title"`
+	Prompt  string `json:"prompt,omitempty" jsonschema:"the first message the session gets when the user starts it, with the context it needs; default the title"`
 	Dir     string `json:"dir,omitempty" jsonschema:"project folder, ~ allowed; default this session's project"`
 	Host    string `json:"host,omitempty" jsonschema:"machine name; default this session's machine"`
 	Blocked string `json:"blocked,omitempty" jsonschema:"what it waits on, when it cannot be started yet"`
@@ -123,7 +124,8 @@ type backlogIn struct {
 }
 
 type backlogItem struct {
-	Text    string `json:"text"`
+	Title   string `json:"title"`
+	Prompt  string `json:"prompt,omitempty"`
 	Dir     string `json:"dir"`
 	Host    string `json:"host,omitempty"`
 	Status  string `json:"status" jsonschema:"ready, blocked, started or done"`
@@ -541,7 +543,7 @@ func (t *tools) stop(ctx context.Context, _ *mcp.CallToolRequest, in ref) (*mcp.
 func (t *tools) later(ctx context.Context, _ *mcp.CallToolRequest, in laterIn) (*mcp.CallToolResult, backlogItem, error) {
 	live, _ := t.c.Live()
 	me, ok := client.Self(live)
-	req := map[string]any{"text": in.Text, "dir": in.Dir, "by": "an agent"}
+	req := map[string]any{"title": in.Title, "prompt": in.Prompt, "dir": in.Dir, "by": "an agent"}
 	if ok {
 		req["by"], req["from"] = cmp.Or(me.Title, "an agent"), me.SessionID
 		req["dir"] = cmp.Or(in.Dir, me.Cwd)
@@ -567,7 +569,7 @@ func (t *tools) backlog(ctx context.Context, _ *mcp.CallToolRequest, in backlogI
 }
 
 func itemView(it backlog.Item) backlogItem {
-	v := backlogItem{Text: it.Text, Dir: it.Dir, Host: it.Host, Status: it.Status, Why: it.Why, Session: it.Session}
+	v := backlogItem{Title: it.Title, Prompt: it.Prompt, Dir: it.Dir, Host: it.Host, Status: it.Status, Why: it.Why, Session: it.Session}
 	if it.Suggested() {
 		v.By = it.By
 	}
