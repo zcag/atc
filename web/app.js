@@ -1542,7 +1542,7 @@ function makeDock(id) {
   const tlog = (event, detail = {}) => fetch("/api/termlog", { method: "POST", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device: DEVICE, session: id, event, detail: me ? { ...detail, viewer: `#${me}` } : detail }) }).catch(() => {});
   const emit = (patch) => { Object.assign(d.state, patch); d.ui?.({ ...d.state }); };
   const ctl = (o) => ws?.readyState === 1 && (ws.send(JSON.stringify(o)), true);
-  d.send = (data) => ws?.readyState === 1 && ws.send(enc.encode(data));
+  d.send = (data) => ws?.readyState === 1 && (ws.send(enc.encode(data)), true);
   d.claim = () => ctl({ type: "claim" });
   d.focus = () => term.focus();
 
@@ -1698,7 +1698,7 @@ function Term({ s, say, voice, onVoiceOff }) {
         const res = await fetch(`/api/sessions/${s.sessionId}/upload`, { method: "POST", body: fd });
         if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
         const { path } = await res.json();
-        api_.current.send?.(` \x1b[200~${/\s/.test(path) ? `"${path}"` : path}\x1b[201~`);
+        if (!api_.current.send?.(` \x1b[200~${/\s/.test(path) ? `"${path}"` : path}\x1b[201~`)) say(`Uploaded, but the terminal is not connected, so it did not get the path: ${path}`);
       } catch (e) {
         say(`Upload failed: ${e.message}`);
       }
@@ -3900,11 +3900,19 @@ function BgStrip({ s }) {
   </div>`;
 }
 
+const ATT_URL = new Map();
+const attsOf = (sid) => txStore.get(`atts.${sid}`, []).map((a) => ({ ...a, url: ATT_URL.get(a.id) || null }));
+
 function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, focusRef, working, top }) {
   const ta = useRef();
   const [busy, setBusy] = useState(false);
   const [drag, setDrag] = useState(false);
-  const [atts, setAtts] = useState([]);
+  const [atts, setAttsRaw] = useState(() => attsOf(s.sessionId));
+  const setAtts = (f) => setAttsRaw((as) => {
+    const n = typeof f === "function" ? f(as) : f, kept = n.filter((a) => a.path).map(({ id, name, path }) => ({ id, name, path }));
+    txStore.set(`atts.${s.sessionId}`, kept.length ? kept : null);
+    return n;
+  });
   const [big, setBig] = useState(null);
   focusRef.current = () => ta.current?.focus();
   const dict = useDictation((t) => setDraft((d) => (d ? `${d.trimEnd()} ${t}` : t)), say);
@@ -3924,8 +3932,9 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
     for (const f of files) {
       const fd = new FormData();
       fd.append("file", f, f.name);
-      const id = Math.random().toString(36).slice(2);
-      setAtts((as) => [...as, { id, name: f.name, url: f.type.startsWith("image/") ? URL.createObjectURL(f) : null }]);
+      const id = Math.random().toString(36).slice(2), url = f.type.startsWith("image/") ? URL.createObjectURL(f) : null;
+      if (url) ATT_URL.set(id, url);
+      setAtts((as) => [...as, { id, name: f.name, url }]);
       try {
         const res = await fetch(`/api/sessions/${s.sessionId}/upload`, { method: "POST", body: fd });
         if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
