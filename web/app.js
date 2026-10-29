@@ -1507,7 +1507,7 @@ function shelf() {
 }
 
 function prewarm(s) {
-  if (s?.attachable && s.id && !DOCK.has(s.id)) dock(s);
+  if (s?.attachable && s.kind !== "hub" && s.id && !DOCK.has(s.id)) dock(s);
 }
 
 function dock(s) {
