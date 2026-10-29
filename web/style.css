@@ -1463,8 +1463,11 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .blhead .count { font-size: 12px; color: var(--faint); }
 .blhead.fold { cursor: pointer; }
 .blhead .caret { font-style: normal; font-size: 11px; color: var(--faint); }
-.blrow { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; margin-bottom: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--strip); }
-.blrow .bltx { flex: 1; min-width: 0; }
+.blrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "tx acts" "m acts"; column-gap: 10px; padding: 10px 12px; margin-bottom: 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--strip); }
+.blrow .bltx { grid-area: tx; min-width: 0; }
+.blrow.editing .bltx { grid-column: 1 / -1; }
+.blrow .m { grid-area: m; }
+.blrow .acts { grid-area: acts; align-self: start; }
 .blrow .txt { display: block; width: 100%; border: 0; background: none; padding: 0; text-align: left; color: var(--ink); font: inherit; cursor: text; }
 .blrow .txt b { display: block; font-weight: 500; font-size: 14.5px; line-height: 1.4; overflow-wrap: anywhere; }
 .blrow .prompt { margin: 6px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--sunk); color: var(--dim); font: 12.5px/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow-y: auto; }
@@ -1493,6 +1496,6 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .blrow.done .txt b { text-decoration: line-through; text-decoration-color: var(--faint); }
 .blsec .clear { font-size: 13px; padding: 4px 10px; }
 @media (max-width: 899px) {
-  .blrow { flex-wrap: wrap; }
-  .blrow .acts { width: 100%; justify-content: flex-end; }
+  .blrow { grid-template-areas: "tx tx" "m acts"; row-gap: 4px; }
+  .blrow .acts { align-self: end; }
 }

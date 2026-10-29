@@ -1062,6 +1062,7 @@ function sessionActions(s, say, { rename, open, after } = {}) {
   items.push({ label: "Rename", run: rename || run(() => { const n = prompt("Rename session", s.title); return n === null ? null : patch({ name: n }); }) });
   items.push({ label: s.pinned ? "Unpin" : "Pin to top", run: run(() => patch({ pinned: !s.pinned })) });
   items.push({ label: s.parked ? "Unpark" : "Park", run: run(() => patch({ parked: !s.parked })) });
+  items.push({ label: "Put on the backlog", title: "Set it aside to come back to: it stops unless it is working, and Resume on the backlog brings it back", run: () => putAside(s, say).then(() => after && after()) });
   if (s.attachable) items.push({ label: "Stop", run: run(() => api(`/api/sessions/${s.id}/stop`, { method: "POST" }), () => say("Stopped. Resume it any time.")) });
   if (!s.attachable && s.kind !== "interactive")
     items.push({ label: "Resume", run: run(() => api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" }), (r) => go(r.id)) });
@@ -3097,7 +3098,11 @@ const itemQ = (it) => hostQ(it.host, HERE);
 const itemRun = (it, live) => it.session && live.find((s) => (it.sid && s.sessionId === it.sid) || s.id === it.session);
 const suggested = (it) => !!it.by && !it.accepted;
 const itemTitle = (it) => it.title || (it.prompt || "").split("\n")[0];
-const itemStage = (it) => it.status === "done" ? "done" : suggested(it) ? "suggested" : it.session ? "started" : it.status;
+const itemStage = (it) => it.status === "done" ? "done" : suggested(it) ? "suggested" : it.status === "ready" && it.session && !it.aside ? "started" : it.status;
+const putAside = (s, say) => api(`/api/sessions/${s.sessionId}/aside${hostQ(s.host, HERE)}`, { method: "POST", body: { title: s.title } }).then(() => {
+  loadBacklog();
+  say(s.attachable && s.state !== "working" ? "On the backlog, and stopped. Resume it from there." : "On the backlog. Resume it from there.");
+}, (e) => say(e.message));
 const STAGES = [
   ["started", "Started"],
   ["ready", "Ready"],
@@ -3224,7 +3229,7 @@ function BacklogRow({ it, stage, run, tag, patch, remove, start }) {
     { label: "Delete", danger: true, run: () => confirm("Delete this item?") && remove(it) },
   ].filter(Boolean);
   return html`
-    <div class="blrow ${stage}">
+    <div class="blrow ${stage} ${edit ? "editing" : ""}">
       <div class="bltx">
         ${edit ? html`
           <form onSubmit=${(e) => { e.preventDefault(); save(); }}>
@@ -3238,27 +3243,28 @@ function BacklogRow({ it, stage, run, tag, patch, remove, start }) {
         : html`
           <button class="txt" title="Edit" onClick=${() => begin("text")}><b>${head}</b></button>
           ${showPrompt && html`<pre class="prompt">${it.prompt}</pre>`}
-          ${it.why && html`<p class="why">Waiting on ${it.why}</p>`}
-          <p class="m">
-            ${tag && html`<${ProjectTag} path=${it.dir} />`}
-            ${MULTI && it.host && html`<span class="host">${it.host}</span>`}
-            ${it.by && html`<span class="by" role=${it.from ? "link" : null} title=${it.from ? "Open the session that added it" : ""} onClick=${it.from ? () => go(it.from) : null}>${ICON.chat}${it.by}</span>`}
-            ${run
-              ? html`<a class="run" href=${`#/s/${keyOf(run)}`}><i class="st ${run.state}"></i>${run.title || "Session"}</a><span>${ended ? "ended" : WORD[run.state] || run.state}</span>`
-              : html`<span>${stage === "started" ? "session ended" : agoLong(stage === "done" ? it.updated : it.created)}${it.worktree && !it.session ? " · worktree" : ""}</span>`}
-            ${extra && html`<button class="pr" aria-expanded=${showPrompt} onClick=${() => setShowPrompt(!showPrompt)}>prompt ${showPrompt ? "▾" : "▸"}</button>`}
-          </p>`}
+          ${it.why && html`<p class="why">Waiting on ${it.why}</p>`}`}
       </div>
-      ${!edit && html`<div class="acts">
-        ${stage === "suggested" ? html`
-          <button class="btn" onClick=${() => remove(it)}>Dismiss</button>
-          <button class="btn primary" onClick=${() => patch(it, { accepted: true }, "Moved to your backlog.")}>Take it</button>`
-        : stage === "ready" ? html`<button class="btn primary" title="Start a session with this as its first message" onClick=${() => start(it)}><span class="mi">${ICON.play}</span>Start</button>`
-        : stage === "blocked" ? html`<button class="btn" onClick=${() => patch(it, { status: "ready" })}>Unblock</button>`
-        : ended ? html`<button class="btn primary" onClick=${() => patch(it, { status: "done" })}>Done</button>`
-        : run ? html`<button class="btn" onClick=${() => go(keyOf(run))}>Open</button>` : null}
-        <${Menu} items=${menu} label=${html`<span class="mi">${ICON.more}</span>`} />
-      </div>`}
+      ${!edit && html`
+        <p class="m">
+          ${tag && html`<${ProjectTag} path=${it.dir} />`}
+          ${MULTI && it.host && html`<span class="host">${it.host}</span>`}
+          ${it.by && html`<span class="by" role=${it.from ? "link" : null} title=${it.from ? "Open the session that added it" : ""} onClick=${it.from ? () => go(it.from) : null}>${ICON.chat}${it.by}</span>`}
+          ${run || it.aside
+            ? html`<a class="run" href=${`#/s/${run ? keyOf(run) : it.sid}`}>${run && html`<i class="st ${run.state}"></i>`}${(run?.title || it.title) === head ? "session" : run?.title || "session"}</a><span>${it.aside ? "put aside" : ended ? "ended" : WORD[run.state] || run.state}</span>`
+            : html`<span>${stage === "started" ? "session ended" : agoLong(stage === "done" ? it.updated : it.created)}${it.worktree && !it.session ? " · worktree" : ""}</span>`}
+          ${extra && html`<button class="pr" aria-expanded=${showPrompt} onClick=${() => setShowPrompt(!showPrompt)}>prompt ${showPrompt ? "▾" : "▸"}</button>`}
+        </p>
+        <div class="acts">
+          ${stage === "suggested" ? html`
+            <button class="btn" onClick=${() => remove(it)}>Dismiss</button>
+            <button class="btn primary" onClick=${() => patch(it, { accepted: true }, "Moved to your backlog.")}>Take it</button>`
+          : stage === "ready" ? html`<button class="btn primary" title=${it.aside ? "Bring back the session you put aside" : "Start a session with this as its first message"} onClick=${() => start(it)}><span class="mi">${ICON.play}</span>${it.aside ? "Resume" : "Start"}</button>`
+          : stage === "blocked" ? html`<button class="btn" onClick=${() => patch(it, { status: "ready" })}>Unblock</button>`
+          : ended ? html`<button class="btn primary" onClick=${() => patch(it, { status: "done" })}>Done</button>`
+          : run ? html`<button class="btn" onClick=${() => go(keyOf(run))}>Open</button>` : null}
+          <${Menu} items=${menu} label=${html`<span class="mi">${ICON.more}</span>`} />
+        </div>`}
     </div>`;
 }
 
@@ -4758,6 +4764,7 @@ function Palette({ live, sel, say, home, actions, onClose }) {
     act(s.pinned ? "Unpin" : "Pin to top", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }));
     act(s.parked ? "Unpark" : "Park", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { parked: !s.parked } }), "hide quiet");
     if (s.attachable) act("Stop", () => api(`/api/sessions/${s.sessionId}/stop`, { method: "POST" }).then(() => say("Stopped. Resume it any time.")), "end");
+    act("Put on the backlog", () => putAside(s, say), "later aside backlog");
   }
   for (const s of live) add("Sessions", s.title || "Untitled", { s, kw: `${project(s.cwd).name} ${s.host || ""} ${s.lastPrompt || ""}`, run: run(() => go(keyOf(s))) });
   const liveIDs = new Set(live.map((s) => s.sessionId));
@@ -4772,7 +4779,7 @@ function Palette({ live, sel, say, home, actions, onClose }) {
   add("Actions", "Assistant", { glyph: "◇", hint: "a", kw: "ask chat switchboard", run: run(actions.ask) });
   if (VOICE_OK) add("Actions", "Talk to Claude", { glyph: "◉", hint: "t", kw: "voice assistant", run: run(actions.talk) });
   add("Actions", "Backlog", { glyph: "☰", hint: "b", kw: "later todo tasks ideas", run: run(() => (location.hash = BACKLOG)) });
-  add("Actions", "Put on the backlog", { glyph: "+", kw: "later todo task add", run: run(() => actions.create({ later: true })) });
+  add("Actions", "New backlog item", { glyph: "+", kw: "later todo task add put", run: run(() => actions.create({ later: true })) });
   add("Actions", "All pages", { glyph: "▣", hint: "p", kw: "shown html reports gallery", run: run(() => (location.hash = PAGES)) });
   add("Actions", "Usage and limits", { glyph: "%", hint: "u", kw: "tokens cost week", run: run(actions.usage) });
   add("Actions", "Keyboard shortcuts", { glyph: "?", hint: "?", kw: "help keys", run: run(actions.help) });

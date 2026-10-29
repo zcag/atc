@@ -48,3 +48,18 @@ func TestBacklog(t *testing.T) {
 		t.Fatalf("empty list: %q", body)
 	}
 }
+
+func TestPutAside(t *testing.T) {
+	ts := newTestServer(t, nil, Voice{})
+	for range 2 {
+		if res, body := do(t, "POST", ts.URL+"/api/sessions/l1/aside", "tok", `{}`); res.StatusCode != 200 {
+			t.Fatalf("aside: %d %s", res.StatusCode, body)
+		}
+	}
+	var items []backlog.Item
+	_, body := get(t, ts.URL+"/api/backlog", "tok")
+	json.Unmarshal([]byte(body), &items)
+	if len(items) != 1 || !items[0].Aside || items[0].SID != "l1" || items[0].Session != "loc00001" || items[0].Title != "local one" || items[0].Dir != "/tmp" {
+		t.Fatalf("one item that remembers the session: %s", body)
+	}
+}

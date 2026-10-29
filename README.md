@@ -419,13 +419,16 @@ screen, filtered by project like the list:
   behind *prompt* on the row; without one the session gets the title).
 - Items are **ready** or **blocked** (with what they wait on). **Start** turns one into a session
   with that first message (in its own worktree if you set that), and the item follows the
-  session's state until you mark it **done**.
+  session's state until you mark it **done**. The session is told it came from the backlog, and
+  marks its own item done or blocked with the `mark` MCP tool.
+- **Put on the backlog** (a session's menu, or the palette) sets a session aside: it stops unless it
+  is working, and its item gets **Resume**, which brings that same conversation back.
 - Agents add items only when you ask them to (the `later` MCP tool). Theirs wait, dashed, under
   **Suggested by agents** with the session that added them, until you **take** or **dismiss** them.
 
 Items live with the machine the folder is on (`backlog.json` in its config folder); the screen
 shows every machine's. Over HTTP: `GET`/`POST /api/backlog`, `PATCH`/`DELETE /api/backlog/<id>`,
-`POST /api/backlog/<id>/start`, with `?host=` for another machine.
+`POST /api/backlog/<id>/start`, `POST /api/sessions/<session>/aside`, with `?host=` for another machine.
 
 ## Notify
 
@@ -539,7 +542,8 @@ not billed per token.
   message to one (resuming it first if it was stopped), `wait` for its answer, `outputs` for the
   servers, pages and files it produced, `stop`, `history`, `presets`.
 - `later` puts a task on your backlog when you ask for that (it shows as a suggestion from that
-  session), `backlog` lists what is on it.
+  session), `backlog` lists what is on it, `mark` marks an item done, blocked or ready (by default
+  the one the session was started from).
 
 The voice assistant session has these tools from the start, so you can say "what is the deploy
 session up to?" or "tell the docs session to also cover the CLI" without opening either. To give

@@ -184,6 +184,14 @@ func (c *Client) AddBacklog(host string, req map[string]any) (it backlog.Item, e
 	return it, c.do("POST", path, req, &it)
 }
 
+func (c *Client) PatchBacklog(host, id string, fields map[string]any) (it backlog.Item, err error) {
+	path := "/api/backlog/" + id
+	if host != "" {
+		path += "?host=" + url.QueryEscape(host)
+	}
+	return it, c.do("PATCH", path, fields, &it)
+}
+
 type Preset struct {
 	Name  string `json:"name"`
 	Dir   string `json:"dir"`

@@ -156,6 +156,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/backlog/{id}", s.backlogPatch)
 	mux.HandleFunc("DELETE /api/backlog/{id}", s.backlogRemove)
 	mux.HandleFunc("POST /api/backlog/{id}/start", s.backlogStart)
+	mux.HandleFunc("POST /api/sessions/{sid}/aside", s.putAside)
 	mux.HandleFunc("GET /api/apps", s.apps)
 	mux.HandleFunc("GET /api/engines", s.engines)
 	mux.HandleFunc("POST /api/presence", s.presencePost)
@@ -714,14 +715,22 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 		s.done(w, sid, s.M.Keep(sid, store.Running))
 		return
 	}
-	t, _ := s.M.Index.Find(sid)
-	dir, name := t.StartCwd, s.standingName(sid, t.AgentName)
-	if dir == "" {
-		http.Error(w, "unknown session "+sid, http.StatusNotFound)
+	id, err := s.resumeSession(r.Context(), sid)
+	if errors.Is(err, errUnknown) {
+		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	id, err := s.relaunch(r.Context(), name, dir, sid)
 	s.done(w, id, err)
+}
+
+var errUnknown = errors.New("unknown session")
+
+func (s *Server) resumeSession(ctx context.Context, sid string) (string, error) {
+	t, _ := s.M.Index.Find(sid)
+	if t.StartCwd == "" {
+		return "", fmt.Errorf("%w %s", errUnknown, sid)
+	}
+	return s.relaunch(ctx, s.standingName(sid, t.AgentName), t.StartCwd, sid)
 }
 
 func (s *Server) act(f func(context.Context, string) error) http.HandlerFunc {

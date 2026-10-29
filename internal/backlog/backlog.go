@@ -34,6 +34,7 @@ type Item struct {
 	Worktree bool      `json:"worktree,omitempty"`
 	Session  string    `json:"session,omitempty"`
 	SID      string    `json:"sid,omitempty"`
+	Aside    bool      `json:"aside,omitempty"`
 	Created  time.Time `json:"created"`
 	Updated  time.Time `json:"updated"`
 	Host     string    `json:"host,omitempty"`
@@ -42,6 +43,10 @@ type Item struct {
 func (it Item) Suggested() bool { return it.By != "" && !it.Accepted }
 
 func (it Item) FirstMessage() string { return cmp.Or(it.Prompt, it.Title) }
+
+func (it Item) Of(sid, id string) bool {
+	return sid != "" && it.SID == sid || id != "" && it.Session == id
+}
 
 type Store struct {
 	path  string

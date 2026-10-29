@@ -21,7 +21,7 @@ const instructions = `atc is how the user runs Claude Code sessions on their mac
 	`"have another agent look at this"), or talks about another session, project or task by name, even without naming atc. ` +
 	`"sessions" shows what is open and what each is doing or asking, "read" before you summarize or answer about a session, ` +
 	`"start" for new work in a folder on a machine, "send" to pass something on, "wait" for its answer, "outputs" for what it produced ` +
-	`(running servers, pages it showed, files), "later" to put a task on the user's backlog when they ask for that, "backlog" to see it. Refer to sessions by their title. Never send to the session marked as you.
+	`(running servers, pages it showed, files), "later" to put a task on the user's backlog when they ask for that, "backlog" to see it, "mark" to mark an item done or blocked. Refer to sessions by their title. Never send to the session marked as you.
 
 ` +
 	`Sessions talk to each other through send and start, and atc ends every such message with a line naming the sender: ` +
@@ -123,6 +123,12 @@ type backlogIn struct {
 	Done    bool   `json:"done,omitempty" jsonschema:"include finished items"`
 }
 
+type markIn struct {
+	Status string `json:"status" jsonschema:"done, blocked or ready"`
+	Why    string `json:"why,omitempty" jsonschema:"for blocked: what it waits on, in a few words"`
+	Item   string `json:"item,omitempty" jsonschema:"a piece of another item's title; default the item this session was started from"`
+}
+
 type backlogItem struct {
 	Title   string `json:"title"`
 	Prompt  string `json:"prompt,omitempty"`
@@ -132,6 +138,7 @@ type backlogItem struct {
 	Why     string `json:"why,omitempty" jsonschema:"what a blocked item waits on"`
 	By      string `json:"by,omitempty" jsonschema:"the session that suggested it; empty when the user added it"`
 	Session string `json:"session,omitempty" jsonschema:"the session started from it"`
+	Yours   bool   `json:"yours,omitempty" jsonschema:"this session was started from it"`
 }
 
 type backlogList struct {
@@ -200,6 +207,8 @@ func Run(ctx context.Context, c *client.Client) error {
 	mcp.AddTool(s, &mcp.Tool{Name: "later", Description: "Put a task on the user's backlog for a project, to start later as a session. " +
 		"Only when the user asks for it (\"add that to the backlog\", \"remember to do X in atc\"), never on your own. " +
 		"It shows as a suggestion from this session until the user accepts it."}, t.later)
+	mcp.AddTool(s, &mcp.Tool{Name: "mark", Description: "Mark a backlog item done, blocked (with what it waits on) or ready again. " +
+		"A session started from the backlog marks its own item: done when the work has shipped, blocked when it cannot go on without something."}, t.mark)
 	mcp.AddTool(s, &mcp.Tool{Name: "backlog", Description: "List the user's backlog: tasks they or agents put aside per project to start later, with status ready, blocked, started or done."}, t.backlog)
 	mcp.AddTool(s, &mcp.Tool{Name: "history", Description: "Search earlier conversations by title, prompts or folder, newest first."}, t.history)
 	return s.Run(ctx, &mcp.StdioTransport{})
@@ -558,9 +567,12 @@ func (t *tools) later(ctx context.Context, _ *mcp.CallToolRequest, in laterIn) (
 
 func (t *tools) backlog(ctx context.Context, _ *mcp.CallToolRequest, in backlogIn) (*mcp.CallToolResult, backlogList, error) {
 	items, err := t.c.Backlog()
+	live, _ := t.c.Live()
+	me, _ := client.Self(live)
 	out := backlogList{Items: []backlogItem{}}
 	for _, it := range items {
 		v := itemView(it)
+		v.Yours = it.Of(me.SessionID, me.ID)
 		if (in.Done || v.Status != backlog.Done) && strings.Contains(it.Dir, in.Project) {
 			out.Items = append(out.Items, v)
 		}
@@ -568,12 +580,37 @@ func (t *tools) backlog(ctx context.Context, _ *mcp.CallToolRequest, in backlogI
 	return nil, out, err
 }
 
+func (t *tools) mark(ctx context.Context, _ *mcp.CallToolRequest, in markIn) (*mcp.CallToolResult, backlogItem, error) {
+	items, err := t.c.Backlog()
+	if err != nil {
+		return nil, backlogItem{}, err
+	}
+	live, _ := t.c.Live()
+	me, _ := client.Self(live)
+	var hits []backlog.Item
+	for _, it := range items {
+		if in.Item == "" && it.Of(me.SessionID, me.ID) || in.Item != "" && strings.Contains(strings.ToLower(it.Title+"\n"+it.Prompt), strings.ToLower(in.Item)) {
+			hits = append(hits, it)
+		}
+	}
+	switch {
+	case len(hits) == 0 && in.Item == "":
+		return nil, backlogItem{}, fmt.Errorf("this session was not started from a backlog item; name one with item")
+	case len(hits) == 0:
+		return nil, backlogItem{}, fmt.Errorf("no backlog item matches %q", in.Item)
+	case len(hits) > 1:
+		return nil, backlogItem{}, fmt.Errorf("%d backlog items match %q; use more of the title", len(hits), in.Item)
+	}
+	it, err := t.c.PatchBacklog(hits[0].Host, hits[0].ID, map[string]any{"status": in.Status, "why": in.Why})
+	return nil, itemView(it), err
+}
+
 func itemView(it backlog.Item) backlogItem {
 	v := backlogItem{Title: it.Title, Prompt: it.Prompt, Dir: it.Dir, Host: it.Host, Status: it.Status, Why: it.Why, Session: it.Session}
 	if it.Suggested() {
 		v.By = it.By
 	}
-	if it.Session != "" && it.Status != backlog.Done {
+	if it.Session != "" && !it.Aside && it.Status == backlog.Ready {
 		v.Status = "started"
 	}
 	return v

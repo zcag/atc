@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/backlog"
+	"github.com/zcag/atc/internal/sessions"
 )
 
 var worktreeDir = regexp.MustCompile(`/\.claude/worktrees/[^/]+$`)
@@ -143,15 +145,81 @@ func (s *Server) backlogStart(w http.ResponseWriter, r *http.Request) {
 		backlogFail(w, backlog.ErrNotFound)
 		return
 	}
-	sid, err := s.startSession(r.Context(), startReq{Dir: it.Dir, Name: it.Title, Prompt: it.FirstMessage(), Worktree: it.Worktree})
+	if it.Aside && it.SID != "" {
+		ref, err := s.wake(r.Context(), it.SID)
+		if err != nil {
+			backlogFail(w, err)
+			return
+		}
+		_, err = s.Backlog.Update(id, func(it *backlog.Item) {
+			it.Session, it.Aside, it.Status, it.Why = cmp.Or(ref, it.Session), false, backlog.Ready, ""
+		})
+		s.done(w, cmp.Or(ref, it.SID), err)
+		return
+	}
+	ref, err := s.startSession(r.Context(), startReq{Dir: it.Dir, Name: it.Title, Prompt: it.FirstMessage() + fromBacklog, Worktree: it.Worktree})
 	if err != nil {
 		backlogFail(w, err)
 		return
 	}
 	_, err = s.Backlog.Update(id, func(it *backlog.Item) {
-		it.Session, it.SID, it.Status, it.Why, it.Accepted = sid, "", backlog.Ready, "", true
+		it.Session, it.SID, it.Status, it.Why, it.Accepted = ref, "", backlog.Ready, "", true
 	})
-	s.done(w, sid, err)
+	s.done(w, ref, err)
+}
+
+const fromBacklog = "\n\n[from the atc backlog: when this is done, or you are blocked, mark it with the atc mark tool]"
+
+func (s *Server) wake(ctx context.Context, sid string) (string, error) {
+	live, _ := s.M.Live(ctx)
+	for _, x := range live {
+		if x.SessionID == sid && x.Attachable {
+			return x.ID, nil
+		}
+	}
+	return s.resumeSession(ctx, sid)
+}
+
+func (s *Server) putAside(w http.ResponseWriter, r *http.Request) {
+	var q struct{ Title string }
+	json.NewDecoder(r.Body).Decode(&q)
+	key := r.PathValue("sid")
+	live, _ := s.M.Live(r.Context())
+	var x sessions.Session
+	for _, l := range live {
+		if l.SessionID == key || l.ID != "" && l.ID == key {
+			x = l
+		}
+	}
+	if x.SessionID == "" {
+		t, ok := s.M.Find(key)
+		if !ok {
+			http.Error(w, "unknown session "+key, http.StatusNotFound)
+			return
+		}
+		x = sessions.Session{SessionID: t.SessionID, Cwd: cmp.Or(t.StartCwd, t.Cwd), Title: cmp.Or(t.Title, t.AITitle)}
+	}
+	var it backlog.Item
+	var err error
+	if i := slices.IndexFunc(s.Backlog.List(), func(it backlog.Item) bool { return it.Of(x.SessionID, x.ID) }); i >= 0 {
+		it, err = s.Backlog.Update(s.Backlog.List()[i].ID, func(it *backlog.Item) {
+			it.Aside, it.SID = true, cmp.Or(it.SID, x.SessionID)
+			if it.Status == backlog.Done {
+				it.Status = backlog.Ready
+			}
+		})
+	} else {
+		it, err = s.Backlog.Add(backlog.Item{Dir: worktreeDir.ReplaceAllString(x.Cwd, ""), Title: cmp.Or(strings.TrimSpace(q.Title), x.Title, "Untitled session"),
+			Session: x.ID, SID: x.SessionID, Aside: true})
+	}
+	if err == nil && x.Attachable && x.State != sessions.Working {
+		if s.rv != nil {
+			s.rv.stopping(x.ID)
+		}
+		err = s.stop(r.Context(), cmp.Or(x.ID, x.SessionID))
+		s.refresh()
+	}
+	s.backlogDone(w, it, err)
 }
 
 func backlogFail(w http.ResponseWriter, err error) {
