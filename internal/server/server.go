@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/attach"
+	"github.com/zcag/atc/internal/backlog"
 	"github.com/zcag/atc/internal/browser"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
@@ -49,6 +50,7 @@ type Server struct {
 	Host    string
 	Push    *push.Pusher
 	Pages   *pages.Store
+	Backlog *backlog.Store
 	Browser *browser.Browser
 	Peers   []Peer
 	Presets []Preset
@@ -103,6 +105,9 @@ func (s *Server) Handler() http.Handler {
 	if s.Pages == nil {
 		s.Pages, _ = pages.Open("")
 	}
+	if s.Backlog == nil {
+		s.Backlog, _ = backlog.Open("")
+	}
 	if s.StateDir != "" {
 		s.rv = &reviver{path: revivePath(s.StateDir)}
 		if lost := s.rv.afterReboot(); len(lost) > 0 {
@@ -146,6 +151,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/widget", s.widget)
 	mux.HandleFunc("GET /api/presets", s.presets)
 	mux.HandleFunc("POST /api/presets/{name}/run", s.runPreset)
+	mux.HandleFunc("GET /api/backlog", s.backlogList)
+	mux.HandleFunc("POST /api/backlog", s.backlogAdd)
+	mux.HandleFunc("PATCH /api/backlog/{id}", s.backlogPatch)
+	mux.HandleFunc("DELETE /api/backlog/{id}", s.backlogRemove)
+	mux.HandleFunc("POST /api/backlog/{id}/start", s.backlogStart)
 	mux.HandleFunc("GET /api/apps", s.apps)
 	mux.HandleFunc("GET /api/engines", s.engines)
 	mux.HandleFunc("POST /api/presence", s.presencePost)

@@ -178,8 +178,9 @@ function App() {
   const aloneRoute = () => { const m = location.hash.match(/^#\/p\/([^/]+)(?:\/(.+))?$/); return m && (m[2] || m[1].startsWith(APP_REF)) && { sid: decodeURIComponent(m[1]), name: m[2] && decodeURIComponent(m[2]) }; };
   const [alone, setAlone] = useState(aloneRoute);
   const [pagesHome, setPagesHome] = useState(location.hash === PAGES);
+  const [backlog, setBacklog] = useState(location.hash === BACKLOG);
   useEffect(() => {
-    const f = () => { setAssisting(location.hash === "#/assist"); setUsage(location.hash === USAGE); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesHome(location.hash === PAGES); };
+    const f = () => { setAssisting(location.hash === "#/assist"); setUsage(location.hash === USAGE); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesHome(location.hash === PAGES); setBacklog(location.hash === BACKLOG); };
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
@@ -309,11 +310,13 @@ function App() {
       } else if (e.key === "t" && VOICE_OK) {
         e.preventDefault(); location.hash = "#/assist";
       } else if (e.key === "n") {
-        e.preventDefault(); setCreating(true);
+        e.preventDefault(); setCreating(location.hash === BACKLOG ? { later: true } : true);
       } else if (e.key === "u") {
         e.preventDefault(); location.hash === USAGE ? closeUsage() : openUsage();
       } else if (e.key === "p") {
         e.preventDefault(); location.hash === PAGES ? closePages() : (location.hash = PAGES);
+      } else if (e.key === "b") {
+        e.preventDefault(); location.hash === BACKLOG ? closeBacklog() : (location.hash = BACKLOG);
       } else if (e.key === "/") {
         e.preventDefault(); document.querySelector('.search input')?.focus();
       } else if (e.key === "?") {
@@ -361,6 +364,7 @@ function App() {
           <${Menu} cls="btn talk" aria="More" width=${250} label=${html`<span class="mi">${ICON.more}</span>`} items=${[
             { cls: "viewitem", title: "Jump to any session, run any action", run: () => setPalette(true), label: html`<span class="mi">${ICON.search}</span><span class="grow">Search and commands</span><kbd>${MAC ? "⌘" : "Ctrl+"}K</kbd>` },
             { cls: "viewitem", title: "Everything your sessions showed you", run: () => (location.hash = PAGES), label: html`<span class="mi">${ICON.page}</span><span class="grow">Pages</span><kbd>p</kbd>` },
+            { cls: "viewitem", title: "Work you put aside per project, to start later", run: () => (location.hash = BACKLOG), label: html`<span class="mi">${ICON.list}</span><span class="grow">Backlog</span><kbd>b</kbd>` },
             ...LISTS.map(([k, label, hint]) => ({ cls: `viewitem ${view.list === k ? "on" : ""}`, title: hint, run: () => setView({ ...view, list: k }), label: html`<span>${label}</span>${view.list === k && "✓"}` })),
             { cls: `viewitem ${view.rail ? "on" : ""}`, title: "While a session is open on a wide screen, the list folds into a strip of projects; hover or click it to bring the list back",
               run: () => setView({ ...view, rail: !view.rail }), label: html`<span>Fold into a rail while reading</span>${view.rail && "✓"}` },
@@ -382,6 +386,7 @@ function App() {
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
     ${pagesHome && html`<${PagesHome} live=${all} say=${say} onClose=${closePages} />`}
+    ${backlog && html`<${BacklogPage} live=${all} say=${say} onClose=${closeBacklog} onAdd=${setCreating} />`}
     ${alone && (appOpen
       ? html`<${AppView} key=${alone.sid} name=${alone.sid.slice(APP_REF.length)} page=${alone.name} apps=${apps} live=${all} say=${say} reload=${loadApps} />`
       : html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`)}
@@ -418,6 +423,7 @@ function App() {
             <dt>/</dt><dd>Search earlier sessions</dd>
             <dt>u</dt><dd>Usage: limits, spend by day, projects and sessions</dd>
             <dt>p</dt><dd>Pages: everything your sessions showed you</dd>
+            <dt>b</dt><dd>Backlog: work put aside per project, to start later</dd>
             <dt>[ / ]</dt><dd>Previous or next project tab</dd>
             <dt>Ctrl + Z</dt><dd>In a terminal: detach. The session keeps running.</dd>
             <dt>1 / 2 / 3</dt><dd>In a transcript: outline, story or everything</dd>
@@ -797,6 +803,7 @@ const ICON = {
   page: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2" width="11" height="12" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 5.5h6M5 8h6M5 10.5h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   split: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 2.5v11" stroke="currentColor" stroke-width="1.4"/></svg>`,
   expand: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9 7M2.5 13.5L7 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  list: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 4h7.5M6 8h7.5M6 12h7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2.5 3.3l.8.8 1.4-1.6M2.5 7.3l.8.8 1.4-1.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="3.4" cy="12" r="1" fill="currentColor"/></svg>`,
   more: html`<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="12.5" cy="8" r="1.3" fill="currentColor"/></svg>`,
 };
 
@@ -3082,6 +3089,152 @@ function PagesHome({ live, say, onClose }) {
     </div>`;
 }
 
+const BACKLOG = "#/backlog";
+const closeBacklog = () => (history.length > 1 ? history.back() : location.replace("#/"));
+const itemQ = (it) => hostQ(it.host, HERE);
+const itemRun = (it, live) => it.session && live.find((s) => (it.sid && s.sessionId === it.sid) || s.id === it.session);
+const suggested = (it) => !!it.by && !it.accepted;
+const itemStage = (it) => it.status === "done" ? "done" : suggested(it) ? "suggested" : it.session ? "started" : it.status;
+const STAGES = [
+  ["started", "Started"],
+  ["ready", "Ready"],
+  ["blocked", "Blocked"],
+  ["suggested", "Suggested by agents"],
+  ["done", "Done"],
+];
+const FOLDED = new Set(["suggested", "done"]);
+const baseDir = (d) => (d || "").replace(/\/\.claude\/worktrees\/[^/]+$/, "");
+let BACKLOG_RELOAD = () => {};
+
+function BacklogPage({ live, say, onClose, onAdd }) {
+  useNow(30000);
+  const [list, setList] = useState(null);
+  const [only, setOnly] = useState(TABS.only);
+  const [open, setOpen] = useState({});
+  const load = () => api("/api/backlog").then((l) => setList(l || []), (e) => { say(e.message); setList((x) => x || []); });
+  BACKLOG_RELOAD = load;
+  useEffect(() => {
+    load();
+    const t = setInterval(() => document.visibilityState === "visible" && load(), 10000);
+    return () => { clearInterval(t); BACKLOG_RELOAD = () => {}; };
+  }, []);
+  useEffect(() => {
+    const k = (e) => e.key === "Escape" && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName) && !document.querySelector(".veil") && onClose();
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, []);
+  const act = async (f, done) => {
+    try { await f(); if (done) say(done); } catch (e) { say(e.message); }
+    load();
+  };
+  const call = (it, method, body, sub = "") => api(`/api/backlog/${it.id}${sub}${itemQ(it)}`, { method, body });
+  const patch = (it, body, done) => act(() => call(it, "PATCH", body), done);
+  const remove = (it) => act(() => call(it, "DELETE"));
+  const start = (it) => act(async () => go((await call(it, "POST", undefined, "/start")).id), "Session started.");
+  const all = list || [];
+  const waiting = (it) => it.status !== "done" && !suggested(it);
+  const projects = [...new Set(all.filter((it) => it.status !== "done").map((it) => project(it.dir).name))].sort();
+  if (only && !projects.includes(only)) projects.unshift(only);
+  const shown = all.filter((it) => !only || project(it.dir).name === only);
+  const by = Object.fromEntries(STAGES.map(([k]) => [k, []]));
+  for (const it of shown) by[itemStage(it)].push(it);
+  for (const k in by) by[k].sort((a, b) => k === "done" ? Date.parse(b.updated) - Date.parse(a.updated) : Date.parse(a.created) - Date.parse(b.created));
+  const add = () => {
+    const known = shown.map((it) => ({ dir: it.dir, host: it.host })).concat(live.map((s) => ({ dir: baseDir(s.cwd), host: s.host })));
+    const at = only && known.find((x) => project(x.dir).name === only);
+    onAdd({ dir: at?.dir, host: at?.host, later: true });
+  };
+  const counts = STAGES.filter(([k]) => k !== "done" && by[k].length).map(([k]) => `${by[k].length} ${k}`).join(" · ");
+  return html`
+    <div class="pghome backlog" role="dialog" aria-label="Backlog">
+      <header class="pghead">
+        <button class="icon" onClick=${onClose} aria-label="Back">←</button>
+        <div class="who"><h2>Backlog</h2><span class="sub">${list ? counts || "Nothing waiting" : "Loading…"}</span></div>
+        <button class="btn primary" onClick=${add} title="Put a task on the backlog (n)"><span class="mi">${ICON.plus}</span> Add</button>
+      </header>
+      ${projects.length > 1 && html`
+        <nav class="projtabs" aria-label="Projects">
+          <button class=${only ? "" : "on"} onClick=${() => setOnly(null)}>All</button>
+          ${projects.map((p) => {
+            const n = all.filter((it) => project(it.dir).name === p && waiting(it)).length;
+            return html`<button class=${only === p ? "on" : ""} style=${`--ph: ${hueOf(p)}`} onClick=${() => setOnly(only === p ? null : p)}>
+              <span class="nm">${p}</span>${n > 0 && html`<span class="count">${n}</span>`}</button>`;
+          })}
+        </nav>`}
+      <div class="pgbody">
+        ${list && !shown.length && html`<div class="none"><p>Nothing on the backlog${only ? ` for ${only}` : ""}.</p>
+          <p class="sub">Put work here to start later: <b>Add</b>, or <b>Later</b> in the new session dialog. Agents add to it when you ask them to, and what they add waits under Suggested until you take it.</p></div>`}
+        <div class="bl">
+          ${STAGES.map(([k, title]) => by[k].length > 0 && html`
+            <section class="blsec ${k}">
+              ${FOLDED.has(k)
+                ? html`<button class="blhead fold" aria-expanded=${!!open[k]} onClick=${() => setOpen({ ...open, [k]: !open[k] })}><h3>${title}</h3><span class="count">${by[k].length}</span><i class="caret">${open[k] ? "▾" : "▸"}</i></button>`
+                : html`<div class="blhead"><h3>${title}</h3><span class="count">${by[k].length}</span></div>`}
+              ${(!FOLDED.has(k) || open[k]) && html`
+                ${by[k].map((it) => html`<${BacklogRow} key=${it.id} it=${it} stage=${k} run=${itemRun(it, live)} tag=${!only} patch=${patch} remove=${remove} start=${start} />`)}
+                ${k === "done" && html`<button class="btn clear" onClick=${() => confirm(`Delete ${plural(by.done.length, "finished item")}?`) && act(() => Promise.all(by.done.map((it) => call(it, "DELETE"))), "Cleared.")}>Clear done</button>`}`}
+            </section>`)}
+        </div>
+      </div>
+    </div>`;
+}
+
+function BacklogRow({ it, stage, run, tag, patch, remove, start }) {
+  const [edit, setEdit] = useState(null);
+  const [text, setText] = useState("");
+  const begin = (mode) => { setEdit(mode); setText(mode === "why" ? it.why || "" : it.text); };
+  const save = () => {
+    if (edit === "why") patch(it, { status: "blocked", why: text });
+    else if (text.trim()) patch(it, { text });
+    setEdit(null);
+  };
+  const [head, ...rest] = it.text.split("\n");
+  const more = rest.join(" ").trim();
+  const ended = stage === "started" && (!run || run.state === "stopped");
+  const menu = [
+    stage !== "blocked" && stage !== "done" && { label: "Blocked…", run: () => begin("why") },
+    (stage === "blocked" || stage === "done") && { label: "Ready", run: () => patch(it, { status: "ready" }) },
+    stage !== "done" && { label: "Done", run: () => patch(it, { status: "done" }) },
+    { label: "Edit", run: () => begin("text") },
+    !it.session && stage !== "done" && { label: it.worktree ? "Start in the folder itself" : "Start in a git worktree", run: () => patch(it, { worktree: !it.worktree }) },
+    { label: "Delete", danger: true, run: () => confirm("Delete this item?") && remove(it) },
+  ].filter(Boolean);
+  return html`
+    <div class="blrow ${stage}">
+      <div class="bltx">
+        ${edit ? html`
+          <form onSubmit=${(e) => { e.preventDefault(); save(); }}>
+            ${edit === "why"
+              ? html`<input value=${text} onInput=${(e) => setText(e.target.value)} placeholder="Waiting on what?" ref=${focusOnMount} />`
+              : html`<textarea rows="4" value=${text} onInput=${(e) => setText(e.target.value)} ref=${focusOnMount}
+                  onKeyDown=${(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && save()}></textarea>`}
+            <div class="actions"><button type="button" class="btn" onClick=${() => setEdit(null)}>Cancel</button><button class="btn primary">${edit === "why" ? "Mark blocked" : "Save"}</button></div>
+          </form>`
+        : html`
+          <button class="txt" title="Edit" onClick=${() => begin("text")}><b>${head}</b>${more && html`<span class="more">${more}</span>`}</button>
+          ${it.why && html`<p class="why">Waiting on ${it.why}</p>`}
+          <p class="m">
+            ${tag && html`<${ProjectTag} path=${it.dir} />`}
+            ${MULTI && it.host && html`<span class="host">${it.host}</span>`}
+            ${it.by && html`<span class="by" role=${it.from ? "link" : null} title=${it.from ? "Open the session that added it" : ""} onClick=${it.from ? () => go(it.from) : null}>${ICON.chat}${it.by}</span>`}
+            ${run
+              ? html`<a class="run" href=${`#/s/${keyOf(run)}`}><i class="st ${run.state}"></i>${run.title || "Session"}</a><span>${ended ? "ended" : WORD[run.state] || run.state}</span>`
+              : html`<span>${stage === "started" ? "session ended" : agoLong(stage === "done" ? it.updated : it.created)}${it.worktree && !it.session ? " · worktree" : ""}</span>`}
+          </p>`}
+      </div>
+      ${!edit && html`<div class="acts">
+        ${stage === "suggested" ? html`
+          <button class="btn" onClick=${() => remove(it)}>Dismiss</button>
+          <button class="btn primary" onClick=${() => patch(it, { accepted: true }, "Moved to your backlog.")}>Take it</button>`
+        : stage === "ready" ? html`<button class="btn primary" title="Start a session with this as its first message" onClick=${() => start(it)}><span class="mi">${ICON.play}</span>Start</button>`
+        : stage === "blocked" ? html`<button class="btn" onClick=${() => patch(it, { status: "ready" })}>Unblock</button>`
+        : ended ? html`<button class="btn primary" onClick=${() => patch(it, { status: "done" })}>Done</button>`
+        : run ? html`<button class="btn" onClick=${() => go(keyOf(run))}>Open</button>` : null}
+        <${Menu} items=${menu} label=${html`<span class="mi">${ICON.more}</span>`} />
+      </div>`}
+    </div>`;
+}
+
 const APP_REF = "app:";
 const hiddenRun = (s) => !!s.app && s.state !== "needs-you";
 const appLink = (a, page) => `#/p/${APP_REF}${encodeURIComponent(a.name)}${page ? `/${encodeURIComponent(page)}` : ""}`;
@@ -4431,6 +4584,7 @@ function HostField({ hosts, host, setHost }) {
 const untrusted = "Claude Code hasn't been trusted in this folder yet. Open Claude there once and accept the prompt, then try again.";
 
 function NewSession({ onClose, say, hosts, home, start: from }) {
+  const later = !!from?.later;
   const [host, setHost] = useState(from?.host || home);
   const dirs = useDirs(host, home);
   const [dir, setDir] = useState(from?.dir ? tilde(from.dir) : "~");
@@ -4455,8 +4609,22 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
     return () => removeEventListener("keydown", f);
   }, []);
 
+  const putAside = async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/backlog${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), text: prompt, worktree: worktree && !harness } });
+      onClose();
+      say("On the backlog.");
+      BACKLOG_RELOAD();
+    } catch (e) {
+      setErr(e.message);
+    }
+    setBusy(false);
+  };
   const start = async (e) => {
     e.preventDefault();
+    if (later) return putAside();
     setBusy(true);
     setErr(null);
     try {
@@ -4475,24 +4643,26 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
   return html`
     <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
       <form class="sheet" onSubmit=${start}>
-        <h3>New session</h3>
+        <h3>${later ? "Put on the backlog" : "New session"}</h3>
         ${preset ? html`
           <p class="presetnote"><span class="proj" style=${`--ph: ${hueOf(preset.name)}`}>${preset.name}</span> starts in <b>${tilde(preset.dir)}</b>${MULTI && preset.host ? html` on <b>${preset.host}</b>` : ""}${preset.brief ? html`, with the instructions in <b>${preset.brief}</b>` : ""}. <button type="button" class="link" onClick=${() => setPreset(null)}>Pick a folder instead</button></p>
         ` : html`
           <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDir("~"); }} />
           <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} autofocus />
           ${!harness && html`<${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />`}`}
-        <label class="field"><span>Name</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder=${preset ? preset.name : "Optional"} />${!preset && html`<small>Without one, ${harness || "Claude"} titles the session from what you ask.</small>`}</label>
-        <label class="field"><span>First message</span><textarea rows="3" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} placeholder="Optional. You can also type it in the terminal."></textarea></label>
+        ${!later && html`<label class="field"><span>Name</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder=${preset ? preset.name : "Optional"} />${!preset && html`<small>Without one, ${harness || "Claude"} titles the session from what you ask.</small>`}</label>`}
+        <label class="field"><span>${later ? "What should the session do?" : "First message"}</span><textarea rows=${later ? 5 : 3} value=${prompt} onInput=${(e) => setPrompt(e.target.value)}
+          placeholder=${later ? "Its first message when you start it. The first line is what the backlog shows." : "Optional. You can also type it in the terminal."}></textarea></label>
         ${err && html`<p class="err">${err}</p>`}
-        ${usable.length > 0 && html`
+        ${!later && usable.length > 0 && html`
           <p class="presetline">Model:${[{ name: "" }, ...usable].map((e) => html` <button type="button" class="pick ${e.name === engine ? "on" : ""}" title=${e.harness ? `${e.harness}${e.model ? ` on ${e.model}` : ""}` : e.model || "Claude, as configured"}
             onClick=${() => setEngine(e.name)}>${e.name || "Claude"}</button>`)}</p>`}
-        ${presets.length > 0 && !preset && html`
+        ${!later && presets.length > 0 && !preset && html`
           <p class="presetline">Or use a preset:${presets.map((p) => html` <button type="button" class="proj" style=${`--ph: ${hueOf(p.name)}`} title=${`${MULTI && p.host ? p.host + ": " : ""}${tilde(p.dir)}`} onClick=${() => setPreset(p)}>${p.name}</button>`)}</p>`}
         <div class="actions">
           <button type="button" class="btn" onClick=${onClose}>Cancel</button>
-          <button class="btn primary" disabled=${(!preset && !dir.trim()) || busy}>${busy ? "Starting…" : "Start session"}</button>
+          ${!later && !preset && html`<button type="button" class="btn" title="Put it on the backlog to start later" disabled=${!dir.trim() || !prompt.trim() || busy} onClick=${putAside}>Later</button>`}
+          <button class="btn primary" disabled=${(!preset && !dir.trim()) || (later && !prompt.trim()) || busy}>${later ? "Add to backlog" : busy ? "Starting…" : "Start session"}</button>
         </div>
       </form>
     </div>
@@ -4572,6 +4742,8 @@ function Palette({ live, sel, say, home, actions, onClose }) {
   for (const p of presets) add("Actions", `Start ${p.name}`, { proj: p.name, kw: `preset ${p.dir}`, sub: tilde(p.dir), run: run(() => api(`/api/sessions${hostQ(p.host, home)}`, { method: "POST", body: { preset: p.name } }).then((r) => { say(`Started ${p.name}.`); go(r.id); }, (e) => say(e.message))) });
   add("Actions", "Assistant", { glyph: "◇", hint: "a", kw: "ask chat switchboard", run: run(actions.ask) });
   if (VOICE_OK) add("Actions", "Talk to Claude", { glyph: "◉", hint: "t", kw: "voice assistant", run: run(actions.talk) });
+  add("Actions", "Backlog", { glyph: "☰", hint: "b", kw: "later todo tasks ideas", run: run(() => (location.hash = BACKLOG)) });
+  add("Actions", "Put on the backlog", { glyph: "+", kw: "later todo task add", run: run(() => actions.create({ later: true })) });
   add("Actions", "All pages", { glyph: "▣", hint: "p", kw: "shown html reports gallery", run: run(() => (location.hash = PAGES)) });
   add("Actions", "Usage and limits", { glyph: "%", hint: "u", kw: "tokens cost week", run: run(actions.usage) });
   add("Actions", "Keyboard shortcuts", { glyph: "?", hint: "?", kw: "help keys", run: run(actions.help) });

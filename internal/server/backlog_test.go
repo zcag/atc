@@ -1,0 +1,47 @@
+package server
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/zcag/atc/internal/backlog"
+)
+
+func TestBacklog(t *testing.T) {
+	ts := newTestServer(t, nil, Voice{})
+	repo := t.TempDir()
+	wt := filepath.Join(repo, ".claude", "worktrees", "x")
+	os.MkdirAll(wt, 0o755)
+
+	res, body := do(t, "POST", ts.URL+"/api/backlog", "tok", `{"dir":"`+wt+`","text":"  try it  ","by":"helper","from":"s1","status":"blocked","why":"the release"}`)
+	var it backlog.Item
+	json.Unmarshal([]byte(body), &it)
+	if res.StatusCode != 200 || it.Dir != repo || it.Text != "try it" || !it.Suggested() || it.Status != backlog.Blocked || it.Why != "the release" {
+		t.Fatalf("add: %d %s", res.StatusCode, body)
+	}
+	if res, _ := do(t, "POST", ts.URL+"/api/backlog", "tok", `{"dir":"`+repo+`/nope","text":"x"}`); res.StatusCode != 400 {
+		t.Fatalf("a missing folder is refused: %d", res.StatusCode)
+	}
+	if res, _ := do(t, "PATCH", ts.URL+"/api/backlog/"+it.ID, "tok", `{"status":"someday"}`); res.StatusCode != 400 {
+		t.Fatalf("unknown status: %d", res.StatusCode)
+	}
+
+	_, body = do(t, "PATCH", ts.URL+"/api/backlog/"+it.ID, "tok", `{"status":"ready","accepted":true}`)
+	it = backlog.Item{ID: it.ID}
+	json.Unmarshal([]byte(body), &it)
+	if it.Status != backlog.Ready || it.Why != "" || it.Suggested() {
+		t.Fatalf("unblocked and taken: %s", body)
+	}
+
+	if res, _ := do(t, "DELETE", ts.URL+"/api/backlog/"+it.ID, "tok", ""); res.StatusCode != 200 {
+		t.Fatalf("delete: %d", res.StatusCode)
+	}
+	if res, _ := do(t, "DELETE", ts.URL+"/api/backlog/"+it.ID, "tok", ""); res.StatusCode != 404 {
+		t.Fatalf("delete twice: %d", res.StatusCode)
+	}
+	if _, body := get(t, ts.URL+"/api/backlog", "tok"); body != "[]\n" && body != "[]" {
+		t.Fatalf("empty list: %q", body)
+	}
+}

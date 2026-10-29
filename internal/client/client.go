@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/zcag/atc/internal/backlog"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/sessions"
@@ -169,6 +170,18 @@ func (c *Client) Begin(host string, req map[string]any) (string, error) {
 	}
 	err := c.do("POST", path, req, &r)
 	return r.ID, err
+}
+
+func (c *Client) Backlog() (items []backlog.Item, err error) {
+	return items, c.do("GET", "/api/backlog", nil, &items)
+}
+
+func (c *Client) AddBacklog(host string, req map[string]any) (it backlog.Item, err error) {
+	path := "/api/backlog"
+	if host != "" {
+		path += "?host=" + url.QueryEscape(host)
+	}
+	return it, c.do("POST", path, req, &it)
 }
 
 type Preset struct {

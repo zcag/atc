@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"net/url"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/zcag/atc/internal/backlog"
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/sessions"
@@ -19,7 +21,7 @@ const instructions = `atc is how the user runs Claude Code sessions on their mac
 	`"have another agent look at this"), or talks about another session, project or task by name, even without naming atc. ` +
 	`"sessions" shows what is open and what each is doing or asking, "read" before you summarize or answer about a session, ` +
 	`"start" for new work in a folder on a machine, "send" to pass something on, "wait" for its answer, "outputs" for what it produced ` +
-	`(running servers, pages it showed, files). Refer to sessions by their title. Never send to the session marked as you.
+	`(running servers, pages it showed, files), "later" to put a task on the user's backlog when they ask for that, "backlog" to see it. Refer to sessions by their title. Never send to the session marked as you.
 
 ` +
 	`Sessions talk to each other through send and start, and atc ends every such message with a line naming the sender: ` +
@@ -108,6 +110,32 @@ type startIn struct {
 	Worktree bool   `json:"worktree,omitempty" jsonschema:"work in its own git worktree so it cannot clash with other sessions in the repo"`
 }
 
+type laterIn struct {
+	Text    string `json:"text" jsonschema:"the task, written as the first message a session will get when the user starts it"`
+	Dir     string `json:"dir,omitempty" jsonschema:"project folder, ~ allowed; default this session's project"`
+	Host    string `json:"host,omitempty" jsonschema:"machine name; default this session's machine"`
+	Blocked string `json:"blocked,omitempty" jsonschema:"what it waits on, when it cannot be started yet"`
+}
+
+type backlogIn struct {
+	Project string `json:"project,omitempty" jsonschema:"a piece of the project folder to filter by"`
+	Done    bool   `json:"done,omitempty" jsonschema:"include finished items"`
+}
+
+type backlogItem struct {
+	Text    string `json:"text"`
+	Dir     string `json:"dir"`
+	Host    string `json:"host,omitempty"`
+	Status  string `json:"status" jsonschema:"ready, blocked, started or done"`
+	Why     string `json:"why,omitempty" jsonschema:"what a blocked item waits on"`
+	By      string `json:"by,omitempty" jsonschema:"the session that suggested it; empty when the user added it"`
+	Session string `json:"session,omitempty" jsonschema:"the session started from it"`
+}
+
+type backlogList struct {
+	Items []backlogItem `json:"items"`
+}
+
 type waitIn struct {
 	Session string `json:"session" jsonschema:"a session ref, short id, a unique piece of its title, or app:<name> for that app's latest run"`
 	Seconds int    `json:"seconds,omitempty" jsonschema:"how long to wait at most, default 300, max 900"`
@@ -167,6 +195,10 @@ func Run(ctx context.Context, c *client.Client) error {
 		})
 	mcp.AddTool(s, &mcp.Tool{Name: "stop", Description: "Stop a running session. Its conversation is kept and can be resumed."}, t.stop)
 	mcp.AddTool(s, &mcp.Tool{Name: "outputs", Description: "What a session produced: servers it started (with links), pages it published, files it wrote with links to open them, links from its replies."}, t.outputs)
+	mcp.AddTool(s, &mcp.Tool{Name: "later", Description: "Put a task on the user's backlog for a project, to start later as a session. " +
+		"Only when the user asks for it (\"add that to the backlog\", \"remember to do X in atc\"), never on your own. " +
+		"It shows as a suggestion from this session until the user accepts it."}, t.later)
+	mcp.AddTool(s, &mcp.Tool{Name: "backlog", Description: "List the user's backlog: tasks they or agents put aside per project to start later, with status ready, blocked, started or done."}, t.backlog)
 	mcp.AddTool(s, &mcp.Tool{Name: "history", Description: "Search earlier conversations by title, prompts or folder, newest first."}, t.history)
 	return s.Run(ctx, &mcp.StdioTransport{})
 }
@@ -504,6 +536,45 @@ func (t *tools) stop(ctx context.Context, _ *mcp.CallToolRequest, in ref) (*mcp.
 		return nil, done{}, fmt.Errorf("that is this session itself")
 	}
 	return nil, done{Ref: x.ID, Title: x.Title, State: "stopped"}, t.c.Stop(x.ID)
+}
+
+func (t *tools) later(ctx context.Context, _ *mcp.CallToolRequest, in laterIn) (*mcp.CallToolResult, backlogItem, error) {
+	live, _ := t.c.Live()
+	me, ok := client.Self(live)
+	req := map[string]any{"text": in.Text, "dir": in.Dir, "by": "an agent"}
+	if ok {
+		req["by"], req["from"] = cmp.Or(me.Title, "an agent"), me.SessionID
+		req["dir"] = cmp.Or(in.Dir, me.Cwd)
+		in.Host = cmp.Or(in.Host, me.Host)
+	}
+	if in.Blocked != "" {
+		req["status"], req["why"] = backlog.Blocked, in.Blocked
+	}
+	it, err := t.c.AddBacklog(in.Host, req)
+	return nil, itemView(it), err
+}
+
+func (t *tools) backlog(ctx context.Context, _ *mcp.CallToolRequest, in backlogIn) (*mcp.CallToolResult, backlogList, error) {
+	items, err := t.c.Backlog()
+	out := backlogList{Items: []backlogItem{}}
+	for _, it := range items {
+		v := itemView(it)
+		if (in.Done || v.Status != backlog.Done) && strings.Contains(it.Dir, in.Project) {
+			out.Items = append(out.Items, v)
+		}
+	}
+	return nil, out, err
+}
+
+func itemView(it backlog.Item) backlogItem {
+	v := backlogItem{Text: it.Text, Dir: it.Dir, Host: it.Host, Status: it.Status, Why: it.Why, Session: it.Session}
+	if it.Suggested() {
+		v.By = it.By
+	}
+	if it.Session != "" && it.Status != backlog.Done {
+		v.Status = "started"
+	}
+	return v
 }
 
 func (t *tools) history(ctx context.Context, _ *mcp.CallToolRequest, in historyIn) (*mcp.CallToolResult, list, error) {

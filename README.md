@@ -408,6 +408,23 @@ A folder shows its `index.html`, with the files beside it loading by relative pa
 Markdown, PDF, CSV/TSV, video and audio render. Pages run sandboxed, away from atc's own login.
 `atc show -h` is the reference agents read; atc's MCP instructions point every agent at it.
 
+## Backlog
+
+Work you want an agent to do, but not now. **Backlog** (`b`, or the header's menu) is its own
+screen, filtered by project like the list:
+
+- **Add** an item there, or press **Later** in the new session dialog: the same folder and first
+  message, put aside instead of started. The first line is what the backlog shows.
+- Items are **ready** or **blocked** (with what they wait on). **Start** turns one into a session
+  with that first message (in its own worktree if you set that), and the item follows the
+  session's state until you mark it **done**.
+- Agents add items only when you ask them to (the `later` MCP tool). Theirs wait, dashed, under
+  **Suggested by agents** with the session that added them, until you **take** or **dismiss** them.
+
+Items live with the machine the folder is on (`backlog.json` in its config folder); the screen
+shows every machine's. Over HTTP: `GET`/`POST /api/backlog`, `PATCH`/`DELETE /api/backlog/<id>`,
+`POST /api/backlog/<id>/start`, with `?host=` for another machine.
+
 ## Notify
 
 An agent tells you something with `atc notify <message>` from inside its session: a push that
@@ -519,6 +536,8 @@ not billed per token.
 - `start` a session in a folder on any machine (optionally in its own worktree), `send` a
   message to one (resuming it first if it was stopped), `wait` for its answer, `outputs` for the
   servers, pages and files it produced, `stop`, `history`, `presets`.
+- `later` puts a task on your backlog when you ask for that (it shows as a suggestion from that
+  session), `backlog` lists what is on it.
 
 The voice assistant session has these tools from the start, so you can say "what is the deploy
 session up to?" or "tell the docs session to also cover the CLI" without opening either. To give

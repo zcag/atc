@@ -21,6 +21,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/zcag/atc/internal/attach"
+	"github.com/zcag/atc/internal/backlog"
 	"github.com/zcag/atc/internal/browser"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/client"
@@ -252,6 +253,9 @@ func serve(args []string) error {
 		return err
 	}
 	if srv.Pages, err = pages.Open(filepath.Join(client.ConfigDir(), "pages.json")); err != nil {
+		return err
+	}
+	if srv.Backlog, err = backlog.Open(filepath.Join(client.ConfigDir(), "backlog.json")); err != nil {
 		return err
 	}
 	if u := os.Getenv("ATC_BROWSER"); u != "" {
