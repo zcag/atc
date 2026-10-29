@@ -108,3 +108,24 @@ func TestMidTurnMessagesBelongToTheTurn(t *testing.T) {
 		t.Fatalf("a message sent mid-turn should stay in its turn: %+v", turns)
 	}
 }
+
+func TestNoticeAfterTheTurnStartsAnother(t *testing.T) {
+	lines := []string{
+		`{"type":"user","timestamp":"2026-10-01T10:00:00Z","message":{"content":"call me"}}`,
+		`{"type":"assistant","message":{"id":"m1","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"wait"}}]}}`,
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"started"}]}}`,
+		`{"type":"assistant","message":{"id":"m2","content":[{"type":"text","text":"## Please call now"}]}}`,
+		`{"type":"system","subtype":"turn_duration","durationMs":1000,"timestamp":"2026-10-01T10:00:10Z"}`,
+		`{"type":"user","timestamp":"2026-10-01T10:05:00Z","message":{"content":"<task-notification><summary>Background command wait completed</summary></task-notification>"}}`,
+		`{"type":"assistant","message":{"id":"m3","content":[{"type":"tool_use","id":"t2","name":"Bash","input":{"command":"cat out"}}]}}`,
+		`{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"heard you"}]}}`,
+		`{"type":"assistant","message":{"id":"m4","content":[{"type":"text","text":"It worked."}]}}`,
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "s.jsonl")
+	os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+	turns, _, _ := New(dir).Turns(path)
+	if len(turns) != 2 || turns[0].Reply != "## Please call now" || !turns[1].Notice || turns[1].Prompt != "Background command wait completed" || turns[1].Reply != "It worked." {
+		t.Fatalf("a notice after the turn ended should open its own turn: %+v", turns)
+	}
+}

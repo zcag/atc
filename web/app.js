@@ -3605,9 +3605,10 @@ function Story({ items, s, level, zoom, live, badges }) {
 
 const Note = ({ n }) => html`<div class="note-you" title=${`You, while Claude was working${n.time ? ` · ${txClock(n.time)}` : ""}`}><span>${n.text}</span></div>`;
 
-function Prompt({ text, images, partial }) {
+function Prompt({ text, images, partial, notice }) {
   const [all, setAll] = useState(false);
   if (partial) return html`<p class="partial">This turn started before what is loaded here.</p>`;
+  if (notice) return html`<p class="event">${text}</p>`;
   if (images?.length) text = text.replace(/\[Image #\d+\]\s*/g, "");
   const long = text.length > 480 || text.split("\n").length > 6;
   return html`<div class="prompt">${text && html`<div class=${long && !all ? "clamp" : ""}>${text}</div>`}${long && html`<button class="fold" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}${(images || []).map((src) => html`<img src=${src} alt="Image you attached" />`)}</div>`;
@@ -3647,11 +3648,11 @@ function Turn({ t, i, s, body, level, zoom, quote, latest, live, fresh }) {
   const files = (t.files || []).filter((f) => !scratch(f.path));
   return html`<section class="turn ${latest ? "latest" : ""} ${fresh ? "fresh" : ""}" id=${`tx${i}`} data-i=${i}>
     <${Node} t=${t} live=${live} />
-    <${Prompt} text=${body?.prompt ?? t.prompt} images=${body?.images} partial=${t.partial} />
+    <${Prompt} text=${body?.prompt ?? t.prompt} images=${body?.images} partial=${t.partial} notice=${t.notice} />
     <p class="meta-inline">${txClock(t.at)}${txDur(t) && ` · worked ${txDur(t)}`}${txUsd(t.cost) && ` · ${txUsd(t.cost)}`}${files.length > 0 && ` · ${files.length} file${files.length > 1 ? "s" : ""} changed`}</p>
     <${Margin} t=${t} i=${i} s=${s} answer=${answer} />
     ${!body ? (t.steps || t.reply) && html`<div class="skeleton"><i></i><i></i><i></i></div>` : html`
-      <${Story} items=${body.items} s=${s} level=${level} zoom=${zoom} live=${live} />
+      <${Story} items=${t.notice ? body.items.filter((it, j) => j || it.t !== "event") : body.items} s=${s} level=${level} zoom=${zoom} live=${live} />
       ${latest && answer && html`<${Gist} s=${s} answer=${answer} />`}
       ${answer ? html`<div class="prose" data-answer dangerouslySetInnerHTML=${{ __html: html_ }}></div><${Acts} answer=${answer} quote=${quote} />`
         : !latest && html`<p class="cont">No reply after this.</p>`}`}

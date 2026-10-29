@@ -18,6 +18,7 @@ type Turn struct {
 	Prompt  string       `json:"prompt"`
 	Images  int          `json:"images,omitempty"`
 	Partial bool         `json:"partial,omitempty"`
+	Notice  bool         `json:"notice,omitempty"`
 	Reply   string       `json:"reply,omitempty"`
 	Steps   int          `json:"steps"`
 	Looks   int          `json:"looks,omitempty"`
@@ -54,15 +55,16 @@ func BuildTurns(msgs []Message, offs []int64, end int64, price func(string, Usag
 		turns = append(turns, Turn{From: off, At: m.Time, End: m.Time, Partial: partial})
 		cur = &turns[len(turns)-1]
 	}
-	replyFrom := false
+	replyFrom, ended := false, false
 	for i, m := range msgs {
 		off := offs[i]
-		if m.Role == "user" {
+		if m.Role == "user" || m.Role == "event" && ended {
 			open(m, off, false)
-			cur.Prompt, cur.Images = clip(m.Text, 2000), len(m.Images)
-			replyFrom = false
+			cur.Prompt, cur.Images, cur.Notice = clip(m.Text, 2000), len(m.Images), m.Role == "event"
+			replyFrom, ended = false, false
 			continue
 		}
+		ended = m.Role == "done"
 		if cur == nil {
 			open(m, off, true)
 		}
