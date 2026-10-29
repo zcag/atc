@@ -26,6 +26,7 @@ import (
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/history"
+	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/llm"
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/pages"
@@ -39,6 +40,7 @@ import (
 	"github.com/zcag/atc/internal/tui"
 	limits "github.com/zcag/atc/internal/usage"
 	"github.com/zcag/atc/internal/whatsapp"
+	"github.com/zcag/atc/modes"
 	"github.com/zcag/atc/web"
 )
 
@@ -89,6 +91,11 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc wa [--file F]... [--render F.html]... [--voice TEXT] [--poll Q --option A...] [text...]
                                  send the user files, a rendered page, a voice note, a poll or text on
                                  WhatsApp, from the account atc answers them on; atc wa -h
+  atc call [--reason TEXT] [--wait] [--timeout 45s]
+                                 have delta ring the user's phone, with the assistant on the
+                                 line; atc call -h
+  atc hub [status|reset]         run the assistant's one conversation for atc, WhatsApp and
+                                 phone calls (atc-hub.service); atc hub -h
   atc outputs [-json] <session>  what it produced: running servers, files (with a link to
                                  open each in a browser), links, code it touched
   atc usage [-json] [session]    plan limits and tokens per day; with a session, its tokens,
@@ -144,6 +151,10 @@ func main() {
 		err = show(args)
 	case "wa":
 		err = wa(args)
+	case "call":
+		err = callCmd(args)
+	case "hub":
+		err = hubCmd(args)
 	case "notify":
 		err = notify(args)
 	case "browser":
@@ -198,6 +209,7 @@ func serve(args []string) error {
 	if bin == "" {
 		bin = "claude"
 	}
+	modes.Dir = filepath.Join(client.ConfigDir(), "modes")
 	st, err := store.Open(filepath.Join(client.ConfigDir(), "meta.json"))
 	if err != nil {
 		return err
@@ -224,6 +236,7 @@ func serve(args []string) error {
 		Voice: server.VoiceFromEnv(),
 
 		WhatsApp:  whatsapp.FromEnv(),
+		Hub:       hubClient(),
 		PublicURL: strings.TrimRight(os.Getenv("ATC_PUBLIC_URL"), "/"),
 		LocalURL:  loopback(*addr),
 
@@ -275,6 +288,13 @@ func serve(args []string) error {
 		log.Printf("run `atc token` for the login token")
 	}
 	return http.ListenAndServe(*addr, srv.Handler())
+}
+
+func hubClient() *hub.Client {
+	if os.Getenv("ATC_HUB") == "" {
+		return nil
+	}
+	return hub.NewClient(os.Getenv("ATC_HUB"))
 }
 
 func summarizer(cli claude.CLI) (*summary.Summarizer, error) {

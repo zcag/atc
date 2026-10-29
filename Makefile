@@ -14,6 +14,13 @@ install: check build
 	systemctl --user restart atc
 	$(MAKE) --no-print-directory sync-main
 
+install-hub: check build
+	install -m755 atc ~/.local/bin/atc-hub
+	install -Dm644 deploy/atc-hub.service ~/.config/systemd/user/atc-hub.service
+	systemctl --user daemon-reload
+	systemctl --user enable atc-hub
+	systemctl --user restart atc-hub
+
 sync-main:
 	@main=$$(cd "$$(git rev-parse --git-common-dir)/.." && pwd); git fetch -q origin; \
 	if [ "$$(git -C $$main branch --show-current)" != master ]; then echo "sync-main: $$main is not on master, left alone"; \
@@ -53,4 +60,4 @@ android-publish:
 	rsync -t android/dist/atc.apk $(APP_HOST):$(APP_DIR)/
 	rsync -t android/dist/version.json $(APP_HOST):$(APP_DIR)/
 
-.PHONY: build check install install-opencode install-mac android android-publish
+.PHONY: build check install install-hub install-opencode install-mac android android-publish

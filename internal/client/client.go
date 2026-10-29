@@ -230,8 +230,17 @@ func (c *Client) Resume(sid string) (string, error) {
 	return r.ID, err
 }
 
+// Send types text into a session. From inside a Claude session it says which one sent it,
+// so the hub hears it as another session rather than the user typing.
 func (c *Client) Send(id, text string) error {
-	return c.do("POST", "/api/sessions/"+id+"/send", map[string]string{"text": text}, nil)
+	return c.do("POST", "/api/sessions/"+id+"/send", map[string]string{"text": text, "from": os.Getenv("CLAUDE_CODE_SESSION_ID")}, nil)
+}
+
+func (c *Client) Call(req map[string]any) (string, error) {
+	var r struct{ Outcome string }
+	waits := *c
+	waits.http = &http.Client{}
+	return r.Outcome, waits.do("POST", "/api/call", req, &r)
 }
 
 func (c *Client) Show(sid string, req map[string]any) (r struct {

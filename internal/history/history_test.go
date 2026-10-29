@@ -130,3 +130,10 @@ func TestFindFallsBackToTheForkedConversation(t *testing.T) {
 		t.Fatalf("resumed %v", r)
 	}
 }
+
+func TestTalkModeIsNotPartOfThePrompt(t *testing.T) {
+	in := "[talk-mode: whatsapp, until the next talk-mode line]\n# talk-mode: whatsapp\n\n- rules\n[message]\nhello"
+	if got := unpaste(in); got != "hello" {
+		t.Fatalf("got %q", got)
+	}
+}

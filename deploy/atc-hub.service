@@ -1,0 +1,14 @@
+[Unit]
+Description=atc hub, the assistant's one conversation for atc, WhatsApp and phone calls
+After=network-online.target
+
+[Service]
+EnvironmentFile=-%h/.config/atc/env
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+WorkingDirectory=%h
+ExecStart=%h/.local/bin/atc-hub hub
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

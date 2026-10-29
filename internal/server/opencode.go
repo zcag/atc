@@ -89,6 +89,10 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) stop(ctx context.Context, id string) error {
+	if s.hubSession(id) {
+		_, err := s.Hub.Interrupt(ctx, "atc")
+		return err
+	}
 	if !s.M.OpenCode(id) {
 		return s.M.CLI.Stop(ctx, id)
 	}
@@ -99,6 +103,9 @@ func (s *Server) stop(ctx context.Context, id string) error {
 }
 
 func (s *Server) remove(ctx context.Context, id string) error {
+	if s.hubSession(id) {
+		return errors.New("the assistant runs in atc's hub; it starts over with /new on WhatsApp or a fresh assistant in atc, not by removing it")
+	}
 	if !s.M.OpenCode(id) {
 		return s.M.CLI.Remove(ctx, id)
 	}

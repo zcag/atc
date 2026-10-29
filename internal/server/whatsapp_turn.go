@@ -63,6 +63,9 @@ func (s *Server) waType(ctx context.Context, msg waMsg, text, voice string) erro
 	if text == "" {
 		return nil
 	}
+	if s.hubUp() {
+		return s.waHubType(ctx, msg, text, voice)
+	}
 	id, err := s.keep(ctx, waName, false)
 	if err != nil {
 		return fmt.Errorf("could not open the whatsapp session: %w", err)
@@ -108,7 +111,7 @@ func (s *Server) waWatch() {
 		s.wa.mu.Lock()
 		m, busy := s.wa.mark, s.wa.turn != nil
 		s.wa.mu.Unlock()
-		if busy || m.SID == "" {
+		if busy || m.SID == "" || s.hubUp() {
 			continue
 		}
 		path := s.transcriptOf(m.SID)
@@ -304,6 +307,14 @@ func (s *Server) waGist(ctx context.Context, sid, text string) string {
 }
 
 func (s *Server) waNew(ctx context.Context, msg waMsg) error {
+	if s.hubUp() {
+		if err := s.Hub.Reset(ctx); err != nil {
+			return err
+		}
+		s.WhatsApp.React(ctx, msg.chat, msg.id, "🆕")
+		_, err := s.waText(ctx, "🆕 Starting over: the conversation writes a handover note for the next one, and stays in atc as _"+hubName+" "+time.Now().Format("01-02")+"…_")
+		return err
+	}
 	list, err := s.M.Live(ctx)
 	if err != nil {
 		return err
@@ -335,6 +346,13 @@ func (s *Server) waNew(ctx context.Context, msg waMsg) error {
 }
 
 func (s *Server) waStop(ctx context.Context, msg waMsg) error {
+	if s.hubUp() {
+		cut, err := s.Hub.Interrupt(ctx, waName)
+		if err != nil {
+			return err
+		}
+		return s.WhatsApp.React(ctx, msg.chat, msg.id, map[bool]string{true: "🛑", false: "🤷"}[cut])
+	}
 	s.wa.mu.Lock()
 	t := s.wa.turn
 	s.wa.mu.Unlock()

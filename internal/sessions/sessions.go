@@ -341,3 +341,12 @@ func claudeAsk(id string, b claude.Block, multi map[string]bool) opencode.Ask {
 	}
 	return a
 }
+
+// Session is a conversation as its transcript shows it, for one atc runs outside Claude's own list.
+func (m *Manager) Session(sid string) (Session, bool) {
+	t, ok := m.Index.Find(sid)
+	if !ok {
+		return Session{}, false
+	}
+	return m.build(t), true
+}

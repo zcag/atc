@@ -52,7 +52,7 @@ let TABS = { only: null, tabs: [], set: () => {} };
 const focusOnMount = (el) => { if (el && !el.dataset.focused) { el.dataset.focused = "1"; requestAnimationFrame(() => el.focus({ preventScroll: true })); } };
 const local = (m) => !!m && !m.startsWith("claude-") && m !== "<synthetic>";
 const model = (m) => (local(m) ? m.split("/").pop().split(":")[0] : (m || "").replace(/^claude-/, "").replace(/-\d.*$/, ""));
-const engineTag = (s) => s.harness
+const engineTag = (s) => s.harness && s.kind !== "hub"
   ? html`<span class="eng" title=${`Runs in ${s.harness}${s.model ? ` on ${s.model}` : ""}, not Claude Code`}>${s.engine || s.harness}</span>`
   : (s.engine || local(s.model)) && html`<span class="eng" title=${`Runs on ${s.engine || s.model}, not Claude`}>${s.engine || model(s.model)}</span>`;
 const keyOf = (s) => s.id || s.sessionId;
@@ -1096,11 +1096,13 @@ function paneFor(s) {
   let p = null;
   try { p = localStorage.getItem(PANE); } catch {}
   if (p === "chat" || p === "out") return p;
+  if (s.kind === "hub") return "chat";
   return s.attachable || s.state === "stopped" ? "term" : "chat";
 }
 
 function Session({ s, say, live }) {
   const canAttach = s.attachable;
+  const hasTerm = s.kind !== "hub";
   const auto = useRef(AUTO_PANE);
   const shown = usePages(s);
   const [kept] = useState(() => { const n = !auto.current && !routePage() && stored(SESSION_PAGE, {})[s.sessionId]; return n && shown.some((p) => p.name === n) ? n : null; });
@@ -1208,7 +1210,7 @@ function Session({ s, say, live }) {
           : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
       ${(mode === "chat" || sideBySide) && html`<div class="tx-slot" ref=${setSlot}></div>`}
       <div class="seg" role="tablist">
-        <button class=${mode === "term" ? "on" : ""} onClick=${() => choose("term")}>Terminal</button>
+        ${hasTerm && html`<button class=${mode === "term" ? "on" : ""} onClick=${() => choose("term")}>Terminal</button>`}
         <button class=${mode === "chat" ? "on" : ""} onClick=${() => choose("chat")}>Transcript</button>
         ${shown.length > 0 && html`<${PagesTab} list=${shown} on=${mode === "page"} onClick=${() => choose("page")} />`}
         <button class=${mode === "out" ? "on" : ""} onClick=${() => choose("out")}>Outputs${outCount > 0 && html`<span class="count">${outCount}</span>`}</button>
@@ -1225,7 +1227,7 @@ function Session({ s, say, live }) {
             ? html`<${PageSplit}><${Transcript} s=${s} say=${say} slot=${slot} resume=${() => resume("chat")} busy=${busy} voice=${voice && canAttach} onVoiceOff=${() => setVoice(false)} />${pane}<//>`
             : pane;
         })()
-    : mode === "term"
+    : mode === "term" && hasTerm
       ? canAttach
         ? html`<${Term} key=${s.id} s=${s} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} />`
         : html`<div class="stage"><div class="cover">${Unattachable(s, () => resume(), busy, setMode)}</div></div>`
@@ -4232,6 +4234,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
   const live = s.attachable || s.harness === "opencode";
   const working = s.state === "working" && !s.turnDone;
   const turns = idx || [];
+  const stream = useHubStream(s, () => loadIdx());
 
   const setDraft = (v) => setDraftRaw((d) => { const n = typeof v === "function" ? v(d) : v; txStore.set(`draft.${s.sessionId}`, n || null); return n; });
 
@@ -4420,7 +4423,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
     requestAnimationFrame(() => focusInput.current());
   };
 
-  const send = async (text, { retryId, suggested } = {}) => {
+  const send = async (text, { retryId, suggested, voice } = {}) => {
     const ask = s.asks?.[0];
     if (ask?.permission && !s.harness) { say("Allow or reject the request above first."); return false; }
     if (ask && !ask.permission) {
@@ -4434,7 +4437,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
     letGo();
     atEnd.current = true;
     try {
-      await api(`/api/sessions/${s.id || s.sessionId}/send`, { method: "POST", body: { text, suggested } });
+      await api(`/api/sessions/${s.id || s.sessionId}/send`, { method: "POST", body: { text, suggested, voice } });
       setPending((ps) => ps.map((x) => (x.id === id ? { ...x, state: "sent" } : x)));
       setTimeout(loadIdx, 1500);
       return true;
@@ -4485,7 +4488,8 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
                 ? html`<${Folded} key=${`f${t.from}`} t=${t} i=${i} open=${openTurn} />`
                 : html`${i === firstOpen && firstOpen > 0 && html`<div class="since">${firstOpen === turns.length - 1 ? "Latest" : `${turns.length - firstOpen} new since you last read`}</div>`}<${Turn} key=${`t${t.from}`} t=${t} i=${i} s=${s} body=${bodies[t.from]} level=${level} zoom=${setShot} quote=${live ? quote : null} latest=${i === turns.length - 1} live=${working && i === turns.length - 1} fresh=${opened.has(i)} />`}`)}
             ${pending.map((p) => html`<${Pending} key=${p.id} p=${p} retry=${() => send(p.text, { retryId: p.id })} drop=${() => setPending((ps) => ps.filter((x) => x.id !== p.id))} />`)}
-            ${working && !pending.some((p) => p.state !== "failed") && html`<${Thinking} since=${lastAt(lastBody) || last?.end} step=${running} />`}
+            ${stream?.text && html`<${Streaming} st=${stream} />`}
+            ${working && !stream?.text && !pending.some((p) => p.state !== "failed") && html`<${Thinking} since=${lastAt(lastBody) || last?.end} step=${running} />`}
           `}
         </main>
       </div>
@@ -4496,7 +4500,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
       ${fresh > 0 && html`<span>${working ? "New activity" : "New reply"}</span>`}<svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>`}
     ${!live && resume && s.kind !== "interactive" && level !== 1 && html`<${ResumeBar} s=${s} resume=${resume} busy=${busy} />`}
-    ${live && voice && html`<${VoiceBar} s=${s} say=${say} type=${(t) => send(t)} onClose=${onVoiceOff} top=${html`<${BgStrip} s=${s} />`}
+    ${live && voice && html`<${VoiceBar} s=${s} say=${say} type=${(t) => send(t, { voice: true })} onClose=${onVoiceOff} top=${html`<${BgStrip} s=${s} />`}
       press=${(k) => api(`/api/sessions/${s.id || s.sessionId}/keys`, { method: "POST", body: { keys: k } }).catch((e) => say(e.message))} />`}
     ${live && !voice && level !== 1 && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies} focusRef=${focusInput} working=${working} top=${html`<${BgStrip} s=${s} />`} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
@@ -4530,6 +4534,34 @@ const shipped = (t) => (t.badges || []).some((b) => b.ok && (b.kind === "commit"
 const Node = ({ t, live }) => html`<span class="node ${shipped(t) ? "ship" : ""} ${live ? "live" : ""}" aria-hidden="true"><span class="node-t">${txClock(t.at)}</span></span>`;
 
 const lastAt = (body) => (body?.items || []).map((it) => it.out?.time || it.time).filter(Boolean).sort().pop();
+
+const HUB_CHANNEL = { phone: "On the call", whatsapp: "On WhatsApp", "atc-voice": "By voice", agent: "To a session" };
+
+// useHubStream follows the assistant's reply as the hub streams it: what it writes after its
+// last tool call, since everything before that is already in the transcript.
+function useHubStream(s, landed) {
+  const [st, setSt] = useState(null);
+  useEffect(() => {
+    if (s.kind !== "hub") return;
+    const es = new EventSource(`/api/sessions/${s.sessionId}/stream`);
+    es.onmessage = (m) => {
+      const e = JSON.parse(m.data);
+      if (e.type === "turn" || e.type === "tool") setSt({ channel: e.channel, text: "" });
+      else if (e.type === "text") setSt((x) => ({ channel: e.channel, text: (x?.channel === e.channel ? x.text : "") + e.delta }));
+      else if (e.type === "done") { setSt(null); landed(); }
+    };
+    return () => es.close();
+  }, [s.sessionId, s.kind]);
+  return st;
+}
+
+function Streaming({ st }) {
+  const h = useMemo(() => md(st.text), [st.text]);
+  return html`<section class="turn streaming">
+    ${HUB_CHANNEL[st.channel] && html`<p class="live-line"><span class="dot"></span>${HUB_CHANNEL[st.channel]}</p>`}
+    <div class="prose" dangerouslySetInnerHTML=${{ __html: h }}></div>
+  </section>`;
+}
 
 function Thinking({ since, step }) {
   useNow(1000);

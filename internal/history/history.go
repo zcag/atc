@@ -183,7 +183,7 @@ func apply(t *Transcript, e *entry, custom *string) {
 	case "agent-name":
 		t.AgentName = e.AgentName
 	case "last-prompt":
-		t.LastPrompt = e.LastPrompt
+		t.LastPrompt = strings.TrimSpace(unpaste(e.LastPrompt))
 	case "permission-mode":
 		t.PermissionMode = e.PermissionMode
 	case "system":

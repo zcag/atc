@@ -29,6 +29,7 @@ import (
 	"github.com/zcag/atc/internal/browser"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
+	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/outputs"
 	"github.com/zcag/atc/internal/pages"
@@ -37,6 +38,7 @@ import (
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/usage"
 	"github.com/zcag/atc/internal/whatsapp"
+	"github.com/zcag/atc/modes"
 )
 
 type Server struct {
@@ -58,6 +60,8 @@ type Server struct {
 	Voice   Voice
 
 	WhatsApp *whatsapp.Client
+	Hub      *hub.Client
+	hub      *hubLink
 	// PublicURL is where the user reaches atc (links in messages), LocalURL where this
 	// machine's own browser does.
 	PublicURL, LocalURL string
@@ -120,6 +124,9 @@ func (s *Server) Handler() http.Handler {
 	if s.WhatsApp != nil {
 		s.startWhatsApp()
 	}
+	if s.Hub != nil {
+		s.startHub()
+	}
 	go s.poll()
 	s.watchOpenCode()
 	s.schedule()
@@ -180,6 +187,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/browser/{sid}/cdp", s.browserCDP)
 	mux.HandleFunc("GET /api/sessions/{sid}/tabs/{tab}/view", s.browserView)
 	mux.HandleFunc("GET /api/sessions/{id}/attach", func(w http.ResponseWriter, r *http.Request) {
+		if s.hubSession(r.PathValue("id")) {
+			http.Error(w, "the assistant has no terminal: write to it in the transcript", http.StatusConflict)
+			return
+		}
 		s.nameViewer(r)
 		s.Term.Serve(w, r, r.PathValue("id"))
 	})
@@ -195,6 +206,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/assist", s.assist)
 	mux.HandleFunc("POST /api/whatsapp/hook", s.waHook)
 	mux.HandleFunc("POST /api/whatsapp/send", s.waPost)
+	mux.HandleFunc("POST /api/call", s.call)
+	mux.HandleFunc("GET /api/sessions/{sid}/stream", s.hubStream)
 	mux.Handle("GET /app/", s.app())
 	mux.Handle("GET /", s.static())
 	return s.auth(s.route(mux))
@@ -518,6 +531,7 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 	if err != nil {
 		return nil, err
 	}
+	list = s.hubMark(ctx, list)
 	for i := range list {
 		list[i].Host = s.Host
 		if list[i].PID > 0 {
@@ -682,6 +696,8 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Text      string
 		Suggested bool
+		Voice     bool
+		From      string
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Text) == "" {
 		http.Error(w, "text is required", http.StatusBadRequest)
@@ -695,6 +711,17 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 		s.done(w, id, s.sendOpenCode(r.Context(), id, req.Text))
 		return
 	}
+	if s.hubSession(id) {
+		channel := "atc"
+		switch {
+		case req.From != "":
+			channel = hub.Agent
+		case req.Voice:
+			channel = "atc-voice"
+		}
+		s.done(w, id, s.hubSend(r.Context(), channel, req.Text))
+		return
+	}
 	s.done(w, id, s.Term.Send(r.Context(), id, req.Text))
 }
 
@@ -706,6 +733,15 @@ func (s *Server) keys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
+	if s.hubSession(id) {
+		if req.Keys == "\x1b" {
+			_, err := s.Hub.Interrupt(r.Context(), "atc")
+			s.done(w, id, err)
+			return
+		}
+		s.done(w, id, nil)
+		return
+	}
 	s.done(w, id, s.Term.Keys(r.Context(), id, req.Keys))
 }
 
@@ -713,6 +749,10 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 	sid := r.PathValue("sid")
 	if s.M.OpenCode(sid) {
 		s.done(w, sid, s.M.Keep(sid, store.Running))
+		return
+	}
+	if s.hubSession(sid) {
+		s.done(w, sid, nil)
 		return
 	}
 	id, err := s.resumeSession(r.Context(), sid)
@@ -947,7 +987,9 @@ func (s *Server) watch(list []sessions.Session) {
 func (s *Server) notify(list []sessions.Session) {
 	prev := s.seen
 	s.seen = states(list)
-	viewing := func(x sessions.Session) bool { return s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) }
+	viewing := func(x sessions.Session) bool {
+		return s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) || s.hub != nil && s.hubQuiet(x)
+	}
 	shown, showing := pageAlerts(s.shown, list, viewing)
 	s.shown = shown
 	noted, normal, urgent := noteAlerts(s.noted, list, viewing)
@@ -1109,7 +1151,15 @@ func (s *Server) pushUnregister(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) assist(w http.ResponseWriter, r *http.Request) {
-	id, err := s.keep(r.Context(), "assistant", r.URL.Query().Get("new") != "")
+	if sid := s.hubSID(); s.hubUp() {
+		var err error
+		if r.URL.Query().Get("new") != "" {
+			err = s.Hub.Reset(r.Context())
+		}
+		s.done(w, sid, err)
+		return
+	}
+	id, err := s.keep(r.Context(), hubName, r.URL.Query().Get("new") != "")
 	s.done(w, id, err)
 }
 
@@ -1145,6 +1195,8 @@ func (s *Server) keep(ctx context.Context, name string, fresh bool) (string, err
 		from, dir := "", ""
 		if last != nil {
 			from, dir = last.SessionID, existingDir(last.StartCwd, last.Cwd)
+		} else if sid := s.hubSID(); sid != "" && name == waName {
+			from, dir = sid, home
 		} else if t, ok := s.lastNamed(name); ok {
 			from, dir = t.SessionID, existingDir(t.StartCwd, t.Cwd)
 		}
@@ -1225,10 +1277,10 @@ func (s *Server) standingName(sid, fallback string) string {
 
 func standing(name string) ([]string, bool) {
 	switch name {
-	case "assistant":
-		return standingArgs(voicePrompt), true
+	case hubName:
+		return standingArgs(modes.Text("atc-voice") + "\n\n" + switchboard), true
 	case waName:
-		return append(standingArgs(waPrompt), "--disallowedTools", "AskUserQuestion,EnterPlanMode"), true
+		return append(standingArgs(modes.Text(waName)+"\n\n"+switchboard), "--disallowedTools", "AskUserQuestion,EnterPlanMode"), true
 	}
 	return nil, false
 }
@@ -1269,11 +1321,6 @@ func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, e
 	}
 	return id, err
 }
-
-const voicePrompt = `This session is used by voice. The user speaks to you through speech-to-text and hears your replies through text-to-speech. ` +
-	`Answer the way you would say it out loud: short, natural sentences, the important part first. No markdown, no code blocks, no tables, no bullet lists, ` +
-	`no URLs read out; say file and command names plainly. When the work produces something long (code, a report, a list), put it in a file or the session ` +
-	`and tell the user briefly where it is. Transcription can mishear words: if a request is ambiguous, ask a short question. ` + switchboard
 
 const switchboard = `You are also the user's switchboard for their other Claude Code sessions: with the atc tools you can list them, read what they did, ` +
 	`send them instructions, start new ones and wait for results. When the user mentions another session or project, use those tools ` +

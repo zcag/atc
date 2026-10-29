@@ -404,7 +404,12 @@ var notice = regexp.MustCompile(`(?s)<summary>(.*?)</summary>`)
 
 var pastedTag = regexp.MustCompile(`</?pasted_content[^>]*>\n?`)
 
-func unpaste(t string) string { return pastedTag.ReplaceAllString(t, "") }
+// talkMode is how the hub tells its session which channel a message came from (atc's modes/).
+var talkMode = regexp.MustCompile(`(?s)^\[talk-mode: [\w-]+, until the next talk-mode line\]\n.*?\n\[message\]\n`)
+
+func unpaste(t string) string {
+	return talkMode.ReplaceAllString(pastedTag.ReplaceAllString(t, ""), "")
+}
 
 func queued(text string, at time.Time) (Message, bool) {
 	t := strings.TrimSpace(unpaste(text))

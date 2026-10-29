@@ -102,7 +102,8 @@ needs the token either way.
     the box with a start you can edit), **Copy** or **Find**.
 - **New session** starts Claude in any folder, with an optional name and first message.
 - **Assistant** (the chat button, or `a`) opens one session with the atc tools, for asking about
-  your other sessions or driving them. It is the same session the phone's side key opens.
+  your other sessions or driving them. It is the same session the phone's side key opens, and with
+  a hub (see "One assistant on every channel") the same conversation as WhatsApp and phone calls.
 - **Earlier** lists past conversations. Open one and press **Resume** to continue it.
 - On a phone, a row of keys above the keyboard gives you Esc, Tab, Shift+Tab, Ctrl and arrows.
 - Press `?` for keyboard shortcuts.
@@ -668,6 +669,69 @@ carry with `atc wa`: `--file`, `--render page.html` (drawn as an image), `--voic
 `--poll QUESTION --option A --option B` (`--multi` for several). `/status` lists your sessions,
 `/stop` interrupts it, `/new` starts a fresh conversation (the last one stays in atc under a dated
 name) and `/help` lists all this.
+
+## One assistant on every channel
+
+`atc hub` keeps the assistant as one conversation that atc, WhatsApp and phone calls all talk into.
+It runs Claude as a stream-json process (`claude -p`), so a reply streams to whoever asked as it is
+written, and it runs as its own service, so restarting atc never cuts a call:
+
+```sh
+make install-hub                         # installs atc-hub.service; make install leaves it alone
+ATC_HUB=http://127.0.0.1:8820            # in ~/.config/atc/env: atc talks to it there
+ATC_HUB_CLAUDE_ARGS=...                  # optional extra flags for its Claude
+ATC_DELTA_CALL=http://127.0.0.1:8807     # the phone line (delta-call), for atc call
+ATC_CALL_NUMBER=+905551234567            # optional, defaults to the first ATC_WHATSAPP_OWNER
+atc hub status · atc hub reset           # what it is doing; start over now
+```
+
+With `ATC_HUB` set, the Assistant button, the side key and WhatsApp all reach the hub's session. It
+shows in the list as **assistant**, with no terminal: its transcript is the chat, the box under it
+writes to it, the reply appears as it is written, and Esc or Stop interrupts it. A phone call is a
+third channel: delta's `talk.py` connects as `phone` (`ws://127.0.0.1:8820/ws?channel=phone`).
+
+**Channels.** Each message is tagged with where it came from: `atc`, `atc-voice` (the Voice button),
+`whatsapp`, `phone`, and `agent` (another session's `send`). When the channel changes, the message
+carries that channel's rules from `modes/<channel>.md` (built in; a file of the same name in
+`~/.config/atc/modes/` takes its place), so the session writes Markdown for atc, short spoken
+sentences on a call, and phone-screen messages on WhatsApp. A report from another session is
+answered on the channel they last wrote from.
+
+**Several at once.** A message that arrives while the session works joins the turn it is on, and
+each part of the reply goes to the channel of the newest message the session had read when it wrote
+it. Text from atc or WhatsApp while the phone is part of the turn waits until that turn ends, so a
+call never reads out an answer meant for a screen. A barge-in on the call interrupts only what is
+being said to the call.
+
+**Starting over.** When the conversation has been quiet for 6 hours and is past 80k tokens, or quiet
+for 10 minutes and past 150k, never during a call, the hub has the session write a handover note in
+one last turn and opens a new session with it as the first message. `/new` on WhatsApp, a fresh
+assistant in atc and `atc hub reset` do it at once. The old conversation stays in atc as
+**assistant MM-DD hh:mm**; the notes are in `~/.local/state/atc/hub/handovers/`.
+
+**When the hub is down**, WhatsApp and the Assistant button fall back to a plain background session
+resumed from the hub's conversation. When the hub is back, atc stops it; what was said there stays in
+its own transcript, and if Claude gave it a new session id, the hub does not see it.
+
+Endpoints, for clients other than atc: `GET /ws?channel=NAME` (send `{"type":"message","text"}`,
+`{"type":"note","text"}` or `{"type":"interrupt"}`; get `text`, `tool`, `block`, `read`, `joined`,
+`held`, `done`, `error`, `notice`), `GET /events` (every channel's events), `GET /status`,
+`POST /message {channel, text}`, `POST /interrupt {channel}`, `POST /reset`,
+`POST /call {reason, from, notify, timeout}`.
+
+## Calling the user
+
+```sh
+atc call [--reason TEXT] [--wait] [--timeout 45s]
+```
+
+has delta (the agents' phone line, through delta-call) ring the user's own number; it never dials
+another. When they pick up, the assistant is on the line: its first message carries the reason and,
+from another session, that session's sender line, so it says why it called and passes their answer
+back with `send`. Without `--wait` the command returns at once, and a call nobody picks up comes
+back to the session that asked as a `[telefon ... açmadı]` message (the assistant's own calls come
+back on the channel it was busy with). `--wait` prints the outcome instead: `answered`, `no-answer`
+or `busy` (a call is already on).
 
 ## Notes
 
