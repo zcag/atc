@@ -1058,6 +1058,10 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 :root[data-theme="dark"] .btn.primary { background: color-mix(in srgb, var(--work) 62%, var(--board)); border-color: transparent; color: #fff; }
 .btn.talk .mi { display: grid; place-items: center; width: 16px; height: 16px; line-height: 0; }
 .btn.talk .mi svg { display: block; width: 16px; height: 16px; }
+.btn.talk.hub.busy { display: inline-flex; gap: 6px; width: auto; max-width: 180px; padding: 0 10px; color: var(--work); border-color: color-mix(in srgb, var(--work) 45%, var(--line)); }
+.btn.talk.hub.busy.needs-you { color: var(--needs); border-color: color-mix(in srgb, var(--needs) 45%, var(--line)); }
+.btn.talk.hub.busy .mi { animation: pulse 1.6s ease-in-out infinite; }
+.hubword { overflow: hidden; font-size: 13px; white-space: nowrap; text-overflow: ellipsis; }
 
 .sumbar { --edge: var(--turn); position: relative; flex: none; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--strip) 65%, var(--board)); }
 .sumbar::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--edge); opacity: .85; }

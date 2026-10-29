@@ -97,6 +97,8 @@ function App() {
   const [me, setMe] = useState(undefined);
   const [runs, setLive] = useState(null);
   const live = useMemo(() => runs && runs.filter((x) => !hiddenRun(x)), [runs]);
+  const reach = useMemo(() => runs && runs.filter((x) => !hiddenRun(x) || x.kind === "hub"), [runs]);
+  const hub = runs?.find((x) => x.kind === "hub");
   const [apps, setApps] = useState(null);
   const [up, setUp] = useState(true);
   const [past, setPast] = useState({});
@@ -245,17 +247,17 @@ function App() {
   useEffect(() => {
     if (!live) return;
     if (APP?.setSessions) {
-      const rows = ordered.filter((s) => !s.parked && FEED_STATES.includes(s.state)).slice(0, 12).map((s) => ({
+      const rows = arrange(reach).filter((s) => !s.parked && FEED_STATES.includes(s.state)).slice(0, 12).map((s) => ({
         id: s.attachable ? s.id : undefined, sid: s.sessionId, title: s.title, state: s.state, host: s.host || undefined, pinned: s.pinned || undefined,
         since: (s.state === "working" && s.promptAt) || s.updated || undefined,
       }));
       const key = JSON.stringify(rows.map(({ since, ...r }) => r));
       if (key !== appSent) { appSent = key; APP.setSessions(JSON.stringify({ type: "sessions", at: new Date().toISOString(), sessions: rows })); }
     } else if (APP?.setTargets) {
-      const targets = JSON.stringify(live.filter((s) => s.attachable && !s.parked).slice(0, 8).map((s) => ({ id: s.sessionId, title: s.title })));
+      const targets = JSON.stringify(reach.filter((s) => s.attachable && !s.parked).slice(0, 8).map((s) => ({ id: s.sessionId, title: s.title })));
       if (targets !== appSent) APP.setTargets((appSent = targets));
     }
-  }, [live]);
+  }, [reach]);
 
   useEffect(() => {
     const n = (live || []).filter((s) => s.state === "needs-you" && !s.parked).length;
@@ -267,11 +269,7 @@ function App() {
     setTimeout(() => setToast((t) => (t === msg ? null : t)), 3500);
   }, []);
 
-  const bay = (st) => (live || []).filter((x) => !x.pinned && !x.parked && x.state === st);
-  const ordered = (live || []).filter((x) => x.pinned && !x.parked)
-    .concat(["needs-you", "your-turn", "working"].flatMap(bay))
-    .concat((live || []).filter((x) => x.parked))
-    .concat(bay("stopped"));
+  const ordered = arrange(live);
   const keys = useRef({});
   keys.current = { ordered, route, cursor, creating, list: view.list, fly, setFly };
   useEffect(() => {
@@ -359,7 +357,7 @@ function App() {
           ${down.length > 0 && html`<span class="tag" title=${down.map((p) => `${p.name}: ${p.error}`).join("\n")}>${down.map((p) => p.name).join(", ")} unreachable</span>`}
           <span class="grow"></span>
           ${apps?.length > 0 && html`<${AppsMenu} apps=${apps} live=${all} say=${say} reload=${loadApps} />`}
-          <button class="btn talk" onClick=${() => talk(false, false)} title="Assistant: ask about or drive your sessions (a)" aria-label="Assistant"><span class="mi">${ICON.chat}</span></button>
+          <${HubButton} hub=${hub} onClick=${() => talk(false, false)} />
           <button class="btn talk" onClick=${() => setCreating(true)} title="New session (n)" aria-label="New session"><span class="mi">${ICON.plus}</span></button>
           <${Menu} cls="btn talk" aria="More" width=${250} label=${html`<span class="mi">${ICON.more}</span>`} items=${[
             { cls: "viewitem", title: "Jump to any session, run any action", run: () => setPalette(true), label: html`<span class="mi">${ICON.search}</span><span class="grow">Search and commands</span><kbd>${MAC ? "⌘" : "Ctrl+"}K</kbd>` },
@@ -384,7 +382,7 @@ function App() {
     ${palette && html`<${Palette} live=${live || []} sel=${sel} say=${say} home=${me.host} onClose=${() => setPalette(false)}
       actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: () => (location.hash = "#/assist"), ask: () => talk(false, false) }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
-    ${assisting && html`<${Assist} live=${live} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
+    ${assisting && html`<${Assist} live=${reach} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
     ${pagesHome && html`<${PagesHome} live=${all} say=${say} onClose=${closePages} />`}
     ${backlog && html`<${BacklogPage} live=${all} say=${say} onClose=${closeBacklog} onAdd=${setCreating} />`}
     ${alone && (appOpen
@@ -452,6 +450,23 @@ function monograms(names) {
     out.set(n, m);
   }
   return out;
+}
+
+function arrange(list) {
+  const bay = (st) => (list || []).filter((x) => !x.pinned && !x.parked && x.state === st);
+  return (list || []).filter((x) => x.pinned && !x.parked)
+    .concat(["needs-you", "your-turn", "working"].flatMap(bay))
+    .concat((list || []).filter((x) => x.parked))
+    .concat(bay("stopped"));
+}
+
+function HubButton({ hub, onClick }) {
+  const st = hub?.state;
+  const word = st === "needs-you" ? ["needs you", hub.activity].filter(Boolean).join(": ") : hub?.activity || (st === "working" ? "working" : "");
+  const busy = st === "needs-you" || st === "working" || !!hub?.activity;
+  return html`<button class="btn talk hub ${busy ? `busy ${st}` : ""}" onClick=${onClick} aria-label="Assistant"
+    title=${`Assistant: ${hub ? word || "idle" : "ask about or drive your sessions"} (a)`}>
+    <span class="mi">${ICON.chat}</span>${busy && html`<span class="hubword">${word}</span>`}</button>`;
 }
 
 function Rail({ live, sel, onHover, onPick }) {
