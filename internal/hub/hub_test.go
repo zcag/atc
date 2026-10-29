@@ -79,22 +79,39 @@ func fakeClaude() {
 			se(map[string]any{"type": "content_block_start", "content_block": map[string]any{"type": "tool_use", "name": "Bash"}})
 			se(map[string]any{"type": "content_block_stop"})
 			var joined []string
-			for wait := time.After(400 * time.Millisecond); ; {
-				select {
-				case l := <-lines:
-					var j struct {
-						Type    string
-						Message struct{ Content string }
+			interrupted := func(d time.Duration) bool {
+				for wait := time.After(d); ; {
+					select {
+					case l := <-lines:
+						var j struct {
+							Type    string
+							Request struct{ Subtype string }
+							Message struct{ Content string }
+						}
+						json.Unmarshal([]byte(l), &j)
+						if j.Type == "control_request" && j.Request.Subtype == "interrupt" {
+							return true
+						}
+						if j.Type == "user" {
+							replay(j.Message.Content)
+							joined = append(joined, last(j.Message.Content))
+						}
+						continue
+					case <-wait:
 					}
-					json.Unmarshal([]byte(l), &j)
-					if j.Type == "user" {
-						replay(j.Message.Content)
-						joined = append(joined, last(j.Message.Content))
-					}
-					continue
-				case <-wait:
+					return false
 				}
-				break
+			}
+			if interrupted(400 * time.Millisecond) {
+				textBlock("tool cancelled")
+				emit(map[string]any{"type": "result", "subtype": "error_during_execution"})
+				continue
+			}
+			emit(map[string]any{"type": "user", "parent_tool_use_id": nil, "message": map[string]any{"role": "user",
+				"content": []map[string]any{{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}}}})
+			if interrupted(200 * time.Millisecond) {
+				emit(map[string]any{"type": "result", "subtype": "error_during_execution"})
+				continue
 			}
 			textBlock("done " + strings.Join(joined, "+"))
 		} else {
@@ -367,6 +384,22 @@ func TestInterruptByPhoneOnlyWhenItsOwn(t *testing.T) {
 	}
 	if es := atc.until("done"); !es[len(es)-1].Interrupted {
 		t.Fatalf("done %v", es[len(es)-1])
+	}
+}
+
+func TestBargeInLetsTheToolFinish(t *testing.T) {
+	r := newRig(t, CallConfig{})
+	phone := r.dial("phone")
+	phone.send("message", "TOOL send it")
+	phone.until("tool")
+	phone.send("interrupt", "")
+	es := phone.until("done")
+	if strings.Contains(said(es), "cancelled") || strings.Contains(said(es), "done") || !es[len(es)-1].Interrupted {
+		t.Fatalf("said %q, done %v", said(es), es[len(es)-1])
+	}
+	phone.send("message", "next")
+	if es := phone.until("done"); !strings.Contains(said(es), "echo: next") {
+		t.Fatalf("after the cut: %q", said(es))
 	}
 }
 

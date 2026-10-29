@@ -90,6 +90,8 @@ type turn struct {
 	text        strings.Builder
 	wrote       map[string]bool
 	interrupted bool
+	tools       int
+	cutAfter    bool
 }
 
 type sub struct {
@@ -302,7 +304,7 @@ func (h *Hub) write(v any) error {
 }
 
 // Interrupt stops the running turn. A channel that is not forcing it (the phone's barge-in)
-// only cuts what is being said to it.
+// only cuts what is being said to it, and lets a running tool finish first so its result is kept.
 func (h *Hub) Interrupt(ch string, force bool) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -310,8 +312,11 @@ func (h *Hub) Interrupt(ch string, force bool) bool {
 	if t == nil || !force && t.route != ch {
 		return false
 	}
-	h.write(map[string]any{"type": "control_request", "request_id": fmt.Sprintf("int%d", time.Now().UnixNano()),
-		"request": map[string]string{"subtype": "interrupt"}})
+	if !force && t.tools > 0 {
+		t.cutAfter = true
+	} else {
+		h.cut()
+	}
 	t.interrupted = true
 	for _, c := range t.channels {
 		if c != ch {
@@ -319,6 +324,11 @@ func (h *Hub) Interrupt(ch string, force bool) bool {
 		}
 	}
 	return true
+}
+
+func (h *Hub) cut() {
+	h.write(map[string]any{"type": "control_request", "request_id": fmt.Sprintf("int%d", time.Now().UnixNano()),
+		"request": map[string]string{"subtype": "interrupt"}})
 }
 
 type usage struct {
@@ -332,6 +342,7 @@ type line struct {
 	Subtype   string `json:"subtype"`
 	SessionID string `json:"session_id"`
 	IsReplay  bool   `json:"isReplay"`
+	Parent    string `json:"parent_tool_use_id"`
 	Message   struct {
 		Content json.RawMessage `json:"content"`
 		Usage   *usage          `json:"usage"`
@@ -425,6 +436,18 @@ func (h *Hub) event(l line) {
 			h.turn.channels = append(h.turn.channels, route)
 		}
 		h.turn.route = route
+	case l.Type == "user" && !l.IsReplay && l.Parent == "" && h.turn != nil && h.turn.tools > 0:
+		var blocks []struct{ Type string }
+		json.Unmarshal(l.Message.Content, &blocks)
+		for _, b := range blocks {
+			if b.Type == "tool_result" {
+				h.turn.tools--
+			}
+		}
+		if h.turn.tools <= 0 && h.turn.cutAfter {
+			h.turn.tools, h.turn.cutAfter = 0, false
+			h.cut()
+		}
 	case l.Type == "assistant" && l.Message.Usage != nil:
 		u := l.Message.Usage
 		h.context = u.Input + u.CacheRead + u.CacheCreate
@@ -463,6 +486,9 @@ func (h *Hub) stream(l line) {
 				h.emit(Event{Type: "text", Channel: t.block, Delta: "\n\n"})
 			}
 		case "tool_use":
+			if l.Parent == "" {
+				t.tools++
+			}
 			h.emit(Event{Type: "tool", Channel: t.route, Name: ev.ContentBlock.Name})
 		}
 	case "content_block_delta":
