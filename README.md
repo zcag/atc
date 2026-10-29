@@ -163,6 +163,12 @@ unreachable and the rest keep working.
 cannot: notifications, the device's own text-to-speech for voice, and being your phone's digital
 assistant, so holding the side key opens atc listening, even on the lock screen.
 
+- **Pages during a call:** while the phone is in a call, a page a session shows you with `atc show`
+  opens on the screen by itself instead of arriving as a notification, through the assistant, so
+  atc must be the phone's digital assistant. The call keeps running behind it.
+- **atc links:** the app handles `https://atc.example` links (the host is set in the manifest). Android
+  does not verify a private host, so turn it on once: Settings › Apps › atc › Set as default ›
+  Supported web addresses.
 - **Install:** the server offers the app at `/app/` (set `ATC_APP_DIR` to the folder holding
   `atc.apk` and `version.json`, which `make android` produces). The app checks that folder and
   updates itself.

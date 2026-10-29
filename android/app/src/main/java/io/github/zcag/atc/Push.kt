@@ -10,6 +10,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import org.json.JSONObject
@@ -30,8 +31,10 @@ class Push : PushService() {
     override fun onMessage(message: PushMessage, instance: String) {
         val text = String(message.content)
         if (Feed.parse(text) != null) Live.save(this, text)
-        else Note.parse(message.content)?.let { notify(this, it) }
+        else Note.parse(message.content)?.let { if (!(it.page && onCall() && AssistService.open(it.url))) notify(this, it) }
     }
+
+    private fun onCall() = getSystemService(AudioManager::class.java).mode == AudioManager.MODE_IN_CALL
 
     override fun onRegistrationFailed(reason: FailedReason, instance: String) {
         Prefs(this).pushError = reason.name.lowercase()

@@ -30,6 +30,7 @@ class Note(
     val session: String = "", val replies: List<String> = emptyList(),
 ) {
     val id get() = tag.hashCode()
+    val page get() = Regex("^/#/s/[^/]+/p/").containsMatchIn(url)
 
     companion object {
         fun parse(bytes: ByteArray) = runCatching {

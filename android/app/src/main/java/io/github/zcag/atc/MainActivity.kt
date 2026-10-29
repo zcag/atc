@@ -191,7 +191,11 @@ class MainActivity : Activity() {
 
     private fun open(intent: Intent, assist: Boolean) {
         val server = prefs.server ?: return setup()
-        val path = intent.getStringExtra(EXTRA_PATH) ?: if (assist) "/#/assist" else null
+        val path = intent.getStringExtra(EXTRA_PATH)
+            ?: intent.data?.takeIf { it.host == serverHost() }?.let { u ->
+                u.encodedPath.orEmpty().ifEmpty { "/" } + u.encodedQuery?.let { "?$it" }.orEmpty() + u.encodedFragment?.let { "#$it" }.orEmpty()
+            }
+            ?: if (assist) "/#/assist" else null
         val w = web
         if (w == null) browse(server + (path ?: "/")) else if (path != null) w.loadUrl(server + path)
     }

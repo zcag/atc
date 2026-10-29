@@ -210,7 +210,7 @@ func pageAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 			key := x.SessionID + "/" + p.Name
 			now[key] = p.Shown
 			was, ok := prev[key]
-			if prev == nil || (ok && !p.Shown.After(was)) || x.Parked || x.App != "" || viewing(x) {
+			if prev == nil || (ok && !p.Shown.After(was)) || x.Parked && x.Kind != "hub" || x.App != "" || viewing(x) {
 				continue
 			}
 			out = append(out, push.Message{Title: x.Title, Tag: key, URL: "/#/s/" + x.SessionID + "/p/" + p.Name,

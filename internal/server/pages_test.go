@@ -141,4 +141,15 @@ func TestPageAlerts(t *testing.T) {
 	if _, ms = pageAlerts(seen, list(at.Add(time.Minute)), func(sessions.Session) bool { return true }); len(ms) != 0 {
 		t.Fatalf("pushed while you watch the session: %v", ms)
 	}
+	parked := func(kind string) []sessions.Session {
+		l := list(at.Add(time.Minute))
+		l[0].Parked, l[0].Kind = true, kind
+		return l
+	}
+	if _, ms = pageAlerts(seen, parked(""), never); len(ms) != 0 {
+		t.Fatalf("pushed for a parked session: %v", ms)
+	}
+	if _, ms = pageAlerts(seen, parked("hub"), never); len(ms) != 1 {
+		t.Fatalf("the assistant's page must push even when parked: %v", ms)
+	}
 }
