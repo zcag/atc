@@ -349,7 +349,7 @@ func (s *Server) watchAgents() {
 		}
 		for _, a := range s.localAgents() {
 			cur := agentSession(live, a.Name)
-			if cur == nil || cur.State != sessions.YourTurn && cur.State != sessions.Stopped {
+			if cur == nil || !cur.Parked || cur.State != sessions.YourTurn && cur.State != sessions.Stopped {
 				continue
 			}
 			p, _ := a.policy()

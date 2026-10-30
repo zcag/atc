@@ -286,7 +286,8 @@ you can park it by hand. A wake-up leaves it parked: it works out of sight and u
 with `unpark`) only when it has something for you. Typing to it unparks it. A question or a
 permission prompt brings it back even while parked (this holds for any parked session).
 
-**Starting over.** When the conversation has been quiet for `reset.quiet` (default 6h) and is past
+**Starting over.** Only while it is parked, so never in the middle of work with you: when the
+conversation has been quiet for `reset.quiet` (default 6h) and is past
 `reset.over` tokens (80k), or quiet for `reset.capQuiet` (10m) and past `reset.cap` (150k), atc asks
 it for a handover note, starts a new conversation with that note as its first message (parked if
 the old one was), and takes the old one off Claude's list under a dated name, its transcript kept.
