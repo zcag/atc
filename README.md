@@ -241,8 +241,8 @@ email/
 - `title`, `icon` (one of mail, sun, present, lira, target, inbox, calendar, chart, pr, globe,
   pulse, doc, or an emoji) and `color` (blue, amber, violet, green, red, teal, pink, orange, slate,
   or a hex color): how it looks.
-- `dir`: the folder its conversation works in, default the agent's own folder. `args`: more Claude
-  Code flags.
+- `dir`: the folder its conversation works in, default the agent's own folder. With one, its
+  conversation also shows in that project's tab. `args`: more Claude Code flags.
 - `every`, `from`, `check`, `prompt`: when it wakes up (below). `prompt` also starts its first
   conversation from atc.
 - `reset`: when its conversation starts over (below).
@@ -298,7 +298,7 @@ This is the assistant's rule too (`internal/startover`).
 **In the UI.** An agent's conversation is a session like any other, under the agent's title and
 icon. The **Agents** tab (the robot icon next to All in the project tabs) lists them the way a project tab lists
 its sessions, parked ones included, with the same dots; agents with no conversation yet are listed
-below by name. Agent sessions stay out of the project tabs. An agent's tag, in place of the project
+below by name. An agent with a `dir` also shows in that project's tab; the rest stay out of the project tabs. An agent's tag, in place of the project
 tag, and its name on the Agents tab open its details: what it is doing, when it wakes and when next,
 its check and prompt, when it starts over and last did, its pages and folder, with Open (or Start),
 Wake, Park and Start over. The assistant (the hub's conversation, below) is listed there too, with

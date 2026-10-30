@@ -569,7 +569,7 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
   }, [tabs, only, agents]);
-  const mine = (s) => (only === AGENTS ? !!s.agent : !only || (!s.agent && project(s.cwd).name === only));
+  const mine = (s) => (only === AGENTS ? !!s.agent : !only || (!homeless(s) && project(s.cwd).name === only));
   const restingHub = (s) => s.kind === "hub" && s.state === "your-turn";
   const live = only === AGENTS ? runs && runs.filter((s) => s.agent && !restingHub(s)) : all && all.filter(mine);
   const [hist, setHist] = useState(null);
@@ -1059,7 +1059,7 @@ const RANK = { "needs-you": 0, "your-turn": 1, working: 2 };
 function projectTabs(live, keep) {
   const by = new Map();
   for (const x of live) {
-    if (x.state === "past" || x.state === "stopped" || x.agent) continue;
+    if (x.state === "past" || x.state === "stopped" || homeless(x)) continue;
     const n = project(x.cwd).name;
     if (!by.has(n)) by.set(n, { name: n, pips: [] });
     if (!away(x) && RANK[x.state] !== undefined) by.get(n).pips.push(x.state);
@@ -3324,6 +3324,7 @@ function BacklogRow({ it, stage, run, tag, patch, remove, start }) {
 const AGENTS = "@agents";
 let AGENT_INFO = {};
 const away = (s) => !!s.parked && s.state !== "needs-you";
+const homeless = (s) => !!s.agent && !AGENT_INFO[s.agent]?.dir;
 const hiddenRun = (s) => (s.kind === "hub" || (!!s.agent && !!s.parked)) && s.state !== "needs-you";
 const agentApi = (a, what, body) => api(`/api/agents/${encodeURIComponent(a)}/${what}`, { method: "POST", body });
 const mins = (ns) => Math.round(ns / 6e10);
