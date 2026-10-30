@@ -760,13 +760,13 @@ func (m model) row(s sessions.Session, sel bool) []string {
 	if s.Pinned {
 		meta = append(meta, st(plain.Foreground(accent)).Render("pinned"))
 	}
-	if s.App != "" {
-		meta = append(meta, st(dim).Render("app "+s.App))
+	if s.Agent != "" {
+		meta = append(meta, st(dim).Render("@"+s.Agent))
 	}
 	if s.Parked {
 		meta = append(meta, st(dim).Render("parked"))
 	}
-	if s.Parked || s.Hidden() {
+	if s.Away() {
 		stateSt = st(dim)
 	}
 	prompt, promptSt := "", st(dim)
@@ -780,7 +780,7 @@ func (m model) row(s sessions.Session, sel bool) []string {
 	}
 	lines := []string{
 		bar + stateSt.Render(ansi.Truncate(fmt.Sprintf("%-*s", stateW, state), stateW, "")) +
-			map[bool]lipgloss.Style{true: st(dim), false: st(bold)}[s.Parked || s.Hidden()].Render(ansi.Truncate(s.Title, titleW, "…")),
+			map[bool]lipgloss.Style{true: st(dim), false: st(bold)}[s.Away()].Render(ansi.Truncate(s.Title, titleW, "…")),
 		indent + strings.Join(meta, st(dim).Render(" · ")),
 		indent + promptSt.Render(ansi.Truncate(prompt, max(8, m.w-2-stateW-1), "…")),
 	}

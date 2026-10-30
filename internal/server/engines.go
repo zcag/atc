@@ -7,6 +7,7 @@ import (
 	"log"
 	"maps"
 	"net/http"
+	"time"
 
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/store"
@@ -50,21 +51,23 @@ func (s *Server) engine(name string) (Engine, bool) {
 	return Engine{}, false
 }
 
-func (s *Server) tag(ctx context.Context, id, engine, app string) {
-	if engine == "" && app == "" {
-		return
-	}
-	agents, err := s.M.CLI.Agents(ctx)
-	if err != nil {
-		log.Printf("tag %s: %v", id, err)
-		return
-	}
-	for _, a := range agents {
-		if a.ID == id {
-			s.M.Store.Update(a.SessionID, func(m *store.Meta) { m.Engine, m.App = cmp.Or(engine, m.Engine), cmp.Or(app, m.App) })
+// tag sets atc's own fields of a session Claude just started or resumed, once it lists it.
+func (s *Server) tag(ctx context.Context, id string, f func(*store.Meta)) {
+	for range 10 {
+		agents, err := s.M.CLI.Agents(ctx)
+		if err != nil {
+			log.Printf("tag %s: %v", id, err)
 			return
 		}
+		for _, a := range agents {
+			if a.ID == id && a.SessionID != "" {
+				s.M.Store.Update(a.SessionID, f)
+				return
+			}
+		}
+		time.Sleep(time.Second)
 	}
+	log.Printf("tag %s: Claude does not list it", id)
 }
 
 func (s *Server) engineOf(sid string) (Engine, bool) {

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/claude"
+	"github.com/zcag/atc/internal/startover"
 )
 
 const (
@@ -45,10 +46,7 @@ type Config struct {
 	// Mode is the text that tells the session how to talk on a channel, "" for none.
 	Mode func(channel string) string
 
-	Quiet    time.Duration // quiet this long and past Small tokens: start over
-	Small    int
-	CapQuiet time.Duration // quiet this long and past Cap tokens: start over
-	Cap      int
+	Reset startover.Policy
 
 	Call CallConfig
 	Now  func() time.Time
@@ -641,8 +639,7 @@ func (h *Hub) freshStart() {
 	h.cmd.Process.Signal(syscall.SIGTERM)
 }
 
-// Watch applies the reset rule: a quiet session goes on while it is small, and starts over
-// once it has been quiet for Quiet and is past Small tokens, or quiet for CapQuiet and past Cap.
+// Watch applies the reset rule (cfg.Reset) every tick.
 func (h *Hub) Watch(ctx context.Context, every time.Duration) {
 	t := time.NewTicker(every)
 	defer t.Stop()
@@ -669,10 +666,7 @@ func (h *Hub) due() string {
 	if !h.idle() || h.handover != nil {
 		return ""
 	}
-	if quiet > h.cfg.Quiet && h.context > h.cfg.Small || quiet > h.cfg.CapQuiet && h.context > h.cfg.Cap {
-		return fmt.Sprintf("quiet %s, context %d", quiet.Round(time.Minute), h.context)
-	}
-	return ""
+	return h.cfg.Reset.Due(quiet, h.context)
 }
 
 // Stop ends the claude process for good, for tests and shutdown.

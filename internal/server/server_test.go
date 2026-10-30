@@ -214,9 +214,10 @@ func TestAlerts(t *testing.T) {
 			Summary: &summary.Summary{Status: "Found: the cache is stale", Gist: []string{"Clearing it fixes the test"}, Replies: []string{"clear it", "why stale?"}}},
 	}
 	got, later := alerts(prev, list, func(s sessions.Session) bool { return s.ID == "open0001" })
-	if len(got) != 3 {
-		t.Fatalf("want 3 alerts, got %+v", got)
+	if len(got) != 4 || got[2].Title != "F" {
+		t.Fatalf("want 4 alerts, a parked session that needs you among them, got %+v", got)
 	}
+	got = append(got[:2], got[3])
 	if got[0].Title != "A" || got[0].Body != "All tests pass." || got[0].URL != "/#/s/a" {
 		t.Errorf("finished turn: %+v", got[0])
 	}

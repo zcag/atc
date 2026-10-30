@@ -13,7 +13,7 @@ type Meta struct {
 	Parked    bool   `json:"parked,omitempty"`
 	Engine    string `json:"engine,omitempty"`
 	Live      string `json:"live,omitempty"`
-	App       string `json:"app,omitempty"`
+	Agent     string `json:"agent,omitempty"`
 	ReportsTo string `json:"reportsTo,omitempty"`
 	Next      string `json:"next,omitempty"`
 }

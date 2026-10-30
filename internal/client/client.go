@@ -230,6 +230,12 @@ func (c *Client) Resume(sid string) (string, error) {
 	return r.ID, err
 }
 
+// Message wakes an agent with text: its conversation, resumed or started as needed.
+func (c *Client) Message(agent, text string) (string, error) {
+	var r struct{ ID string }
+	return r.ID, c.do("POST", "/api/agents/"+url.PathEscape(agent)+"/message", map[string]string{"text": text}, &r)
+}
+
 // Send types text into a session. From inside a Claude session it says which one sent it,
 // so the hub hears it as another session rather than the user typing.
 func (c *Client) Send(id, text string) error {

@@ -79,7 +79,7 @@ func noteAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 		switch {
 		case x.Note.Urgent:
 			urgent = append(urgent, m)
-		case !x.Parked && !viewing(x):
+		case !x.Away() && !viewing(x):
 			normal = append(normal, m)
 		}
 	}

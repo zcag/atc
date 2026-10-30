@@ -18,26 +18,10 @@ type Preset struct {
 	Args     []string `json:"args,omitempty"`
 	Worktree bool     `json:"worktree,omitempty"`
 	Host     string   `json:"host,omitempty"`
-	Every    string   `json:"every,omitempty"`
-	From     string   `json:"from,omitempty"`
-	Check    string   `json:"check,omitempty"`
-	Prompt   string   `json:"prompt,omitempty"`
-	Command  string   `json:"command,omitempty"`
-	App      bool     `json:"app,omitempty"`
-	Title    string   `json:"title,omitempty"`
-	Open     string   `json:"open,omitempty"`
-	Icon     string   `json:"icon,omitempty"`
-	Color    string   `json:"color,omitempty"`
 }
 
 func LoadPresets(path string) ([]Preset, error) {
-	list, err := loadList[Preset](path)
-	for _, p := range list {
-		if _, e := p.interval(); e != nil {
-			return nil, fmt.Errorf("%s: %w", path, e)
-		}
-	}
-	return list, err
+	return loadList[Preset](path)
 }
 
 func loadList[T any](path string) ([]T, error) {

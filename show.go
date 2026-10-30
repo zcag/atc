@@ -63,7 +63,6 @@ table); details.disclose (a collapsible block); .btn with .primary .quiet .dange
 t-hot t-turn t-work t-live t-stop) colors .edge, .dot, .pill, .stat, .meter and
 .callout.
 
-  atc show <file> --app <name> show it as that app's page, from any script (no session)
   atc show --list              this session's pages
   atc show --off <name>        take a page down
   atc show --state <name>      the page's data, as JSON (see atc.state)
@@ -104,8 +103,8 @@ any args: declare only commands whose worst case with arbitrary args is acceptab
 Links to other sites open outside atc on their own.
 
 Inside a session atc knows which one it is; anywhere else add --session <session>.
-Inside a run of an app (a preset with "app": true) pages belong to the app, not the
-run: the next run shows and reads the same pages and state (atc state app:<name>).
+Inside an agent's conversation pages belong to the agent, not the conversation: the
+next one shows and reads the same pages and state (atc state @<name>).
 `
 
 func show(args []string) error {
@@ -141,11 +140,6 @@ func show(args []string) error {
 			note, err = val()
 		case flag == "session":
 			ref, err = val()
-		case flag == "app":
-			var app string
-			if app, err = val(); err == nil {
-				ref = "app:" + app
-			}
 		case flag == "action":
 			var v string
 			if v, err = val(); err == nil {
@@ -169,7 +163,7 @@ func show(args []string) error {
 	}
 	c := client.Load()
 	sid := os.Getenv("CLAUDE_CODE_SESSION_ID")
-	if strings.HasPrefix(ref, "app:") {
+	if strings.HasPrefix(ref, "@") {
 		sid = ref
 	} else if ref != "" {
 		s, err := c.Find(ref, true)
@@ -179,7 +173,7 @@ func show(args []string) error {
 		sid = s.SessionID
 	}
 	if sid == "" {
-		return fmt.Errorf("not inside a Claude session, so atc can't tell whose page this is; add --session <session> or --app <name>")
+		return fmt.Errorf("not inside a Claude session, so atc can't tell whose page this is; add --session <session>")
 	}
 	switch mode {
 	case "list", "l":
@@ -266,7 +260,7 @@ func stateCmd(args []string) error {
 	}
 	c := client.Load()
 	sid, title := fs.Arg(0), fs.Arg(0)
-	if !strings.HasPrefix(sid, "app:") {
+	if !strings.HasPrefix(sid, "@") {
 		s, err := c.Find(sid, true)
 		if err != nil {
 			return err

@@ -42,8 +42,8 @@ import (
 )
 
 type Server struct {
-	cmdMu   sync.Mutex
-	cmds    map[string]*CommandRun
+	agentMu map[string]*sync.Mutex
+	wakes   map[string]time.Time
 	M       *sessions.Manager
 	Term    *attach.Hub
 	Web     fs.FS
@@ -56,8 +56,10 @@ type Server struct {
 	Browser *browser.Browser
 	Peers   []Peer
 	Presets []Preset
-	Engines []Engine
-	Voice   Voice
+	// AgentsDir holds a folder per agent; every machine reads it and runs the ones naming it.
+	AgentsDir string
+	Engines   []Engine
+	Voice     Voice
 
 	WhatsApp *whatsapp.Client
 	Hub      *hub.Client
@@ -129,7 +131,8 @@ func (s *Server) Handler() http.Handler {
 	}
 	go s.poll()
 	s.watchOpenCode()
-	s.schedule()
+	go s.schedule()
+	go s.watchAgents()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
@@ -157,14 +160,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/guess", s.guess)
 	mux.HandleFunc("GET /api/widget", s.widget)
 	mux.HandleFunc("GET /api/presets", s.presets)
-	mux.HandleFunc("POST /api/presets/{name}/run", s.runPreset)
 	mux.HandleFunc("GET /api/backlog", s.backlogList)
 	mux.HandleFunc("POST /api/backlog", s.backlogAdd)
 	mux.HandleFunc("PATCH /api/backlog/{id}", s.backlogPatch)
 	mux.HandleFunc("DELETE /api/backlog/{id}", s.backlogRemove)
 	mux.HandleFunc("POST /api/backlog/{id}/start", s.backlogStart)
 	mux.HandleFunc("POST /api/sessions/{sid}/aside", s.putAside)
-	mux.HandleFunc("GET /api/apps", s.apps)
+	mux.HandleFunc("GET /api/agents", s.agents)
+	mux.HandleFunc("POST /api/agents/{name}/message", s.agentMessage)
+	mux.HandleFunc("POST /api/agents/{name}/reset", s.agentReset)
 	mux.HandleFunc("GET /api/engines", s.engines)
 	mux.HandleFunc("POST /api/presence", s.presencePost)
 	mux.HandleFunc("POST /api/termlog", s.termLog)
@@ -584,8 +588,10 @@ func (s *Server) route(next http.Handler) http.Handler {
 		}
 		parts := strings.Split(r.URL.Path, "/")
 		host := r.URL.Query().Get("host")
-		if host == "" && len(parts) >= 4 && parts[2] == "sessions" && s.localApp(parts[3]) {
-			host = s.Host
+		if name, ok := strings.CutPrefix(parts[min(3, len(parts)-1)], agentRef); host == "" && len(parts) >= 4 && parts[2] == "sessions" && ok {
+			host = s.agentHost(name)
+		} else if host == "" && len(parts) >= 4 && parts[2] == "agents" {
+			host = s.agentHost(parts[3])
 		} else if host == "" && len(parts) >= 4 && parts[2] == "sessions" {
 			if host = s.fleet.ownerOf(parts[3]); host == "" {
 				s.fleet.gather(r.Context(), "/api/sessions?local=1")
@@ -663,11 +669,7 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 		if req.Worktree {
 			return "", badf("a git worktree needs Claude; opencode sessions start in the folder itself")
 		}
-		var pp *Preset
-		if req.Preset != "" {
-			pp = &p
-		}
-		return s.startOpenCode(ctx, dir, req.Name, req.Prompt, e, pp)
+		return s.startOpenCode(ctx, dir, req.Name, req.Prompt, e, p)
 	}
 	if req.Worktree {
 		extra = append(extra, "--worktree="+worktreeName(req.Name))
@@ -677,8 +679,7 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 	}
 	id, err := s.M.CLI.Start(ctx, dir, req.Name, req.Prompt, extra...)
 	if err == nil {
-		s.tag(ctx, id, req.Engine, p.appName())
-		s.pruneRuns(ctx, p.appName(), id)
+		s.tag(ctx, id, func(m *store.Meta) { m.Engine = cmp.Or(req.Engine, m.Engine) })
 	}
 	return id, err
 }
@@ -725,6 +726,9 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 		}
 		s.done(w, id, s.hubSend(r.Context(), channel, req.Text))
 		return
+	}
+	if req.From == "" {
+		s.unparkOnInput(r.Context(), id)
 	}
 	s.done(w, id, s.Term.Send(r.Context(), id, req.Text))
 }
@@ -1048,7 +1052,7 @@ type widgetSession struct {
 func widgetList(list []sessions.Session) []widgetSession {
 	out := []widgetSession{}
 	for _, x := range list {
-		if x.Parked || x.Hidden() || x.State == sessions.Stopped || x.State == sessions.Past {
+		if x.Away() || x.State == sessions.Stopped || x.State == sessions.Past {
 			continue
 		}
 		since := x.Last()
@@ -1117,7 +1121,7 @@ func (s *Server) pushAll(ms []push.Message, urgent bool) {
 func alerts(prev map[string]string, list []sessions.Session, viewing func(sessions.Session) bool) (out, later []push.Message) {
 	for _, x := range list {
 		was, ok := prev[x.SessionID]
-		if !ok || was == x.State || x.Parked || viewing(x) {
+		if !ok || was == x.State || x.Away() || viewing(x) {
 			continue
 		}
 		m := push.Message{Title: x.Title, Tag: x.SessionID, URL: "/#/s/" + x.SessionID}
@@ -1127,7 +1131,7 @@ func alerts(prev map[string]string, list []sessions.Session, viewing func(sessio
 			if x.Activity != "" {
 				m.Body += ": " + x.Activity
 			}
-		case x.State == sessions.YourTurn && was == sessions.Working && x.App == "":
+		case x.State == sessions.YourTurn && was == sessions.Working:
 			m.Body = cmp.Or(pushBody(x.Summary), x.LastReply, "Finished. Your turn.")
 			answerable(&m, x)
 			if x.Summary == nil && x.Summarizing {
@@ -1321,6 +1325,9 @@ func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, e
 		}
 		return id, err
 	}
+	if a, ok := s.agentNamed(s.M.Store.Get(sid).Agent); ok {
+		return s.resumeAgent(ctx, a, sid)
+	}
 	var extra []string
 	if p, ok := s.preset(name); ok {
 		var err error
@@ -1335,7 +1342,7 @@ func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, e
 	id, err := s.M.CLI.Resume(ctx, dir, sid, extra...)
 	if err == nil {
 		s.superseded(sid, id)
-		s.tag(ctx, id, e.Name, s.M.Store.Get(sid).App)
+		s.tag(ctx, id, func(m *store.Meta) { m.Engine = cmp.Or(e.Name, m.Engine) })
 	}
 	return id, err
 }

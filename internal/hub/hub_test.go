@@ -16,6 +16,8 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+
+	"github.com/zcag/atc/internal/startover"
 )
 
 func TestMain(m *testing.M) {
@@ -642,7 +644,7 @@ func TestResetHandsOver(t *testing.T) {
 
 func TestResetRule(t *testing.T) {
 	now := time.Now()
-	h := New(Config{State: t.TempDir(), Quiet: 6 * time.Hour, Small: 80_000, CapQuiet: 10 * time.Minute, Cap: 150_000,
+	h := New(Config{State: t.TempDir(), Reset: startover.Default,
 		Now: func() time.Time { return now }})
 	for _, c := range []struct {
 		quiet   time.Duration

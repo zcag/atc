@@ -65,9 +65,6 @@ func (f *fleet) remember(host string, list []sessions.Session) {
 		if s.ID != "" {
 			f.owner[s.ID] = host
 		}
-		if s.App != "" {
-			f.owner[appRef+s.App] = host
-		}
 	}
 }
 

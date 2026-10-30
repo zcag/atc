@@ -61,8 +61,8 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "give the page a name with letters or digits", http.StatusBadRequest)
 		return
 	}
-	if sid := r.PathValue("sid"); strings.HasPrefix(sid, appRef) && !s.localApp(sid) {
-		http.Error(w, "no app named "+strings.TrimPrefix(sid, appRef)+" on "+s.Host, http.StatusNotFound)
+	if sid := r.PathValue("sid"); strings.HasPrefix(sid, agentRef) && !s.localAgent(sid) {
+		http.Error(w, "no agent named "+strings.TrimPrefix(sid, agentRef)+" on "+s.Host, http.StatusNotFound)
 		return
 	}
 	if req.Open && r.PathValue("sid") != s.hubSID() {
@@ -198,7 +198,7 @@ func (s *Server) allPages(w http.ResponseWriter, r *http.Request) {
 	briefs := s.M.Briefs(want)
 	for i := range list {
 		b := briefs[list[i].Session]
-		list[i].Of, list[i].Cwd = cmp.Or(b.Title, strings.TrimPrefix(list[i].Session, appRef)), b.Cwd
+		list[i].Of, list[i].Cwd = cmp.Or(b.Title, strings.TrimPrefix(list[i].Session, agentRef)), b.Cwd
 	}
 	gather(s, w, r, "/api/pages", s.pageURLs(list), func(p *pages.Page, h string) { p.Host = h })
 }
@@ -219,7 +219,7 @@ func pageAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 			key := x.SessionID + "/" + p.Name
 			now[key] = p.Shown
 			was, ok := prev[key]
-			if prev == nil || (ok && !p.Shown.After(was)) || x.Parked || x.App != "" || viewing(x) {
+			if prev == nil || (ok && !p.Shown.After(was)) || x.Away() || viewing(x) {
 				continue
 			}
 			out = append(out, push.Message{Title: x.Title, Tag: key, URL: "/#/s/" + x.SessionID + "/p/" + p.Name,

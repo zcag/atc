@@ -27,17 +27,17 @@ func Resolve(q string, pool []sessions.Session) (sessions.Session, error) {
 	if n, err := strconv.Atoi(q); err == nil && n >= 1 && n <= len(pool) && len(q) < 4 {
 		return pool[n-1], nil
 	}
-	if app, ok := strings.CutPrefix(q, "app:"); ok {
-		var run *sessions.Session
+	if agent, ok := strings.CutPrefix(q, "@"); ok {
+		var cur *sessions.Session
 		for i, s := range pool {
-			if s.App == app && (run == nil || s.Last().After(run.Last())) {
-				run = &pool[i]
+			if s.Agent == agent && (cur == nil || s.Last().After(cur.Last())) {
+				cur = &pool[i]
 			}
 		}
-		if run == nil {
-			return sessions.Session{}, fmt.Errorf("app %s has no run yet; start one with its preset", app)
+		if cur == nil {
+			return sessions.Session{}, fmt.Errorf("agent %s has no conversation yet; atc send @%s starts one", agent, agent)
 		}
-		return *run, nil
+		return *cur, nil
 	}
 	var hits []sessions.Session
 	seen := map[string]bool{}

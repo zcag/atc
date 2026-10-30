@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -16,21 +15,21 @@ import (
 
 const checkTimeout = time.Minute
 
-func (p Preset) interval() (time.Duration, error) {
-	if p.Every == "" {
+func (a Agent) interval() (time.Duration, error) {
+	if a.Every == "" {
 		return 0, nil
 	}
-	d, err := parseEvery(p.Every)
-	_, ferr := p.anchor()
+	d, err := parseEvery(a.Every)
+	_, ferr := a.anchor()
 	switch {
 	case err != nil:
-		return 0, fmt.Errorf("preset %s: every: %w", p.Name, err)
+		return 0, fmt.Errorf("every: %w", err)
 	case ferr != nil:
-		return 0, fmt.Errorf("preset %s: from: %w", p.Name, ferr)
+		return 0, fmt.Errorf("from: %w", ferr)
 	case d <= 0:
-		return 0, fmt.Errorf("preset %s: every must be positive", p.Name)
-	case p.Check == "" && p.Prompt == "" && p.Command == "":
-		return 0, fmt.Errorf("preset %s: every needs a check, a prompt or a command", p.Name)
+		return 0, fmt.Errorf("every must be positive")
+	case a.Check == "" && a.Prompt == "":
+		return 0, fmt.Errorf("every needs a check or a prompt")
 	}
 	return d, nil
 }
@@ -48,11 +47,11 @@ func parseEvery(s string) (time.Duration, error) {
 	return time.ParseDuration(s)
 }
 
-func (p Preset) anchor() (time.Time, error) {
-	if p.From == "" {
+func (a Agent) anchor() (time.Time, error) {
+	if a.From == "" {
 		return time.Time{}, nil
 	}
-	return time.ParseInLocation("2006-01-02T15:04", p.From, time.Local)
+	return time.ParseInLocation("2006-01-02T15:04", a.From, time.Local)
 }
 
 func step(t time.Time, d time.Duration) time.Time {
@@ -72,31 +71,27 @@ func nextRun(from time.Time, d time.Duration, now time.Time) time.Time {
 	return from
 }
 
-func (p Preset) firstMessage(ctx context.Context) (string, string) {
-	got, why := p.checked(ctx)
+func (a Agent) firstMessage(ctx context.Context) (string, string) {
+	got, why := a.checked(ctx)
 	switch {
 	case why != "":
 		return "", why
-	case p.Check == "":
-		return p.Prompt, ""
-	case p.Prompt == "":
+	case a.Check == "":
+		return a.Prompt, ""
+	case a.Prompt == "":
 		return got, ""
 	}
-	return p.Prompt + "\n\n" + got, ""
+	return a.Prompt + "\n\n" + got, ""
 }
 
-func (p Preset) checked(ctx context.Context) (string, string) {
-	if p.Check == "" {
+func (a Agent) checked(ctx context.Context) (string, string) {
+	if a.Check == "" {
 		return "", ""
-	}
-	dir, err := expand(p.Dir)
-	if err != nil {
-		return "", err.Error()
 	}
 	ctx, cancel := context.WithTimeout(ctx, checkTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "sh", "-c", p.Check)
-	cmd.Dir = dir
+	cmd := exec.CommandContext(ctx, "sh", "-c", a.Check)
+	cmd.Dir = a.Folder
 	var errOut bytes.Buffer
 	cmd.Stderr = &errOut
 	out, err := cmd.Output()
@@ -110,156 +105,71 @@ func (p Preset) checked(ctx context.Context) (string, string) {
 	return got, ""
 }
 
-func busy(list []sessions.Session, id string) bool {
-	for _, x := range list {
-		if x.ID == id {
-			return x.State == sessions.Working || x.State == sessions.NeedsYou
-		}
-	}
-	return false
-}
-
+// schedule wakes each agent of this machine on its every (and from), rereading the agent
+// folders each round so an edited schedule applies without a restart. The first wake-up comes
+// one interval after atc starts or the schedule changes.
 func (s *Server) schedule() {
-	for _, p := range s.Presets {
-		if every, err := p.interval(); err != nil {
-			log.Print(err)
-		} else if every > 0 {
-			go s.every(p, every)
+	spec := map[string]string{}
+	for {
+		now := time.Now()
+		next := map[string]time.Time{}
+		for _, a := range s.localAgents() {
+			d, _ := a.interval()
+			if d == 0 {
+				continue
+			}
+			s.mu.Lock()
+			at, key := s.wakes[a.Name], a.Every+"|"+a.From
+			s.mu.Unlock()
+			if spec[a.Name] != key || at.IsZero() {
+				spec[a.Name], at = key, a.after(d, now)
+				log.Printf("agent %s: every %s, next %s", a.Name, a.Every, at.Format("Mon Jan 2 15:04"))
+			} else if !now.Before(at) {
+				at = a.after(d, now)
+				go s.tick(a)
+			}
+			next[a.Name] = at
 		}
+		s.mu.Lock()
+		s.wakes = next
+		s.mu.Unlock()
+		time.Sleep(30 * time.Second)
 	}
 }
 
-func (s *Server) every(p Preset, d time.Duration) {
-	if from, _ := p.anchor(); !from.IsZero() {
-		var last string
-		for {
-			next := nextRun(from, d, time.Now())
-			log.Printf("preset %s: every %s, next %s", p.Name, p.Every, next.Format("Mon Jan 2 15:04"))
-			time.Sleep(time.Until(next))
-			last = s.tick(context.Background(), p, last)
-		}
+func (a Agent) after(d time.Duration, now time.Time) time.Time {
+	if from, _ := a.anchor(); !from.IsZero() {
+		return nextRun(from, d, now)
 	}
-	log.Printf("preset %s: every %s", p.Name, d)
-	t := time.NewTicker(d)
-	defer t.Stop()
-	var last string
-	for range t.C {
-		last = s.tick(context.Background(), p, last)
-	}
+	return now.Add(d)
 }
 
-func (s *Server) tick(ctx context.Context, p Preset, last string) string {
-	if p.Command != "" {
-		if got, why := p.checked(ctx); why != "" {
-			log.Printf("preset %s: skip, %s", p.Name, why)
-		} else {
-			s.runCommand(p, got)
-		}
-		return ""
+func (s *Server) nextWake(name string) time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.wakes[name]
+}
+
+func (s *Server) tick(a Agent) {
+	ctx := context.Background()
+	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	list, err := s.M.Live(lctx)
+	cancel()
+	if err != nil {
+		log.Printf("agent %s: skip, no session list: %v", a.Name, err)
+		return
 	}
-	if last != "" {
-		lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		list, err := s.M.Live(lctx)
-		cancel()
-		if err != nil {
-			log.Printf("preset %s: skip, no session list: %v", p.Name, err)
-			return last
-		}
-		if busy(list, last) {
-			log.Printf("preset %s: skip, %s is still running", p.Name, last)
-			return last
-		}
+	if cur := agentSession(list, a.Name); cur != nil && (cur.State == sessions.Working || cur.State == sessions.NeedsYou) {
+		log.Printf("agent %s: skip, %s", a.Name, cur.State)
+		return
 	}
-	msg, why := p.firstMessage(ctx)
+	msg, why := a.firstMessage(ctx)
 	if why != "" {
-		log.Printf("preset %s: skip, %s", p.Name, why)
-		return last
-	}
-	id, err := s.startSession(ctx, startReq{Preset: p.Name, Prompt: msg})
-	if err != nil {
-		log.Printf("preset %s: start: %v", p.Name, err)
-		return last
-	}
-	log.Printf("preset %s: started %s", p.Name, id)
-	s.refresh()
-	return id
-}
-
-const commandTimeout = 5 * time.Minute
-
-type CommandRun struct {
-	Running bool      `json:"running,omitempty"`
-	At      time.Time `json:"at,omitzero"`
-	Code    int       `json:"code"`
-	Output  string    `json:"output,omitempty"`
-}
-
-func (s *Server) runCommand(p Preset, input string) bool {
-	s.cmdMu.Lock()
-	if s.cmds == nil {
-		s.cmds = map[string]*CommandRun{}
-	}
-	if r := s.cmds[p.Name]; r != nil && r.Running {
-		s.cmdMu.Unlock()
-		log.Printf("preset %s: skip, its command is still running", p.Name)
-		return false
-	}
-	run := &CommandRun{Running: true, At: time.Now()}
-	s.cmds[p.Name] = run
-	s.cmdMu.Unlock()
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), commandTimeout)
-		defer cancel()
-		cmd := exec.CommandContext(ctx, "sh", "-c", p.Command)
-		cmd.Dir, _ = expand(p.Dir)
-		cmd.Stdin = strings.NewReader(input)
-		out, err := cmd.CombinedOutput()
-		code := cmd.ProcessState.ExitCode()
-		if err != nil && code == 0 {
-			code = -1
-		}
-		tail := strings.TrimSpace(string(out))
-		if len(tail) > 4096 {
-			tail = tail[len(tail)-4096:]
-		}
-		log.Printf("preset %s: command exit %d in %s", p.Name, code, time.Since(run.At).Round(time.Millisecond))
-		s.cmdMu.Lock()
-		s.cmds[p.Name] = &CommandRun{At: run.At, Code: code, Output: tail}
-		s.cmdMu.Unlock()
-		s.refresh()
-	}()
-	return true
-}
-
-func (s *Server) commandRun(name string) *CommandRun {
-	s.cmdMu.Lock()
-	defer s.cmdMu.Unlock()
-	if r := s.cmds[name]; r != nil {
-		c := *r
-		return &c
-	}
-	return nil
-}
-
-func (s *Server) runPreset(w http.ResponseWriter, r *http.Request) {
-	p, ok := s.preset(r.PathValue("name"))
-	if !ok {
-		http.Error(w, "no preset named "+r.PathValue("name"), http.StatusNotFound)
+		log.Printf("agent %s: skip, %s", a.Name, why)
 		return
 	}
-	if p.Command != "" {
-		if !s.runCommand(p, "") {
-			http.Error(w, p.Name+" is already running", http.StatusConflict)
-			return
-		}
-		reply(w, map[string]string{"ok": "started"})
-		return
-	}
-	id, err := s.startSession(r.Context(), startReq{Preset: p.Name, Prompt: p.Prompt})
-	if err != nil {
-		fail(w, err)
-		return
+	if _, err := s.wakeAgent(ctx, a, "[wake-up from your schedule, every "+a.Every+"]\n"+msg); err != nil {
+		log.Printf("agent %s: wake-up: %v", a.Name, err)
 	}
 	s.refresh()
-	reply(w, map[string]string{"id": id})
 }

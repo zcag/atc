@@ -7,17 +7,17 @@ import (
 	"github.com/zcag/atc/internal/sessions"
 )
 
-func TestResolveApp(t *testing.T) {
+func TestResolveAgent(t *testing.T) {
 	now := time.Now()
 	pool := []sessions.Session{
-		{SessionID: "old", App: "email", Updated: now.Add(-time.Hour)},
-		{SessionID: "new", App: "email", Updated: now},
+		{SessionID: "old", Agent: "email", Updated: now.Add(-time.Hour)},
+		{SessionID: "new", Agent: "email", Updated: now},
 		{SessionID: "other", Title: "email"},
 	}
-	if s, err := Resolve("app:email", pool); err != nil || s.SessionID != "new" {
-		t.Fatalf("app:email = %v %v", s.SessionID, err)
+	if s, err := Resolve("@email", pool); err != nil || s.SessionID != "new" {
+		t.Fatalf("@email = %v %v", s.SessionID, err)
 	}
-	if _, err := Resolve("app:invoice", pool); err == nil {
-		t.Fatal("an app with no run should fail")
+	if _, err := Resolve("@invoice", pool); err == nil {
+		t.Fatal("an agent with no conversation should fail")
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/server"
+	"github.com/zcag/atc/internal/startover"
 	"github.com/zcag/atc/modes"
 )
 
@@ -74,10 +75,11 @@ func hubCmd(args []string) error {
 	home, _ := os.UserHomeDir()
 	state := fs.String("state", filepath.Join(home, ".local/state/atc/hub"), "where the session id and handover notes live")
 	dir := fs.String("dir", home, "the folder the session works in")
-	quiet := fs.Duration("quiet", 6*time.Hour, "")
-	small := fs.Int("small", 80_000, "")
-	capQuiet := fs.Duration("cap-quiet", 10*time.Minute, "")
-	cap := fs.Int("cap", 150_000, "")
+	d := startover.Default
+	quiet := fs.Duration("quiet", d.Quiet, "")
+	small := fs.Int("small", d.Small, "")
+	capQuiet := fs.Duration("cap-quiet", d.CapQuiet, "")
+	cap := fs.Int("cap", d.Cap, "")
 	fs.Parse(args)
 	modes.Dir = filepath.Join(client.ConfigDir(), "modes")
 	bin := cmp.Or(os.Getenv("ATC_CLAUDE_BIN"), "claude")
@@ -85,8 +87,8 @@ func hubCmd(args []string) error {
 	cargs = append(cargs, strings.Fields(os.Getenv("ATC_HUB_CLAUDE_ARGS"))...)
 	h := hub.New(hub.Config{
 		Bin: bin, Args: cargs, Dir: *dir, State: *state, Mode: modes.Text,
-		Quiet: *quiet, Small: *small, CapQuiet: *capQuiet, Cap: *cap,
-		Call: hub.CallConfig{URL: cmp.Or(os.Getenv("ATC_DELTA_CALL"), "http://127.0.0.1:8807"), Number: callNumber()},
+		Reset: startover.Policy{Quiet: *quiet, Small: *small, CapQuiet: *capQuiet, Cap: *cap},
+		Call:  hub.CallConfig{URL: cmp.Or(os.Getenv("ATC_DELTA_CALL"), "http://127.0.0.1:8807"), Number: callNumber()},
 	})
 	if err := h.Start(); err != nil {
 		return err

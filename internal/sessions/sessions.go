@@ -66,7 +66,7 @@ type Session struct {
 	Tabs           []browser.Tab    `json:"tabs,omitempty"`
 	Pinned         bool             `json:"pinned,omitempty"`
 	Parked         bool             `json:"parked,omitempty"`
-	App            string           `json:"app,omitempty"`
+	Agent          string           `json:"agent,omitempty"`
 	Root           string           `json:"root,omitempty"`
 	ReportsTo      string           `json:"reportsTo,omitempty"`
 }
@@ -142,7 +142,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		}
 		meta := m.Store.Get(a.SessionID)
 		s.Title = first(meta.Name, s.Title, a.Name, base(s.Cwd))
-		s.Pinned, s.Parked, s.Engine, s.App = meta.Pinned, meta.Parked, meta.Engine, meta.App
+		s.Pinned, s.Parked, s.Engine, s.Agent = meta.Pinned, meta.Parked, meta.Engine, meta.Agent
 		s.Root, s.ReportsTo = m.lineage(a.SessionID)
 		out = append(out, s)
 	}
@@ -160,7 +160,7 @@ func (m *Manager) History(q, dir string, limit int) []Session {
 			continue
 		}
 		s := m.build(t)
-		if s.App != "" && q == "" {
+		if s.Agent != "" && q == "" {
 			continue
 		}
 		if dir != "" && s.StartCwd != dir && s.Cwd != dir {
@@ -185,7 +185,7 @@ func (m *Manager) build(t history.Transcript) Session {
 		Cwd: t.Cwd, StartCwd: t.StartCwd, Branch: t.Branch, Model: t.Model,
 		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, Context: t.Context, PromptAt: t.PromptAt,
 		Activity: t.Activity, LastReply: t.LastReply, Summary: m.Summary.Get(t),
-		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine, Harness: t.Harness, App: meta.App,
+		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine, Harness: t.Harness, Agent: meta.Agent,
 	}
 }
 
@@ -257,7 +257,7 @@ func Sort(list []Session) {
 var rank = map[string]int{NeedsYou: 0, YourTurn: 1, Working: 2, Stopped: 4, Past: 5}
 
 func group(s Session) int {
-	if (s.Parked || s.Hidden()) && s.State != Past {
+	if s.Away() && s.State != Past {
 		return 3
 	}
 	return rank[s.State]
@@ -275,7 +275,8 @@ func less(a, b Session) bool {
 	return a.Last().After(b.Last())
 }
 
-func (s Session) Hidden() bool { return s.App != "" && s.State != NeedsYou }
+// Away is parked and not asking anything: a parked session that needs you comes back.
+func (s Session) Away() bool { return s.Parked && s.State != NeedsYou }
 
 func (s Session) Last() time.Time {
 	if s.Updated.After(s.StartedAt) {

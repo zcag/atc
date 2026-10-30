@@ -409,7 +409,7 @@ func (s *Server) waStatus(ctx context.Context) error {
 	var lines []string
 	stopped := 0
 	for _, x := range list {
-		if x.Hidden() || x.Kind == "hub" || x.Kind == "interactive" && x.PID == 0 || cmp.Or(s.M.Store.Get(x.SessionID).Name, x.Name) == waName {
+		if x.Away() || x.Kind == "hub" || x.Kind == "interactive" && x.PID == 0 || cmp.Or(s.M.Store.Get(x.SessionID).Name, x.Name) == waName {
 			continue
 		}
 		if x.State == sessions.Stopped {

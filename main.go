@@ -66,7 +66,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
       maps onto the same path under the server's home
   atc send [-report] [-wake] <session> [text...]
                                  type a message into a session, resuming it if stopped;
-                                 reads stdin when no text is given (cmd | atc send 2)
+                                 reads stdin when no text is given (cmd | atc send 2);
+                                 @name wakes that agent, starting its conversation if needed
       from inside a Claude session, -report asks the other to report back to it;
       without, the work is handed off and it does not. A stopped session is
       resumed for it only when it waits on its report, or with -wake
@@ -76,7 +77,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc stop <session>             stop it; the conversation is kept
   atc rm <session>               delete a background session
   atc rename <session> <name>    atc pin|unpin <session>
-  atc park|unpark <session>      move it out of the way: bottom of the list, no notifications
+  atc park|unpark [session]      move it out of the way: bottom of the list, no notifications;
+                                 inside a session, without one, parks that session
   atc summary [-json] [-again] <session>
                                  its final message in short: a status line, the gist and
                                  an overview; -again summarizes it anew
@@ -87,8 +89,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc state [-set] <session> [page]
                                  a page's state, as JSON; -set merges the JSON on stdin into
                                  it by top-level key (null deletes a key). page can be left
-                                 out when the session shows one; app:<name> in place of
-                                 <session> is an app's pages
+                                 out when the session shows one; @name in place of
+                                 <session> is an agent's pages
   atc notify [--urgent] [--reply TEXT]... [message...]
                                  from inside a session: a push to the user's phone that opens
                                  the session; --urgent buzzes even while they use atc
@@ -248,6 +250,7 @@ func serve(args []string) error {
 		LocalURL:  loopback(*addr),
 
 		AppDir:    os.Getenv("ATC_APP_DIR"),
+		AgentsDir: cmp.Or(os.Getenv("ATC_AGENTS"), "~/notes/agents"),
 		StateDir:  client.ConfigDir(),
 		AssistDir: os.Getenv("ATC_ASSIST_DIR"),
 
@@ -426,6 +429,9 @@ func tildePWD() string {
 }
 
 func act(cmd string, args []string) error {
+	if sid := os.Getenv("CLAUDE_CODE_SESSION_ID"); len(args) == 0 && sid != "" && (cmd == "park" || cmd == "unpark") {
+		args = []string{sid}
+	}
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") || (cmd == "rename") != (len(args) >= 2) {
 		return fmt.Errorf("usage: atc %s <session>%s", cmd, map[bool]string{true: " <name>"}[cmd == "rename"])
 	}
@@ -633,6 +639,11 @@ func sendTo(args []string) error {
 		return fmt.Errorf("nothing to send")
 	}
 	c := client.Load()
+	if agent, ok := strings.CutPrefix(args[0], "@"); ok {
+		live, _ := c.Live()
+		_, err := c.Message(agent, client.Signed(live, false, *report, text))
+		return err
+	}
 	s, err := c.Find(args[0], true)
 	if err != nil {
 		return err
@@ -703,8 +714,8 @@ func printRows(list []sessions.Session) {
 		if s.Parked {
 			tags = append(tags, "parked")
 		}
-		if s.App != "" {
-			tags = append(tags, "app "+s.App)
+		if s.Agent != "" {
+			tags = append(tags, "@"+s.Agent)
 		}
 		where := sessions.Tilde(s.Cwd, home)
 		if s.Host != "" && len(hostsOf(list)) > 1 {

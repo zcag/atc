@@ -36,10 +36,10 @@ func TestState(t *testing.T) {
 	}
 }
 
-func TestSortAppRunsWithParked(t *testing.T) {
+func TestSortParked(t *testing.T) {
 	list := []Session{
-		{SessionID: "run", App: "email", State: YourTurn},
-		{SessionID: "asks", App: "email", State: NeedsYou},
+		{SessionID: "run", Agent: "email", State: YourTurn},
+		{SessionID: "asks", Parked: true, State: NeedsYou},
 		{SessionID: "parked", Parked: true, State: YourTurn},
 		{SessionID: "chat", State: Working},
 		{SessionID: "old", State: Stopped},
@@ -49,7 +49,7 @@ func TestSortAppRunsWithParked(t *testing.T) {
 	for _, s := range list {
 		got = append(got, s.SessionID)
 	}
-	if want := "asks chat run parked old"; strings.Join(got, " ") != want {
+	if want := "asks run chat parked old"; strings.Join(got, " ") != want {
 		t.Errorf("order %v, want %s", got, want)
 	}
 }

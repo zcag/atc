@@ -21,7 +21,8 @@ const instructions = `atc is how the user runs Claude Code sessions on their mac
 	`"have another agent look at this"), or talks about another session, project or task by name, even without naming atc. ` +
 	`"sessions" shows what is open and what each is doing or asking, "read" before you summarize or answer about a session, ` +
 	`"start" for new work in a folder on a machine, "send" to pass something on, "wait" for its answer, "outputs" for what it produced ` +
-	`(running servers, pages it showed, files), "later" to put a task on the user's backlog when they ask for that, "backlog" to see it, "mark" to mark an item done or blocked. Refer to sessions by their title. Never send to the session marked as you.
+	`(running servers, pages it showed, files), "later" to put a task on the user's backlog when they ask for that, "backlog" to see it, "mark" to mark an item done or blocked. Refer to sessions by their title. Never send to the session marked as you. ` +
+	`An agent is a standing conversation under one name: send to it as @name and it wakes, resumed or started as needed.
 
 ` +
 	`Sessions talk to each other through send and start, and atc ends every such message with a line naming the sender: ` +
@@ -65,7 +66,7 @@ type Session struct {
 	InTerminal bool     `json:"inTerminal,omitempty" jsonschema:"open in someone's terminal: readable, cannot take messages"`
 	Pinned     bool     `json:"pinned,omitempty" jsonschema:"the user pinned it to the top of their list"`
 	Parked     bool     `json:"parked,omitempty"`
-	App        string   `json:"app,omitempty" jsonschema:"a run of this app (a scheduled or preset agent), not a conversation the user is having"`
+	Agent      string   `json:"agent,omitempty" jsonschema:"the standing agent this conversation belongs to; send to it as @name"`
 	You        bool     `json:"you,omitempty" jsonschema:"this is the session calling the tool"`
 	Branch     string   `json:"branch,omitempty"`
 	Doing      string   `json:"doing,omitempty" jsonschema:"what it is doing right now, while working"`
@@ -90,7 +91,7 @@ type list struct {
 }
 
 type ref struct {
-	Session string `json:"session" jsonschema:"a session ref, short id, a unique piece of its title, or app:<name> for that app's latest run"`
+	Session string `json:"session" jsonschema:"a session ref, short id, a unique piece of its title, or @name for that agent"`
 }
 
 type readIn struct {
@@ -100,7 +101,7 @@ type readIn struct {
 }
 
 type sendIn struct {
-	Session string `json:"session" jsonschema:"a session ref, short id, a unique piece of its title, or app:<name> for that app's latest run"`
+	Session string `json:"session" jsonschema:"a session ref, short id, a unique piece of its title, or @name for that agent"`
 	Text    string `json:"text" jsonschema:"the message, typed into the session as if the user wrote it"`
 	Report  bool   `json:"report,omitempty" jsonschema:"ask it to answer you; only when your own next step needs the answer"`
 	Wake    bool   `json:"wake,omitempty" jsonschema:"resume it although it is stopped; only when the user asked for this message"`
@@ -129,6 +130,11 @@ type backlogIn struct {
 	Done    bool   `json:"done,omitempty" jsonschema:"include finished items"`
 }
 
+type parkIn struct {
+	Unpark  bool   `json:"unpark,omitempty" jsonschema:"bring it back into the user's list instead"`
+	Session string `json:"session,omitempty" jsonschema:"a session ref or title; default this session"`
+}
+
 type markIn struct {
 	Status string `json:"status" jsonschema:"done, blocked or ready"`
 	Why    string `json:"why,omitempty" jsonschema:"for blocked: what it waits on, in a few words"`
@@ -152,7 +158,7 @@ type backlogList struct {
 }
 
 type waitIn struct {
-	Session string `json:"session" jsonschema:"a session ref, short id, a unique piece of its title, or app:<name> for that app's latest run"`
+	Session string `json:"session" jsonschema:"a session ref, short id, a unique piece of its title, or @name for that agent"`
 	Seconds int    `json:"seconds,omitempty" jsonschema:"how long to wait at most, default 300, max 900"`
 }
 
@@ -215,6 +221,8 @@ func Run(ctx context.Context, c *client.Client) error {
 		"It shows as a suggestion from this session until the user accepts it."}, t.later)
 	mcp.AddTool(s, &mcp.Tool{Name: "mark", Description: "Mark a backlog item done, blocked (with what it waits on) or ready again. " +
 		"A session started from the backlog marks its own item: done when the work has shipped, blocked when it cannot go on without something."}, t.mark)
+	mcp.AddTool(s, &mcp.Tool{Name: "park", Description: "Park a session (default: this one): it leaves the user's list and sends no pushes until it needs them " +
+		"(a question or a permission brings it back). An agent parks itself when its work with the user is done, and unparks when it has something for them."}, t.park)
 	mcp.AddTool(s, &mcp.Tool{Name: "backlog", Description: "List the user's backlog: tasks they or agents put aside per project to start later, with status ready, blocked, started or done."}, t.backlog)
 	mcp.AddTool(s, &mcp.Tool{Name: "history", Description: "Search earlier conversations by title, prompts or folder, newest first."}, t.history)
 	return s.Run(ctx, &mcp.StdioTransport{})
@@ -268,7 +276,7 @@ func (t *tools) list(xs []sessions.Session, pool []sessions.Session) list {
 func (t *tools) view(x sessions.Session, self *sessions.Session) Session {
 	v := Session{
 		Ref: x.SessionID, Title: x.Title, State: x.State, Host: x.Host, Dir: x.Cwd, Running: x.Attachable,
-		InTerminal: x.Kind == "interactive", Pinned: x.Pinned, Parked: x.Parked, App: x.App, You: self != nil && self.SessionID == x.SessionID,
+		InTerminal: x.Kind == "interactive", Pinned: x.Pinned, Parked: x.Parked, Agent: x.Agent, You: self != nil && self.SessionID == x.SessionID,
 		Branch: x.Branch, Asked: clip(x.LastPrompt, 200), Replied: clip(x.LastReply, 300), Servers: x.Servers,
 	}
 	if x.ID != "" {
@@ -418,7 +426,27 @@ func render(msgs []history.Message, n int) string {
 	return b.String()
 }
 
+func (t *tools) park(ctx context.Context, _ *mcp.CallToolRequest, in parkIn) (*mcp.CallToolResult, done, error) {
+	live, _ := t.c.Live()
+	x, ok := client.Self(live)
+	if in.Session != "" {
+		var err error
+		if x, err = t.find(in.Session, true); err != nil {
+			return nil, done{}, err
+		}
+	} else if !ok {
+		return nil, done{}, fmt.Errorf("not inside a session atc knows; name one with session")
+	}
+	state := map[bool]string{true: "unparked", false: "parked"}[in.Unpark]
+	return nil, done{Ref: x.SessionID, Title: x.Title, State: state}, t.c.Patch(x.SessionID, map[string]any{"parked": !in.Unpark})
+}
+
 func (t *tools) send(ctx context.Context, _ *mcp.CallToolRequest, in sendIn) (*mcp.CallToolResult, done, error) {
+	if agent, ok := strings.CutPrefix(in.Session, "@"); ok {
+		live, _ := t.c.Live()
+		id, err := t.c.Message(agent, client.Signed(live, false, in.Report, in.Text))
+		return nil, done{Ref: id, Title: in.Session, State: "sent"}, err
+	}
 	x, err := t.find(in.Session, true)
 	if err != nil {
 		return nil, done{}, err

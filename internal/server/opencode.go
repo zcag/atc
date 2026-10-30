@@ -50,18 +50,15 @@ func (s *Server) watchOpenCode() {
 	})
 }
 
-func (s *Server) startOpenCode(ctx context.Context, dir, name, prompt string, e Engine, p *Preset) (string, error) {
-	op := opencode.Prompt{Text: prompt, Model: e.Model}
-	if p != nil {
-		brief, err := p.brief(dir)
-		if err != nil {
-			return "", err
-		}
-		op.Brief = brief
+func (s *Server) startOpenCode(ctx context.Context, dir, name, prompt string, e Engine, p Preset) (string, error) {
+	brief, err := p.brief(dir)
+	if err != nil {
+		return "", err
 	}
+	op := opencode.Prompt{Text: prompt, Model: e.Model, Brief: brief}
 	sid, err := s.M.OC.Start(ctx, dir, name, op)
 	if sid != "" {
-		s.M.Store.Update(sid, func(m *store.Meta) { m.Live, m.Engine, m.App = store.Running, e.Name, p.appName() })
+		s.M.Store.Update(sid, func(m *store.Meta) { m.Live, m.Engine = store.Running, e.Name })
 	}
 	return sid, err
 }
