@@ -108,6 +108,8 @@ function App() {
   const [cursor, setCursor] = useState(null);
   const [quick, setQuick] = useState(null);
   QUICK = (s, rect) => setQuick({ s, rect });
+  const [agentSheet, setAgentSheet] = useState(null);
+  AGENT_SHEET = setAgentSheet;
   const [help, setHelp] = useState(false);
   const [toast, setToast] = useState(null);
   const [limits, setLimits] = useState(null);
@@ -386,6 +388,7 @@ function App() {
     ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`}
     ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
+    ${agentSheet && html`<${AgentSheet} name=${agentSheet} live=${all} say=${say} onClose=${() => setAgentSheet(null)} reload=${loadAgents} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
     ${notifAsk && me && !updated && html`<div class="appbar" role="status">
       <span>Get a desktop notification when a session finishes or needs you, while this tab is in the background?</span>
@@ -623,7 +626,7 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
           ${agents?.length > 0 && (() => {
             const pips = (runs || []).filter((x) => x.agent && !away(x) && RANK[x.state] !== undefined).map((x) => x.state).sort((a, b) => RANK[a] - RANK[b]);
             return html`<button class="agentstab ${only === AGENTS ? "on" : ""}" onClick=${() => setOnly(only === AGENTS ? null : AGENTS)} title="Agents: standing conversations, each under one name">
-              <span class="nm">Agents</span>
+              <span class="nm" aria-label="Agents"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><rect x="2.5" y="5" width="11" height="8.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 5V2.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="2.2" r="1" fill="currentColor"/><circle cx="6" cy="9.2" r="1.1" fill="currentColor"/><circle cx="10" cy="9.2" r="1.1" fill="currentColor"/></svg></span>
               ${pips.length > 0 && html`<span class="pips">${pips.slice(0, 5).map((st) => html`<i class=${st}></i>`)}</span>`}
             </button>`;
           })()}
@@ -636,7 +639,7 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
         </nav>`}
       ${only === AGENTS ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />${(() => {
           const idle = (agents || []).filter((a) => !a.error && !(runs || []).some((x) => x.agent === a.name));
-          return idle.length > 0 && html`<p class="calm idleagents">Not running: ${idle.map((a) => html`<button class="link" title=${["Start its conversation with its prompt", ...behaviour(a)].join("\n")} onClick=${() => startAgent(a, say)}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</button>`)}</p>`;
+          return idle.length > 0 && html`<p class="calm idleagents">Not running: ${idle.map((a) => html`<button class="link" onClick=${() => AGENT_SHEET(a.name)}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</button>`)}</p>`;
         })()}`
         : mode === "triage" ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />${earlierBay}`
         : mode === "lanes" ? html`${search}${q ? past : html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} size="lrow" />
@@ -1031,6 +1034,7 @@ function Elapsed({ s }) {
 }
 
 let QUICK = () => {};
+let AGENT_SHEET = () => {};
 let PICK_PROJECT = () => {};
 const CONTAINERS = new Set(["proj", "projects", "src", "code", "dev", "work", "repos", "git", "Developer"]);
 function project(path) {
@@ -3329,23 +3333,60 @@ const soon = (at) => {
   const hm = t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   return t.toDateString() === new Date().toDateString() ? hm : `${t.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })} ${hm}`;
 };
-const behaviour = (a) => [
-  a.error,
-  a.every ? `Wakes every ${a.every}${a.from ? ` from ${a.from.replace("T", " ")}` : ""}${a.check ? `, when ${a.check} finds something` : ""}${a.next ? `. Next ${soon(a.next)}` : ""}` : "Wakes only when messaged",
-  a.rule && `Starts over when ${spanOf(a.rule.Quiet)} quiet past ${ktok(a.rule.Small)}, or ${spanOf(a.rule.CapQuiet)} quiet past ${ktok(a.rule.Cap)}`,
-  a.lastReset && `Last started over ${agoLong(a.lastReset)}`,
-].filter(Boolean);
 
 function AgentTag({ s }) {
   const a = AGENT_INFO[s.agent] || { name: s.agent };
-  return html`<span class="agenttag" role="button" title=${[`@${a.name}`, ...behaviour(a)].join("\n")}
-    onClick=${(e) => { e.stopPropagation(); TABS.set(AGENTS); }}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</span>`;
+  return html`<span class="agenttag" role="button" title=${`${agentLabel(a)}: details`}
+    onClick=${(e) => { e.stopPropagation(); AGENT_SHEET(a.name); }}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</span>`;
+}
+
+function AgentSheet({ name, live, say, onClose, reload }) {
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const k = (e) => e.key === "Escape" && onClose();
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, []);
+  const a = AGENT_INFO[name];
+  if (!a) return null;
+  const x = live.filter((v) => v.agent === name).sort((p, q) => Date.parse(q.startedAt || 0) - Date.parse(p.startedAt || 0))[0];
+  const act = (fn, done) => async () => {
+    setBusy(true);
+    try { const r = await fn(); done && done(r); reload(); } catch (e) { say(e.message); }
+    setBusy(false);
+  };
+  const open = (id) => { onClose(); go(id); };
+  const rule = a.rule && `${spanOf(a.rule.Quiet)} quiet past ${ktok(a.rule.Small)} tokens, or ${spanOf(a.rule.CapQuiet)} quiet past ${ktok(a.rule.Cap)}`;
+  const rows = [
+    ["Now", x ? `${WORD[x.state] || x.state}${x.parked ? ", parked" : ""}${x.context ? ` · ${ktok(x.context)} context` : ""}` : "no conversation"],
+    ["Wakes", a.every ? `every ${a.every}${a.from ? ` from ${a.from.replace("T", " ")}` : ""}` : "only when messaged"],
+    a.next && ["Next", soon(a.next)],
+    a.check && ["Only if", html`<code>${a.check}</code> prints something`],
+    a.prompt && ["Prompt", a.prompt],
+    ["Starts over", rule],
+    a.lastReset && ["Last did", agoLong(a.lastReset)],
+    a.pages?.length > 0 && ["Pages", a.pages.map((g) => pageTitle(g)).join(", ")],
+    ["Folder", tilde(a.folder)],
+    MULTI && ["Runs on", a.host],
+  ].filter(Boolean);
+  return html`
+    <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
+      <div class="sheet agentsheet" role="dialog" aria-label=${`${agentLabel(a)} agent`}>
+        <h3><${AppTile} a=${a} size=${24} />${agentLabel(a)}<small>@${a.name}</small><span class="grow"></span><button class="icon" onClick=${onClose} aria-label="Close">✕</button></h3>
+        ${a.error && html`<p class="err">${a.error}</p>`}
+        <dl>${rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
+        <div class="row">
+          ${x && html`<button class="btn" disabled=${busy} onClick=${act(() => api(`/api/sessions/${x.sessionId}`, { method: "PATCH", body: { parked: !x.parked } }))}>${x.parked ? "Unpark" : "Park"}</button>`}
+          ${x && x.state !== "past" && html`<button class="btn" disabled=${busy || x.state === "working"} onClick=${act(() => agentApi(name, "reset"), () => say(`${agentLabel(a)} is starting over.`))}>Start over</button>`}
+          <span class="grow"></span>
+          ${a.prompt && x && html`<button class="btn" disabled=${busy || x.state === "working"} title=${a.prompt} onClick=${act(() => agentApi(name, "message"), () => say(`Woke ${agentLabel(a)}.`))}>Wake</button>`}
+          ${x ? html`<button class="btn primary" onClick=${() => open(keyOf(x))}>Open</button>`
+            : html`<button class="btn primary" disabled=${busy || !!a.error} onClick=${act(() => agentApi(name, "message"), (r) => open(r.id))}>Start</button>`}
+        </div>
+      </div>
+    </div>`;
 }
 const SourceTag = ({ s, full }) => (s.agent ? html`<${AgentTag} s=${s} />` : html`<${ProjectTag} path=${s.cwd} full=${full} />`);
-
-const startAgent = async (a, say) => {
-  try { go((await agentApi(a.name, "message")).id); } catch (e) { say(e.message); }
-};
 
 const APP_ICONS = {
   mail: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',

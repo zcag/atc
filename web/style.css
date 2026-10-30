@@ -1005,7 +1005,18 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .atile .adot.needs { background: var(--needs); }
 .agenttag { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--ink); cursor: pointer; }
 .agenttag .atile { border-radius: 4px; }
-.projtabs button.agentstab .nm { color: var(--ink); }
+.projtabs button.agentstab { padding: 3px 8px; }
+.projtabs button.agentstab .nm { display: inline-flex; color: var(--dim); }
+.projtabs button.agentstab.on .nm, .projtabs button.agentstab:hover .nm { color: var(--ink); }
+.agentsheet { width: min(460px, 100%); }
+.agentsheet h3 { display: flex; align-items: center; gap: 9px; }
+.agentsheet h3 small { font: 400 13px var(--mono); color: var(--faint); }
+.agentsheet h3 .grow { flex: 1; }
+.agentsheet dl { display: grid; grid-template-columns: max-content 1fr; gap: 7px 14px; margin: 0 0 16px; font-size: 13.5px; }
+.agentsheet dt { color: var(--faint); }
+.agentsheet dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.agentsheet .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.agentsheet .row .grow { flex: 1; }
 .idleagents { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 .idleagents .link { display: inline-flex; align-items: center; gap: 5px; }
 
