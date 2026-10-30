@@ -976,8 +976,7 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .presetline .pick { border: 1px solid transparent; border-radius: 4px; background: none; color: var(--dim); font: inherit; padding: 0 5px; margin-left: 2px; cursor: pointer; }
 .presetline .pick.on { border-color: var(--line); color: var(--ink); }
 
-.projtabs { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; gap: 6px; height: 40px; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 0 14px 4px; background: var(--board); }
-.projtabs::-webkit-scrollbar { display: none; }
+.projtabs { position: sticky; top: 0; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 -12px; padding: 6px 14px; background: var(--board); }
 .projtabs button { flex: none; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--strip); border-radius: 999px; padding: 3px 10px; font-size: 13px; color: var(--dim); }
 .projtabs button:hover { color: var(--ink); }
 .projtabs button .nm { font-weight: 600; color: hsl(var(--ph, 0) 45% 36%); }
@@ -1448,7 +1447,7 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
   .pgbody .cards { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
 }
 
-.backlog .projtabs { margin: 0; padding: 8px 14px 4px; height: auto; position: static; border-bottom: 1px solid var(--line); }
+.backlog .projtabs { margin: 0; padding: 8px 14px 4px; position: static; border-bottom: 1px solid var(--line); }
 .projtabs .count { font-size: 11px; color: var(--faint); }
 .backlog .pghead .mi, .blrow .acts .mi { display: inline-flex; width: 14px; height: 14px; margin-right: 4px; vertical-align: -2px; }
 .backlog .pghead .mi svg, .blrow .acts .mi svg { width: 14px; height: 14px; }

@@ -587,6 +587,14 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
 
   const boardRef = useRef();
   const remeasure = useFlip(boardRef);
+  const tabsRO = useRef();
+  const tabsRef = useCallback((nav) => {
+    tabsRO.current?.disconnect();
+    const board = boardRef.current;
+    if (!nav) return board?.style.removeProperty("--stick");
+    tabsRO.current = new ResizeObserver(() => nav.parentElement?.style.setProperty("--stick", `${nav.offsetHeight}px`));
+    tabsRO.current.observe(nav);
+  }, []);
   if (!live) return html`<div class="board"><div class="skeleton"><i></i><i></i><i></i></div></div>`;
   const liveIDs = new Set((runs || live).map((s) => s.sessionId));
   const earlier = (hist || []).filter((s) => !liveIDs.has(s.sessionId) && mine(s));
@@ -620,9 +628,9 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
     ${earlierBay}`;
 
   return html`
-    <div class="board ${mode === "classic" ? "" : "v2"}" ref=${boardRef} onScroll=${remeasure} style=${tabs.length > 1 || agents?.length ? "--stick: 40px" : "--stick: 0px"}>
+    <div class="board ${mode === "classic" ? "" : "v2"}" ref=${boardRef} onScroll=${remeasure}>
       ${(tabs.length > 1 || agents?.length > 0) && html`
-        <nav class="projtabs" aria-label="Projects">
+        <nav class="projtabs" ref=${tabsRef} aria-label="Projects">
           <button class=${only ? "" : "on"} onClick=${() => setOnly(null)}>All</button>
           ${agents?.length > 0 && (() => {
             const pips = (runs || []).filter((x) => x.agent && !away(x) && RANK[x.state] !== undefined && !(x.kind === "hub" && x.state === "your-turn")).map((x) => x.state).sort((a, b) => RANK[a] - RANK[b]);
