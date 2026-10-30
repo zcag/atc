@@ -113,6 +113,7 @@ type Hub struct {
 	pending  []msg
 	held     []msg
 	turn     *turn
+	cutEarly bool
 	last     string
 	home     string
 	context  int
@@ -308,10 +309,18 @@ func (h *Hub) write(v any) error {
 
 // Interrupt stops the running turn. A channel that is not forcing it (the phone's barge-in)
 // only cuts what is being said to it, and lets a running tool finish first so its result is kept.
+// Claude Code replays a message only about two seconds after taking it, when its answer starts;
+// a cut in that time (their turn reopened right after it was sent) stops the turn before it began.
 func (h *Hub) Interrupt(ch string, force bool) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	t := h.turn
+	if t == nil && len(h.pending) > 0 && h.pending[0].channel == ch {
+		h.cut()
+		h.cutEarly = true
+		log.Printf("hub: cut %s before claude replayed it", ch)
+		return true
+	}
 	if t == nil || !force && t.route != ch {
 		return false
 	}
@@ -429,7 +438,8 @@ func (h *Hub) event(l line) {
 		}
 		h.emit(Event{Type: "read", Channel: ch})
 		if h.turn == nil {
-			h.turn = &turn{channels: []string{ch}, wrote: map[string]bool{}}
+			h.turn = &turn{channels: []string{ch}, wrote: map[string]bool{}, interrupted: h.cutEarly}
+			h.cutEarly = false
 			h.emit(Event{Type: "turn", Channel: ch})
 		} else if !slices.Contains(h.turn.channels, ch) {
 			h.turn.channels = append(h.turn.channels, ch)
@@ -459,6 +469,16 @@ func (h *Hub) event(l line) {
 		h.lastTurn = h.cfg.Now()
 		t := h.turn
 		h.turn = nil
+		if t == nil && h.cutEarly && len(h.pending) > 0 {
+			m := h.pending[0]
+			h.pending, h.cutEarly = h.pending[1:], false
+			log.Printf("hub: turn [%s] cut before it began", m.channel)
+			h.emit(Event{Type: "done", Channel: m.channel, Interrupted: true, Subtype: l.Subtype})
+			if len(h.pending) == 0 {
+				h.release()
+			}
+			return
+		}
 		if t == nil {
 			return
 		}

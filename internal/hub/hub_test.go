@@ -71,6 +71,10 @@ func fakeClaude() {
 			continue
 		}
 		text := m.Message.Content
+		if strings.Contains(text, "SLOW") && cutBeforeReplay(lines) {
+			emit(map[string]any{"type": "result", "subtype": "error_during_execution"})
+			continue
+		}
 		replay(text)
 		if strings.Contains(text, "[hub: bu oturum") {
 			textBlock("HANDOVER NOTE")
@@ -119,6 +123,17 @@ func fakeClaude() {
 		}
 		emit(map[string]any{"type": "assistant", "message": map[string]any{"usage": map[string]int{"input_tokens": tokens}}})
 		emit(map[string]any{"type": "result", "subtype": "success"})
+	}
+}
+
+// cutBeforeReplay is Claude Code taking ~2 s to replay a message: an interrupt in that time ends
+// the turn without the message ever being replayed.
+func cutBeforeReplay(lines chan string) bool {
+	select {
+	case l := <-lines:
+		return strings.Contains(l, `"interrupt"`)
+	case <-time.After(600 * time.Millisecond):
+		return false
 	}
 }
 
@@ -338,6 +353,25 @@ func TestTextWaitsForPhoneTurn(t *testing.T) {
 	}
 	if got := said(wa.until("done")); got != "echo: hello" {
 		t.Fatalf("whatsapp got %q", got)
+	}
+}
+
+func TestCutBeforeReplay(t *testing.T) {
+	r := newRig(t, CallConfig{})
+	phone := r.dial("phone")
+	phone.send("message", "SLOW half a question")
+	time.Sleep(50 * time.Millisecond)
+	phone.send("interrupt", "")
+	es := phone.until("done")
+	if got := said(es); got != "" || !es[len(es)-1].Interrupted {
+		t.Fatalf("said %q, done %+v", got, es[len(es)-1])
+	}
+	phone.send("message", "the whole question")
+	if got := said(phone.until("done")); got != "echo: the whole question" {
+		t.Fatalf("after the cut: %q", got)
+	}
+	if st := r.h.Status(); len(st.Pending) != 0 {
+		t.Fatalf("pending %v", st.Pending)
 	}
 }
 
