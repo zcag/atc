@@ -294,11 +294,12 @@ the old one was), and takes the old one off Claude's list under a dated name, it
 This is the assistant's rule too (`internal/startover`).
 
 **In the UI.** An agent's conversation is a session like any other, under the agent's title and
-icon. The **Agents** tab, next to All in the project tabs, lists them the way a project tab lists
+icon. The **Agents** tab (the robot icon next to All in the project tabs) lists them the way a project tab lists
 its sessions, parked ones included, with the same dots; agents with no conversation yet are listed
-below by name, and a click starts one with its `prompt`. Agent sessions stay out of the project
-tabs. An agent's tag in place of the project tag shows its behaviour on hover: when it wakes and when
-next, when it starts over, when it last did. It opens with its page beside the conversation, and
+below by name. Agent sessions stay out of the project tabs. An agent's tag, in place of the project
+tag, and its name on the Agents tab open its details: what it is doing, when it wakes and when next,
+its check and prompt, when it starts over and last did, its pages and folder, with Open (or Start),
+Wake, Park and Start over. It opens with its page beside the conversation, and
 **Start over** is in its menu with Park. A note from its page reaches its conversation even when
 it is stopped.
 
