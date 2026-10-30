@@ -232,7 +232,7 @@ email/
 ```
 
 ```json
-{ "host": "desktop", "title": "Email", "icon": "mail", "color": "blue", "page": true,
+{ "host": "desktop", "title": "Email", "icon": "mail", "color": "blue",
   "every": "5m", "check": "./check.sh", "prompt": "Unread mail to triage.",
   "reset": { "quiet": "6h", "over": 80000 } }
 ```
@@ -241,10 +241,10 @@ email/
 - `title`, `icon` (one of mail, sun, present, lira, target, inbox, calendar, chart, pr, globe,
   pulse, doc, or an emoji) and `color` (blue, amber, violet, green, red, teal, pink, orange, slate,
   or a hex color): how it looks.
-- `page`: open on its page rather than its chat.
 - `dir`: the folder its conversation works in, default the agent's own folder. `args`: more Claude
   Code flags.
-- `every`, `from`, `check`, `prompt`: when it wakes up (below). `prompt` is also what **Wake** sends.
+- `every`, `from`, `check`, `prompt`: when it wakes up (below). `prompt` also starts its first
+  conversation from atc.
 - `reset`: when its conversation starts over (below).
 
 Edits apply without a restart: atc rereads the folders, and the brief is read at every start and
@@ -293,14 +293,17 @@ the old one was), and takes the old one off Claude's list under a dated name, it
 **Start over** in its menu does it now. The notes are in `agents/<name>/` in atc's config folder.
 This is the assistant's rule too (`internal/startover`).
 
-**In the UI.** The **Agents** tab, next to All in the project tabs, lists every agent of every
-machine with what it is doing, its page's `headline` and `badge` (top-level keys of the page's
-state), and its behaviour: when it wakes and when next, when it starts over, its context and when it
-last started over. An agent opens on its page (with `page`) or its conversation. Its view has
-**Wake** (send its `prompt`), **Chat**, and **Park** and **Start over** in its menu; a note from its
-page reaches its conversation even when it is stopped. Agent sessions stay out of the project tabs.
+**In the UI.** An agent's conversation is a session like any other, under the agent's title and
+icon. The **Agents** tab, next to All in the project tabs, lists them the way a project tab lists
+its sessions, parked ones included, with the same dots; agents with no conversation yet are listed
+below by name, and a click starts one with its `prompt`. Agent sessions stay out of the project
+tabs. An agent's tag in place of the project tag shows its behaviour on hover: when it wakes and when
+next, when it starts over, when it last did. It opens with its page beside the conversation, and
+**Start over** is in its menu with Park. A note from its page reaches its conversation even when
+it is stopped.
 
-`GET /api/agents` lists the agents of every machine with all of the above. `POST
+`GET /api/agents` lists the agents of every machine with their behaviour, current conversation,
+and page `headline` and `badge`. `POST
 /api/agents/<name>/reset` starts one over.
 
 ## Other models

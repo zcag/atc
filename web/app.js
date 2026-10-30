@@ -177,7 +177,7 @@ function App() {
   const [usage, setUsage] = useState(location.hash === USAGE);
   const shareRoute = () => (location.hash.startsWith("#/share") ? location.hash : null);
   const [sharing, setSharing] = useState(shareRoute);
-  const aloneRoute = () => { const m = location.hash.match(/^#\/p\/([^/]+)(?:\/(.+))?$/); return m && (m[2] || m[1].startsWith(AGENT_REF)) && { sid: decodeURIComponent(m[1]), name: m[2] && decodeURIComponent(m[2]) }; };
+  const aloneRoute = () => { const m = location.hash.match(/^#\/p\/([^/]+)(?:\/(.+))?$/); return m && (m[2] || false) && { sid: decodeURIComponent(m[1]), name: m[2] && decodeURIComponent(m[2]) }; };
   const [alone, setAlone] = useState(aloneRoute);
   const [pagesHome, setPagesHome] = useState(location.hash === PAGES);
   const [backlog, setBacklog] = useState(location.hash === BACKLOG);
@@ -186,14 +186,13 @@ function App() {
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
-  const loadAgents = useCallback(() => api("/api/agents").then((l) => setAgents(l || []), () => {}), []);
-  const agentOpen = !!alone?.sid.startsWith(AGENT_REF);
+  const loadAgents = useCallback(() => api("/api/agents").then((l) => { AGENT_INFO = Object.fromEntries((l || []).map((a) => [a.name, a])); setAgents(l || []); }, () => {}), []);
   useEffect(() => {
     if (!me) return;
     loadAgents();
-    const t = setInterval(() => document.visibilityState === "visible" && loadAgents(), agentOpen || TABS.only === AGENTS ? 5000 : 20000);
+    const t = setInterval(() => document.visibilityState === "visible" && loadAgents(), 30000);
     return () => clearInterval(t);
-  }, [!!me, agentOpen]);
+  }, [!!me]);
   const talk = async (fresh, voice = true) => {
     setStarting(true);
     try {
@@ -384,9 +383,7 @@ function App() {
     ${assisting && html`<${Assist} live=${reach} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
     ${pagesHome && html`<${PagesHome} live=${all} say=${say} onClose=${closePages} />`}
     ${backlog && html`<${BacklogPage} live=${all} say=${say} onClose=${closeBacklog} onAdd=${setCreating} />`}
-    ${alone && (agentOpen
-      ? html`<${AgentView} key=${alone.sid} name=${alone.sid.slice(AGENT_REF.length)} page=${alone.name} agents=${agents} live=${all} say=${say} reload=${loadAgents} />`
-      : html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`)}
+    ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`}
     ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
@@ -569,8 +566,8 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
   }, [tabs, only, agents]);
-  const mine = (s) => !only || only === AGENTS || project(s.cwd).name === only;
-  const live = all && all.filter(mine);
+  const mine = (s) => (only === AGENTS ? !!s.agent : !only || (!s.agent && project(s.cwd).name === only));
+  const live = only === AGENTS ? runs && runs.filter((s) => s.agent) : all && all.filter(mine);
   const [hist, setHist] = useState(null);
   const [limit, setLimit] = useState(30);
 
@@ -623,10 +620,13 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
       ${(tabs.length > 1 || agents?.length > 0) && html`
         <nav class="projtabs" aria-label="Projects">
           <button class=${only ? "" : "on"} onClick=${() => setOnly(null)}>All</button>
-          ${agents?.length > 0 && html`<button class="agentstab ${only === AGENTS ? "on" : ""}" onClick=${() => setOnly(only === AGENTS ? null : AGENTS)} title="Agents: standing conversations, each under one name">
-            <span class="nm">Agents</span>
-            ${(() => { const p = agentPips(agents, runs || []); return p.length > 0 && html`<span class="pips">${p.slice(0, 5).map((st) => html`<i class=${st}></i>`)}</span>`; })()}
-          </button>`}
+          ${agents?.length > 0 && (() => {
+            const pips = (runs || []).filter((x) => x.agent && !away(x) && RANK[x.state] !== undefined).map((x) => x.state).sort((a, b) => RANK[a] - RANK[b]);
+            return html`<button class="agentstab ${only === AGENTS ? "on" : ""}" onClick=${() => setOnly(only === AGENTS ? null : AGENTS)} title="Agents: standing conversations, each under one name">
+              <span class="nm">Agents</span>
+              ${pips.length > 0 && html`<span class="pips">${pips.slice(0, 5).map((st) => html`<i class=${st}></i>`)}</span>`}
+            </button>`;
+          })()}
           ${tabs.map((t) => html`
             <button class=${only === t.name ? "on" : ""} style=${`--ph: ${hueOf(t.name)}`} onClick=${() => setOnly(only === t.name ? null : t.name)}
               title=${`${t.name}: ${t.summary || "nothing active"}`}>
@@ -634,7 +634,10 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
               ${t.pips.length > 0 && html`<span class="pips">${t.pips.slice(0, 5).map((st) => html`<i class=${st}></i>`)}${t.pips.length > 5 && html`<em>+${t.pips.length - 5}</em>`}</span>`}
             </button>`)}
         </nav>`}
-      ${only === AGENTS ? html`<${AgentsBoard} agents=${agents} live=${runs || []} say=${say} />`
+      ${only === AGENTS ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />${(() => {
+          const idle = (agents || []).filter((a) => !a.error && !(runs || []).some((x) => x.agent === a.name));
+          return idle.length > 0 && html`<p class="calm idleagents">Not running: ${idle.map((a) => html`<button class="link" title=${["Start its conversation with its prompt", ...behaviour(a)].join("\n")} onClick=${() => startAgent(a, say)}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</button>`)}</p>`;
+        })()}`
         : mode === "triage" ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />${earlierBay}`
         : mode === "lanes" ? html`${search}${q ? past : html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} size="lrow" />
             <${Lanes} live=${live.filter((s) => !pinned.includes(s))} earlier=${earlier} only=${only} setOnly=${setOnly} sel=${sel} cursor=${cursor}
@@ -669,7 +672,7 @@ function Triage({ live, only, sel, cursor }) {
     : wait.length ? html`${name(wait[0])} is waiting on you.${busy}`
     : work.length ? `Nothing needs you.${busy}`
     : live.length ? "All quiet."
-    : only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below.";
+    : only === AGENTS ? "No agent conversations." : only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below.";
   return html`
     <p class="brief">${brief}</p>
     <${BacklogLine} only=${only} />
@@ -874,7 +877,7 @@ const Steps = ({ s }) => s.steps > 0 && html`<span class="steps">${plural(s.step
 function Meta({ s, quiet }) {
   return html`
     <div class="l3">
-      <${ProjectTag} path=${s.cwd} full />
+      <${SourceTag} s=${s} full />
       ${s.branch && !["HEAD", "main", "master"].includes(s.branch) && html`<span class="br">${s.branch}</span>`}
       ${MULTI && s.host && !(quiet && s.host === HERE) && html`<span class="host">${s.host}</span>`}
       ${engineTag(s)}
@@ -989,7 +992,7 @@ function Strip({ s, sel, cursor, size = "full" }) {
       <button ...${attrs}>
         ${acts}
         ${glyph}<span class="title">${s.title || "Untitled"}</span>
-        ${size === "line" && html`<${ProjectTag} path=${s.cwd} full />`}${size === "line" && elsewhere(s)}${when}
+        ${size === "line" && html`<${SourceTag} s=${s} full />`}${size === "line" && elsewhere(s)}${when}
         ${size === "lrow" && said(s, true)}
         ${size === "lrow" && s.state !== "past" && html`<${Meta} s=${s} quiet />`}
       </button>`;
@@ -1087,6 +1090,7 @@ function sessionActions(s, say, { rename, open, after } = {}) {
   items.push({ label: "Rename", run: rename || run(() => { const n = prompt("Rename session", s.title); return n === null ? null : patch({ name: n }); }) });
   items.push({ label: s.pinned ? "Unpin" : "Pin to top", run: run(() => patch({ pinned: !s.pinned })) });
   items.push({ label: s.parked ? "Unpark" : "Park", run: run(() => patch({ parked: !s.parked })) });
+  if (s.agent && s.state !== "past") items.push({ label: "Start over", title: "It writes a handover note and a new conversation starts from it", run: run(() => agentApi(s.agent, "reset"), () => say(`${s.title} is starting over.`)) });
   items.push({ label: "Put on the backlog", title: "Set it aside to come back to: it stops unless it is working, and Resume on the backlog brings it back", run: () => putAside(s, say).then(() => after && after()) });
   if (s.attachable) items.push({ label: "Stop", run: run(() => api(`/api/sessions/${s.id}/stop`, { method: "POST" }), () => say("Stopped. Resume it any time.")) });
   if (!s.attachable && s.kind !== "interactive")
@@ -1131,9 +1135,10 @@ function Session({ s, say, live }) {
   const auto = useRef(AUTO_PANE);
   const shown = usePages(s);
   const [kept] = useState(() => { const n = !auto.current && !routePage() && stored(SESSION_PAGE, {})[s.sessionId]; return n && shown.some((p) => p.name === n) ? n : null; });
-  const [mode, setMode] = useState(() => { AUTO_PANE = null; return auto.current || (routePage() || kept ? "page" : paneFor(s)); });
-  const [pg, setPg] = useState(() => routePage() || kept);
-  const [split, setSplitRaw] = useState(() => { const v = AUTO_SPLIT || stored(PAGE_SPLIT, true); AUTO_SPLIT = false; return v; });
+  const agentPage = !auto.current && !routePage() && !kept && !!s.agent && shown[0]?.name;
+  const [mode, setMode] = useState(() => { AUTO_PANE = null; return auto.current || (routePage() || kept || agentPage ? "page" : paneFor(s)); });
+  const [pg, setPg] = useState(() => routePage() || kept || agentPage);
+  const [split, setSplitRaw] = useState(() => { const v = AUTO_SPLIT || !!agentPage || stored(PAGE_SPLIT, true); AUTO_SPLIT = false; return v; });
   const setSplit = (v) => { setSplitRaw(v); store(PAGE_SPLIT, v); };
   const wideNow = useWide();
   const sideBySide = mode === "page" && split && wideNow && shown.length > 0;
@@ -1213,7 +1218,7 @@ function Session({ s, say, live }) {
         </div>
         <div class="meta">
           <span class="word" style=${`--edge: var(--${{ "needs-you": "needs", "your-turn": "turn", working: "work" }[s.state] || "stop"})`}>${WORD[s.state] || s.state}</span>
-          <${ProjectTag} path=${s.cwd} full />
+          <${SourceTag} s=${s} full />
           ${s.branch && s.branch !== "HEAD" && html`<span class="wide">${s.branch}</span>`}
           ${engineTag(s) || (s.model && html`<span class="wide">${model(s.model)}</span>`)}
           ${(s.context > 0 || use?.total > 0) && html`
@@ -2980,7 +2985,7 @@ function SendNote({ s, note, say, onClose }) {
   const send = async () => {
     setBusy(true);
     try {
-      if (s.agentName && !s.attachable) await api(`/api/agents/${encodeURIComponent(s.agentName)}/message`, { method: "POST", body: { text, user: true } });
+      if (s.agent && !s.attachable) await api(`/api/agents/${encodeURIComponent(s.agent)}/message`, { method: "POST", body: { text, user: true } });
       else {
         let id = s.id || s.sessionId;
         if (!s.attachable) id = (await api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" })).id;
@@ -3310,31 +3315,11 @@ function BacklogRow({ it, stage, run, tag, patch, remove, start }) {
     </div>`;
 }
 
-const AGENT_REF = "@", AGENTS = "@agents";
+const AGENTS = "@agents";
+let AGENT_INFO = {};
 const away = (s) => !!s.parked && s.state !== "needs-you";
 const hiddenRun = (s) => (s.kind === "hub" || (!!s.agent && !!s.parked)) && s.state !== "needs-you";
-const agentLink = (a, page) => `#/p/${AGENT_REF}${encodeURIComponent(a.name)}${page ? `/${encodeURIComponent(page)}` : ""}`;
-const agentRun = (a, live) => live.find((s) => s.sessionId === a.sessionId);
-const agentState = (a, live) => agentRun(a, live)?.state || a.state || "";
-const AGENT_WORD = { working: "working", "needs-you": "needs you", "your-turn": "your turn", stopped: "asleep", past: "asleep", "": "not started" };
-const agentWord = (a, live) => {
-  const st = agentState(a, live), x = agentRun(a, live);
-  return a.error ? "broken" : AGENT_WORD[st] + ((x ? away(x) : a.parked && st !== "needs-you") ? " · parked" : "");
-};
-const agentDot = (st) => (st === "working" ? "work" : st === "needs-you" ? "needs" : null);
-const agentApi = (a, what, body) => api(`/api/agents/${encodeURIComponent(a.name)}/${what}`, { method: "POST", body });
-
-const openAgent = (a, live, say) => (a.page && a.pages.length ? (location.hash = agentLink(a)) : chatAgent(a, live, say));
-const chatAgent = async (a, live, say, page) => {
-  let key = agentRun(a, live)?.id || a.sessionId;
-  if (!key) {
-    try { key = (await agentApi(a, "message")).id; } catch (e) { return say(e.message); }
-  }
-  const pg = page || a.pages[0]?.name;
-  if (pg && !PHONE.matches) { AUTO_SPLIT = true; location.hash = pageLink(key, pg); }
-  else { AUTO_PANE = "chat"; go(key); }
-};
-
+const agentApi = (a, what, body) => api(`/api/agents/${encodeURIComponent(a)}/${what}`, { method: "POST", body });
 const mins = (ns) => Math.round(ns / 6e10);
 const spanOf = (ns) => { const m = mins(ns); return m % 60 ? (m > 60 ? `${Math.floor(m / 60)}h${m % 60}m` : `${m}m`) : `${m / 60}h`; };
 const ktok = (n) => (n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`);
@@ -3348,27 +3333,19 @@ const behaviour = (a) => [
   a.error,
   a.every ? `Wakes every ${a.every}${a.from ? ` from ${a.from.replace("T", " ")}` : ""}${a.check ? `, when ${a.check} finds something` : ""}${a.next ? `. Next ${soon(a.next)}` : ""}` : "Wakes only when messaged",
   a.rule && `Starts over when ${spanOf(a.rule.Quiet)} quiet past ${ktok(a.rule.Small)}, or ${spanOf(a.rule.CapQuiet)} quiet past ${ktok(a.rule.Cap)}`,
-  [a.context && `Context ${ktok(a.context)}`, a.lastReset && `started over ${agoLong(a.lastReset)}`, a.page && "opens on its page"].filter(Boolean).join(" · "),
+  a.lastReset && `Last started over ${agoLong(a.lastReset)}`,
 ].filter(Boolean);
 
-function AgentsBoard({ agents, live, say }) {
-  if (!agents) return html`<div class="skeleton"><i></i><i></i><i></i></div>`;
-  if (!agents.length) return html`<p class="calm">No agents yet. An agent is a folder with an <code>agent.json</code> in the agents folder; the README has the fields.</p>`;
-  return html`<div class="agents">${agents.map((a) => {
-    const st = agentState(a, live);
-    return html`
-      <div key=${`${a.host}/${a.name}`} class="abrief ${a.error ? "broken" : ""}" role="button" tabindex="0" onClick=${() => openAgent(a, live, say)} onKeyDown=${(e) => e.key === "Enter" && openAgent(a, live, say)}>
-        <${AppTile} a=${a} size=${32} dot=${agentDot(st)} />
-        <div class="abody">
-          <div class="atop"><b>${agentLabel(a)}</b>${elsewhere(a)}${a.badge != null && html`<span class="abadge">${a.badge}</span>`}<small class=${a.error ? "needs-you" : st}>${agentWord(a, live)}</small></div>
-          ${a.headline && html`<p>${a.headline}</p>`}
-          <ul class="rules">${behaviour(a).map((l, i) => html`<li class=${i === 0 && a.error ? "err" : ""}>${l}</li>`)}</ul>
-        </div>
-      </div>`;
-  })}</div>`;
+function AgentTag({ s }) {
+  const a = AGENT_INFO[s.agent] || { name: s.agent };
+  return html`<span class="agenttag" role="button" title=${[`@${a.name}`, ...behaviour(a)].join("\n")}
+    onClick=${(e) => { e.stopPropagation(); TABS.set(AGENTS); }}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</span>`;
 }
+const SourceTag = ({ s, full }) => (s.agent ? html`<${AgentTag} s=${s} />` : html`<${ProjectTag} path=${s.cwd} full=${full} />`);
 
-const agentPips = (agents, live) => (agents || []).map((a) => agentRun(a, live)).filter((x) => x && !away(x) && RANK[x.state] !== undefined).map((x) => x.state).sort((a, b) => RANK[a] - RANK[b]);
+const startAgent = async (a, say) => {
+  try { go((await agentApi(a.name, "message")).id); } catch (e) { say(e.message); }
+};
 
 const APP_ICONS = {
   mail: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
@@ -3396,44 +3373,6 @@ function AppTile({ a, size = 32, dot }) {
 }
 
 const agentLabel = (a) => a.title || a.name.replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
-
-function AgentView({ name, page, agents, live, say, reload }) {
-  const [busy, setBusy] = useState("");
-  const a = agents && (agents.find((x) => x.name === name && x.host === HERE) || agents.find((x) => x.name === name));
-  useEffect(() => {
-    const k = (e) => e.key === "Escape" && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName) && closePages();
-    addEventListener("keydown", k);
-    return () => removeEventListener("keydown", k);
-  }, []);
-  if (!a) return html`<div class="palone"><div class="fbody"><p class="empty">${agents ? `No agent named ${name}.` : "Loading…"}</p></div></div>`;
-  const x = agentRun(a, live), st = agentState(a, live);
-  const act = (label, fn, done) => async () => {
-    setBusy(label);
-    try { await fn(); done && say(done); reload(); } catch (e) { say(e.message); }
-    setBusy("");
-  };
-  const s = { ...(x || { sessionId: a.sessionId, title: agentLabel(a), state: "past", host: a.host }), agentName: a.name };
-  const parked = x ? away(x) : a.parked;
-  return html`
-    <div class="palone appview">
-      <header class="pghead">
-        <button class="icon" onClick=${closePages} aria-label="Back">←</button>
-        <div class="who">
-          <h2><${AppTile} a=${a} size=${26} />${agentLabel(a)}</h2>
-          <span class="sub ${st}">${agentWord(a, live)}${MULTI && a.host ? ` · ${a.host}` : ""}</span>
-        </div>
-        ${a.prompt && html`<button class="btn" disabled=${!!busy || st === "working"} title=${a.prompt} onClick=${act("wake", () => agentApi(a, "message"), `Woke ${agentLabel(a)}.`)}>Wake</button>`}
-        <button class="btn" onClick=${() => chatAgent(a, live, say, page)}>Chat</button>
-        ${a.sessionId && html`<${Menu} aria="More" label=${html`<span class="mi">${ICON.more}</span>`} items=${[
-          { label: parked ? "Unpark" : "Park", run: act("park", () => api(`/api/sessions/${a.sessionId}`, { method: "PATCH", body: { parked: !parked } })) },
-          { label: "Start over", title: "It writes a handover note and a new conversation starts from it", run: act("reset", () => agentApi(a, "reset"), `${agentLabel(a)} is starting over.`) },
-        ]} />`}
-      </header>
-      ${a.pages.length
-        ? html`<${PagePane} s=${s} list=${a.pages} cur=${page} pick=${(n) => location.replace(agentLink(a, n))} say=${say} alone />`
-        : html`<div class="fbody"><div class="none"><p>${agentLabel(a)} has no page yet.</p><ul class="rules">${behaviour(a).map((l) => html`<li>${l}</li>`)}</ul></div></div>`}
-    </div>`;
-}
 
 function PageAlone({ sid, name, live, say }) {
   const [got, setGot] = useState(null);

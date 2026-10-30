@@ -34,7 +34,6 @@ type Agent struct {
 	Title  string     `json:"title,omitempty"`
 	Icon   string     `json:"icon,omitempty"`
 	Color  string     `json:"color,omitempty"`
-	Page   bool       `json:"page,omitempty"`
 	Dir    string     `json:"dir,omitempty"`
 	Args   []string   `json:"args,omitempty"`
 	Every  string     `json:"every,omitempty"`
