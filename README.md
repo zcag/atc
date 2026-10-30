@@ -301,7 +301,7 @@ below by name. Agent sessions stay out of the project tabs. An agent's tag, in p
 tag, and its name on the Agents tab open its details: what it is doing, when it wakes and when next,
 its check and prompt, when it starts over and last did, its pages and folder, with Open (or Start),
 Wake, Park and Start over. The assistant (the hub's conversation, below) is listed there too, with
-its own reset rule; `POST /api/agents/assistant/message` reaches it as another session would. It opens with its page beside the conversation, and
+its own reset rule and no dot while it is idle, since it never parks; `POST /api/agents/assistant/message` reaches it as another session would. It opens with its page beside the conversation, and
 **Start over** is in its menu with Park. A note from its page reaches its conversation even when
 it is stopped.
 

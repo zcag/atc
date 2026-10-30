@@ -624,7 +624,7 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
         <nav class="projtabs" aria-label="Projects">
           <button class=${only ? "" : "on"} onClick=${() => setOnly(null)}>All</button>
           ${agents?.length > 0 && (() => {
-            const pips = (runs || []).filter((x) => x.agent && !away(x) && RANK[x.state] !== undefined).map((x) => x.state).sort((a, b) => RANK[a] - RANK[b]);
+            const pips = (runs || []).filter((x) => x.agent && !away(x) && RANK[x.state] !== undefined && !(x.kind === "hub" && x.state === "your-turn")).map((x) => x.state).sort((a, b) => RANK[a] - RANK[b]);
             return html`<button class="agentstab ${only === AGENTS ? "on" : ""}" onClick=${() => setOnly(only === AGENTS ? null : AGENTS)} title="Agents: standing conversations, each under one name">
               <span class="nm" aria-label="Agents"><svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><rect x="2.5" y="5" width="11" height="8.5" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 5V2.8" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="2.2" r="1" fill="currentColor"/><circle cx="6" cy="9.2" r="1.1" fill="currentColor"/><circle cx="10" cy="9.2" r="1.1" fill="currentColor"/></svg></span>
               ${pips.length > 0 && html`<span class="pips">${pips.slice(0, 5).map((st) => html`<i class=${st}></i>`)}</span>`}
