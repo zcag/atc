@@ -29,8 +29,9 @@ type Agent struct {
 var ErrUntrusted = errors.New("workspace not trusted")
 
 type CLI struct {
-	Bin  string
-	Args []string
+	Bin    string
+	Args   []string
+	Launch []string
 }
 
 var shortID = regexp.MustCompile(`\b[0-9a-f]{8}\b`)
@@ -38,7 +39,11 @@ var shortID = regexp.MustCompile(`\b[0-9a-f]{8}\b`)
 var printing sync.Map
 
 func (c CLI) run(ctx context.Context, dir string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, c.Bin, args...)
+	argv := append([]string{c.Bin}, args...)
+	if args[0] == "--bg" {
+		argv = append(slices.Clone(c.Launch), argv...)
+	}
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out

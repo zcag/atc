@@ -215,6 +215,9 @@ func serve(args []string) error {
 		return err
 	}
 	cli := claude.CLI{Bin: bin, Args: strings.Fields(os.Getenv("ATC_CLAUDE_ARGS"))}
+	if _, err := exec.LookPath("systemd-run"); err == nil {
+		cli.Launch = []string{"systemd-run", "--user", "--scope", "--collect", "--quiet", "--slice=claude.slice"}
+	}
 	sum, err := summarizer(cli)
 	if err != nil {
 		return err
