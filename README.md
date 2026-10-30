@@ -420,7 +420,7 @@ An agent shows you something to look at (a report, a handover, a diagram, a scre
   list) shows every page from every session and machine, with previews, a filter and take-down.
 - **Talking back.** A page that loads `/atc.js` gets `window.atc`: `atc.state.get()` and
   `atc.state.set(obj)` keep the page's data on the server, across devices; `atc.send(text)` sends
-  a note to the session after you confirm it; `atc.copy(text)` copies, in the browser and the app.
+  a note straight to the session, like `atc send`; `atc.copy(text)` copies, in the browser and the app.
   Links to other sites open outside atc. Outside atc the same calls fall back to localStorage and
   the clipboard.
 - **Looking like atc.** A page that links `/atc.css` gets atc's fonts, colors (light and dark)

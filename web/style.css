@@ -1403,10 +1403,6 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .pggrip { cursor: col-resize; background: var(--board); }
 .pggrip:hover, .pgsplit.dragging .pggrip { background: color-mix(in srgb, var(--work) 30%, var(--board)); }
 
-.pnote-sheet { width: min(560px, 100%); }
-.pnote-sheet textarea { width: 100%; min-height: 150px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--board); color: var(--ink); font: 14px/1.5 var(--sans); }
-.pnote-sheet .row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
-.pnote-sheet .hint { flex: 1; font-size: 13px; color: var(--dim); }
 
 .shown { display: flex; align-items: center; gap: 10px; width: min(440px, 100%); margin: 4px 0; padding: 8px 10px; text-align: left; border: 1px solid color-mix(in srgb, var(--work) 35%, var(--line)); background: var(--strip); border-radius: 10px; color: var(--ink); }
 .shown:hover { background: color-mix(in srgb, var(--work) 8%, var(--strip)); }

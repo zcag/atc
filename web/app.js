@@ -2986,51 +2986,30 @@ function BrowserView({ p, say }) {
     </div>`;
 }
 
-function useNote(s, say) {
-  const [note, setNote] = useState(null);
-  const ask = useCallback((p) => (text) => new Promise((done) => setNote({ text: `On the page “${pageTitle(p)}”:\n${text}`, done })), []);
-  const sheet = note && html`<${SendNote} s=${s} note=${note} say=${say} onClose=${(sent) => { note.done(sent); setNote(null); }} />`;
-  return [ask, sheet];
+async function sendNote(s, p, note, say) {
+  const text = `On the page “${pageTitle(p)}”:\n${note}`;
+  try {
+    await deliver(s, text);
+  } catch (e) { say(e.message); throw e; }
+  say(`Sent to ${s.title || "the session"}.`);
+  return true;
 }
 
-function SendNote({ s, note, say, onClose }) {
-  const [text, setText] = useState(note.text);
-  const [busy, setBusy] = useState(false);
-  const send = async () => {
-    setBusy(true);
-    try {
-      if (s.agent && !s.attachable) await api(`/api/agents/${encodeURIComponent(s.agent)}/message`, { method: "POST", body: { text, user: true } });
-      else {
-        let id = s.id || s.sessionId;
-        if (!s.attachable) id = (await api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" })).id;
-        await api(`/api/sessions/${id}/send`, { method: "POST", body: { text } });
-      }
-      say(`Sent to ${s.title || "the session"}.`);
-      onClose(true);
-    } catch (e) { say(e.message); setBusy(false); }
-  };
-  return html`
-    <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose(false)}>
-      <div class="sheet pnote-sheet" role="dialog" aria-label="Send a note">
-        <h3>Send to ${s.title || "the session"}</h3>
-        <textarea ref=${focusOnMount} value=${text} onInput=${(e) => setText(e.target.value)}
-          onKeyDown=${(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send(); if (e.key === "Escape") onClose(false); }}></textarea>
-        <div class="row">
-          <span class="hint">${s.attachable ? "Goes in as your message." : "Resumes the session, then sends it."}</span>
-          <button class="btn" onClick=${() => onClose(false)}>Cancel</button>
-          <button class="btn primary" disabled=${busy || !text.trim()} onClick=${send}>Send</button>
-        </div>
-      </div>
-    </div>`;
+async function deliver(s, text) {
+  if (s.agent && !s.attachable) await api(`/api/agents/${encodeURIComponent(s.agent)}/message`, { method: "POST", body: { text, user: true } });
+  else {
+    let id = s.id || s.sessionId;
+    if (!s.attachable) id = (await api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" })).id;
+    await api(`/api/sessions/${id}/send`, { method: "POST", body: { text } });
+  }
 }
 
 function PagePane({ s, list, cur, pick, split, setSplit, onClose, say, alone }) {
   useNow(15000);
   useSeenTick();
   const p = list.find((x) => x.name === cur) || list[0];
-  const [ask, sheet] = useNote(s, say);
   const [nonce, setNonce] = useState(0);
-  const onSend = useMemo(() => p && ask(p), [p && pkey(p), p?.title]);
+  const onSend = useMemo(() => p && ((t) => sendNote(s, p, t, say)), [p && pkey(p), p?.title, s.id, s.sessionId, s.attachable]);
   useEffect(() => {
     const f = () => p && document.visibilityState === "visible" && markPage(p);
     f();
@@ -3060,7 +3039,6 @@ function PagePane({ s, list, cur, pick, split, setSplit, onClose, say, alone }) 
       </div>
       ${p.note && html`<div class="pnote">${p.note}</div>`}
       <${PageBody} key=${`${pkey(p)}:${nonce}`} p=${p} onSend=${onSend} say=${say} />
-      ${sheet}
     </div>`;
 }
 
