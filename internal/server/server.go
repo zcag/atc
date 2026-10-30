@@ -770,19 +770,19 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 var errUnknown = errors.New("unknown session")
 
 func (s *Server) resumeSession(ctx context.Context, sid string) (string, error) {
-	sid = s.newest(sid)
-	if agents, err := s.M.CLI.Agents(ctx); err == nil {
-		for _, a := range agents {
-			if a.SessionID == sid && a.PID > 0 {
-				return a.ID, nil
-			}
+	agents, _ := s.M.CLI.Agents(ctx)
+	chain := s.chain(sid, agents)
+	for _, c := range slices.Backward(chain) {
+		if i := slices.IndexFunc(agents, func(a claude.Agent) bool { return a.SessionID == c && a.PID > 0 }); i >= 0 {
+			return agents[i].ID, nil
 		}
 	}
-	t, _ := s.M.Index.Find(sid)
-	if t.StartCwd == "" {
-		return "", fmt.Errorf("%w %s", errUnknown, sid)
+	for i, c := range slices.Backward(chain) {
+		if t, _ := s.M.Index.Find(c); t.StartCwd != "" && (i == 0 || t.SessionID == c) {
+			return s.relaunch(ctx, s.standingName(c, t.AgentName), t.StartCwd, c)
+		}
 	}
-	return s.relaunch(ctx, s.standingName(sid, t.AgentName), t.StartCwd, sid)
+	return "", fmt.Errorf("%w %s", errUnknown, sid)
 }
 
 func (s *Server) act(f func(context.Context, string) error) http.HandlerFunc {
@@ -1346,20 +1346,18 @@ func (s *Server) superseded(sid, id string) {
 	}
 }
 
-func (s *Server) newest(sid string) string {
+func (s *Server) chain(sid string, agents []claude.Agent) []string {
+	out := []string{sid}
 	for range 50 {
 		next := s.M.Store.Get(sid).Next
-		if next == "" {
-			return sid
-		}
-		all := s.M.Index.Scan()
-		i := slices.IndexFunc(all, func(t history.Transcript) bool { return strings.HasPrefix(t.SessionID, next) })
+		i := slices.IndexFunc(agents, func(a claude.Agent) bool { return next != "" && a.ID == next })
 		if i < 0 {
-			return sid
+			break
 		}
-		sid = all[i].SessionID
+		sid = agents[i].SessionID
+		out = append(out, sid)
 	}
-	return sid
+	return out
 }
 
 func (s *Server) stopped(ctx context.Context, id string) bool {
