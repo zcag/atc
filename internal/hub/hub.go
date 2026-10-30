@@ -76,6 +76,10 @@ type Status struct {
 	Home     string         `json:"home,omitempty"`
 	Call     string         `json:"call,omitempty"`
 	Channels map[string]int `json:"channels"`
+
+	Reset     startover.Policy `json:"reset"`
+	Dir       string           `json:"dir"`
+	LastReset time.Time        `json:"lastReset,omitzero"`
 }
 
 type msg struct{ channel, text string }
@@ -569,7 +573,14 @@ func (h *Hub) Status() Status {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	st := Status{Session: h.sid, Alive: h.alive, Context: h.context, IdleS: int(h.cfg.Now().Sub(h.lastTurn).Seconds()),
-		Pending: []string{}, Held: []string{}, Home: h.home, Channels: map[string]int{}}
+		Pending: []string{}, Held: []string{}, Home: h.home, Channels: map[string]int{}, Reset: h.cfg.Reset, Dir: h.cfg.Dir}
+	if ents, err := os.ReadDir(filepath.Join(h.cfg.State, "handovers")); err == nil {
+		for _, e := range ents {
+			if i, err := e.Info(); err == nil && i.ModTime().After(st.LastReset) {
+				st.LastReset = i.ModTime()
+			}
+		}
+	}
 	if h.cmd != nil && h.cmd.Process != nil {
 		st.PID = h.cmd.Process.Pid
 	}

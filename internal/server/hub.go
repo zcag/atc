@@ -219,7 +219,7 @@ func (s *Server) hubMark(ctx context.Context, list []sessions.Session) []session
 		list, i = append(list, x), len(list)
 	}
 	x := &list[i]
-	x.Kind, x.ID, x.Harness, x.PID, x.Attachable = "hub", st.Session, "hub", st.PID, st.Alive
+	x.Kind, x.ID, x.Harness, x.PID, x.Attachable, x.Agent = "hub", st.Session, "hub", st.PID, st.Alive, hubName
 	m := s.M.Store.Get(st.Session)
 	x.Title, x.Pinned, x.Parked = cmp.Or(m.Name, hubName), m.Pinned, m.Parked
 	x.Asks, x.TurnDone = nil, false

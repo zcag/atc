@@ -3400,6 +3400,7 @@ const APP_ICONS = {
   pr: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V9a3 3 0 0 0-3-3h-4m0 0 2.5-2.5M11 6l2.5 2.5"/>',
   globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>',
   pulse: '<path d="M3 12h4l2.5-6 4 12 2.5-6H21"/>',
+  chat: '<path d="M4 5.5h16v10H10l-4.5 3.5v-3.5H4z"/>',
   doc: '<path d="M7 3h7l5 5v11.5A1.5 1.5 0 0 1 17.5 21h-10A1.5 1.5 0 0 1 6 19.5v-15A1.5 1.5 0 0 1 7.5 3z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
 };
 const APP_COLORS = { blue: "#3b82f6", amber: "#f59e0b", violet: "#8b5cf6", green: "#10b981", red: "#ef4444", teal: "#14b8a6", pink: "#ec4899", orange: "#f97316", slate: "#64748b" };

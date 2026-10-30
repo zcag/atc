@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/history"
+	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/startover"
@@ -476,7 +477,31 @@ func (s *Server) agents(w http.ResponseWriter, r *http.Request) {
 		}
 		list = append(list, v)
 	}
+	if a, ok := s.assistant(r.Context()); ok {
+		list = append(list, a)
+	}
 	gather(s, w, r, "/api/agents", list, func(a *AgentView, h string) { a.Host = cmp.Or(a.Host, h) })
+}
+
+// assistant is the hub's conversation as an agent: it keeps its own process and channels, and
+// shares the reset rule.
+func (s *Server) assistant(ctx context.Context) (AgentView, bool) {
+	if !s.hubUp() {
+		return AgentView{}, false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	st, err := s.Hub.Status(ctx)
+	if err != nil || st.Session == "" {
+		return AgentView{}, false
+	}
+	v := AgentView{Agent: Agent{Name: hubName, Host: s.Host, Title: "Assistant", Icon: "chat", Color: "violet", Folder: st.Dir},
+		Rule: st.Reset, LastReset: st.LastReset, Session: st.Session, ID: st.Session, State: sessions.YourTurn,
+		Parked: s.M.Store.Get(st.Session).Parked, Context: st.Context, Last: time.Now().Add(-time.Duration(st.IdleS) * time.Second), Pages: []pages.Page{}}
+	if len(st.Owners) > 0 || len(st.Pending) > 0 {
+		v.State = sessions.Working
+	}
+	return v, true
 }
 
 // agentMessage wakes an agent with the request body: {"text": ...} or anything else as it came
@@ -484,6 +509,19 @@ func (s *Server) agents(w http.ResponseWriter, r *http.Request) {
 // background, so a webhook never times out and retries. {"user": true} is the user writing from
 // atc, which unparks it like typing into its conversation does.
 func (s *Server) agentMessage(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("name") == hubName && s.hubUp() {
+		b, _ := io.ReadAll(io.LimitReader(r.Body, 256<<10))
+		text := strings.TrimSpace(string(b))
+		if text == "" {
+			http.Error(w, "nothing to send", http.StatusBadRequest)
+			return
+		}
+		if from := r.URL.Query().Get("from"); from != "" {
+			text = "[message from " + from + "]\n" + text
+		}
+		s.done(w, s.hubSID(), s.hubSend(r.Context(), hub.Agent, text))
+		return
+	}
 	a, ok := s.agentNamed(r.PathValue("name"))
 	if !ok {
 		http.Error(w, "no agent named "+r.PathValue("name")+" on "+s.Host, http.StatusNotFound)
@@ -523,6 +561,10 @@ func (s *Server) agentMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) agentReset(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("name") == hubName && s.hubUp() {
+		s.done(w, s.hubSID(), s.Hub.Reset(r.Context()))
+		return
+	}
 	a, ok := s.agentNamed(r.PathValue("name"))
 	if !ok {
 		http.Error(w, "no agent named "+r.PathValue("name")+" on "+s.Host, http.StatusNotFound)
