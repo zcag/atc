@@ -570,7 +570,8 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
     return () => removeEventListener("keydown", k);
   }, [tabs, only, agents]);
   const mine = (s) => (only === AGENTS ? !!s.agent : !only || (!s.agent && project(s.cwd).name === only));
-  const live = only === AGENTS ? runs && runs.filter((s) => s.agent) : all && all.filter(mine);
+  const restingHub = (s) => s.kind === "hub" && s.state === "your-turn";
+  const live = only === AGENTS ? runs && runs.filter((s) => s.agent && !restingHub(s)) : all && all.filter(mine);
   const [hist, setHist] = useState(null);
   const [limit, setLimit] = useState(30);
 
@@ -637,7 +638,8 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
               ${t.pips.length > 0 && html`<span class="pips">${t.pips.slice(0, 5).map((st) => html`<i class=${st}></i>`)}${t.pips.length > 5 && html`<em>+${t.pips.length - 5}</em>`}</span>`}
             </button>`)}
         </nav>`}
-      ${only === AGENTS ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />${(() => {
+      ${only === AGENTS ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />
+        <${Bay} title="Assistant" list=${(runs || []).filter(restingHub)} sel=${sel} cursor=${cursor} size="lrow" />${(() => {
           const idle = (agents || []).filter((a) => !a.error && !(runs || []).some((x) => x.agent === a.name));
           return idle.length > 0 && html`<p class="calm idleagents">Not running: ${idle.map((a) => html`<button class="link" onClick=${() => AGENT_SHEET(a.name)}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</button>`)}</p>`;
         })()}`
