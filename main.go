@@ -430,7 +430,7 @@ func tildePWD() string {
 }
 
 func act(cmd string, args []string) error {
-	if len(args) < 1 || (cmd == "rename") != (len(args) >= 2) {
+	if len(args) < 1 || strings.HasPrefix(args[0], "-") || (cmd == "rename") != (len(args) >= 2) {
 		return fmt.Errorf("usage: atc %s <session>%s", cmd, map[bool]string{true: " <name>"}[cmd == "rename"])
 	}
 	c := client.Load()
