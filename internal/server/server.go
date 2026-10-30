@@ -1304,7 +1304,7 @@ func standing(name string) ([]string, bool) {
 func standingArgs(prompt string) []string {
 	extra := []string{"--append-system-prompt", prompt}
 	if exe, err := os.Executable(); err == nil {
-		cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"atc": map[string]any{"command": exe, "args": []string{"mcp"}}}})
+		cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"atc": map[string]any{"command": exe, "args": []string{"mcp"}, "alwaysLoad": true}}})
 		extra = append(extra, "--mcp-config", string(cfg))
 	}
 	return extra

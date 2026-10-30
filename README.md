@@ -744,7 +744,8 @@ atc call [--reason TEXT] [--wait] [--timeout 45s] [--whatsapp]
 has delta (the agents' phone line, through delta-call) ring the user's own number; it never dials
 another. When they pick up, the assistant is on the line: its first message carries the reason and,
 from another session, that session's sender line, so it says why it called and passes their answer
-back with `send`. Without `--wait` the command returns at once, and a call nobody picks up comes
+back with `send`. delta-talk sends that first message while it still rings, so the hub marks it
+"telefon çalıyor" and the opening is ready the moment they answer. Without `--wait` the command returns at once, and a call nobody picks up comes
 back to the session that asked as a `[telefon ... açmadı]` message (the assistant's own calls come
 back on the channel it was busy with). `--wait` prints the outcome instead: `answered`, `no-answer`
 or `busy` (a call is already on). `--whatsapp` makes it a WhatsApp voice call from delta's bot

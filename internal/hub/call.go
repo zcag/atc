@@ -32,12 +32,18 @@ type call struct {
 	reason, from string
 	at           time.Time
 	answered     bool
+	told         bool
 	notify       string
 }
 
-// envelope is what the session reads before the phone's first message once they pick up.
+// envelope is what the session reads before the phone's first message: once they pick up, or while
+// it still rings, when delta-talk writes the opening ahead so it plays the moment they answer.
 func (c *call) envelope(now time.Time) string {
-	s := fmt.Sprintf("[telefon · %s · kullanıcıyı sen aradın, açtı", now.Format("15:04"))
+	state := "açtı"
+	if !c.answered {
+		state = "telefon çalıyor, açınca ilk bunu duyacak"
+	}
+	s := fmt.Sprintf("[telefon · %s · kullanıcıyı sen aradın, %s", now.Format("15:04"), state)
 	if c.reason != "" {
 		s += " · sebep: " + c.reason
 	}
@@ -175,8 +181,13 @@ func (h *Hub) Call(ctx context.Context, r CallReq) (string, error) {
 		if st.Precise == "active" {
 			h.mu.Lock()
 			pc.answered = true
+			told := pc.told
 			h.mu.Unlock()
-			time.AfterFunc(2*time.Minute, clear)
+			if told {
+				clear()
+			} else {
+				time.AfterFunc(2*time.Minute, clear)
+			}
 			log.Printf("hub: call answered")
 			return Answered, nil
 		}

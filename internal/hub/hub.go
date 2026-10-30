@@ -238,9 +238,12 @@ func (h *Hub) say(ch, text string) (string, error) {
 		log.Printf("hub: held %s behind %v", ch, h.busy())
 		return "held", nil
 	}
-	if c := h.call; ch == Phone && c != nil && c.answered {
+	if c := h.call; ch == Phone && c != nil && !c.told {
 		text = c.envelope(h.cfg.Now()) + "\n" + text
-		h.call = nil
+		c.told = true
+		if c.answered {
+			h.call = nil
+		}
 	}
 	if ch != Agent && ch != reset {
 		if ch != h.last {

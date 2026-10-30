@@ -470,6 +470,40 @@ func TestCallAnswered(t *testing.T) {
 	}
 }
 
+func TestCallOpeningWrittenWhileRinging(t *testing.T) {
+	states := []lineState{{"idle", "idle"}, {"offhook", "dialing"}}
+	for range 40 {
+		states = append(states, lineState{"offhook", "alerting"})
+	}
+	l := &line_{states: append(states, lineState{"offhook", "active"})}
+	r := newRig(t, CallConfig{URL: l.server(t).URL, Number: "+900", Poll: 10 * time.Millisecond})
+	var mu sync.Mutex
+	var written string
+	in := r.h.in
+	r.h.mu.Lock()
+	r.h.in = writerFunc(func(b []byte) (int, error) { mu.Lock(); written += string(b); mu.Unlock(); return in.Write(b) })
+	r.h.mu.Unlock()
+	done := make(chan string)
+	go func() { out, _ := r.h.Call(context.Background(), CallReq{Reason: "deploy bitti"}); done <- out }()
+	for r.h.Status().Call != "dialing" {
+		time.Sleep(time.Millisecond)
+	}
+	phone := r.dial("phone")
+	phone.send("message", "[açılış]")
+	phone.until("done")
+	if out := <-done; out != Answered {
+		t.Fatal(out)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if !strings.Contains(written, "kullanıcıyı sen aradın, telefon çalıyor, açınca ilk bunu duyacak · sebep: deploy bitti]\\n[açılış]") {
+		t.Fatalf("phone message: %s", written)
+	}
+	if r.h.Status().Call != "" {
+		t.Fatal("call still pending after it was answered")
+	}
+}
+
 func TestCallNotAnsweredTellsTheChannel(t *testing.T) {
 	l := &line_{states: []lineState{{"idle", "idle"}, {"offhook", "dialing"}, {"idle", "disconnected"}}}
 	r := newRig(t, CallConfig{URL: l.server(t).URL, Number: "+900", Poll: 10 * time.Millisecond})
