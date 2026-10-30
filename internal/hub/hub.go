@@ -445,6 +445,7 @@ func (h *Hub) event(l line) {
 		for _, b := range blocks {
 			if b.Type == "tool_result" {
 				h.turn.tools--
+				h.emit(Event{Type: "tool_done", Channel: h.turn.route})
 			}
 		}
 		if h.turn.tools <= 0 && h.turn.cutAfter {

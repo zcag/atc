@@ -341,6 +341,25 @@ func TestTextWaitsForPhoneTurn(t *testing.T) {
 	}
 }
 
+func TestToolDoneReachesThePhone(t *testing.T) {
+	r := newRig(t, CallConfig{})
+	phone := r.dial("phone")
+	phone.send("message", "TOOL check")
+	es := phone.until("done")
+	if types(es, "tool") != 1 || types(es, "tool_done") != 1 {
+		t.Fatalf("events %v", es)
+	}
+	var order []string
+	for _, e := range es {
+		if e.Type == "tool" || e.Type == "tool_done" || e.Type == "done" {
+			order = append(order, e.Type)
+		}
+	}
+	if strings.Join(order, ",") != "tool,tool_done,done" {
+		t.Fatalf("order %v", order)
+	}
+}
+
 func TestJoinRoutesToNewest(t *testing.T) {
 	r := newRig(t, CallConfig{})
 	atc, wa := r.dial("atc"), r.dial("whatsapp")
