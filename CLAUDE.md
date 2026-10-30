@@ -29,6 +29,11 @@ from a worktree doesn't move it, and a session started there would otherwise bui
 It leaves the checkout alone when it's off master or has local changes. Settings live in
 `~/.config/atc/env` on each. Don't stop at a branch.
 
+The hub (`internal/hub`: calls, channels, the assistant's conversation) is a separate binary,
+`atc-hub.service`, which `make install` does not touch: a hub change also needs `make install-hub`
+on desktop. Restart it only while delta is idle (`curl -s desktop:8807/status` shows `"call": "idle"`),
+or it drops the call they are on.
+
 ## Terminal size and rendering problems
 
 Every attached screen is logged to the journal, server and browser side, keyed by the session's
