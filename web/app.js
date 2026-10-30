@@ -4750,12 +4750,12 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
           <p class="presetnote"><span class="proj" style=${`--ph: ${hueOf(preset.name)}`}>${preset.name}</span> starts in <b>${tilde(preset.dir)}</b>${MULTI && preset.host ? html` on <b>${preset.host}</b>` : ""}${preset.brief ? html`, with the instructions in <b>${preset.brief}</b>` : ""}. <button type="button" class="link" onClick=${() => setPreset(null)}>Pick a folder instead</button></p>
         ` : html`
           <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDir("~"); }} />
-          <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} autofocus />
+          <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} autofocus=${!from?.dir} />
           ${!harness && html`<${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />`}`}
         <label class="field"><span>${later ? "Title" : "Name"}</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder=${later ? "What the backlog shows, in a few words" : preset ? preset.name : "Optional"} />${later
           ? html`<small>It also names the session when you start it.</small>`
           : !preset && html`<small>Without one, ${harness || "Claude"} titles the session from what you ask. Also the title if you put it on the backlog.</small>`}</label>
-        <label class="field"><span>${later ? "Prompt" : "First message"}</span><textarea rows=${later ? 5 : 3} value=${prompt} onInput=${(e) => setPrompt(e.target.value)}
+        <label class="field"><span>${later ? "Prompt" : "First message"}</span><textarea rows=${later ? 5 : 3} ref=${from?.dir && !touch ? focusOnMount : null} value=${prompt} onInput=${(e) => setPrompt(e.target.value)}
           placeholder=${later ? "The session's first message when you start it. Optional: without one it gets the title." : "Optional. You can also type it in the terminal."}></textarea></label>
         ${err && html`<p class="err">${err}</p>`}
         ${!later && usable.length > 0 && html`
