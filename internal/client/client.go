@@ -207,8 +207,8 @@ type Agent struct {
 		Page  string `json:"page"`
 		About string `json:"about,omitempty"`
 	} `json:"share,omitempty"`
-	Badge    json.RawMessage `json:"badge,omitempty"`
-	Headline string          `json:"headline,omitempty"`
+	Badge    any    `json:"badge,omitempty"`
+	Headline string `json:"headline,omitempty"`
 }
 
 func (c *Client) Agents() (list []Agent, err error) {

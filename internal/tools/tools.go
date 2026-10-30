@@ -171,21 +171,21 @@ type stateIn struct {
 }
 
 type sharer struct {
-	Agent    string          `json:"agent"`
-	Title    string          `json:"title,omitempty"`
-	Host     string          `json:"host"`
-	Page     string          `json:"page"`
-	About    string          `json:"about,omitempty"`
-	Headline string          `json:"headline,omitempty"`
-	Badge    json.RawMessage `json:"badge,omitempty"`
+	Agent    string `json:"agent"`
+	Title    string `json:"title,omitempty"`
+	Host     string `json:"host"`
+	Page     string `json:"page"`
+	About    string `json:"about,omitempty"`
+	Headline string `json:"headline,omitempty"`
+	Badge    any    `json:"badge,omitempty"`
 }
 
 type stateOut struct {
-	Agents []sharer         `json:"agents,omitempty" jsonschema:"the agents that share state, when no agent was named"`
-	Agent  string           `json:"agent,omitempty"`
-	Page   string           `json:"page,omitempty"`
-	State  *json.RawMessage `json:"state,omitempty"`
-	Keys   []string         `json:"keys,omitempty" jsonschema:"every top-level key of its state, when you asked for some"`
+	Agents []sharer `json:"agents,omitempty" jsonschema:"the agents that share state, when no agent was named"`
+	Agent  string   `json:"agent,omitempty"`
+	Page   string   `json:"page,omitempty"`
+	State  any      `json:"state,omitempty"`
+	Keys   []string `json:"keys,omitempty" jsonschema:"every top-level key of its state, when you asked for some"`
 }
 
 type historyIn struct {
@@ -581,24 +581,27 @@ func (t *tools) state(ctx context.Context, _ *mcp.CallToolRequest, in stateIn) (
 	if err != nil {
 		return nil, out, err
 	}
-	if len(in.Keys) > 0 {
-		var all map[string]json.RawMessage
-		if json.Unmarshal(st, &all) != nil {
-			return nil, out, fmt.Errorf("%s's state is not an object, so it has no keys; ask without keys", out.Agent)
-		}
-		for k := range all {
-			out.Keys = append(out.Keys, k)
-		}
-		sort.Strings(out.Keys)
-		some := map[string]json.RawMessage{}
-		for _, k := range in.Keys {
-			if v, ok := all[k]; ok {
-				some[k] = v
-			}
-		}
-		st, _ = json.Marshal(some)
+	if string(st) == "null" {
+		return nil, out, fmt.Errorf("%s has not written its state yet", out.Agent)
 	}
-	out.State = &st
+	if len(in.Keys) == 0 {
+		return nil, out, json.Unmarshal(st, &out.State)
+	}
+	var all map[string]any
+	if json.Unmarshal(st, &all) != nil || all == nil {
+		return nil, out, fmt.Errorf("%s's state is not an object, so it has no keys; ask without keys", out.Agent)
+	}
+	for k := range all {
+		out.Keys = append(out.Keys, k)
+	}
+	sort.Strings(out.Keys)
+	some := map[string]any{}
+	for _, k := range in.Keys {
+		if v, ok := all[k]; ok {
+			some[k] = v
+		}
+	}
+	out.State = some
 	return nil, out, nil
 }
 
