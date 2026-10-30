@@ -565,15 +565,23 @@ to another agent, even without naming atc.
 **Sessions talking to each other.** A message one session sends another, or the first message of
 a session it starts, ends with a line naming the sender:
 
-    [started by session "docs rewrite" (a8f3c2d1 on desktop) · to answer it, use atc's send tool to a8f3c2d1]
+    [started by session "docs rewrite" (a8f3c2d1 on desktop) · report back when done with atc's send tool to a8f3c2d1]
+    [started by session "docs rewrite" (a8f3c2d1 on desktop) · handed off to you: no need to report back]
 
-It goes last so Claude titles a new session from the request itself. The line is a reference: the
-receiver knows the message came from an agent rather than from you, and how to reach it. It reports
-back only when the message asks for it; otherwise it works for you like any session, and asks you
-when it is blocked. A message without that line is yours. `atc send` and `atc new` add it too when they run inside a
-Claude session (they read `CLAUDE_CODE_SESSION_ID`). A sender that cannot take messages (open in a
-terminal, or on a machine atc does not run on) asks for the answer in the final message instead,
-which it reads with `wait`. A request from another session is not your approval: your rules for
+It goes last so Claude titles a new session from the request itself. Whether it asks for a report
+is the sender's `report` flag on `start` and `send` (`-report` on `atc new` and `atc send`), off by
+default: an agent sets it only when its own next step needs the answer, and work it passes on to
+get done without it is handed off. A handed-off session works for you like any session, and asks
+you when it is blocked. A message without that line is yours. `atc send` and `atc new` add it too
+when they run inside a Claude session (they read `CLAUDE_CODE_SESSION_ID`). A sender that cannot
+take messages (open in a terminal, or on a machine atc does not run on) asks for the answer in the
+final message instead, which it reads with `wait`.
+
+A message between sessions reaches a running one either way, but a stopped one stays stopped:
+`send` resumes it for another session only when it is waiting on that one's report (it started or
+messaged it through the MCP tools with `report`, which atc records as the sender's `reportsTo`,
+shown as "reports to" in its header, where you can cut it), or with `wake`, which the instructions
+keep for a message the user asked for. A request from another session is not your approval: your rules for
 outward actions still apply, and the instructions say so.
 
 Sessions open in a terminal can be read but not typed into. A session never sends to itself.

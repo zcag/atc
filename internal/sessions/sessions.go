@@ -66,6 +66,7 @@ type Session struct {
 	Pinned         bool             `json:"pinned,omitempty"`
 	Parked         bool             `json:"parked,omitempty"`
 	App            string           `json:"app,omitempty"`
+	ReportsTo      string           `json:"reportsTo,omitempty"`
 }
 
 type Note struct {
@@ -137,7 +138,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		}
 		meta := m.Store.Get(a.SessionID)
 		s.Title = first(meta.Name, s.Title, a.Name, base(s.Cwd))
-		s.Pinned, s.Parked, s.Engine, s.App = meta.Pinned, meta.Parked, meta.Engine, meta.App
+		s.Pinned, s.Parked, s.Engine, s.App, s.ReportsTo = meta.Pinned, meta.Parked, meta.Engine, meta.App, meta.ReportsTo
 		out = append(out, s)
 	}
 	out = append(out, m.openCode(ctx)...)
@@ -179,7 +180,7 @@ func (m *Manager) build(t history.Transcript) Session {
 		Cwd: t.Cwd, StartCwd: t.StartCwd, Branch: t.Branch, Model: t.Model,
 		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, Context: t.Context, PromptAt: t.PromptAt,
 		Activity: t.Activity, LastReply: t.LastReply, Summary: m.Summary.Get(t),
-		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine, Harness: t.Harness, App: meta.App,
+		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine, Harness: t.Harness, App: meta.App, ReportsTo: meta.ReportsTo,
 	}
 }
 

@@ -1216,6 +1216,11 @@ function Session({ s, say, live }) {
                 <span class="hint">Click for details</span>
               </span>`}
             </span>`}
+          ${s.reportsTo && (() => {
+            const to = live?.find((x) => x.sessionId === s.reportsTo)?.title || "a session";
+            return html`<span role="button" title=${`It was asked to report back to “${to}”, which its report resumes even if stopped. Click to cut that: a stopped “${to}” stays stopped.`}
+              onClick=${() => confirm(`Stop “${s.title}” from waking “${to}” with its report?`) && patch({ reportsTo: "" })}>reports to ${to}</span>`;
+          })()}
           ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first, except where a permission rule says to ask">no permission prompts</span>`}
         </div>
       </div>

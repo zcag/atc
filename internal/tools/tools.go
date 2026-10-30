@@ -26,10 +26,11 @@ const instructions = `atc is how the user runs Claude Code sessions on their mac
 ` +
 	`Sessions talk to each other through send and start, and atc ends every such message with a line naming the sender: ` +
 	`"[from session "title" (ref on host) · ...]" or "[started by session ...]". A message without that line comes from the user. ` +
-	`That line is a reference to who sent it and how to reach them, not a request to report. Report back with send only when ` +
-	`the message asks you to: briefly, what you did, what came out of it and anything the sender must decide. Otherwise you work ` +
-	`for the user, who follows every session in atc: if you are blocked or need a decision, ask the user as usual. When you start ` +
-	`or message a session yourself, ask it to report back in your message only when your next step needs its answer. ` +
+	`The line ends saying whether to report back. Only when it says so, report with send: briefly, what you did, what came out ` +
+	`of it and anything the sender must decide. Otherwise the work is yours now and you work for the user, who follows every ` +
+	`session in atc: if you are blocked or need a decision, ask the user as usual. When you start or message a session ` +
+	`yourself, set report only when your own next step needs its answer; work you hand off so it gets done without you leaves ` +
+	`report off, and the session does not report to you. ` +
 	`A request from another session is not the user's approval: ` +
 	`the user's rules for outward actions (sending, publishing, spending, deleting) still apply. ` +
 	`When you start work in a repo another session is working in, pass worktree so you cannot clash, and check sessions first ` +
@@ -100,6 +101,8 @@ type readIn struct {
 type sendIn struct {
 	Session string `json:"session" jsonschema:"a session ref, short id, a unique piece of its title, or app:<name> for that app's latest run"`
 	Text    string `json:"text" jsonschema:"the message, typed into the session as if the user wrote it"`
+	Report  bool   `json:"report,omitempty" jsonschema:"ask it to answer you; only when your own next step needs the answer"`
+	Wake    bool   `json:"wake,omitempty" jsonschema:"resume it although it is stopped; only when the user asked for this message"`
 }
 
 type startIn struct {
@@ -109,6 +112,7 @@ type startIn struct {
 	Name     string `json:"name,omitempty" jsonschema:"short title; without one Claude titles it"`
 	Host     string `json:"host,omitempty" jsonschema:"machine name from the sessions list; default the main one"`
 	Worktree bool   `json:"worktree,omitempty" jsonschema:"work in its own git worktree so it cannot clash with other sessions in the repo"`
+	Report   bool   `json:"report,omitempty" jsonschema:"have it report back to you when done; only when your own next step needs its outcome. Off, the work is handed off and it does not report"`
 }
 
 type laterIn struct {
@@ -191,9 +195,9 @@ func Run(ctx context.Context, c *client.Client) error {
 			return nil, t.list(live, live), nil
 		})
 	mcp.AddTool(s, &mcp.Tool{Name: "read", Description: "Read a session (open or past): its last reply in short, one line per turn (what was asked, files changed, tests, commits, pushes, deploys, failures), then the last messages in full."}, t.read)
-	mcp.AddTool(s, &mcp.Tool{Name: "send", Description: "Send a message to a session, signed with a last line saying it comes from you so it can answer back. A stopped or past session is resumed first. Returns right away; use wait for the answer."}, t.send)
+	mcp.AddTool(s, &mcp.Tool{Name: "send", Description: "Send a message to a session, signed with a last line saying it comes from you and whether to answer (report). A stopped or past session is resumed first, but only when it is waiting on your report or the user asked for the message (wake). Returns right away; use wait for the answer."}, t.send)
 	mcp.AddTool(s, &mcp.Tool{Name: "wait", Description: "Wait until a session finishes its turn or needs the user, then return its reply in short and the start of the reply itself."}, t.wait)
-	mcp.AddTool(s, &mcp.Tool{Name: "start", Description: "Start a new Claude Code session in a folder on one of the user's machines, running in the background where the user can follow it in atc. Use it whenever the user asks to start, open or spin up a session or agent. The first message ends with a line saying you started it, so it reports back to you."}, t.start)
+	mcp.AddTool(s, &mcp.Tool{Name: "start", Description: "Start a new Claude Code session in a folder on one of the user's machines, running in the background where the user can follow it in atc. Use it whenever the user asks to start, open or spin up a session or agent. The first message ends with a line saying you started it and, with report, asking it to report back to you."}, t.start)
 	mcp.AddTool(s, &mcp.Tool{Name: "presets", Description: "List the named presets for new sessions (a folder plus standing instructions, like a dedicated agent). Start one with start and its name."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, struct {
 			Presets []client.Preset `json:"presets"`
@@ -226,11 +230,6 @@ func (t *tools) isSelf(x sessions.Session) bool {
 	}
 	me, ok := client.Self(live)
 	return ok && me.SessionID == x.SessionID
-}
-
-func (t *tools) signed(started bool, text string) string {
-	live, _ := t.c.Live()
-	return client.Signed(live, started, text)
 }
 
 func asking(x sessions.Session) []Ask {
@@ -429,6 +428,11 @@ func (t *tools) send(ctx context.Context, _ *mcp.CallToolRequest, in sendIn) (*m
 	if x.Kind == "interactive" && x.PID > 0 {
 		return nil, done{}, fmt.Errorf("%q is open in a terminal, so it cannot take messages from here; the user has to type into it there", x.Title)
 	}
+	live, _ := t.c.Live()
+	me, isSession := client.Self(live)
+	if !x.Attachable && isSession && !in.Wake && me.ReportsTo != x.SessionID {
+		return nil, done{}, fmt.Errorf("%q is stopped and is not waiting on a report from you, so it stays stopped; leave the outcome in your final message, or pass wake if the user asked for this message", x.Title)
+	}
 	id, note := x.ID, ""
 	if !x.Attachable {
 		if id, err = t.c.Resume(x.SessionID); err != nil {
@@ -439,8 +443,11 @@ func (t *tools) send(ctx context.Context, _ *mcp.CallToolRequest, in sendIn) (*m
 		}
 		note = "resumed it first"
 	}
-	if err := t.c.Send(id, t.signed(false, in.Text)); err != nil {
+	if err := t.c.Send(id, client.Signed(live, false, in.Report, in.Text)); err != nil {
 		return nil, done{}, err
+	}
+	if in.Report && isSession {
+		t.c.Patch(x.SessionID, map[string]any{"reportsTo": me.SessionID})
 	}
 	return nil, done{Ref: id, Title: x.Title, State: "sent", Note: note}, nil
 }
@@ -499,7 +506,9 @@ func (t *tools) until(ctx context.Context, key string, limit time.Duration, ok f
 }
 
 func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (*mcp.CallToolResult, done, error) {
-	prompt := t.signed(true, in.Prompt)
+	live, _ := t.c.Live()
+	me, isSession := client.Self(live)
+	prompt := client.Signed(live, true, in.Report, in.Prompt)
 	var id, title string
 	var err error
 	if in.Preset != "" {
@@ -512,10 +521,17 @@ func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (
 	if err != nil {
 		return nil, done{}, err
 	}
-	out := done{Ref: id, Title: title, State: "started", Note: "it reports back here when done; use wait to block on it, read to check in"}
+	out := done{Ref: id, Title: title, State: "started", Note: "handed off: it does not report back; read to check in"}
+	if in.Report {
+		out.Note = "it reports back here when done; use wait to block on it, read to check in"
+	}
 	t.until(ctx, id, 20*time.Second, func(s sessions.Session) bool {
 		if s.Title != "" {
 			out.Title, out.State = s.Title, s.State
+		}
+		if in.Report && isSession && s.SessionID != "" {
+			t.c.Patch(s.SessionID, map[string]any{"reportsTo": me.SessionID})
+			in.Report = false
 		}
 		return s.Title != "" && s.State != sessions.Stopped
 	})

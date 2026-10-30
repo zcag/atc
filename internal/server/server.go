@@ -784,9 +784,10 @@ func (s *Server) act(f func(context.Context, string) error) http.HandlerFunc {
 
 func (s *Server) patch(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Name   *string `json:"name"`
-		Pinned *bool   `json:"pinned"`
-		Parked *bool   `json:"parked"`
+		Name      *string `json:"name"`
+		Pinned    *bool   `json:"pinned"`
+		Parked    *bool   `json:"parked"`
+		ReportsTo *string `json:"reportsTo"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -801,6 +802,9 @@ func (s *Server) patch(w http.ResponseWriter, r *http.Request) {
 		}
 		if req.Parked != nil {
 			m.Parked = *req.Parked
+		}
+		if req.ReportsTo != nil {
+			m.ReportsTo = *req.ReportsTo
 		}
 	})
 	s.done(w, r.PathValue("sid"), err)

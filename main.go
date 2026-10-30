@@ -60,12 +60,15 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc ls [-json]                 live sessions, most urgent first
   atc attach <session>           take over this terminal; Ctrl+Z detaches
   atc history [-json] [query]    past conversations, newest first
-  atc new [-n name] [-host machine] [dir] [prompt...]
+  atc new [-n name] [-host machine] [-report] [dir] [prompt...]
   atc new -p preset [prompt...]  start from a preset (presets.json in the server's config folder)
       dir defaults to the current dir, with your home written as ~ so it
       maps onto the same path under the server's home
-  atc send <session> [text...]   type a message into a running session; reads
+  atc send [-report] <session> [text...]
+                                 type a message into a running session; reads
                                  stdin when no text is given (cmd | atc send 2)
+      from inside a Claude session, -report asks the other to report back to it;
+      without, the work is handed off and it does not
   atc mcp                        tools for Claude to see and drive your other sessions
                                  (MCP over stdio): claude mcp add atc -- atc mcp
   atc resume <session>           bring a stopped or past session back
@@ -391,12 +394,13 @@ func newSession(args []string) error {
 	name := fs.String("n", "", "session name")
 	host := fs.String("host", "", "machine to start it on, when the server lists several")
 	preset := fs.String("p", "", "start from a named preset")
+	report := fs.Bool("report", false, "from inside a Claude session: ask the new session to report back to it")
 	fs.Parse(args)
 	rest := fs.Args()
 	c := client.Load()
 	live, _ := c.Live()
 	if *preset != "" {
-		id, dir, err := c.StartPreset(*preset, client.Signed(live, true, strings.Join(rest, " ")))
+		id, dir, err := c.StartPreset(*preset, client.Signed(live, true, *report, strings.Join(rest, " ")))
 		if err == nil {
 			fmt.Printf("started %s (%s) in %s\n", id, *preset, dir)
 		}
@@ -409,7 +413,7 @@ func newSession(args []string) error {
 	if dir == "" {
 		dir = tildePWD()
 	}
-	id, err := c.StartOn(*host, dir, *name, client.Signed(live, true, strings.Join(rest, " ")), false)
+	id, err := c.StartOn(*host, dir, *name, client.Signed(live, true, *report, strings.Join(rest, " ")), false)
 	if err != nil {
 		return err
 	}
@@ -612,8 +616,12 @@ func showLimits(args []string) error {
 }
 
 func sendTo(args []string) error {
+	report := len(args) > 0 && args[0] == "-report"
+	if report {
+		args = args[1:]
+	}
 	if len(args) < 1 {
-		return fmt.Errorf("usage: atc send <session> [text...]")
+		return fmt.Errorf("usage: atc send [-report] <session> [text...]")
 	}
 	text := strings.Join(args[1:], " ")
 	if text == "" {
@@ -635,7 +643,7 @@ func sendTo(args []string) error {
 		return fmt.Errorf("%q is not running in the background; resume it first", s.Title)
 	}
 	live, _ := c.Live()
-	return c.Send(s.ID, client.Signed(live, false, text))
+	return c.Send(s.ID, client.Signed(live, false, report, text))
 }
 
 func attachTo(args []string) error {

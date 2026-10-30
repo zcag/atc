@@ -8,12 +8,13 @@ import (
 )
 
 type Meta struct {
-	Name   string `json:"name,omitempty"`
-	Pinned bool   `json:"pinned,omitempty"`
-	Parked bool   `json:"parked,omitempty"`
-	Engine string `json:"engine,omitempty"`
-	Live   string `json:"live,omitempty"`
-	App    string `json:"app,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Pinned    bool   `json:"pinned,omitempty"`
+	Parked    bool   `json:"parked,omitempty"`
+	Engine    string `json:"engine,omitempty"`
+	Live      string `json:"live,omitempty"`
+	App       string `json:"app,omitempty"`
+	ReportsTo string `json:"reportsTo,omitempty"`
 }
 
 const (

@@ -24,35 +24,42 @@ func Ref(s sessions.Session) string {
 	return s.SessionID[:min(8, len(s.SessionID))]
 }
 
-func From(pool []sessions.Session, started bool) string {
+func From(pool []sessions.Session, started, report bool) string {
 	me, ok := Self(pool)
+	verb := "from"
+	if started {
+		verb = "started by"
+	}
 	if !ok {
 		if os.Getenv("CLAUDE_CODE_SESSION_ID") == "" {
 			return ""
 		}
 		host, _ := os.Hostname()
-		if started {
-			return fmt.Sprintf("[started by a Claude session on %s that atc does not run, so it cannot take messages · if it asks for a report, put it in your final message]", host)
+		ask := "no need to answer"
+		if report {
+			ask = "put your report in your final message"
 		}
-		return fmt.Sprintf("[from a Claude session on %s that atc does not run, so it cannot take messages · put your answer in your final message]", host)
+		return fmt.Sprintf("[%s a Claude session on %s that atc does not run, so it cannot take messages · %s]", verb, host, ask)
 	}
 	who := fmt.Sprintf("session %q (%s", me.Title, Ref(me))
 	if me.Host != "" {
 		who += " on " + me.Host
 	}
 	who += ")"
-	how := "use atc's send tool to " + Ref(me)
-	if !me.Attachable {
-		how = "put it in your final message: it is open in a terminal and cannot take messages, it reads yours with wait"
+	ask := "no need to answer"
+	switch {
+	case !report && started:
+		ask = "handed off to you: no need to report back"
+	case report && !me.Attachable:
+		ask = "report back in your final message: it is open in a terminal and cannot take messages, it reads yours with wait"
+	case report:
+		ask = "report back when done with atc's send tool to " + Ref(me)
 	}
-	if started {
-		return fmt.Sprintf("[started by %s · to answer it, %s]", who, how)
-	}
-	return fmt.Sprintf("[from %s · %s]", who, how)
+	return fmt.Sprintf("[%s %s · %s]", verb, who, ask)
 }
 
-func Signed(pool []sessions.Session, started bool, text string) string {
-	if h := From(pool, started); h != "" {
+func Signed(pool []sessions.Session, started, report bool, text string) string {
+	if h := From(pool, started, report); h != "" {
 		if text == "" {
 			return h
 		}
