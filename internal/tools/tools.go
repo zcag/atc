@@ -171,13 +171,14 @@ type stateIn struct {
 }
 
 type sharer struct {
-	Agent    string `json:"agent"`
-	Title    string `json:"title,omitempty"`
-	Host     string `json:"host"`
-	Page     string `json:"page"`
-	About    string `json:"about,omitempty"`
-	Headline string `json:"headline,omitempty"`
-	Badge    any    `json:"badge,omitempty"`
+	Agent    string         `json:"agent"`
+	Title    string         `json:"title,omitempty"`
+	Host     string         `json:"host"`
+	Page     string         `json:"page"`
+	About    string         `json:"about,omitempty"`
+	Headline string         `json:"headline,omitempty"`
+	Badge    any            `json:"badge,omitempty"`
+	Keys     map[string]int `json:"keys,omitempty" jsonschema:"its top-level keys with their size in bytes, so you can ask for only the ones you need"`
 }
 
 type stateOut struct {
@@ -243,7 +244,8 @@ func Run(ctx context.Context, c *client.Client) error {
 	mcp.AddTool(s, &mcp.Tool{Name: "stop", Description: "Stop a running session. Its conversation is kept and can be resumed."}, t.stop)
 	mcp.AddTool(s, &mcp.Tool{Name: "outputs", Description: "What a session produced: servers it started (with links), pages it published, files it wrote with links to open them, links from its replies."}, t.outputs)
 	mcp.AddTool(s, &mcp.Tool{Name: "state", Description: "Read what agents keep track of in their page state. With no agent: the agents that share " +
-		"state, each with what it holds, its headline and badge. With an agent: its state as JSON, or only the top-level keys you name. " +
+		"state, each with what it holds, its headline, badge and top-level keys with their sizes. With an agent: its state as JSON " +
+		"(null and empty fields left out), or only the top-level keys you name. " +
 		"Ask for the small keys first (counts, headline) and the big ones (items) only when the question needs them."}, t.state)
 	mcp.AddTool(s, &mcp.Tool{Name: "later", Description: "Put a task on the user's backlog for a project, to start later as a session. " +
 		"Only when the user asks for it (\"add that to the backlog\", \"remember to do X in atc\"), never on your own. " +
@@ -566,7 +568,17 @@ func (t *tools) state(ctx context.Context, _ *mcp.CallToolRequest, in stateIn) (
 			continue
 		}
 		if name == "" {
-			out.Agents = append(out.Agents, sharer{Agent: "@" + a.Name, Title: a.Title, Host: a.Host, Page: a.Share.Page, About: a.Share.About, Headline: a.Headline, Badge: a.Badge})
+			sh := sharer{Agent: "@" + a.Name, Title: a.Title, Host: a.Host, Page: a.Share.Page, About: a.Share.About, Headline: a.Headline, Badge: a.Badge}
+			if st, err := t.c.PageState(sh.Agent, sh.Page); err == nil {
+				var all map[string]json.RawMessage
+				if json.Unmarshal(st, &all) == nil && len(all) > 0 {
+					sh.Keys = map[string]int{}
+					for k, v := range all {
+						sh.Keys[k] = len(v)
+					}
+				}
+			}
+			out.Agents = append(out.Agents, sh)
 		} else if strings.EqualFold(a.Name, name) {
 			out.Agent, out.Page = "@"+a.Name, a.Share.Page
 		}
@@ -585,7 +597,9 @@ func (t *tools) state(ctx context.Context, _ *mcp.CallToolRequest, in stateIn) (
 		return nil, out, fmt.Errorf("%s has not written its state yet", out.Agent)
 	}
 	if len(in.Keys) == 0 {
-		return nil, out, json.Unmarshal(st, &out.State)
+		err := json.Unmarshal(st, &out.State)
+		out.State = pruned(out.State)
+		return nil, out, err
 	}
 	var all map[string]any
 	if json.Unmarshal(st, &all) != nil || all == nil {
@@ -598,11 +612,44 @@ func (t *tools) state(ctx context.Context, _ *mcp.CallToolRequest, in stateIn) (
 	some := map[string]any{}
 	for _, k := range in.Keys {
 		if v, ok := all[k]; ok {
-			some[k] = v
+			some[k] = pruned(v)
 		}
 	}
 	out.State = some
 	return nil, out, nil
+}
+
+// pruned drops null and empty fields at every depth: a reader pays for each one and learns nothing.
+func pruned(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		for k, e := range x {
+			if e = pruned(e); empty(e) {
+				delete(x, k)
+			} else {
+				x[k] = e
+			}
+		}
+	case []any:
+		for i, e := range x {
+			x[i] = pruned(e)
+		}
+	}
+	return v
+}
+
+func empty(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return true
+	case string:
+		return x == ""
+	case map[string]any:
+		return len(x) == 0
+	case []any:
+		return len(x) == 0
+	}
+	return false
 }
 
 func (t *tools) stop(ctx context.Context, _ *mcp.CallToolRequest, in ref) (*mcp.CallToolResult, done, error) {
