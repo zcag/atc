@@ -246,6 +246,10 @@ email/
 - `every`, `from`, `check`, `prompt`: when it wakes up (below). `prompt` also starts its first
   conversation from atc.
 - `reset`: when its conversation starts over (below).
+- `share`: `{"page": "items", "about": "what it holds"}` names the page whose state other sessions
+  read with the `state` tool, so the assistant answers "what's open?" from it instead of asking the
+  agent. Give that state a `headline` and `badge` and keep its keys small and named (`counts`
+  apart from `items`), since a reader can ask for single keys.
 
 Edits apply without a restart: atc rereads the folders, and the brief is read at every start and
 resume. Before the brief, atc tells the agent its name and folder, that it keeps durable things in
@@ -580,6 +584,8 @@ not billed per token.
 - `start` a session in a folder on any machine (optionally in its own worktree), `send` a
   message to one (resuming it first if it was stopped), `wait` for its answer, `outputs` for the
   servers, pages and files it produced, `stop`, `history`, `presets`.
+- `state`: with no agent, the agents that share state (`share` in `agent.json`) with what it
+  holds, headline and badge; with one, its state, or only the top-level keys asked for.
 - `later` puts a task on your backlog when you ask for that (it shows as a suggestion from that
   session), `backlog` lists what is on it, `mark` marks an item done, blocked or ready (by default
   the one the session was started from).

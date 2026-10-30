@@ -35,13 +35,14 @@ func TestLoadAgents(t *testing.T) {
 	writeAgent(t, root, "nohost", `{"title":"x"}`)
 	writeAgent(t, root, "badevery", `{"host":"here","every":"soon","prompt":"x"}`)
 	writeAgent(t, root, "silent", `{"host":"here","every":"5m"}`)
+	writeAgent(t, root, "nopage", `{"host":"here","share":{"about":"x"}}`)
 	os.MkdirAll(filepath.Join(root, "not-an-agent"), 0o755)
 	list := loadAgents(root)
 	errs := map[string]string{}
 	for _, a := range list {
 		errs[a.Name] = a.Err
 	}
-	if len(list) != 4 || errs["mail"] != "" || errs["nohost"] == "" || errs["badevery"] == "" || errs["silent"] == "" {
+	if len(list) != 5 || errs["mail"] != "" || errs["nohost"] == "" || errs["badevery"] == "" || errs["silent"] == "" || errs["nopage"] == "" {
 		t.Fatalf("load: %+v", list)
 	}
 	a := list[slicesIndex(list, "mail")]

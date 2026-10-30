@@ -42,7 +42,14 @@ type Agent struct {
 	Check  string     `json:"check,omitempty"`
 	Prompt string     `json:"prompt,omitempty"`
 	Reset  *resetSpec `json:"reset,omitempty"`
+	Share  *share     `json:"share,omitempty"`
 	Err    string     `json:"error,omitempty"`
+}
+
+// share names the page whose state the agent keeps for other sessions to read, and what it holds.
+type share struct {
+	Page  string `json:"page"`
+	About string `json:"about,omitempty"`
 }
 
 type resetSpec struct {
@@ -88,6 +95,9 @@ func (a Agent) valid() error {
 	}
 	if _, err := a.interval(); err != nil {
 		return err
+	}
+	if a.Share != nil && a.Share.Page == "" {
+		return errors.New("share needs a page: the name of the page whose state it shares")
 	}
 	_, err := a.policy()
 	return err

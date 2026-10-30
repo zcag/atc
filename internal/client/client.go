@@ -199,6 +199,22 @@ type Preset struct {
 	Host  string `json:"host,omitempty"`
 }
 
+type Agent struct {
+	Name  string `json:"name"`
+	Title string `json:"title,omitempty"`
+	Host  string `json:"host"`
+	Share *struct {
+		Page  string `json:"page"`
+		About string `json:"about,omitempty"`
+	} `json:"share,omitempty"`
+	Badge    json.RawMessage `json:"badge,omitempty"`
+	Headline string          `json:"headline,omitempty"`
+}
+
+func (c *Client) Agents() (list []Agent, err error) {
+	return list, c.do("GET", "/api/agents", nil, &list)
+}
+
 func (c *Client) Presets() (ps []Preset, err error) {
 	return ps, c.do("GET", "/api/presets", nil, &ps)
 }

@@ -3,8 +3,10 @@ package tools
 import (
 	"cmp"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,7 +23,8 @@ const instructions = `atc is how the user runs Claude Code sessions on their mac
 	`"have another agent look at this"), or talks about another session, project or task by name, even without naming atc. ` +
 	`"sessions" shows what is open and what each is doing or asking, "read" before you summarize or answer about a session, ` +
 	`"start" for new work in a folder on a machine, "send" to pass something on, "wait" for its answer, "outputs" for what it produced ` +
-	`(running servers, pages it showed, files), "later" to put a task on the user's backlog when they ask for that, "backlog" to see it, "mark" to mark an item done or blocked. Refer to sessions by their title. Never send to the session marked as you. ` +
+	`(running servers, pages it showed, files), "state" for what agents keep track of (what is open, counts, statuses: ` +
+	`read it before asking an agent), "later" to put a task on the user's backlog when they ask for that, "backlog" to see it, "mark" to mark an item done or blocked. Refer to sessions by their title. Never send to the session marked as you. ` +
 	`An agent is a standing conversation under one name: send to it as @name and it wakes, resumed or started as needed.
 
 ` +
@@ -162,6 +165,29 @@ type waitIn struct {
 	Seconds int    `json:"seconds,omitempty" jsonschema:"how long to wait at most, default 300, max 900"`
 }
 
+type stateIn struct {
+	Agent string   `json:"agent,omitempty" jsonschema:"the agent, as name or @name; empty lists the agents that share state"`
+	Keys  []string `json:"keys,omitempty" jsonschema:"only these top-level keys of its state, such as counts or headline; empty returns all of it"`
+}
+
+type sharer struct {
+	Agent    string          `json:"agent"`
+	Title    string          `json:"title,omitempty"`
+	Host     string          `json:"host"`
+	Page     string          `json:"page"`
+	About    string          `json:"about,omitempty"`
+	Headline string          `json:"headline,omitempty"`
+	Badge    json.RawMessage `json:"badge,omitempty"`
+}
+
+type stateOut struct {
+	Agents []sharer         `json:"agents,omitempty" jsonschema:"the agents that share state, when no agent was named"`
+	Agent  string           `json:"agent,omitempty"`
+	Page   string           `json:"page,omitempty"`
+	State  *json.RawMessage `json:"state,omitempty"`
+	Keys   []string         `json:"keys,omitempty" jsonschema:"every top-level key of its state, when you asked for some"`
+}
+
 type historyIn struct {
 	Query string `json:"query,omitempty" jsonschema:"words from the title, prompts or folder"`
 	Limit int    `json:"limit,omitempty" jsonschema:"default 15"`
@@ -216,6 +242,9 @@ func Run(ctx context.Context, c *client.Client) error {
 		})
 	mcp.AddTool(s, &mcp.Tool{Name: "stop", Description: "Stop a running session. Its conversation is kept and can be resumed."}, t.stop)
 	mcp.AddTool(s, &mcp.Tool{Name: "outputs", Description: "What a session produced: servers it started (with links), pages it published, files it wrote with links to open them, links from its replies."}, t.outputs)
+	mcp.AddTool(s, &mcp.Tool{Name: "state", Description: "Read what agents keep track of in their page state. With no agent: the agents that share " +
+		"state, each with what it holds, its headline and badge. With an agent: its state as JSON, or only the top-level keys you name. " +
+		"Ask for the small keys first (counts, headline) and the big ones (items) only when the question needs them."}, t.state)
 	mcp.AddTool(s, &mcp.Tool{Name: "later", Description: "Put a task on the user's backlog for a project, to start later as a session. " +
 		"Only when the user asks for it (\"add that to the backlog\", \"remember to do X in atc\"), never on your own. " +
 		"It shows as a suggestion from this session until the user accepts it."}, t.later)
@@ -523,6 +552,54 @@ func (t *tools) outputs(ctx context.Context, _ *mcp.CallToolRequest, in ref) (*m
 		}
 	}
 	return nil, o, err
+}
+
+func (t *tools) state(ctx context.Context, _ *mcp.CallToolRequest, in stateIn) (*mcp.CallToolResult, stateOut, error) {
+	agents, err := t.c.Agents()
+	if err != nil {
+		return nil, stateOut{}, err
+	}
+	var out stateOut
+	name := strings.TrimPrefix(in.Agent, "@")
+	for _, a := range agents {
+		if a.Share == nil {
+			continue
+		}
+		if name == "" {
+			out.Agents = append(out.Agents, sharer{Agent: "@" + a.Name, Title: a.Title, Host: a.Host, Page: a.Share.Page, About: a.Share.About, Headline: a.Headline, Badge: a.Badge})
+		} else if strings.EqualFold(a.Name, name) {
+			out.Agent, out.Page = "@"+a.Name, a.Share.Page
+		}
+	}
+	if name == "" {
+		return nil, out, nil
+	}
+	if out.Agent == "" {
+		return nil, out, fmt.Errorf("no agent named %q shares state; call state with no agent for the ones that do", name)
+	}
+	st, err := t.c.PageState(out.Agent, out.Page)
+	if err != nil {
+		return nil, out, err
+	}
+	if len(in.Keys) > 0 {
+		var all map[string]json.RawMessage
+		if json.Unmarshal(st, &all) != nil {
+			return nil, out, fmt.Errorf("%s's state is not an object, so it has no keys; ask without keys", out.Agent)
+		}
+		for k := range all {
+			out.Keys = append(out.Keys, k)
+		}
+		sort.Strings(out.Keys)
+		some := map[string]json.RawMessage{}
+		for _, k := range in.Keys {
+			if v, ok := all[k]; ok {
+				some[k] = v
+			}
+		}
+		st, _ = json.Marshal(some)
+	}
+	out.State = &st
+	return nil, out, nil
 }
 
 func (t *tools) stop(ctx context.Context, _ *mcp.CallToolRequest, in ref) (*mcp.CallToolResult, done, error) {
