@@ -378,7 +378,7 @@ function App() {
           : html`<div class="blank">${starting || (route && !live) ? "Opening…" : route ? "This session is gone. Pick another from the list." : "Pick a session, or start a new one."}</div>`}
       </main>
     </div>
-    ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} start=${creating} />`}
+    ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} start=${creating === true ? here(sel, live) : creating} />`}
     ${palette && html`<${Palette} live=${reach || []} sel=${sel} say=${say} home=${me.host} onClose=${() => setPalette(false)}
       actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: () => (location.hash = "#/assist"), ask: () => talk(false, false) }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
@@ -3141,6 +3141,13 @@ const STAGES = [
 ];
 const FOLDED = new Set(["suggested", "done"]);
 const baseDir = (d) => (d || "").replace(/\/\.claude\/worktrees\/[^/]+$/, "");
+const here = (sel, live) => {
+  if (sel?.cwd) return { dir: baseDir(sel.cwd), host: sel.host };
+  const s = TABS.only && live?.find((x) => x.cwd && project(x.cwd).name === TABS.only);
+  if (!s) return true;
+  const { rest } = project(s.cwd), dir = baseDir(s.cwd);
+  return { dir: rest ? dir.slice(0, -rest.length - 1) : dir, host: s.host };
+};
 let BL = null, blTimer = 0;
 const blSubs = new Set();
 const loadBacklog = (onErr) => api("/api/backlog").then((l) => { BL = l || []; blSubs.forEach((f) => f(BL)); },
