@@ -422,34 +422,15 @@ func (t *tools) send(ctx context.Context, _ *mcp.CallToolRequest, in sendIn) (*m
 	if err != nil {
 		return nil, done{}, err
 	}
-	if t.isSelf(x) {
-		return nil, done{}, fmt.Errorf("that is this session itself")
-	}
-	if x.Kind == "interactive" && x.PID > 0 {
-		return nil, done{}, fmt.Errorf("%q is open in a terminal, so it cannot take messages from here; the user has to type into it there", x.Title)
-	}
-	live, _ := t.c.Live()
-	me, isSession := client.Self(live)
-	if !x.Attachable && isSession && !in.Wake && me.ReportsTo != x.Lineage() {
-		return nil, done{}, fmt.Errorf("%q is stopped and is not waiting on a report from you, so it stays stopped; leave the outcome in your final message, or pass wake if the user asked for this message", x.Title)
-	}
-	id, note := x.ID, ""
-	if !x.Attachable {
-		if id, err = t.c.Resume(x.SessionID); err != nil {
-			return nil, done{}, fmt.Errorf("resume %q: %w", x.Title, err)
-		}
-		if err := t.until(ctx, id, 30*time.Second, func(s sessions.Session) bool { return s.Attachable }); err != nil {
-			return nil, done{}, err
-		}
-		note = "resumed it first"
-	}
-	if err := t.c.Send(id, client.Signed(live, false, in.Report, in.Text)); err != nil {
+	id, resumed, err := t.c.Deliver(ctx, x, in.Text, in.Report, in.Wake)
+	if err != nil {
 		return nil, done{}, err
 	}
-	if in.Report && isSession {
-		t.c.Patch(x.Lineage(), map[string]any{"reportsTo": me.Lineage()})
+	out := done{Ref: id, Title: x.Title, State: "sent"}
+	if resumed {
+		out.Note = "resumed it first"
 	}
-	return nil, done{Ref: id, Title: x.Title, State: "sent", Note: note}, nil
+	return nil, out, nil
 }
 
 func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*mcp.CallToolResult, done, error) {
@@ -467,7 +448,7 @@ func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*m
 	}
 	time.Sleep(3 * time.Second)
 	var last sessions.Session
-	err = t.until(ctx, key, time.Duration(min(secs, 900))*time.Second, func(s sessions.Session) bool {
+	err = t.c.Until(ctx, key, time.Duration(min(secs, 900))*time.Second, func(s sessions.Session) bool {
 		last = s
 		return s.State != sessions.Working
 	})
@@ -483,55 +464,18 @@ func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*m
 	return nil, done{Ref: key, Title: last.Title, State: last.State, Summary: sum, Replied: clip(last.LastReply, 1500)}, nil
 }
 
-func (t *tools) until(ctx context.Context, key string, limit time.Duration, ok func(sessions.Session) bool) error {
-	end := time.Now().Add(limit)
-	for {
-		live, err := t.c.Live()
-		if err == nil {
-			for _, s := range live {
-				if (s.ID == key || s.SessionID == key) && ok(s) {
-					return nil
-				}
-			}
-		}
-		if time.Now().After(end) {
-			return fmt.Errorf("gave up after %s", limit)
-		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(3 * time.Second):
-		}
-	}
-}
-
 func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (*mcp.CallToolResult, done, error) {
-	live, _ := t.c.Live()
-	me, isSession := client.Self(live)
-	prompt := client.Signed(live, true, in.Report, in.Prompt)
-	var id, title string
-	var err error
-	if in.Preset != "" {
-		id, _, err = t.c.StartPreset(in.Preset, prompt)
-		title = in.Preset
-	} else {
-		id, err = t.c.StartOn(in.Host, in.Dir, in.Name, prompt, in.Worktree)
-		title = in.Name
-	}
+	id, _, err := t.c.Launch(ctx, client.Launch{Host: in.Host, Dir: in.Dir, Name: in.Name, Preset: in.Preset, Prompt: in.Prompt, Worktree: in.Worktree, Report: in.Report})
 	if err != nil {
 		return nil, done{}, err
 	}
-	out := done{Ref: id, Title: title, State: "started", Note: "handed off: it does not report back; read to check in"}
+	out := done{Ref: id, Title: cmp.Or(in.Name, in.Preset), State: "started", Note: "handed off: it does not report back; read to check in"}
 	if in.Report {
 		out.Note = "it reports back here when done; use wait to block on it, read to check in"
 	}
-	t.until(ctx, id, 20*time.Second, func(s sessions.Session) bool {
+	t.c.Until(ctx, id, 20*time.Second, func(s sessions.Session) bool {
 		if s.Title != "" {
 			out.Title, out.State = s.Title, s.State
-		}
-		if in.Report && isSession && s.SessionID != "" {
-			t.c.Patch(s.Lineage(), map[string]any{"reportsTo": me.Lineage()})
-			in.Report = false
 		}
 		return s.Title != "" && s.State != sessions.Stopped
 	})

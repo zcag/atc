@@ -64,11 +64,12 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc new -p preset [prompt...]  start from a preset (presets.json in the server's config folder)
       dir defaults to the current dir, with your home written as ~ so it
       maps onto the same path under the server's home
-  atc send [-report] <session> [text...]
-                                 type a message into a running session; reads
-                                 stdin when no text is given (cmd | atc send 2)
+  atc send [-report] [-wake] <session> [text...]
+                                 type a message into a session, resuming it if stopped;
+                                 reads stdin when no text is given (cmd | atc send 2)
       from inside a Claude session, -report asks the other to report back to it;
-      without, the work is handed off and it does not
+      without, the work is handed off and it does not. A stopped session is
+      resumed for it only when it waits on its report, or with -wake
   atc mcp                        tools for Claude to see and drive your other sessions
                                  (MCP over stdio): claude mcp add atc -- atc mcp
   atc resume <session>           bring a stopped or past session back
@@ -397,23 +398,14 @@ func newSession(args []string) error {
 	report := fs.Bool("report", false, "from inside a Claude session: ask the new session to report back to it")
 	fs.Parse(args)
 	rest := fs.Args()
-	c := client.Load()
-	live, _ := c.Live()
-	if *preset != "" {
-		id, dir, err := c.StartPreset(*preset, client.Signed(live, true, *report, strings.Join(rest, " ")))
-		if err == nil {
-			fmt.Printf("started %s (%s) in %s\n", id, *preset, dir)
-		}
-		return err
-	}
 	dir := ""
-	if len(rest) > 0 && (strings.HasPrefix(rest[0], "/") || strings.HasPrefix(rest[0], "~")) {
-		dir, rest = rest[0], rest[1:]
+	if *preset == "" {
+		if len(rest) > 0 && (strings.HasPrefix(rest[0], "/") || strings.HasPrefix(rest[0], "~")) {
+			dir, rest = rest[0], rest[1:]
+		}
+		dir = cmp.Or(dir, tildePWD())
 	}
-	if dir == "" {
-		dir = tildePWD()
-	}
-	id, err := c.StartOn(*host, dir, *name, client.Signed(live, true, *report, strings.Join(rest, " ")), false)
+	id, dir, err := client.Load().Launch(context.Background(), client.Launch{Host: *host, Dir: dir, Name: *name, Preset: *preset, Prompt: strings.Join(rest, " "), Report: *report})
 	if err != nil {
 		return err
 	}
@@ -616,12 +608,18 @@ func showLimits(args []string) error {
 }
 
 func sendTo(args []string) error {
-	report := len(args) > 0 && args[0] == "-report"
-	if report {
-		args = args[1:]
+	fs := flag.NewFlagSet("send", flag.ExitOnError)
+	report := fs.Bool("report", false, "from inside a Claude session: ask it to answer this session")
+	wake := fs.Bool("wake", false, "from inside a Claude session: resume it although it is stopped and not waiting on this session")
+	fs.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: atc send [-report] [-wake] <session> [text...]")
+		fs.PrintDefaults()
 	}
+	fs.Parse(args)
+	args = fs.Args()
 	if len(args) < 1 {
-		return fmt.Errorf("usage: atc send [-report] <session> [text...]")
+		fs.Usage()
+		os.Exit(2)
 	}
 	text := strings.Join(args[1:], " ")
 	if text == "" {
@@ -635,15 +633,15 @@ func sendTo(args []string) error {
 		return fmt.Errorf("nothing to send")
 	}
 	c := client.Load()
-	s, err := c.Find(args[0], false)
+	s, err := c.Find(args[0], true)
 	if err != nil {
 		return err
 	}
-	if !s.Attachable {
-		return fmt.Errorf("%q is not running in the background; resume it first", s.Title)
+	_, resumed, err := c.Deliver(context.Background(), s, text, *report, *wake)
+	if resumed {
+		fmt.Printf("resumed %s first\n", s.Title)
 	}
-	live, _ := c.Live()
-	return c.Send(s.ID, client.Signed(live, false, report, text))
+	return err
 }
 
 func attachTo(args []string) error {

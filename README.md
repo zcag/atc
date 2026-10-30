@@ -578,10 +578,11 @@ take messages (open in a terminal, or on a machine atc does not run on) asks for
 final message instead, which it reads with `wait`.
 
 A message between sessions reaches a running one either way, but a stopped one stays stopped:
-`send` resumes it for another session only when it is waiting on that one's report (it started or
-messaged it through the MCP tools with `report`, which atc records as the sender's `reportsTo`,
-shown as "reports to" in its header, where you can cut it), or with `wake`, which the instructions
-keep for a message the user asked for. A request from another session is not your approval: your rules for
+`send` (the tool or `atc send`) resumes it for another session only when it is waiting on that
+one's report (it started or messaged it with `report`, which atc records as the reporting
+session's `reportsTo`, shown as "reports to" in its header, where you can cut it), or with `wake`,
+which the instructions keep for a message the user asked for. The tools and the CLI share this
+code (`internal/client/relay.go`), so they behave the same. A request from another session is not your approval: your rules for
 outward actions still apply, and the instructions say so.
 
 Sessions open in a terminal can be read but not typed into. A session never sends to itself.
