@@ -111,7 +111,7 @@ func callNumber() string {
 
 const callHelp = `atc call: have delta ring the user, with the assistant on the line.
 
-  atc call [--reason TEXT] [--wait] [--timeout 45s]
+  atc call [--reason TEXT] [--wait] [--timeout 45s] [--whatsapp]
 
 delta (the agents' phone line) calls the user's own number, never another. When they pick
 up, the assistant (atc's hub session) speaks first and knows the reason; from another
@@ -120,6 +120,8 @@ session, it also knows who asked and passes their answer back to you with send.
   --reason TEXT   why you are calling and what to tell them
   --wait          wait for the outcome and print it: answered, no-answer or busy
   --timeout D     how long it rings (default 45s)
+  --whatsapp      a WhatsApp voice call from delta's bot account instead of the phone line;
+                  only when the user asks for a WhatsApp call
 
 Without --wait it returns at once; a call nobody picks up comes back to your session as
 a "[telefon ... açmadı]" message.
@@ -127,7 +129,7 @@ a "[telefon ... açmadı]" message.
 
 func callCmd(args []string) error {
 	var reason string
-	var wait bool
+	var wait, whatsapp bool
 	timeout := 45 * time.Second
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -153,6 +155,8 @@ func callCmd(args []string) error {
 			reason, err = val()
 		case flag == "wait" || flag == "w":
 			wait = true
+		case flag == "whatsapp":
+			whatsapp = true
 		case flag == "timeout":
 			var d string
 			if d, err = val(); err == nil {
@@ -167,7 +171,7 @@ func callCmd(args []string) error {
 	}
 	c := client.Load()
 	live, _ := c.Live()
-	out, err := c.Call(map[string]any{"reason": reason, "wait": wait, "timeout": int(timeout.Seconds()),
+	out, err := c.Call(map[string]any{"reason": reason, "wait": wait, "timeout": int(timeout.Seconds()), "whatsapp": whatsapp,
 		"from": client.From(live, false, true), "session": os.Getenv("CLAUDE_CODE_SESSION_ID")})
 	if err != nil {
 		return err

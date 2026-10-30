@@ -2,6 +2,7 @@ package hub
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -101,10 +102,11 @@ func (c CallConfig) onCall(ctx context.Context) bool {
 var ErrNoPhone = errors.New("no phone line configured (ATC_DELTA_CALL)")
 
 type CallReq struct {
-	Reason  string `json:"reason"`
-	From    string `json:"from,omitempty"`
-	Notify  bool   `json:"notify,omitempty"`
-	Timeout int    `json:"timeout,omitempty"`
+	Reason   string `json:"reason"`
+	From     string `json:"from,omitempty"`
+	Notify   bool   `json:"notify,omitempty"`
+	Timeout  int    `json:"timeout,omitempty"`
+	WhatsApp bool   `json:"whatsapp,omitempty"`
 }
 
 // Call has delta ring them and waits for the outcome. Answered, the phone's first message reaches
@@ -147,11 +149,15 @@ func (h *Hub) Call(ctx context.Context, r CallReq) (string, error) {
 		clear()
 		return Busy, nil
 	}
-	if err := c.post(ctx, "/dial", map[string]string{"number": c.Number}); err != nil {
+	dial := map[string]string{"number": c.Number}
+	if r.WhatsApp {
+		dial["via"] = "whatsapp"
+	}
+	if err := c.post(ctx, "/dial", dial); err != nil {
 		clear()
 		return "", err
 	}
-	log.Printf("hub: calling %s: %s", c.Number, pc.reason)
+	log.Printf("hub: calling %s (%s): %s", c.Number, cmp.Or(dial["via"], "phone"), pc.reason)
 	poll := cmpDur(c.Poll, 500*time.Millisecond)
 	deadline := time.Now().Add(timeout)
 	rang := false

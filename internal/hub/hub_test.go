@@ -407,6 +407,7 @@ type line_ struct {
 	mu      sync.Mutex
 	states  []lineState
 	dialed  []string
+	via     []string
 	hangups int
 }
 
@@ -422,9 +423,14 @@ func (l *line_) server(t *testing.T) *httptest.Server {
 			}
 			json.NewEncoder(w).Encode(st)
 		case "/dial":
-			var b struct{ Number string }
+			var b map[string]string
 			json.NewDecoder(r.Body).Decode(&b)
-			l.dialed = append(l.dialed, b.Number)
+			l.dialed = append(l.dialed, b["number"])
+			v, ok := b["via"]
+			if !ok {
+				v = "-"
+			}
+			l.via = append(l.via, v)
 			fmt.Fprint(w, `{"ok":true}`)
 		case "/hangup":
 			l.hangups++
@@ -485,6 +491,26 @@ func TestCallTimesOutAndHangsUp(t *testing.T) {
 	out, _ := r.h.Call(context.Background(), CallReq{Timeout: 1})
 	if out != NoAnswer || l.hangups != 1 {
 		t.Fatalf("%s, %d hangups", out, l.hangups)
+	}
+}
+
+func TestCallViaWhatsAppOnlyWhenAsked(t *testing.T) {
+	l := &line_{states: []lineState{{"idle", "idle"}, {"offhook", "dialing"}, {"offhook", "active"}}}
+	r := newRig(t, CallConfig{URL: l.server(t).URL, Number: "+900", Poll: 10 * time.Millisecond})
+	if out, err := r.h.Call(context.Background(), CallReq{WhatsApp: true}); out != Answered {
+		t.Fatalf("%s %v", out, err)
+	}
+	r.h.mu.Lock()
+	r.h.call = nil
+	r.h.mu.Unlock()
+	l.mu.Lock()
+	l.states = []lineState{{"idle", "idle"}, {"offhook", "dialing"}, {"offhook", "active"}}
+	l.mu.Unlock()
+	if out, err := r.h.Call(context.Background(), CallReq{}); out != Answered {
+		t.Fatalf("%s %v", out, err)
+	}
+	if strings.Join(l.via, ",") != "whatsapp,-" {
+		t.Fatalf("via %v", l.via)
 	}
 }
 

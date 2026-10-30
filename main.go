@@ -95,7 +95,7 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc wa [--file F]... [--render F.html]... [--voice TEXT] [--poll Q --option A...] [text...]
                                  send the user files, a rendered page, a voice note, a poll or text on
                                  WhatsApp, from the account atc answers them on; atc wa -h
-  atc call [--reason TEXT] [--wait] [--timeout 45s]
+  atc call [--reason TEXT] [--wait] [--timeout 45s] [--whatsapp]
                                  have delta ring the user's phone, with the assistant on the
                                  line; atc call -h
   atc hub [status|reset]         run the assistant's one conversation for atc, WhatsApp and

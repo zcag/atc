@@ -733,12 +733,12 @@ Endpoints, for clients other than atc: `GET /ws?channel=NAME` (send `{"type":"me
 `{"type":"note","text"}` or `{"type":"interrupt"}`; get `text`, `tool`, `block`, `read`, `joined`,
 `held`, `done`, `error`, `notice`), `GET /events` (every channel's events), `GET /status`,
 `POST /message {channel, text}`, `POST /interrupt {channel}`, `POST /reset`,
-`POST /call {reason, from, notify, timeout}`.
+`POST /call {reason, from, notify, timeout, whatsapp}`.
 
 ## Calling the user
 
 ```sh
-atc call [--reason TEXT] [--wait] [--timeout 45s]
+atc call [--reason TEXT] [--wait] [--timeout 45s] [--whatsapp]
 ```
 
 has delta (the agents' phone line, through delta-call) ring the user's own number; it never dials
@@ -747,7 +747,8 @@ from another session, that session's sender line, so it says why it called and p
 back with `send`. Without `--wait` the command returns at once, and a call nobody picks up comes
 back to the session that asked as a `[telefon ... açmadı]` message (the assistant's own calls come
 back on the channel it was busy with). `--wait` prints the outcome instead: `answered`, `no-answer`
-or `busy` (a call is already on).
+or `busy` (a call is already on). `--whatsapp` makes it a WhatsApp voice call from delta's bot
+account instead; use it only when the user asks for a WhatsApp call, otherwise the phone line.
 
 ## Notes
 

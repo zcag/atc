@@ -25,7 +25,8 @@ const hubName = "assistant"
 const hubPrompt = `Messages reach you from several channels: atc (typed on a screen), atc-voice (spoken in atc), whatsapp, phone ` +
 	`(a live call on delta's line) and agent (other sessions reporting back). When the channel changes, a "[talk-mode: ...]" line ` +
 	`brings how to talk there; follow it until the next one. Answer where the message came from. To reach the user elsewhere use ` +
-	"`atc wa` (WhatsApp) or `atc call --reason TEXT` (delta rings their phone and the call comes to you; `atc call -h`). "
+	"`atc wa` (WhatsApp) or `atc call --reason TEXT` (delta rings their phone and the call comes to you; `atc call -h`; " +
+	"`--whatsapp` only when they ask for a WhatsApp call, otherwise the phone line). "
 
 // HubArgs are the flags for the hub's Claude: the same tools and switchboard as atc's standing
 // sessions, plus how the channels work.
@@ -307,7 +308,7 @@ func (s *Server) call(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Reason, From, Session string
-		Wait                  bool
+		Wait, WhatsApp        bool
 		Timeout               int
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -315,7 +316,7 @@ func (s *Server) call(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fromHub := req.Session != "" && req.Session == s.hubSID()
-	cr := hub.CallReq{Reason: req.Reason, From: req.From, Timeout: req.Timeout, Notify: fromHub && !req.Wait}
+	cr := hub.CallReq{Reason: req.Reason, From: req.From, Timeout: req.Timeout, WhatsApp: req.WhatsApp, Notify: fromHub && !req.Wait}
 	if fromHub {
 		cr.From = ""
 	}

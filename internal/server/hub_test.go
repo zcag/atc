@@ -174,7 +174,7 @@ func TestHubSessionIsListedAndTakesMessages(t *testing.T) {
 func TestCallFromTheHubTellsItselfOnNoAnswer(t *testing.T) {
 	f := newFakeHub(t, "hub-sid")
 	_, ts := hubServer(t, f, nil)
-	code, b := api(t, ts, "POST", "/api/call", `{"reason":"why","from":"[from session x]","session":"other","wait":true,"timeout":5}`)
+	code, b := api(t, ts, "POST", "/api/call", `{"reason":"why","from":"[from session x]","session":"other","wait":true,"timeout":5,"whatsapp":true}`)
 	if code != 200 || !strings.Contains(b, "no-answer") {
 		t.Fatalf("call: %d %s", code, b)
 	}
@@ -182,10 +182,10 @@ func TestCallFromTheHubTellsItselfOnNoAnswer(t *testing.T) {
 	eventually(t, "second call", func() bool { f.mu.Lock(); defer f.mu.Unlock(); return len(f.calls) == 2 })
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if c := f.calls[0]; c.Notify || c.From != "[from session x]" || c.Timeout != 5 {
+	if c := f.calls[0]; c.Notify || c.From != "[from session x]" || c.Timeout != 5 || !c.WhatsApp {
 		t.Errorf("worker's call %+v", c)
 	}
-	if c := f.calls[1]; !c.Notify || c.From != "" {
+	if c := f.calls[1]; !c.Notify || c.From != "" || c.WhatsApp {
 		t.Errorf("hub's own call %+v", c)
 	}
 }
