@@ -213,71 +213,95 @@ read fresh at each start and given to Claude as instructions rather than as your
 the session's title comes from what you actually ask. `args` adds Claude Code flags; `worktree`
 starts it in its own git worktree.
 
-A preset can also start itself. With `every` (`90s`, `5m`, `1h`, or whole days and weeks: `1d`, `2w`) the atc that
-loads it starts a run on that interval, its first message being `prompt`. Add `check`, a shell
-command run in `dir`, and a run starts only when it exits 0 and prints something; the first message
-is then `prompt` followed by what it printed:
+A preset is a template you start by hand. For something that runs on its own and keeps one
+conversation, make an [agent](#agents).
+
+## Agents
+
+An agent is one standing conversation under one name, for something you come back to: your mail,
+an invoice, CI alerts. It is a folder, by default under `~/notes/agents/` (`ATC_AGENTS`), so
+every machine sees the same folders; each one runs only the agents whose `host` names it.
+
+```
+email/
+  agent.json      what atc needs (below)
+  brief.md        its standing instructions, read fresh at every start
+  settings.json   optional: Claude Code settings (permissions), passed as --settings
+  mcp.json        optional: MCP servers, passed as --mcp-config
+  notes.md        what it keeps across conversations (it writes this itself)
+```
 
 ```json
-{ "name": "inbox", "dir": "~/mail", "every": "5m", "check": "ls new/", "prompt": "File these:" }
+{ "host": "desktop", "title": "Email", "icon": "mail", "color": "blue", "page": true,
+  "every": "5m", "check": "./check.sh", "prompt": "Unread mail to triage.",
+  "reset": { "quiet": "6h", "over": 80000 } }
 ```
 
-A check gets a minute. While the previous run it started is still working or needs you, a tick is
-skipped, so runs never pile up. Each tick's decision is logged to the journal (`preset inbox: …`).
-The first run comes one interval after atc starts.
+- `host` (required): the machine it runs on.
+- `title`, `icon` (one of mail, sun, present, lira, target, inbox, calendar, chart, pr, globe,
+  pulse, doc, or an emoji) and `color` (blue, amber, violet, green, red, teal, pink, orange, slate,
+  or a hex color): how it looks.
+- `page`: open on its page rather than its chat.
+- `dir`: the folder its conversation works in, default the agent's own folder. `args`: more Claude
+  Code flags.
+- `every`, `from`, `check`, `prompt`: when it wakes up (below). `prompt` is also what **Wake** sends.
+- `reset`: when its conversation starts over (below).
 
-To run at set times, add `from`, a local date and time the schedule counts from: runs land on
-`from` plus whole multiples of `every`, so `"every": "2w", "from": "2026-03-06T09:00"` is every
-second Friday at 07:00, and `"every": "1d", "from": "2026-10-28T07:00"` is every morning at 07:00.
-Day and week steps keep the wall-clock time across daylight saving. A run missed while atc was down
-is not made up; the journal says when the next one is.
+Edits apply without a restart: atc rereads the folders, and the brief is read at every start and
+resume. Before the brief, atc tells the agent its name and folder, that it keeps durable things in
+`notes.md`, and when to park itself.
 
-Anything else can start one too, with the same `POST /api/sessions` the New session screen uses:
+**One conversation.** Every message reaches the same conversation: the running one, the last one
+resumed, or a new one when it has none. A message that arrives mid-turn waits for the turn to end
+(Claude Code queues it). Its pages belong to the agent (`@name`), not to one conversation, so they
+and their state carry across. Its sessions carry its title, and `@name` names its current
+conversation anywhere a session is named: `atc send @email`, `atc attach @email`,
+`atc state @email inbox`, and the MCP tools.
 
-```sh
-curl -H "Authorization: Bearer $TOKEN" -d '{"preset":"inbox","prompt":"New mail from Ana"}' https://atc.example/api/sessions
-```
+**Waking it.**
+- On a schedule: with `every` (`90s`, `5m`, `1h`, or whole days and weeks: `1d`, `2w`) it wakes
+  on that interval with `prompt`. With `from`, a local date and time, wake-ups land on `from` plus
+  whole multiples of `every` (`"every": "2w", "from": "2026-03-06T09:00"` is every second Friday at
+  07:00), keeping the wall-clock time across daylight saving. With `check`, a shell command run in
+  the agent's folder, it wakes only when that exits 0 and prints something, and the message is
+  `prompt` followed by what it printed. A check gets a minute. A wake-up is skipped while the
+  conversation is working or needs you, and one missed while atc was down is not made up. Each
+  decision is in the journal (`agent email: …`).
+- From anything: `atc send @name [text]` (stdin when no text), or
 
-## Apps
+  ```sh
+  curl -H "Authorization: Bearer $TOKEN" --data-binary @alert.json "https://atc.example/api/agents/cicd/message?from=grafana"
+  ```
 
-An app is a preset with `"app": true`, and optionally a `title`, an `icon` (one of mail, sun, present,
-lira, target, inbox, calendar, chart, pr, globe, pulse, doc, or an emoji) and a `color` (blue, amber,
-violet, green, red, teal, pink, orange, slate, or a hex color) for its tile:
+  The body is `{"text": ...}` or anything else as it came (a Grafana alert, a CI payload); empty,
+  it is the agent's `prompt`. With `from`, the message starts `[message from grafana]` and the
+  request answers 202 at once, so a webhook never times out and retries. Any machine takes it: atc
+  forwards it to the agent's `host`. A Grafana webhook contact point with that URL and the token
+  as its Authorization header is all it takes; Grafana's grouping and repeat interval are the
+  throttle.
 
-```json
-{ "name": "mail", "icon": "✉", "app": true, "dir": "~/mail", "brief": "MAIL.md",
-  "every": "15m", "check": "mail-cli new", "prompt": "Triage these:" }
-```
+**Parking.** A parked agent is out of the session list (its row stays in the Agents tab) and sends
+no pushes. It parks itself when its work with you is done, with atc's `park` tool or `atc park`, and
+you can park it by hand. A wake-up leaves it parked: it works out of sight and unparks itself (`park`
+with `unpark`) only when it has something for you. Typing to it unparks it. A question or a
+permission prompt brings it back even while parked (this holds for any parked session).
 
-There is no standing session. Each run is an ordinary session started from the preset: by its
-`every` and `check`, by anything that `POST`s to `/api/sessions` with the preset or to
-`/api/presets/<name>/run`, or by hand with **Run**, which starts one with `prompt` and skips the
-check.
+**Starting over.** When the conversation has been quiet for `reset.quiet` (default 6h) and is past
+`reset.over` tokens (80k), or quiet for `reset.capQuiet` (10m) and past `reset.cap` (150k), atc asks
+it for a handover note, starts a new conversation with that note as its first message (parked if
+the old one was), and takes the old one off Claude's list under a dated name, its transcript kept.
+**Start over** in its menu does it now. The notes are in `agents/<name>/` in atc's config folder.
+This is the assistant's rule too (`internal/startover`).
 
-An app that needs no agent to refresh gives its preset a `command` instead: on `every` (after
-`check`, if any), on **Run** and on `POST /api/presets/<name>/run`, atc runs that command in the
-preset's folder and starts no session. The command keeps the page current itself, with
-`atc show <file> --app <name>` and `atc state -set app:<name> <page>`. If the preset also has a
-`brief`, **Chat** still starts a session for whatever needs judgment. `command` works on any
-preset, app or not; its last run (exit code and output) shows as the app's state.
+**In the UI.** The **Agents** tab, next to All in the project tabs, lists every agent of every
+machine with what it is doing, its page's `headline` and `badge` (top-level keys of the page's
+state), and its behaviour: when it wakes and when next, when it starts over, its context and when it
+last started over. An agent opens on its page (with `page`) or its conversation. Its view has
+**Wake** (send its `prompt`), **Chat**, and **Park** and **Start over** in its menu; a note from its
+page reaches its conversation even when it is stopped. Agent sessions stay out of the project tabs.
 
-- **Pages.** A page a run shows with `atc show` belongs to the app, filed under `app:<name>`
-  instead of the run, so the next run shows and updates the same page and reads the same state.
-  Anywhere else it is `atc state app:<name> [page]`.
-- **Badge.** A number or a short string under the top-level `badge` key of the page's state shows
-  in the app's own header.
-- **Quiet runs.** Runs stay out of the session list and the widget unless one needs you, and a
-  finished run sends no push. A run that needs you, and `atc notify` from a run, push as usual.
-- **In the UI.** The grid button in the header opens a menu of apps: those with something to say
-  (a badge, a run working, needing you or failed) as cards with their page's `headline` and **Run**,
-  the rest as a row of chips. An app opens its page full width, with **Run** and **Chat**, which opens the latest run
-  beside the page. `atc.send` from the page goes to the latest run, resuming it if it stopped.
-  With `"open": "chat"` the app opens straight into that view, for apps you mostly talk to.
-- **From other sessions.** An agent starts a run with atc's `start` tool and the app's preset, and
-  reaches the app's latest run as `app:<name>` wherever a session is named: `send`, `read`, `wait`,
-  `atc attach app:<name>`.
-
-`GET /api/apps` lists the apps of every machine with their pages, badge and latest run.
+`GET /api/agents` lists the agents of every machine with all of the above. `POST
+/api/agents/<name>/reset` starts one over.
 
 ## Other models
 
@@ -720,7 +744,7 @@ call never reads out an answer meant for a screen. A barge-in on the call interr
 being said to the call.
 
 **Starting over.** When the conversation has been quiet for 6 hours and is past 80k tokens, or quiet
-for 10 minutes and past 150k, never during a call, the hub has the session write a handover note in
+for 10 minutes and past 150k (the same rule as [agents](#agents)), never during a call, the hub has the session write a handover note in
 one last turn and opens a new session with it as the first message. `/new` on WhatsApp, a fresh
 assistant in atc and `atc hub reset` do it at once. The old conversation stays in atc as
 **assistant MM-DD hh:mm**; the notes are in `~/.local/state/atc/hub/handovers/`.

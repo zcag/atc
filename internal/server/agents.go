@@ -482,7 +482,8 @@ func (s *Server) agents(w http.ResponseWriter, r *http.Request) {
 
 // agentMessage wakes an agent with the request body: {"text": ...} or anything else as it came
 // (a Grafana alert, a CI payload). With from=<source> it answers at once and delivers in the
-// background, so a webhook never times out and retries.
+// background, so a webhook never times out and retries. {"user": true} is the user writing from
+// atc, which unparks it like typing into its conversation does.
 func (s *Server) agentMessage(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.agentNamed(r.PathValue("name"))
 	if !ok {
@@ -490,7 +491,10 @@ func (s *Server) agentMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b, _ := io.ReadAll(io.LimitReader(r.Body, 256<<10))
-	var body struct{ Text string }
+	var body struct {
+		Text string
+		User bool
+	}
 	text := strings.TrimSpace(string(b))
 	if json.Unmarshal(b, &body) == nil && body.Text != "" {
 		text = body.Text
@@ -503,6 +507,9 @@ func (s *Server) agentMessage(w http.ResponseWriter, r *http.Request) {
 	from := r.URL.Query().Get("from")
 	if from == "" {
 		id, err := s.wakeAgent(r.Context(), a, text)
+		if err == nil && body.User {
+			s.unparkOnInput(r.Context(), id)
+		}
 		s.done(w, id, err)
 		return
 	}

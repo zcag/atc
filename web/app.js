@@ -2980,9 +2980,12 @@ function SendNote({ s, note, say, onClose }) {
   const send = async () => {
     setBusy(true);
     try {
-      let id = s.id || s.sessionId;
-      if (!s.attachable) id = (await api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" })).id;
-      await api(`/api/sessions/${id}/send`, { method: "POST", body: { text } });
+      if (s.agentName && !s.attachable) await api(`/api/agents/${encodeURIComponent(s.agentName)}/message`, { method: "POST", body: { text, user: true } });
+      else {
+        let id = s.id || s.sessionId;
+        if (!s.attachable) id = (await api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" })).id;
+        await api(`/api/sessions/${id}/send`, { method: "POST", body: { text } });
+      }
       say(`Sent to ${s.title || "the session"}.`);
       onClose(true);
     } catch (e) { say(e.message); setBusy(false); }
@@ -3338,13 +3341,13 @@ const ktok = (n) => (n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`);
 const soon = (at) => {
   const t = new Date(at), m = Math.round((t - Date.now()) / 6e4);
   if (m < 60) return `in ${Math.max(1, m)}m`;
-  const hm = t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const hm = t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
   return t.toDateString() === new Date().toDateString() ? hm : `${t.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })} ${hm}`;
 };
 const behaviour = (a) => [
   a.error,
   a.every ? `Wakes every ${a.every}${a.from ? ` from ${a.from.replace("T", " ")}` : ""}${a.check ? `, when ${a.check} finds something` : ""}${a.next ? `. Next ${soon(a.next)}` : ""}` : "Wakes only when messaged",
-  a.rule && `Starts over after ${spanOf(a.rule.Quiet)} quiet past ${ktok(a.rule.Small)} tokens, or ${spanOf(a.rule.CapQuiet)} past ${ktok(a.rule.Cap)}`,
+  a.rule && `Starts over when ${spanOf(a.rule.Quiet)} quiet past ${ktok(a.rule.Small)}, or ${spanOf(a.rule.CapQuiet)} quiet past ${ktok(a.rule.Cap)}`,
   [a.context && `Context ${ktok(a.context)}`, a.lastReset && `started over ${agoLong(a.lastReset)}`, a.page && "opens on its page"].filter(Boolean).join(" · "),
 ].filter(Boolean);
 
@@ -3409,7 +3412,7 @@ function AgentView({ name, page, agents, live, say, reload }) {
     try { await fn(); done && say(done); reload(); } catch (e) { say(e.message); }
     setBusy("");
   };
-  const s = x || (a.sessionId ? { sessionId: a.sessionId, title: agentLabel(a), state: "past", host: a.host } : { title: agentLabel(a) });
+  const s = { ...(x || { sessionId: a.sessionId, title: agentLabel(a), state: "past", host: a.host }), agentName: a.name };
   const parked = x ? away(x) : a.parked;
   return html`
     <div class="palone appview">
@@ -3421,10 +3424,10 @@ function AgentView({ name, page, agents, live, say, reload }) {
         </div>
         ${a.prompt && html`<button class="btn" disabled=${!!busy || st === "working"} title=${a.prompt} onClick=${act("wake", () => agentApi(a, "message"), `Woke ${agentLabel(a)}.`)}>Wake</button>`}
         <button class="btn" onClick=${() => chatAgent(a, live, say, page)}>Chat</button>
-        <${Menu} cls="btn" aria="More" label=${html`<span class="mi">${ICON.more}</span>`} items=${[
-          a.sessionId && { label: parked ? "Unpark" : "Park", run: act("park", () => api(`/api/sessions/${a.sessionId}`, { method: "PATCH", body: { parked: !parked } })) },
-          a.sessionId && { label: "Start over", title: "It writes a handover note and a new conversation starts from it", run: act("reset", () => agentApi(a, "reset"), `${agentLabel(a)} is starting over.`) },
-        ].filter(Boolean)} />
+        ${a.sessionId && html`<${Menu} aria="More" label=${html`<span class="mi">${ICON.more}</span>`} items=${[
+          { label: parked ? "Unpark" : "Park", run: act("park", () => api(`/api/sessions/${a.sessionId}`, { method: "PATCH", body: { parked: !parked } })) },
+          { label: "Start over", title: "It writes a handover note and a new conversation starts from it", run: act("reset", () => agentApi(a, "reset"), `${agentLabel(a)} is starting over.`) },
+        ]} />`}
       </header>
       ${a.pages.length
         ? html`<${PagePane} s=${s} list=${a.pages} cur=${page} pick=${(n) => location.replace(agentLink(a, n))} say=${say} alone />`
