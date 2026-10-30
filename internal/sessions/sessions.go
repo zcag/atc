@@ -101,7 +101,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 	resumed := m.Index.Resumed()
 	out := make([]Session, 0, len(agents))
 	for _, a := range agents {
-		if resumed[a.SessionID] && a.PID == 0 {
+		if (resumed[a.SessionID] || m.Store.Get(a.SessionID).Next != "") && a.PID == 0 {
 			continue
 		}
 		t, ok := byID[a.SessionID]
@@ -156,7 +156,7 @@ func (m *Manager) History(q, dir string, limit int) []Session {
 	var out []Session
 	resumed := m.Index.Resumed()
 	for _, t := range m.transcripts() {
-		if resumed[t.SessionID] {
+		if resumed[t.SessionID] || m.Store.Get(t.SessionID).Next != "" {
 			continue
 		}
 		s := m.build(t)

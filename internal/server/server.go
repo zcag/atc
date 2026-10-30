@@ -191,6 +191,10 @@ func (s *Server) Handler() http.Handler {
 			http.Error(w, "the assistant has no terminal: write to it in the transcript", http.StatusConflict)
 			return
 		}
+		if s.stopped(r.Context(), r.PathValue("id")) {
+			http.Error(w, "it is stopped: resume it first", http.StatusConflict)
+			return
+		}
 		s.nameViewer(r)
 		s.Term.Serve(w, r, r.PathValue("id"))
 	})
@@ -766,6 +770,14 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 var errUnknown = errors.New("unknown session")
 
 func (s *Server) resumeSession(ctx context.Context, sid string) (string, error) {
+	sid = s.newest(sid)
+	if agents, err := s.M.CLI.Agents(ctx); err == nil {
+		for _, a := range agents {
+			if a.SessionID == sid && a.PID > 0 {
+				return a.ID, nil
+			}
+		}
+	}
 	t, _ := s.M.Index.Find(sid)
 	if t.StartCwd == "" {
 		return "", fmt.Errorf("%w %s", errUnknown, sid)
@@ -1304,6 +1316,7 @@ func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, e
 	if args, ok := standing(name); ok {
 		id, err := s.M.CLI.Resume(ctx, dir, sid, args...)
 		if err == nil {
+			s.superseded(sid, id)
 			s.claim(ctx, name, id, sid)
 		}
 		return id, err
@@ -1321,9 +1334,37 @@ func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, e
 	}
 	id, err := s.M.CLI.Resume(ctx, dir, sid, extra...)
 	if err == nil {
+		s.superseded(sid, id)
 		s.tag(ctx, id, e.Name, s.M.Store.Get(sid).App)
 	}
 	return id, err
+}
+
+func (s *Server) superseded(sid, id string) {
+	if id != "" && !strings.HasPrefix(sid, id) {
+		s.M.Store.Update(sid, func(m *store.Meta) { m.Next = id })
+	}
+}
+
+func (s *Server) newest(sid string) string {
+	for range 50 {
+		next := s.M.Store.Get(sid).Next
+		if next == "" {
+			return sid
+		}
+		all := s.M.Index.Scan()
+		i := slices.IndexFunc(all, func(t history.Transcript) bool { return strings.HasPrefix(t.SessionID, next) })
+		if i < 0 {
+			return sid
+		}
+		sid = all[i].SessionID
+	}
+	return sid
+}
+
+func (s *Server) stopped(ctx context.Context, id string) bool {
+	agents, err := s.M.CLI.Agents(ctx)
+	return err == nil && slices.ContainsFunc(agents, func(a claude.Agent) bool { return a.ID == id && a.PID == 0 })
 }
 
 const switchboard = `You are also the user's switchboard for their other Claude Code sessions: with the atc tools you can list them, read what they did, ` +

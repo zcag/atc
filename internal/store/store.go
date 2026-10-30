@@ -15,6 +15,7 @@ type Meta struct {
 	Live      string `json:"live,omitempty"`
 	App       string `json:"app,omitempty"`
 	ReportsTo string `json:"reportsTo,omitempty"`
+	Next      string `json:"next,omitempty"`
 }
 
 const (
