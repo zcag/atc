@@ -4628,7 +4628,10 @@ document.addEventListener("click", (e) => {
   const c = e.target.closest?.("[data-copy]");
   if (c) { copyText(c.parentElement.querySelector("code").innerText); c.textContent = "Copied"; setTimeout(() => (c.textContent = "Copy"), 1200); return; }
   const a = e.target.closest?.("a[data-out]");
-  if (a) { e.preventDefault(); openOut(a.getAttribute("href")); }
+  if (!a) return;
+  const u = new URL(a.getAttribute("href"), location.href);
+  if (u.origin === location.origin && u.pathname === "/" && u.hash && !(e.metaKey || e.ctrlKey || e.shiftKey)) { e.preventDefault(); location.hash = u.hash; return; }
+  e.preventDefault(); openOut(u.href);
 });
 
 function useDirs(host, home) {
