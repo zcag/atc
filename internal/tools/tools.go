@@ -430,7 +430,7 @@ func (t *tools) send(ctx context.Context, _ *mcp.CallToolRequest, in sendIn) (*m
 	}
 	live, _ := t.c.Live()
 	me, isSession := client.Self(live)
-	if !x.Attachable && isSession && !in.Wake && me.ReportsTo != x.SessionID {
+	if !x.Attachable && isSession && !in.Wake && me.ReportsTo != x.Lineage() {
 		return nil, done{}, fmt.Errorf("%q is stopped and is not waiting on a report from you, so it stays stopped; leave the outcome in your final message, or pass wake if the user asked for this message", x.Title)
 	}
 	id, note := x.ID, ""
@@ -447,7 +447,7 @@ func (t *tools) send(ctx context.Context, _ *mcp.CallToolRequest, in sendIn) (*m
 		return nil, done{}, err
 	}
 	if in.Report && isSession {
-		t.c.Patch(x.SessionID, map[string]any{"reportsTo": me.SessionID})
+		t.c.Patch(x.Lineage(), map[string]any{"reportsTo": me.Lineage()})
 	}
 	return nil, done{Ref: id, Title: x.Title, State: "sent", Note: note}, nil
 }
@@ -530,7 +530,7 @@ func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (
 			out.Title, out.State = s.Title, s.State
 		}
 		if in.Report && isSession && s.SessionID != "" {
-			t.c.Patch(s.SessionID, map[string]any{"reportsTo": me.SessionID})
+			t.c.Patch(s.Lineage(), map[string]any{"reportsTo": me.Lineage()})
 			in.Report = false
 		}
 		return s.Title != "" && s.State != sessions.Stopped

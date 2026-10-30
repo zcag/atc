@@ -126,6 +126,17 @@ func (x *Index) ForkedFrom(sid string) string {
 	return x.Forks()[sid]
 }
 
+func (x *Index) Original(sid string) string {
+	for range 100 {
+		from := x.ForkedFrom(sid)
+		if from == "" || from == sid {
+			break
+		}
+		sid = from
+	}
+	return sid
+}
+
 func (x *Index) Resumed() map[string]bool {
 	out := map[string]bool{}
 	if x.Forks != nil {
