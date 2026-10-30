@@ -266,6 +266,8 @@ func group(s Session) int {
 func less(a, b Session) bool {
 	if pa, pb := a.Pinned && !a.Parked, b.Pinned && !b.Parked; pa != pb {
 		return pa
+	} else if pa {
+		return a.StartedAt.Before(b.StartedAt)
 	}
 	if ga, gb := group(a), group(b); ga != gb {
 		return ga < gb

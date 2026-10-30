@@ -452,9 +452,12 @@ function monograms(names) {
   return out;
 }
 
+const byStart = (a, b) => (Date.parse(a.startedAt || 0) || 0) - (Date.parse(b.startedAt || 0) || 0) || a.sessionId.localeCompare(b.sessionId);
+const pinnedOf = (list) => (list || []).filter((x) => x.pinned && !x.parked).sort(byStart);
+
 function arrange(list) {
   const bay = (st) => (list || []).filter((x) => !x.pinned && !x.parked && x.state === st);
-  return (list || []).filter((x) => x.pinned && !x.parked)
+  return pinnedOf(list)
     .concat(["needs-you", "your-turn", "working"].flatMap(bay))
     .concat((list || []).filter((x) => x.parked))
     .concat(bay("stopped"));
@@ -587,7 +590,7 @@ function Board({ live: all, runs, sel, cursor, onPast, mode = "classic" }) {
   if (!live) return html`<div class="board"><div class="skeleton"><i></i><i></i><i></i></div></div>`;
   const liveIDs = new Set((runs || live).map((s) => s.sessionId));
   const earlier = (hist || []).filter((s) => !liveIDs.has(s.sessionId) && mine(s));
-  const pinned = live.filter((s) => s.pinned && !s.parked);
+  const pinned = pinnedOf(live);
   const rest = live.filter((s) => !s.pinned && !s.parked);
   const parked = live.filter((s) => s.parked);
   const active = live.filter((s) => !s.parked && ["needs-you", "your-turn", "working"].includes(s.state));
@@ -629,7 +632,8 @@ function Board({ live: all, runs, sel, cursor, onPast, mode = "classic" }) {
             </button>`)}
         </nav>`}
       ${mode === "triage" ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />${earlierBay}`
-        : mode === "lanes" ? html`${search}${q ? past : html`<${Lanes} live=${live} earlier=${earlier} only=${only} setOnly=${setOnly} sel=${sel} cursor=${cursor}
+        : mode === "lanes" ? html`${search}${q ? past : html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} size="lrow" />
+            <${Lanes} live=${live.filter((s) => !pinned.includes(s))} earlier=${earlier} only=${only} setOnly=${setOnly} sel=${sel} cursor=${cursor}
             more=${hist && hist.length >= limit + 30 && (() => setLimit(limit + 30))} />`}`
         : classic}
     </div>
@@ -652,7 +656,9 @@ function Triage({ live, only, sel, cursor }) {
   const wait = live.filter((s) => !s.parked && (s.state === "needs-you" || s.state === "your-turn"))
     .sort((a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1));
   const work = live.filter((s) => s.state === "working");
-  const rest = live.filter((s) => !wait.includes(s) && !work.includes(s)).sort((a, b) => !!b.pinned - !!a.pinned);
+  const pinned = pinnedOf(live);
+  const free = (list) => list.filter((s) => !pinned.includes(s));
+  const rest = free(live.filter((s) => !wait.includes(s) && !work.includes(s)));
   const name = (s) => html`<b>${s.title || "Untitled"}</b>`;
   const busy = work.length ? ` ${work.length} working.` : "";
   const brief = wait.length > 1 ? html`${name(wait[0])} and ${wait.length - 1} more are waiting on you.${busy}`
@@ -663,8 +669,9 @@ function Triage({ live, only, sel, cursor }) {
   return html`
     <p class="brief">${brief}</p>
     <${BacklogLine} only=${only} />
-    <${Bay} title="Your turn" list=${wait} sel=${sel} cursor=${cursor} size="tcard" />
-    <${Bay} title="Working" list=${work} sel=${sel} cursor=${cursor} size="work" />
+    <${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} size="lrow" />
+    <${Bay} title="Your turn" list=${free(wait)} sel=${sel} cursor=${cursor} size="tcard" />
+    <${Bay} title="Working" list=${free(work)} sel=${sel} cursor=${cursor} size="work" />
     <${Bay} title="Parked" list=${rest.filter((s) => s.parked)} sel=${sel} cursor=${cursor} size="lrow" />
     <${Bay} title="Stopped" list=${rest.filter((s) => !s.parked)} sel=${sel} cursor=${cursor} size="line" />`;
 }
