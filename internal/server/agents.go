@@ -349,7 +349,7 @@ func (s *Server) watchAgents() {
 		}
 		for _, a := range s.localAgents() {
 			cur := agentSession(live, a.Name)
-			if cur == nil || !cur.Parked || cur.State != sessions.YourTurn && cur.State != sessions.Stopped {
+			if cur == nil || !cur.Parked || cur.State != sessions.YourTurn && cur.State != sessions.Stopped || strings.HasPrefix(cur.LastPrompt, seedMark) {
 				continue
 			}
 			p, _ := a.policy()
@@ -363,6 +363,10 @@ func (s *Server) watchAgents() {
 		}
 	}
 }
+
+// seedMark starts the first message of a conversation that started over; one with nothing after
+// it has nothing to hand over, so it is not started over again.
+const seedMark = "[atc: a new conversation"
 
 var errAgentBusy = errors.New("the agent is busy; try again when its turn ends")
 
@@ -419,7 +423,7 @@ func (s *Server) resetAgent(ctx context.Context, a Agent, why string) error {
 	if dir := filepath.Join(s.StateDir, "agents", a.Name); s.StateDir != "" && os.MkdirAll(dir, 0o755) == nil {
 		os.WriteFile(filepath.Join(dir, time.Now().Format("20060102-150405")+"-"+old.SessionID[:min(8, len(old.SessionID))]+".md"), []byte(note+"\n"), 0o644)
 	}
-	seed := fmt.Sprintf("[atc: a new conversation; the previous one (%s) left this handover note]\n\n%s\n\nRead notes.md, then answer in one line.", old.SessionID[:min(8, len(old.SessionID))], note)
+	seed := fmt.Sprintf(seedMark+"; the previous one (%s) left this handover note]\n\n%s\n\nRead notes.md, then answer in one line.", old.SessionID[:min(8, len(old.SessionID))], note)
 	if _, err := s.startAgent(ctx, a, seed, parked); err != nil {
 		return err
 	}

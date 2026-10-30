@@ -291,7 +291,8 @@ conversation has been quiet for `reset.quiet` (default 6h) and is past
 `reset.over` tokens (80k), or quiet for `reset.capQuiet` (10m) and past `reset.cap` (150k), atc asks
 it for a handover note, starts a new conversation with that note as its first message (parked if
 the old one was), and takes the old one off Claude's list under a dated name, its transcript kept.
-**Start over** in its menu does it now. The notes are in `agents/<name>/` in atc's config folder.
+A conversation with nothing in it since it started over is left alone, so an idle agent
+never starts over twice. **Start over** in its menu does it now. The notes are in `agents/<name>/` in atc's config folder.
 This is the assistant's rule too (`internal/startover`).
 
 **In the UI.** An agent's conversation is a session like any other, under the agent's title and
