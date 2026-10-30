@@ -99,7 +99,7 @@ function App() {
   const live = useMemo(() => runs && runs.filter((x) => !hiddenRun(x)), [runs]);
   const reach = useMemo(() => runs && runs.filter((x) => !hiddenRun(x) || x.kind === "hub"), [runs]);
   const hub = runs?.find((x) => x.kind === "hub");
-  const [apps, setApps] = useState(null);
+  const [agents, setAgents] = useState(null);
   const [up, setUp] = useState(true);
   const [past, setPast] = useState({});
   const [creating, setCreating] = useState(false);
@@ -177,7 +177,7 @@ function App() {
   const [usage, setUsage] = useState(location.hash === USAGE);
   const shareRoute = () => (location.hash.startsWith("#/share") ? location.hash : null);
   const [sharing, setSharing] = useState(shareRoute);
-  const aloneRoute = () => { const m = location.hash.match(/^#\/p\/([^/]+)(?:\/(.+))?$/); return m && (m[2] || m[1].startsWith(APP_REF)) && { sid: decodeURIComponent(m[1]), name: m[2] && decodeURIComponent(m[2]) }; };
+  const aloneRoute = () => { const m = location.hash.match(/^#\/p\/([^/]+)(?:\/(.+))?$/); return m && (m[2] || m[1].startsWith(AGENT_REF)) && { sid: decodeURIComponent(m[1]), name: m[2] && decodeURIComponent(m[2]) }; };
   const [alone, setAlone] = useState(aloneRoute);
   const [pagesHome, setPagesHome] = useState(location.hash === PAGES);
   const [backlog, setBacklog] = useState(location.hash === BACKLOG);
@@ -186,14 +186,14 @@ function App() {
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
-  const loadApps = useCallback(() => api("/api/apps").then((l) => setApps(l || []), () => {}), []);
-  const appOpen = !!alone?.sid.startsWith(APP_REF);
+  const loadAgents = useCallback(() => api("/api/agents").then((l) => setAgents(l || []), () => {}), []);
+  const agentOpen = !!alone?.sid.startsWith(AGENT_REF);
   useEffect(() => {
     if (!me) return;
-    loadApps();
-    const t = setInterval(() => document.visibilityState === "visible" && loadApps(), appOpen ? 5000 : 20000);
+    loadAgents();
+    const t = setInterval(() => document.visibilityState === "visible" && loadAgents(), agentOpen || TABS.only === AGENTS ? 5000 : 20000);
     return () => clearInterval(t);
-  }, [!!me, appOpen]);
+  }, [!!me, agentOpen]);
   const talk = async (fresh, voice = true) => {
     setStarting(true);
     try {
@@ -224,7 +224,7 @@ function App() {
     if (!prev || APP || typeof Notification === "undefined" || Notification.permission !== "granted" || document.hasFocus()) return;
     for (const x of live) {
       const was = prev[x.sessionId];
-      if (!was || was === x.state || x.parked || (x.state !== "needs-you" && x.state !== "your-turn")) continue;
+      if (!was || was === x.state || away(x) || (x.state !== "needs-you" && x.state !== "your-turn")) continue;
       const n = new Notification(x.title || "atc", { body: x.state === "needs-you" ? `Needs you${x.activity ? ": " + x.activity : ""}` : (x.summary?.status || x.lastReply || "Finished its turn"), tag: x.sessionId, icon: "/icon.svg" });
       n.onclick = () => { window.focus(); go(keyOf(x)); n.close(); };
     }
@@ -240,27 +240,27 @@ function App() {
   useEffect(() => {
     if (!live || warmed.current) return;
     warmed.current = true;
-    const likely = live.filter((x) => x.attachable && !x.parked && (x.state === "needs-you" || x.state === "your-turn")).slice(0, 2);
+    const likely = live.filter((x) => x.attachable && !away(x) && (x.state === "needs-you" || x.state === "your-turn")).slice(0, 2);
     setTimeout(() => likely.forEach(prewarm), 1200);
   }, [live]);
 
   useEffect(() => {
     if (!live) return;
     if (APP?.setSessions) {
-      const rows = arrange(reach).filter((s) => !s.parked && FEED_STATES.includes(s.state)).slice(0, 12).map((s) => ({
+      const rows = arrange(reach).filter((s) => !away(s) && FEED_STATES.includes(s.state)).slice(0, 12).map((s) => ({
         id: s.attachable ? s.id : undefined, sid: s.sessionId, title: s.title, state: s.state, host: s.host || undefined, pinned: s.pinned || undefined,
         since: (s.state === "working" && s.promptAt) || s.updated || undefined,
       }));
       const key = JSON.stringify(rows.map(({ since, ...r }) => r));
       if (key !== appSent) { appSent = key; APP.setSessions(JSON.stringify({ type: "sessions", at: new Date().toISOString(), sessions: rows })); }
     } else if (APP?.setTargets) {
-      const targets = JSON.stringify(reach.filter((s) => s.attachable && !s.parked).slice(0, 8).map((s) => ({ id: s.sessionId, title: s.title })));
+      const targets = JSON.stringify(reach.filter((s) => s.attachable && !away(s)).slice(0, 8).map((s) => ({ id: s.sessionId, title: s.title })));
       if (targets !== appSent) APP.setTargets((appSent = targets));
     }
   }, [reach]);
 
   useEffect(() => {
-    const n = (live || []).filter((s) => s.state === "needs-you" && !s.parked).length;
+    const n = (live || []).filter((s) => s.state === "needs-you" && !away(s)).length;
     document.title = n ? `(${n}) atc` : "atc";
   }, [live]);
 
@@ -356,7 +356,6 @@ function App() {
           <span class="conn ${up ? "" : "down"}" title=${up ? `Live${me.hosts?.length > 1 ? `: ${me.hosts.join(" + ")}` : me.host ? ` on ${me.host}` : ""}` : "Reconnecting"}></span>
           ${down.length > 0 && html`<span class="tag" title=${down.map((p) => `${p.name}: ${p.error}`).join("\n")}>${down.map((p) => p.name).join(", ")} unreachable</span>`}
           <span class="grow"></span>
-          ${apps?.length > 0 && html`<${AppsMenu} apps=${apps} live=${all} say=${say} reload=${loadApps} />`}
           <${HubButton} hub=${hub} onClick=${() => talk(false, false)} />
           <button class="btn talk" onClick=${() => setCreating(true)} title="New session (n)" aria-label="New session"><span class="mi">${ICON.plus}</span></button>
           <${Menu} cls="btn talk" aria="More" width=${250} label=${html`<span class="mi">${ICON.more}</span>`} items=${[
@@ -368,7 +367,7 @@ function App() {
               run: () => setView({ ...view, rail: !view.rail }), label: html`<span>Fold into a rail while reading</span>${view.rail && "✓"}` },
           ]} />
         </header>
-        <${Board} live=${live} runs=${runs} sel=${sel} cursor=${cursor} onPast=${remember} mode=${view.list} />
+        <${Board} live=${live} runs=${runs} agents=${agents} say=${say} sel=${sel} cursor=${cursor} onPast=${remember} mode=${view.list} />
         <${UsageFoot} limits=${limits} onOpen=${openUsage} />
         </div>
       </aside>
@@ -385,8 +384,8 @@ function App() {
     ${assisting && html`<${Assist} live=${reach} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
     ${pagesHome && html`<${PagesHome} live=${all} say=${say} onClose=${closePages} />`}
     ${backlog && html`<${BacklogPage} live=${all} say=${say} onClose=${closeBacklog} onAdd=${setCreating} />`}
-    ${alone && (appOpen
-      ? html`<${AppView} key=${alone.sid} name=${alone.sid.slice(APP_REF.length)} page=${alone.name} apps=${apps} live=${all} say=${say} reload=${loadApps} />`
+    ${alone && (agentOpen
+      ? html`<${AgentView} key=${alone.sid} name=${alone.sid.slice(AGENT_REF.length)} page=${alone.name} agents=${agents} live=${all} say=${say} reload=${loadAgents} />`
       : html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`)}
     ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
@@ -453,13 +452,13 @@ function monograms(names) {
 }
 
 const byStart = (a, b) => (Date.parse(a.startedAt || 0) || 0) - (Date.parse(b.startedAt || 0) || 0) || a.sessionId.localeCompare(b.sessionId);
-const pinnedOf = (list) => (list || []).filter((x) => x.pinned && !x.parked).sort(byStart);
+const pinnedOf = (list) => (list || []).filter((x) => x.pinned && !away(x)).sort(byStart);
 
 function arrange(list) {
-  const bay = (st) => (list || []).filter((x) => !x.pinned && !x.parked && x.state === st);
+  const bay = (st) => (list || []).filter((x) => !x.pinned && !away(x) && x.state === st);
   return pinnedOf(list)
     .concat(["needs-you", "your-turn", "working"].flatMap(bay))
-    .concat((list || []).filter((x) => x.parked))
+    .concat((list || []).filter((x) => away(x)))
     .concat(bay("stopped"));
 }
 
@@ -500,7 +499,7 @@ function Assist({ live, busy, onTalk, onOpen }) {
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
   }, []);
-  const open = (live || []).filter((s) => !s.parked);
+  const open = (live || []).filter((s) => !away(s));
   const count = (st) => open.filter((s) => s.state === st).length;
   const summary = [["needs-you", "needs you"], ["your-turn", "your turn"], ["working", "working"]]
     .map(([st, word]) => count(st) && `${count(st)} ${word}`).filter(Boolean).join(" · ") || "Nothing open";
@@ -548,7 +547,7 @@ function Login({ onDone }) {
   `;
 }
 
-function Board({ live: all, runs, sel, cursor, onPast, mode = "classic" }) {
+function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "classic" }) {
   const [q, setQ] = useState("");
   const [only, setOnlyRaw] = useState(() => { try { return localStorage.getItem("atc.project") || null; } catch { return null; } });
   const setOnly = (v) => setOnlyRaw((o) => {
@@ -557,20 +556,20 @@ function Board({ live: all, runs, sel, cursor, onPast, mode = "classic" }) {
     return n;
   });
   PICK_PROJECT = (name) => setOnly((o) => (o === name ? null : name));
-  const tabs = useMemo(() => projectTabs(all || [], only), [all, only]);
+  const tabs = useMemo(() => projectTabs(all || [], only === AGENTS ? null : only), [all, only]);
   TABS = { only, tabs, set: setOnly };
   useEffect(() => {
     const k = (e) => {
       if ((e.key !== "[" && e.key !== "]") || e.metaKey || e.ctrlKey || e.altKey || e.target.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
-      const names = [null, ...tabs.map((t) => t.name)];
+      const names = [null, ...(agents?.length ? [AGENTS] : []), ...tabs.map((t) => t.name)];
       const i = Math.max(0, names.indexOf(only));
       setOnly(names[(i + (e.key === "]" ? 1 : names.length - 1)) % names.length]);
       e.preventDefault();
     };
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
-  }, [tabs, only]);
-  const mine = (s) => !only || project(s.cwd).name === only;
+  }, [tabs, only, agents]);
+  const mine = (s) => !only || only === AGENTS || project(s.cwd).name === only;
   const live = all && all.filter(mine);
   const [hist, setHist] = useState(null);
   const [limit, setLimit] = useState(30);
@@ -591,9 +590,9 @@ function Board({ live: all, runs, sel, cursor, onPast, mode = "classic" }) {
   const liveIDs = new Set((runs || live).map((s) => s.sessionId));
   const earlier = (hist || []).filter((s) => !liveIDs.has(s.sessionId) && mine(s));
   const pinned = pinnedOf(live);
-  const rest = live.filter((s) => !s.pinned && !s.parked);
-  const parked = live.filter((s) => s.parked);
-  const active = live.filter((s) => !s.parked && ["needs-you", "your-turn", "working"].includes(s.state));
+  const rest = live.filter((s) => !s.pinned && !away(s));
+  const parked = live.filter((s) => away(s));
+  const active = live.filter((s) => !away(s) && ["needs-you", "your-turn", "working"].includes(s.state));
   const waiting = active.filter((s) => s.state !== "working").length;
   const working = active.length - waiting;
 
@@ -620,10 +619,14 @@ function Board({ live: all, runs, sel, cursor, onPast, mode = "classic" }) {
     ${earlierBay}`;
 
   return html`
-    <div class="board ${mode === "classic" ? "" : "v2"}" ref=${boardRef} onScroll=${remeasure} style=${tabs.length > 1 ? "--stick: 40px" : "--stick: 0px"}>
-      ${tabs.length > 1 && html`
+    <div class="board ${mode === "classic" ? "" : "v2"}" ref=${boardRef} onScroll=${remeasure} style=${tabs.length > 1 || agents?.length ? "--stick: 40px" : "--stick: 0px"}>
+      ${(tabs.length > 1 || agents?.length > 0) && html`
         <nav class="projtabs" aria-label="Projects">
           <button class=${only ? "" : "on"} onClick=${() => setOnly(null)}>All</button>
+          ${agents?.length > 0 && html`<button class="agentstab ${only === AGENTS ? "on" : ""}" onClick=${() => setOnly(only === AGENTS ? null : AGENTS)} title="Agents: standing conversations, each under one name">
+            <span class="nm">Agents</span>
+            ${(() => { const p = agentPips(agents, runs || []); return p.length > 0 && html`<span class="pips">${p.slice(0, 5).map((st) => html`<i class=${st}></i>`)}</span>`; })()}
+          </button>`}
           ${tabs.map((t) => html`
             <button class=${only === t.name ? "on" : ""} style=${`--ph: ${hueOf(t.name)}`} onClick=${() => setOnly(only === t.name ? null : t.name)}
               title=${`${t.name}: ${t.summary || "nothing active"}`}>
@@ -631,7 +634,8 @@ function Board({ live: all, runs, sel, cursor, onPast, mode = "classic" }) {
               ${t.pips.length > 0 && html`<span class="pips">${t.pips.slice(0, 5).map((st) => html`<i class=${st}></i>`)}${t.pips.length > 5 && html`<em>+${t.pips.length - 5}</em>`}</span>`}
             </button>`)}
         </nav>`}
-      ${mode === "triage" ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />${earlierBay}`
+      ${only === AGENTS ? html`<${AgentsBoard} agents=${agents} live=${runs || []} say=${say} />`
+        : mode === "triage" ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />${earlierBay}`
         : mode === "lanes" ? html`${search}${q ? past : html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} size="lrow" />
             <${Lanes} live=${live.filter((s) => !pinned.includes(s))} earlier=${earlier} only=${only} setOnly=${setOnly} sel=${sel} cursor=${cursor}
             more=${hist && hist.length >= limit + 30 && (() => setLimit(limit + 30))} />`}`
@@ -653,7 +657,7 @@ const steady = (list) => {
 const byRecent = (a, b) => (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
 
 function Triage({ live, only, sel, cursor }) {
-  const wait = live.filter((s) => !s.parked && (s.state === "needs-you" || s.state === "your-turn"))
+  const wait = live.filter((s) => !away(s) && (s.state === "needs-you" || s.state === "your-turn"))
     .sort((a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1));
   const work = live.filter((s) => s.state === "working");
   const pinned = pinnedOf(live);
@@ -672,8 +676,8 @@ function Triage({ live, only, sel, cursor }) {
     <${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} size="lrow" />
     <${Bay} title="Your turn" list=${free(wait)} sel=${sel} cursor=${cursor} size="tcard" />
     <${Bay} title="Working" list=${free(work)} sel=${sel} cursor=${cursor} size="work" />
-    <${Bay} title="Parked" list=${rest.filter((s) => s.parked)} sel=${sel} cursor=${cursor} size="lrow" />
-    <${Bay} title="Stopped" list=${rest.filter((s) => !s.parked)} sel=${sel} cursor=${cursor} size="line" />`;
+    <${Bay} title="Parked" list=${rest.filter((s) => away(s))} sel=${sel} cursor=${cursor} size="lrow" />
+    <${Bay} title="Stopped" list=${rest.filter((s) => !away(s))} sel=${sel} cursor=${cursor} size="line" />`;
 }
 
 function lanesOf(live, earlier) {
@@ -686,7 +690,7 @@ function lanesOf(live, earlier) {
   live.forEach((s) => add(s, "live"));
   earlier.forEach((s) => add(s, "past"));
   return [...by.values()].map((l) => ({ ...l,
-    rank: Math.min(9, ...l.live.filter((s) => !s.parked).map((s) => RANK[s.state] ?? 9)),
+    rank: Math.min(9, ...l.live.filter((s) => !away(s)).map((s) => RANK[s.state] ?? 9)),
     recent: Math.max(0, ...[...l.live, ...l.past].map((s) => Date.parse(s.updated || 0) || 0)),
   })).sort((a, b) => a.rank - b.rank || b.recent - a.recent);
 }
@@ -711,12 +715,12 @@ function Lanes({ live, earlier, only, setOnly, sel, cursor, more }) {
   const recent = Date.now() - 6 * 3600e3;
   return lanes.map((l) => {
     const all = [...l.live, ...l.past];
-    const warm = only === l.name || opened[l.name] || l.live.some((s) => !s.parked && s.state !== "stopped") || l.recent > recent;
+    const warm = only === l.name || opened[l.name] || l.live.some((s) => !away(s) && s.state !== "stopped") || l.recent > recent;
     if (!warm) return html`
       <button class="lane cold" style=${`--ph: ${hueOf(l.name)}`} onClick=${() => setOpened({ ...opened, [l.name]: true })}>
         <span class="nm">${l.name}</span><span class="sum">${all.length} · ${ago([...all].sort(byRecent)[0])}</span>
       </button>`;
-    const count = (f) => l.live.filter((s) => !s.parked && f(s)).length;
+    const count = (f) => l.live.filter((s) => !away(s) && f(s)).length;
     const sum = [[count((s) => s.state === "needs-you" || s.state === "your-turn"), "your turn"], [count((s) => s.state === "working"), "working"]]
       .filter(([k]) => k).map(([k, w]) => `${k} ${w}`).join(" · ") || `${all.length} session${all.length > 1 ? "s" : ""}`;
     const past = only === l.name ? l.past : l.past.slice(0, l.live.length ? 2 : 3);
@@ -811,7 +815,7 @@ function markSeen(list, sid) {
   SEEN = m;
   try { localStorage.setItem("atc.seen", JSON.stringify(m)); } catch {}
 }
-const unread = (s) => (s.state === "your-turn" || s.state === "needs-you") && !s.parked && !!SEEN && Date.parse(s.updated || 0) > Date.parse(SEEN[s.sessionId] || 0);
+const unread = (s) => (s.state === "your-turn" || s.state === "needs-you") && !away(s) && !!SEEN && Date.parse(s.updated || 0) > Date.parse(SEEN[s.sessionId] || 0);
 const oneLine = (t) => (t || "").replace(/\*\*|__|`+|^#+\s*|^>\s*/gm, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
 
 const ICON = {
@@ -823,7 +827,6 @@ const ICON = {
   play: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z" fill="currentColor"/></svg>`,
   layout: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 2.5v11M8.5 6h3M8.5 9h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
   globe: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.4 8h11.2M8 2.2c1.8 1.6 2.6 3.6 2.6 5.8S9.8 12.2 8 13.8C6.2 12.2 5.4 10.2 5.4 8S6.2 3.8 8 2.2z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`,
-  apps: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="2.5" width="4.5" height="4.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="2.5" y="9" width="4.5" height="4.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/><rect x="9" y="9" width="4.5" height="4.5" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>`,
   page: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2" width="11" height="12" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 5.5h6M5 8h6M5 10.5h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   split: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 2.5v11" stroke="currentColor" stroke-width="1.4"/></svg>`,
   expand: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9 7M2.5 13.5L7 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -959,9 +962,9 @@ function Strip({ s, sel, cursor, size = "full" }) {
   const tip = [s.title, [WORD[s.state] || s.state, s.id || s.sessionId.slice(0, 8), model(s.model)].filter(Boolean).join(" · ")].join("\n");
   const cls = `strip ${size} ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}`;
   if (["tcard", "work", "line", "lrow"].includes(size)) {
-    const c = `it ${size} ${s.state} ${s.parked ? "parked" : ""} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}`;
+    const c = `it ${size} ${s.state} ${away(s) ? "parked" : ""} ${on ? "sel" : ""} ${cursor === s.sessionId ? "kb" : ""}`;
     const attrs = { class: c, style: `--ph: ${hueOf(project(s.cwd).name)}`, "data-sid": s.sessionId, "data-state": s.state, title: tip, "aria-current": on ? "true" : null, ...events };
-    const glyph = html`<i class="g ${s.parked && s.state !== "working" ? "parked" : s.state} ${unread(s) ? "unread" : ""}" aria-hidden="true"></i>`;
+    const glyph = html`<i class="g ${away(s) && s.state !== "working" ? "parked" : s.state} ${unread(s) ? "unread" : ""}" aria-hidden="true"></i>`;
     const acts = s.state !== "past" && html`<${HoverActions} s=${s} menu=${menu} />`;
     const when = html`<span class="when" title=${new Date(s.updated || 0).toLocaleString()}>${s.state === "working" ? html`<${Elapsed} s=${s} />` : ago(s)}</span>`;
     if (size === "tcard") return html`
@@ -1047,10 +1050,10 @@ const RANK = { "needs-you": 0, "your-turn": 1, working: 2 };
 function projectTabs(live, keep) {
   const by = new Map();
   for (const x of live) {
-    if (x.state === "past" || x.state === "stopped") continue;
+    if (x.state === "past" || x.state === "stopped" || x.agent) continue;
     const n = project(x.cwd).name;
     if (!by.has(n)) by.set(n, { name: n, pips: [] });
-    if (!x.parked && RANK[x.state] !== undefined) by.get(n).pips.push(x.state);
+    if (!away(x) && RANK[x.state] !== undefined) by.get(n).pips.push(x.state);
   }
   if (keep && !by.has(keep)) by.set(keep, { name: keep, pips: [] });
   const tabs = [...by.values()];
@@ -3304,40 +3307,65 @@ function BacklogRow({ it, stage, run, tag, patch, remove, start }) {
     </div>`;
 }
 
-const APP_REF = "app:";
-const hiddenRun = (s) => (!!s.app || s.kind === "hub") && s.state !== "needs-you";
-const appLink = (a, page) => `#/p/${APP_REF}${encodeURIComponent(a.name)}${page ? `/${encodeURIComponent(page)}` : ""}`;
-const appRun = (a, live) => live.filter((s) => s.app === a.name && (s.host || HERE) === (a.host || HERE))
-  .sort((x, y) => (Date.parse(y.startedAt || 0) || 0) - (Date.parse(x.startedAt || 0) || 0))[0];
-const appState = (a, live) => {
-  const st = appRun(a, live)?.state, r = a.run?.state;
-  if (st === "working" || st === "needs-you") return st;
-  return r === "working" || r === "failed" ? r : st || r ? "done" : "";
+const AGENT_REF = "@", AGENTS = "@agents";
+const away = (s) => !!s.parked && s.state !== "needs-you";
+const hiddenRun = (s) => (s.kind === "hub" || (!!s.agent && !!s.parked)) && s.state !== "needs-you";
+const agentLink = (a, page) => `#/p/${AGENT_REF}${encodeURIComponent(a.name)}${page ? `/${encodeURIComponent(page)}` : ""}`;
+const agentRun = (a, live) => live.find((s) => s.sessionId === a.sessionId);
+const agentState = (a, live) => agentRun(a, live)?.state || a.state || "";
+const AGENT_WORD = { working: "working", "needs-you": "needs you", "your-turn": "your turn", stopped: "asleep", past: "asleep", "": "not started" };
+const agentWord = (a, live) => {
+  const st = agentState(a, live), x = agentRun(a, live);
+  return a.error ? "broken" : AGENT_WORD[st] + ((x ? away(x) : a.parked && st !== "needs-you") ? " · parked" : "");
 };
-const APP_WORD = { working: "Running", "needs-you": "A run needs you", failed: "Last run failed", done: "Idle", "": "No runs yet" };
+const agentDot = (st) => (st === "working" ? "work" : st === "needs-you" ? "needs" : null);
+const agentApi = (a, what, body) => api(`/api/agents/${encodeURIComponent(a.name)}/${what}`, { method: "POST", body });
 
-const openAppChat = async (a, live, say, page) => {
-  const x = appRun(a, live), q = hostQ(a.host, HERE);
-  let key = x && keyOf(x);
+const openAgent = (a, live, say) => (a.page && a.pages.length ? (location.hash = agentLink(a)) : chatAgent(a, live, say));
+const chatAgent = async (a, live, say, page) => {
+  let key = agentRun(a, live)?.id || a.sessionId;
   if (!key) {
-    try {
-      key = (a.run?.sessionId
-        ? await api(`/api/sessions/${a.run.sessionId}/resume${q}`, { method: "POST" })
-        : await api(`/api/sessions${q}`, { method: "POST", body: { preset: a.name, prompt: "" } })).id;
-    } catch (e) { return say(e.message); }
+    try { key = (await agentApi(a, "message")).id; } catch (e) { return say(e.message); }
   }
   const pg = page || a.pages[0]?.name;
   if (pg && !PHONE.matches) { AUTO_SPLIT = true; location.hash = pageLink(key, pg); }
   else { AUTO_PANE = "chat"; go(key); }
 };
 
-const startRun = async (a, say, reload) => {
-  try {
-    await api(`/api/presets/${encodeURIComponent(a.name)}/run${hostQ(a.host, HERE)}`, { method: "POST" });
-    say(`Started a run of ${a.name}.`);
-    reload();
-  } catch (e) { say(e.message); }
+const mins = (ns) => Math.round(ns / 6e10);
+const spanOf = (ns) => { const m = mins(ns); return m % 60 ? (m > 60 ? `${Math.floor(m / 60)}h${m % 60}m` : `${m}m`) : `${m / 60}h`; };
+const ktok = (n) => (n >= 1000 ? `${Math.round(n / 1000)}k` : `${n}`);
+const soon = (at) => {
+  const t = new Date(at), m = Math.round((t - Date.now()) / 6e4);
+  if (m < 60) return `in ${Math.max(1, m)}m`;
+  const hm = t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return t.toDateString() === new Date().toDateString() ? hm : `${t.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })} ${hm}`;
 };
+const behaviour = (a) => [
+  a.error,
+  a.every ? `Wakes every ${a.every}${a.from ? ` from ${a.from.replace("T", " ")}` : ""}${a.check ? `, when ${a.check} finds something` : ""}${a.next ? `. Next ${soon(a.next)}` : ""}` : "Wakes only when messaged",
+  a.rule && `Starts over after ${spanOf(a.rule.Quiet)} quiet past ${ktok(a.rule.Small)} tokens, or ${spanOf(a.rule.CapQuiet)} past ${ktok(a.rule.Cap)}`,
+  [a.context && `Context ${ktok(a.context)}`, a.lastReset && `started over ${agoLong(a.lastReset)}`, a.page && "opens on its page"].filter(Boolean).join(" · "),
+].filter(Boolean);
+
+function AgentsBoard({ agents, live, say }) {
+  if (!agents) return html`<div class="skeleton"><i></i><i></i><i></i></div>`;
+  if (!agents.length) return html`<p class="calm">No agents yet. An agent is a folder with an <code>agent.json</code> in the agents folder; the README has the fields.</p>`;
+  return html`<div class="agents">${agents.map((a) => {
+    const st = agentState(a, live);
+    return html`
+      <div key=${`${a.host}/${a.name}`} class="abrief ${a.error ? "broken" : ""}" role="button" tabindex="0" onClick=${() => openAgent(a, live, say)} onKeyDown=${(e) => e.key === "Enter" && openAgent(a, live, say)}>
+        <${AppTile} a=${a} size=${32} dot=${agentDot(st)} />
+        <div class="abody">
+          <div class="atop"><b>${agentLabel(a)}</b>${elsewhere(a)}${a.badge != null && html`<span class="abadge">${a.badge}</span>`}<small class=${a.error ? "needs-you" : st}>${agentWord(a, live)}</small></div>
+          ${a.headline && html`<p>${a.headline}</p>`}
+          <ul class="rules">${behaviour(a).map((l, i) => html`<li class=${i === 0 && a.error ? "err" : ""}>${l}</li>`)}</ul>
+        </div>
+      </div>`;
+  })}</div>`;
+}
+
+const agentPips = (agents, live) => (agents || []).map((a) => agentRun(a, live)).filter((x) => x && !away(x) && RANK[x.state] !== undefined).map((x) => x.state).sort((a, b) => RANK[a] - RANK[b]);
 
 const APP_ICONS = {
   mail: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
@@ -3364,65 +3392,43 @@ function AppTile({ a, size = 32, dot }) {
   </span>`;
 }
 
-const appLabel = (a) => a.title || a.name.replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
-const appWhen = (a) => {
-  const at = Math.max(Date.parse(a.run?.at || 0) || 0, ...a.pages.map(pageAt));
-  return at ? agoLong(new Date(at).toISOString()) : "";
-};
+const agentLabel = (a) => a.title || a.name.replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
 
-function AppsMenu({ apps, live, say, reload }) {
+function AgentView({ name, page, agents, live, say, reload }) {
   const [busy, setBusy] = useState("");
-  const run = async (e, a) => { e.stopPropagation(); setBusy(a.name); await startRun(a, say, reload); setBusy(""); };
-  const rows = apps.map((a) => ({ a, st: appState(a, live) }));
-  const loud = rows.filter(({ a, st }) => a.badge != null || st === "working" || st === "needs-you" || st === "failed");
-  const quiet = rows.filter((r) => !loud.includes(r));
-  const dotOf = (st) => (st === "working" ? "work" : st === "needs-you" || st === "failed" ? "needs" : null);
-  return html`<${Menu} cls="btn talk" aria="Apps" width=${340} sheetCls="appsheet" label=${html`<span class="mi">${ICON.apps}</span>`} render=${(close) => {
-    const open = (a) => { close(); a.open === "chat" && a.chat ? openAppChat(a, live, say) : (location.hash = appLink(a)); };
-    return html`
-      ${loud.map(({ a, st }) => html`
-        <div key=${`${a.host}/${a.name}`} class="abrief" role="button" tabindex="0" onClick=${() => open(a)} onKeyDown=${(e) => e.key === "Enter" && open(a)}>
-          <${AppTile} a=${a} size=${30} dot=${dotOf(st)} />
-          <div class="abody">
-            <div class="atop"><b>${appLabel(a)}</b>${elsewhere(a)}<small class=${st}>${st === "done" || st === "" ? appWhen(a) || APP_WORD[st].toLowerCase() : APP_WORD[st].toLowerCase()}</small></div>
-            ${a.headline ? html`<p>${a.headline}</p>` : html`<p class="dim">Nothing new from its last run</p>`}
-          </div>
-          <button class="arun" title=${`Run ${a.name}`} aria-label=${`Run ${a.name}`} disabled=${busy === a.name || st === "working"} onClick=${(e) => run(e, a)}><svg viewBox="0 0 12 12"><path d="M3.5 2.2v7.6L9.8 6z" fill="currentColor"/></svg></button>
-        </div>`)}
-      ${quiet.length > 0 && html`<div class="aquiet ${loud.length ? "" : "only"}">
-        ${quiet.map(({ a }) => html`<button key=${`${a.host}/${a.name}`} class="achip" title=${a.headline || appWhen(a) || APP_WORD[""]} onClick=${() => open(a)}><${AppTile} a=${a} size=${20} />${appLabel(a)}</button>`)}
-      </div>`}`;
-  }} />`;
-}
-
-function AppView({ name, page, apps, live, say, reload }) {
-  const [busy, setBusy] = useState(false);
-  const a = apps && (apps.find((x) => x.name === name && x.host === HERE) || apps.find((x) => x.name === name));
+  const a = agents && (agents.find((x) => x.name === name && x.host === HERE) || agents.find((x) => x.name === name));
   useEffect(() => {
     const k = (e) => e.key === "Escape" && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName) && closePages();
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
   }, []);
-  if (!a) return html`<div class="palone"><div class="fbody"><p class="empty">${apps ? `No app named ${name}.` : "Loading…"}</p></div></div>`;
-  const x = appRun(a, live), st = appState(a, live), q = hostQ(a.host, HERE);
-  const run = async () => { setBusy(true); await startRun(a, say, reload); setBusy(false); };
-  const chat = () => openAppChat(a, live, say, page);
-  const s = x || (a.run?.sessionId ? { sessionId: a.run.sessionId, id: a.run.id, title: a.name, state: "past", host: a.host } : { title: a.name });
-  const runBtn = html`<button class="btn" disabled=${busy || st === "working"} onClick=${run}>Run</button>`;
+  if (!a) return html`<div class="palone"><div class="fbody"><p class="empty">${agents ? `No agent named ${name}.` : "Loading…"}</p></div></div>`;
+  const x = agentRun(a, live), st = agentState(a, live);
+  const act = (label, fn, done) => async () => {
+    setBusy(label);
+    try { await fn(); done && say(done); reload(); } catch (e) { say(e.message); }
+    setBusy("");
+  };
+  const s = x || (a.sessionId ? { sessionId: a.sessionId, title: agentLabel(a), state: "past", host: a.host } : { title: agentLabel(a) });
+  const parked = x ? away(x) : a.parked;
   return html`
     <div class="palone appview">
       <header class="pghead">
         <button class="icon" onClick=${closePages} aria-label="Back">←</button>
         <div class="who">
-          <h2><${AppTile} a=${a} size=${26} />${appLabel(a)}</h2>
-          <span class="sub ${st}">${APP_WORD[st]}${MULTI && a.host ? ` · ${a.host}` : ""}</span>
+          <h2><${AppTile} a=${a} size=${26} />${agentLabel(a)}</h2>
+          <span class="sub ${st}">${agentWord(a, live)}${MULTI && a.host ? ` · ${a.host}` : ""}</span>
         </div>
-        ${runBtn}
-        ${a.chat && html`<button class="btn" onClick=${chat}>Chat</button>`}
+        ${a.prompt && html`<button class="btn" disabled=${!!busy || st === "working"} title=${a.prompt} onClick=${act("wake", () => agentApi(a, "message"), `Woke ${agentLabel(a)}.`)}>Wake</button>`}
+        <button class="btn" onClick=${() => chatAgent(a, live, say, page)}>Chat</button>
+        <${Menu} cls="btn" aria="More" label=${html`<span class="mi">${ICON.more}</span>`} items=${[
+          a.sessionId && { label: parked ? "Unpark" : "Park", run: act("park", () => api(`/api/sessions/${a.sessionId}`, { method: "PATCH", body: { parked: !parked } })) },
+          a.sessionId && { label: "Start over", title: "It writes a handover note and a new conversation starts from it", run: act("reset", () => agentApi(a, "reset"), `${agentLabel(a)} is starting over.`) },
+        ].filter(Boolean)} />
       </header>
       ${a.pages.length
-        ? html`<${PagePane} s=${s} list=${a.pages} cur=${page} pick=${(n) => location.replace(appLink(a, n))} say=${say} alone />`
-        : html`<div class="fbody"><div class="none"><p>${a.name} has no page yet.</p><p class="sub">A run shows one with <code>atc show</code>, and it stays here across runs.</p>${runBtn}</div></div>`}
+        ? html`<${PagePane} s=${s} list=${a.pages} cur=${page} pick=${(n) => location.replace(agentLink(a, n))} say=${say} alone />`
+        : html`<div class="fbody"><div class="none"><p>${agentLabel(a)} has no page yet.</p><ul class="rules">${behaviour(a).map((l) => html`<li>${l}</li>`)}</ul></div></div>`}
     </div>`;
 }
 
@@ -4907,7 +4913,7 @@ function Palette({ live, sel, say, home, actions, onClose }) {
             <div class="pg">${g}</div>
             ${its.map((it) => { n++; const idx = n; return html`
               <button class=${`pi ${idx === pick ? "on" : ""}`} onPointerMove=${() => idx !== pick && setAt(idx)} onClick=${it.run}>
-                ${it.s ? html`<i class=${`dot ${it.s.parked ? "parked" : it.s.state}`}></i>` : it.proj ? html`<span class="proj" style=${`--ph: ${hueOf(it.proj)}`}>${it.proj.slice(0, 2)}</span>` : html`<span class="gl">${it.glyph || "›"}</span>`}
+                ${it.s ? html`<i class=${`dot ${away(it.s) ? "parked" : it.s.state}`}></i>` : it.proj ? html`<span class="proj" style=${`--ph: ${hueOf(it.proj)}`}>${it.proj.slice(0, 2)}</span>` : html`<span class="gl">${it.glyph || "›"}</span>`}
                 <span class="pl">${marked(it.label, it.hits)}${it.s && it.s.state === "working" && it.s.activity ? html`<small>${oneLine(it.s.activity)}</small>` : it.sub ? html`<small>${it.sub}</small>` : ""}</span>
                 ${it.s ? html`<span class="pr"><${ProjectTag} path=${it.s.cwd} /><span class="when">${ago(it.s)}</span></span>` : it.hint ? html`<kbd>${it.hint}</kbd>` : ""}
               </button>`; })}`)}
@@ -4935,7 +4941,7 @@ function Share({ live, hosts, home, say }) {
   });
   const [files, setFiles] = useState(shared.files || []);
   const [ask, setAsk] = useState("");
-  const running = (live || []).filter((s) => s.attachable && !s.parked);
+  const running = (live || []).filter((s) => s.attachable && !away(s));
   const [to, setTo] = useState(shared.to ? "running" : "new");
   const [target, setTarget] = useState(null);
   useEffect(() => {
