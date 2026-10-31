@@ -242,16 +242,18 @@ class Line(private val c: Context, private val url: String, private val voice: V
         else -> why.ifEmpty { "ended" }
     }
 
-    private fun dropped(w: WebSocket, why: String) = ui.post {
-        if (closed || w !== ws) return@post
-        if (!live) {
-            wire.trySend(Calls.Wire.Ended(why))
-            return@post
+    private fun dropped(w: WebSocket, why: String) {
+        ui.post {
+            if (closed || w !== ws) return@post
+            if (!live) {
+                wire.trySend(Calls.Wire.Ended(why))
+                return@post
+            }
+            val now = SystemClock.elapsedRealtime()
+            if (lostAt == 0L) lostAt = now
+            if (now - lostAt > 8_000) wire.trySend(Calls.Wire.Ended("connection lost"))
+            else ui.postDelayed({ if (!closed) open("resume") }, 1_000)
         }
-        val now = SystemClock.elapsedRealtime()
-        if (lostAt == 0L) lostAt = now
-        if (now - lostAt > 8_000) wire.trySend(Calls.Wire.Ended("connection lost"))
-        else ui.postDelayed({ if (!closed) open("resume") }, 1_000)
     }
 
     fun send(name: String) {
