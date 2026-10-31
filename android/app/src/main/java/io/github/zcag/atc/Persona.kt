@@ -27,6 +27,11 @@ interface Persona {
     val view: View
     fun face(f: Calls.Face)
 
+    /** A persona that needs a while before its first frame (a character uploading its textures) returns true and
+     *  calls [go] on the UI thread once that frame is up; the host keeps the old one on screen until then and fades
+     *  the new one in over it. One that draws at once returns false and is swapped in directly. */
+    fun drawn(go: () -> Unit) = false
+
     companion object {
         fun make(c: Context): Persona = PersonaHost(c)
     }
@@ -76,7 +81,10 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
                 dir.mkdirs()
                 Net.download(context, "$server/app/personas/$name/persona.json", spec)
                 val files = JSONObject(spec.readText()).optJSONArray("files") ?: JSONArray()
-                for (i in 0 until files.length()) Net.download(context, "$server/app/personas/$name/${files.getString(i)}", File(dir, files.getString(i)))
+                for (i in 0 until files.length()) {
+                    val file = File(dir, files.getString(i)).apply { parentFile?.mkdirs() }
+                    Net.download(context, "$server/app/personas/$name/${files.getString(i)}", file)
+                }
                 File(dir, ".rev").writeText(rev)
             }
             dir to JSONObject(spec.readText())
@@ -89,13 +97,26 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         val next = runCatching {
             when (made?.second?.optString("kind")) {
                 "head3d" -> Head3D(context, made.first, made.second)
+                "live2d" -> Live2D(context, made.first, made.second)
                 else -> Orb(context)
             }
         }.onFailure { Log.w("atc", "persona: ${it.message}") }.getOrElse { Orb(context) }
-        removeAllViews()
         current = next
-        addView(next.view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         next.face(face)
+        val lp = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
+        next.view.alpha = 0f
+        addView(next.view, lp)
+        val fades = next.drawn {
+            if (current === next) next.view.animate().alpha(1f).setDuration(400).withEndAction { keepOnly(next.view) }
+        }
+        if (!fades) {
+            next.view.alpha = 1f
+            keepOnly(next.view)
+        }
+    }
+
+    private fun keepOnly(v: View) {
+        for (i in childCount - 1 downTo 0) if (getChildAt(i) !== v) removeViewAt(i)
     }
 }
 

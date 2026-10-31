@@ -60,6 +60,8 @@ dependencies {
     implementation("com.google.android.filament:filament-android:1.75.1")
     implementation("com.google.android.filament:gltfio-android:1.75.1")
     implementation("com.google.android.filament:filament-utils-android:1.75.1")
+    implementation(project(":cubism"))
+    implementation(files("../live2d/Core/android/Live2DCubismCore.aar"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("junit:junit:4.13.2")
