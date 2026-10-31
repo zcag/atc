@@ -824,7 +824,17 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
   sentence) and the screen shows them as a live transcript and a persona. Tapping the persona while
   it speaks or thinks stops it (`interrupt`). A persona (`Persona.kt`) gets those states and reads
   both voices' loudness on the phone every frame it draws, so it moves with the sound and not with
-  the network; the first one is an orb drawn by a shader. Other looks plug in through `Persona.make`.
+  the network; the first one is an orb drawn by a shader.
+- **Characters** are folders under `$ATC_APP_DIR/personas/<name>/` on the server (`persona.json` with
+  `kind` and `files`, plus the files), listed in `personas/index.json` (`{"default", "personas":
+  [{"name", "rev"}]}`); the phone downloads one when picked and keeps it until its `rev` changes.
+  A long press on the persona switches to the next. `Animator.kt` is the face's behaviour, live and
+  procedural (breathing, irregular blinks, eye movements, sway, looking at them while listening and
+  nodding in their pauses, looking away while thinking, the jaw on the assistant's voice, brows and a
+  nod on stressed words), and it puts out standard ARKit blend shape weights plus head and eye
+  rotation, so any rig can take it. `kind: head3d` (`Head3D.kt`) is a glTF head with ARKit morph
+  targets drawn by Filament (`nodes` names its head and eye nodes, `focal` frames it). `facecap`, a
+  low-detail scanned head (Bannaflak, CC BY 4.0), is there to develop against.
 - **Android Auto** sees atc as a calling app (`CarCalls.kt`, category `CALLING`, Car App library):
   a Call button on the car screen, and Android Auto's own in-call view for every app call. A
   sideloaded app only shows up after Android Auto's developer settings allow unknown sources.
