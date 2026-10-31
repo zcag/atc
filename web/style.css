@@ -1511,3 +1511,37 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
   .blrow { grid-template-areas: "tx tx" "m acts"; row-gap: 4px; }
   .blrow .acts { align-self: end; }
 }
+
+.callview {
+  position: fixed; inset: 0; z-index: 26; background: var(--board); display: flex; flex-direction: column; align-items: center;
+  padding: max(56px, calc(env(safe-area-inset-top) + 40px)) 20px max(36px, calc(env(safe-area-inset-bottom) + 24px)); text-align: center;
+}
+.callview .close { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 16px; font-size: 20px; line-height: 1; }
+.callhead h1 { margin: 0; font-size: 34px; font-weight: 500; letter-spacing: -.01em; }
+.callstate { font-size: 18px; color: var(--dim); margin-top: 4px; min-height: 26px; }
+.calltime { font: 16px var(--mono); color: var(--faint); min-height: 24px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.callview .orb { flex: 1; width: 100%; max-width: 560px; min-height: 160px; cursor: pointer; transition: opacity .4s; -webkit-tap-highlight-color: transparent; }
+.callview .orb.idle { opacity: .35; }
+.calltext { width: min(640px, 100%); min-height: 7.5em; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; }
+.calltext p { margin: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; }
+.calltext .you { font-size: 15px; color: var(--dim); -webkit-line-clamp: 3; }
+.calltext .you.hearing { opacity: .7; font-style: italic; }
+.calltext .said { font-size: 19px; line-height: 1.4; -webkit-line-clamp: 4; }
+.callrow { display: flex; gap: 36px; justify-content: center; margin-top: 22px; min-height: 68px; }
+.callrow .round {
+  width: 68px; height: 68px; border-radius: 50%; border: 0; display: grid; place-items: center;
+  background: color-mix(in srgb, var(--ink) 12%, transparent); color: var(--ink);
+}
+.callrow .round:hover { background: color-mix(in srgb, var(--ink) 20%, transparent); }
+.callrow .round.on { background: var(--ink); color: var(--board); }
+.callrow .round.end { background: #e5484d; color: #fff; }
+.callrow .round.dial { background: #30a46c; color: #fff; }
+.callrow .round.dial svg { transform: rotate(135deg); }
+.callview.ended .orb { opacity: .15; }
+.callpill {
+  position: fixed; left: 50%; bottom: calc(48px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 24;
+  display: flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; padding: 9px 16px;
+  background: #30a46c; color: #fff; font-size: 14px; font-variant-numeric: tabular-nums; box-shadow: 0 6px 24px rgba(0,0,0,.22);
+}
+.callpill i { width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: callpulse 1.6s ease-in-out infinite; }
+@keyframes callpulse { 50% { opacity: .35; } }
