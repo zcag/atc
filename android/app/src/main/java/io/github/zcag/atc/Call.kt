@@ -211,7 +211,7 @@ class Line(private val c: Context, private val url: String, private val voice: V
     fun open(hello: String) {
         val w = Net.webSocket(c, url, object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
-                webSocket.send(cmd(hello))
+                webSocket.send(JSONObject().put("cmd", hello).put("out_rate", Voice.OUT_RATE).toString())
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
@@ -267,6 +267,10 @@ class Line(private val c: Context, private val url: String, private val voice: V
         if (live) ws?.send(frame.toByteString())
     }
 
+    fun stats(o: JSONObject) {
+        if (live) ws?.send(o.put("cmd", "stats").toString())
+    }
+
     fun close() {
         closed = true
         ws?.close(1000, null)
@@ -275,14 +279,19 @@ class Line(private val c: Context, private val url: String, private val voice: V
     private fun cmd(name: String) = JSONObject().put("cmd", name).toString()
 }
 
-/** Call audio: 16 kHz mono s16le in 20 ms frames, the format of delta-call. Playback waits for
- *  a few frames before it starts (and after it runs dry), so network jitter does not cut words. */
+/** Call audio: their voice at 16 kHz (what delta-call's speech recognition takes) and the assistant's at 24 kHz (Higgs' own
+ *  rate), mono s16le in 20 ms frames. Playback holds a few frames before it starts and after it runs dry, so network
+ *  jitter does not cut words; every time it runs dry mid-call it holds two more (up to 300 ms), and gives one back
+ *  after each 10 s that played clean. The counters go to delta-call every 10 s, into the call's log line. */
 class Voice {
     companion object {
         const val RATE = 16_000
         const val FRAME = 640
-        private const val PREFILL = 4
-        private const val MAX_QUEUE = 20
+        const val OUT_RATE = 24_000
+        const val OUT_FRAME = 960
+        private const val MIN_HOLD = 3
+        private const val MAX_HOLD = 15
+        private const val SLACK = 10
     }
 
     @Volatile var muted = false
@@ -290,12 +299,18 @@ class Voice {
     @Volatile var held = false
     @Volatile private var running = false
     private val queue = LinkedBlockingDeque<ByteArray>()
+    private var hold = MIN_HOLD + 1
+    private var underruns = 0
+    private var dropped = 0
+    private var played = 0
+    private var deepest = 0
+    private var holdMax = hold
 
     fun start(line: Line) {
         if (running) return
         running = true
         thread(name = "call-mic") { record(line) }
-        thread(name = "call-speaker") { play() }
+        thread(name = "call-speaker") { play(line) }
     }
 
     fun play(frame: ByteArray) {
@@ -332,37 +347,66 @@ class Voice {
         }
     }
 
-    private fun play() {
-        val size = maxOf(AudioTrack.getMinBufferSize(RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT), FRAME * 4)
+    private fun play(line: Line) {
+        val size = maxOf(AudioTrack.getMinBufferSize(OUT_RATE, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT), OUT_FRAME * 4)
         val track = AudioTrack.Builder()
             .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
-            .setAudioFormat(AudioFormat.Builder().setSampleRate(RATE).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+            .setAudioFormat(AudioFormat.Builder().setSampleRate(OUT_RATE).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
             .setTransferMode(AudioTrack.MODE_STREAM)
             .setBufferSizeInBytes(size)
             .build()
-        val silence = ByteArray(FRAME)
+        val silence = ByteArray(OUT_FRAME)
+        var buffering = true
+        var started = false
+        var clean = SystemClock.elapsedRealtime()
+        var report = clean
         try {
             track.play()
-            var buffering = true
             while (running) {
+                val now = SystemClock.elapsedRealtime()
+                if (now - report >= 10_000) {
+                    report = now
+                    line.stats(stats())
+                }
                 if (buffering) {
-                    if (queue.size < PREFILL) {
+                    if (queue.size < hold) {
                         Thread.sleep(5)
                         continue
                     }
                     buffering = false
+                    started = true
                 }
-                val f = queue.poll(100, TimeUnit.MILLISECONDS)
+                val f = queue.poll(60, TimeUnit.MILLISECONDS)
                 if (f == null) {
                     buffering = true
+                    if (started) {
+                        underruns++
+                        hold = minOf(hold + 2, MAX_HOLD)
+                        holdMax = maxOf(holdMax, hold)
+                        clean = now
+                    }
                     continue
                 }
-                while (queue.size > MAX_QUEUE) queue.poll()
+                if (now - clean >= 10_000 && hold > MIN_HOLD) {
+                    hold--
+                    clean = now
+                }
+                deepest = maxOf(deepest, queue.size)
+                while (queue.size > hold + SLACK) {
+                    queue.poll()
+                    dropped++
+                }
+                played++
                 track.write(if (held) silence else f, 0, f.size)
             }
         } finally {
+            line.stats(stats())
             queue.clear()
             track.release()
         }
     }
+
+    private fun stats() = JSONObject()
+        .put("played", played).put("underruns", underruns).put("dropped", dropped)
+        .put("hold_ms", hold * 20).put("hold_max_ms", holdMax * 20).put("deepest_ms", deepest * 20)
 }
