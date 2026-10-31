@@ -155,6 +155,9 @@ class CallActivity : Activity() {
     private lateinit var callRow: LinearLayout
     private lateinit var mute: ImageButton
     private lateinit var speaker: ImageButton
+    private lateinit var persona: Persona
+    private lateinit var youView: TextView
+    private lateinit var saidView: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -169,6 +172,25 @@ class CallActivity : Activity() {
         scope.launch {
             Calls.state.collect { show(it) }
         }
+        scope.launch {
+            Calls.face.collect { show(it) }
+        }
+    }
+
+    private fun show(f: Calls.Face) {
+        persona.face(f)
+        youView.text = f.hearing.ifEmpty { f.you }
+        youView.alpha = if (f.hearing.isNotEmpty()) .5f else .7f
+        saidView.text = f.said
+        if (Calls.state.value.phase == Calls.Phase.Active) statusView.text = activity(f)
+    }
+
+    private fun activity(f: Calls.Face) = when (f.state) {
+        "hearing" -> "Hearing you"
+        "thinking" -> "Thinking…"
+        "tool" -> "Using " + f.tool.substringAfterLast("__").replace('_', ' ').ifEmpty { "a tool" } + "…"
+        "speaking" -> "Speaking · tap to stop"
+        else -> "Listening"
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -207,7 +229,8 @@ class CallActivity : Activity() {
     }
 
     private fun show(st: Calls.State) {
-        statusView.text = status(st)
+        statusView.text = if (st.phase == Calls.Phase.Active && !st.muted) activity(Calls.face.value) else status(st)
+        persona.view.visibility = if (st.phase == Calls.Phase.Active || st.phase == Calls.Phase.Connecting) View.VISIBLE else View.INVISIBLE
         reasonView.text = st.reason
         reasonView.visibility = if (st.reason.isNotEmpty() && st.phase != Calls.Phase.Ringing) View.VISIBLE else View.GONE
         incomingRow.visibility = if (st.phase == Calls.Phase.Ringing) View.VISIBLE else View.GONE
@@ -272,7 +295,11 @@ class CallActivity : Activity() {
         mute = round(R.drawable.ic_mic_off, 0x33ffffff) { Calls.send(Calls.Cmd.Mute) }
         speaker = round(R.drawable.ic_speaker, 0x33ffffff) { Calls.send(Calls.Cmd.Speaker) }
         callRow = row(mute, round(R.drawable.ic_call_end, 0xffe5484d.toInt()) { Calls.send(Calls.Cmd.Hangup) }, speaker)
-        val spacer = { View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 0, 1f) } }
+        persona = Persona.make(this)
+        persona.view.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
+        persona.view.setOnClickListener { if (Calls.face.value.state in setOf("speaking", "thinking", "tool")) Calls.send(Calls.Cmd.Interrupt) }
+        youView = text(15f, .7f).apply { maxLines = 3 }
+        saidView = text(19f, 1f).apply { maxLines = 4; setPadding(dp(24), dp(4), dp(24), dp(20)) }
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
@@ -282,7 +309,9 @@ class CallActivity : Activity() {
             addView(statusView)
             addView(timer)
             addView(reasonView)
-            addView(spacer())
+            addView(persona.view)
+            addView(youView)
+            addView(saidView)
             addView(incomingRow)
             addView(callRow)
         }

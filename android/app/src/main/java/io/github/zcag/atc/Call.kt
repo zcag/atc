@@ -49,7 +49,10 @@ object Calls {
         val live get() = phase != Phase.Idle && phase != Phase.Ended
     }
 
-    enum class Cmd { Answer, Hangup, Mute, Speaker, Hold, Unhold }
+    enum class Cmd { Answer, Hangup, Mute, Speaker, Hold, Unhold, Interrupt }
+
+    /** What the assistant is doing, from delta-talk: listening, hearing (them), thinking, tool, speaking. */
+    data class Face(val state: String = "listening", val hearing: String = "", val you: String = "", val said: String = "", val tool: String = "")
 
     sealed interface Wire {
         data object Active : Wire
@@ -57,6 +60,22 @@ object Calls {
     }
 
     val state = MutableStateFlow(State())
+    val face = MutableStateFlow(Face())
+    @Volatile var voice: Voice? = null
+
+    /** Their voice's and the assistant's loudness right now, 0 to 1, measured on the phone. */
+    fun levels() = voice?.let { it.you to it.it } ?: (0f to 0f)
+
+    fun persona(o: JSONObject) {
+        val f = face.value
+        face.value = f.copy(
+            state = o.optString("state").ifEmpty { f.state },
+            hearing = if (o.has("hearing")) o.optString("hearing") else if (o.has("you")) "" else f.hearing,
+            you = o.optString("you").ifEmpty { f.you },
+            said = o.optString("said").ifEmpty { f.said },
+            tool = o.optString("tool").ifEmpty { f.tool },
+        )
+    }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var cmds: Channel<Cmd>? = null
 
@@ -81,6 +100,7 @@ object Calls {
         val inbox = Channel<Cmd>(Channel.UNLIMITED)
         cmds = inbox
         state.value = State(if (incoming) Phase.Ringing else Phase.Calling, incoming, reason)
+        face.value = Face()
         CallNote.show(app, state.value)
         scope.launch {
             val why = runCatching { run(app, server, incoming, inbox) }.getOrElse { it.message ?: it.javaClass.simpleName }
@@ -94,6 +114,7 @@ object Calls {
     private suspend fun run(app: Context, server: String, incoming: Boolean, inbox: Channel<Cmd>): String {
         val wire = Channel<Wire>(Channel.UNLIMITED)
         val voice = Voice()
+        this.voice = voice
         val line = Line(app, "$server/api/call/line", voice, wire)
         line.open(if (incoming) "ringing" else "call")
         val calls = CallsManager(app)
@@ -115,6 +136,7 @@ object Calls {
         } finally {
             voice.stop()
             line.close()
+            this.voice = null
         }
         return why
     }
@@ -160,6 +182,10 @@ object Calls {
                             val want = if (state.value.speaker) endpoints.filter { it.type != CallEndpointCompat.TYPE_SPEAKER }.maxByOrNull { it.type }
                             else endpoints.firstOrNull { it.type == CallEndpointCompat.TYPE_SPEAKER }
                             want?.let { requestEndpointChange(it) }
+                            null
+                        }
+                        Cmd.Interrupt -> {
+                            line.send("interrupt")
                             null
                         }
                         Cmd.Hold, Cmd.Unhold -> {
@@ -223,6 +249,7 @@ class Line(private val c: Context, private val url: String, private val voice: V
                         wire.trySend(Calls.Wire.Active)
                     }
                     "ended" -> wire.trySend(Calls.Wire.Ended(ended(o.optString("why"))))
+                    "persona" -> ui.post { Calls.persona(o) }
                 }
             }
 
@@ -297,6 +324,8 @@ class Voice {
     @Volatile var muted = false
     @Volatile var systemMuted = false
     @Volatile var held = false
+    @Volatile var you = 0f
+    @Volatile var it = 0f
     @Volatile private var running = false
     private val queue = LinkedBlockingDeque<ByteArray>()
     private var hold = MIN_HOLD + 1
@@ -340,7 +369,9 @@ class Voice {
                     if (r < 0) return
                     n += r
                 }
-                line.audio(if (muted || systemMuted || held) silence else buf.copyOf())
+                val quiet = muted || systemMuted || held
+                you = if (quiet) 0f else loudness(buf)
+                line.audio(if (quiet) silence else buf.copyOf())
             }
         } finally {
             rec.release()
@@ -378,6 +409,7 @@ class Voice {
                 }
                 val f = queue.poll(60, TimeUnit.MILLISECONDS)
                 if (f == null) {
+                    it = 0f
                     buffering = true
                     if (started) {
                         underruns++
@@ -397,6 +429,7 @@ class Voice {
                     dropped++
                 }
                 played++
+                it = if (held) 0f else loudness(f)
                 track.write(if (held) silence else f, 0, f.size)
             }
         } finally {
@@ -404,6 +437,16 @@ class Voice {
             queue.clear()
             track.release()
         }
+    }
+
+    /** RMS of a frame, scaled so normal speech sits around 0.5. */
+    private fun loudness(frame: ByteArray): Float {
+        var sum = 0.0
+        for (i in 0 until frame.size / 2) {
+            val v = ((frame[2 * i + 1].toInt() shl 8) or (frame[2 * i].toInt() and 0xff)).toDouble()
+            sum += v * v
+        }
+        return minOf(1f, (Math.sqrt(sum / (frame.size / 2)) / 32768 * 6).toFloat())
     }
 
     private fun stats() = JSONObject()
