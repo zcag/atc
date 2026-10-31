@@ -834,7 +834,14 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
   nod on stressed words), and it puts out standard ARKit blend shape weights plus head and eye
   rotation, so any rig can take it. `kind: head3d` (`Head3D.kt`) is a glTF head with ARKit morph
   targets drawn by Filament (`nodes` names its head and eye nodes, `focal` frames it). `facecap`, a
-  low-detail scanned head (Bannaflak, CC BY 4.0), is there to develop against.
+  low-detail scanned head (Bannaflak, CC BY 4.0), is there to develop against. `kind: live2d`
+  (`Live2D.kt`) is an illustrated Live2D Cubism character (`model` its `.model3.json`, `frame` crops it
+  to head and shoulders, the body fades out at the bottom): the Animator's pose drives its face, head
+  and body parameters, the model's own physics its hair and clothes, its motions stay off. It fades in
+  over the previous persona once its first frame is drawn. The Cubism SDK for Java sits in
+  `android/live2d/` with its licences (Framework as source, patched to compile blend mode shaders on
+  first use; Core for arm64 only); `hiyori` and `natori` are Live2D's sample models, used under their
+  sample model terms.
 - **Android Auto** sees atc as a calling app (`CarCalls.kt`, category `CALLING`, Car App library):
   a Call button on the car screen, and Android Auto's own in-call view for every app call. A
   sideloaded app only shows up after Android Auto's developer settings allow unknown sources.
