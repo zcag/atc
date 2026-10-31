@@ -617,8 +617,9 @@ func sendTo(args []string) error {
 	fs := flag.NewFlagSet("send", flag.ExitOnError)
 	report := fs.Bool("report", false, "from inside a Claude session: ask it to answer this session")
 	wake := fs.Bool("wake", false, "from inside a Claude session: resume it although it is stopped and not waiting on this session")
+	approved := fs.Bool("approved", false, "from the assistant only: this relays the user's own go-ahead, so it counts as their approval")
 	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: atc send [-report] [-wake] <session> [text...]")
+		fmt.Fprintln(os.Stderr, "usage: atc send [-report] [-wake] [-approved] <session> [text...]")
 		fs.PrintDefaults()
 	}
 	fs.Parse(args)
@@ -641,14 +642,18 @@ func sendTo(args []string) error {
 	c := client.Load()
 	if agent, ok := strings.CutPrefix(args[0], "@"); ok {
 		live, _ := c.Live()
-		_, err := c.Message(agent, client.Signed(live, false, *report, text))
+		signed, err := client.Signed(live, client.Sign{Report: *report, Approved: *approved}, text)
+		if err != nil {
+			return err
+		}
+		_, err = c.Message(agent, signed)
 		return err
 	}
 	s, err := c.Find(args[0], true)
 	if err != nil {
 		return err
 	}
-	_, resumed, err := c.Deliver(context.Background(), s, text, *report, *wake)
+	_, resumed, err := c.Deliver(context.Background(), s, text, *report, *wake, *approved)
 	if resumed {
 		fmt.Printf("resumed %s first\n", s.Title)
 	}

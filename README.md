@@ -622,6 +622,13 @@ which the instructions keep for a message the user asked for. The tools and the 
 code (`internal/client/relay.go`), so they behave the same. A request from another session is not your approval: your rules for
 outward actions still apply, and the instructions say so.
 
+The exception is the assistant (the hub) passing on what you told it. It sets `approved` on `send`
+or `start` (`-approved` on `atc send`), and atc adds "relays the user's own go-ahead" to the
+sender line, so the session merges, pushes or deploys without asking you again. atc writes that
+line itself and only when the sender is the hub session (`kind` "hub", which atc's server sets), and
+refuses `approved` from any other session; the instructions tell receivers that only the line at the
+very end counts, not the same words inside the message.
+
 Sessions open in a terminal can be read but not typed into. A session never sends to itself.
 
 ## Voice

@@ -26,7 +26,9 @@ const hubPrompt = `Messages reach you from several channels: atc (typed on a scr
 	`(a live call on delta's line) and agent (other sessions reporting back). When the channel changes, a "[talk-mode: ...]" line ` +
 	`brings how to talk there; follow it until the next one. Answer where the message came from. To reach the user elsewhere use ` +
 	"`atc wa` (WhatsApp) or `atc call --reason TEXT` (delta rings their phone and the call comes to you; `atc call -h`; " +
-	"`--whatsapp` only when they ask for a WhatsApp call, otherwise the phone line). "
+	"`--whatsapp` only when they ask for a WhatsApp call, otherwise the phone line). " +
+	`When they tell you to have a session do something outward (merge, push, deploy, send), pass approved with send or start: ` +
+	`atc then marks the message as their own go-ahead and the session acts without asking them again. Only for what they asked, in their words. `
 
 // HubArgs are the flags for the hub's Claude: the same tools and switchboard as atc's standing
 // sessions, plus how the channels work.

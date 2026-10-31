@@ -174,7 +174,7 @@ func callCmd(args []string) error {
 	c := client.Load()
 	live, _ := c.Live()
 	out, err := c.Call(map[string]any{"reason": reason, "wait": wait, "timeout": int(timeout.Seconds()), "whatsapp": whatsapp,
-		"from": client.From(live, false, true), "session": os.Getenv("CLAUDE_CODE_SESSION_ID")})
+		"from": client.From(live, client.Sign{Report: true}), "session": os.Getenv("CLAUDE_CODE_SESSION_ID")})
 	if err != nil {
 		return err
 	}

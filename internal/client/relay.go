@@ -10,12 +10,15 @@ import (
 
 type Launch struct {
 	Host, Dir, Name, Preset, Prompt string
-	Worktree, Report                bool
+	Worktree, Report, Approved      bool
 }
 
 func (c *Client) Launch(ctx context.Context, l Launch) (id, dir string, err error) {
 	live, _ := c.Live()
-	prompt := Signed(live, true, l.Report, l.Prompt)
+	prompt, err := Signed(live, Sign{Started: true, Report: l.Report, Approved: l.Approved}, l.Prompt)
+	if err != nil {
+		return "", "", err
+	}
 	if l.Preset != "" {
 		id, dir, err = c.StartPreset(l.Preset, prompt)
 	} else {
@@ -34,7 +37,7 @@ func (c *Client) Launch(ctx context.Context, l Launch) (id, dir string, err erro
 	return id, dir, nil
 }
 
-func (c *Client) Deliver(ctx context.Context, x sessions.Session, text string, report, wake bool) (id string, resumed bool, err error) {
+func (c *Client) Deliver(ctx context.Context, x sessions.Session, text string, report, wake, approved bool) (id string, resumed bool, err error) {
 	live, _ := c.Live()
 	me, isSession := Self(live)
 	switch {
@@ -44,6 +47,10 @@ func (c *Client) Deliver(ctx context.Context, x sessions.Session, text string, r
 		return "", false, fmt.Errorf("%q is open in a terminal, so it cannot take messages from here; the user has to type into it there", x.Title)
 	case !x.Attachable && isSession && !wake && me.ReportsTo != x.Lineage():
 		return "", false, fmt.Errorf("%q is stopped and is not waiting on a report from you, so it stays stopped; leave the outcome in your final message, or pass wake if the user asked for this message", x.Title)
+	}
+	signed, err := Signed(live, Sign{Report: report, Approved: approved}, text)
+	if err != nil {
+		return "", false, err
 	}
 	id = x.ID
 	if !x.Attachable {
@@ -55,7 +62,7 @@ func (c *Client) Deliver(ctx context.Context, x sessions.Session, text string, r
 		}
 		resumed = true
 	}
-	if err = c.Send(id, Signed(live, false, report, text)); err != nil {
+	if err = c.Send(id, signed); err != nil {
 		return "", resumed, err
 	}
 	if report && isSession {

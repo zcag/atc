@@ -24,10 +24,19 @@ func Ref(s sessions.Session) string {
 	return s.SessionID[:min(8, len(s.SessionID))]
 }
 
-func From(pool []sessions.Session, started, report bool) string {
+type Sign struct{ Started, Report, Approved bool }
+
+const relayedApproval = "relays the user's own go-ahead: what this message asks counts as their approval"
+
+func IsAssistant(pool []sessions.Session) bool {
+	me, ok := Self(pool)
+	return ok && me.Kind == "hub"
+}
+
+func From(pool []sessions.Session, sg Sign) string {
 	me, ok := Self(pool)
 	verb := "from"
-	if started {
+	if sg.Started {
 		verb = "started by"
 	}
 	if !ok {
@@ -36,7 +45,7 @@ func From(pool []sessions.Session, started, report bool) string {
 		}
 		host, _ := os.Hostname()
 		ask := "no need to answer"
-		if report {
+		if sg.Report {
 			ask = "put your report in your final message"
 		}
 		return fmt.Sprintf("[%s a Claude session on %s that atc does not run, so it cannot take messages · %s]", verb, host, ask)
@@ -46,24 +55,30 @@ func From(pool []sessions.Session, started, report bool) string {
 		who += " on " + me.Host
 	}
 	who += ")"
+	if sg.Approved && me.Kind == "hub" {
+		who += " · " + relayedApproval
+	}
 	ask := "no need to answer"
 	switch {
-	case !report && started:
+	case !sg.Report && sg.Started:
 		ask = "handed off to you: no need to report back"
-	case report && !me.Attachable:
+	case sg.Report && !me.Attachable:
 		ask = "report back in your final message: it is open in a terminal and cannot take messages, it reads yours with wait"
-	case report:
+	case sg.Report:
 		ask = "report back when done with atc's send tool to " + Ref(me)
 	}
 	return fmt.Sprintf("[%s %s · %s]", verb, who, ask)
 }
 
-func Signed(pool []sessions.Session, started, report bool, text string) string {
-	if h := From(pool, started, report); h != "" {
-		if text == "" {
-			return h
-		}
-		return text + "\n\n" + h
+func Signed(pool []sessions.Session, sg Sign, text string) (string, error) {
+	if sg.Approved && !IsAssistant(pool) {
+		return "", fmt.Errorf("approved is for the assistant relaying the user's own words; this session cannot pass on an approval")
 	}
-	return text
+	if h := From(pool, sg); h != "" {
+		if text == "" {
+			return h, nil
+		}
+		return text + "\n\n" + h, nil
+	}
+	return text, nil
 }
