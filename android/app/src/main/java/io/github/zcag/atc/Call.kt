@@ -123,9 +123,11 @@ object Calls {
         app: Context, line: Line, voice: Voice, incoming: Boolean, inbox: Channel<Cmd>, wire: Channel<Wire>,
     ): String {
         var endpoints = emptyList<CallEndpointCompat>()
-        launch { availableEndpoints.collect { endpoints = it } }
-        launch { currentCallEndpoint.collect { e -> update { copy(speaker = e.type == CallEndpointCompat.TYPE_SPEAKER) } } }
-        launch { isMuted.collect { m -> voice.systemMuted = m; update { copy(muted = voice.muted) } } }
+        val watchers = listOf(
+            launch { availableEndpoints.collect { endpoints = it } },
+            launch { currentCallEndpoint.collect { e -> update { copy(speaker = e.type == CallEndpointCompat.TYPE_SPEAKER) } } },
+            launch { isMuted.collect { m -> voice.systemMuted = m; update { copy(muted = voice.muted) } } },
+        )
         val timeout = launch {
             delay(if (incoming) 60_000 else 20_000)
             wire.send(Wire.Ended("no answer"))
@@ -190,6 +192,7 @@ object Calls {
                     else -> DisconnectCause.REMOTE
                 }
                 disconnect(DisconnectCause(cause))
+                (watchers + timeout).forEach { it.cancel() }
                 return why
             }
         }
