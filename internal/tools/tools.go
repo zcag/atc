@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -95,6 +96,11 @@ type Ask struct {
 
 type list struct {
 	Sessions []Session `json:"sessions"`
+	Hidden   int       `json:"hidden,omitempty" jsonschema:"stopped and parked sessions left out; pass all to see them"`
+}
+
+type sessionsIn struct {
+	All bool `json:"all,omitempty" jsonschema:"also the stopped and parked ones; default only the running ones and what needs the user"`
 }
 
 type ref struct {
@@ -226,13 +232,20 @@ func Run(ctx context.Context, c *client.Client) error {
 	}
 	s := mcp.NewServer(&mcp.Implementation{Name: "atc", Version: "1"}, &mcp.ServerOptions{Instructions: in})
 
-	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "List the user's open Claude Code sessions on all their machines, most urgent first: what each is doing, what it is asking the user, and its last reply in short."},
-		func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, list, error) {
+	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "List the user's Claude Code sessions on all their machines, most urgent first: what each is doing, what it is asking the user, and its last reply in short. " +
+		"By default only the running ones that are not parked, and any that need the user; all adds the stopped and parked ones."},
+		func(ctx context.Context, _ *mcp.CallToolRequest, in sessionsIn) (*mcp.CallToolResult, list, error) {
 			live, err := c.Live()
 			if err != nil {
 				return nil, list{}, err
 			}
-			return nil, t.list(live, live), nil
+			shown := live
+			if !in.All {
+				shown = slices.DeleteFunc(slices.Clone(live), func(x sessions.Session) bool { return !current(x) })
+			}
+			out := t.list(shown, live)
+			out.Hidden = len(live) - len(shown)
+			return nil, out, nil
 		})
 	mcp.AddTool(s, &mcp.Tool{Name: "read", Description: "Read a session (open or past): its last reply in short, one line per turn (what was asked, files changed, tests, commits, pushes, deploys, failures), then the last messages in full."}, t.read)
 	mcp.AddTool(s, &mcp.Tool{Name: "send", Description: "Send a message to a session, signed with a last line saying it comes from you and whether to answer (report). A stopped or past session is resumed first, but only when it is waiting on your report or the user asked for the message (wake). Returns right away; use wait for the answer."}, t.send)
@@ -296,6 +309,10 @@ func asking(x sessions.Session) []Ask {
 		out = append(out, Ask{Question: x.Activity})
 	}
 	return out
+}
+
+func current(x sessions.Session) bool {
+	return x.State == sessions.NeedsYou || !x.Parked && (x.Attachable || x.State == sessions.Working)
 }
 
 func (t *tools) list(xs []sessions.Session, pool []sessions.Session) list {
