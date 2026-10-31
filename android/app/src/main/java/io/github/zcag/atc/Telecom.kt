@@ -42,7 +42,12 @@ class Telecom(private val c: Context, private val inbox: SendChannel<Calls.Cmd>)
         fun handle(c: Context) = PhoneAccountHandle(ComponentName(c, CallService::class.java), "assistant")
     }
 
-    private fun register(tm: TelecomManager) = tm.registerPhoneAccount(
+    private fun register(tm: TelecomManager) {
+        runCatching { tm.unregisterPhoneAccount(PhoneAccountHandle(ComponentName(c.packageName, c.packageName), "Jetpack")) }
+        registerOwn(tm)
+    }
+
+    private fun registerOwn(tm: TelecomManager) = tm.registerPhoneAccount(
         PhoneAccount.builder(handle, "atc")
             .setCapabilities(PhoneAccount.CAPABILITY_SELF_MANAGED or PhoneAccount.CAPABILITY_SUPPORTS_TRANSACTIONAL_OPERATIONS)
             .setIcon(Icon.createWithResource(c, R.drawable.ic_call))
