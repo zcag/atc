@@ -249,6 +249,7 @@ func serve(args []string) error {
 		CallLine: callLine(),
 
 		CallTestLine: os.Getenv("ATC_CALL_TEST_LINE"),
+		CallNumber:   os.Getenv("ATC_CALL_LINE_NUMBER"),
 		CallTestFrom: strings.FieldsFunc(os.Getenv("ATC_CALL_TEST_FROM"), func(r rune) bool { return r == ',' || r == ' ' }),
 		PublicURL:    strings.TrimRight(os.Getenv("ATC_PUBLIC_URL"), "/"),
 		LocalURL:     loopback(*addr),

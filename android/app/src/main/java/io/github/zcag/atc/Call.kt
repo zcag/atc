@@ -15,15 +15,15 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.telecom.DisconnectCause
-import androidx.core.telecom.CallAttributesCompat
-import androidx.core.telecom.CallControlScope
-import androidx.core.telecom.CallEndpointCompat
-import androidx.core.telecom.CallsManager
+import android.os.Build
+import android.telecom.CallEndpoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.SendChannel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -95,7 +95,7 @@ object Calls {
 
     private fun begin(c: Context, incoming: Boolean, reason: String): Boolean {
         val app = c.applicationContext
-        if (state.value.live) return false
+        if (state.value.live || Build.VERSION.SDK_INT < 34) return false
         val server = Prefs(app).server ?: return false
         val inbox = Channel<Cmd>(Channel.UNLIMITED)
         cmds = inbox
@@ -117,63 +117,62 @@ object Calls {
         this.voice = voice
         val line = Line(app, "$server/api/call/line", voice, wire)
         line.open(if (incoming) "ringing" else "call")
-        val calls = CallsManager(app)
-        calls.registerAppWithTelecom(CallsManager.CAPABILITY_BASELINE)
-        val attrs = CallAttributesCompat(
-            "Assistant", Uri.fromParts("sip", "assistant@atc", null),
-            if (incoming) CallAttributesCompat.DIRECTION_INCOMING else CallAttributesCompat.DIRECTION_OUTGOING,
-        )
-        var why = "ended"
+        val tele = Telecom(app, inbox)
         try {
-            calls.addCall(attrs,
-                onAnswer = { inbox.send(Cmd.Answer) },
-                onDisconnect = { inbox.send(Cmd.Hangup) },
-                onSetActive = { inbox.send(Cmd.Unhold) },
-                onSetInactive = { inbox.send(Cmd.Hold) },
-            ) {
-                launch { why = session(app, line, voice, incoming, inbox, wire) }
-            }
+            tele.add(incoming, address(app, server))
+            return session(app, tele, line, voice, incoming, inbox, wire)
         } finally {
             voice.stop()
             line.close()
             this.voice = null
         }
-        return why
     }
 
-    private suspend fun CallControlScope.session(
-        app: Context, line: Line, voice: Voice, incoming: Boolean, inbox: Channel<Cmd>, wire: Channel<Wire>,
-    ): String {
-        var endpoints = emptyList<CallEndpointCompat>()
+    /** What the phone's call log shows for these calls: the assistant's own phone line (delta's number, from atc's
+     *  /api/me), so calling back from recents reaches the assistant over the SIM line; sip:assistant@atc without it. */
+    private suspend fun address(app: Context, server: String): Uri {
+        val number = withContext(Dispatchers.IO) {
+            runCatching { JSONObject(Net.get(app, "$server/api/me")).optString("callNumber") }.getOrNull()
+        }.orEmpty()
+        if (number.isEmpty()) return Uri.fromParts("sip", "assistant@atc", null)
+        Prefs(app).callNumber = number
+        Contact.ensure(app, number)
+        return Uri.fromParts("tel", number, null)
+    }
+
+    private suspend fun session(
+        app: Context, tele: Telecom, line: Line, voice: Voice, incoming: Boolean, inbox: Channel<Cmd>, wire: Channel<Wire>,
+    ): String = coroutineScope {
         val watchers = listOf(
-            launch { availableEndpoints.collect { endpoints = it } },
             launch {
-            currentCallEndpoint.collect { e ->
-                voice.route = when (e.type) {
-                    CallEndpointCompat.TYPE_EARPIECE -> "earpiece"
-                    CallEndpointCompat.TYPE_SPEAKER -> "speaker"
-                    CallEndpointCompat.TYPE_BLUETOOTH -> "bluetooth"
-                    CallEndpointCompat.TYPE_WIRED_HEADSET -> "wired"
-                    else -> "other"
+                tele.endpoint.collect { e ->
+                    if (e == null) return@collect
+                    voice.route = when (e.endpointType) {
+                        CallEndpoint.TYPE_EARPIECE -> "earpiece"
+                        CallEndpoint.TYPE_SPEAKER -> "speaker"
+                        CallEndpoint.TYPE_BLUETOOTH -> "bluetooth"
+                        CallEndpoint.TYPE_WIRED_HEADSET -> "wired"
+                        else -> "other"
+                    }
+                    update { copy(speaker = e.endpointType == CallEndpoint.TYPE_SPEAKER) }
                 }
-                update { copy(speaker = e.type == CallEndpointCompat.TYPE_SPEAKER) }
-            }
-        },
-            launch { isMuted.collect { m -> voice.systemMuted = m; update { copy(muted = voice.muted) } } },
+            },
+            launch { tele.muted.collect { m -> voice.systemMuted = m; update { copy(muted = voice.muted) } } },
         )
         val timeout = launch {
             delay(if (incoming) 60_000 else 20_000)
             wire.send(Wire.Ended("no answer"))
         }
         var answered = !incoming
-        while (true) {
+        var ended: String? = null
+        while (ended == null) {
             val why: String? = select {
                 inbox.onReceive { cmd ->
                     when (cmd) {
                         Cmd.Answer -> {
                             if (!answered) {
                                 answered = true
-                                answer(CallAttributesCompat.CALL_TYPE_AUDIO_CALL)
+                                tele.answer()
                                 line.send("accept")
                                 update { copy(phase = Phase.Connecting) }
                                 CallService.start(app)
@@ -190,9 +189,10 @@ object Calls {
                             null
                         }
                         Cmd.Speaker -> {
-                            val want = if (state.value.speaker) endpoints.filter { it.type != CallEndpointCompat.TYPE_SPEAKER }.maxByOrNull { it.type }
-                            else endpoints.firstOrNull { it.type == CallEndpointCompat.TYPE_SPEAKER }
-                            want?.let { requestEndpointChange(it) }
+                            val all = tele.endpoints.value
+                            val want = if (state.value.speaker) all.filter { it.endpointType != CallEndpoint.TYPE_SPEAKER }.maxByOrNull { it.endpointType }
+                            else all.firstOrNull { it.endpointType == CallEndpoint.TYPE_SPEAKER }
+                            want?.let { tele.route(it) }
                             null
                         }
                         Cmd.Interrupt -> {
@@ -210,7 +210,7 @@ object Calls {
                         Wire.Active -> {
                             timeout.cancel()
                             if (state.value.phase != Phase.Active) {
-                                if (!incoming) setActive()
+                                if (!incoming) tele.setActive()
                                 voice.start(line)
                                 update { copy(phase = Phase.Active, since = SystemClock.elapsedRealtime()) }
                                 CallService.start(app)
@@ -225,16 +225,16 @@ object Calls {
                 val cause = when (why) {
                     "you hung up" -> DisconnectCause.LOCAL
                     "declined" -> DisconnectCause.REJECTED
-                    "no answer" -> if (incoming) DisconnectCause.MISSED else DisconnectCause.REMOTE
-                    else -> DisconnectCause.REMOTE
+                    else -> if (incoming && !answered) DisconnectCause.MISSED else DisconnectCause.REMOTE
                 }
-                disconnect(DisconnectCause(cause))
+                tele.disconnect(cause)
                 (watchers + timeout).forEach { it.cancel() }
-                return why
+                if (incoming && !answered && why != "declined") CallNote.missed(app, state.value.reason)
+                ended = why
             }
         }
+        ended!!
     }
-}
 
 /** atc's call line: commands and events as JSON text, audio as binary frames. A line that drops
  *  mid-call gets a few seconds to come back (the phone switched networks) before the call ends. */

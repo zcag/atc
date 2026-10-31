@@ -11,6 +11,7 @@ import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
@@ -80,6 +81,21 @@ object CallNote {
     }
 
     fun cancel(c: Context) = c.getSystemService(NotificationManager::class.java).cancel(ID)
+
+    /** Telecom logs a missed call from a self-managed app but leaves the notification to it. */
+    fun missed(c: Context, reason: String) {
+        channels(c)
+        val back = PendingIntent.getActivity(c, 3, Intent(c, CallActivity::class.java).setAction(CallActivity.DIAL)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
+        c.getSystemService(NotificationManager::class.java).notify(ID + 1, Notification.Builder(c, ONGOING)
+            .setSmallIcon(R.drawable.ic_call)
+            .setContentTitle("Missed call from the assistant")
+            .setContentText(reason.ifEmpty { "Tap to call back" })
+            .setCategory(Notification.CATEGORY_MISSED_CALL)
+            .setContentIntent(back)
+            .setAutoCancel(true)
+            .build())
+    }
 }
 
 class CallAction : BroadcastReceiver() {
@@ -206,9 +222,18 @@ class CallActivity : Activity() {
 
     private fun handle(intent: Intent) {
         val action = intent.action?.takeIf { it == DIAL || it == ANSWER } ?: return
-        if (!Calls.canRecord(this)) {
+        if (Build.VERSION.SDK_INT < 34) {
+            statusView.text = "Calls in atc need Android 14 or newer"
+            finishSoon()
+            return
+        }
+        val prefs = Prefs(this)
+        val ask = (if (Calls.canRecord(this)) emptyList() else listOf(Manifest.permission.RECORD_AUDIO)) +
+            if (prefs.askedContacts == null) Contact.permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED } else emptyList()
+        if (ask.isNotEmpty()) {
+            prefs.askedContacts = "1"
             pending = action
-            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
+            requestPermissions(ask.toTypedArray(), REQ_MIC)
             return
         }
         act(action)

@@ -67,7 +67,9 @@ type Server struct {
 	// CallTestFrom go to CallTestLine.
 	CallLine, CallTestLine string
 	CallTestFrom           []string
-	hub                    *hubLink
+	// CallNumber is the assistant's own phone line, which the app logs its calls under.
+	CallNumber string
+	hub        *hubLink
 	// PublicURL is where the user reaches atc (links in messages), LocalURL where this
 	// machine's own browser does.
 	PublicURL, LocalURL string
@@ -297,7 +299,7 @@ func (s *Server) me() map[string]any {
 	for _, p := range s.Peers {
 		hosts = append(hosts, p.Name)
 	}
-	return map[string]any{"host": s.Host, "home": home, "claudeTheme": theme, "hosts": hosts, "peers": s.fleet.statuses(),
+	return map[string]any{"host": s.Host, "home": home, "claudeTheme": theme, "hosts": hosts, "peers": s.fleet.statuses(), "callNumber": s.CallNumber,
 		"voice": map[string]bool{"stt": s.Voice.STT != "", "tts": s.Voice.TTS != "", "condense": s.Voice.LLM != ""}, "web": s.web}
 }
 
