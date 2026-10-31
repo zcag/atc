@@ -811,9 +811,18 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
                                                                            delta-talk ── hub
 ```
 
-- **Audio** is delta-call's own format, 16 kHz mono s16le in 20 ms frames, as binary websocket
-  frames both ways, so delta-talk treats an app call like any other (`via: app`). The phone records
-  with `VOICE_COMMUNICATION` (Android's echo cancelling) and plays after a ~80 ms buffer.
+- **Audio** is mono s16le in 20 ms binary websocket frames: their voice at 16 kHz (what the speech
+  recognition takes), the assistant's at 24 kHz, Higgs' own rate (the SIM line gets 16 kHz). The
+  app asks for it with `out_rate`, so an older app still gets 16 kHz. delta-talk treats an app call
+  like any other (`via: app`). The phone records with `VOICE_COMMUNICATION` (Android's echo
+  cancelling) and plays after a jitter buffer that starts at 80 ms, grows by 40 ms each time it
+  runs dry (up to 300 ms) and shrinks again after clean stretches. Its counters (played, underruns,
+  dropped, buffer depth) reach delta-call every 10 s and land in the call's line in `calls.jsonl`:
+  read them before reaching for Opus or UDP.
+- **Android Auto** sees atc as a calling app (`CarCalls.kt`, category `CALLING`, Car App library):
+  a Call button on the car screen, and Android Auto's own in-call view for every app call. A
+  sideloaded app only shows up after Android Auto's developer settings allow unknown sources.
+  Plain Bluetooth in the car works through Telecom without it.
 - **Him calling:** the app sends `call`; delta-talk answers at once and greets.
 - **A call to them:** the hub dials `via: app`, which delta-call keeps quiet, and emits a `ring` event;
   atc pushes `{"ring": {"reason", "at"}}` through UnifiedPush. The app takes rings younger than
