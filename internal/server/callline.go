@@ -18,12 +18,13 @@ import (
 )
 
 // callLine is the phone app's end of a call: its socket passed through to delta-call's app line,
-// which only answers on loopback, so atc's login is what guards it. Calls from CallTestFrom (a test
-// device, such as an emulator) go to CallTestLine instead, a delta-call of their own, so a test
-// never touches the line they call on.
+// which only answers on loopback, so atc's login is what guards it. The Android app's calls from
+// CallTestFrom (laptop, where the test emulator runs) go to CallTestLine instead, a delta-call of
+// their own, so a test never touches the line they call on; a browser there (their own, on laptop)
+// still gets the real line.
 func (s *Server) callLine(w http.ResponseWriter, r *http.Request) {
 	line := s.CallLine
-	if s.CallTestLine != "" && slices.Contains(s.CallTestFrom, s.clientIP(r).String()) {
+	if s.CallTestLine != "" && slices.Contains(s.CallTestFrom, s.clientIP(r).String()) && strings.HasPrefix(r.UserAgent(), "okhttp") {
 		line = s.CallTestLine
 	}
 	if line == "" {
