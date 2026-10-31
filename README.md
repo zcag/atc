@@ -799,8 +799,12 @@ account instead, only when the user asks for a WhatsApp call.
 
 ### Calls in the app
 
-The app makes and takes calls like WhatsApp does: a self-managed Telecom call (Jetpack
-`core-telecom`), so Android shows its own call notification and lock-screen ring, Bluetooth and car
+The app makes and takes calls like WhatsApp does: a self-managed Telecom call (Android 14's own
+transactional API, `Telecom.kt`; Android 14 or newer), so the phone's call log and recents list them
+(`EXTRA_LOG_SELF_MANAGED_CALLS`) under the assistant's own line, `ATC_CALL_LINE_NUMBER` in atc's env
+(delta's number, so calling back from recents reaches the assistant over the SIM), with an
+"Assistant" contact the app adds once if no contact has that number; a missed call gets the app's
+own notification, so Android shows its own call notification and lock-screen ring, Bluetooth and car
 buttons answer and hang up, a SIM call can put it on hold, and audio routes between earpiece,
 speaker and headsets. They call from the menu (Call the assistant), the Assistant screen or the
 launcher icon's Call assistant shortcut.
