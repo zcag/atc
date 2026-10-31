@@ -36,7 +36,7 @@ class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(
     private val nodes = HashMap<String, Node>()
     private val m = FloatArray(16)
     private val r = FloatArray(16)
-    private val light = EntityManager.get().create()
+    private var light = 0
     private var ambient: IndirectLight? = null
 
     init {
@@ -75,6 +75,7 @@ class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(
         }
         targets.forEach { rm.setMorphWeights(rm.getInstance(it.entity), it.weights, 0) }
         val (cr, cg, cb) = Colors.cct(5600f)
+        light = EntityManager.get().create()
         LightManager.Builder(LightManager.Type.DIRECTIONAL)
             .color(cr, cg, cb)
             .intensity(spec.optDouble("light", 70_000.0).toFloat())
