@@ -92,7 +92,7 @@ class Animator(seed: Int = 1) {
         pose.pitch = headPitch.to(gazePitch * .3f + rad(1.2f) * sway * wave(.11f, .17f) + rad(.6f) * sin(2f * PI.toFloat() * .22f * t) + nod, dt)
         pose.roll = headRoll.to(rad(1.4f) * sway * wave(.09f, .05f) + tilt.to(if (state == "hearing") rad(3f) else if (thinking) rad(-2f) else 0f, dt), dt)
 
-        val open = jaw.to(if (speaking) min(1f, voice.pow(.8f) * .85f) else 0f, dt)
+        val open = jaw.to(if (speaking) min(.6f, voice.pow(.8f) * .55f) else 0f, dt)
         pose["jawOpen"] = open
         pose["mouthClose"] = if (speaking) 0f else .05f
         pose["mouthFunnel"] = open * (.15f + .15f * wave(1.7f, 2.9f))

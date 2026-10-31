@@ -47,7 +47,7 @@ class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(
             Manipulator.Builder().targetPosition(0f, lift, -4f).orbitHomePosition(0f, lift, 0f).build(Manipulator.Mode.ORBIT))
         viewer.autoPlayAnimations = false
         viewer.cameraFocalLength = spec.optDouble("focal", 50.0).toFloat()
-        viewer.renderer.clearOptions = Renderer.ClearOptions().apply { clear = true; clearColor = doubleArrayOf(.082, .11, .153, 1.0) }
+        viewer.renderer.clearOptions = Renderer.ClearOptions().apply { clear = true; clearColor = doubleArrayOf(.0074, .0119, .0203, 1.0) }
         viewer.loadModelGlb(ByteBuffer.wrap(File(dir, spec.optString("model", "head.glb")).readBytes()).let {
             ByteBuffer.allocateDirect(it.capacity()).put(it).flip() as ByteBuffer
         })
@@ -121,8 +121,9 @@ class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(
     private fun apply(p: Pose) {
         val engine = viewer.engine
         val rm = engine.renderableManager
+        val eyes = nodes.containsKey("eyeL")
         for (tg in targets) {
-            for (i in tg.names.indices) tg.weights[i] = p[tg.names[i]]
+            for (i in tg.names.indices) tg.weights[i] = p[tg.names[i]] * if (eyes && tg.names[i].startsWith("eyeLook")) .35f else 1f
             rm.setMorphWeights(rm.getInstance(tg.entity), tg.weights, 0)
         }
         rotate("head", p.yaw, p.pitch, p.roll)

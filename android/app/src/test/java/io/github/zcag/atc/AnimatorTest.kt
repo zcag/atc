@@ -37,7 +37,7 @@ class AnimatorTest {
             if (t > 1f && t % 1f in .3f..0.5f) loud = maxOf(loud, p["jawOpen"])
             if (t > 1f && t % 1f in .85f..0.99f) quiet = minOf(quiet, p["jawOpen"])
         }
-        assertTrue("open while loud: $loud", loud > .5f)
+        assertTrue("open while loud: $loud", loud > .35f)
         assertTrue("closed in the gaps: $quiet", quiet < .1f)
         var listening = 0f
         run(2f, "listening", it = { .8f }) { _, p -> listening = maxOf(listening, p["jawOpen"]) }
