@@ -782,18 +782,47 @@ Endpoints, for clients other than atc: `GET /ws?channel=NAME` (send `{"type":"me
 ## Calling the user
 
 ```sh
-atc call [--reason TEXT] [--wait] [--timeout 45s] [--whatsapp]
+atc call [--reason TEXT] [--wait] [--timeout 45s] [--app | --phone | --whatsapp]
 ```
 
-has delta (the agents' phone line, through delta-call) ring the user's own number; it never dials
-another. When they pick up, the assistant is on the line: its first message carries the reason and,
+rings the user with the assistant on the line, on the atc app first and on delta's phone line
+when the app does not ring within 8 s (no data, phone off, an old app). It only ever calls their own
+number. When they pick up, the assistant is on the line: its first message carries the reason and,
 from another session, that session's sender line, so it says why it called and passes their answer
 back with `send`. delta-talk sends that first message while it still rings, so the hub marks it
 "telefon çalıyor" and the opening is ready the moment they answer. Without `--wait` the command returns at once, and a call nobody picks up comes
 back to the session that asked as a `[telefon ... açmadı]` message (the assistant's own calls come
 back on the channel it was busy with). `--wait` prints the outcome instead: `answered`, `no-answer`
-or `busy` (a call is already on). `--whatsapp` makes it a WhatsApp voice call from delta's bot
-account instead; use it only when the user asks for a WhatsApp call, otherwise the phone line.
+or `busy` (a call is already on). A call they decline in the app is not retried on the phone line.
+`--app` and `--phone` pin one line; `--whatsapp` makes it a WhatsApp voice call from delta's bot
+account instead, only when the user asks for a WhatsApp call.
+
+### Calls in the app
+
+The app makes and takes calls like WhatsApp does: a self-managed Telecom call (Jetpack
+`core-telecom`), so Android shows its own call notification and lock-screen ring, Bluetooth and car
+buttons answer and hang up, a SIM call can put it on hold, and audio routes between earpiece,
+speaker and headsets. They call from the menu (Call the assistant), the Assistant screen or the
+launcher icon's Call assistant shortcut.
+
+```
+phone app ── wss://atc.example/api/call/line (atc's login) ── atc ── ws://127.0.0.1:8807/app ── delta-call
+                                                                                   │ same events as the SIM line
+                                                                           delta-talk ── hub
+```
+
+- **Audio** is delta-call's own format, 16 kHz mono s16le in 20 ms frames, as binary websocket
+  frames both ways, so delta-talk treats an app call like any other (`via: app`). The phone records
+  with `VOICE_COMMUNICATION` (Android's echo cancelling) and plays after a ~80 ms buffer.
+- **Him calling:** the app sends `call`; delta-talk answers at once and greets.
+- **A call to them:** the hub dials `via: app`, which delta-call keeps quiet, and emits a `ring` event;
+  atc pushes `{"ring": {"reason", "at"}}` through UnifiedPush. The app takes rings younger than
+  60 s, opens the line and sends `ringing`; only then does delta-call announce the call, so
+  delta-talk starts the opening. Answering sends `accept`.
+- **A dropped line** (the phone changed networks) reconnects with `resume` within 8 s; after
+  that the call ends.
+- `internal/server/callline.go` is atc's side, `android/.../Call.kt` the call itself and
+  `CallScreen.kt` its screen, notification and service. delta-call's README has the line's contract.
 
 ## Notes
 
