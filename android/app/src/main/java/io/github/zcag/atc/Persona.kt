@@ -106,12 +106,18 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         val fades = next.drawn {
             if (current === next) next.view.animate().alpha(1f).setDuration(400).withEndAction { keepOnly(next.view) }
         }
-        if (fades) next.view.alpha = 0f else removeAllViews()
+        if (fades) next.view.alpha = UNSEEN else removeAllViews()
         addView(next.view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
 
     private fun keepOnly(v: View) {
         for (i in childCount - 1 downTo 0) if (getChildAt(i) !== v) removeViewAt(i)
+    }
+
+    companion object {
+        /** Faint enough not to show, yet still drawn: a view at alpha 0 is skipped, and a TextureView only gets its
+         *  surface once it is drawn. */
+        private const val UNSEEN = .01f
     }
 }
 
