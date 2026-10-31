@@ -120,10 +120,14 @@ class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(
 
     override fun onDetachedFromWindow() {
         Choreographer.getInstance().removeFrameCallback(this)
-        viewer.destroyModel()
-        ambient?.let { viewer.engine.destroyIndirectLight(it) }
-        viewer.engine.destroyEntity(light)
-        viewer.engine.destroy()
+        val engine = viewer.engine
+        viewer.scene.indirectLight = null
+        ambient?.let { engine.destroyIndirectLight(it) }
+        viewer.scene.removeEntity(light)
+        engine.lightManager.destroy(light)
+        EntityManager.get().destroy(light)
+        viewer.destroy()
+        engine.destroy()
         super.onDetachedFromWindow()
     }
 
