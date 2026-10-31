@@ -4,6 +4,7 @@ import android.content.Context
 import android.opengl.Matrix
 import android.view.Choreographer
 import android.view.SurfaceView
+import android.view.View
 import android.widget.FrameLayout
 import com.google.android.filament.Colors
 import com.google.android.filament.Engine
@@ -49,6 +50,10 @@ class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(
     init {
         ensureFilament()
         addView(surface, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        surface.addOnAttachStateChangeListener(object : OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) {}
+            override fun onViewDetachedFromWindow(v: View) = releaseOwn()
+        })
         val lift = spec.optDouble("lift", 0.0).toFloat()
         val cam = spec.optJSONObject("camera")
         val target = cam?.optJSONArray("target")?.let { a -> FloatArray(3) { a.getDouble(it).toFloat() } } ?: floatArrayOf(0f, lift, -4f)
@@ -120,18 +125,24 @@ class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(
     }
 
     override fun onDetachedFromWindow() {
-        Choreographer.getInstance().removeFrameCallback(this)
-        if (gone) return super.onDetachedFromWindow()
         gone = true
+        Choreographer.getInstance().removeFrameCallback(this)
+        super.onDetachedFromWindow()
+    }
+
+    /** ModelViewer destroys itself and its engine when the surface leaves the window, which is before this view's
+     *  own onDetachedFromWindow; what Head3D added to the engine goes first, from a listener registered ahead of it. */
+    private fun releaseOwn() {
+        gone = true
+        Choreographer.getInstance().removeFrameCallback(this)
         val engine = viewer.engine
         viewer.scene.indirectLight = null
         ambient?.let { engine.destroyIndirectLight(it) }
-        viewer.scene.removeEntity(light)
-        engine.lightManager.destroy(light)
-        EntityManager.get().destroy(light)
-        viewer.destroy()
-        engine.destroy()
-        super.onDetachedFromWindow()
+        if (light != 0) {
+            viewer.scene.removeEntity(light)
+            engine.lightManager.destroy(light)
+            EntityManager.get().destroy(light)
+        }
     }
 
     override fun doFrame(frameTimeNanos: Long) {
