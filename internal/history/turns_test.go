@@ -123,8 +123,13 @@ func TestNoticeAfterTheTurnStartsAnother(t *testing.T) {
 	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "s.jsonl")
-	os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
-	turns, _, _ := New(dir).Turns(path)
+	os.WriteFile(path, []byte(strings.Join(lines[:7], "\n")+"\n"), 0o644)
+	x := New(dir)
+	x.Turns(path)
+	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	f.WriteString(strings.Join(lines[7:], "\n") + "\n")
+	f.Close()
+	turns, _, _ := x.Turns(path)
 	if len(turns) != 2 || turns[0].Reply != "## Please call now" || !turns[1].Notice || turns[1].Prompt != "Background command wait completed" || turns[1].Reply != "It worked." {
 		t.Fatalf("a notice after the turn ended should open its own turn: %+v", turns)
 	}

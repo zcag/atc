@@ -58,7 +58,7 @@ func BuildTurns(msgs []Message, offs []int64, end int64, price func(string, Usag
 	replyFrom, ended := false, false
 	for i, m := range msgs {
 		off := offs[i]
-		if m.Role == "user" || m.Role == "event" && ended {
+		if m.Role == "user" || m.Role == "event" && (ended || cur == nil) {
 			open(m, off, false)
 			cur.Prompt, cur.Images, cur.Notice = clip(m.Text, 2000), len(m.Images), m.Role == "event"
 			replyFrom, ended = false, false
