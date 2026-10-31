@@ -4628,48 +4628,92 @@ function useDirs(host, home) {
 
 const hostQ = (host, home) => (host && host !== home ? `?host=${encodeURIComponent(host)}` : "");
 
-function FolderField({ dirs, dir, setDir, note, autofocus }) {
-  const shown = useMemo(() => {
-    const q = dir.toLowerCase();
-    return dirs.filter((d) => !q || tilde(d.path).toLowerCase().includes(q.replace(/^~/, "")) || d.path.toLowerCase().includes(q)).slice(0, 40);
-  }, [dir, dirs]);
+const COMMON = 8;
+const chipName = (p) => { const { name, rest } = project(p); return rest ? `${name}/${rest}` : name; };
+
+function useGuess({ text, host, home, on, byNameOnly, set }) {
+  useEffect(() => {
+    if (!on) return;
+    if (!text.trim()) { set(null); return; }
+    let live = true;
+    const t = setTimeout(() => api(`/api/guess${hostQ(host, home)}`, { method: "POST", body: { text } }).then((r) => {
+      if (live) set(r.dir && (!byNameOnly || r.by === "name") ? tilde(r.dir) : null);
+    }, () => {}), 700);
+    return () => { live = false; clearTimeout(t); };
+  }, [text, host, on]);
+}
+
+function FolderPicker({ dirs, dir, pick, presets = [], preset, setPreset }) {
+  const [q, setQ] = useState("");
+  const [at, setAt] = useState(0);
+  const common = useMemo(() => {
+    const top = dirs.map((d, i) => ({ d, i })).filter(({ d }) => d.recent)
+      .sort((a, b) => (b.d.uses || 0) - (a.d.uses || 0) || a.i - b.i).slice(0, COMMON).map(({ d }) => tilde(d.path));
+    return !preset && dir && !top.includes(dir) ? [dir, ...top] : top;
+  }, [dirs, dir, preset]);
+  const found = useMemo(() => {
+    const s = q.trim().toLowerCase().replace(/^~\/?/, "");
+    if (!q.trim()) return [];
+    const rank = (p) => {
+      const m = fuzzy(s, p.toLowerCase()), base = p.split("/").at(-1).toLowerCase();
+      return m && m.score + (base === s ? 400 : base.startsWith(s) ? 150 : 0);
+    };
+    const hits = dirs.map((d) => ({ p: tilde(d.path), score: rank(tilde(d.path)) })).filter((x) => x.score).sort((a, b) => b.score - a.score).slice(0, 30);
+    const typed = /^[~/]/.test(q.trim()) && !hits.some((h) => h.p === q.trim()) ? [{ p: q.trim(), typed: true }] : [];
+    return [...typed, ...hits];
+  }, [q, dirs]);
+  useEffect(() => setAt(0), [q]);
+  const choose = (p) => { setPreset?.(null); pick(p); setQ(""); };
+  const key = (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); setAt((a) => Math.max(0, Math.min(found.length - 1, a + (e.key === "ArrowDown" ? 1 : -1)))); }
+    else if (e.key === "Enter") { e.preventDefault(); if (found[at]) choose(found[at].p); }
+    else if (e.key === "Escape" && q) { e.stopPropagation(); setQ(""); }
+  };
   return html`
-    <label class="field">
-      <span>Folder${note && html` <em class="note">${note}</em>`}</span>
-      <input value=${dir} onInput=${(e) => setDir(e.target.value, true)} placeholder="~/projects/app" ref=${autofocus && !touch ? focusOnMount : null} autocapitalize="off" autocomplete="off" spellcheck="false" />
-      <div class="dirs">
-        ${shown.map((d) => html`<button type="button" class=${tilde(d.path) === dir ? "on" : ""} onClick=${() => setDir(tilde(d.path), true)}>${tilde(d.path)}${d.recent && html`<span class="r">recent</span>`}</button>`)}
-        ${shown.length === 0 && html`<p class="empty" style="padding: 10px">No match. A full path works too.</p>`}
-      </div>
-    </label>`;
+    <div class="chips">
+      ${common.map((p) => html`<button type="button" class=${!preset && p === dir ? "on" : ""} style=${`--ph: ${hueOf(project(p).name)}`} title=${p} onClick=${() => choose(p)}>${chipName(p)}</button>`)}
+      ${presets.map((p) => html`<button type="button" class="preset ${preset?.name === p.name ? "on" : ""}" style=${`--ph: ${hueOf(p.name)}`} title=${`Preset: ${MULTI && p.host ? p.host + ": " : ""}${tilde(p.dir)}`} onClick=${() => setPreset(preset?.name === p.name ? null : p)}><span class="mark">★</span>${p.name}</button>`)}
+    </div>
+    <div class="dirfind">
+      <input value=${q} onInput=${(e) => setQ(e.target.value)} onKeyDown=${key} placeholder="Another folder: search, or type a path" autocapitalize="off" autocomplete="off" spellcheck="false" />
+      ${q.trim() && html`<div class="dirs">
+        ${found.map((f, i) => html`<button type="button" class=${i === at ? "on" : ""} onPointerEnter=${() => setAt(i)} onClick=${() => choose(f.p)}>${f.typed ? html`Use <b>${f.p}</b>` : f.p}</button>`)}
+        ${found.length === 0 && html`<p class="empty" style="padding: 10px">No match. Start with ~ or / to use a path.</p>`}
+      </div>`}
+    </div>`;
 }
 
 function WorktreeField({ dirs, dir, on, setOn }) {
   const d = dirs.find((d) => tilde(d.path) === dir.trim() || d.path === dir.trim());
   if (!d?.git) return null;
   return html`
-    <label class="check">
-      <input type="checkbox" checked=${on} onChange=${(e) => setOn(e.target.checked)} />
-      <span>Work in its own git worktree<small>A separate checkout on a new branch, so it can't clash with other sessions in this repo.</small></span>
+    <label class="tog" title="A separate checkout on a new branch, so it can't clash with other sessions in this repo.">
+      <input type="checkbox" checked=${on} onChange=${(e) => setOn(e.target.checked)} /> Own worktree
     </label>`;
 }
 
 function HostField({ hosts, host, setHost }) {
   if (hosts.length < 2) return null;
-  return html`
-    <div class="field"><span>Machine</span>
-      <div class="seg">${hosts.map((h) => html`<button type="button" class=${h === host ? "on" : ""} onClick=${() => setHost(h)}>${h}</button>`)}</div>
-    </div>`;
+  return html`<div class="seg">${hosts.map((h) => html`<button type="button" class=${h === host ? "on" : ""} onClick=${() => setHost(h)}>${h}</button>`)}</div>`;
 }
 
 const untrusted = "Claude Code hasn't been trusted in this folder yet. Open Claude there once and accept the prompt, then try again.";
+const submitOnEnter = (e) => {
+  const mod = e.metaKey || e.ctrlKey;
+  if (e.key !== "Enter" || e.isComposing || (!mod && (touch || e.shiftKey))) return;
+  e.preventDefault();
+  e.target.form?.requestSubmit();
+};
 
 function NewSession({ onClose, say, hosts, home, start: from }) {
   const later = !!from?.later;
   const [host, setHost] = useState(from?.host || home);
   const dirs = useDirs(host, home);
-  const [dir, setDir] = useState(from?.dir ? tilde(from.dir) : "~");
+  const near = from?.dir && (from.host || home) === host ? tilde(from.dir) : null;
+  const [chosen, setChosen] = useState(null);
+  const [guess, setGuess] = useState(null);
   const [name, setName] = useState("");
+  const [naming, setNaming] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [worktree, setWorktree] = useState(false);
   const [presets, setPresets] = useState([]);
@@ -4678,6 +4722,9 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
   const [engines, setEngines] = useState([]);
   const [engine, setEngine] = useState("");
   useEffect(() => { api("/api/engines").then((e) => setEngines(e || []), () => {}); }, []);
+  const recent = dirs.find((d) => d.recent);
+  const dir = chosen ?? guess ?? near ?? (recent ? tilde(recent.path) : "~");
+  useGuess({ text: prompt, host, home, on: !chosen && !preset, byNameOnly: !!near, set: setGuess });
   const target = preset ? preset.host || home : host;
   const usable = engines.filter((e) => (e.host || home) === target);
   useEffect(() => { if (!usable.some((e) => e.name === engine)) setEngine(""); }, [target, engines]);
@@ -4705,6 +4752,7 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
   };
   const start = async (e) => {
     e.preventDefault();
+    if (busy) return;
     if (later) return putAside();
     setBusy(true);
     setErr(null);
@@ -4721,27 +4769,28 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
     setBusy(false);
   };
 
+  const where = preset
+    ? html`<b>${tilde(preset.dir)}</b>${MULTI && preset.host ? html` on <b>${preset.host}</b>` : ""}${preset.brief ? html`, with <b>${preset.brief}</b>` : ""}`
+    : html`<b>${dir}</b>${dir === guess && !chosen ? html` <em class="note">from your message</em>` : ""}`;
   return html`
     <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
-      <form class="sheet" onSubmit=${start}>
+      <form class="sheet newsess" onSubmit=${start}>
         <h3>${later ? "Put on the backlog" : "New session"}</h3>
-        ${preset ? html`
-          <p class="presetnote"><span class="proj" style=${`--ph: ${hueOf(preset.name)}`}>${preset.name}</span> starts in <b>${tilde(preset.dir)}</b>${MULTI && preset.host ? html` on <b>${preset.host}</b>` : ""}${preset.brief ? html`, with the instructions in <b>${preset.brief}</b>` : ""}. <button type="button" class="link" onClick=${() => setPreset(null)}>Pick a folder instead</button></p>
-        ` : html`
-          <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDir("~"); }} />
-          <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} />
-          ${!harness && html`<${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />`}`}
-        <label class="field"><span>${later ? "Title" : "Name"}</span><input value=${name} onInput=${(e) => setName(e.target.value)} placeholder=${later ? "What the backlog shows, in a few words" : preset ? preset.name : "Optional"} />${later
-          ? html`<small>It also names the session when you start it.</small>`
-          : !preset && html`<small>Without one, ${harness || "Claude"} titles the session from what you ask. Also the title if you put it on the backlog.</small>`}</label>
-        <label class="field"><span>${later ? "Prompt" : "First message"}</span><textarea rows=${later ? 5 : 3} ref=${touch ? null : focusOnMount} value=${prompt} onInput=${(e) => setPrompt(e.target.value)}
-          placeholder=${later ? "The session's first message when you start it. Optional: without one it gets the title." : "Optional. You can also type it in the terminal."}></textarea></label>
+        ${later && html`<input class="title" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} placeholder="Title: what the backlog shows, in a few words" ref=${touch ? null : focusOnMount} />`}
+        <textarea class="ask" rows=${later ? 4 : 3} ref=${touch || later ? null : focusOnMount} value=${prompt} onInput=${(e) => setPrompt(e.target.value)} onKeyDown=${submitOnEnter}
+          placeholder=${later ? "The session's first message when you start it (optional)" : `What should it do? (optional${touch ? "" : ", Enter starts"})`}></textarea>
+        <div class="wherehead"><span>Where</span>${!preset && html`<${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setChosen(null); setGuess(null); }} />`}</div>
+        <${FolderPicker} dirs=${dirs} dir=${dir} pick=${setChosen} presets=${later ? [] : presets} preset=${preset} setPreset=${setPreset} />
+        <div class="opts">
+          <span class="at">${where}</span>
+          ${!preset && !harness && html`<${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />`}
+          ${!later && usable.length > 0 && html`<span class="models">${[{ name: "" }, ...usable].map((e) => html`<button type="button" class="pick ${e.name === engine ? "on" : ""}" title=${e.harness ? `${e.harness}${e.model ? ` on ${e.model}` : ""}` : e.model || "Claude, as configured"}
+            onClick=${() => setEngine(e.name)}>${e.name || "Claude"}</button>`)}</span>`}
+          ${!later && (naming
+            ? html`<input class="name" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} placeholder=${preset ? preset.name : "Session name"} ref=${focusOnMount} />`
+            : html`<button type="button" class="pick" title=${`Without one, ${harness || "Claude"} titles the session from what you ask`} onClick=${() => setNaming(true)}>Name it</button>`)}
+        </div>
         ${err && html`<p class="err">${err}</p>`}
-        ${!later && usable.length > 0 && html`
-          <p class="presetline">Model:${[{ name: "" }, ...usable].map((e) => html` <button type="button" class="pick ${e.name === engine ? "on" : ""}" title=${e.harness ? `${e.harness}${e.model ? ` on ${e.model}` : ""}` : e.model || "Claude, as configured"}
-            onClick=${() => setEngine(e.name)}>${e.name || "Claude"}</button>`)}</p>`}
-        ${!later && presets.length > 0 && !preset && html`
-          <p class="presetline">Or use a preset:${presets.map((p) => html` <button type="button" class="proj" style=${`--ph: ${hueOf(p.name)}`} title=${`${MULTI && p.host ? p.host + ": " : ""}${tilde(p.dir)}`} onClick=${() => setPreset(p)}>${p.name}</button>`)}</p>`}
         <div class="actions">
           <button type="button" class="btn" onClick=${onClose}>Cancel</button>
           ${!later && !preset && html`<button type="button" class="btn" title="Put it on the backlog to start later" disabled=${!dir.trim() || !(name.trim() || prompt.trim()) || busy} onClick=${putAside}>Later</button>`}
@@ -4922,26 +4971,13 @@ function Share({ live, hosts, home, say }) {
   }, [live]);
   const [host, setHost] = useState(home);
   const dirs = useDirs(host, home);
-  const [dir, setDirRaw] = useState("~");
-  const [picked, setPicked] = useState(false);
-  const [note, setNote] = useState("");
+  const [chosen, setChosen] = useState(null);
+  const [guess, setGuess] = useState(null);
+  const dir = chosen ?? guess ?? "~";
   const [worktree, setWorktree] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-  const setDir = (d, byHand) => { setDirRaw(d); if (byHand) { setPicked(true); setNote(""); } };
-
-  const about = [ask, text, ...files.map((f) => f.name)].join("\n");
-  useEffect(() => {
-    if (picked || to !== "new") return;
-    const t = setTimeout(() => {
-      api(`/api/guess${hostQ(host, home)}`, { method: "POST", body: { text: about } }).then((r) => {
-        if (picked) return;
-        if (r.dir) { setDirRaw(tilde(r.dir)); setNote("suggested"); }
-        else { setDirRaw("~"); setNote(""); }
-      }, () => {});
-    }, ask ? 900 : 0);
-    return () => clearTimeout(t);
-  }, [about, host, picked, to]);
+  useGuess({ text: [ask, text, ...files.map((f) => f.name)].join("\n"), host, home, on: !chosen && to === "new", set: setGuess });
 
   const close = (id) => { APP?.clearShared?.(); id ? go(id) : go(null); };
   const quote = (p) => (/\s/.test(p) ? `"${p}"` : p);
@@ -4993,9 +5029,12 @@ function Share({ live, hosts, home, say }) {
           </div>
         </div>
         ${to === "new" ? html`
-          <${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setDirRaw("~"); setPicked(false); }} />
-          <${FolderField} dirs=${dirs} dir=${dir} setDir=${setDir} note=${note} />
-          <${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />
+          <div class="wherehead"><span>Folder</span><${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setChosen(null); setGuess(null); }} /></div>
+          <${FolderPicker} dirs=${dirs} dir=${dir} pick=${setChosen} />
+          <div class="opts">
+            <span class="at"><b>${dir}</b>${dir === guess && !chosen ? html` <em class="note">from what you shared</em>` : ""}</span>
+            <${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />
+          </div>
         ` : html`
           <div class="targets">
             ${running.map((s) => html`

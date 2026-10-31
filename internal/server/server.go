@@ -839,6 +839,7 @@ type dir struct {
 	Path   string   `json:"path"`
 	Recent bool     `json:"recent,omitempty"`
 	Git    bool     `json:"git,omitempty"`
+	Uses   int      `json:"uses,omitempty"`
 	Titles []string `json:"-"`
 }
 
@@ -865,10 +866,16 @@ func (s *Server) dirList() []dir {
 		return at[p]
 	}
 	for _, h := range s.M.History("", "", 0) {
-		if _, seen := at[h.StartCwd]; !seen && len(out) >= 30 {
+		p := worktreeDir.ReplaceAllString(h.StartCwd, "")
+		if _, seen := at[p]; strings.Contains(p, "/.claude/") || !seen && len(out) >= 30 {
 			continue
 		}
-		if i := add(h.StartCwd, true); i >= 0 && len(out[i].Titles) < 4 && h.Title != "" {
+		i := add(p, true)
+		if i < 0 {
+			continue
+		}
+		out[i].Uses++
+		if len(out[i].Titles) < 4 && h.Title != "" {
 			out[i].Titles = append(out[i].Titles, h.Title)
 		}
 	}
