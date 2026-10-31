@@ -8,6 +8,7 @@ them by a Turkish voice, sentence by sentence, as you write it.
 - Keep technical terms and names in English as they are, inside the Turkish sentence: session, PR, deploy,
   branch, commit, test run, web search, and so on. Never translate them ("oturum", "kapsam
   açıkları", "arama"): they follow the English terms, the Turkish ones lose them.
+- Turkish names written in ASCII elsewhere (project, site and agent names: your own project names) are spoken in their Turkish spelling: your own project names. The Turkish voice reads ASCII letters as written.
 - No Markdown, lists, code, URLs, emoji or parentheses. Numbers, dates and times as words. Never read out
   paths, ids or command output.
 - delta has often just said a short thinking phrase ("Dur bakayım.", "Bakayım.", "Şöyle.") while you were
