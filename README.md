@@ -817,8 +817,10 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
   like any other (`via: app`). The phone records with `VOICE_COMMUNICATION` (Android's echo
   cancelling) and plays after a jitter buffer that starts at 80 ms, grows by 40 ms each time it
   runs dry (up to 300 ms) and shrinks again after clean stretches. Its counters (played, underruns,
-  dropped, buffer depth) reach delta-call every 10 s and land in the call's line in `calls.jsonl`:
-  read them before reaching for Opus or UDP.
+  dropped, buffer depth, the audio route and whether echo cancelling is on) reach delta-call every
+  10 s and land in the call's line in `calls.jsonl`: read them before reaching for Opus or UDP. On
+  speaker or in a car delta's voice can come back through their mic; delta-talk drops a turn mostly
+  made of its own words from the last seconds (app calls only).
 - **The call screen follows the call.** delta-talk sends `persona` events over the line (listening,
   hearing with their words as they are recognised, thinking, the tool it uses, speaking with the
   sentence) and the screen shows them as a live transcript and a persona. Tapping the persona while
@@ -833,8 +835,13 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
   nodding in their pauses, looking away while thinking, the jaw on the assistant's voice, brows and a
   nod on stressed words), and it puts out standard ARKit blend shape weights plus head and eye
   rotation, so any rig can take it. `kind: head3d` (`Head3D.kt`) is a glTF head with ARKit morph
-  targets drawn by Filament (`nodes` names its head and eye nodes, `focal` frames it). `facecap`, a
-  low-detail scanned head (Bannaflak, CC BY 4.0), is there to develop against. `kind: live2d`
+  targets drawn by Filament: `nodes` names its head and eye bones, `axes` which local axis of each
+  turns which way, `rest` a starting pose (arms down from a T-pose), `camera` and `focal` the framing.
+  `rocketbox-m08` (the default, a man, to match the voices) and `rocketbox-f01` are Microsoft
+  Rocketbox characters (MIT) with HeadBox's ARKit shapes, converted from FBX by FBX2glTF and
+  gltf-transform to the 52 ARKit shapes and 1-2k textures. Ship them uncompressed: Filament can't
+  normalize the skinning weights that quantizing (and so meshopt) writes, and the body disappears.
+  `kind: live2d`
   (`Live2D.kt`) is an illustrated Live2D Cubism character (`model` its `.model3.json`, `frame` crops it
   to head and shoulders, the body fades out at the bottom): the Animator's pose drives its face, head
   and body parameters, the model's own physics its hair and clothes, its motions stay off. It fades in
@@ -851,6 +858,11 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
   atc pushes `{"ring": {"reason", "at"}}` through UnifiedPush. The app takes rings younger than
   60 s, opens the line and sends `ringing`; only then does delta-call announce the call, so
   delta-talk starts the opening. Answering sends `accept`.
+- **One device per call.** A call belongs to the connection that placed or took it; another device
+  is told busy (call) or gone (ringing, resume) and can't take it over.
+- **Testing:** calls from the addresses in `ATC_CALL_TEST_FROM` (laptop, for its emulator) go to
+  `ATC_CALL_TEST_LINE`, a standalone delta-call (`DELTA_CALL_BRIDGE=0 DELTA_CALL_PORT=8817`) with a
+  fake talker on it. Never test on the live line or stop delta-talk: they call at any moment.
 - **A dropped line** (the phone changed networks) reconnects with `resume` within 8 s; after
   that the call ends.
 - `internal/server/callline.go` is atc's side, `android/.../Call.kt` the call itself and
