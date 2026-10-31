@@ -235,6 +235,7 @@ object Calls {
         }
         ended!!
     }
+}
 
 /** atc's call line: commands and events as JSON text, audio as binary frames. A line that drops
  *  mid-call gets a few seconds to come back (the phone switched networks) before the call ends. */
