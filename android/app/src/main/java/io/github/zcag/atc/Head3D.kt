@@ -43,6 +43,7 @@ class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(
     private val eyeAxes = axes("eye", "+y", "-x", "+z")
     private val turn = FloatArray(3)
     private var light = 0
+    private var gone = false
     private var ambient: IndirectLight? = null
 
     init {
@@ -115,11 +116,13 @@ class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
-        Choreographer.getInstance().postFrameCallback(this)
+        if (!gone) Choreographer.getInstance().postFrameCallback(this)
     }
 
     override fun onDetachedFromWindow() {
         Choreographer.getInstance().removeFrameCallback(this)
+        if (gone) return super.onDetachedFromWindow()
+        gone = true
         val engine = viewer.engine
         viewer.scene.indirectLight = null
         ambient?.let { engine.destroyIndirectLight(it) }
@@ -132,6 +135,7 @@ class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(
     }
 
     override fun doFrame(frameTimeNanos: Long) {
+        if (gone) return
         Choreographer.getInstance().postFrameCallback(this)
         val dt = if (last == 0L) 1f / 60 else ((frameTimeNanos - last) / 1e9f).coerceIn(0f, .1f)
         last = frameTimeNanos
