@@ -108,10 +108,11 @@ class Orb(c: Context) : View(c), Persona {
                 float r = length(uv);
                 float a = atan(uv.y, uv.x);
                 float wob = 0.030 * sin(a * 3.0 + t * 1.3) + 0.022 * sin(a * 5.0 - t * 1.7) + 0.016 * sin(a * 7.0 + t * 2.3);
-                float radius = 0.26 + 0.11 * level + wob * (0.5 + 1.6 * level);
+                float lv = min(level, 1.0);
+                float radius = 0.25 + 0.08 * lv + wob * (0.5 + 1.2 * lv);
                 float d = r - radius;
                 float body = smoothstep(0.008, -0.008, d);
-                float glow = exp(-max(d, 0.0) * (10.0 - 4.0 * min(level, 1.0))) * (0.25 + 0.6 * min(level, 1.0));
+                float glow = exp(-max(d, 0.0) * (14.0 - 4.0 * lv)) * (0.2 + 0.45 * lv) * smoothstep(0.5, 0.36, r);
                 float swirl = 0.5 + 0.5 * sin(a * 2.0 + t * 0.9 + r * 9.0 - level * 3.0);
                 float3 col = mix(c1, c2, swirl);
                 float core = 0.75 + 0.35 * (1.0 - clamp(r / radius, 0.0, 1.0));
