@@ -229,9 +229,12 @@ class CallActivity : Activity() {
         }
         val prefs = Prefs(this)
         val ask = (if (Calls.canRecord(this)) emptyList() else listOf(Manifest.permission.RECORD_AUDIO)) +
-            if (prefs.askedContacts == null) Contact.permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED } else emptyList()
+            (if (prefs.askedContacts == null) Contact.permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED } else emptyList()) +
+            if (prefs.askedCallLog == null && checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED)
+                listOf(Manifest.permission.READ_CALL_LOG) else emptyList()
         if (ask.isNotEmpty()) {
             prefs.askedContacts = "1"
+            prefs.askedCallLog = "1"
             pending = action
             requestPermissions(ask.toTypedArray(), REQ_MIC)
             return

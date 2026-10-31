@@ -36,7 +36,11 @@ class Telecom(private val c: Context, private val inbox: SendChannel<Calls.Cmd>)
     private var control: CallControl? = null
     private val run = Executor { it.run() }
 
-    private val handle get() = PhoneAccountHandle(ComponentName(c, CallService::class.java), "assistant")
+    private val handle get() = handle(c)
+
+    companion object {
+        fun handle(c: Context) = PhoneAccountHandle(ComponentName(c, CallService::class.java), "assistant")
+    }
 
     private fun register(tm: TelecomManager) = tm.registerPhoneAccount(
         PhoneAccount.builder(handle, "atc")

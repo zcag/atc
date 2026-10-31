@@ -107,6 +107,7 @@ object Calls {
             cmds = null
             update { copy(phase = Phase.Ended, why = why) }
             CallNote.cancel(app)
+            Diag.send(app)
         }
         return true
     }

@@ -222,6 +222,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/whatsapp/send", s.waPost)
 	mux.HandleFunc("POST /api/call", s.call)
 	mux.HandleFunc("GET /api/call/line", s.callLine)
+	mux.HandleFunc("POST /api/call/diag", s.callDiag)
 	mux.HandleFunc("GET /api/sessions/{sid}/stream", s.hubStream)
 	mux.Handle("GET /app/", s.app())
 	mux.Handle("GET /", s.static())

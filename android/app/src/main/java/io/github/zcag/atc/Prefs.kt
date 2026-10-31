@@ -20,6 +20,7 @@ class Prefs(c: Context) {
     var persona by string()
     var callNumber by string()
     var askedContacts by string()
+    var askedCallLog by string()
 
     fun pinFor(host: String?) = pin?.split(" ")?.takeIf { it[0] == host }?.get(1)
 
