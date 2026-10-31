@@ -9,7 +9,6 @@ import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
-import android.media.audiofx.NoiseSuppressor
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -341,6 +340,9 @@ class Voice {
     @Volatile var it = 0f
     @Volatile var route = ""
     @Volatile private var aec = "off"
+    @Volatile private var micFrames = 0
+    @Volatile private var micZero = 0
+    @Volatile private var withheld = 0
     @Volatile private var running = false
     private val queue = LinkedBlockingDeque<ByteArray>()
     private var hold = MIN_HOLD + 1
@@ -373,7 +375,6 @@ class Voice {
         }.getOrNull()?.takeIf { it.state == AudioRecord.STATE_INITIALIZED } ?: return
         aec = if (!AcousticEchoCanceler.isAvailable()) "unavailable"
         else AcousticEchoCanceler.create(rec.audioSessionId)?.let { it.enabled = true; if (it.enabled) "on" else "refused" } ?: "failed"
-        if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(rec.audioSessionId)?.enabled = true
         val silence = ByteArray(FRAME)
         try {
             rec.startRecording()
@@ -386,6 +387,8 @@ class Voice {
                     n += r
                 }
                 val quiet = muted || systemMuted || held
+                if (quiet) withheld++ else if (buf.all { it == 0.toByte() }) micZero++
+                micFrames++
                 you = if (quiet) 0f else loudness(buf)
                 line.audio(if (quiet) silence else buf.copyOf())
             }
@@ -469,4 +472,6 @@ class Voice {
         .put("played", played).put("underruns", underruns).put("dropped", dropped)
         .put("hold_ms", hold * 20).put("hold_max_ms", holdMax * 20).put("deepest_ms", deepest * 20)
         .put("route", route).put("aec", aec)
+        .put("mic_frames", micFrames).put("mic_zero", micZero).put("withheld", withheld)
+        .put("muted", muted).put("system_muted", systemMuted).put("held", held)
 }
