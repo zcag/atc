@@ -1,0 +1,151 @@
+package io.github.zcag.atc
+
+import android.content.Context
+import android.opengl.Matrix
+import android.view.Choreographer
+import android.view.SurfaceView
+import android.widget.FrameLayout
+import com.google.android.filament.Colors
+import com.google.android.filament.Engine
+import com.google.android.filament.android.UiHelper
+import com.google.android.filament.utils.Manipulator
+import com.google.android.filament.EntityManager
+import com.google.android.filament.IndirectLight
+import com.google.android.filament.LightManager
+import com.google.android.filament.Renderer
+import com.google.android.filament.utils.ModelViewer
+import com.google.android.filament.utils.Utils
+import org.json.JSONObject
+import java.io.File
+import java.nio.ByteBuffer
+
+/** A glTF head drawn by Filament, its ARKit morph targets, head and eyes driven by the Animator every frame.
+ *  The persona's folder holds persona.json: {"model": "head.glb", "nodes": {"head", "eyeL", "eyeR"},
+ *  "focal": mm, "lift": how far up the face sits, "light": key light lux, "ambient": ambient intensity}. */
+class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(c), Persona, Choreographer.FrameCallback {
+    override val view get() = this
+
+    private val surface = SurfaceView(c)
+    private val viewer: ModelViewer
+    private val animator = Animator((System.nanoTime() % 100_000).toInt())
+    private var state = "listening"
+    private var last = 0L
+    private class Target(val entity: Int, val names: Array<String>, val weights: FloatArray)
+    private class Node(val entity: Int, val rest: FloatArray)
+    private var targets = emptyList<Target>()
+    private val nodes = HashMap<String, Node>()
+    private val m = FloatArray(16)
+    private val r = FloatArray(16)
+    private val light = EntityManager.get().create()
+    private var ambient: IndirectLight? = null
+
+    init {
+        ensureFilament()
+        addView(surface, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        val lift = spec.optDouble("lift", 0.0).toFloat()
+        viewer = ModelViewer(surface, Engine.create(), UiHelper(UiHelper.ContextErrorPolicy.DONT_CHECK),
+            Manipulator.Builder().targetPosition(0f, lift, -4f).orbitHomePosition(0f, lift, 0f).build(Manipulator.Mode.ORBIT))
+        viewer.autoPlayAnimations = false
+        viewer.cameraFocalLength = spec.optDouble("focal", 50.0).toFloat()
+        viewer.renderer.clearOptions = Renderer.ClearOptions().apply { clear = true; clearColor = floatArrayOf(.082f, .11f, .153f, 1f) }
+        viewer.loadModelGlb(ByteBuffer.wrap(File(dir, spec.optString("model", "head.glb")).readBytes()).let {
+            ByteBuffer.allocateDirect(it.capacity()).put(it).flip() as ByteBuffer
+        })
+        viewer.transformToUnitCube()
+        setUp()
+    }
+
+    private fun setUp() {
+        val asset = viewer.asset ?: return
+        val engine = viewer.engine
+        val rm = engine.renderableManager
+        targets = asset.renderableEntities.mapNotNull { e ->
+            val names = asset.getMorphTargetNames(e)
+            if (names.isEmpty()) null else Target(e, names, FloatArray(names.size))
+        }
+        val tm = engine.transformManager
+        val n = spec.optJSONObject("nodes") ?: JSONObject()
+        for (key in listOf("head", "eyeL", "eyeR")) {
+            val name = n.optString(key).ifEmpty { continue }
+            val e = asset.getFirstEntityByName(name)
+            if (e == 0) continue
+            val rest = FloatArray(16)
+            tm.getTransform(tm.getInstance(e), rest)
+            nodes[key] = Node(e, rest)
+        }
+        targets.forEach { rm.setMorphWeights(rm.getInstance(it.entity), it.weights, 0) }
+        val (cr, cg, cb) = Colors.cct(5600f)
+        LightManager.Builder(LightManager.Type.DIRECTIONAL)
+            .color(cr, cg, cb)
+            .intensity(spec.optDouble("light", 70_000.0).toFloat())
+            .direction(-.45f, -.35f, -1f)
+            .castShadows(false)
+            .build(engine, light)
+        viewer.scene.addEntity(light)
+        ambient = IndirectLight.Builder()
+            .irradiance(1, floatArrayOf(.85f, .8f, .78f))
+            .intensity(spec.optDouble("ambient", 28_000.0).toFloat())
+            .build(engine)
+        viewer.scene.indirectLight = ambient
+    }
+
+    override fun face(f: Calls.Face) {
+        state = f.state
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        Choreographer.getInstance().postFrameCallback(this)
+    }
+
+    override fun onDetachedFromWindow() {
+        Choreographer.getInstance().removeFrameCallback(this)
+        viewer.destroyModel()
+        ambient?.let { viewer.engine.destroyIndirectLight(it) }
+        viewer.engine.destroyEntity(light)
+        viewer.engine.destroy()
+        super.onDetachedFromWindow()
+    }
+
+    override fun doFrame(frameTimeNanos: Long) {
+        Choreographer.getInstance().postFrameCallback(this)
+        val dt = if (last == 0L) 1f / 60 else ((frameTimeNanos - last) / 1e9f).coerceIn(0f, .1f)
+        last = frameTimeNanos
+        val (you, it) = Calls.levels()
+        val p = animator.step(dt, state, you, it)
+        apply(p)
+        viewer.render(frameTimeNanos)
+    }
+
+    private fun apply(p: Pose) {
+        val engine = viewer.engine
+        val rm = engine.renderableManager
+        for (tg in targets) {
+            for (i in tg.names.indices) tg.weights[i] = p[tg.names[i]]
+            rm.setMorphWeights(rm.getInstance(tg.entity), tg.weights, 0)
+        }
+        rotate("head", p.yaw, p.pitch, p.roll)
+        rotate("eyeL", p.eyeYaw, p.eyePitch, 0f)
+        rotate("eyeR", p.eyeYaw, p.eyePitch, 0f)
+    }
+
+    private fun rotate(key: String, yaw: Float, pitch: Float, roll: Float) {
+        val n = nodes[key] ?: return
+        val deg = 180f / Math.PI.toFloat()
+        Matrix.setRotateEulerM(r, 0, -pitch * deg, yaw * deg, roll * deg)
+        Matrix.multiplyMM(m, 0, n.rest, 0, r, 0)
+        val tm = viewer.engine.transformManager
+        tm.setTransform(tm.getInstance(n.entity), m)
+    }
+
+    companion object {
+        private var ready = false
+
+        fun ensureFilament() {
+            if (!ready) {
+                Utils.init()
+                ready = true
+            }
+        }
+    }
+}

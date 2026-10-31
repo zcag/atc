@@ -8,7 +8,16 @@ import android.graphics.RadialGradient
 import android.graphics.RuntimeShader
 import android.graphics.Shader
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.view.View
+import android.widget.FrameLayout
+import android.widget.Toast
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import kotlin.concurrent.thread
 import kotlin.math.sin
 
 /** What the call screen shows of the assistant. A persona gets the call's state as it changes and reads both
@@ -19,9 +28,74 @@ interface Persona {
     fun face(f: Calls.Face)
 
     companion object {
-        fun make(c: Context, name: String = "orb"): Persona = when (name) {
-            else -> Orb(c)
+        fun make(c: Context): Persona = PersonaHost(c)
+    }
+}
+
+/** The call screen's persona slot: the orb at once, then the chosen character once its files are on the phone.
+ *  Characters are folders on the server under /app/personas/<name>/ (persona.json with "kind" and "files", plus
+ *  those files), listed in /app/personas/index.json ({"default": name, "personas": [{"name", "rev"}]}), and
+ *  cached on the phone until their rev changes. A long press switches to the next one, and the choice is kept. */
+class PersonaHost(c: Context) : FrameLayout(c), Persona {
+    override val view get() = this
+    private var current: Persona = Orb(c)
+    private var face = Calls.Face()
+    private var names = listOf("orb")
+    private val ui = Handler(Looper.getMainLooper())
+
+    init {
+        addView(current.view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        setOnLongClickListener {
+            val next = names[(names.indexOf(Prefs(context).persona ?: "orb") + 1) % names.size]
+            Prefs(context).persona = next
+            Toast.makeText(context, next, Toast.LENGTH_SHORT).show()
+            load(next)
+            true
         }
+        load(Prefs(c).persona)
+    }
+
+    override fun face(f: Calls.Face) {
+        face = f
+        current.face(f)
+    }
+
+    private fun load(chosen: String?) = thread {
+        val made = runCatching {
+            val server = Prefs(context).server ?: return@thread
+            val index = JSONObject(Net.get(context, "$server/app/personas/index.json"))
+            val list = index.optJSONArray("personas") ?: JSONArray()
+            names = listOf("orb") + List(list.length()) { list.getJSONObject(it).getString("name") }
+            val name = chosen ?: index.optString("default", "orb")
+            if (name == "orb" || name !in names) return@runCatching null
+            val rev = List(list.length()) { list.getJSONObject(it) }.first { it.getString("name") == name }.optString("rev")
+            val dir = File(context.filesDir, "personas/$name")
+            val spec = File(dir, "persona.json")
+            if (File(dir, ".rev").takeIf { it.exists() }?.readText() != rev || !spec.exists()) {
+                dir.deleteRecursively()
+                dir.mkdirs()
+                Net.download(context, "$server/app/personas/$name/persona.json", spec)
+                val files = JSONObject(spec.readText()).optJSONArray("files") ?: JSONArray()
+                for (i in 0 until files.length()) Net.download(context, "$server/app/personas/$name/${files.getString(i)}", File(dir, files.getString(i)))
+                File(dir, ".rev").writeText(rev)
+            }
+            dir to JSONObject(spec.readText())
+        }.onFailure { Log.w("atc", "persona: ${it.message}") }.getOrNull()
+        ui.post { show(made) }
+    }
+
+    private fun show(made: Pair<File, JSONObject>?) {
+        if (!isAttachedToWindow) return
+        val next = runCatching {
+            when (made?.second?.optString("kind")) {
+                "head3d" -> Head3D(context, made.first, made.second)
+                else -> Orb(context)
+            }
+        }.onFailure { Log.w("atc", "persona: ${it.message}") }.getOrElse { Orb(context) }
+        removeAllViews()
+        current = next
+        addView(next.view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        next.face(face)
     }
 }
 
