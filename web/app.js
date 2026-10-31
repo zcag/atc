@@ -2,6 +2,7 @@ import { html, render, useState, useEffect, useLayoutEffect, useRef, useMemo, us
 import { marked as Marked } from "./vendor/marked.esm.js";
 import hljs from "./vendor/highlight.min.js";
 import { diffLines } from "./vendor/diff.mjs";
+import { Call } from "./call.js";
 
 const BAYS = [
   ["needs-you", "Needs you"],
@@ -90,6 +91,13 @@ const APP = window.AtcApp || null;
 const APP_VERSION = +((navigator.userAgent.match(/AtcApp\/(\d+)/) || [])[1] || 0);
 let AUTO_VOICE = false, AUTO_PANE = null, AUTO_SPLIT = false;
 const WEB = { at: null, fresh: false, shown: Date.now() };
+const CALL = "#/call";
+let CAN_CALL = false;
+const callAssistant = () => {
+  if (APP?.call) return APP.call();
+  Call.dial();
+  if (location.hash !== CALL) location.hash = CALL;
+};
 let appSent = "";
 const FEED_STATES = ["needs-you", "your-turn", "working"];
 
@@ -183,8 +191,9 @@ function App() {
   const [alone, setAlone] = useState(aloneRoute);
   const [pagesHome, setPagesHome] = useState(location.hash === PAGES);
   const [backlog, setBacklog] = useState(location.hash === BACKLOG);
+  const [calling, setCalling] = useState(location.hash === CALL);
   useEffect(() => {
-    const f = () => { setAssisting(location.hash === "#/assist"); setUsage(location.hash === USAGE); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesHome(location.hash === PAGES); setBacklog(location.hash === BACKLOG); };
+    const f = () => { setCalling(location.hash === CALL); setAssisting(location.hash === "#/assist"); setUsage(location.hash === USAGE); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesHome(location.hash === PAGES); setBacklog(location.hash === BACKLOG); };
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
@@ -336,6 +345,7 @@ function App() {
   HERE = me.host || "";
   VOICE = me.voice || {};
   VOICE_OK = !!VOICE.stt;
+  CAN_CALL = !!APP?.call || (!APP && !!me.call && Call.supported());
   const down = (me.peers || []).filter((p) => p.error);
 
   const all = runs || [];
@@ -360,7 +370,7 @@ function App() {
           <${HubButton} hub=${hub} onClick=${() => talk(false, false)} />
           <button class="btn talk" onClick=${() => setCreating(true)} title="New session (n)" aria-label="New session"><span class="mi">${ICON.plus}</span></button>
           <${Menu} cls="btn talk" aria="More" width=${250} label=${html`<span class="mi">${ICON.more}</span>`} items=${[
-            ...(APP?.call ? [{ cls: "viewitem", title: "A phone call with the assistant", run: () => APP.call(), label: html`<span class="mi">${ICON.phone}</span><span class="grow">Call the assistant</span>` }] : []),
+            ...(CAN_CALL ? [{ cls: "viewitem", title: "A phone call with the assistant", run: callAssistant, label: html`<span class="mi">${ICON.phone}</span><span class="grow">Call the assistant</span>` }] : []),
             { cls: "viewitem", title: "Jump to any session, run any action", run: () => setPalette(true), label: html`<span class="mi">${ICON.search}</span><span class="grow">Search and commands</span><kbd>${MAC ? "⌘" : "Ctrl+"}K</kbd>` },
             { cls: "viewitem", title: "Everything your sessions showed you", run: () => (location.hash = PAGES), label: html`<span class="mi">${ICON.page}</span><span class="grow">Pages</span><kbd>p</kbd>` },
             { cls: "viewitem", title: "Work you put aside per project, to start later", run: () => (location.hash = BACKLOG), label: html`<span class="mi">${ICON.list}</span><span class="grow">Backlog</span><kbd>b</kbd>` },
@@ -387,6 +397,7 @@ function App() {
     ${pagesHome && html`<${PagesHome} live=${all} say=${say} onClose=${closePages} />`}
     ${backlog && html`<${BacklogPage} live=${all} say=${say} onClose=${closeBacklog} onAdd=${setCreating} />`}
     ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`}
+    ${calling ? html`<${CallView} />` : html`<${CallPill} />`}
     ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${agentSheet && html`<${AgentSheet} name=${agentSheet} live=${all} say=${say} onClose=${() => setAgentSheet(null)} reload=${loadAgents} />`}
@@ -515,7 +526,7 @@ function Assist({ live, busy, onTalk, onOpen }) {
         <span class="sub">Talk to Claude in a fresh session</span>
       </button>
       ${last && html`<button class="link" disabled=${busy} onClick=${() => onTalk(false)}>Continue the last voice session</button>`}
-      ${APP?.call && html`<button class="choice" onClick=${() => APP.call()}>
+      ${CAN_CALL && html`<button class="choice" onClick=${callAssistant}>
         <span class="what">Call the assistant</span>
         <span class="sub">A phone call, through atc</span>
       </button>`}
@@ -526,6 +537,179 @@ function Assist({ live, busy, onTalk, onOpen }) {
       </button>
     </div>
   `;
+}
+
+function useCall() {
+  const [, tick] = useState(0);
+  useEffect(() => Call.subscribe(() => tick((n) => n + 1)), []);
+  return [Call.get(), Call.face()];
+}
+
+const closeCall = () => (history.length > 1 ? history.back() : location.replace("#/"));
+const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+const callDoing = (f) => ({
+  hearing: "Hearing you",
+  thinking: "Thinking…",
+  tool: `Using ${(f.tool.split("__").pop() || "a tool").replace(/_/g, " ")}…`,
+  speaking: "Speaking · tap to stop",
+})[f.state] || "Listening";
+
+function CallView() {
+  const [st, f] = useCall();
+  useNow(1000);
+  useEffect(() => {
+    if (st.phase !== "ended") return;
+    const t = setTimeout(() => location.hash === CALL && !Call.live() && closeCall(), 1500);
+    return () => clearTimeout(t);
+  }, [st.phase]);
+  useEffect(() => {
+    const k = (e) => { if (e.key === "Escape") closeCall(); };
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, []);
+  const live = Call.live();
+  const status = st.phase === "calling" ? "Calling…"
+    : st.phase === "active" ? (st.muted ? "Muted" : callDoing(f))
+    : st.phase === "ended" ? `Call ended${st.why ? `: ${st.why}` : ""}`
+    : CAN_CALL ? "A phone call with the assistant, through atc" : "Calls need atc's call line and a microphone";
+  return html`
+    <div class="callview ${st.phase}">
+      <button class="icon close" onClick=${closeCall} aria-label=${live ? "Back to atc, the call goes on" : "Close"} title=${live ? "Back to atc (the call goes on)" : "Close"}>${live ? CHEVRON_DOWN : "✕"}</button>
+      <div class="callhead">
+        <h1>Assistant</h1>
+        <div class="callstate">${status}</div>
+        <div class="calltime">${st.phase === "active" ? clock(Date.now() - st.since) : " "}</div>
+      </div>
+      <${Orb} state=${f.state} on=${st.phase === "active"} onTap=${Call.interrupt} />
+      <div class="calltext">
+        <p class="you ${f.hearing ? "hearing" : ""}">${f.hearing || f.you}</p>
+        <p class="said">${f.said}</p>
+      </div>
+      <div class="callrow">
+        ${live ? html`
+          <button class="round ${st.muted ? "on" : ""}" onClick=${Call.mute} aria-label=${st.muted ? "Unmute" : "Mute"} title=${st.muted ? "Unmute" : "Mute"}>${MIC_OFF}</button>
+          <button class="round end" onClick=${Call.hangup} aria-label="Hang up" title="Hang up">${HANG_UP}</button>`
+        : st.phase !== "ended" && CAN_CALL && html`<button class="round dial" onClick=${callAssistant} aria-label="Call" title="Call the assistant">${HANG_UP}</button>`}
+      </div>
+    </div>`;
+}
+
+function CallPill() {
+  const [st] = useCall();
+  useNow(1000);
+  if (!Call.live()) return null;
+  return html`<button class="callpill" onClick=${() => (location.hash = CALL)} title="Back to the call">
+    <i></i>Assistant · ${st.phase === "active" ? clock(Date.now() - st.since) : "Calling…"}
+  </button>`;
+}
+
+const HANG_UP = html`<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M3.4 14.6a1.2 1.2 0 0 1 0-1.7C5.7 10.6 8.7 9.4 12 9.4s6.3 1.2 8.6 3.5a1.2 1.2 0 0 1 0 1.7l-1.7 1.7a1.2 1.2 0 0 1-1.6.1l-2-1.5a1.2 1.2 0 0 1-.5-1v-1.7a9.5 9.5 0 0 0-5.6 0v1.7a1.2 1.2 0 0 1-.5 1l-2 1.5a1.2 1.2 0 0 1-1.6-.1z" fill="currentColor"/></svg>`;
+const CHEVRON_DOWN = html`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
+const ORB_LOOKS = {
+  listening: [[.25, .55, 1], [.45, .9, .95], .6],
+  hearing: [[.2, .85, .55], [.6, 1, .7], .8],
+  thinking: [[.55, .35, 1], [.95, .5, .9], 2.2],
+  tool: [[1, .6, .2], [1, .85, .45], 2.6],
+  speaking: [[.35, .6, 1], [.95, .95, 1], 1],
+};
+const ORB_SRC = `precision highp float;
+uniform vec2 size; uniform float t; uniform float level; uniform vec3 c1; uniform vec3 c2;
+void main() {
+  vec2 uv = (gl_FragCoord.xy - size * 0.5) / min(size.x, size.y);
+  float r = length(uv);
+  float a = atan(uv.y, uv.x);
+  float wob = 0.030 * sin(a * 3.0 + t * 1.3) + 0.022 * sin(a * 5.0 - t * 1.7) + 0.016 * sin(a * 7.0 + t * 2.3);
+  float lv = min(level, 1.0);
+  float radius = 0.25 + 0.08 * lv + wob * (0.5 + 1.2 * lv);
+  float d = r - radius;
+  float body = smoothstep(0.008, -0.008, d);
+  float glow = exp(-max(d, 0.0) * (14.0 - 4.0 * lv)) * (0.2 + 0.45 * lv) * smoothstep(0.5, 0.36, r);
+  float swirl = 0.5 + 0.5 * sin(a * 2.0 + t * 0.9 + r * 9.0 - level * 3.0);
+  vec3 col = mix(c1, c2, swirl);
+  float core = 0.75 + 0.35 * (1.0 - clamp(r / radius, 0.0, 1.0));
+  float alpha = clamp(body + glow * 0.85, 0.0, 1.0);
+  gl_FragColor = vec4(col * (body * core + glow * (1.0 - body)), alpha);
+}`;
+
+function orbGL(canvas) {
+  const gl = canvas.getContext("webgl", { premultipliedAlpha: true, antialias: false });
+  if (!gl) return null;
+  const sh = (type, src) => { const x = gl.createShader(type); gl.shaderSource(x, src); gl.compileShader(x); return x; };
+  const prog = gl.createProgram();
+  gl.attachShader(prog, sh(gl.VERTEX_SHADER, "attribute vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }"));
+  gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, ORB_SRC));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+  gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  const u = Object.fromEntries(["size", "t", "level", "c1", "c2"].map((k) => [k, gl.getUniformLocation(prog, k)]));
+  return (w, h, t, level, a, b) => {
+    gl.viewport(0, 0, w, h);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.uniform2f(u.size, w, h);
+    gl.uniform1f(u.t, t);
+    gl.uniform1f(u.level, Math.min(level, 1.2));
+    gl.uniform3fv(u.c1, a);
+    gl.uniform3fv(u.c2, b);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  };
+}
+
+function orb2D(canvas) {
+  const g = canvas.getContext("2d");
+  const css = (c, al = 1) => `rgba(${c.map((v) => Math.round(v * 255)).join(",")},${al})`;
+  return (w, h, t, level, a, b) => {
+    g.clearRect(0, 0, w, h);
+    const r = Math.min(w, h) * (.28 + .12 * Math.min(level, 1));
+    let gr = g.createRadialGradient(w / 2, h / 2, r * .6, w / 2, h / 2, r * 1.4);
+    gr.addColorStop(0, css(b, .5));
+    gr.addColorStop(1, css(b, 0));
+    g.fillStyle = gr;
+    g.beginPath(); g.arc(w / 2, h / 2, r * 1.4, 0, 7); g.fill();
+    gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, r);
+    gr.addColorStop(0, css(b));
+    gr.addColorStop(1, css(a));
+    g.fillStyle = gr;
+    g.beginPath(); g.arc(w / 2, h / 2, r, 0, 7); g.fill();
+  };
+}
+
+function Orb({ state, on, onTap }) {
+  const ref = useRef(null);
+  const now = useRef(state);
+  now.current = state;
+  useEffect(() => {
+    const cv = ref.current;
+    const draw = orbGL(cv) || orb2D(cv);
+    const a = [...ORB_LOOKS.listening[0]], b = [...ORB_LOOKS.listening[1]];
+    let spin = 1, level = 0, phase = 0, last = performance.now(), raf;
+    const frame = (ms) => {
+      raf = requestAnimationFrame(frame);
+      const dt = Math.min(Math.max((ms - last) / 1000, 0), .1), t = ms / 1000;
+      last = ms;
+      const look = ORB_LOOKS[now.current] || ORB_LOOKS.listening;
+      const [you, it] = Call.levels();
+      const target = { speaking: .15 + it, hearing: .1 + you, thinking: .22 + .1 * Math.sin(t * 3), tool: .22 + .1 * Math.sin(t * 3) }[now.current] ?? .06 + .03 * Math.sin(t * 1.4) + you * .5;
+      level += (target - level) * (target > level ? .35 : .12);
+      for (let i = 0; i < 3; i++) {
+        a[i] += (look[0][i] - a[i]) * .06;
+        b[i] += (look[1][i] - b[i]) * .06;
+      }
+      spin += (look[2] - spin) * .05;
+      phase += dt * spin;
+      const k = devicePixelRatio || 1, w = Math.round(cv.clientWidth * k), h = Math.round(cv.clientHeight * k);
+      if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+      if (w && h) draw(w, h, phase, level, a, b);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return html`<canvas ref=${ref} class="orb ${on ? "" : "idle"}" onClick=${onTap} aria-label="The assistant. Tap to stop it while it speaks"></canvas>`;
 }
 
 function Login({ onDone }) {

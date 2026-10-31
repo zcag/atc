@@ -867,6 +867,14 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
 - **Testing:** calls from the addresses in `ATC_CALL_TEST_FROM` (laptop, for its emulator) go to
   `ATC_CALL_TEST_LINE`, a standalone delta-call (`DELTA_CALL_BRIDGE=0 DELTA_CALL_PORT=8817`) with a
   fake talker on it. Never test on the live line or stop delta-talk: they call at any moment.
+- **In a browser** (no app), the same menu item and Assistant choice open `#/call`, a web call on the
+  same line (`web/call.js`, its audio worklets in `web/call-worklet.js`): the microphone with the
+  browser's echo cancelling, resampled to 16 kHz frames, and the assistant's 24 kHz frames through
+  the same jitter buffer as the app, the orb ported to WebGL, and the same `stats` with `"client":
+  "web"`. Playback goes through a MediaStream into an `<audio>` element, which every engine's echo
+  canceller hears (Chromium 155 on Linux cancels plain Web Audio as well, measured on a loopback
+  sink). It can only place calls, not take a ring, and it lasts as long as the tab: closing it hangs
+  up. `/api/me` says `call: true` when atc has a call line.
 - **A dropped line** (the phone changed networks) reconnects with `resume` within 8 s; after
   that the call ends.
 - `internal/server/callline.go` is atc's side, `android/.../Call.kt` the call itself and

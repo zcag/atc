@@ -301,7 +301,7 @@ func (s *Server) me() map[string]any {
 		hosts = append(hosts, p.Name)
 	}
 	return map[string]any{"host": s.Host, "home": home, "claudeTheme": theme, "hosts": hosts, "peers": s.fleet.statuses(), "callNumber": s.CallNumber,
-		"voice": map[string]bool{"stt": s.Voice.STT != "", "tts": s.Voice.TTS != "", "condense": s.Voice.LLM != ""}, "web": s.web}
+		"voice": map[string]bool{"stt": s.Voice.STT != "", "tts": s.Voice.TTS != "", "condense": s.Voice.LLM != ""}, "web": s.web, "call": s.CallLine != ""}
 }
 
 func webVersion(web fs.FS) string {
