@@ -819,6 +819,12 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
   runs dry (up to 300 ms) and shrinks again after clean stretches. Its counters (played, underruns,
   dropped, buffer depth) reach delta-call every 10 s and land in the call's line in `calls.jsonl`:
   read them before reaching for Opus or UDP.
+- **The call screen follows the call.** delta-talk sends `persona` events over the line (listening,
+  hearing with their words as they are recognised, thinking, the tool it uses, speaking with the
+  sentence) and the screen shows them as a live transcript and a persona. Tapping the persona while
+  it speaks or thinks stops it (`interrupt`). A persona (`Persona.kt`) gets those states and reads
+  both voices' loudness on the phone every frame it draws, so it moves with the sound and not with
+  the network; the first one is an orb drawn by a shader. Other looks plug in through `Persona.make`.
 - **Android Auto** sees atc as a calling app (`CarCalls.kt`, category `CALLING`, Car App library):
   a Call button on the car screen, and Android Auto's own in-call view for every app call. A
   sideloaded app only shows up after Android Auto's developer settings allow unknown sources.
