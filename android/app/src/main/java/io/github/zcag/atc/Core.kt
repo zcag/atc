@@ -25,6 +25,15 @@ class Release(val versionCode: Int, val versionName: String, val apk: String, va
     }
 }
 
+class Ring(val reason: String, val at: Long) {
+    fun fresh(now: Long) = now - at < 60
+
+    companion object {
+        fun parse(text: String) = runCatching { JSONObject(text).optJSONObject("ring") }.getOrNull()
+            ?.let { Ring(it.optString("reason"), it.optLong("at")) }
+    }
+}
+
 class Note(
     val title: String, val body: String, val tag: String, val url: String,
     val session: String = "", val replies: List<String> = emptyList(), val open: Boolean = false,

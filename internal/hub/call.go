@@ -2,7 +2,6 @@ package hub
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,6 +18,7 @@ type CallConfig struct {
 	Number  string
 	Timeout time.Duration
 	Poll    time.Duration
+	AppAck  time.Duration
 	HTTP    *http.Client
 }
 
@@ -113,15 +113,38 @@ type CallReq struct {
 	Notify   bool   `json:"notify,omitempty"`
 	Timeout  int    `json:"timeout,omitempty"`
 	WhatsApp bool   `json:"whatsapp,omitempty"`
+	Via      string `json:"via,omitempty"`
 }
 
-// Call has delta ring them and waits for the outcome. Answered, the phone's first message reaches
-// the session with the reason in front of it, so it speaks first and knows why. Not answered,
-// a Notify call puts that in front of the session on the channel it was busy with.
+// lines are the lines a call is tried on, in order: atc's phone app first, then delta's phone
+// line. A call the app never reports ringing (the push did not reach the phone) falls back.
+func (r CallReq) lines() ([]string, error) {
+	via := r.Via
+	if r.WhatsApp {
+		via = "whatsapp"
+	}
+	switch via {
+	case "":
+		return []string{"app", "phone"}, nil
+	case "app", "phone", "whatsapp":
+		return []string{via}, nil
+	}
+	return nil, fmt.Errorf("unknown line %q (app, phone or whatsapp)", via)
+}
+
+const unreached = "unreached"
+
+// Call has them rung and waits for the outcome. Answered, the call's first message reaches the
+// session with the reason in front of it, so it speaks first and knows why. Not answered, a
+// Notify call puts that in front of the session on the channel it was busy with.
 func (h *Hub) Call(ctx context.Context, r CallReq) (string, error) {
 	c := h.cfg.Call
 	if c.URL == "" || c.Number == "" {
 		return "", ErrNoPhone
+	}
+	lines, err := r.lines()
+	if err != nil {
+		return "", err
 	}
 	timeout := cmpDur(time.Duration(r.Timeout)*time.Second, c.Timeout, 45*time.Second)
 	h.mu.Lock()
@@ -155,50 +178,27 @@ func (h *Hub) Call(ctx context.Context, r CallReq) (string, error) {
 		clear()
 		return Busy, nil
 	}
-	dial := map[string]string{"number": c.Number}
-	if r.WhatsApp {
-		dial["via"] = "whatsapp"
-	}
-	if err := c.post(ctx, "/dial", dial); err != nil {
-		clear()
-		return "", err
-	}
-	log.Printf("hub: calling %s (%s): %s", c.Number, cmp.Or(dial["via"], "phone"), pc.reason)
-	poll := cmpDur(c.Poll, 500*time.Millisecond)
 	deadline := time.Now().Add(timeout)
-	rang := false
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			clear()
-			return "", ctx.Err()
-		case <-time.After(poll):
-		}
-		st, err := c.status(ctx)
-		if err != nil {
-			continue
-		}
-		if st.Precise == "active" {
-			h.mu.Lock()
-			pc.answered = true
-			told := pc.told
-			h.mu.Unlock()
-			if told {
-				clear()
-			} else {
-				time.AfterFunc(2*time.Minute, clear)
-			}
-			log.Printf("hub: call answered")
-			return Answered, nil
-		}
-		if st.Call != "idle" {
-			rang = true
-		} else if rang {
+	out := unreached
+	for i, via := range lines {
+		if out, err = h.ring(ctx, pc, via, deadline, i < len(lines)-1); err != nil || out != unreached {
 			break
 		}
 	}
-	if !rang || time.Now().After(deadline) {
-		c.post(context.WithoutCancel(ctx), "/hangup", map[string]any{})
+	if err != nil {
+		clear()
+		return "", err
+	}
+	if out == Answered {
+		h.mu.Lock()
+		told := pc.told
+		h.mu.Unlock()
+		if told {
+			clear()
+		} else {
+			time.AfterFunc(2*time.Minute, clear)
+		}
+		return Answered, nil
 	}
 	clear()
 	log.Printf("hub: call not answered")
@@ -209,6 +209,61 @@ func (h *Hub) Call(ctx context.Context, r CallReq) (string, error) {
 		}
 		h.Say(pc.notify, text+"]")
 	}
+	return NoAnswer, nil
+}
+
+// ring dials one line until they answer, it stops ringing or the deadline passes. On the app
+// line, with a line left to fall back to, a call the phone has not reported ringing within
+// AppAck is dropped as unreached.
+func (h *Hub) ring(ctx context.Context, pc *call, via string, deadline time.Time, fallback bool) (string, error) {
+	c := h.cfg.Call
+	dial := map[string]string{"number": c.Number}
+	if via != "phone" {
+		dial["via"] = via
+	}
+	if err := c.post(ctx, "/dial", dial); err != nil {
+		return "", err
+	}
+	log.Printf("hub: calling %s (%s): %s", c.Number, via, pc.reason)
+	if via == "app" {
+		h.mu.Lock()
+		h.emit(Event{Type: "ring", Text: pc.reason})
+		h.mu.Unlock()
+	}
+	hangup := func() { c.post(context.WithoutCancel(ctx), "/hangup", map[string]any{}) }
+	ack := time.Now().Add(cmpDur(c.AppAck, 8*time.Second))
+	poll := cmpDur(c.Poll, 500*time.Millisecond)
+	rang := false
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			hangup()
+			return "", ctx.Err()
+		case <-time.After(poll):
+		}
+		st, err := c.status(ctx)
+		if err != nil {
+			continue
+		}
+		if st.Precise == "active" {
+			h.mu.Lock()
+			pc.answered = true
+			h.mu.Unlock()
+			log.Printf("hub: call answered (%s)", via)
+			return Answered, nil
+		}
+		if via == "app" && fallback && st.Precise == "dialing" && time.Now().After(ack) {
+			hangup()
+			log.Printf("hub: the app did not ring")
+			return unreached, nil
+		}
+		if st.Call != "idle" {
+			rang = true
+		} else if rang {
+			return NoAnswer, nil
+		}
+	}
+	hangup()
 	return NoAnswer, nil
 }
 

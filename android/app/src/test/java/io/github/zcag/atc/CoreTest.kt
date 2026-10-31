@@ -61,6 +61,14 @@ class CoreTest {
         assertNull(Note.parse("not json".toByteArray()))
     }
 
+    @Test fun ringIsOnlyTakenWhileFresh() {
+        val r = Ring.parse("""{"ring":{"reason":"deploy bitti","at":1000}}""")!!
+        assertEquals("deploy bitti", r.reason)
+        assertEquals(true, r.fresh(1030))
+        assertEquals(false, r.fresh(1100))
+        assertNull(Ring.parse("""{"title":"x","body":"y"}"""))
+    }
+
     @Test fun splitsSentences() =
         assertEquals(listOf("Done.", "Tests pass!", "Next?", "Line"), sentences("Done. Tests pass!  Next?\nLine"))
 }

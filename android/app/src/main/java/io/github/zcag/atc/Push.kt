@@ -29,7 +29,10 @@ class Push : PushService() {
 
     override fun onMessage(message: PushMessage, instance: String) {
         val text = String(message.content)
-        if (Feed.parse(text) != null) Live.save(this, text)
+        val ring = Ring.parse(text)
+        if (ring != null) {
+            if (ring.fresh(System.currentTimeMillis() / 1000)) Calls.ring(this, ring.reason)
+        } else if (Feed.parse(text) != null) Live.save(this, text)
         else Note.parse(message.content)?.let { if (!(it.open && AssistService.open(it.url))) notify(this, it) }
     }
 

@@ -63,6 +63,8 @@ type Server struct {
 
 	WhatsApp *whatsapp.Client
 	Hub      *hub.Client
+	// CallLine is delta-call, whose app line the phone app's calls go through.
+	CallLine string
 	hub      *hubLink
 	// PublicURL is where the user reaches atc (links in messages), LocalURL where this
 	// machine's own browser does.
@@ -215,6 +217,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/whatsapp/hook", s.waHook)
 	mux.HandleFunc("POST /api/whatsapp/send", s.waPost)
 	mux.HandleFunc("POST /api/call", s.call)
+	mux.HandleFunc("GET /api/call/line", s.callLine)
 	mux.HandleFunc("GET /api/sessions/{sid}/stream", s.hubStream)
 	mux.Handle("GET /app/", s.app())
 	mux.Handle("GET /", s.static())

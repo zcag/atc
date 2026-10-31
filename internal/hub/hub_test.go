@@ -598,8 +598,46 @@ func TestCallViaWhatsAppOnlyWhenAsked(t *testing.T) {
 	if out, err := r.h.Call(context.Background(), CallReq{}); out != Answered {
 		t.Fatalf("%s %v", out, err)
 	}
-	if strings.Join(l.via, ",") != "whatsapp,-" {
+	if strings.Join(l.via, ",") != "whatsapp,app" {
 		t.Fatalf("via %v", l.via)
+	}
+}
+
+func TestCallFallsBackToThePhoneWhenTheAppDoesNotRing(t *testing.T) {
+	states := []lineState{{"idle", "idle"}}
+	for range 20 {
+		states = append(states, lineState{"offhook", "dialing"})
+	}
+	l := &line_{states: append(states, lineState{"offhook", "alerting"}, lineState{"offhook", "active"})}
+	r := newRig(t, CallConfig{URL: l.server(t).URL, Number: "+900", Poll: 10 * time.Millisecond, AppAck: 50 * time.Millisecond})
+	events, done := r.h.Subscribe("")
+	defer done()
+	if out, err := r.h.Call(context.Background(), CallReq{Reason: "soru"}); out != Answered {
+		t.Fatalf("%s %v", out, err)
+	}
+	if strings.Join(l.via, ",") != "app,-" || l.hangups != 1 {
+		t.Fatalf("via %v, %d hangups", l.via, l.hangups)
+	}
+	for {
+		select {
+		case e := <-events:
+			if e.Type == "ring" {
+				if e.Text != "soru" {
+					t.Fatalf("ring %q", e.Text)
+				}
+				return
+			}
+		case <-time.After(time.Second):
+			t.Fatal("no ring event")
+		}
+	}
+}
+
+func TestCallDeclinedInTheAppDoesNotFallBack(t *testing.T) {
+	l := &line_{states: []lineState{{"idle", "idle"}, {"offhook", "dialing"}, {"offhook", "alerting"}, {"idle", "idle"}}}
+	r := newRig(t, CallConfig{URL: l.server(t).URL, Number: "+900", Poll: 10 * time.Millisecond, AppAck: time.Second})
+	if out, _ := r.h.Call(context.Background(), CallReq{}); out != NoAnswer || strings.Join(l.via, ",") != "app" {
+		t.Fatalf("%s via %v", out, l.via)
 	}
 }
 

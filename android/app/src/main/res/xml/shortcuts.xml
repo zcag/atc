@@ -1,5 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="call"
+        android:enabled="true"
+        android:icon="@drawable/ic_call_shortcut"
+        android:shortcutShortLabel="@string/call_label">
+        <intent
+            android:action="io.github.zcag.atc.DIAL"
+            android:targetClass="io.github.zcag.atc.CallActivity"
+            android:targetPackage="io.github.zcag.atc" />
+    </shortcut>
     <share-target android:targetClass="io.github.zcag.atc.ShareActivity">
         <data android:mimeType="*/*" />
         <category android:name="io.github.zcag.atc.SESSION" />

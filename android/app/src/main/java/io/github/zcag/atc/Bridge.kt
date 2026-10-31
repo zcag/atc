@@ -39,6 +39,9 @@ class Bridge(private val a: MainActivity) : TextToSpeech.OnInitListener {
     }
     @JavascriptInterface fun openExternal(url: String) { a.openOutside(url) }
     @JavascriptInterface fun copyImage(url: String) { a.copyImage(url) }
+    @JavascriptInterface fun call() = a.runOnUiThread {
+        a.startActivity(android.content.Intent(a, CallActivity::class.java).setAction(CallActivity.DIAL))
+    }
     @JavascriptInterface fun checkUpdate() = a.runOnUiThread { a.updater.check(manual = true) }
 
     @JavascriptInterface

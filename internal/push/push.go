@@ -75,6 +75,11 @@ func (p *Pusher) Send(m Message) {
 	p.post(m, m.Title+": "+m.Body, func(Device) bool { return true })
 }
 
+// Ring has the phone app ring for a call to them; it connects to the call line to take it.
+func (p *Pusher) Ring(reason string) {
+	p.post(map[string]any{"ring": map[string]any{"reason": reason, "at": time.Now().Unix()}}, "ring", func(Device) bool { return true })
+}
+
 func (p *Pusher) SendWidget(v any) {
 	p.post(v, "", func(d Device) bool { return d.Widget })
 }

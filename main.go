@@ -246,6 +246,7 @@ func serve(args []string) error {
 
 		WhatsApp:  whatsapp.FromEnv(),
 		Hub:       hubClient(),
+		CallLine:  callLine(),
 		PublicURL: strings.TrimRight(os.Getenv("ATC_PUBLIC_URL"), "/"),
 		LocalURL:  loopback(*addr),
 
@@ -298,6 +299,13 @@ func serve(args []string) error {
 		log.Printf("run `atc token` for the login token")
 	}
 	return http.ListenAndServe(*addr, srv.Handler())
+}
+
+func callLine() string {
+	if os.Getenv("ATC_HUB") == "" {
+		return os.Getenv("ATC_DELTA_CALL")
+	}
+	return cmp.Or(os.Getenv("ATC_DELTA_CALL"), "http://127.0.0.1:8807")
 }
 
 func hubClient() *hub.Client {

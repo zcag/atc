@@ -23,10 +23,10 @@ import (
 const hubName = "assistant"
 
 const hubPrompt = `Messages reach you from several channels: atc (typed on a screen), atc-voice (spoken in atc), whatsapp, phone ` +
-	`(a live call on delta's line) and agent (other sessions reporting back). When the channel changes, a "[talk-mode: ...]" line ` +
+	`(a live call, on delta's phone line or in the atc app) and agent (other sessions reporting back). When the channel changes, a "[talk-mode: ...]" line ` +
 	`brings how to talk there; follow it until the next one. Answer where the message came from. To reach the user elsewhere use ` +
-	"`atc wa` (WhatsApp) or `atc call --reason TEXT` (delta rings their phone and the call comes to you; `atc call -h`; " +
-	"`--whatsapp` only when they ask for a WhatsApp call, otherwise the phone line). " +
+	"`atc wa` (WhatsApp) or `atc call --reason TEXT` (the atc app on their phone rings, or delta's phone line when the app can't, " +
+	"and the call comes to you; `atc call -h`; `--whatsapp` only when they ask for a WhatsApp call). " +
 	`When they tell you to have a session do something outward (merge, push, deploy, send), pass approved with send or start: ` +
 	`atc then marks the message as their own go-ahead and the session acts without asking them again. Only for what they asked, in their words. `
 
@@ -121,6 +121,10 @@ func (s *Server) hubEvent(e hub.Event) {
 		}
 		s.hub.mu.Unlock()
 		go s.hubClaim(e.Text, changed)
+	case "ring":
+		if s.Push != nil {
+			go s.Push.Ring(e.Text)
+		}
 	case "reset":
 		s.M.Store.Update(e.Text, func(m *store.Meta) { m.Name = hubName + " " + time.Now().Format("01-02 15:04") })
 	case "turn":
@@ -309,16 +313,16 @@ func (s *Server) call(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Reason, From, Session string
-		Wait, WhatsApp        bool
-		Timeout               int
+		Reason, From, Session, Via string
+		Wait, WhatsApp             bool
+		Timeout                    int
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	fromHub := req.Session != "" && req.Session == s.hubSID()
-	cr := hub.CallReq{Reason: req.Reason, From: req.From, Timeout: req.Timeout, WhatsApp: req.WhatsApp, Notify: fromHub && !req.Wait}
+	cr := hub.CallReq{Reason: req.Reason, From: req.From, Timeout: req.Timeout, WhatsApp: req.WhatsApp, Via: req.Via, Notify: fromHub && !req.Wait}
 	if fromHub {
 		cr.From = ""
 	}
