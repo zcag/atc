@@ -63,9 +63,11 @@ type Server struct {
 
 	WhatsApp *whatsapp.Client
 	Hub      *hub.Client
-	// CallLine is delta-call, whose app line the phone app's calls go through.
-	CallLine string
-	hub      *hubLink
+	// CallLine is delta-call, whose app line the phone app's calls go through; calls from
+	// CallTestFrom go to CallTestLine.
+	CallLine, CallTestLine string
+	CallTestFrom           []string
+	hub                    *hubLink
 	// PublicURL is where the user reaches atc (links in messages), LocalURL where this
 	// machine's own browser does.
 	PublicURL, LocalURL string

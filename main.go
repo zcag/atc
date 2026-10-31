@@ -244,11 +244,14 @@ func serve(args []string) error {
 		Roots: roots,
 		Voice: server.VoiceFromEnv(),
 
-		WhatsApp:  whatsapp.FromEnv(),
-		Hub:       hubClient(),
-		CallLine:  callLine(),
-		PublicURL: strings.TrimRight(os.Getenv("ATC_PUBLIC_URL"), "/"),
-		LocalURL:  loopback(*addr),
+		WhatsApp: whatsapp.FromEnv(),
+		Hub:      hubClient(),
+		CallLine: callLine(),
+
+		CallTestLine: os.Getenv("ATC_CALL_TEST_LINE"),
+		CallTestFrom: strings.FieldsFunc(os.Getenv("ATC_CALL_TEST_FROM"), func(r rune) bool { return r == ',' || r == ' ' }),
+		PublicURL:    strings.TrimRight(os.Getenv("ATC_PUBLIC_URL"), "/"),
+		LocalURL:     loopback(*addr),
 
 		AppDir:    os.Getenv("ATC_APP_DIR"),
 		AgentsDir: cmp.Or(os.Getenv("ATC_AGENTS"), "~/notes/agents"),

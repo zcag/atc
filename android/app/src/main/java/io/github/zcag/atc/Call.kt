@@ -147,7 +147,18 @@ object Calls {
         var endpoints = emptyList<CallEndpointCompat>()
         val watchers = listOf(
             launch { availableEndpoints.collect { endpoints = it } },
-            launch { currentCallEndpoint.collect { e -> update { copy(speaker = e.type == CallEndpointCompat.TYPE_SPEAKER) } } },
+            launch {
+            currentCallEndpoint.collect { e ->
+                voice.route = when (e.type) {
+                    CallEndpointCompat.TYPE_EARPIECE -> "earpiece"
+                    CallEndpointCompat.TYPE_SPEAKER -> "speaker"
+                    CallEndpointCompat.TYPE_BLUETOOTH -> "bluetooth"
+                    CallEndpointCompat.TYPE_WIRED_HEADSET -> "wired"
+                    else -> "other"
+                }
+                update { copy(speaker = e.type == CallEndpointCompat.TYPE_SPEAKER) }
+            }
+        },
             launch { isMuted.collect { m -> voice.systemMuted = m; update { copy(muted = voice.muted) } } },
         )
         val timeout = launch {
@@ -326,6 +337,8 @@ class Voice {
     @Volatile var held = false
     @Volatile var you = 0f
     @Volatile var it = 0f
+    @Volatile var route = ""
+    @Volatile private var aec = "off"
     @Volatile private var running = false
     private val queue = LinkedBlockingDeque<ByteArray>()
     private var hold = MIN_HOLD + 1
@@ -356,7 +369,8 @@ class Voice {
         val rec = runCatching {
             AudioRecord(MediaRecorder.AudioSource.VOICE_COMMUNICATION, RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, size)
         }.getOrNull()?.takeIf { it.state == AudioRecord.STATE_INITIALIZED } ?: return
-        if (AcousticEchoCanceler.isAvailable()) AcousticEchoCanceler.create(rec.audioSessionId)?.enabled = true
+        aec = if (!AcousticEchoCanceler.isAvailable()) "unavailable"
+        else AcousticEchoCanceler.create(rec.audioSessionId)?.let { it.enabled = true; if (it.enabled) "on" else "refused" } ?: "failed"
         if (NoiseSuppressor.isAvailable()) NoiseSuppressor.create(rec.audioSessionId)?.enabled = true
         val silence = ByteArray(FRAME)
         try {
@@ -452,4 +466,5 @@ class Voice {
     private fun stats() = JSONObject()
         .put("played", played).put("underruns", underruns).put("dropped", dropped)
         .put("hold_ms", hold * 20).put("hold_max_ms", holdMax * 20).put("deepest_ms", deepest * 20)
+        .put("route", route).put("aec", aec)
 }
