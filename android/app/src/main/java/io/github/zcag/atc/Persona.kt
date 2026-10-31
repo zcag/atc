@@ -103,16 +103,11 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         }.onFailure { Log.w("atc", "persona: ${it.message}") }.getOrElse { Orb(context) }
         current = next
         next.face(face)
-        val lp = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
-        next.view.alpha = 0f
-        addView(next.view, lp)
         val fades = next.drawn {
             if (current === next) next.view.animate().alpha(1f).setDuration(400).withEndAction { keepOnly(next.view) }
         }
-        if (!fades) {
-            next.view.alpha = 1f
-            keepOnly(next.view)
-        }
+        if (fades) next.view.alpha = 0f else removeAllViews()
+        addView(next.view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
 
     private fun keepOnly(v: View) {
