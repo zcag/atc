@@ -47,7 +47,7 @@ class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(
             Manipulator.Builder().targetPosition(0f, lift, -4f).orbitHomePosition(0f, lift, 0f).build(Manipulator.Mode.ORBIT))
         viewer.autoPlayAnimations = false
         viewer.cameraFocalLength = spec.optDouble("focal", 50.0).toFloat()
-        viewer.renderer.clearOptions = Renderer.ClearOptions().apply { clear = true; clearColor = floatArrayOf(.082f, .11f, .153f, 1f) }
+        viewer.renderer.clearOptions = Renderer.ClearOptions().apply { clear = true; clearColor = doubleArrayOf(.082, .11, .153, 1.0) }
         viewer.loadModelGlb(ByteBuffer.wrap(File(dir, spec.optString("model", "head.glb")).readBytes()).let {
             ByteBuffer.allocateDirect(it.capacity()).put(it).flip() as ByteBuffer
         })
@@ -59,7 +59,7 @@ class Head3D(c: Context, dir: File, private val spec: JSONObject) : FrameLayout(
         val asset = viewer.asset ?: return
         val engine = viewer.engine
         val rm = engine.renderableManager
-        targets = asset.renderableEntities.mapNotNull { e ->
+        targets = asset.renderableEntities.toList().mapNotNull { e ->
             val names = asset.getMorphTargetNames(e)
             if (names.isEmpty()) null else Target(e, names, FloatArray(names.size))
         }
