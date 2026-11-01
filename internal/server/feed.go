@@ -121,7 +121,7 @@ func (f *feed) news(since int64, full bool, now time.Time) (text string, seq int
 		if f.prev == nil {
 			return "", f.seq
 		}
-		return "[atc now, " + clock + "] " + f.snapshot(now), f.seq
+		return "[atc now, " + clock + "]\n" + f.snapshot(now), f.seq
 	}
 	var latest []feedEvent
 	for _, e := range f.evs {
@@ -196,52 +196,75 @@ func label(x sessions.Session, withHost bool) string {
 }
 
 func result(x sessions.Session) string {
-	if x.Summary != nil && x.Summary.Status != "" {
-		return x.Summary.Status
-	}
-	return cmp.Or(clipText(x.LastReply, 140), "its turn is done")
+	return cmp.Or(clipText(x.Result(), 140), "its turn is done")
 }
 
+// said is a session's last word for the snapshot: what it came to and everything it leaves open.
+func said(x sessions.Session) string {
+	return strings.Join(append([]string{clipText(result(x), 160)}, x.Open()...), " | ")
+}
+
+// snapshot is everything that may wait on them, in full: no session that finished its turn is left
+// out for age or count, since one that ends asking them something looks just like one that is done.
 func (f *feed) snapshot(now time.Time) string {
-	var needs, working, done, agents []string
-	var recent []sessions.Session
+	var needs, turn, parked, working []string
+	agents := map[string]sessions.Session{}
+	hosts := map[string]bool{}
+	var mine []sessions.Session
 	for _, x := range f.list {
-		if _, ok := f.prev[x.SessionID]; !ok || !x.Current() && x.Agent == "" {
-			continue
+		if _, ok := f.prev[x.SessionID]; ok {
+			mine = append(mine, x)
+			hosts[x.Host] = true
 		}
-		if x.Agent != "" && x.State != sessions.NeedsYou {
-			switch {
-			case x.State == sessions.Working:
-				agents = append(agents, "@"+x.Agent+" working")
-			case now.Sub(x.Last()) < 12*time.Hour:
-				agents = append(agents, "@"+x.Agent+" done "+ago(now.Sub(x.Last()))+" ago: "+clipText(result(x), 80))
+	}
+	slices.SortStableFunc(mine, func(a, b sessions.Session) int { return b.Last().Compare(a.Last()) })
+	when := func(x sessions.Session) string { return " (" + ago(now.Sub(x.Last())) + " ago): " }
+	for _, x := range mine {
+		name := label(x, len(hosts) > 1)
+		switch {
+		case x.State == sessions.NeedsYou:
+			needs = append(needs, name+": "+cmp.Or(clipText(x.Activity, 160), "waiting on them"))
+		case x.Agent != "":
+			if a, ok := agents[x.Agent]; !ok || a.State == sessions.Stopped && x.State != sessions.Stopped {
+				agents[x.Agent] = x
 			}
-			continue
+		case x.State == sessions.Working:
+			working = append(working, name)
+		case x.State != sessions.YourTurn:
+		case x.Parked:
+			parked = append(parked, name+when(x)+said(x))
+		case x.Attachable:
+			turn = append(turn, name+when(x)+said(x))
 		}
-		switch x.State {
-		case sessions.NeedsYou:
-			needs = append(needs, label(x, false)+" ("+cmp.Or(clipText(x.Activity, 100), "waiting")+")")
-		case sessions.Working:
-			working = append(working, x.Title)
-		default:
-			if now.Sub(x.Last()) < 3*time.Hour {
-				recent = append(recent, x)
+	}
+	var ags []string
+	for _, x := range mine {
+		if a, ok := agents[x.Agent]; ok && a.SessionID == x.SessionID {
+			if x.State == sessions.Working {
+				ags = append(ags, "@"+x.Agent+" working: "+cmp.Or(clipText(x.Activity, 120), "on it"))
+			} else {
+				ags = append(ags, "@"+x.Agent+" "+cmp.Or(map[string]string{sessions.YourTurn: "done"}[x.State], x.State)+when(x)+said(x))
 			}
 		}
 	}
-	slices.SortStableFunc(recent, func(a, b sessions.Session) int { return b.Last().Compare(a.Last()) })
-	for _, x := range recent[:min(len(recent), 5)] {
-		done = append(done, x.Title+": "+clipText(result(x), 80))
+	list := func(head string, items []string) string {
+		if len(items) == 0 {
+			return head + ": none"
+		}
+		return head + ":\n- " + strings.Join(items, "\n- ")
 	}
-	parts := []string{"needs them: " + cmp.Or(strings.Join(needs, "; "), "nothing")}
+	parts := []string{
+		list("needs them (a question or permission is open)", needs),
+		list("their turn (each finished its turn and waits for their next message; the text after the colon says whether it asks them for something)", turn),
+	}
+	if len(parked) > 0 {
+		parts = append(parts, list("parked, still their turn (they set these aside; any that asks them something still waits on them)", parked))
+	}
+	if len(ags) > 0 {
+		parts = append(parts, list("agents (their last result, and what it leaves open for them)", ags))
+	}
 	if len(working) > 0 {
 		parts = append(parts, "working: "+strings.Join(working, ", "))
-	}
-	if len(done) > 0 {
-		parts = append(parts, "finished lately: "+strings.Join(done, "; "))
-	}
-	if len(agents) > 0 {
-		parts = append(parts, "agents: "+strings.Join(agents, "; "))
 	}
 	var off []string
 	for h, d := range f.down {
@@ -253,7 +276,7 @@ func (f *feed) snapshot(now time.Time) string {
 		slices.Sort(off)
 		parts = append(parts, "offline: "+strings.Join(off, ", ")+" (its sessions are missing)")
 	}
-	return strings.Join(parts, ". ") + "."
+	return strings.Join(parts, "\n")
 }
 
 func ago(d time.Duration) string {

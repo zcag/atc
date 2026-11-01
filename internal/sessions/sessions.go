@@ -293,6 +293,28 @@ func (s Session) Current() bool {
 	return s.State == NeedsYou || !s.Parked && (s.Attachable || s.State == Working)
 }
 
+// Result is what the last reply came to: its summary's status, else the reply itself.
+func (s Session) Result() string {
+	if s.Summary != nil && s.Summary.Status != "" {
+		return s.Summary.Status
+	}
+	return s.LastReply
+}
+
+// Open is what the last reply's summary leaves open: its "Open:" lines.
+func (s Session) Open() []string {
+	if s.Summary == nil {
+		return nil
+	}
+	var open []string
+	for _, l := range s.Summary.Overview {
+		if strings.HasPrefix(l, "Open:") {
+			open = append(open, l)
+		}
+	}
+	return open
+}
+
 func (s Session) Last() time.Time {
 	if s.Updated.After(s.StartedAt) {
 		return s.Updated

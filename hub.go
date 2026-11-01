@@ -21,7 +21,7 @@ import (
 
 const hubHelp = `atc hub: the assistant's one conversation, shared by atc, WhatsApp and phone calls.
 
-  atc hub [-addr 127.0.0.1:8820] [-model opus] [-effort low] [-state DIR]
+  atc hub [-addr 127.0.0.1:8820] [-model opus] [-effort medium] [-state DIR]
   atc hub status | reset
 
 Runs Claude as a stream-json process that each channel talks into, so a reply streams to
@@ -74,7 +74,7 @@ func hubCmd(args []string) error {
 	fs.Usage = func() { fmt.Print(hubHelp) }
 	addr := fs.String("addr", cmp.Or(os.Getenv("ATC_HUB_ADDR"), "127.0.0.1:8820"), "listen address")
 	model := fs.String("model", "opus", "Claude model")
-	effort := fs.String("effort", "low", "Claude effort")
+	effort := fs.String("effort", "medium", "Claude effort")
 	home, _ := os.UserHomeDir()
 	state := fs.String("state", filepath.Join(home, ".local/state/atc/hub"), "where the session id and handover notes live")
 	dir := fs.String("dir", home, "the folder the session works in")

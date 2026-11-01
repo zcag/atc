@@ -364,25 +364,27 @@ func (t *tools) view(x sessions.Session, self *sessions.Session) Session {
 }
 
 type brief struct {
-	Ref    string `json:"ref"`
-	Title  string `json:"title"`
-	Host   string `json:"host,omitempty"`
-	Agent  string `json:"agent,omitempty"`
-	State  string `json:"state,omitempty" jsonschema:"for agents: working, your-turn (done) or stopped"`
-	Asking []Ask  `json:"asking,omitempty"`
-	Doing  string `json:"doing,omitempty"`
-	Result string `json:"result,omitempty" jsonschema:"its last reply in one line"`
-	Ago    string `json:"ago,omitempty" jsonschema:"since its last activity, like 4m or 2h"`
+	Ref    string   `json:"ref"`
+	Title  string   `json:"title"`
+	Host   string   `json:"host,omitempty"`
+	Agent  string   `json:"agent,omitempty"`
+	State  string   `json:"state,omitempty" jsonschema:"for agents: working, your-turn (done) or stopped"`
+	Asking []Ask    `json:"asking,omitempty"`
+	Doing  string   `json:"doing,omitempty"`
+	Result string   `json:"result,omitempty" jsonschema:"its last reply in one line"`
+	Open   []string `json:"open,omitempty" jsonschema:"what its last reply leaves open, often something for the user"`
+	Ago    string   `json:"ago,omitempty" jsonschema:"since its last activity, like 4m or 2h"`
 	at     time.Time
 }
 
 type statusOut struct {
 	NeedsYou []brief  `json:"needsYou"`
 	Working  []brief  `json:"working"`
-	Finished []brief  `json:"finished" jsonschema:"finished a turn and is open for the next message, newest first"`
+	Finished []brief  `json:"finished" jsonschema:"finished a turn and is open for the next message, newest first; its result and open say whether it asks the user something"`
+	Parked   []brief  `json:"parked,omitempty" jsonschema:"set aside by the user but still the user's turn; one that asks something still waits on the user"`
 	Agents   []brief  `json:"agents" jsonschema:"the standing agents, parked or not: working, or done with their last result"`
 	Offline  []string `json:"offline,omitempty" jsonschema:"machines that do not answer: their sessions are missing here"`
-	Hidden   int      `json:"hidden,omitempty" jsonschema:"stopped and parked sessions left out; sessions with all lists them"`
+	Hidden   int      `json:"hidden,omitempty" jsonschema:"stopped sessions left out; sessions with all lists them"`
 }
 
 func (t *tools) status(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, statusOut, error) {
@@ -401,12 +403,13 @@ func (t *tools) status(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) 
 		if x.Kind == "hub" || x.SessionID == me.SessionID && me.SessionID != "" {
 			continue
 		}
-		if !x.Current() && x.Agent == "" {
-			out.Hidden++
-			continue
-		}
 		b := brief{Ref: client.Ref(x), Title: x.Title, Host: x.Host, Agent: x.Agent, Ago: ago(x.Last()), at: x.Last()}
 		switch {
+		case x.Agent == "" && x.Away() && x.State == sessions.YourTurn:
+			b.Result, b.Open = result(x), x.Open()
+			out.Parked = append(out.Parked, b)
+		case !x.Current() && x.Agent == "":
+			out.Hidden++
 		case x.State == sessions.NeedsYou:
 			b.Asking = asking(x)
 			out.NeedsYou = append(out.NeedsYou, b)
@@ -415,29 +418,25 @@ func (t *tools) status(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) 
 			if x.State == sessions.Working {
 				b.Doing = clip(x.Activity, 120)
 			} else {
-				b.Result = result(x)
+				b.Result, b.Open = result(x), x.Open()
 			}
 			out.Agents = append(out.Agents, b)
 		case x.State == sessions.Working:
 			b.Doing = clip(x.Activity, 120)
 			out.Working = append(out.Working, b)
 		default:
-			b.Result = result(x)
+			b.Result, b.Open = result(x), x.Open()
 			out.Finished = append(out.Finished, b)
 		}
 	}
 	newest := func(a, b brief) int { return b.at.Compare(a.at) }
 	slices.SortStableFunc(out.Finished, newest)
 	slices.SortStableFunc(out.Agents, newest)
+	slices.SortStableFunc(out.Parked, newest)
 	return nil, out, nil
 }
 
-func result(x sessions.Session) string {
-	if x.Summary != nil && x.Summary.Status != "" {
-		return x.Summary.Status
-	}
-	return clip(x.LastReply, 140)
-}
+func result(x sessions.Session) string { return clip(x.Result(), 140) }
 
 func ago(at time.Time) string {
 	if at.IsZero() {
