@@ -64,6 +64,7 @@ class MainActivity : Activity() {
     private var unlockThen: Intent? = null
     private var root: FrameLayout? = null
     private var offline: View? = null
+    private var veil: View? = null
     private var failed: String? = null
     private val ui = Handler(Looper.getMainLooper())
     private val retry = Runnable { failed?.let { web?.loadUrl(it) } }
@@ -74,6 +75,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false)
         prefs = Prefs(this)
         bridge = Bridge(this)
         updater = Updater(this)
@@ -197,7 +199,27 @@ class MainActivity : Activity() {
             }
             ?: if (assist) "/#/assist" else null
         val w = web
-        if (w == null) browse(server + (path ?: "/")) else if (path != null) w.loadUrl(server + path)
+        if (w == null) return browse(server + (path ?: "/"))
+        if (path == null) return
+        if (path.endsWith("#/assist")) veilUntil(w, ".assist")
+        w.loadUrl(server + path)
+    }
+
+    private fun veilUntil(w: WebView, selector: String) {
+        if (veil == null) veil = View(this).apply { setBackgroundColor(getColor(R.color.board)); setOnClickListener {} }
+            .also { root?.addView(it, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) }
+        val giveUp = SystemClock.uptimeMillis() + 2500
+        val lift = Runnable { veil?.let { root?.removeView(it) }; veil = null }
+        ui.postDelayed(lift, 3000)
+        val check = object : Runnable {
+            override fun run() = w.evaluateJavascript("!!document.querySelector('$selector')") { found ->
+                if (found != "true" && SystemClock.uptimeMillis() < giveUp) ui.postDelayed(this, 16)
+                else w.postVisualStateCallback(0, object : WebView.VisualStateCallback() {
+                    override fun onComplete(id: Long) { ui.removeCallbacks(lift); lift.run() }
+                })
+            }
+        }
+        ui.post(check)
     }
 
     private fun menu() = AlertDialog.Builder(this)
