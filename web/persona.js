@@ -130,6 +130,7 @@ export class Mind {
     const was = this.state;
     this.state = state;
     this.since = this.t;
+    this.fixUntil = this.t;
     this.nextGaze = this.t + (state === "thinking" || state === "tool" ? .05 : rand(.15, .4));
     if (chance(.75)) this.blink(this.t + rand(0, .08));
     if (state === "hearing") { this.wide.hit(.45, .12, .7); this.flash.hit(.5, .12, .8); }
@@ -234,7 +235,7 @@ export class Mind {
     const smileBase = { listening: .35, hearing: .25, thinking: .05, tool: .1, speaking: .2 }[s] ?? .2;
     const smile = this.smile.to(smileBase + this.pulse * .35 + .18 * wander(t * .7, 4) * (s === "listening" ? 1 : .3), dt);
     const smileOpen = this.smileOpen.to(speaking ? 0 : this.pulse * .3, dt);
-    const knit = this.knit.to(thinking ? .55 + .2 * wander(t, 9) : tool ? .3 : 0, dt);
+    const knit = this.knit.to(thinking ? .3 + .15 * wander(t, 9) : tool ? .3 : 0, dt);
     const half = this.half.to(thinking ? .25 : tool ? .35 : s === "listening" ? .08 : 0, dt);
     const wide = this.wide.step(dt);
     const browUp = this.browUp.to(hearing ? .12 : 0, dt) + this.flash.step(dt);
@@ -268,15 +269,19 @@ export class Mind {
     else if (mid) eye = "half";
     else if (wide > .25) eye = "wide";
     else if (ty < -.4) eye = "gaze_down";
+    else if (ty > .3 && thinking) eye = "think";
+    else if (ty > .2 && speaking && Math.abs(tx) > .2) eye = "recall";
     else if (Math.max(Math.abs(tx), ty) > .3) eye = Math.abs(tx) > ty ? (tx > 0 ? "gaze_r" : "gaze_l") : "gaze_up";
     else if (half > .2) eye = "half";
+    else if (smile > .52 || this.pulse > .5) eye = "smile_eyes";
     this.eyes.set(eye, t);
 
     let mouth = null;
     if (speaking) {
       const lvl = open < .35 ? 0 : open < .65 ? 1 : 2;
       if (this.sib > .4) mouth = "m_e";
-      else if (open > .1) mouth = round > .65 ? (lvl ? "m_o" : "m_u") : spread > .4 ? "m_e" : ["m_small", "m_open", "m_a"][lvl];
+      else if (open > .04 && open <= .12) mouth = "m_slight";
+      else if (open > .12) mouth = round > .65 ? (lvl ? "m_o" : "m_u") : spread > .4 ? "m_e" : ["m_small", "m_open", "m_a"][lvl];
     } else if ((s === "listening" || s === "hearing") && this.pulse > .45) mouth = "smile_open";
     this.mouth.set(mouth, t, mouth ? .07 : .05);
     const shown = this.mouth.shown(t);
