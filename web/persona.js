@@ -542,6 +542,7 @@ void main() {
     }
     return best;
   };
+  const bornAt = performance.now();
   const tick = (ms) => {
     raf = requestAnimationFrame(tick);
     const t = ms / 1000, k = Math.min(devicePixelRatio || 1, 2), W = Math.round(canvas.clientWidth * k), H = Math.round(canvas.clientHeight * k);
@@ -580,6 +581,11 @@ void main() {
     gl.viewport(0, 0, W, H);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     if (fade && x >= 1) { cur.pause(); [cur, next] = [next, cur]; fade = null; }
+    if (!drew && !cur.currentTime && ms - bornAt > 3000 && failed) {
+      cancelAnimationFrame(raf);
+      cur.pause(); next.pause();
+      return failed(new Error("video does not play here"));
+    }
     if (!drew && cur.currentTime > .3) {
       const px = new Uint8Array(4);
       gl.readPixels(Math.floor(W / 2), Math.floor(H * .65), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
