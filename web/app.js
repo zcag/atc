@@ -393,7 +393,7 @@ function App() {
     ${palette && html`<${Palette} live=${reach || []} sel=${sel} say=${say} home=${me.host} onClose=${() => setPalette(false)}
       actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: () => (location.hash = "#/assist"), ask: () => talk(false, false) }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
-    ${assisting && html`<${Assist} live=${reach} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
+    ${assisting && html`<${Assist} live=${reach} onOpen=${() => go(null)} />`}
     ${pagesHome && html`<${PagesHome} live=${all} say=${say} onClose=${closePages} />`}
     ${backlog && html`<${BacklogPage} live=${all} say=${say} onClose=${closeBacklog} onAdd=${setCreating} />`}
     ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`}
@@ -505,7 +505,7 @@ function Rail({ live, sel, onHover, onPick }) {
     </nav>`;
 }
 
-function Assist({ live, busy, onTalk, onOpen }) {
+function Assist({ live, onOpen }) {
   useEffect(() => {
     const k = (e) => { if (e.key === "Escape") onOpen(); };
     addEventListener("keydown", k);
@@ -514,25 +514,19 @@ function Assist({ live, busy, onTalk, onOpen }) {
   const open = (live || []).filter((s) => !away(s));
   const count = (st) => open.filter((s) => s.state === st).length;
   const summary = [["needs-you", "needs you"], ["your-turn", "your turn"], ["working", "working"]]
-    .map(([st, word]) => count(st) && `${count(st)} ${word}`).filter(Boolean).join(" · ") || "Nothing open";
-  const top = open.filter((s) => s.state !== "stopped").slice(0, 3);
-  const last = open.find((s) => s.name === "assistant" || s.title === "assistant");
+    .map(([st, word]) => count(st) && html`<span class=${st}>${count(st)} ${word}</span>`).filter(Boolean);
+  const top = open.filter((s) => s.state !== "stopped" && s.name !== "assistant").slice(0, 4);
   return html`
     <div class="assist">
       ${!APP && html`<button class="icon close" onClick=${onOpen} aria-label="Close">✕</button>`}
-      <button class="choice talk" disabled=${busy} onClick=${() => onTalk(true)}>
-        <span class="big">${MIC}</span>
-        <span class="what">${busy ? "Starting…" : "New voice session"}</span>
-        <span class="sub">Talk to Claude in a fresh session</span>
-      </button>
-      ${last && html`<button class="link" disabled=${busy} onClick=${() => onTalk(false)}>Continue the last voice session</button>`}
-      ${CAN_CALL && html`<button class="choice" onClick=${callAssistant}>
-        <span class="what">Call the assistant</span>
-        <span class="sub">A phone call, through atc</span>
-      </button>`}
-      <button class="choice" onClick=${onOpen}>
-        <span class="what">Open atc</span>
-        <span class="sub">${live ? summary : "Loading…"}</span>
+      <div class="ahero" onClick=${CAN_CALL ? callAssistant : null}>
+        <${Orb} state="listening" on=${CAN_CALL} />
+        <h1>Assistant</h1>
+        <p>${CAN_CALL ? "Tap to call" : "Calls need atc's call line and a microphone"}</p>
+        ${CAN_CALL && html`<button class="round dial" aria-label="Call the assistant">${HANG_UP}</button>`}
+      </div>
+      <button class="aopen" onClick=${onOpen}>
+        <span class="head"><b>Open atc</b><span class="sum">${!live ? "Loading…" : summary.length ? summary : "Nothing open"}</span><span class="go">›</span></span>
         ${top.map((s) => html`<span class="row"><i class=${s.state}></i>${s.title}</span>`)}
       </button>
     </div>
