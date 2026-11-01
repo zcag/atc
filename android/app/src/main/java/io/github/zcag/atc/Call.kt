@@ -44,11 +44,12 @@ object Calls {
     data class State(
         val phase: Phase = Phase.Idle, val incoming: Boolean = false, val reason: String = "",
         val since: Long = 0, val muted: Boolean = false, val speaker: Boolean = false, val why: String = "",
+        val held: Boolean = false,
     ) {
         val live get() = phase != Phase.Idle && phase != Phase.Ended
     }
 
-    enum class Cmd { Answer, Hangup, Mute, Speaker, Hold, Unhold, Interrupt }
+    enum class Cmd { Answer, Hangup, Mute, Speaker, Hold, Unhold, Resume, Interrupt }
 
     /** What the assistant is doing, from delta-talk: listening, hearing (them), thinking, tool, speaking. */
     data class Face(val state: String = "listening", val hearing: String = "", val you: String = "", val said: String = "", val tool: String = "")
@@ -161,7 +162,13 @@ object Calls {
                 }
             },
             launch { tele.muted.collect { m -> voice.systemMuted = m; update { copy(muted = voice.muted) } } },
+            launch { Cellular.idle(app).collect { if (state.value.held) inbox.send(Cmd.Resume) } },
         )
+        fun hold(on: Boolean) {
+            voice.held = on
+            line.send(if (on) "hold" else "unhold")
+            update { copy(held = on) }
+        }
         val timeout = launch {
             delay(if (incoming) 60_000 else 20_000)
             wire.send(Wire.Ended("no answer"))
@@ -199,11 +206,16 @@ object Calls {
                             null
                         }
                         Cmd.Interrupt -> {
+                            voice.flush()
                             line.send("interrupt")
                             null
                         }
                         Cmd.Hold, Cmd.Unhold -> {
-                            voice.held = cmd == Cmd.Hold
+                            hold(cmd == Cmd.Hold)
+                            null
+                        }
+                        Cmd.Resume -> {
+                            if (state.value.held && tele.setActive()) hold(false)
                             null
                         }
                     }
@@ -265,6 +277,7 @@ class Line(private val c: Context, private val url: String, private val voice: V
                     }
                     "ended" -> wire.trySend(Calls.Wire.Ended(ended(o.optString("why"))))
                     "persona" -> ui.post { Calls.persona(o) }
+                    "flush" -> voice.flush()
                 }
             }
 
@@ -323,8 +336,11 @@ class Line(private val c: Context, private val url: String, private val voice: V
 
 /** Call audio: their voice at 16 kHz (what delta-call's speech recognition takes) and the assistant's at 24 kHz (Higgs' own
  *  rate), mono s16le in 20 ms frames. Playback holds a few frames before it starts and after it runs dry, so network
- *  jitter does not cut words; every time it runs dry mid-call it holds two more (up to 300 ms), and gives one back
- *  after each 10 s that played clean. The counters go to delta-call every 10 s, into the call's log line. */
+ *  jitter does not cut words. Each time it runs dry mid-call it holds enough to cover the longest wait between frames of
+ *  the last 30 s (at least two more, up to 1 s: on a phone's mobile data a frame came up to 0.37 s late on one call,
+ *  and bursts reached 1.7 s), and gives one back after each 10 s that played clean. A burst is shed through silent frames,
+ *  never speech (the old cap of hold + 200 ms dropped words). The counters go to delta-call every 10 s, into the call's log
+ *  line, with each frame's arrival time (android/bench/where.py, replay.py). */
 class Voice {
     companion object {
         const val RATE = 16_000
@@ -332,8 +348,10 @@ class Voice {
         const val OUT_RATE = 24_000
         const val OUT_FRAME = 960
         private const val MIN_HOLD = 3
-        private const val MAX_HOLD = 15
+        private const val MAX_HOLD = 50
         private const val SLACK = 10
+        private const val MAX_QUEUE = 150
+        private const val SPIKE_MS = 30_000
         private val GAP_STEPS = intArrayOf(100, 250, 500, 1000)
     }
 
@@ -357,6 +375,8 @@ class Voice {
     private class Arrival(val gap: Int, val speech: Boolean, val wall: Long)
     private val arrivals = java.util.concurrent.ConcurrentLinkedQueue<Arrival>()
     @Volatile private var lastArrival = 0L
+    @Volatile private var spike = 0
+    @Volatile private var spikeAt = 0L
     private var gapMax = 0
     private val gapsOver = IntArray(4)
     private var speechDropped = 0
@@ -412,12 +432,23 @@ class Voice {
     fun play(frame: ByteArray) {
         if (!running) return
         val now = SystemClock.elapsedRealtime()
-        arrivals.offer(Arrival(if (lastArrival == 0L) 0 else (now - lastArrival).toInt(), !silent(frame), System.currentTimeMillis()))
+        val gap = if (lastArrival == 0L) 0 else (now - lastArrival).toInt()
+        arrivals.offer(Arrival(gap, !silent(frame), System.currentTimeMillis()))
         lastArrival = now
+        if (gap >= spike || now - spikeAt > SPIKE_MS) {
+            spike = gap
+            spikeAt = now
+        }
         queue.offer(frame)
     }
 
     private fun silent(f: ByteArray) = f.all { it == 0.toByte() }
+
+    /** Drop what is queued: they cut delta off (a tap, or delta-talk heard them talk over it), so nothing already sent plays. */
+    fun flush() = queue.clear()
+
+    /** Frames to hold so the longest recent wait between frames does not run the speaker dry. */
+    private fun spikeHold(now: Long) = if (now - spikeAt > SPIKE_MS) 0 else spike / 20 + 1
 
     /** When each of delta's frames reached the phone since the last trace: the gap after the previous one in ms and
      *  whether it was speech, so delta-call can line it up with what atc's relay sent and replay it in tests. */
@@ -509,21 +540,18 @@ class Voice {
                     if (started) {
                         dry = true
                         underruns++
-                        hold = minOf(hold + 2, MAX_HOLD)
+                        hold = minOf(maxOf(hold + 2, spikeHold(now)), MAX_HOLD)
                         holdMax = maxOf(holdMax, hold)
                         clean = now
                     }
                     continue
                 }
-                if (now - clean >= 10_000 && hold > MIN_HOLD) {
+                if (now - clean >= 10_000 && hold > maxOf(MIN_HOLD, spikeHold(now))) {
                     hold--
                     clean = now
                 }
                 deepest = maxOf(deepest, queue.size)
-                while (queue.size > hold + SLACK) {
-                    if (!silent(queue.poll() ?: break)) speechDropped++
-                    dropped++
-                }
+                trim()
                 val speech = !silent(f)
                 if (dry && speech && lastSpeech) {
                     breaks++
@@ -541,6 +569,26 @@ class Voice {
             line.report(stats())
             queue.clear()
             track.release()
+        }
+    }
+
+    /** A burst left more queued than the hold needs: shed silent frames (delta-talk sends digital zero between and around
+     *  sentences) so the delay comes back down without cutting a word; speech goes only past MAX_QUEUE (3 s). */
+    private fun trim() {
+        val extra = queue.size - (hold + SLACK)
+        if (extra <= 0) return
+        var shed = 0
+        val it = queue.iterator()
+        while (shed < extra && it.hasNext()) {
+            if (silent(it.next())) {
+                it.remove()
+                shed++
+            }
+        }
+        dropped += shed
+        while (queue.size > MAX_QUEUE) {
+            if (!silent(queue.poll() ?: break)) speechDropped++
+            dropped++
         }
     }
 

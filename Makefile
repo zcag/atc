@@ -11,8 +11,18 @@ install: check build
 	install -Dm644 deploy/atc.service ~/.config/systemd/user/atc.service
 	systemctl --user daemon-reload
 	systemctl --user enable --now atc
+	@$(MAKE) --no-print-directory call-idle
 	systemctl --user restart atc
 	$(MAKE) --no-print-directory sync-main
+
+# The phone app's calls run through atc (/api/call/line): a restart mid-call cuts delta's voice for over a second
+# . Wait for delta-call's app line to be free, up to 30 min; no delta-call, no wait.
+call-idle:
+	@for i in $$(seq 360); do \
+	  curl -sf --max-time 3 127.0.0.1:8807/status | python3 -c 'import json,sys; sys.exit(json.load(sys.stdin).get("app") is not None)' && exit 0; \
+	  curl -sf --max-time 3 -o /dev/null 127.0.0.1:8807/status || exit 0; \
+	  echo "an app call is on, atc waits to restart"; sleep 5; \
+	done; echo "app call still on after 30 min, restarting anyway"
 
 install-hub: check build
 	install -m755 atc ~/.local/bin/atc-hub
@@ -65,4 +75,4 @@ android-publish:
 	rsync -t android/dist/atc.apk $(APP_HOST):$(APP_DIR)/
 	rsync -t android/dist/version.json $(APP_HOST):$(APP_DIR)/
 
-.PHONY: build check install install-hub install-opencode install-mac android android-publish
+.PHONY: call-idle build check install install-hub install-opencode install-mac android android-publish

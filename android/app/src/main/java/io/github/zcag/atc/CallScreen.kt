@@ -159,7 +159,7 @@ class CallActivity : Activity() {
             Calls.Phase.Calling -> "Calling…"
             Calls.Phase.Ringing -> st.reason.ifEmpty { "Calling you" }
             Calls.Phase.Connecting -> "Connecting…"
-            Calls.Phase.Active -> if (st.muted) "Muted" else "On the call"
+            Calls.Phase.Active -> if (st.held) "On hold, tap to resume" else if (st.muted) "Muted" else "On the call"
             Calls.Phase.Ended -> "Call ended" + if (st.why.isNotEmpty()) ": ${st.why}" else ""
             Calls.Phase.Idle -> ""
         }
@@ -204,7 +204,7 @@ class CallActivity : Activity() {
         youView.text = f.hearing.ifEmpty { f.you }
         youView.alpha = if (f.hearing.isNotEmpty()) .5f else .7f
         saidView.text = f.said
-        if (Calls.state.value.phase == Calls.Phase.Active) statusView.text = activity(f)
+        if (Calls.state.value.phase == Calls.Phase.Active && !Calls.state.value.held) statusView.text = activity(f)
     }
 
     private fun activity(f: Calls.Face) = when (f.state) {
@@ -236,11 +236,13 @@ class CallActivity : Activity() {
         val prefs = Prefs(this)
         val ask = (if (Calls.canRecord(this)) emptyList() else listOf(Manifest.permission.RECORD_AUDIO)) +
             (if (prefs.askedContacts == null) Contact.permissions.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED } else emptyList()) +
-            if (prefs.askedCallLog == null && checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED)
-                listOf(Manifest.permission.READ_CALL_LOG) else emptyList()
+            (if (prefs.askedCallLog == null && checkSelfPermission(Manifest.permission.READ_CALL_LOG) != PackageManager.PERMISSION_GRANTED)
+                listOf(Manifest.permission.READ_CALL_LOG) else emptyList()) +
+            if (prefs.askedPhoneState == null && !Cellular.allowed(this)) listOf(Manifest.permission.READ_PHONE_STATE) else emptyList()
         if (ask.isNotEmpty()) {
             prefs.askedContacts = "1"
             prefs.askedCallLog = "1"
+            prefs.askedPhoneState = "1"
             pending = action
             requestPermissions(ask.toTypedArray(), REQ_MIC)
             return
@@ -263,7 +265,7 @@ class CallActivity : Activity() {
     }
 
     private fun show(st: Calls.State) {
-        statusView.text = if (st.phase == Calls.Phase.Active && !st.muted) activity(Calls.face.value) else status(st)
+        statusView.text = if (st.phase == Calls.Phase.Active && !st.muted && !st.held) activity(Calls.face.value) else status(st)
         persona.view.visibility = if (st.phase == Calls.Phase.Active || st.phase == Calls.Phase.Connecting) View.VISIBLE else View.INVISIBLE
         reasonView.text = st.reason
         reasonView.visibility = if (st.reason.isNotEmpty() && st.phase != Calls.Phase.Ringing) View.VISIBLE else View.GONE
@@ -331,7 +333,11 @@ class CallActivity : Activity() {
         speaker = round(R.drawable.ic_speaker, 0x33ffffff) { Calls.send(Calls.Cmd.Speaker) }
         callRow = row(mute, round(R.drawable.ic_call_end, 0xffe5484d.toInt()) { Calls.send(Calls.Cmd.Hangup) }, speaker)
         persona = Persona.make(this)
-        persona.view.setOnClickListener { if (Calls.face.value.state in setOf("speaking", "thinking", "tool")) Calls.send(Calls.Cmd.Interrupt) }
+        persona.view.setOnClickListener {
+            if (Calls.state.value.held) Calls.send(Calls.Cmd.Resume)
+            else if (Calls.face.value.state in setOf("speaking", "thinking", "tool")) Calls.send(Calls.Cmd.Interrupt)
+        }
+        statusView.setOnClickListener { if (Calls.state.value.held) Calls.send(Calls.Cmd.Resume) }
         youView = text(15f, .7f).apply { maxLines = 3 }
         saidView = text(19f, 1f).apply { maxLines = 4; setPadding(dp(24), dp(4), dp(24), dp(20)) }
         val front = LinearLayout(this).apply {
