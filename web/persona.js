@@ -487,19 +487,19 @@ export async function footage(canvas, base, now, opts = {}) {
   cur.currentTime = (first.start + .5) / fps;
   await cur.play().catch(() => {});
   const g = canvas.getContext("2d");
-  let plan = null, fade = null, voiceAt = -9, raf, stateSince = performance.now(), lastWant = "", drew = false;
+  let plan = null, fade = null, voiceAt = -9, jumpedAt = 0, raf, stateSince = performance.now(), lastWant = "", drew = false;
   const frame = (v) => Math.min(meta.frames - 1, Math.floor(v.currentTime * fps + .02));
   const want = (state, t) => {
-    const w = state === "speaking" ? (t - voiceAt < .5 ? "speaking" : "listening") : state === "thinking" || state === "tool" ? state : "listening";
+    const w = state === "speaking" ? (t - voiceAt < .9 ? "speaking" : "listening") : state === "thinking" || state === "tool" ? (has.has(state) ? state : "thinking") : "listening";
     return has.has(w) ? w : "listening";
   };
   const choose = (fi, target, wide) => {
     let best = null;
-    for (let a = fi + 3; a <= fi + (wide ? 50 : 20); a++) {
+    for (let a = fi + 3; a <= Math.min(fi + 12, meta.segments[segOf[fi]].end - 1); a++) {
       for (const [b, c] of from.get(a) || []) {
         const s = meta.segments[segOf[b]];
         if (s.state !== target || b > s.end - 40) continue;
-        const cost = c + (a - fi) * .002;
+        const cost = c + (a - fi) * .001;
         if (!best || cost < best.cost) best = { a, b, cost };
       }
     }
@@ -521,18 +521,18 @@ export async function footage(canvas, base, now, opts = {}) {
     const target = want(state, t);
     if (target !== lastWant) { lastWant = target; stateSince = ms; plan = null; }
     const fi = frame(cur), seg = meta.segments[segOf[fi]];
-    if (!fade && !plan && (seg.state !== target || fi > seg.end - 30)) {
-      plan = choose(fi, target, ms - stateSince > 800 || fi > seg.end - 30);
-      if (!plan && (ms - stateSince > 1500 || fi >= seg.end - 3)) {
-        const s = meta.segments.filter((x) => x.state === target).sort(() => Math.random() - .5)[0];
-        plan = { a: fi + 2, b: s.start + Math.floor(Math.random() * Math.max(1, s.end - s.start - 120)), hard: true };
-      }
+    if (!fade && !plan && (fi > seg.end - 30 || seg.state !== target && ms - jumpedAt > 1200)) {
+      plan = choose(fi, target, true);
+      const waited = ms - stateSince, ending = fi > seg.end - 8;
+      if (plan && plan.cost > .16 && waited < 4000 && !ending) plan = null;
+      else if (plan && plan.cost > .16) plan.hard = true;
       if (plan) { next.currentTime = (plan.b + .5) / fps; next.pause(); }
     }
     if (!fade && fi >= seg.end - 1 && !cur.paused) cur.pause();
     if (plan && !fade && (fi >= plan.a || cur.paused) && !next.seeking && next.readyState >= 2) {
       next.play().catch(() => {});
-      fade = { at: ms, len: plan.hard ? 400 : 160 };
+      fade = { at: ms, len: plan.hard ? 250 : 160 };
+      jumpedAt = ms;
       plan = null;
     }
     g.clearRect(0, 0, W, H);
