@@ -929,11 +929,7 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
   });
   PICK_PROJECT = (name) => setOnly((o) => (o === name ? null : name));
   const desk = (runs || []).filter((s) => s.kind === "hub" && s.agent === GUESTS);
-  const tabs = useMemo(() => {
-    const t = projectTabs(all || [], only === AGENTS ? null : only);
-    if (desk.length && !t.some((x) => x.name === GUESTS)) t.push({ name: GUESTS, pips: [], summary: "" });
-    return t;
-  }, [all, only, desk.length]);
+  const tabs = useMemo(() => projectTabs(all || [], only === AGENTS ? null : only), [all, only]);
   TABS = { only, tabs, set: setOnly };
   useEffect(() => {
     const k = (e) => {
@@ -1448,11 +1444,13 @@ function projectTabs(live, keep) {
   for (const x of live) {
     if (x.state === "past" || x.state === "stopped" || homeless(x)) continue;
     const n = project(x.cwd).name;
-    if (!by.has(n)) by.set(n, { name: n, pips: [] });
-    if (!away(x) && RANK[x.state] !== undefined) by.get(n).pips.push(x.state);
+    if (!by.has(n)) by.set(n, { name: n, pips: [], own: false });
+    const t = by.get(n);
+    t.own ||= !x.agent;
+    if (!away(x) && RANK[x.state] !== undefined) t.pips.push(x.state);
   }
-  if (keep && !by.has(keep)) by.set(keep, { name: keep, pips: [] });
-  const tabs = [...by.values()];
+  const tabs = [...by.values()].filter((t) => t.own || t.name === keep);
+  if (keep && !by.has(keep)) tabs.push({ name: keep, pips: [] });
   for (const t of tabs) {
     t.pips.sort((a, b) => RANK[a] - RANK[b]);
     t.summary = Object.entries(t.pips.reduce((c, st) => ({ ...c, [st]: (c[st] || 0) + 1 }), {})).map(([st, n]) => `${n} ${WORD[st]}`).join(", ");
