@@ -86,7 +86,7 @@ func hubCmd(args []string) error {
 	cargs := append([]string{"--model", *model, "--effort", *effort}, server.HubArgs()...)
 	cargs = append(cargs, strings.Fields(os.Getenv("ATC_HUB_CLAUDE_ARGS"))...)
 	h := hub.New(hub.Config{
-		Bin: bin, Args: cargs, Dir: *dir, State: *state, Mode: modes.Text,
+		Bin: bin, Args: cargs, Dir: *dir, State: *state, Mode: modes.Text, News: atcNews(),
 		Reset: startover.Policy{Quiet: *quiet, Small: *small, CapQuiet: *capQuiet, Cap: *cap},
 		Call:  hub.CallConfig{URL: cmp.Or(os.Getenv("ATC_DELTA_CALL"), "http://127.0.0.1:8807"), Number: callNumber()},
 	})
@@ -96,6 +96,20 @@ func hubCmd(args []string) error {
 	go h.Watch(context.Background(), time.Minute)
 	log.Printf("atc hub listening on http://%s", *addr)
 	return http.ListenAndServe(*addr, h.Handler())
+}
+
+func atcNews() func(bool) string {
+	c := client.Load()
+	var seq int64
+	return func(full bool) string {
+		text, next, err := c.Feed(seq, full)
+		if err != nil {
+			log.Printf("hub: atc feed: %v", err)
+			return ""
+		}
+		seq = next
+		return text
+	}
 }
 
 func hubURL() string { return cmp.Or(os.Getenv("ATC_HUB"), "http://127.0.0.1:8820") }

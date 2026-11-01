@@ -45,6 +45,8 @@ type Config struct {
 	State string
 	// Mode is the text that tells the session how to talk on a channel, "" for none.
 	Mode func(channel string) string
+	// News is what changed in atc since it was last asked, or with full how things stand; "" for nothing.
+	News func(full bool) string
 
 	Reset startover.Policy
 
@@ -117,6 +119,7 @@ type Hub struct {
 	turn     *turn
 	cutEarly bool
 	unsaid   bool
+	fresh    bool
 	last     string
 	home     string
 	context  int
@@ -180,7 +183,7 @@ func (h *Hub) start() error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	h.cmd, h.in, h.alive = cmd, in, true
+	h.cmd, h.in, h.alive, h.fresh = cmd, in, true, true
 	log.Printf("hub: claude %d on %s", cmd.Process.Pid, h.sid)
 	go h.read(cmd, out)
 	if h.seed != "" {
@@ -242,6 +245,7 @@ func (h *Hub) say(ch, text string) (string, error) {
 		log.Printf("hub: held %s behind %v", ch, h.busy())
 		return "held", nil
 	}
+	text = h.withNews(ch, text)
 	if c := h.call; ch == Phone && c != nil && !c.told {
 		text = c.envelope(h.cfg.Now()) + "\n" + text
 		c.told = true

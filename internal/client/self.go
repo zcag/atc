@@ -64,6 +64,8 @@ func From(pool []sessions.Session, sg Sign) string {
 		ask = "handed off to you: no need to report back"
 	case sg.Report && !me.Attachable:
 		ask = "report back in your final message: it is open in a terminal and cannot take messages, it reads yours with wait"
+	case sg.Report && me.Kind == "hub":
+		ask = "report back when done with atc's report tool"
 	case sg.Report:
 		ask = "report back when done with atc's send tool to " + Ref(me)
 	}

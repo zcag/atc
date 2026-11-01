@@ -84,6 +84,7 @@ type Server struct {
 	tailnet        *tailnet
 
 	fleet   *fleet
+	feed    *feed
 	rv      *reviver
 	here    presence
 	scanner outputs.Scanner
@@ -114,6 +115,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	s.web = webVersion(s.Web)
 	s.fleet = newFleet(s.Peers)
+	s.feed = newFeed()
 	s.kick = make(chan struct{}, 1)
 	if s.Pages == nil {
 		s.Pages, _ = pages.Open("")
@@ -144,6 +146,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 	mux.HandleFunc("GET /api/sessions", s.live)
+	mux.HandleFunc("GET /api/feed", s.feedNews)
 	mux.HandleFunc("GET /api/history", s.history)
 	mux.HandleFunc("GET /api/dirs", s.dirs)
 	mux.HandleFunc("GET /api/events", s.events)
@@ -978,7 +981,7 @@ func (s *Server) poll() {
 		s.mu.Lock()
 		n := len(s.subs)
 		s.mu.Unlock()
-		if n == 0 && (s.Push == nil || s.Push.Count() == 0) {
+		if n == 0 && (s.Push == nil || s.Push.Count() == 0) && !s.hubUp() {
 			s.seen, s.shown, s.noted = nil, nil, nil
 			if idle++; s.rv == nil || idle%8 != 0 {
 				continue
@@ -1000,6 +1003,9 @@ func (s *Server) poll() {
 		}
 		s.watch(list)
 		s.notify(list)
+		if s.feed.observe(list, s.fleet.statuses(), s.isHub) && s.hubUp() {
+			go s.Hub.Notice(context.Background())
+		}
 		b, _ := json.Marshal(list)
 		s.mu.Lock()
 		s.lastAt = time.Now()
