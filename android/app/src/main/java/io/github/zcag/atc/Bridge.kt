@@ -8,16 +8,16 @@ import android.webkit.JavascriptInterface
 import java.util.Locale
 
 class Bridge(private val a: MainActivity) : TextToSpeech.OnInitListener {
-    private val tts = TextToSpeech(a, this)
     private var ready: Boolean? = null
     private var pending: Pair<String, String>? = null
     @Volatile private var gen = 0
     @Volatile private var speaking = false
+    private val tts = TextToSpeech(a, this)
 
     @Synchronized
     override fun onInit(status: Int) {
         ready = status == TextToSpeech.SUCCESS
-        tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+        if (ready == true) tts.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
             override fun onStart(id: String) {}
             override fun onDone(id: String) { if (id == "$gen-end") done() }
             @Suppress("OVERRIDE_DEPRECATION")
