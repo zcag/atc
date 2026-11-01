@@ -9,6 +9,7 @@ WorkingDirectory=%h
 ExecStart=%h/.local/bin/atc-hub hub
 Restart=always
 RestartSec=5
+MemorySwapMax=0
 
 [Install]
 WantedBy=default.target

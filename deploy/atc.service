@@ -9,6 +9,7 @@ ExecStart=%h/.local/bin/atc serve
 Restart=always
 RestartSec=5
 KillMode=process
+MemorySwapMax=0
 
 [Install]
 WantedBy=default.target

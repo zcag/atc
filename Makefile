@@ -9,6 +9,7 @@ check:
 install: check build
 	install -m755 atc ~/.local/bin/atc
 	install -Dm644 deploy/atc.service ~/.config/systemd/user/atc.service
+	install -Dm644 deploy/claude.slice ~/.config/systemd/user/claude.slice
 	systemctl --user daemon-reload
 	systemctl --user enable --now atc
 	@$(MAKE) --no-print-directory call-idle
