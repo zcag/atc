@@ -144,7 +144,7 @@ class Orb(c: Context) : View(c), Persona {
     private var hear = 0f
     private var speak = 0f
     private var start = System.nanoTime()
-    private val shader = if (Build.VERSION.SDK_INT >= 33) RuntimeShader(SRC) else null
+    private val shader = if (Build.VERSION.SDK_INT >= 33) runCatching { RuntimeShader(SRC) }.onFailure { Log.w("atc", "orb: $it") }.getOrNull() else null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
     override fun face(f: Calls.Face) {
@@ -257,8 +257,8 @@ class Orb(c: Context) : View(c), Persona {
                 float refl = (smoothstep(r, r - 0.08, md) * 0.3 + exp(-max(md - r, 0.0) * 7.0) * 0.1) * below * exp(-(floorY - uv.y) * 6.0);
                 col += tint * refl;
                 a += refl;
-                float2 half = 0.5 * size / min(size.x, size.y);
-                float keep = smoothstep(half.x, half.x - 0.12, abs(uv.x)) * smoothstep(half.y, half.y - 0.12, abs(uv.y));
+                float2 edge2 = 0.5 * size / min(size.x, size.y);
+                float keep = smoothstep(edge2.x, edge2.x - 0.12, abs(uv.x)) * smoothstep(edge2.y, edge2.y - 0.12, abs(uv.y));
                 col *= keep;
                 a *= keep;
                 if (d < r) {
