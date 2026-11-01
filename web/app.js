@@ -929,11 +929,7 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
   });
   PICK_PROJECT = (name) => setOnly((o) => (o === name ? null : name));
   const desk = (runs || []).filter((s) => s.kind === "hub" && s.agent === GUESTS);
-  const tabs = useMemo(() => {
-    const t = projectTabs(all || [], only === AGENTS ? null : only);
-    if (desk.length && !t.some((x) => x.name === GUESTS)) t.push({ name: GUESTS, pips: [], summary: "" });
-    return t;
-  }, [all, only, desk.length]);
+  const tabs = useMemo(() => projectTabs(all || [], only === AGENTS ? null : only), [all, only]);
   TABS = { only, tabs, set: setOnly };
   useEffect(() => {
     const k = (e) => {
