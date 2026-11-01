@@ -830,7 +830,7 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
   background: color-mix(in srgb, var(--strip) 72%, transparent); backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
   box-shadow: 0 10px 30px -18px rgba(0,0,0,.4);
 }
-.aopen .head { display: flex; align-items: center; gap: 10px; border: 0; padding: 0 0 2px; }
+.aopen .head { display: flex; align-items: center; gap: 10px; border: 0; padding: 0 0 2px; background: none; position: static; }
 .aopen b { font-size: 16px; font-weight: 600; }
 .aopen .sum { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 4px 6px; justify-content: flex-end; }
 .aopen .sum span { font-size: 12.5px; font-weight: 500; padding: 2px 9px; border-radius: 999px; color: var(--work); background: color-mix(in srgb, var(--work) 14%, transparent); }
