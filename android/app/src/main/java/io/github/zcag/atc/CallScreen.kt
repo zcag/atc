@@ -53,7 +53,7 @@ object CallNote {
 
     fun build(c: Context, st: Calls.State): Notification {
         channels(c)
-        val screen = PendingIntent.getActivity(c, 0, Intent(c, CallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_IMMUTABLE)
+        val screen = PendingIntent.getActivity(c, 0, CallActivity.open(c), PendingIntent.FLAG_IMMUTABLE)
         val hangup = PendingIntent.getBroadcast(c, 1, Intent(c, CallAction::class.java), PendingIntent.FLAG_IMMUTABLE)
         val person = Person.Builder().setName("Assistant").setImportant(true).build()
         val ringing = st.phase == Calls.Phase.Ringing
@@ -152,6 +152,8 @@ class CallActivity : Activity() {
         const val DIAL = "io.github.zcag.atc.DIAL"
         const val ANSWER = "io.github.zcag.atc.ANSWER"
         private const val REQ_MIC = 1
+
+        fun open(c: Context): Intent = Intent(c, CallActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
         fun status(st: Calls.State) = when (st.phase) {
             Calls.Phase.Calling -> "Calling…"

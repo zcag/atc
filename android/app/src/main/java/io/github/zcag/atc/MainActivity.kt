@@ -33,6 +33,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Button
+import android.widget.Chronometer
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -42,6 +43,9 @@ import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import java.io.File
 
 class MainActivity : Activity() {
@@ -63,6 +67,12 @@ class MainActivity : Activity() {
     private var lastBack = 0L
     private var unlockThen: Intent? = null
     private var root: FrameLayout? = null
+    private var callBar: LinearLayout? = null
+    private var callLabel: TextView? = null
+    private var callTimer: Chronometer? = null
+    private var bars = androidx.core.graphics.Insets.NONE
+    private var lightStatus: Boolean? = null
+    private val scope = MainScope()
     private var offline: View? = null
     private var veil: View? = null
     private var failed: String? = null
@@ -82,6 +92,7 @@ class MainActivity : Activity() {
         route(intent)
         if (prefs.server != null) started()
         getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(network)
+        scope.launch { Calls.state.collect { showCall(it) } }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -110,6 +121,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(network) }
         ui.removeCallbacks(retry)
+        scope.cancel()
         bridge.shutdown()
         web?.destroy()
         super.onDestroy()
@@ -172,6 +184,7 @@ class MainActivity : Activity() {
 
     private fun route(intent: Intent) {
         val assist = intent.getBooleanExtra(EXTRA_ASSIST, false) || intent.action == Intent.ACTION_ASSIST
+        if (assist && Calls.state.value.live) return toCall()
         setShowWhenLocked(assist)
         setTurnScreenOn(assist)
         if (assist && getSystemService(KeyguardManager::class.java).isKeyguardLocked) {
@@ -179,6 +192,14 @@ class MainActivity : Activity() {
             return
         }
         open(intent, assist)
+    }
+
+    private fun toCall() {
+        setShowWhenLocked(false)
+        setTurnScreenOn(false)
+        startActivity(CallActivity.open(this))
+        val server = prefs.server
+        if (web == null && server != null) browse("$server/")
     }
 
     private fun unlock(intent: Intent) = getSystemService(KeyguardManager::class.java)
@@ -355,12 +376,64 @@ class MainActivity : Activity() {
         offline = null
         val frame = FrameLayout(this).apply { addView(v) }
         root = frame
-        ViewCompat.setOnApplyWindowInsetsListener(frame) { view, insets ->
-            val b = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime() or WindowInsetsCompat.Type.displayCutout())
-            view.setPadding(b.left, b.top, b.right, b.bottom)
+        val bar = callBar()
+        val page = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(bar, LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            addView(frame, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+        ViewCompat.setOnApplyWindowInsetsListener(page) { _, insets ->
+            bars = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.ime() or WindowInsetsCompat.Type.displayCutout())
+            pad()
             WindowInsetsCompat.CONSUMED
         }
-        setContentView(frame)
+        setContentView(page)
+        showCall(Calls.state.value)
+    }
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+
+    private fun callBar(): LinearLayout {
+        val label = TextView(this).apply { setTextColor(android.graphics.Color.WHITE); textSize = 15f }
+        val timer = Chronometer(this).apply { setTextColor(android.graphics.Color.WHITE); textSize = 15f; setPadding(dp(10), 0, 0, 0) }
+        callLabel = label
+        callTimer = timer
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setBackgroundColor(0xff30a46c.toInt())
+            visibility = View.GONE
+            contentDescription = "Return to the call"
+            setOnClickListener { startActivity(CallActivity.open(this@MainActivity)) }
+            addView(label)
+            addView(timer)
+            callBar = this
+        }
+    }
+
+    private fun pad() {
+        val bar = callBar ?: return
+        val on = bar.visibility == View.VISIBLE
+        (bar.parent as? View)?.setPadding(bars.left, 0, bars.right, bars.bottom)
+        bar.setPadding(dp(16), bars.top + dp(8), dp(16), dp(10))
+        root?.setPadding(0, if (on) 0 else bars.top, 0, 0)
+    }
+
+    private fun showCall(st: Calls.State) {
+        val bar = callBar ?: return
+        val on = st.live
+        val status = WindowCompat.getInsetsController(window, window.decorView)
+        if (on && lightStatus == null) lightStatus = status.isAppearanceLightStatusBars.also { status.isAppearanceLightStatusBars = false }
+        if (!on) lightStatus?.let { status.isAppearanceLightStatusBars = it; lightStatus = null }
+        val active = st.phase == Calls.Phase.Active
+        callLabel?.text = if (active) "Tap to return to the call" else "Assistant · " + CallActivity.status(st)
+        callTimer?.apply {
+            visibility = if (active) View.VISIBLE else View.GONE
+            if (active) { base = st.since; start() } else stop()
+        }
+        if ((bar.visibility == View.VISIBLE) == on) return
+        bar.visibility = if (on) View.VISIBLE else View.GONE
+        pad()
     }
 
     private fun serverHost() = prefs.server?.let { Uri.parse(it).host }
