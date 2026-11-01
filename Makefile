@@ -43,8 +43,13 @@ install-mac: check build
 	while launchctl print gui/$$(id -u)/io.github.zcag.atc >/dev/null 2>&1; do sleep 0.2; done
 	launchctl bootstrap gui/$$(id -u) ~/Library/LaunchAgents/io.github.zcag.atc.plist
 
+ifeq ($(shell uname),Darwin)
 JAVA_HOME ?= /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 ANDROID_HOME ?= $(HOME)/Library/Android/sdk
+else
+JAVA_HOME ?= $(HOME)/.local/opt/jdk17
+ANDROID_HOME ?= $(HOME)/Android/sdk
+endif
 APP_HOST ?= desktop
 APP_DIR ?= .local/share/atc/app
 
@@ -52,7 +57,7 @@ android:
 	cd android && JAVA_HOME="$(JAVA_HOME)" ANDROID_HOME="$(ANDROID_HOME)" ./gradlew -q testReleaseUnitTest assembleRelease
 	mkdir -p android/dist
 	cp android/app/build/outputs/apk/release/app-release.apk android/dist/atc.apk
-	n=$$(git rev-list --count HEAD); sum=$$(shasum -a 256 android/dist/atc.apk | cut -d' ' -f1); \
+	n=$$(git rev-list --count HEAD); sum=$$( (sha256sum 2>/dev/null || shasum -a 256) < android/dist/atc.apk | cut -d' ' -f1); \
 	printf '{"versionCode":%s,"versionName":"0.%s","apk":"/app/atc.apk","sha256":"%s"}\n' $$n $$n $$sum > android/dist/version.json
 
 android-publish:

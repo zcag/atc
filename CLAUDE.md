@@ -15,8 +15,10 @@ phone too. A web change is not done until it works there:
 - **Native pieces.** If the change needs something the WebView can't do, it belongs in `Bridge.kt`.
   If it changes what a session row carries, consider the home-screen widget feed (`APP.setSessions`,
   `Widget.kt`) and push (`internal/push`).
-- Kotlin changes need a new APK: `make android && make android-publish` on laptop (the app updates
-  itself from `https://atc.example/app/`). Web-only changes reach the app on `make install`: an open page notices the new build (`web` in `/api/me`) and reloads when you come back to it, or offers Reload.
+- Kotlin changes need a new APK: `make android && make android-publish` on laptop or desktop (the app
+  updates itself from `https://atc.example/app/`). On desktop, `redroid up` starts a headless Android 12
+  device for testing (`adb -s 127.0.0.1:5555`, arm64 libs through translation, the real GPU);
+  `redroid install|start|shot|log`. desktop has no KVM, so no emulator. Web-only changes reach the app on `make install`: an open page notices the new build (`web` in `/api/me`) and reloads when you come back to it, or offers Reload.
 
 ## Shipping
 

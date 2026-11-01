@@ -45,6 +45,14 @@ func TestShowPage(t *testing.T) {
 	if shown.Created || shown.Page.Title != "Handover" || shown.Page.Note != "look" {
 		t.Fatalf("showing again should replace, keeping the note: %+v", shown)
 	}
+	_, body = do(t, "POST", ts.URL+"/api/sessions/l1/pages", "tok", `{"path":"`+dir+`","name":"handover","at":"#towel"}`)
+	json.Unmarshal([]byte(body), &shown)
+	if shown.Page.At != "towel" || shown.Page.Ref() != "handover#towel" {
+		t.Fatalf("shown at a section: %+v", shown.Page)
+	}
+	if res, _ := do(t, "POST", ts.URL+"/api/sessions/l1/pages", "tok", `{"path":"`+dir+`","name":"handover","at":"a b"}`); res.StatusCode != 400 {
+		t.Fatalf("an id with a space: %d", res.StatusCode)
+	}
 
 	if res, _ := do(t, "PUT", ts.URL+"/api/sessions/l1/pages/handover/state", "tok", `{"ticks":2}`); res.StatusCode != 200 {
 		t.Fatalf("set state: %d", res.StatusCode)
@@ -143,5 +151,10 @@ func TestPageAlerts(t *testing.T) {
 	}
 	if _, ms = pageAlerts(seen, list(at.Add(time.Minute)), func(sessions.Session) bool { return true }); len(ms) != 0 {
 		t.Fatalf("pushed while you watch the session: %v", ms)
+	}
+	towel := list(at.Add(2 * time.Minute))
+	towel[0].Shown[0].At = "towel"
+	if _, ms = pageAlerts(seen, towel, never); len(ms) != 1 || ms[0].URL != "/#/s/s1/p/handover#towel" {
+		t.Fatalf("shown at a section: %+v", ms)
 	}
 }

@@ -188,7 +188,13 @@ function App() {
   const [usage, setUsage] = useState(location.hash === USAGE);
   const shareRoute = () => (location.hash.startsWith("#/share") ? location.hash : null);
   const [sharing, setSharing] = useState(shareRoute);
-  const aloneRoute = () => { const m = location.hash.match(/^#\/p\/([^/]+)(?:\/(.+))?$/); return m && (m[2] || false) && { sid: decodeURIComponent(m[1]), name: m[2] && decodeURIComponent(m[2]) }; };
+  const aloneRoute = () => {
+    const m = location.hash.match(/^#\/p\/([^/]+)(?:\/(.+))?$/);
+    if (!m || !m[2]) return m && false;
+    const sid = decodeURIComponent(m[1]), ref = decodeURIComponent(m[2]), at = atOf(ref), name = splitRef(ref)[0];
+    if (at) history.replaceState(null, "", aloneLink(sid, name));
+    return { sid, name, at };
+  };
   const [alone, setAlone] = useState(aloneRoute);
   const [pagesHome, setPagesHome] = useState(location.hash === PAGES);
   const [backlog, setBacklog] = useState(location.hash === BACKLOG);
@@ -394,10 +400,10 @@ function App() {
     ${palette && html`<${Palette} live=${reach || []} sel=${sel} say=${say} home=${me.host} onClose=${() => setPalette(false)}
       actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: () => (location.hash = "#/assist"), ask: () => talk(false, false) }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
-    ${assisting && html`<${Assist} live=${reach} busy=${starting} onTalk=${talk} onOpen=${() => go(null)} />`}
+    ${assisting && html`<${Assist} live=${reach} onOpen=${() => go(null)} />`}
     ${pagesHome && html`<${PagesHome} live=${all} say=${say} onClose=${closePages} />`}
     ${backlog && html`<${BacklogPage} live=${all} say=${say} onClose=${closeBacklog} onAdd=${setCreating} />`}
-    ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`}
+    ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} at=${alone.at} live=${all} say=${say} />`}
     ${calling ? html`<${CallView} />` : html`<${CallPill} />`}
     ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
@@ -506,7 +512,7 @@ function Rail({ live, sel, onHover, onPick }) {
     </nav>`;
 }
 
-function Assist({ live, busy, onTalk, onOpen }) {
+function Assist({ live, onOpen }) {
   useEffect(() => {
     const k = (e) => { if (e.key === "Escape") onOpen(); };
     addEventListener("keydown", k);
@@ -515,25 +521,26 @@ function Assist({ live, busy, onTalk, onOpen }) {
   const open = (live || []).filter((s) => !away(s));
   const count = (st) => open.filter((s) => s.state === st).length;
   const summary = [["needs-you", "needs you"], ["your-turn", "your turn"], ["working", "working"]]
-    .map(([st, word]) => count(st) && `${count(st)} ${word}`).filter(Boolean).join(" · ") || "Nothing open";
-  const top = open.filter((s) => s.state !== "stopped").slice(0, 3);
-  const last = open.find((s) => s.name === "assistant" || s.title === "assistant");
+    .map(([st, word]) => count(st) && html`<span class=${st}>${count(st)} ${word}</span>`).filter(Boolean);
+  const top = open.filter((s) => s.state !== "stopped" && s.name !== "assistant").slice(0, 4);
+  useNow(30000);
+  const now = new Date(), hr = now.getHours();
+  const hello = hr < 5 ? "Good night" : hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
   return html`
     <div class="assist">
       ${!APP && html`<button class="icon close" onClick=${onOpen} aria-label="Close">✕</button>`}
-      <button class="choice talk" disabled=${busy} onClick=${() => onTalk(true)}>
-        <span class="big">${MIC}</span>
-        <span class="what">${busy ? "Starting…" : "New voice session"}</span>
-        <span class="sub">Talk to Claude in a fresh session</span>
-      </button>
-      ${last && html`<button class="link" disabled=${busy} onClick=${() => onTalk(false)}>Continue the last voice session</button>`}
-      ${CAN_CALL && html`<button class="choice" onClick=${callAssistant}>
-        <span class="what">Call the assistant</span>
-        <span class="sub">A phone call, through atc</span>
-      </button>`}
-      <button class="choice" onClick=${onOpen}>
-        <span class="what">Open atc</span>
-        <span class="sub">${live ? summary : "Loading…"}</span>
+      <header class="ahello">
+        <span class="time">${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
+        <span class="date">${hello} · ${now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}</span>
+      </header>
+      <div class="ahero" onClick=${CAN_CALL ? callAssistant : null}>
+        <${Orb} state="listening" on=${CAN_CALL} />
+        <h1>Assistant</h1>
+        <p>${CAN_CALL ? "Tap to call" : "Calls need atc's call line and a microphone"}</p>
+        ${CAN_CALL && html`<button class="round dial" aria-label="Call the assistant"><i></i><i></i>${DIAL}</button>`}
+      </div>
+      <button class="aopen" onClick=${onOpen}>
+        <span class="head"><b>Open atc</b><span class="sum">${!live ? "Loading…" : summary.length ? summary : "Nothing open"}</span><span class="go">›</span></span>
         ${top.map((s) => html`<span class="row"><i class=${s.state}></i>${s.title}</span>`)}
       </button>
     </div>
@@ -590,7 +597,7 @@ function CallView() {
         ${live ? html`
           <button class="round ${st.muted ? "on" : ""}" onClick=${Call.mute} aria-label=${st.muted ? "Unmute" : "Mute"} title=${st.muted ? "Unmute" : "Mute"}>${MIC_OFF}</button>
           <button class="round end" onClick=${Call.hangup} aria-label="Hang up" title="Hang up">${HANG_UP}</button>`
-        : st.phase !== "ended" && CAN_CALL && html`<button class="round dial" onClick=${callAssistant} aria-label="Call" title="Call the assistant">${HANG_UP}</button>`}
+        : st.phase !== "ended" && CAN_CALL && html`<button class="round dial" onClick=${callAssistant} aria-label="Call" title="Call the assistant">${DIAL}</button>`}
       </div>
     </div>`;
 }
@@ -604,70 +611,130 @@ function CallPill() {
   </button>`;
 }
 
+const DIAL = html`<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M20 15.4c-1.2 0-2.4-.2-3.5-.6a1 1 0 0 0-1 .3l-1.6 2a15 15 0 0 1-6.9-6.9l2-1.6c.3-.3.4-.7.2-1-.4-1.1-.6-2.3-.6-3.5 0-.6-.4-1-1-1H4.2C3.6 3 3 3.2 3 4c0 9.3 7.7 17 17 17 .7 0 1-.6 1-1.2v-3.4c0-.6-.4-1-1-1z" fill="currentColor"/></svg>`;
 const HANG_UP = html`<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M3.4 14.6a1.2 1.2 0 0 1 0-1.7C5.7 10.6 8.7 9.4 12 9.4s6.3 1.2 8.6 3.5a1.2 1.2 0 0 1 0 1.7l-1.7 1.7a1.2 1.2 0 0 1-1.6.1l-2-1.5a1.2 1.2 0 0 1-.5-1v-1.7a9.5 9.5 0 0 0-5.6 0v1.7a1.2 1.2 0 0 1-.5 1l-2 1.5a1.2 1.2 0 0 1-1.6-.1z" fill="currentColor"/></svg>`;
 const CHEVRON_DOWN = html`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 const ORB_LOOKS = {
-  listening: [[.18, .42, 1], [.35, .85, .95], [.85, .95, 1]],
-  hearing: [[.12, .7, .55], [.45, .95, .75], [.9, 1, .85]],
-  thinking: [[.45, .25, .95], [.9, .45, .85], [1, .8, .95]],
-  tool: [[.95, .5, .15], [1, .8, .4], [1, .95, .8]],
-  speaking: [[.3, .42, 1], [.62, .7, 1], [.95, .85, 1]],
+  listening: [[.08, .25, .9], [.2, .75, 1], [.75, .5, 1]],
+  hearing: [[.02, .42, .4], [.2, .95, .7], [.85, 1, .5]],
+  thinking: [[.3, .1, .85], [.85, .3, .95], [.3, .75, 1]],
+  tool: [[.8, .25, .05], [1, .65, .2], [1, .3, .5]],
+  speaking: [[.12, .18, .95], [.35, .65, 1], [1, .45, .85]],
 };
 const ORB_SRC = `precision highp float;
-uniform vec2 size; uniform float t, level, think, hear, speak; uniform vec3 c1, c2, c3;
+uniform vec2 size; uniform float t, level, think, hear, speak, bg, rad, lift, spin, flow, wave; uniform vec3 c1, c2, c3;
 float hash(vec3 p) { p = fract(p * .3183099 + .1); p *= 17.; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float hash2(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec3 x) { vec3 i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);
   return mix(mix(mix(hash(i), hash(i + vec3(1,0,0)), f.x), mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z); }
-float fbm(vec3 p) { float a = .5, s = 0.; for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + 3.1; a *= .5; } return s; }
+float fbm(vec3 p) { float a = .5, s = 0.; for (int i = 0; i < 3; i++) { s += a * noise(p); p = p * 2.03 + 3.1; a *= .5; } return s; }
+float blob(vec3 p, float lv) {
+  float amp = .018 + .008 * think + lv * (.028 * speak + .022 * hear + .008);
+  float d = sin(p.x * 2.1 + t * .5) * sin(p.y * 2.4 - t * .42) * sin(p.z * 1.9 + t * .35);
+  d += .5 * sin(p.x * 3.6 - t * .7 + p.y * 1.7) * sin(p.z * 3.2 + t * .6);
+  d += (.15 + .3 * think + .4 * speak * lv) * sin(dot(p, vec3(2.6, 3.4, 2.2)) + flow);
+  return length(p) - (1. + .018 * sin(t * .55) + .04 * lv) - d * amp;
+}
+vec3 normalAt(vec3 p, float lv) {
+  vec2 e = vec2(.003, -.003);
+  return normalize(e.xyy * blob(p + e.xyy, lv) + e.yyx * blob(p + e.yyx, lv) + e.yxy * blob(p + e.yxy, lv) + e.xxx * blob(p + e.xxx, lv));
+}
 void main() {
   vec2 uv = (gl_FragCoord.xy - .5 * size) / min(size.x, size.y);
-  float floorY = -.3, lv = min(level, 1.);
+  float lv = min(level, 1.);
+  vec2 ctr = vec2(0., lift + .008 * sin(t * .45));
+  vec2 q = (uv - ctr) / rad;
+  float dq = length(q);
   vec3 tint = mix(c1, c2, .55);
-  float haze = fbm(vec3(uv * 1.4 + vec2(t * .015, t * .008), t * .025));
-  float a = .1 * smoothstep(.35, .85, haze) * smoothstep(.75, .1, length(uv * vec2(.8, 1.)));
-  vec3 col = tint * a;
-  float line = .08 * exp(-abs(uv.y - floorY) * 30.) * smoothstep(.5, 0., abs(uv.x));
-  col += tint * line; a += line;
-  vec2 o = vec2(0., .05 + .012 * sin(t * .8));
-  float r = .2 + .01 * sin(t * 1.25) + .03 * lv;
-  vec2 q = uv - o;
-  float ang = atan(q.y, q.x);
-  r += (.002 + .01 * speak * lv) * sin(ang * 3. + t * 2.2) + (.002 + .008 * hear * lv) * sin(ang * 4. - t * 2.9);
-  float d = length(q);
-  float glow = exp(-max(d - r, 0.) * (7. - 3. * lv)) * (.22 + .45 * lv) * smoothstep(.62, .22, d);
-  col += tint * glow; a += glow * .9;
-  float below = smoothstep(floorY + .01, floorY - .02, uv.y);
-  vec2 m = vec2(uv.x, 2. * floorY - uv.y) - o;
-  float md = length(m);
-  float refl = (smoothstep(r, r - .08, md) * .3 + exp(-max(md - r, 0.) * 7.) * .1) * below * exp(-(floorY - uv.y) * 6.);
-  col += tint * refl; a += refl;
-  vec2 e = .5 * size / min(size.x, size.y);
-  float keep = smoothstep(e.x, e.x - .12, abs(uv.x)) * smoothstep(e.y, e.y - .12, abs(uv.y));
-  col *= keep; a *= keep;
-  if (d < r) {
-    float z = sqrt(max(r * r - d * d, 0.)) / r;
-    vec3 nrm = normalize(vec3(q / r, z));
-    float spin = t * (.12 + .45 * think);
-    vec3 pp = nrm * 1.3;
-    pp = vec3(cos(spin) * pp.x - sin(spin) * pp.z, pp.y, sin(spin) * pp.x + cos(spin) * pp.z);
-    vec3 w = vec3(fbm(pp * 1.7 + t * .06), fbm(pp * 1.7 + 4.3 - t * .05), fbm(pp * 1.7 + 8.1));
-    float bands = fbm(pp * .9 + w * (.9 + .8 * lv) + vec3(0., 0., t * (.12 + .4 * lv)));
-    float stripe = smoothstep(.42, .62, bands) - smoothstep(.62, .8, bands);
-    vec3 inner = mix(mix(c1, c2, .25) * .7, c1, smoothstep(.2, .55, bands));
-    inner = mix(inner, c2, smoothstep(.5, .78, bands));
-    inner += c3 * stripe * (.1 + .22 * lv);
-    inner *= .75 + .45 * z;
-    inner += mix(c2, vec3(1.), .3) * pow(z, 3.) * .35;
-    float fres = pow(1. - z, 3.);
-    float rim = smoothstep(0., .12, 1. - z) * smoothstep(.35, .05, 1. - z);
-    float spec = pow(max(dot(nrm, normalize(vec3(-.45, .6, .75))), 0.), 22.);
-    vec3 orb = inner + fres * mix(c2, vec3(1.), .5) * .55 + rim * tint * .25 + spec * .35;
-    orb = orb / (1. + orb * .35);
-    float edge = smoothstep(r, r - .004, d);
-    col = col * (1. - edge) + orb * edge;
-    a = a * (1. - edge) + edge;
+  vec3 col = vec3(0.);
+  float a = 0.;
+  if (bg > 0.) {
+    float n1 = fbm(vec3(uv * 1.3, t * .04));
+    float n2 = fbm(vec3(uv * 1.1 + n1 * 1.8 + vec2(t * .03, -t * .02), t * .05 + 5.));
+    col = (vec3(.01, .013, .025) + c1 * .03) * (1.25 - .45 * length(uv * vec2(.8, .55)));
+    col += mix(c1, c2, n1) * smoothstep(.38, .9, n2) * (.12 + .2 * lv) * smoothstep(2.2, .3, length(uv - ctr * .5));
+    float ring = pow(.5 + .5 * sin(dq * 6. - wave), 6.);
+    col += tint * ring * smoothstep(1., 1.3, dq) * exp(-(dq - 1.) * .9) * lv * (.16 * speak + .12 * hear);
+    for (int i = 0; i < 2; i++) {
+      float fi = float(i);
+      vec2 g = uv * (11. + 9. * fi) + vec2(fi * 3.7, t * (.04 + .03 * fi));
+      vec2 id = floor(g), f = fract(g) - .5;
+      float h = hash2(id + fi * 7.1);
+      vec2 off = vec2(hash2(id + 3.3), hash2(id + 9.7)) - .5;
+      float s = smoothstep(.07, 0., length(f - off * .7)) * step(.82, h) * (.6 + .4 * sin(t * (.3 + .8 * h) + h * 40.));
+      col += mix(c3, vec3(1.), .5) * s * (.25 + .35 * smoothstep(3., .8, dq) + .3 * lv);
+    }
+    a = 1.;
+  }
+  float glow = exp(-max(dq - 1., 0.) * (7. - 3. * lv)) * (.35 + .5 * lv) + exp(-max(dq - 1., 0.) * 1.6) * (.07 + .12 * lv);
+  if (bg <= 0.) glow *= smoothstep(2.8, 1.2, dq);
+  col += tint * glow;
+  a += glow * .9;
+  vec3 back = vec3(0.), front = vec3(0.);
+  for (int i = 0; i < 9; i++) {
+    float fi = float(i);
+    float an = t * (.25 + .03 * fi) + fi * .698;
+    float orbit = 1.32 + .08 * sin(t * .4 + fi * 2.3);
+    vec2 pos = vec2(cos(an), sin(an) * .3) * orbit;
+    pos = vec2(pos.x * .96 - pos.y * .28, pos.x * .28 + pos.y * .96);
+    float sp = (exp(-length(q - pos) * 40.) * 2.5 + exp(-length(q - pos) * 12.) * .35) * think;
+    if (sin(an) > 0.) back += c3 * sp; else front += c3 * sp;
+  }
+  col += back;
+  a += length(back);
+  if (dq < 1.45) {
+    float cs = cos(spin), sn = sin(spin), tx = .2 * sin(t * .1);
+    mat3 m = mat3(cs, 0., -sn, 0., 1., 0., sn, 0., cs) * mat3(1., 0., 0., 0., cos(tx), sin(tx), 0., -sin(tx), cos(tx));
+    vec3 ro = vec3(0., 0., 4.), rd = normalize(vec3(q, -4.));
+    vec3 rdo = m * rd;
+    vec3 p = m * ro;
+    float b = dot(p, rdo), c = dot(p, p) - 2.1, h = b * b - c;
+    float dist = -b - sqrt(max(h, 0.)), best = 9.;
+    vec3 near = p + rdo * dist;
+    if (h > 0.) {
+      for (int i = 0; i < 34; i++) {
+        vec3 x = p + rdo * dist;
+        float d = blob(x, lv);
+        if (d < best) { best = d; near = x; }
+        if (d < .001) break;
+        dist += d * .55;
+        if (dist > 7.) break;
+      }
+    }
+    float cov = 1. - smoothstep(0., 2. / (min(size.x, size.y) * rad), best);
+    if (cov > 0.) {
+      vec3 no = normalAt(near, lv);
+      vec3 n = no * m;
+      vec3 v = -rd;
+      float z = max(dot(n, v), 0.);
+      float fres = pow(1. - z, 3.);
+      float ph = dot(n, vec3(sin(t * .11), cos(t * .09), .5)) * 2.2 + fbm(no * 1.6 + t * .03) * 4. + t * .08;
+      vec3 iri = mix(c1, c2, .5 + .5 * sin(ph * 2.2));
+      iri = mix(iri, c3, smoothstep(.55, 1., sin(ph * 1.3 + 1.7)) * .6);
+      vec3 ip = near + refract(rdo, no, .72) * .7;
+      float sw = fbm(ip * 1.7 + vec3(0., flow * .06, t * .03));
+      vec3 inner = mix(c1 * .12, c1, smoothstep(.25, .55, sw));
+      inner = mix(inner, c2, smoothstep(.5, .75, sw)) + c3 * pow(smoothstep(.45, .85, sw), 2.) * (.4 + .9 * lv);
+      inner += mix(c3, vec3(1.), .3) * pow(max(1. - abs(sw - .52) * 7., 0.), 3.) * (.35 + .7 * lv);
+      vec3 sc = mix(inner, iri, .25 + .55 * fres);
+      sc += mix(c2, c3, .4) * pow(z, 3.) * (.22 + .35 * lv);
+      sc += fres * mix(c2, c3, .5 + .5 * sin(ph)) * .8;
+      vec3 rf = reflect(rd, n);
+      sc += pow(max(dot(rf, normalize(vec3(-.5, .7, .6))), 0.), 48.) * .7;
+      sc += c2 * pow(max(dot(rf, normalize(vec3(.6, -.5, .4))), 0.), 6.) * .25;
+      sc = 1. - exp(-sc * 1.5);
+      col = mix(col, sc, cov);
+      a = mix(a, 1., cov);
+    }
+  }
+  col += front;
+  a += length(front);
+  if (bg <= 0.) {
+    vec2 e = .5 * size / min(size.x, size.y);
+    float keep = smoothstep(e.x, e.x - .12, abs(uv.x)) * smoothstep(e.y, e.y - .12, abs(uv.y));
+    col *= keep; a *= keep;
   }
   a = clamp(a, 0., 1.);
   gl_FragColor = vec4(min(col, vec3(a)), a);
@@ -676,7 +743,13 @@ void main() {
 function orbGL(canvas) {
   const gl = canvas.getContext("webgl", { premultipliedAlpha: true, antialias: false });
   if (!gl) return null;
-  const sh = (type, src) => { const x = gl.createShader(type); gl.shaderSource(x, src); gl.compileShader(x); return x; };
+  const sh = (type, src) => {
+    const x = gl.createShader(type);
+    gl.shaderSource(x, src);
+    gl.compileShader(x);
+    if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) console.warn("orb:", gl.getShaderInfoLog(x));
+    return x;
+  };
   const prog = gl.createProgram();
   gl.attachShader(prog, sh(gl.VERTEX_SHADER, "attribute vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }"));
   gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, ORB_SRC));
@@ -687,7 +760,7 @@ function orbGL(canvas) {
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-  const u = Object.fromEntries(["size", "t", "level", "think", "hear", "speak", "c1", "c2", "c3"].map((k) => [k, gl.getUniformLocation(prog, k)]));
+  const u = Object.fromEntries(["size", "t", "level", "think", "hear", "speak", "bg", "rad", "lift", "spin", "flow", "wave", "c1", "c2", "c3"].map((k) => [k, gl.getUniformLocation(prog, k)]));
   return (w, h, t, o) => {
     gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0);
@@ -698,6 +771,13 @@ function orbGL(canvas) {
     gl.uniform1f(u.think, o.think);
     gl.uniform1f(u.hear, o.hear);
     gl.uniform1f(u.speak, o.speak);
+    gl.uniform1f(u.spin, o.spin);
+    gl.uniform1f(u.flow, o.flow);
+    gl.uniform1f(u.wave, o.wave);
+    const tall = h > w * 1.3;
+    gl.uniform1f(u.bg, o.full ? 1 : 0);
+    gl.uniform1f(u.rad, o.full ? (tall ? .27 : .19) : .22);
+    gl.uniform1f(u.lift, o.full ? (tall ? .1 : .07) : .02);
     gl.uniform3fv(u.c1, o.c[0]);
     gl.uniform3fv(u.c2, o.c[1]);
     gl.uniform3fv(u.c3, o.c[2]);
@@ -710,6 +790,7 @@ function orb2D(canvas) {
   const css = (c, al = 1) => `rgba(${c.map((v) => Math.round(v * 255)).join(",")},${al})`;
   return (w, h, t, o) => {
     g.clearRect(0, 0, w, h);
+    if (o.full) { g.fillStyle = "#05070d"; g.fillRect(0, 0, w, h); }
     const r = Math.min(w, h) * (.22 + .08 * Math.min(o.level, 1));
     let gr = g.createRadialGradient(w / 2, h / 2, r * .6, w / 2, h / 2, r * 1.6);
     gr.addColorStop(0, css(o.c[1], .45));
@@ -759,8 +840,8 @@ function Persona({ state, on, onTap }) {
   const down = () => { held.current = false; hold.current = setTimeout(() => { held.current = true; next(); }, 600); };
   const up = () => clearTimeout(hold.current);
   const tap = () => { if (!held.current) onTap(); };
-  return html`<div class="persona" onPointerDown=${down} onPointerUp=${up} onPointerLeave=${up} onContextMenu=${next}>
-    ${shown === "orb" ? html`<${Orb} state=${state} on=${on} onTap=${tap} />` : html`<${Drawn} key=${shown} name=${shown} state=${state} on=${on} onTap=${tap} />`}
+  return html`<div class="orb persona" onPointerDown=${down} onPointerUp=${up} onPointerLeave=${up} onContextMenu=${next}>
+    ${shown === "orb" ? html`<${Orb} full state=${state} on=${on} onTap=${tap} />` : html`<${Drawn} key=${shown} name=${shown} state=${state} on=${on} onTap=${tap} />`}
     ${label && html`<span class="personaname">${label}</span>`}
   </div>`;
 }
@@ -779,34 +860,39 @@ function Drawn({ name, state, on, onTap }) {
   return html`<canvas ref=${ref} class="orb ${on ? "" : "idle"}" onClick=${onTap} aria-label="The assistant. Tap to stop it while it speaks"></canvas>`;
 }
 
-function Orb({ state, on, onTap }) {
+function Orb({ state, on, onTap, full }) {
   const ref = useRef(null);
   const now = useRef(state);
   now.current = state;
   useEffect(() => {
     const cv = ref.current;
     const draw = orbGL(cv) || orb2D(cv);
-    const o = { level: 0, think: 0, hear: 0, speak: 0, c: ORB_LOOKS.listening.map((c) => [...c]) };
+    const o = { full, level: 0, think: 0, hear: 0, speak: 0, spin: 0, flow: 0, wave: 0, c: ORB_LOOKS.listening.map((c) => [...c]) };
     const start = performance.now();
-    let raf;
+    let raf, last = start;
     const frame = (ms) => {
       raf = requestAnimationFrame(frame);
-      const t = (ms - start) / 1000, st = now.current, look = ORB_LOOKS[st] || ORB_LOOKS.listening;
+      const t = (ms - start) / 1000, dt = Math.min((ms - last) / 1000, .1), st = now.current, look = ORB_LOOKS[st] || ORB_LOOKS.listening;
+      last = ms;
+      const ease = (v, to, tau) => v + (to - v) * (1 - Math.exp(-dt / tau));
       const [you, it] = Call.levels();
-      const target = { speaking: .1 + it, hearing: .08 + you, thinking: .22 + .1 * Math.sin(t * 3), tool: .22 + .1 * Math.sin(t * 3) }[st] ?? .05 + you * .4;
-      o.level += (target - o.level) * (target > o.level ? .35 : .1);
-      o.think += ((st === "thinking" || st === "tool") - o.think) * .04;
-      o.hear += ((st === "hearing") - o.hear) * .06;
-      o.speak += ((st === "speaking") - o.speak) * .06;
-      look.forEach((c, i) => c.forEach((v, j) => (o.c[i][j] += (v - o.c[i][j]) * .04)));
-      const k = Math.min(devicePixelRatio || 1, 2), w = Math.round(cv.clientWidth * k), h = Math.round(cv.clientHeight * k);
+      const target = { speaking: .08 + .8 * it, hearing: .06 + .7 * you, thinking: .18, tool: .18 }[st] ?? .04 + you * .25;
+      o.level = ease(o.level, target, target > o.level ? .18 : .5);
+      o.think = ease(o.think, +(st === "thinking" || st === "tool"), 1.2);
+      o.hear = ease(o.hear, +(st === "hearing"), 1.2);
+      o.speak = ease(o.speak, +(st === "speaking"), 1.2);
+      o.spin += dt * (.08 + .18 * o.think);
+      o.flow += dt * (.5 + .9 * Math.min(o.level, 1));
+      o.wave += dt * 1.4 * (o.speak - o.hear);
+      look.forEach((c, i) => c.forEach((v, j) => (o.c[i][j] = ease(o.c[i][j], v, 1.4))));
+      const k = Math.min(devicePixelRatio || 1, full ? 1.25 : 2), w = Math.round(cv.clientWidth * k), h = Math.round(cv.clientHeight * k);
       if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
       if (w && h) draw(w, h, t, o);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
   }, []);
-  return html`<canvas ref=${ref} class="orb ${on ? "" : "idle"}" onClick=${onTap} aria-label="The assistant. Tap to stop it while it speaks"></canvas>`;
+  return html`<canvas ref=${ref} class="orb ${full ? "full" : ""} ${on ? "" : "idle"}" onClick=${onTap} aria-label="The assistant. Tap to stop it while it speaks"></canvas>`;
 }
 
 function Login({ onDone }) {
@@ -1438,7 +1524,8 @@ function Session({ s, say, live }) {
   const [kept] = useState(() => { const n = !auto.current && !routePage() && stored(SESSION_PAGE, {})[s.sessionId]; return n && shown.some((p) => p.name === n) ? n : null; });
   const agentPage = !auto.current && !routePage() && !kept && !!s.agent && shown[0]?.name;
   const [mode, setMode] = useState(() => { AUTO_PANE = null; return auto.current || (routePage() || kept || agentPage ? "page" : paneFor(s)); });
-  const [pg, setPg] = useState(() => routePage() || kept || agentPage);
+  const [pg, setPg] = useState(() => splitRef(routePage())[0] || kept || agentPage);
+  const [at, setAt] = useState(() => atOf(routePage()));
   const [split, setSplitRaw] = useState(() => { const v = AUTO_SPLIT || !!agentPage || stored(PAGE_SPLIT, true); AUTO_SPLIT = false; return v; });
   const setSplit = (v) => { setSplitRaw(v); store(PAGE_SPLIT, v); };
   const wideNow = useWide();
@@ -1450,9 +1537,9 @@ function Session({ s, say, live }) {
     if (name) m[s.sessionId] = name;
     store(SESSION_PAGE, Object.fromEntries(Object.entries(m).slice(-100)));
   };
-  const openPage = (name) => { setPg(name); setMode("page"); keep(name); history.replaceState(null, "", `${base()}/p/${encodeURIComponent(name)}`); };
+  const openPage = (ref) => { const [name] = splitRef(ref); setPg(name); setAt(atOf(ref)); setMode("page"); keep(name); history.replaceState(null, "", `${base()}/p/${encodeURIComponent(name)}`); };
   const leavePage = (m) => { setMode(m); keep(null); history.replaceState(null, "", base()); };
-  useEffect(() => { if (kept) history.replaceState(null, "", `${base()}/p/${encodeURIComponent(kept)}`); }, []);
+  useEffect(() => { if (kept || at) history.replaceState(null, "", `${base()}/p/${encodeURIComponent(pg)}`); }, []);
   const [slot, setSlot] = useState(null);
   const choose = (m) => { if (m === "page") return openPage(pg || shown[0]?.name); leavePage(m); try { localStorage.setItem(PANE, m); } catch {} };
   useEffect(() => {
@@ -1466,9 +1553,10 @@ function Session({ s, say, live }) {
     const prev = known.current;
     known.current = now;
     const p = prev && shown.find((x) => prev[x.name] !== x.shown);
+    if (p && mode === "page" && pg === p.name && p.at) return setAt(atOf(pageRef(p)));
     if (!p || (mode === "page" && (pg === p.name || sideBySide))) return;
     const idle = Date.now() - LAST_KEY > 8000 && !document.activeElement?.closest?.("textarea, input, .xterm");
-    if (idle && wideNow && split && mode !== "page" && p.kind !== "browser") openPage(p.name);
+    if (idle && wideNow && split && mode !== "page" && p.kind !== "browser") openPage(pageRef(p));
     else say(p.kind === "browser" ? "It opened a browser tab. It's on the page button up top." : `Showing you “${pageTitle(p)}”. It's on the page button up top.`);
   }, [shown.map((p) => p.name + p.shown).join()]);
   const [busy, setBusy] = useState(false);
@@ -1557,7 +1645,7 @@ function Session({ s, say, live }) {
     ${mode !== "chat" && !sideBySide && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
     ${mode === "page" && shown.length > 0
       ? (() => {
-          const pane = html`<${PagePane} s=${s} list=${shown} cur=${pg} pick=${openPage} split=${sideBySide} setSplit=${wideNow ? setSplit : null} say=${say}
+          const pane = html`<${PagePane} s=${s} list=${shown} cur=${pg} at=${at} pick=${openPage} split=${sideBySide} setSplit=${wideNow ? setSplit : null} say=${say}
             onClose=${() => leavePage(paneFor(s))} />`;
           return sideBySide
             ? html`<${PageSplit}><${Transcript} s=${s} say=${say} slot=${slot} resume=${() => resume("chat")} busy=${busy} voice=${voice && canAttach} onVoiceOff=${() => setVoice(false)} />${pane}<//>`
@@ -3032,6 +3120,11 @@ const pageSrc = (p) => p.url && `${p.url}?v=${pageAt(p)}`;
 const pageInfo = (p) => p.gone ? "file is gone" : `${KIND_LABEL[p.kind] || "Page"} · updated ${agoLong(p.updated || p.shown)}`;
 const pageLink = (sid, name) => `#/s/${sid}/p/${encodeURIComponent(name)}`;
 const aloneLink = (sid, name) => `#/p/${sid}/${encodeURIComponent(name)}`;
+const splitRef = (r) => { const i = (r || "").indexOf("#"); return i < 0 ? [r, null] : [r.slice(0, i), r.slice(i + 1)]; };
+const pageRef = (p) => (p.at ? `${p.name}#${p.at}` : p.name);
+let AT_SEQ = 0;
+const atOf = (ref) => { const [name, id] = splitRef(ref); return id ? { name, id, seq: ++AT_SEQ } : null; };
+const atcRoute = (href) => { const u = new URL(href, location.href); return u.origin === location.origin && u.pathname === "/" && u.hash ? u.hash : null; };
 const routePage = () => { const m = location.hash.match(/^#\/s\/[^/]+\/p\/(.+)$/); return m ? decodeURIComponent(m[1]) : null; };
 let LAST_KEY = 0;
 addEventListener("keydown", () => { LAST_KEY = Date.now(); }, true);
@@ -3077,7 +3170,7 @@ async function takeDown(p, say) {
   } catch (e) { say?.(e.message); return false; }
 }
 
-function PageFrame({ p, onSend, say }) {
+function PageFrame({ p, at, onSend, say }) {
   const src = pageSrc(p);
   const [cur, setCur] = useState(src);
   const [next, setNext] = useState(null);
@@ -3092,7 +3185,7 @@ function PageFrame({ p, onSend, say }) {
       run: (a) => api(`${base}/run${q}`, { method: "POST", body: a }),
       copy: (t) => { copyText(t); say(t.length < 60 ? `Copied “${t}”.` : "Copied."); },
       copyImage: (u) => (APP?.copyImage ? APP.copyImage(u) : copyImage(u).then(() => say("Image copied."))),
-      open: (u) => openOut(u),
+      open: (u) => { const h = atcRoute(u); h ? (location.hash = h) : openOut(u); },
       send: (t) => onSend(t),
     };
     const f = (e) => {
@@ -3108,19 +3201,27 @@ function PageFrame({ p, onSend, say }) {
     addEventListener("message", f);
     return () => removeEventListener("message", f);
   }, [p.session, p.name, p.host, onSend]);
+  const jump = useRef(null);
+  useEffect(() => {
+    if (!at) return;
+    const id = (jump.current = encodeURIComponent(at.id));
+    for (const [u, el] of Object.entries(frames.current)) if (el) el.src = `${u}#${id}`;
+    const t = setTimeout(() => jump.current === id && (jump.current = null), 3000);
+    return () => clearTimeout(t);
+  }, [at?.seq]);
   useEffect(() => {
     if (p.stateAt) for (const w of Object.values(frames.current)) w?.contentWindow?.postMessage({ atc: 1, op: "state" }, "*");
   }, [p.stateAt]);
-  const frame = (u, hidden) => html`<iframe key=${u} ref=${(el) => { frames.current[u] = el; }} src=${u} class=${hidden ? "next" : ""}
+  const frame = (u, hidden) => html`<iframe key=${u} ref=${(el) => { frames.current[u] = el; }} src=${hidden && jump.current ? `${u}#${jump.current}` : u} class=${hidden ? "next" : ""}
     sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
     onLoad=${hidden ? () => { delete frames.current[cur]; setCur(u); setNext(null); } : null}></iframe>`;
   return html`<div class="pframe">${frame(cur, false)}${next && frame(next, true)}</div>`;
 }
 
-function PageBody({ p, onSend, say }) {
+function PageBody({ p, at, onSend, say }) {
   if (p.kind === "browser") return html`<${BrowserView} p=${p} say=${say} />`;
   if (p.gone) return html`<div class="fbody"><div class="none"><p>The file behind this page is gone.</p><p class="sub">${tilde(p.path)}</p></div></div>`;
-  return html`<${FileBody} f=${{ ...p, url: pageSrc(p) }} frame=${p.kind === "html" && html`<${PageFrame} key=${pkey(p)} p=${p} onSend=${onSend} say=${say} />`} />`;
+  return html`<${FileBody} f=${{ ...p, url: pageSrc(p) }} frame=${p.kind === "html" && html`<${PageFrame} key=${pkey(p)} p=${p} at=${at} onSend=${onSend} say=${say} />`} />`;
 }
 
 const BROWSER_KEYS = { Enter: 13, Backspace: 8, Tab: 9, Escape: 27, Delete: 46, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Home: 36, End: 35, PageUp: 33, PageDown: 34 };
@@ -3291,7 +3392,7 @@ async function deliver(s, text) {
   }
 }
 
-function PagePane({ s, list, cur, pick, split, setSplit, onClose, say, alone }) {
+function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, say, alone }) {
   useNow(15000);
   useSeenTick();
   const p = list.find((x) => x.name === cur) || list[0];
@@ -3325,7 +3426,7 @@ function PagePane({ s, list, cur, pick, split, setSplit, onClose, say, alone }) 
         ${onClose && html`<button class="icon" title="Close" aria-label="Close" onClick=${onClose}>✕</button>`}
       </div>
       ${p.note && html`<div class="pnote">${p.note}</div>`}
-      <${PageBody} key=${`${pkey(p)}:${nonce}`} p=${p} onSend=${onSend} say=${say} />
+      <${PageBody} key=${`${pkey(p)}:${nonce}`} p=${p} at=${at?.name === p.name ? at : null} onSend=${onSend} say=${say} />
     </div>`;
 }
 
@@ -3367,7 +3468,7 @@ function PageCard({ p, onOpen, sub, onDown }) {
 
 function ShownStep({ b, s }) {
   useSeenTick();
-  const p = (s.shown || []).find((x) => x.name === b.ref);
+  const p = (s.shown || []).find((x) => x.name === splitRef(b.ref)[0]);
   return html`<button class="shown ${p && pageFresh(p) ? "fresh" : ""}" onClick=${() => SESSION_API?.page(b.ref)} title=${p ? tilde(p.path) : ""}>
     <span class="th">${ICON.page}</span>
     <span class="tx"><b>${p ? pageTitle(p) : b.text}</b><small>${p ? `Showed you a page · ${pageInfo(p)}` : s.state === "past" ? "Showed you a page" : "Page taken down"}</small></span>
@@ -3692,7 +3793,7 @@ function AppTile({ a, size = 32, dot }) {
 
 const agentLabel = (a) => a.title || a.name.replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
 
-function PageAlone({ sid, name, live, say }) {
+function PageAlone({ sid, name, at, live, say }) {
   const [got, setGot] = useState(null);
   const s = live.find((x) => x.sessionId === sid);
   useEffect(() => {
@@ -3709,7 +3810,7 @@ function PageAlone({ sid, name, live, say }) {
     <div class="palone">
       ${got?.err ? html`<div class="fbody"><p class="empty">${got.err}</p></div>`
         : !s && !got ? html`<div class="fbody"><p class="empty">Loading…</p></div>`
-        : list.some((p) => p.name === name) ? html`<${PagePane} s=${owner} list=${list} cur=${name} pick=${(n) => location.replace(aloneLink(sid, n))} say=${say} onClose=${back} alone />`
+        : list.some((p) => p.name === name) ? html`<${PagePane} s=${owner} list=${list} cur=${name} at=${at} pick=${(n) => location.replace(aloneLink(sid, n))} say=${say} onClose=${back} alone />`
         : html`<div class="fbody"><div class="none"><p>This page was taken down.</p><button class="btn" onClick=${() => (location.hash = "#/pages")}>All pages</button></div></div>`}
     </div>`;
 }
@@ -4902,9 +5003,10 @@ document.addEventListener("click", (e) => {
   if (c) { copyText(c.parentElement.querySelector("code").innerText); c.textContent = "Copied"; setTimeout(() => (c.textContent = "Copy"), 1200); return; }
   const a = e.target.closest?.("a[data-out]");
   if (!a) return;
-  const u = new URL(a.getAttribute("href"), location.href);
-  if (u.origin === location.origin && u.pathname === "/" && u.hash && !(e.metaKey || e.ctrlKey || e.shiftKey)) { e.preventDefault(); location.hash = u.hash; return; }
-  e.preventDefault(); openOut(u.href);
+  const h = atcRoute(a.getAttribute("href"));
+  e.preventDefault();
+  if (h && !(e.metaKey || e.ctrlKey || e.shiftKey)) location.hash = h;
+  else openOut(new URL(a.getAttribute("href"), location.href).href);
 });
 
 function useDirs(host, home) {

@@ -11,7 +11,7 @@
   addEventListener("message", (e) => {
     const m = e.data;
     if (!inAtc || e.source !== parent || !m || m.atc !== 1) return;
-    if (m.op === "scroll") return scrollTo(0, m.y);
+    if (m.op === "scroll") return location.hash || scrollTo(0, m.y);
     if (m.op === "state") return changed.forEach((fn) => fn());
     const w = waiting.get(m.id);
     if (!w) return;
@@ -72,12 +72,32 @@
       : Promise.reject(new Error("atc.run works only inside atc, where the page was shown with atc show --action"))),
     open: (url) => (inAtc ? ask("open", new URL(url, location.href).href) : Promise.resolve(void open(url, "_blank", "noopener"))),
   };
+  let watch;
+  const jump = () => {
+    watch && watch.disconnect();
+    let id = location.hash.slice(1);
+    try { id = decodeURIComponent(id); } catch {}
+    if (!id) return;
+    const go = () => {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      el.scrollIntoView({ block: "start" });
+      getComputedStyle(el).animationName !== "a-at" && el.animate && el.animate([{ outline: "2px solid #e8a33d", outlineOffset: "3px", background: "rgba(232,163,61,.18)" }, { outline: "2px solid transparent", outlineOffset: "3px" }], { duration: 2600, easing: "ease-in" });
+      return true;
+    };
+    if (go()) return;
+    const w = watch = new MutationObserver(() => go() && w.disconnect());
+    w.observe(document.documentElement, { childList: true, subtree: true });
+    setTimeout(() => w.disconnect(), 8000);
+  };
+  addEventListener("hashchange", jump);
+  document.readyState === "loading" ? addEventListener("DOMContentLoaded", jump) : jump();
   if (!inAtc) return;
   addEventListener("click", (e) => {
     const a = e.target.closest && e.target.closest("a[href]");
     if (!a || e.defaultPrevented) return;
     const u = new URL(a.getAttribute("href"), location.href);
-    if (!/^https?:$/.test(u.protocol) || u.host === location.host) return;
+    if (!/^https?:$/.test(u.protocol) || (u.host === location.host && !(u.pathname === "/" && u.hash))) return;
     e.preventDefault();
     ask("open", u.href);
   });

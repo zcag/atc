@@ -11,7 +11,7 @@ import (
 
 const notifyHelp = `atc notify: tell the user something, as a push on their phone.
 
-  atc notify [--urgent] [--reply TEXT]... [message...]
+  atc notify [--urgent] [--reply TEXT]... [--page name[#id]] [message...]
 
 From inside a session the push carries the session's title and opens it when tapped.
 Reads the message from stdin when none is given.
@@ -22,13 +22,16 @@ user is looking at this session or using atc anywhere, or while the session is p
 
   --reply TEXT   a button on the push that sends TEXT back to this session when tapped
                  (repeat for more, up to three); the user can also type a reply
+  --page name[#id]
+                 tapping it opens this session's page (atc show), at the section
+                 with that id when given
 
 Inside a session atc knows which one it is; anywhere else add --session <session>.
 `
 
 func notify(args []string) error {
 	var urgent bool
-	var ref string
+	var ref, page string
 	var replies, words []string
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -58,6 +61,8 @@ func notify(args []string) error {
 			replies = append(replies, r)
 		case flag == "session":
 			ref, err = val()
+		case flag == "page":
+			page, err = val()
 		default:
 			return fmt.Errorf("unknown flag %s (atc notify -h)", a)
 		}
@@ -92,7 +97,7 @@ func notify(args []string) error {
 	if sid == "" {
 		return fmt.Errorf("not inside a Claude session, so atc can't tell who is talking; add --session <session>")
 	}
-	res, err := c.Notify(sid, map[string]any{"text": text, "urgent": urgent, "replies": replies})
+	res, err := c.Notify(sid, map[string]any{"text": text, "urgent": urgent, "replies": replies, "page": page})
 	switch {
 	case err != nil:
 		return err

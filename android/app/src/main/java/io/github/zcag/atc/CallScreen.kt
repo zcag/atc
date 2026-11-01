@@ -25,8 +25,10 @@ import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
 import android.widget.Chronometer
+import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.Space
 import android.widget.TextView
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
@@ -180,6 +182,8 @@ class CallActivity : Activity() {
         setShowWhenLocked(true)
         setTurnScreenOn(true)
         window.statusBarColor = Color.TRANSPARENT
+        window.navigationBarColor = Color.TRANSPARENT
+        window.setDecorFitsSystemWindows(false)
         setContentView(layout())
         proximity = getSystemService(PowerManager::class.java)
             .takeIf { it.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK) }
@@ -310,6 +314,7 @@ class CallActivity : Activity() {
         this.alpha = alpha
         gravity = Gravity.CENTER
         setPadding(dp(24), dp(6), dp(24), dp(6))
+        setShadowLayer(14f, 0f, 1f, 0x99000000.toInt())
     }
 
     private fun layout(): View {
@@ -324,24 +329,27 @@ class CallActivity : Activity() {
         speaker = round(R.drawable.ic_speaker, 0x33ffffff) { Calls.send(Calls.Cmd.Speaker) }
         callRow = row(mute, round(R.drawable.ic_call_end, 0xffe5484d.toInt()) { Calls.send(Calls.Cmd.Hangup) }, speaker)
         persona = Persona.make(this)
-        persona.view.layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         persona.view.setOnClickListener { if (Calls.face.value.state in setOf("speaking", "thinking", "tool")) Calls.send(Calls.Cmd.Interrupt) }
         youView = text(15f, .7f).apply { maxLines = 3 }
         saidView = text(19f, 1f).apply { maxLines = 4; setPadding(dp(24), dp(4), dp(24), dp(20)) }
-        return LinearLayout(this).apply {
+        val front = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setBackgroundColor(0xff151c27.toInt())
             setPadding(0, dp(96), 0, dp(72))
             addView(text(34f, 1f).apply { text = "Assistant" })
             addView(statusView)
             addView(timer)
             addView(reasonView)
-            addView(persona.view)
+            addView(Space(context), LinearLayout.LayoutParams(0, 0, 1f))
             addView(youView)
             addView(saidView)
             addView(incomingRow)
             addView(callRow)
+        }
+        return FrameLayout(this).apply {
+            setBackgroundColor(Orb.BACKDROP)
+            addView(persona.view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            addView(front, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }
     }
 }
