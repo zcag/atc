@@ -616,7 +616,7 @@ const ORB_LOOKS = {
   speaking: [[.12, .18, .95], [.35, .65, 1], [1, .45, .85]],
 };
 const ORB_SRC = `precision highp float;
-uniform vec2 size; uniform float t, level, think, hear, speak, bg, rad, lift; uniform vec3 c1, c2, c3;
+uniform vec2 size; uniform float t, level, think, hear, speak, bg, rad, lift, spin, flow, wave; uniform vec3 c1, c2, c3;
 float hash(vec3 p) { p = fract(p * .3183099 + .1); p *= 17.; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
 float hash2(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec3 x) { vec3 i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);
@@ -624,11 +624,11 @@ float noise(vec3 x) { vec3 i = floor(x), f = fract(x); f = f * f * (3. - 2. * f)
              mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z); }
 float fbm(vec3 p) { float a = .5, s = 0.; for (int i = 0; i < 3; i++) { s += a * noise(p); p = p * 2.03 + 3.1; a *= .5; } return s; }
 float blob(vec3 p, float lv) {
-  float amp = .025 + .015 * think + lv * (.045 * speak + .035 * hear + .015);
-  float d = sin(p.x * 2.1 + t * 1.3) * sin(p.y * 2.4 - t * 1.1) * sin(p.z * 1.9 + t * .9);
-  d += .5 * sin(p.x * 4.3 - t * 2.1 + p.y * 1.7) * sin(p.z * 3.9 + t * 1.7);
-  d += (.2 + .5 * think + .6 * speak * lv) * sin(dot(p, vec3(3.1, 4.2, 2.6)) + t * (3. + 4. * lv));
-  return length(p) - (1. + .025 * sin(t * 1.2) + .07 * lv) - d * amp;
+  float amp = .018 + .008 * think + lv * (.028 * speak + .022 * hear + .008);
+  float d = sin(p.x * 2.1 + t * .5) * sin(p.y * 2.4 - t * .42) * sin(p.z * 1.9 + t * .35);
+  d += .5 * sin(p.x * 3.6 - t * .7 + p.y * 1.7) * sin(p.z * 3.2 + t * .6);
+  d += (.15 + .3 * think + .4 * speak * lv) * sin(dot(p, vec3(2.6, 3.4, 2.2)) + flow);
+  return length(p) - (1. + .018 * sin(t * .55) + .04 * lv) - d * amp;
 }
 vec3 normalAt(vec3 p, float lv) {
   vec2 e = vec2(.003, -.003);
@@ -637,7 +637,7 @@ vec3 normalAt(vec3 p, float lv) {
 void main() {
   vec2 uv = (gl_FragCoord.xy - .5 * size) / min(size.x, size.y);
   float lv = min(level, 1.);
-  vec2 ctr = vec2(0., lift + .012 * sin(t * .8));
+  vec2 ctr = vec2(0., lift + .008 * sin(t * .45));
   vec2 q = (uv - ctr) / rad;
   float dq = length(q);
   vec3 tint = mix(c1, c2, .55);
@@ -648,15 +648,15 @@ void main() {
     float n2 = fbm(vec3(uv * 1.1 + n1 * 1.8 + vec2(t * .03, -t * .02), t * .05 + 5.));
     col = (vec3(.01, .013, .025) + c1 * .03) * (1.25 - .45 * length(uv * vec2(.8, .55)));
     col += mix(c1, c2, n1) * smoothstep(.38, .9, n2) * (.12 + .2 * lv) * smoothstep(2.2, .3, length(uv - ctr * .5));
-    float ring = pow(.5 + .5 * sin(dq * 8. - t * 3.5 * (speak >= hear ? 1. : -1.)), 8.);
-    col += tint * ring * smoothstep(1., 1.3, dq) * exp(-(dq - 1.) * .8) * lv * (.25 * speak + .2 * hear);
+    float ring = pow(.5 + .5 * sin(dq * 6. - wave), 6.);
+    col += tint * ring * smoothstep(1., 1.3, dq) * exp(-(dq - 1.) * .9) * lv * (.16 * speak + .12 * hear);
     for (int i = 0; i < 2; i++) {
       float fi = float(i);
       vec2 g = uv * (11. + 9. * fi) + vec2(fi * 3.7, t * (.04 + .03 * fi));
       vec2 id = floor(g), f = fract(g) - .5;
       float h = hash2(id + fi * 7.1);
       vec2 off = vec2(hash2(id + 3.3), hash2(id + 9.7)) - .5;
-      float s = smoothstep(.07, 0., length(f - off * .7)) * step(.82, h) * (.55 + .45 * sin(t * (.7 + 2. * h) + h * 40.));
+      float s = smoothstep(.07, 0., length(f - off * .7)) * step(.82, h) * (.6 + .4 * sin(t * (.3 + .8 * h) + h * 40.));
       col += mix(c3, vec3(1.), .5) * s * (.25 + .35 * smoothstep(3., .8, dq) + .3 * lv);
     }
     a = 1.;
@@ -668,8 +668,8 @@ void main() {
   vec3 back = vec3(0.), front = vec3(0.);
   for (int i = 0; i < 9; i++) {
     float fi = float(i);
-    float an = t * (.5 + .07 * fi) + fi * .698;
-    float orbit = 1.32 + .12 * sin(t * 1.1 + fi * 2.3);
+    float an = t * (.25 + .03 * fi) + fi * .698;
+    float orbit = 1.32 + .08 * sin(t * .4 + fi * 2.3);
     vec2 pos = vec2(cos(an), sin(an) * .3) * orbit;
     pos = vec2(pos.x * .96 - pos.y * .28, pos.x * .28 + pos.y * .96);
     float sp = (exp(-length(q - pos) * 40.) * 2.5 + exp(-length(q - pos) * 12.) * .35) * think;
@@ -678,7 +678,7 @@ void main() {
   col += back;
   a += length(back);
   if (dq < 1.45) {
-    float cs = cos(t * (.15 + .5 * think)), sn = sin(t * (.15 + .5 * think)), tx = .25 * sin(t * .2);
+    float cs = cos(spin), sn = sin(spin), tx = .2 * sin(t * .1);
     mat3 m = mat3(cs, 0., -sn, 0., 1., 0., sn, 0., cs) * mat3(1., 0., 0., 0., cos(tx), sin(tx), 0., -sin(tx), cos(tx));
     vec3 ro = vec3(0., 0., 4.), rd = normalize(vec3(q, -4.));
     vec3 rdo = m * rd;
@@ -703,11 +703,11 @@ void main() {
       vec3 v = -rd;
       float z = max(dot(n, v), 0.);
       float fres = pow(1. - z, 3.);
-      float ph = dot(n, vec3(sin(t * .3), cos(t * .23), .5)) * 2.2 + fbm(no * 1.6 + t * .08) * 4. + t * .3;
+      float ph = dot(n, vec3(sin(t * .11), cos(t * .09), .5)) * 2.2 + fbm(no * 1.6 + t * .03) * 4. + t * .08;
       vec3 iri = mix(c1, c2, .5 + .5 * sin(ph * 2.2));
       iri = mix(iri, c3, smoothstep(.55, 1., sin(ph * 1.3 + 1.7)) * .6);
       vec3 ip = near + refract(rdo, no, .72) * .7;
-      float sw = fbm(ip * 1.7 + vec3(0., t * (.12 + .35 * lv), t * .07));
+      float sw = fbm(ip * 1.7 + vec3(0., flow * .06, t * .03));
       vec3 inner = mix(c1 * .12, c1, smoothstep(.25, .55, sw));
       inner = mix(inner, c2, smoothstep(.5, .75, sw)) + c3 * pow(smoothstep(.45, .85, sw), 2.) * (.4 + .9 * lv);
       inner += mix(c3, vec3(1.), .3) * pow(max(1. - abs(sw - .52) * 7., 0.), 3.) * (.35 + .7 * lv);
@@ -753,7 +753,7 @@ function orbGL(canvas) {
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-  const u = Object.fromEntries(["size", "t", "level", "think", "hear", "speak", "bg", "rad", "lift", "c1", "c2", "c3"].map((k) => [k, gl.getUniformLocation(prog, k)]));
+  const u = Object.fromEntries(["size", "t", "level", "think", "hear", "speak", "bg", "rad", "lift", "spin", "flow", "wave", "c1", "c2", "c3"].map((k) => [k, gl.getUniformLocation(prog, k)]));
   return (w, h, t, o) => {
     gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0);
@@ -764,6 +764,9 @@ function orbGL(canvas) {
     gl.uniform1f(u.think, o.think);
     gl.uniform1f(u.hear, o.hear);
     gl.uniform1f(u.speak, o.speak);
+    gl.uniform1f(u.spin, o.spin);
+    gl.uniform1f(u.flow, o.flow);
+    gl.uniform1f(u.wave, o.wave);
     const tall = h > w * 1.3;
     gl.uniform1f(u.bg, o.full ? 1 : 0);
     gl.uniform1f(u.rad, o.full ? (tall ? .27 : .19) : .22);
@@ -802,19 +805,24 @@ function Orb({ state, on, onTap, full }) {
   useEffect(() => {
     const cv = ref.current;
     const draw = orbGL(cv) || orb2D(cv);
-    const o = { full, level: 0, think: 0, hear: 0, speak: 0, c: ORB_LOOKS.listening.map((c) => [...c]) };
+    const o = { full, level: 0, think: 0, hear: 0, speak: 0, spin: 0, flow: 0, wave: 0, c: ORB_LOOKS.listening.map((c) => [...c]) };
     const start = performance.now();
-    let raf;
+    let raf, last = start;
     const frame = (ms) => {
       raf = requestAnimationFrame(frame);
-      const t = (ms - start) / 1000, st = now.current, look = ORB_LOOKS[st] || ORB_LOOKS.listening;
+      const t = (ms - start) / 1000, dt = Math.min((ms - last) / 1000, .1), st = now.current, look = ORB_LOOKS[st] || ORB_LOOKS.listening;
+      last = ms;
+      const ease = (v, to, tau) => v + (to - v) * (1 - Math.exp(-dt / tau));
       const [you, it] = Call.levels();
-      const target = { speaking: .1 + it, hearing: .08 + you, thinking: .22 + .1 * Math.sin(t * 3), tool: .22 + .1 * Math.sin(t * 3) }[st] ?? .05 + you * .4;
-      o.level += (target - o.level) * (target > o.level ? .35 : .1);
-      o.think += ((st === "thinking" || st === "tool") - o.think) * .04;
-      o.hear += ((st === "hearing") - o.hear) * .06;
-      o.speak += ((st === "speaking") - o.speak) * .06;
-      look.forEach((c, i) => c.forEach((v, j) => (o.c[i][j] += (v - o.c[i][j]) * .04)));
+      const target = { speaking: .08 + .8 * it, hearing: .06 + .7 * you, thinking: .18, tool: .18 }[st] ?? .04 + you * .25;
+      o.level = ease(o.level, target, target > o.level ? .18 : .5);
+      o.think = ease(o.think, +(st === "thinking" || st === "tool"), 1.2);
+      o.hear = ease(o.hear, +(st === "hearing"), 1.2);
+      o.speak = ease(o.speak, +(st === "speaking"), 1.2);
+      o.spin += dt * (.08 + .18 * o.think);
+      o.flow += dt * (.5 + .9 * Math.min(o.level, 1));
+      o.wave += dt * 1.4 * (o.speak - o.hear);
+      look.forEach((c, i) => c.forEach((v, j) => (o.c[i][j] = ease(o.c[i][j], v, 1.4))));
       const k = Math.min(devicePixelRatio || 1, full ? 1.25 : 2), w = Math.round(cv.clientWidth * k), h = Math.round(cv.clientHeight * k);
       if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
       if (w && h) draw(w, h, t, o);
