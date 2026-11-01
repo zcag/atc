@@ -32,6 +32,7 @@ type CLI struct {
 	Bin    string
 	Args   []string
 	Launch []string
+	Slice  string
 }
 
 var shortID = regexp.MustCompile(`\b[0-9a-f]{8}\b`)

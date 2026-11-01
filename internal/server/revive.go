@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -11,17 +12,22 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/sessions"
+	"github.com/zcag/atc/internal/store"
 )
 
-const continuePrompt = "The machine restarted while you were working, which interrupted you. Continue where you left off."
+func continuePrompt(why string) string {
+	return "[atc: you were interrupted mid-turn: " + why + "] Continue where you left off."
+}
 
 type running struct {
 	SID     string `json:"sid"`
@@ -44,6 +50,36 @@ type reviver struct {
 	last     map[string]running
 	written  time.Time
 	intended map[string]bool
+	reviving bool
+	revived  time.Time
+}
+
+// reviveEvery spaces revives out: a service dying again that soon is likely dying of the revive.
+const reviveEvery = 10 * time.Minute
+
+func (rv *reviver) begin() bool {
+	rv.mu.Lock()
+	defer rv.mu.Unlock()
+	return rv.beginLocked()
+}
+
+func (rv *reviver) beginLocked() bool {
+	if rv.reviving {
+		log.Print("revive: one is already running")
+		return false
+	}
+	if !rv.revived.IsZero() && time.Since(rv.revived) < reviveEvery {
+		log.Printf("revive: not again, the last one was %s ago", time.Since(rv.revived).Round(time.Second))
+		return false
+	}
+	rv.reviving, rv.revived = true, time.Now()
+	return true
+}
+
+func (rv *reviver) end() {
+	rv.mu.Lock()
+	defer rv.mu.Unlock()
+	rv.reviving = false
 }
 
 func (rv *reviver) stopping(id string) {
@@ -74,22 +110,22 @@ func (rv *reviver) observe(now map[string]running) (lost []running) {
 				lost = append(lost, r)
 			}
 		}
-		if len(lost) < 2 {
+		if len(lost) < 2 || !rv.beginLocked() {
 			lost = nil
 		}
 	}
-	if lost == nil {
+	if !rv.reviving {
 		changed := len(now) != len(rv.last)
 		for sid, r := range now {
 			if p, ok := rv.last[sid]; !ok || p != r {
 				changed = true
 			}
 		}
-		rv.last = now
 		if changed || time.Since(rv.written) > time.Minute {
 			rv.save(now)
 		}
 	}
+	rv.last = now
 	rv.intended = nil
 	return lost
 }
@@ -160,12 +196,12 @@ func bootTime() (time.Time, error) {
 	return time.Time{}, fmt.Errorf("no btime in /proc/stat")
 }
 
+// revive runs after rv.begin (observe calls it for a stop) and ends that claim.
 func (s *Server) revive(lost []running, why string) {
-	if len(lost) == 0 {
-		return
-	}
+	defer s.rv.end()
 	var back []string
 	for _, r := range lost {
+		r.Working = r.Working || s.midTurn(r.SID)
 		if r.Harness == opencode.Harness {
 			if r.Working && s.M.OC != nil {
 				back = append(back, r.Title)
@@ -173,9 +209,11 @@ func (s *Server) revive(lost []running, why string) {
 			}
 			continue
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		id, err := s.relaunch(ctx, s.standingName(r.SID, r.Name), r.Dir, r.SID)
-		cancel()
+		id, err := s.reviveOne(r)
+		if errors.Is(err, errBack) {
+			log.Printf("revive %s: already back as %s", r.Title, id)
+			continue
+		}
 		if err != nil {
 			log.Printf("revive %s: %v", r.Title, err)
 			continue
@@ -183,10 +221,13 @@ func (s *Server) revive(lost []running, why string) {
 		back = append(back, r.Title)
 		if r.Working {
 			go func() {
-				time.Sleep(5 * time.Second)
-				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 				defer cancel()
-				if err := s.Term.Send(ctx, id, continuePrompt); err != nil {
+				err := s.untilAttachable(ctx, id)
+				if err == nil {
+					err = s.Term.Send(ctx, id, continuePrompt(why))
+				}
+				if err != nil {
 					log.Printf("revive %s: continue: %v", r.Title, err)
 				}
 			}()
@@ -199,10 +240,47 @@ func (s *Server) revive(lost []running, why string) {
 	}
 }
 
+// midTurn reads it from the transcript: a dying daemon's replacement lists its sessions as blocked.
+func (s *Server) midTurn(sid string) bool {
+	t, ok := s.M.Index.Find(sid)
+	return ok && !t.Ended && t.PromptAt.After(time.Time{}) && time.Since(t.Updated) < 15*time.Minute
+}
+
+var errBack = errors.New("already back")
+
+// reviveOne holds the agent's lock so a wake-up cannot resume the same conversation alongside it.
+func (s *Server) reviveOne(r running) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	was := s.M.Store.Get(r.SID)
+	if was.Agent != "" {
+		mu := s.agentLock(was.Agent)
+		mu.Lock()
+		defer mu.Unlock()
+	}
+	agents, err := s.M.CLI.Agents(ctx)
+	if err != nil {
+		return "", err
+	}
+	if id, ok := s.liveIn(s.chain(r.SID, agents), agents); ok {
+		return id, errBack
+	}
+	if i := slices.IndexFunc(agents, func(a claude.Agent) bool {
+		return a.PID > 0 && was.Agent != "" && s.M.Store.Get(a.SessionID).Agent == was.Agent
+	}); i >= 0 {
+		return agents[i].ID, errBack
+	}
+	id, err := s.relaunch(ctx, s.standingName(r.SID, r.Name), r.Dir, r.SID)
+	if err == nil && was.Parked && was.Agent == "" {
+		s.tag(ctx, id, func(m *store.Meta) { m.Parked = true })
+	}
+	return id, err
+}
+
 func (s *Server) continueOpenCode(r running) {
 	for range 12 {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		err := s.sendOpenCode(ctx, r.SID, continuePrompt)
+		err := s.sendOpenCode(ctx, r.SID, continuePrompt("the machine restarted"))
 		cancel()
 		if err == nil {
 			return
