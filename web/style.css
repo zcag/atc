@@ -811,7 +811,7 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .ahero h1 { margin: 4px 0 0; font-size: 34px; font-weight: 500; letter-spacing: -.01em; }
 .ahero p { margin: 4px 0 22px; font-size: 16px; color: var(--dim); }
 .ahero .round { width: 84px; height: 84px; border-radius: 50%; border: 0; display: grid; place-items: center; background: #30a46c; color: #fff; box-shadow: 0 8px 28px color-mix(in srgb, #30a46c 45%, transparent); transition: transform .15s; }
-.ahero .round svg { transform: rotate(135deg); width: 52px; height: 52px; }
+.ahero .round svg { width: 38px; height: 38px; }
 .aopen .head:last-child { border: 0; padding: 0; }
 .ahero:active .round { transform: scale(.94); }
 .aopen { width: min(520px, 100%); display: flex; flex-direction: column; gap: 8px; text-align: left; border: 1px solid var(--line); background: var(--strip); color: var(--ink); border-radius: 16px; padding: 14px 16px; }
@@ -1539,7 +1539,6 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .callrow .round.on { background: var(--ink); color: var(--board); }
 .callrow .round.end { background: #e5484d; color: #fff; }
 .callrow .round.dial { background: #30a46c; color: #fff; }
-.callrow .round.dial svg { transform: rotate(135deg); }
 .callview.ended .orb { opacity: .15; }
 .callpill {
   position: fixed; left: 50%; bottom: calc(48px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 24;

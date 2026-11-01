@@ -523,7 +523,7 @@ function Assist({ live, onOpen }) {
         <${Orb} state="listening" on=${CAN_CALL} />
         <h1>Assistant</h1>
         <p>${CAN_CALL ? "Tap to call" : "Calls need atc's call line and a microphone"}</p>
-        ${CAN_CALL && html`<button class="round dial" aria-label="Call the assistant">${HANG_UP}</button>`}
+        ${CAN_CALL && html`<button class="round dial" aria-label="Call the assistant">${DIAL}</button>`}
       </div>
       <button class="aopen" onClick=${onOpen}>
         <span class="head"><b>Open atc</b><span class="sum">${!live ? "Loading…" : summary.length ? summary : "Nothing open"}</span><span class="go">›</span></span>
@@ -583,7 +583,7 @@ function CallView() {
         ${live ? html`
           <button class="round ${st.muted ? "on" : ""}" onClick=${Call.mute} aria-label=${st.muted ? "Unmute" : "Mute"} title=${st.muted ? "Unmute" : "Mute"}>${MIC_OFF}</button>
           <button class="round end" onClick=${Call.hangup} aria-label="Hang up" title="Hang up">${HANG_UP}</button>`
-        : st.phase !== "ended" && CAN_CALL && html`<button class="round dial" onClick=${callAssistant} aria-label="Call" title="Call the assistant">${HANG_UP}</button>`}
+        : st.phase !== "ended" && CAN_CALL && html`<button class="round dial" onClick=${callAssistant} aria-label="Call" title="Call the assistant">${DIAL}</button>`}
       </div>
     </div>`;
 }
@@ -597,6 +597,7 @@ function CallPill() {
   </button>`;
 }
 
+const DIAL = html`<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M20 15.4c-1.2 0-2.4-.2-3.5-.6a1 1 0 0 0-1 .3l-1.6 2a15 15 0 0 1-6.9-6.9l2-1.6c.3-.3.4-.7.2-1-.4-1.1-.6-2.3-.6-3.5 0-.6-.4-1-1-1H4.2C3.6 3 3 3.2 3 4c0 9.3 7.7 17 17 17 .7 0 1-.6 1-1.2v-3.4c0-.6-.4-1-1-1z" fill="currentColor"/></svg>`;
 const HANG_UP = html`<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M3.4 14.6a1.2 1.2 0 0 1 0-1.7C5.7 10.6 8.7 9.4 12 9.4s6.3 1.2 8.6 3.5a1.2 1.2 0 0 1 0 1.7l-1.7 1.7a1.2 1.2 0 0 1-1.6.1l-2-1.5a1.2 1.2 0 0 1-.5-1v-1.7a9.5 9.5 0 0 0-5.6 0v1.7a1.2 1.2 0 0 1-.5 1l-2 1.5a1.2 1.2 0 0 1-1.6-.1z" fill="currentColor"/></svg>`;
 const CHEVRON_DOWN = html`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
