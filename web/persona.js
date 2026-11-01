@@ -103,6 +103,7 @@ export class Mind {
     this.postYaw = new Spring(.25);
     this.postPitch = new Spring(.25);
     this.postRoll = new Spring(.2);
+    this.greet = rand(.5, .9);
   }
 
   enter(state) {
@@ -154,6 +155,7 @@ export class Mind {
   step(dt, state, you, it, lo = it * .9, hi = it * .1) {
     this.t += dt;
     if (state !== this.state) this.enter(state);
+    if (this.greet && this.t > this.greet) { this.greet = 0; this.nod.hit(.3, .22, .55); this.flash.hit(.35, .15, .7); this.pulse = 1; }
     const s = this.state, t = this.t, speaking = s === "speaking", thinking = s === "thinking", tool = s === "tool";
     const hearing = s === "hearing" || (s === "listening" && you > .1);
 
