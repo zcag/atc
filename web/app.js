@@ -607,29 +607,69 @@ const HANG_UP = html`<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden
 const CHEVRON_DOWN = html`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 const ORB_LOOKS = {
-  listening: [[.25, .55, 1], [.45, .9, .95], .6],
-  hearing: [[.2, .85, .55], [.6, 1, .7], .8],
-  thinking: [[.55, .35, 1], [.95, .5, .9], 2.2],
-  tool: [[1, .6, .2], [1, .85, .45], 2.6],
-  speaking: [[.35, .6, 1], [.95, .95, 1], 1],
+  listening: [[.18, .42, 1], [.35, .85, .95], [.85, .95, 1]],
+  hearing: [[.12, .7, .55], [.45, .95, .75], [.9, 1, .85]],
+  thinking: [[.45, .25, .95], [.9, .45, .85], [1, .8, .95]],
+  tool: [[.95, .5, .15], [1, .8, .4], [1, .95, .8]],
+  speaking: [[.3, .42, 1], [.62, .7, 1], [.95, .85, 1]],
 };
 const ORB_SRC = `precision highp float;
-uniform vec2 size; uniform float t; uniform float level; uniform vec3 c1; uniform vec3 c2;
+uniform vec2 size; uniform float t, level, think, hear, speak; uniform vec3 c1, c2, c3;
+float hash(vec3 p) { p = fract(p * .3183099 + .1); p *= 17.; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float noise(vec3 x) { vec3 i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);
+  return mix(mix(mix(hash(i), hash(i + vec3(1,0,0)), f.x), mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+             mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z); }
+float fbm(vec3 p) { float a = .5, s = 0.; for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + 3.1; a *= .5; } return s; }
 void main() {
-  vec2 uv = (gl_FragCoord.xy - size * 0.5) / min(size.x, size.y);
-  float r = length(uv);
-  float a = atan(uv.y, uv.x);
-  float wob = 0.030 * sin(a * 3.0 + t * 1.3) + 0.022 * sin(a * 5.0 - t * 1.7) + 0.016 * sin(a * 7.0 + t * 2.3);
-  float lv = min(level, 1.0);
-  float radius = 0.25 + 0.08 * lv + wob * (0.5 + 1.2 * lv);
-  float d = r - radius;
-  float body = smoothstep(0.008, -0.008, d);
-  float glow = exp(-max(d, 0.0) * (14.0 - 4.0 * lv)) * (0.2 + 0.45 * lv) * smoothstep(0.5, 0.36, r);
-  float swirl = 0.5 + 0.5 * sin(a * 2.0 + t * 0.9 + r * 9.0 - level * 3.0);
-  vec3 col = mix(c1, c2, swirl);
-  float core = 0.75 + 0.35 * (1.0 - clamp(r / radius, 0.0, 1.0));
-  float alpha = clamp(body + glow * 0.85, 0.0, 1.0);
-  gl_FragColor = vec4(col * (body * core + glow * (1.0 - body)), alpha);
+  vec2 uv = (gl_FragCoord.xy - .5 * size) / min(size.x, size.y);
+  float floorY = -.3, lv = min(level, 1.);
+  vec3 tint = mix(c1, c2, .55);
+  float haze = fbm(vec3(uv * 1.4 + vec2(t * .015, t * .008), t * .025));
+  float a = .1 * smoothstep(.35, .85, haze) * smoothstep(.75, .1, length(uv * vec2(.8, 1.)));
+  vec3 col = tint * a;
+  float line = .08 * exp(-abs(uv.y - floorY) * 30.) * smoothstep(.5, 0., abs(uv.x));
+  col += tint * line; a += line;
+  vec2 o = vec2(0., .05 + .012 * sin(t * .8));
+  float r = .2 + .01 * sin(t * 1.25) + .03 * lv;
+  vec2 q = uv - o;
+  float ang = atan(q.y, q.x);
+  r += (.002 + .01 * speak * lv) * sin(ang * 3. + t * 2.2) + (.002 + .008 * hear * lv) * sin(ang * 4. - t * 2.9);
+  float d = length(q);
+  float glow = exp(-max(d - r, 0.) * (7. - 3. * lv)) * (.22 + .45 * lv) * smoothstep(.62, .22, d);
+  col += tint * glow; a += glow * .9;
+  float below = smoothstep(floorY + .01, floorY - .02, uv.y);
+  vec2 m = vec2(uv.x, 2. * floorY - uv.y) - o;
+  float md = length(m);
+  float refl = (smoothstep(r, r - .08, md) * .3 + exp(-max(md - r, 0.) * 7.) * .1) * below * exp(-(floorY - uv.y) * 6.);
+  col += tint * refl; a += refl;
+  vec2 e = .5 * size / min(size.x, size.y);
+  float keep = smoothstep(e.x, e.x - .12, abs(uv.x)) * smoothstep(e.y, e.y - .12, abs(uv.y));
+  col *= keep; a *= keep;
+  if (d < r) {
+    float z = sqrt(max(r * r - d * d, 0.)) / r;
+    vec3 nrm = normalize(vec3(q / r, z));
+    float spin = t * (.12 + .45 * think);
+    vec3 pp = nrm * 1.3;
+    pp = vec3(cos(spin) * pp.x - sin(spin) * pp.z, pp.y, sin(spin) * pp.x + cos(spin) * pp.z);
+    vec3 w = vec3(fbm(pp * 1.7 + t * .06), fbm(pp * 1.7 + 4.3 - t * .05), fbm(pp * 1.7 + 8.1));
+    float bands = fbm(pp * .9 + w * (.9 + .8 * lv) + vec3(0., 0., t * (.12 + .4 * lv)));
+    float stripe = smoothstep(.42, .62, bands) - smoothstep(.62, .8, bands);
+    vec3 inner = mix(mix(c1, c2, .25) * .7, c1, smoothstep(.2, .55, bands));
+    inner = mix(inner, c2, smoothstep(.5, .78, bands));
+    inner += c3 * stripe * (.1 + .22 * lv);
+    inner *= .75 + .45 * z;
+    inner += mix(c2, vec3(1.), .3) * pow(z, 3.) * .35;
+    float fres = pow(1. - z, 3.);
+    float rim = smoothstep(0., .12, 1. - z) * smoothstep(.35, .05, 1. - z);
+    float spec = pow(max(dot(nrm, normalize(vec3(-.45, .6, .75))), 0.), 22.);
+    vec3 orb = inner + fres * mix(c2, vec3(1.), .5) * .55 + rim * tint * .25 + spec * .35;
+    orb = orb / (1. + orb * .35);
+    float edge = smoothstep(r, r - .004, d);
+    col = col * (1. - edge) + orb * edge;
+    a = a * (1. - edge) + edge;
+  }
+  a = clamp(a, 0., 1.);
+  gl_FragColor = vec4(min(col, vec3(a)), a);
 }`;
 
 function orbGL(canvas) {
@@ -646,16 +686,20 @@ function orbGL(canvas) {
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-  const u = Object.fromEntries(["size", "t", "level", "c1", "c2"].map((k) => [k, gl.getUniformLocation(prog, k)]));
-  return (w, h, t, level, a, b) => {
+  const u = Object.fromEntries(["size", "t", "level", "think", "hear", "speak", "c1", "c2", "c3"].map((k) => [k, gl.getUniformLocation(prog, k)]));
+  return (w, h, t, o) => {
     gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.uniform2f(u.size, w, h);
     gl.uniform1f(u.t, t);
-    gl.uniform1f(u.level, Math.min(level, 1.2));
-    gl.uniform3fv(u.c1, a);
-    gl.uniform3fv(u.c2, b);
+    gl.uniform1f(u.level, Math.min(o.level, 1.2));
+    gl.uniform1f(u.think, o.think);
+    gl.uniform1f(u.hear, o.hear);
+    gl.uniform1f(u.speak, o.speak);
+    gl.uniform3fv(u.c1, o.c[0]);
+    gl.uniform3fv(u.c2, o.c[1]);
+    gl.uniform3fv(u.c3, o.c[2]);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   };
 }
@@ -663,17 +707,17 @@ function orbGL(canvas) {
 function orb2D(canvas) {
   const g = canvas.getContext("2d");
   const css = (c, al = 1) => `rgba(${c.map((v) => Math.round(v * 255)).join(",")},${al})`;
-  return (w, h, t, level, a, b) => {
+  return (w, h, t, o) => {
     g.clearRect(0, 0, w, h);
-    const r = Math.min(w, h) * (.28 + .12 * Math.min(level, 1));
-    let gr = g.createRadialGradient(w / 2, h / 2, r * .6, w / 2, h / 2, r * 1.4);
-    gr.addColorStop(0, css(b, .5));
-    gr.addColorStop(1, css(b, 0));
+    const r = Math.min(w, h) * (.22 + .08 * Math.min(o.level, 1));
+    let gr = g.createRadialGradient(w / 2, h / 2, r * .6, w / 2, h / 2, r * 1.6);
+    gr.addColorStop(0, css(o.c[1], .45));
+    gr.addColorStop(1, css(o.c[1], 0));
     g.fillStyle = gr;
-    g.beginPath(); g.arc(w / 2, h / 2, r * 1.4, 0, 7); g.fill();
-    gr = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, r);
-    gr.addColorStop(0, css(b));
-    gr.addColorStop(1, css(a));
+    g.beginPath(); g.arc(w / 2, h / 2, r * 1.6, 0, 7); g.fill();
+    gr = g.createRadialGradient(w / 2 - r * .3, h / 2 - r * .3, 0, w / 2, h / 2, r);
+    gr.addColorStop(0, css(o.c[2]));
+    gr.addColorStop(1, css(o.c[0]));
     g.fillStyle = gr;
     g.beginPath(); g.arc(w / 2, h / 2, r, 0, 7); g.fill();
   };
@@ -686,25 +730,22 @@ function Orb({ state, on, onTap }) {
   useEffect(() => {
     const cv = ref.current;
     const draw = orbGL(cv) || orb2D(cv);
-    const a = [...ORB_LOOKS.listening[0]], b = [...ORB_LOOKS.listening[1]];
-    let spin = 1, level = 0, phase = 0, last = performance.now(), raf;
+    const o = { level: 0, think: 0, hear: 0, speak: 0, c: ORB_LOOKS.listening.map((c) => [...c]) };
+    const start = performance.now();
+    let raf;
     const frame = (ms) => {
       raf = requestAnimationFrame(frame);
-      const dt = Math.min(Math.max((ms - last) / 1000, 0), .1), t = ms / 1000;
-      last = ms;
-      const look = ORB_LOOKS[now.current] || ORB_LOOKS.listening;
+      const t = (ms - start) / 1000, st = now.current, look = ORB_LOOKS[st] || ORB_LOOKS.listening;
       const [you, it] = Call.levels();
-      const target = { speaking: .15 + it, hearing: .1 + you, thinking: .22 + .1 * Math.sin(t * 3), tool: .22 + .1 * Math.sin(t * 3) }[now.current] ?? .06 + .03 * Math.sin(t * 1.4) + you * .5;
-      level += (target - level) * (target > level ? .35 : .12);
-      for (let i = 0; i < 3; i++) {
-        a[i] += (look[0][i] - a[i]) * .06;
-        b[i] += (look[1][i] - b[i]) * .06;
-      }
-      spin += (look[2] - spin) * .05;
-      phase += dt * spin;
-      const k = devicePixelRatio || 1, w = Math.round(cv.clientWidth * k), h = Math.round(cv.clientHeight * k);
+      const target = { speaking: .1 + it, hearing: .08 + you, thinking: .22 + .1 * Math.sin(t * 3), tool: .22 + .1 * Math.sin(t * 3) }[st] ?? .05 + you * .4;
+      o.level += (target - o.level) * (target > o.level ? .35 : .1);
+      o.think += ((st === "thinking" || st === "tool") - o.think) * .04;
+      o.hear += ((st === "hearing") - o.hear) * .06;
+      o.speak += ((st === "speaking") - o.speak) * .06;
+      look.forEach((c, i) => c.forEach((v, j) => (o.c[i][j] += (v - o.c[i][j]) * .04)));
+      const k = Math.min(devicePixelRatio || 1, 2), w = Math.round(cv.clientWidth * k), h = Math.round(cv.clientHeight * k);
       if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
-      if (w && h) draw(w, h, phase, level, a, b);
+      if (w && h) draw(w, h, t, o);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
