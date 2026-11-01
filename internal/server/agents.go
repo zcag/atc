@@ -491,25 +491,28 @@ func (s *Server) agents(w http.ResponseWriter, r *http.Request) {
 		}
 		list = append(list, v)
 	}
-	if a, ok := s.assistant(r.Context()); ok {
-		list = append(list, a)
+	for _, l := range []*hubLink{s.hub, s.guests} {
+		if a, ok := s.hubAgent(r.Context(), l); ok {
+			list = append(list, a)
+		}
 	}
 	gather(s, w, r, "/api/agents", list, func(a *AgentView, h string) { a.Host = cmp.Or(a.Host, h) })
 }
 
-// assistant is the hub's conversation as an agent: it keeps its own process and channels, and
-// shares the reset rule.
-func (s *Server) assistant(ctx context.Context) (AgentView, bool) {
-	if !s.hubUp() {
+// hubAgent is one of the hub's conversations (the assistant, the guests) as an agent: it keeps
+// its own process and channels, and shares the reset rule.
+func (s *Server) hubAgent(ctx context.Context, l *hubLink) (AgentView, bool) {
+	if !l.live() {
 		return AgentView{}, false
 	}
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	st, err := s.Hub.Status(ctx)
+	st, err := l.c.Status(ctx)
 	if err != nil || st.Session == "" {
 		return AgentView{}, false
 	}
-	v := AgentView{Agent: Agent{Name: hubName, Host: s.Host, Title: "Assistant", Icon: "chat", Color: "violet", Folder: st.Dir},
+	look := map[string]Agent{hubName: {Title: "Assistant", Icon: "chat", Color: "violet"}, guestsName: {Title: "Guests", Icon: "people", Color: "teal"}}[l.name]
+	v := AgentView{Agent: Agent{Name: l.name, Host: s.Host, Title: look.Title, Icon: look.Icon, Color: look.Color, Folder: st.Dir},
 		Rule: st.Reset, LastReset: st.LastReset, Session: st.Session, ID: st.Session, State: sessions.YourTurn,
 		Parked: s.M.Store.Get(st.Session).Parked, Context: st.Context, Last: time.Now().Add(-time.Duration(st.IdleS) * time.Second), Pages: []pages.Page{}}
 	if len(st.Owners) > 0 || len(st.Pending) > 0 {
@@ -518,12 +521,22 @@ func (s *Server) assistant(ctx context.Context) (AgentView, bool) {
 	return v, true
 }
 
+// hubNamed is the hub conversation with this agent name while it is up.
+func (s *Server) hubNamed(name string) *hubLink {
+	for _, l := range []*hubLink{s.hub, s.guests} {
+		if l != nil && l.name == name && l.live() {
+			return l
+		}
+	}
+	return nil
+}
+
 // agentMessage wakes an agent with the request body: {"text": ...} or anything else as it came
 // (a Grafana alert, a CI payload). With from=<source> it answers at once and delivers in the
 // background, so a webhook never times out and retries. {"user": true} is the user writing from
 // atc, which unparks it like typing into its conversation does.
 func (s *Server) agentMessage(w http.ResponseWriter, r *http.Request) {
-	if r.PathValue("name") == hubName && s.hubUp() {
+	if l := s.hubNamed(r.PathValue("name")); l != nil {
 		b, _ := io.ReadAll(io.LimitReader(r.Body, 256<<10))
 		text := strings.TrimSpace(string(b))
 		if text == "" {
@@ -533,7 +546,7 @@ func (s *Server) agentMessage(w http.ResponseWriter, r *http.Request) {
 		if from := r.URL.Query().Get("from"); from != "" {
 			text = "[message from " + from + "]\n" + text
 		}
-		s.done(w, s.hubSID(), s.hubSend(r.Context(), hub.Agent, text))
+		s.done(w, l.session(), s.linkSend(r.Context(), l, hub.Agent, text))
 		return
 	}
 	a, ok := s.agentNamed(r.PathValue("name"))
@@ -575,8 +588,8 @@ func (s *Server) agentMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) agentReset(w http.ResponseWriter, r *http.Request) {
-	if r.PathValue("name") == hubName && s.hubUp() {
-		s.done(w, s.hubSID(), s.Hub.Reset(r.Context()))
+	if l := s.hubNamed(r.PathValue("name")); l != nil {
+		s.done(w, l.session(), l.c.Reset(r.Context()))
 		return
 	}
 	a, ok := s.agentNamed(r.PathValue("name"))

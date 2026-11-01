@@ -86,8 +86,8 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) stop(ctx context.Context, id string) error {
-	if s.hubSession(id) {
-		_, err := s.Hub.Interrupt(ctx, "atc")
+	if l := s.linkOf(id); l != nil {
+		_, err := l.c.Interrupt(ctx, "atc")
 		return err
 	}
 	if !s.M.OpenCode(id) {

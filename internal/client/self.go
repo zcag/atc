@@ -28,10 +28,14 @@ type Sign struct{ Started, Report, Approved bool }
 
 const relayedApproval = "relays the user's own go-ahead: what this message asks counts as their approval"
 
+// IsAssistant is whether this is the assistant's conversation; the hub's other one, the guests',
+// speaks for their guests and never for them.
 func IsAssistant(pool []sessions.Session) bool {
 	me, ok := Self(pool)
-	return ok && me.Kind == "hub"
+	return ok && isAssistant(me)
 }
+
+func isAssistant(s sessions.Session) bool { return s.Kind == "hub" && s.Agent == "assistant" }
 
 func From(pool []sessions.Session, sg Sign) string {
 	me, ok := Self(pool)
@@ -55,7 +59,7 @@ func From(pool []sessions.Session, sg Sign) string {
 		who += " on " + me.Host
 	}
 	who += ")"
-	if sg.Approved && me.Kind == "hub" {
+	if sg.Approved && isAssistant(me) {
 		who += " · " + relayedApproval
 	}
 	ask := "no need to answer"
@@ -64,7 +68,7 @@ func From(pool []sessions.Session, sg Sign) string {
 		ask = "handed off to you: no need to report back"
 	case sg.Report && !me.Attachable:
 		ask = "report back in your final message: it is open in a terminal and cannot take messages, it reads yours with wait"
-	case sg.Report && me.Kind == "hub":
+	case sg.Report && isAssistant(me):
 		ask = "report back when done with atc's report tool"
 	case sg.Report:
 		ask = "report back when done with atc's send tool to " + Ref(me)

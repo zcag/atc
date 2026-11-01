@@ -57,6 +57,11 @@ type Config struct {
 
 	Call CallConfig
 	Now  func() time.Time
+
+	// Guests is the guests' own conversation, which takes the guest channels; nil keeps them here.
+	Guests *Hub
+	// GuestDesk is set on that conversation: the user never talks into it, so it is not told where they are.
+	GuestDesk bool
 }
 
 type Event struct {
@@ -292,6 +297,13 @@ func guest(ch string) bool { return ch == Guest || ch == GuestCall }
 // asideNote tells the session that its reply to a report or a guest reaches no one, and where
 // the user is now, so it can decide whether and how to tell them.
 func (h *Hub) asideNote(ch string) string {
+	note := "[talk-mode: " + ch + ", for this message only]\n"
+	if mode := h.cfg.Mode(ch); mode != "" {
+		note += mode + "\n"
+	}
+	if h.cfg.GuestDesk {
+		return note + "[message]\n"
+	}
 	where := "the user is not on a call"
 	if h.onCall() {
 		where = "the user is on a call with you right now"
@@ -299,10 +311,6 @@ func (h *Hub) asideNote(ch string) string {
 	}
 	if h.home != "" {
 		where += "; they last wrote from " + h.home
-	}
-	note := "[talk-mode: " + ch + ", for this message only]\n"
-	if mode := h.cfg.Mode(ch); mode != "" {
-		note += mode + "\n"
 	}
 	return note + "[now: " + where + "]\n[message]\n"
 }
