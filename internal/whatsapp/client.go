@@ -294,6 +294,7 @@ func (c *Client) EnsureHook(ctx context.Context) error {
 			match  map[string]any
 		}{c.Hook + sep + "guests=1", []string{"message.received"}, nil})
 	}
+	var noVotes error
 	for _, w := range want {
 		conds := []map[string]any{
 			{"field": "isGroup", "operator": "is", "value": false},
@@ -315,8 +316,8 @@ func (c *Client) EnsureHook(ctx context.Context) error {
 		err := c.do(ctx, method, path, body, nil)
 		if voting := slices.Contains(w.events, "poll.vote"); voting && err != nil {
 			body["events"] = slices.DeleteFunc(slices.Clone(w.events), func(e string) bool { return e == "poll.vote" })
-			if c.do(ctx, method, path, body, nil) == nil {
-				return ErrNoVotes
+			if err = c.do(ctx, method, path, body, nil); err == nil {
+				noVotes = ErrNoVotes
 			}
 		} else if voting {
 			c.Votes.Store(true)
@@ -325,7 +326,7 @@ func (c *Client) EnsureHook(ctx context.Context) error {
 			return err
 		}
 	}
-	return nil
+	return noVotes
 }
 
 // ErrNoVotes is EnsureHook's word that everything else is registered but this OpenWA does not
