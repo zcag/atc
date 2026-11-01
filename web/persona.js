@@ -290,7 +290,7 @@ export class Mind {
     const face = { ...this.eyes.weights(t), ...this.brows.weights(t), ...this.mouth.weights(t) };
     return {
       face,
-      head: { head_r: clamp(yaw, 0, .6), head_l: clamp(-yaw, 0, .6), head_up: clamp(pitch - nod, 0, 1), head_down: clamp(nod - pitch, 0, 1.1), lean: clamp(lean) },
+      head: { head_r: clamp(yaw, 0, 1), head_l: clamp(-yaw, 0, 1), head_up: clamp(pitch - nod, 0, 1), head_down: clamp(nod - pitch, 0, 1.1), lean: clamp(lean) },
       roll, breath, light: .03 * Math.sin(t * 1.7) * Math.sin(t * .37),
       parallax: [-yaw * .006, pitch * .003],
     };
