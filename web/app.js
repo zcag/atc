@@ -516,14 +516,21 @@ function Assist({ live, onOpen }) {
   const summary = [["needs-you", "needs you"], ["your-turn", "your turn"], ["working", "working"]]
     .map(([st, word]) => count(st) && html`<span class=${st}>${count(st)} ${word}</span>`).filter(Boolean);
   const top = open.filter((s) => s.state !== "stopped" && s.name !== "assistant").slice(0, 4);
+  useNow(30000);
+  const now = new Date(), hr = now.getHours();
+  const hello = hr < 5 ? "Good night" : hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
   return html`
     <div class="assist">
       ${!APP && html`<button class="icon close" onClick=${onOpen} aria-label="Close">✕</button>`}
+      <header class="ahello">
+        <span class="time">${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+        <span class="date">${hello} · ${now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}</span>
+      </header>
       <div class="ahero" onClick=${CAN_CALL ? callAssistant : null}>
         <${Orb} state="listening" on=${CAN_CALL} />
         <h1>Assistant</h1>
         <p>${CAN_CALL ? "Tap to call" : "Calls need atc's call line and a microphone"}</p>
-        ${CAN_CALL && html`<button class="round dial" aria-label="Call the assistant">${DIAL}</button>`}
+        ${CAN_CALL && html`<button class="round dial" aria-label="Call the assistant"><i></i><i></i>${DIAL}</button>`}
       </div>
       <button class="aopen" onClick=${onOpen}>
         <span class="head"><b>Open atc</b><span class="sum">${!live ? "Loading…" : summary.length ? summary : "Nothing open"}</span><span class="go">›</span></span>
