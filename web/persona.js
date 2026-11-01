@@ -99,6 +99,10 @@ export class Mind {
     this.breathRate = 1 / 4.2;
     this.sigh = 0;
     this.read = 0;
+    this.posture = { yaw: 0, pitch: 0, roll: 0, until: 4 };
+    this.postYaw = new Spring(.25);
+    this.postPitch = new Spring(.25);
+    this.postRoll = new Spring(.2);
   }
 
   enter(state) {
@@ -108,6 +112,7 @@ export class Mind {
     this.nextGaze = this.t + (state === "thinking" || state === "tool" ? .05 : rand(.15, .4));
     if (chance(.75)) this.blink(this.t + rand(0, .08));
     if (state === "hearing") { this.wide.hit(.45, .12, .7); this.flash.hit(.5, .12, .8); }
+    if (was === "speaking" && state !== "speaking") { this.nod.hit(rand(.2, .32), .2, .5); this.flash.hit(.25, .15, .6); this.pulse = 1; }
     if (state === "speaking" && was !== "speaking") { this.sigh = Math.max(this.sigh, .6); if (chance(.5)) this.nextGaze = this.t; }
     if (state === "thinking" && chance(.5)) this.nod.hit(-.25, .25, .6);
   }
@@ -136,7 +141,7 @@ export class Mind {
       return this.lookAt(-.45 + this.read * .22, -rand(.7, .9), this.read === 4 ? rand(.4, .7) : rand(.18, .32));
     }
     if (s === "speaking" && (k < .5 && chance(.6) || chance(.12))) return this.lookAt(rand(.3, .6) * (chance(.5) ? 1 : -1), rand(-.25, .35), rand(.4, .9));
-    if (s === "listening" && chance(.18)) {
+    if (s === "listening" && chance(.12)) {
       const where = pick([["desk", 1], ["window", 1], ["aside", 1]]);
       if (where === "desk") return this.lookAt(rand(-.5, -.2), -rand(.5, .8), rand(.8, 1.6));
       if (where === "window") return this.lookAt(rand(.55, .9), rand(-.05, .2), rand(.7, 1.4));
@@ -165,6 +170,7 @@ export class Mind {
         this.blinkT = -1;
         const every = thinking ? 5 : speaking ? 2.8 : tool ? 4.5 : 3.6;
         this.blinkAt = t + (chance(.1) ? rand(.12, .25) : every * rand(.4, 1.5));
+        this.blinkLen = s === "listening" && chance(.15) ? rand(.35, .55) : rand(.17, .26);
       }
     }
 
@@ -204,7 +210,7 @@ export class Mind {
 
     this.pulse = Math.max(0, this.pulse - dt * 1.2);
     const smileBase = { listening: .35, hearing: .25, thinking: .05, tool: .1, speaking: .2 }[s] ?? .2;
-    const smile = this.smile.to(smileBase + this.pulse * .35 + .12 * wander(t, 4) * (s === "listening" ? 1 : .3), dt);
+    const smile = this.smile.to(smileBase + this.pulse * .35 + .18 * wander(t * .7, 4) * (s === "listening" ? 1 : .3), dt);
     const smileOpen = this.smileOpen.to(speaking ? 0 : this.pulse * .3, dt);
     const knit = this.knit.to(thinking ? .55 + .2 * wander(t, 9) : tool ? .3 : 0, dt);
     const half = this.half.to(thinking ? .25 : tool ? .35 : s === "listening" ? .08 : 0, dt);
@@ -213,12 +219,17 @@ export class Mind {
     const purse = this.purse.to(thinking && wander(t, 2) > .2 ? .5 : 0, dt);
     const press = this.press.step(dt);
 
+    if (t > this.posture.until) {
+      const calm = speaking ? 1 : .7;
+      this.posture = { yaw: rand(-.18, .18) * calm, pitch: rand(-.12, .1) * calm, roll: rand(-.025, .025), until: t + rand(6, 14) };
+    }
+    const py = this.postYaw.to(this.posture.yaw, dt), pp = this.postPitch.to(this.posture.pitch, dt), pr = this.postRoll.to(this.posture.roll, dt);
     const sway = speaking ? 1.3 : hearing ? .7 : 1;
-    const yaw = this.headYaw.to(ex * .45 + .18 * sway * wander(t, 1) + (hearing ? .08 : 0), dt);
-    const pitch = this.headPitch.to(ey * .4 + .1 * sway * wander(t, 5) + (tool ? -.55 : thinking ? .25 : 0), dt);
+    const yaw = this.headYaw.to(ex * .45 + py + .1 * sway * wander(t, 1) + (hearing ? .08 : 0), dt);
+    const pitch = this.headPitch.to(ey * .4 + pp + .06 * sway * wander(t, 5) + (tool ? -.55 : thinking ? .25 : 0), dt);
     const nod = this.nod.step(dt);
     const lean = this.lean.to(hearing ? .55 : speaking ? .2 : tool ? .25 : 0, dt);
-    const roll = this.tilt.to(hearing ? .05 : thinking ? -.035 : 0, dt) + .012 * wander(t, 7) * sway;
+    const roll = this.tilt.to(hearing ? .05 : thinking ? -.035 : 0, dt) + pr + .008 * wander(t, 7) * sway;
 
     this.sigh = Math.max(0, this.sigh - dt * .5);
     this.breathRate = lerp(this.breathRate, speaking ? 1 / 3.2 : 1 / 4.4, 1 - Math.exp(-dt));
@@ -226,9 +237,12 @@ export class Mind {
     if (s === "listening" && chance(dt / 25)) this.sigh = 1;
     const breath = .005 * Math.sin(this.breathPhase) + .006 * this.sigh * Math.sin(Math.min(PI, (1 - this.sigh) * PI * 2));
 
+    // A blink is drawn the way animators draw it, in held steps (open, half, shut, half, open): a lid sliding
+    // over the iris cannot be morphed, and a cross-fade shows the iris through the lid.
+    const shut = lid > .72 ? 1 : 0, mid = lid > .22 && !shut ? 1 : 0;
     const face = {
-      blink: lid,
-      half: half * (1 - lid),
+      blink: shut,
+      half: mid ? 1 : half * (1 - lid),
       squint: clamp(smile - .15) * .7 * (1 - lid),
       wide: clamp(wide) * (1 - lid),
       gaze_r: clamp(ex) * (1 - lid),
