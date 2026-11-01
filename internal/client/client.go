@@ -277,6 +277,10 @@ func (c *Client) Notify(sid string, req map[string]any) (string, error) {
 	return r.OK, c.do("POST", "/api/sessions/"+url.PathEscape(sid)+"/notify", req, &r)
 }
 
+func (c *Client) OpenPage(sid string, req map[string]any) (r struct{ OK, Link string }, err error) {
+	return r, c.do("POST", "/api/sessions/"+url.PathEscape(sid)+"/open", req, &r)
+}
+
 func (c *Client) Pages(sid string) (list []pages.Page, err error) {
 	return list, c.do("GET", "/api/sessions/"+url.PathEscape(sid)+"/pages", nil, &list)
 }

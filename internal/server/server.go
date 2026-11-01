@@ -188,6 +188,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sessions/{sid}/o/{tok}/{path...}", s.outputFile)
 	mux.HandleFunc("GET /api/sessions/{sid}/pages", s.sessionPages)
 	mux.HandleFunc("POST /api/sessions/{sid}/pages", s.showPage)
+	mux.HandleFunc("POST /api/sessions/{sid}/open", s.openPage)
 	mux.HandleFunc("DELETE /api/sessions/{sid}/pages/{name}", s.hidePage)
 	mux.HandleFunc("GET /api/sessions/{sid}/pages/{name}/state", s.pageState)
 	mux.HandleFunc("PUT /api/sessions/{sid}/pages/{name}/state", s.pageState)

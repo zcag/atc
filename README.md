@@ -164,7 +164,8 @@ cannot: notifications, the device's own text-to-speech for voice, and being your
 assistant, so holding the side key opens atc listening, even on the lock screen.
 
 - **Opening a page on the phone:** the assistant can put a page straight on the phone's screen with
-  `atc show <file> --open` (on a call, say), instead of a notification. It opens through the phone's
+  `atc show <file> --open` (on a call, say), or any session's or agent's page at a section with
+  `atc open @shopping/picks#towel`, instead of a notification. It opens through the phone's
   assistant role, so atc must be the digital assistant; anything else falls back to a notification.
   Other sessions can't use it.
 - **atc links:** the app handles `https://atc.example` links (the host is set in the manifest). Android

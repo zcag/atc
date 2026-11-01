@@ -86,6 +86,9 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
                                  from inside a session: show the user a page (HTML, image,
                                  markdown, PDF) beside the conversation, live as the file
                                  changes; atc show -h for the full reference
+  atc open <session|@agent>/<page>[#id]
+                                 the assistant only: open a page any session or agent shows
+                                 on the user's phone screen, at a section; atc show -h
   atc state [-set] <session> [page]
                                  a page's state, as JSON; -set merges the JSON on stdin into
                                  it by top-level key (null deletes a key). page can be left
@@ -163,6 +166,8 @@ func main() {
 		err = hubCmd(args)
 	case "notify":
 		err = notify(args)
+	case "open":
+		err = openPage(args)
 	case "browser":
 		err = browserCmd(args)
 	case "outputs":

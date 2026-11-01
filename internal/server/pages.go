@@ -90,11 +90,47 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 	if s.waShows(p.Session) {
 		go s.waPage(p)
 	}
-	if req.Open && s.Push != nil {
-		go s.Push.Send(push.Message{Title: hubName, Tag: p.Session + "/" + p.Name, URL: pages.Link(p.Session, p.Ref()),
-			Body: "Showing you " + cmp.Or(p.Title, p.Name) + prefixed(": ", p.Note), Open: true})
+	if req.Open {
+		s.pushOpen(p, pages.Link(p.Session, p.Ref()))
 	}
 	reply(w, map[string]any{"page": s.pageURLs([]pages.Page{p})[0], "created": created})
+}
+
+func (s *Server) pushOpen(p pages.Page, link string) {
+	if s.Push != nil {
+		go s.Push.Send(push.Message{Title: hubName, Tag: p.Session + "/" + p.Name, URL: link,
+			Body: "Showing you " + cmp.Or(p.Title, p.Name) + prefixed(": ", p.Note), Open: true})
+	}
+}
+
+func (s *Server) openPage(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Session, Name, At string }
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
+		http.Error(w, "which page: {session, name, at}", http.StatusBadRequest)
+		return
+	}
+	if r.PathValue("sid") != s.hubSID() {
+		http.Error(w, "only the assistant opens pages on the phone's screen", http.StatusForbidden)
+		return
+	}
+	owner := s.owner(cmp.Or(req.Session, r.PathValue("sid")))
+	p, ok := s.Pages.Get(owner, req.Name)
+	if !ok {
+		http.Error(w, "no page "+req.Name+" of "+owner+" on "+s.Host, http.StatusNotFound)
+		return
+	}
+	ref, err := pages.Ref(p.Name, strings.TrimPrefix(req.At, "#"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if s.Push == nil || s.Push.Count() == 0 {
+		http.Error(w, "atc on "+s.Host+" has no phone to push to", http.StatusServiceUnavailable)
+		return
+	}
+	link := "/#/p/" + owner + "/" + ref
+	s.pushOpen(p, link)
+	reply(w, map[string]string{"ok": "opened", "link": link})
 }
 
 func (s *Server) hidePage(w http.ResponseWriter, r *http.Request) {
