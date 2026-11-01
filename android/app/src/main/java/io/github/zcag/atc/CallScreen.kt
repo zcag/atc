@@ -33,7 +33,10 @@ import android.widget.LinearLayout
 import android.widget.PopupMenu
 import android.widget.Space
 import android.widget.TextView
+import android.widget.Toast
 import kotlinx.coroutines.Job
+import org.json.JSONObject
+import kotlin.concurrent.thread
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -318,6 +321,7 @@ class CallActivity : Activity() {
     private fun menu(anchor: View) = PopupMenu(this, anchor).apply {
         menu.add("Sessions (the call keeps going)").setOnMenuItemClickListener { toSessions(); true }
         menu.add("Character…").setOnMenuItemClickListener { pickPersona(); true }
+        menu.add("Voice…").setOnMenuItemClickListener { pickVoice(); true }
         show()
     }
 
@@ -330,6 +334,33 @@ class CallActivity : Activity() {
                 d.dismiss()
             }
             .show()
+    }
+
+    /** The voices the assistant can speak with (Turkish, then English), the current ones ticked; a pick applies
+     *  from its next reply. */
+    private fun pickVoice() {
+        val server = Prefs(this).server?.trimEnd('/') ?: return
+        thread {
+            val got = runCatching { JSONObject(Net.get(this, "$server/api/call/voices")) }
+            runOnUiThread {
+                val all = got.getOrNull() ?: return@runOnUiThread Toast.makeText(this, "Voices not reachable", Toast.LENGTH_SHORT).show()
+                val items = listOf("tr" to "", "en" to "English · ").flatMap { (lang, label) ->
+                    val l = all.optJSONObject(lang) ?: return@flatMap emptyList()
+                    val names = l.optJSONArray("voices") ?: return@flatMap emptyList()
+                    List(names.length()) { Triple(lang, names.getString(it), label + names.getString(it) + if (names.getString(it) == l.optString("current")) "  ✓" else "") }
+                }
+                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("Voice")
+                    .setItems(items.map { it.third }.toTypedArray()) { _, i ->
+                        val (lang, voice) = items[i]
+                        thread {
+                            val ok = runCatching { Net.post(this, "$server/api/call/voices", JSONObject().put("lang", lang).put("voice", voice)) }.getOrNull() == 200
+                            runOnUiThread { Toast.makeText(this, if (ok) "$voice from the next reply" else "Couldn't switch the voice", Toast.LENGTH_SHORT).show() }
+                        }
+                    }
+                    .show()
+            }
+        }
     }
 
     private fun tint(b: ImageButton, on: Boolean) {

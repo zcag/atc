@@ -69,6 +69,8 @@ type Server struct {
 	CallTestFrom           []string
 	// CallNumber is the assistant's own phone line, which the app logs its calls under.
 	CallNumber string
+	// CallVoices is delta-shell, which lists the voices calls can speak with and keeps the pick.
+	CallVoices string
 	hub        *hubLink
 	guests     *hubLink
 	// PublicURL is where the user reaches atc (links in messages), LocalURL where this
@@ -216,6 +218,8 @@ func (s *Server) Handler() http.Handler {
 		s.nameViewer(r)
 		s.Term.Serve(w, r, r.PathValue("id"))
 	})
+	mux.HandleFunc("GET /api/call/voices", s.callVoices)
+	mux.HandleFunc("POST /api/call/voices", s.callVoices)
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/voice/stt", s.stt)
