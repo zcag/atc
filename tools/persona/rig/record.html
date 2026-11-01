@@ -16,7 +16,7 @@ const fixed = q.get("pose") ? JSON.parse(q.get("pose")) : null;
 const poses = q.get("poses") ? await (await fetch(q.get("poses"))).json() : null;
 const log = [];
 const frame = await rig(c, "./p/", () => ({ state: state(), you: at(tl.you), it: at(tl.it), lo: at(tl.lo), hi: at(tl.hi) }),
-  { dt: 1 / fps, params: poses ? () => poses[i] : fixed ? (p) => ({ ...p, ...fixed }) : undefined, tick: (p) => log.push(p) });
+  { dt: 1 / fps, params: poses ? () => poses[i] : fixed ? (p) => ({ ...p, ...fixed }) : undefined, tick: (p, d) => log.push({ ...p, angle: d.angle.cur, eyes: d.eyes.cur, mouth: d.mouth.cur, brows: d.brows.cur }) });
 for (const n = poses ? poses.length : total; i < n; i++) {
   frame(i * 1000 / fps);
   const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", .92));

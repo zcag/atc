@@ -1,8 +1,10 @@
-// A rigged 2D character ("kind": "rig"): painted parts (room, body, head with eye holes and a cut between the lips,
-// eyeballs and the inside of the mouth behind it, glasses) as triangle meshes. Every vertex is first moved by
-// additive deformers in the rest pose (jaw, lips, mouth corners, lids, brows, cheeks, irises), then skinned to a
-// few bones (body, neck, head, face, back) whose offsets fake the head turning in depth. Both run on the GPU from
-// a handful of numbers per frame, which Behaviour sets from the call's state and both voices' loudness.
+// A 2D character drawn from a library of drawings ("kind": "rig"). Every drawing comes from the same painted
+// portrait: the head at a few angles, and for each angle its eyes (gaze directions, half shut, shut), brows (up,
+// knit) and mouth shapes, plus pose layers (a hand to the chin, a notebook, a pen). Like cel animation, the right
+// drawing is swapped in for each moment with only a very short dissolve; between head angles the drawings are bent a
+// little (skinned meshes: the nose and eyes move more than the outline) so a turn reads as one motion. Pose layers
+// rise into frame from below. A grade and a vignette, the lamp's flickering glow and dust in its light give the room
+// depth. Behaviour decides the acting from the call's state and both voices; Director turns it into drawings.
 
 import { PI, clamp, smooth, lerp, rand, chance, Spring, Saccade, Pulses, wander } from "./motion.js";
 
@@ -11,32 +13,40 @@ layout(location=0) in vec2 pos;
 layout(location=1) in vec2 uv;
 layout(location=2) in vec4 bi;
 layout(location=3) in vec4 bw;
-layout(location=4) in vec4 fi;
-layout(location=5) in vec4 fw;
 uniform mat3x2 B[8];
-uniform mat3x2 F[16];
 uniform vec4 view;
+uniform vec2 shift;
 out vec2 t;
 void main() {
   vec3 h = vec3(pos, 1.);
-  vec2 p = pos + fw.x * (F[int(fi.x)] * h) + fw.y * (F[int(fi.y)] * h) + fw.z * (F[int(fi.z)] * h) + fw.w * (F[int(fi.w)] * h);
-  h = vec3(p, 1.);
   vec2 q = bw.x * (B[int(bi.x)] * h) + bw.y * (B[int(bi.y)] * h) + bw.z * (B[int(bi.z)] * h) + bw.w * (B[int(bi.w)] * h);
-  gl_Position = vec4((q - view.xy) * view.zw, 0., 1.);
+  gl_Position = vec4((q + shift - view.xy) * view.zw, 0., 1.);
   t = uv;
 }`;
 const FS = `#version 300 es
 precision mediump float;
 uniform sampler2D tex;
+uniform float alpha;
 in vec2 t;
 out vec4 o;
-void main() { o = texture(tex, t); }`;
+void main() { o = texture(tex, t) * alpha; }`;
+const DUST_VS = `#version 300 es
+layout(location=0) in vec4 d;
+uniform vec4 view;
+uniform float px;
+out float a;
+void main() { gl_Position = vec4((d.xy - view.xy) * view.zw, 0., 1.); gl_PointSize = d.z * px; a = d.w; }`;
+const DUST_FS = `#version 300 es
+precision mediump float;
+uniform vec3 color;
+in float a;
+out vec4 o;
+void main() { float r = length(gl_PointCoord - .5) * 2.; float k = a * smoothstep(1., 0., r) * smoothstep(1., .2, r); o = vec4(color * k, 0.); }`;
 
 /** 2x3 affine matrices as [a, b, c, d, e, f]: x' = a x + c y + e, y' = b x + d y + f (column-major like mat3x2). */
 const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
-const ID = [1, 0, 0, 1, 0, 0];
 
-/** The transform of a bone or deformer at its origin o, from the sum of its parameters' [dx, dy, deg, sx, sy]. */
+/** The transform of a bone at its origin o, from the sum of its parameters' [dx, dy, deg, sx, sy]. */
 function affine(o, p, params) {
   let dx = 0, dy = 0, r = 0, sx = 0, sy = 0;
   for (const k in p) {
@@ -50,19 +60,15 @@ function affine(o, p, params) {
   return [a, b, cc, d, o[0] + dx - (a * o[0] + cc * o[1]), o[1] + dy - (b * o[0] + d * o[1])];
 }
 
-/** Rest-pose matrices for every bone (world) and deformer (minus identity) from the parameters. */
+/** Every bone's world matrix (rest pose = identity) from the parameters, packed for the shader. */
 export function pose(rig, params) {
-  const world = {}, B = new Float32Array(8 * 6), F = new Float32Array(16 * 6);
+  const world = {}, B = new Float32Array(8 * 6);
   rig.boneOrder.forEach((name, i) => {
     const b = rig.bones[name];
     world[name] = b.parent ? mul(world[b.parent], affine(b.o, b.p, params)) : affine(b.o, b.p, params);
     B.set(world[name], i * 6);
   });
-  rig.featureOrder.forEach((name, i) => {
-    const f = rig.features[name], m = affine(f.o, f.p, params);
-    F.set([m[0] - 1, m[1], m[2], m[3] - 1, m[4], m[5]], i * 6);
-  });
-  return { B, F };
+  return B;
 }
 
 /** How much of the image a w x h view shows (it covers the view) and where: [cx, cy, sx, sy] for the shader. */
@@ -75,8 +81,88 @@ function framing(rig, w, h) {
   return [cx, cy, 2 / (sx * W), -2 / (sy * H)];
 }
 
-/** The behaviour: from the call's state and both voices to the rig's parameters, every frame. Eyes lead, the head
- *  follows on a spring, the body follows the head; blinks, breaths and glances come at human intervals. */
+/** One drawing at a time in a slot. A change dissolves from the old drawing to the new one over `dur`; a drawing is
+ *  kept at least `hold` seconds. layers() says what to draw over the slot's base, in order, with what opacity. */
+export class Swap {
+  constructor(name = "base") { this.cur = name; this.prev = null; this.k = 1; this.dur = .05; this.since = 9; }
+  to(name, dur, hold = 0) {
+    if (name === this.cur || this.since < hold) return;
+    this.prev = this.cur;
+    this.cur = name;
+    this.k = dur > 0 ? 0 : 1;
+    this.dur = dur;
+    this.since = 0;
+    if (this.k >= 1) this.prev = null;
+  }
+  step(dt) {
+    this.since += dt;
+    if (this.k < 1 && (this.k = Math.min(1, this.k + dt / this.dur)) >= 1) this.prev = null;
+  }
+  layers() {
+    const e = smooth(0, 1, this.k);
+    if (!this.prev) return [[this.cur, 1]];
+    if (this.cur === "base") return [[this.prev, 1 - e]];
+    return [[this.prev, this.prev === "base" ? 0 : 1], [this.cur, e]];
+  }
+}
+
+const YAW = 12, PITCH = 12; // degrees of head turn per unit of Behaviour's yaw and pitch
+
+/** From Behaviour's continuous acting to drawings: the head angle nearest to where he faces (the rest of the turn
+ *  is done by bending), eyes by blink and gaze, brows, the mouth shape from the voice, and the pose layer. */
+export class Director {
+  constructor(rig) {
+    this.keys = Object.entries(rig.angles);
+    this.angle = new Swap(this.nearest(0, 0));
+    this.eyes = new Swap();
+    this.brows = new Swap();
+    this.mouth = new Swap();
+    this.pose = { cur: null, k: 0 };
+    this.gx = 0; this.gy = 0;
+  }
+
+  angles(k) { return this.keys.find(([n]) => n === k)[1]; }
+
+  nearest(y, p, cur) {
+    const d = (k) => { const [ky, kp] = this.angles(k); return Math.hypot(y - ky, (p - kp) * 1.2); };
+    let best = cur, bd = cur ? d(cur) - 1.5 : Infinity;
+    for (const [k] of this.keys) if (d(k) < bd) { best = k; bd = d(k); }
+    return best;
+  }
+
+  step(dt, p) {
+    const Y = -p.yaw * YAW, P = p.pitch * PITCH;
+    this.angle.to(this.nearest(Y, P, this.angle.cur), .11, .25);
+    const axis = (v, cur, hi) => (Math.abs(v) > .42 ? Math.sign(v) * hi : Math.abs(v) < .22 ? 0 : cur);
+    this.gx = axis(p.gazeX, this.gx, 12);
+    this.gy = axis(-p.gazeY, this.gy, 10);
+    const b = Math.max(p.blinkR, p.blinkL);
+    if (b > .7) this.eyes.to("shut", .02);
+    else if (b > .28) this.eyes.to("half", .02);
+    else if ((p.pose === "read" || p.pose === "write") && p.gazeY > .5) this.eyes.to(`r${p.gazeX < -.15 ? -12 : 0}`, .035, this.eyes.cur === "half" ? 0 : .08);
+    else this.eyes.to(this.gx || this.gy ? `g${this.gx}_${this.gy}` : "base", .035, this.eyes.cur === "half" ? 0 : .08);
+    this.brows.to(p.brow > .3 ? "up" : p.knit > .3 ? "knit" : "base", .12, .2);
+    const open = p.jaw / .72;
+    let m = "base";
+    if (open >= .1) {
+      const lvl = open < .38 ? 1 : open < .7 ? 2 : 3;
+      m = p.round > .35 ? `o${Math.min(2, lvl)}` : p.wide > .3 ? `e${Math.min(2, lvl)}` : `a${lvl}`;
+    } else if (p.round > .5) m = "u";
+    this.mouth.to(m, .045, .07);
+    for (const s of [this.angle, this.eyes, this.brows, this.mouth]) s.step(dt);
+    const Z = this.pose;
+    if (Z.cur !== (p.pose || null)) {
+      Z.k -= dt / .4;
+      if (Z.k <= 0) { Z.k = 0; Z.cur = p.pose || null; }
+    } else if (Z.cur) Z.k = Math.min(1, Z.k + dt / .6);
+    return { Y, P };
+  }
+}
+
+/** The behaviour: from the call's state and both voices to acting, every frame. Eyes lead, the head follows on a
+ *  spring, the body trails; blinks, breaths and glances come at human intervals. Each state has its own business:
+ *  listening is relaxed, hearing him leans in and nods, thinking puts a hand to the chin or looks up and away, a tool
+ *  means reading or writing in a notebook, speaking looks at him with beats on stressed syllables. */
 export class Behaviour {
   constructor() {
     this.t = 0;
@@ -101,9 +187,10 @@ export class Behaviour {
     this.knit = new Spring(.8);
     this.browS = new Spring(3);
     this.level = 0; this.slow = 0; this.lastBeat = 0;
-    this.jaw = new Spring(9); this.round = new Spring(7); this.wide = new Spring(7); this.lip = new Spring(8);
+    this.jaw = new Spring(9); this.round = new Spring(7); this.wide = new Spring(7);
     this.bright = 0;
     this.youSince = -1; this.youQuiet = -9;
+    this.pose = null;
   }
 
   enter(state) {
@@ -112,6 +199,8 @@ export class Behaviour {
     this.since = this.t;
     this.nextHead = this.t;
     this.nextGaze = this.t + (state === "speaking" ? .05 : .15);
+    this.pose = state === "thinking" ? (chance(.7) ? "think" : null) : state === "tool" ? (chance(.55) ? "read" : "write") : null;
+    this.readX = undefined;
     if (state === "hearing") { this.brow.hit(.5, .15, .8); this.tilt.hit(chance(.5) ? .35 : -.35, .5, 2.5); }
     if (state === "thinking") { this.brow.hit(-.2, .3, 1.5); if (chance(.6)) this.blinkNow(); }
     if (state === "tool") this.blinkNow();
@@ -119,55 +208,6 @@ export class Behaviour {
   }
 
   blinkNow(dur = rand(.16, .24)) { if (this.blink.t < 0) { this.blink.t = 0; this.blink.dur = dur; } }
-
-  /** Gaze and head targets per state: where he looks, as eye direction (-1..1) and head pose. */
-  plan(s, t) {
-    const T = this.target;
-    if (s === "thinking") {
-      const side = this.thinkSide ??= chance(.5) ? 1 : -1;
-      if (t > this.nextGaze) {
-        this.look(side * rand(.35, .7), rand(-.75, -.4), rand(.12, .2));
-        this.nextGaze = t + rand(.9, 2.2);
-        if (chance(.25)) this.thinkSide = -side;
-      }
-      if (t > this.nextHead) { T.yaw = this.gaze.x * .35; T.pitch = -.25 + rand(-.05, .05); T.roll = side * rand(.15, .3); this.nextHead = t + rand(1.5, 3); }
-      return;
-    }
-    this.thinkSide = undefined;
-    if (s === "tool") {
-      if (t > this.nextGaze) {
-        this.readX = (this.readX ?? -.4) + rand(.18, .3);
-        if (this.readX > .45) { this.readX = -.45; this.look(-.45, .65, .09); this.nextGaze = t + rand(.25, .4); }
-        else { this.look(this.readX, .6 + rand(-.04, .04), .04); this.nextGaze = t + rand(.18, .32); }
-      }
-      if (t > this.nextHead) { T.yaw = rand(-.1, .1); T.pitch = .38; T.roll = rand(-.08, .08); this.nextHead = t + rand(2, 4); }
-      return;
-    }
-    // listening, hearing, speaking: mostly at him, with glances away; speakers look away more, at phrase starts
-    const speaking = s === "speaking", hearing = s === "hearing";
-    if (t > this.nextGaze) {
-      if (this.away) {
-        this.away = 0;
-        this.look(rand(-.06, .06), rand(-.04, .04), .05);
-        this.nextGaze = t + rand(1.2, speaking ? 3 : 5);
-      } else if (chance(speaking ? .45 : hearing ? .12 : .3)) {
-        this.away = 1;
-        const a = rand(0, 2 * PI);
-        this.look(Math.cos(a) * rand(.3, .6), Math.sin(a) * rand(.15, .4) - (speaking ? .1 : 0), rand(.06, .1));
-        this.nextGaze = t + rand(.4, speaking ? 1.4 : 1);
-      } else {
-        this.look(this.gaze.x * .3 + rand(-.07, .07), this.gaze.y * .3 + rand(-.05, .05), .035);
-        this.nextGaze = t + rand(.5, 1.8);
-      }
-    }
-    if (t > this.nextHead) {
-      const k = speaking ? 1 : .6;
-      T.yaw = (this.away ? this.gaze.x * .25 : 0) + rand(-.12, .12) * k;
-      T.pitch = (hearing ? .06 : 0) + rand(-.06, .08) * k;
-      T.roll = (hearing ? .12 * Math.sign(T.roll || 1) : 0) + rand(-.1, .1) * k;
-      this.nextHead = t + rand(speaking ? .8 : 1.8, speaking ? 2.2 : 4);
-    }
-  }
 
   look(x, y, dur) {
     const big = Math.hypot(x - this.gaze.x, y - this.gaze.y);
@@ -177,29 +217,87 @@ export class Behaviour {
     if (big > .45 && chance(.35)) this.blinkNow(rand(.14, .2));
   }
 
+  /** Where he looks (eye direction, -1..1) and where his head goes, per state. */
+  plan(s, t) {
+    const T = this.target;
+    if (s === "thinking") {
+      const side = (this.thinkSide ??= chance(.5) ? 1 : -1);
+      if (t > this.nextGaze) {
+        this.look(side * rand(.5, .9), rand(-.9, -.55), rand(.12, .2));
+        this.nextGaze = t + rand(1.1, 2.6);
+        if (chance(.2)) this.thinkSide = -side;
+      }
+      if (t > this.nextHead) {
+        const hand = this.pose === "think";
+        T.yaw = hand ? 0 : side * rand(.3, .5); T.pitch = hand ? -.05 : rand(-.5, -.35); T.roll = side * rand(.1, hand ? .15 : .3);
+        this.nextHead = t + rand(1.8, 3.2);
+      }
+      return;
+    }
+    this.thinkSide = undefined;
+    if (s === "tool") {
+      if (t > this.nextGaze) {
+        if (this.pose === "write") {
+          this.look(rand(-.5, .5), rand(.7, 1), .05);
+          this.nextGaze = t + rand(.35, .8);
+        } else if (chance(.06) && t - this.since > 1.5) {
+          this.look(0, 0, .06);
+          this.nextGaze = t + rand(.5, .9);
+        } else {
+          this.readX = (this.readX ?? -.7) + rand(.6, .8);
+          if (this.readX > .8) { this.readX = -.7; this.look(-.7, rand(.75, 1), .08); this.nextGaze = t + rand(.3, .45); }
+          else { this.look(this.readX, rand(.75, 1), .04); this.nextGaze = t + rand(.25, .45); }
+        }
+      }
+      if (t > this.nextHead) { T.yaw = rand(-.2, -.1); T.pitch = .95; T.roll = rand(-.08, .08); this.nextHead = t + rand(2, 4); }
+      return;
+    }
+    const speaking = s === "speaking", hearing = s === "hearing";
+    if (t > this.nextGaze) {
+      if (this.away) {
+        this.away = 0;
+        this.look(rand(-.08, .08), rand(-.06, .06), .05);
+        this.nextGaze = t + rand(1.2, speaking ? 3 : 5);
+      } else if (chance(speaking ? .45 : hearing ? .1 : .3)) {
+        this.away = 1;
+        const a = rand(0, 2 * PI);
+        this.look(Math.cos(a) * rand(.5, .9), Math.sin(a) * rand(.3, .7) - (speaking ? .15 : 0), rand(.06, .1));
+        this.nextGaze = t + rand(.5, speaking ? 1.4 : 1.1);
+      } else {
+        this.look(this.gaze.x * .3 + rand(-.1, .1), this.gaze.y * .3 + rand(-.08, .08), .035);
+        this.nextGaze = t + rand(.6, 2);
+      }
+    }
+    if (t > this.nextHead) {
+      const k = speaking ? 1 : .6;
+      T.yaw = (this.away ? this.gaze.x * .5 : 0) + rand(-.25, .25) * k + (speaking && chance(.25) ? Math.sign(rand(-1, 1)) * rand(.45, .6) : 0);
+      T.pitch = (hearing ? .08 : 0) + rand(-.1, .12) * k;
+      T.roll = (hearing ? .15 * Math.sign(T.roll || 1) : 0) + rand(-.12, .12) * k;
+      this.nextHead = t + rand(speaking ? .9 : 1.8, speaking ? 2.4 : 4);
+    }
+  }
+
   step(dt, s, you, it, lo, hi) {
     const t = (this.t += dt);
     if (s !== this.state) this.enter(s);
     const speaking = s === "speaking";
 
-    // his voice heard: start of a turn lifts the brows, end of a long one gets a nod
     if (you > .1) {
-      if (this.youSince < 0) { this.youSince = t; if (t - this.youQuiet > 1.2) this.brow.hit(.35, .12, .6); }
+      if (this.youSince < 0) { this.youSince = t; if (t - this.youQuiet > 1.2) this.brow.hit(.45, .12, .6); }
       this.youQuiet = t;
     } else if (this.youSince >= 0 && t - this.youQuiet > .45) {
-      if (t - this.youSince > .8 && !speaking && chance(.7)) { this.nod.hit(rand(.18, .3), .22, .5); if (chance(.4)) this.nod.hit(rand(.1, .18), .7, .5); }
+      if (t - this.youSince > .8 && !speaking && chance(.75)) { this.nod.hit(rand(.18, .3), .22, .5); if (chance(.4)) this.nod.hit(rand(.1, .18), .7, .5); }
       this.youSince = -1;
     }
 
-    // its own voice: envelope, stressed syllables (beats) nod and lift the brows a little
     const v = speaking ? it : 0;
     this.level = v > this.level ? lerp(this.level, v, 1 - Math.exp(-dt * 50)) : lerp(this.level, v, 1 - Math.exp(-dt * 16));
     this.slow = lerp(this.slow, this.level, 1 - Math.exp(-dt * 1.8));
     if (speaking && this.level - this.slow > .16 && t - this.lastBeat > .3) {
       this.lastBeat = t;
       if (chance(.55)) this.nod.hit(rand(.08, .16), .16, .4);
-      if (chance(.35)) this.brow.hit(rand(.25, .5), .1, .45);
-      if (chance(.2)) this.tilt.hit(rand(-.12, .12), .2, .8);
+      if (chance(.4)) this.brow.hit(rand(.4, .7), .1, .5);
+      if (chance(.2)) this.tilt.hit(rand(-.15, .15), .2, .8);
     }
     const bright = v > .03 ? hi / (lo + hi + .02) : this.bright;
     this.bright = lerp(this.bright, bright, 1 - Math.exp(-dt * 20));
@@ -207,28 +305,24 @@ export class Behaviour {
     const jaw = this.jaw.to(speaking ? .72 * smooth(.03, .85, this.level) * (1 - .7 * sib) : 0, dt);
     const round = this.round.to(speaking ? smooth(.1, .04, this.bright) * smooth(.05, .3, this.level) * .8 : 0, dt);
     const wide = this.wide.to(speaking ? (smooth(.14, .26, this.bright) * .6 + sib * .5) * smooth(.03, .2, this.level) : 0, dt);
-    const lip = this.lip.to(speaking ? jaw * .5 + sib * .4 : 0, dt);
 
     this.plan(s, t);
     const gx = this.gx.step(dt), gy = this.gy.step(dt);
 
-    // head: target plus slow drift plus gestures; the body trails it
-    const T = this.target, drift = speaking ? 1 : .7;
-    const nod = this.nod.step(dt), tilt = this.tilt.step(dt);
+    const T = this.target, still = this.pose === "think" ? .3 : 1, drift = (speaking ? 1 : .7) * still;
+    const nod = this.nod.step(dt) * still, tilt = this.tilt.step(dt);
     const yaw = this.head.yaw.to(T.yaw + .06 * drift * wander(t * .8, 1), dt);
     const pitch = this.head.pitch.to(T.pitch + .05 * drift * wander(t * .9, 2), dt) + nod;
     const roll = this.head.roll.to(T.roll + tilt + .06 * wander(t * .6, 3), dt);
     const sway = this.body.sway.to(-roll * .35 + .25 * wander(t * .35, 5), dt);
-    const lean = this.body.lean.to(yaw * .25 + (s === "hearing" ? .2 : 0), dt);
+    const lean = this.body.lean.to(-yaw * .25 + (s === "hearing" ? .35 : 0), dt);
 
-    // breathing: inhale a bit quicker than exhale; speech breathes at phrase gaps
     this.breath.phase += dt * this.breath.rate * (speaking ? 1.15 : 1);
     if (this.breath.phase >= 1) { this.breath.phase -= 1; this.breath.rate = 1 / rand(3.6, 5); }
     const ph = this.breath.phase, breath = ph < .4 ? smooth(0, .4, ph) : 1 - smooth(.4, 1, ph);
 
-    // blinks: every 2-6 s, sometimes twice; close fast, open slower
     const B = this.blink;
-    if (B.t < 0 && t > B.next) { this.blinkNow(); }
+    if (B.t < 0 && t > B.next) this.blinkNow();
     let blink = 0;
     if (B.t >= 0) {
       B.t += dt;
@@ -241,27 +335,23 @@ export class Behaviour {
       }
     }
 
-    // brows and smile
     const browHit = this.brow.step(dt);
-    const knit = this.knit.to(s === "thinking" ? .45 + .15 * wander(t, 9) : s === "tool" ? .25 : 0, dt);
-    const brow = this.browS.to(browHit + (s === "hearing" ? .15 : 0) - knit * .2, dt);
+    const knit = this.knit.to(s === "thinking" ? .55 + .15 * wander(t, 9) : s === "tool" ? .2 : 0, dt);
+    const brow = this.browS.to(browHit + (s === "hearing" ? .1 : 0) - knit * .2, dt);
     const smileBase = { listening: .35, hearing: .25, thinking: .1, tool: .12, speaking: .22 }[s] ?? .25;
     const smile = this.smile.to(smileBase + .12 * wander(t * .5, 4), dt) + this.smileP.step(dt);
 
-    // the eyes stay on him while the head turns (looking at the camera means countering the head)
-    const lidDown = .28 * Math.max(0, gy) + .1 * Math.max(0, pitch) - .12 * Math.max(0, -gy) - .1 * brow;
     return {
       yaw, pitch, roll, sway, lean, breath,
-      gazeX: clamp(gx - yaw * .5, -1, 1), gazeY: clamp(gy - pitch * .4, -1, 1),
-      blinkR: clamp(Math.max(blink, lidDown + .04 * smile), -.2, 1), blinkL: clamp(Math.max(blink, lidDown + .04 * smile), -.2, 1),
-      browR: brow, browL: brow * .9, knit,
-      smile: smile * (1 - .5 * jaw), jaw, round, wide, lipup: lip * .6, lipdown: lip,
+      gazeX: clamp(gx, -1, 1), gazeY: clamp(gy, -1, 1),
+      blinkR: blink, blinkL: blink, brow, knit,
+      smile: smile * (1 - .5 * jaw), jaw, round, wide, pose: this.pose,
     };
   }
 }
 
-/** Draws the rigged character at `base` into a canvas. now() gives {state, you, it, lo, hi}. Returns stop; with
- *  opts.dt it draws nothing by itself and returns a frame function for fixed-step recording instead. */
+/** Draws the character at `base` into a canvas. now() gives {state, you, it, lo, hi}. Returns stop; with opts.dt it
+ *  draws nothing by itself and returns a frame function for fixed-step recording instead. */
 export async function rig(canvas, base, now, opts = {}) {
   const R = await (await fetch(base + "rig.json")).json();
   const images = {};
@@ -273,10 +363,9 @@ export async function rig(canvas, base, now, opts = {}) {
   }));
   const gl = canvas.getContext("webgl2", { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: !!opts.dt });
   if (!gl) throw new Error("no WebGL2");
-  let G = null;
-  const setup = () => {
+  const program = (vs, fs) => {
     const prog = gl.createProgram();
-    for (const [type, src] of [[gl.VERTEX_SHADER, VS], [gl.FRAGMENT_SHADER, FS]]) {
+    for (const [type, src] of [[gl.VERTEX_SHADER, vs], [gl.FRAGMENT_SHADER, fs]]) {
       const sh = gl.createShader(type);
       gl.shaderSource(sh, src);
       gl.compileShader(sh);
@@ -285,7 +374,18 @@ export async function rig(canvas, base, now, opts = {}) {
     }
     gl.linkProgram(prog);
     if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
-    gl.useProgram(prog);
+    const u = {};
+    return { prog, u: (n) => (u[n] ??= gl.getUniformLocation(prog, n)) };
+  };
+  const dust = R.dust && Array.from({ length: R.dust.n }, () => ({}));
+  const respawn = (d, anywhere) => {
+    const [x, y, w, h] = R.dust.box;
+    Object.assign(d, { x: x + rand(0, w), y: anywhere ? y + rand(0, h) : y + h, vx: rand(-4, 4), vy: rand(-9, -3), s: rand(...R.dust.size), a: rand(.15, .55), ph: rand(0, 9), life: 0 });
+  };
+  dust?.forEach((d) => respawn(d, true));
+  let G = null;
+  const setup = () => {
+    const main = program(VS, FS), motes = program(DUST_VS, DUST_FS);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
     const tex = {};
@@ -298,33 +398,47 @@ export async function rig(canvas, base, now, opts = {}) {
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       for (const k of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE);
     }
-    const parts = R.parts.map((p) => {
-      const n = p.v.length / 2, d = new Float32Array(n * 20), [bx, by, bw, bh] = p.box;
+    const parts = {};
+    for (const p of R.parts) {
+      const n = p.v.length / 2, d = new Float32Array(n * 12), [bx, by, bw, bh] = p.box, [u0, v0, u1, v1] = p.uv || [0, 0, 1, 1];
       for (let i = 0; i < n; i++) {
-        const x = p.v[2 * i], y = p.v[2 * i + 1], o = i * 20;
-        d.set([x, y, (x - bx) / bw, (y - by) / bh], o);
+        const x = p.v[2 * i], y = p.v[2 * i + 1], o = i * 12;
+        d.set([x, y, u0 + (x - bx) / bw * (u1 - u0), v0 + (y - by) / bh * (v1 - v0)], o);
         d.set(p.bi[i], o + 4);
         d.set(p.bw[i], o + 8);
-        if (p.fi) { d.set(p.fi[i], o + 12); d.set(p.fw[i], o + 16); }
       }
       const vao = gl.createVertexArray();
       gl.bindVertexArray(vao);
       gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
       gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
-      [2, 2, 4, 4, 4, 4].reduce((off, size, loc) => {
+      [2, 2, 4, 4].reduce((off, size, loc) => {
         gl.enableVertexAttribArray(loc);
-        gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 80, off * 4);
+        gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 48, off * 4);
         return off + size;
       }, 0);
-      const ib = gl.createBuffer();
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(p.t), gl.STATIC_DRAW);
       gl.bindVertexArray(null);
-      return { vao, count: p.t.length, tex: tex[p.tex] };
-    });
+      parts[p.name] = { vao, count: p.t.length, tex: tex[p.tex], blend: p.blend };
+    }
+    const dvao = gl.createVertexArray(), dbuf = gl.createBuffer();
+    gl.bindVertexArray(dvao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, dbuf);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0);
+    gl.bindVertexArray(null);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    G = { parts, B: gl.getUniformLocation(prog, "B"), F: gl.getUniformLocation(prog, "F"), view: gl.getUniformLocation(prog, "view") };
+    gl.useProgram(main.prog);
+    gl.uniform1f(main.u("alpha"), 0);
+    for (const q of Object.values(parts)) {
+      gl.bindTexture(gl.TEXTURE_2D, q.tex);
+      gl.bindVertexArray(q.vao);
+      gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_SHORT, 0);
+    }
+    gl.bindVertexArray(null);
+    gl.finish();
+    G = { main, motes, parts, dvao, dbuf, ddata: new Float32Array((dust?.length || 0) * 4) };
   };
   setup();
   const lost = (e) => { e.preventDefault(); G = null; };
@@ -332,31 +446,80 @@ export async function rig(canvas, base, now, opts = {}) {
   canvas.addEventListener("webglcontextlost", lost);
   canvas.addEventListener("webglcontextrestored", restored);
 
-  const behaviour = new Behaviour();
-  let last = performance.now(), raf, drew = false;
+  const behaviour = new Behaviour(), director = new Director(R);
+  const BLEND = { add: [gl.ONE, gl.ONE], mul: [gl.DST_COLOR, gl.ZERO] };
+  let last = performance.now(), raf, drew = false, clock = 0;
+  const draw = (name, alpha = 1, shift = [0, 0]) => {
+    const q = G.parts[name];
+    if (!q || alpha <= .002) return;
+    const [s, d] = BLEND[q.blend] || [gl.ONE, gl.ONE_MINUS_SRC_ALPHA];
+    gl.blendFunc(s, d);
+    gl.uniform1f(G.main.u("alpha"), alpha);
+    gl.uniform2f(G.main.u("shift"), shift[0], shift[1]);
+    gl.bindTexture(gl.TEXTURE_2D, q.tex);
+    gl.bindVertexArray(q.vao);
+    gl.drawElements(gl.TRIANGLES, q.count, gl.UNSIGNED_SHORT, 0);
+  };
   const frame = (ms) => {
     if (!opts.dt) raf = requestAnimationFrame(frame);
     const dt = opts.dt || clamp((ms - last) / 1000, 0, .1);
     last = ms;
+    clock += dt;
     const { state, you, it, lo, hi } = now();
     const params = (opts.params || ((p) => p))(behaviour.step(dt, state, you || 0, it || 0, lo || 0, hi || 0));
-    opts.tick?.(params);
+    const { Y, P } = director.step(dt, params);
+    opts.tick?.(params, director);
+    if (dust) for (const d of dust) {
+      d.life += dt;
+      d.x += (d.vx + 3 * Math.sin(clock * .7 + d.ph)) * dt;
+      d.y += d.vy * dt;
+      if (d.y < R.dust.box[1] || d.life > 40) respawn(d, false);
+    }
     if (!G) return;
     const k = Math.min(devicePixelRatio || 1, 2), w = opts.dt ? canvas.width : Math.round(canvas.clientWidth * k), h = opts.dt ? canvas.height : Math.round(canvas.clientHeight * k);
     if (!w || !h) return;
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-    const { B, F } = pose(R, params);
+    const view = framing(R, w, h);
     gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.uniformMatrix3x2fv(G.B, false, B);
-    gl.uniformMatrix3x2fv(G.F, false, F);
-    gl.uniform4fv(G.view, framing(R, w, h));
-    for (const p of G.parts) {
-      gl.bindTexture(gl.TEXTURE_2D, p.tex);
-      gl.bindVertexArray(p.vao);
-      gl.drawElements(gl.TRIANGLES, p.count, gl.UNSIGNED_SHORT, 0);
+    gl.useProgram(G.main.prog);
+    gl.uniform4fv(G.main.u("view"), view);
+    const bones = (key) => {
+      const [ky, kp] = key ? director.angles(key) : [0, 0];
+      gl.uniformMatrix3x2fv(G.main.u("B"), false, pose(R, { ...params, yawRes: key ? clamp(Y - ky, -6, 6) : 0, pitchRes: key ? clamp(P - kp, -6, 6) : 0 }));
+    };
+    bones(null);
+    draw("plate");
+    draw("body");
+    for (const [key, a] of director.angle.layers()) {
+      if (a <= .002) continue;
+      bones(key);
+      draw(`head.${key}`, a);
+      for (const slot of ["brows", "eyes", "mouth"]) for (const [name, w_] of director[slot].layers()) if (name !== "base") draw(`${key}.${slot}.${name}`, a * w_);
     }
+    const Z = director.pose;
+    if (Z.cur && Z.k > 0) {
+      bones(director.angle.cur);
+      const e = 1 - (1 - Z.k) ** 3;
+      draw(`pose.${Z.cur}`, clamp(e * 4), [0, (1 - e) * .2 * R.size[1] + 3 * params.breath]);
+    }
+    bones(null);
+    draw("vignette");
+    draw("glow", .9 + .06 * Math.sin(clock * 1.3) + .04 * Math.sin(clock * 3.7 + 1));
+    if (dust) {
+      dust.forEach((d, i) => G.ddata.set([d.x, d.y, d.s, d.a * clamp(d.life / 2) * (.6 + .4 * Math.sin(clock * 1.5 + d.ph))], i * 4));
+      gl.useProgram(G.motes.prog);
+      gl.uniform4fv(G.motes.u("view"), view);
+      gl.uniform1f(G.motes.u("px"), view[2] * w / 2);
+      gl.uniform3fv(G.motes.u("color"), R.dust.color.map((c) => c / 255));
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.bindVertexArray(G.dvao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, G.dbuf);
+      gl.bufferData(gl.ARRAY_BUFFER, G.ddata, gl.DYNAMIC_DRAW);
+      gl.drawArrays(gl.POINTS, 0, dust.length);
+    }
+    gl.bindVertexArray(null);
     if (!drew) { drew = true; opts.first?.(); }
   };
   if (opts.dt) return frame;

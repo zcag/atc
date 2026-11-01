@@ -17,13 +17,15 @@ const now = () => {
 await persona(c, "./p/", now, { first: () => {} });
 const gaps = [];
 let last = 0;
-const watch = (ms) => { if (last) gaps.push(ms - last); last = ms; requestAnimationFrame(watch); };
+const big = [];
+const watch = (ms) => { if (last) { gaps.push(ms - last); if (ms - last > 50) big.push(`${Math.round(ms - last)}ms at ${t0 ? ((ms - t0) / 1000).toFixed(1) + "s" : "before start"}`); } last = ms; requestAnimationFrame(watch); };
 requestAnimationFrame(watch);
 await new Promise((r) => setTimeout(r, 300));
 t0 = performance.now();
 document.title = "go";
 setTimeout(() => {
   gaps.sort((a, b) => a - b);
+  console.log(`long frames: ${big.join(", ") || "none"}`);
   console.log(`frames ${gaps.length} median ${gaps[gaps.length >> 1].toFixed(1)} ms p99 ${gaps[Math.floor(gaps.length * .99)].toFixed(1)} ms max ${gaps.at(-1).toFixed(1)} ms`);
   document.title = "done";
 }, tl.plan.reduce((a, [, d]) => a + d, 0) * 1000 + 300);
