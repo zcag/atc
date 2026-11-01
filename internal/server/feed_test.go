@@ -23,7 +23,7 @@ func TestFeedLinesAndSnapshot(t *testing.T) {
 		t.Fatalf("first look reported changes: %q", text)
 	}
 	text, seq := f.news(0, true, now)
-	if !strings.Contains(text, "needs them: nothing") || !strings.Contains(text, "working: build") || !strings.Contains(text, "docs") {
+	if !strings.Contains(text, "is open): none") || !strings.Contains(text, "working: build") || !strings.Contains(text, "- docs (0m ago): its turn is done") {
 		t.Fatalf("snapshot %q", text)
 	}
 
@@ -87,7 +87,41 @@ func TestFeedFollowsParkedAgents(t *testing.T) {
 	if text, _ = f.news(seq, false, time.Now()); !strings.Contains(text, "@shopping finished: Picks: towel") {
 		t.Fatalf("agent done and parked: %q", text)
 	}
-	if snap, _ := f.news(0, true, time.Now()); !strings.Contains(snap, "agents: @shopping done 0m ago: Picks: towel") {
+	if snap, _ := f.news(0, true, time.Now()); !strings.Contains(snap, "- @shopping done (0m ago): Picks: towel") {
 		t.Fatalf("snapshot %q", snap)
+	}
+}
+
+func TestSnapshotListsEverythingThatMayWaitOnHim(t *testing.T) {
+	f := newFeed()
+	none := func(sessions.Session) bool { return false }
+	now := time.Now()
+	var list []sessions.Session
+	for i := range 8 {
+		x := sess(string(rune('a'+i)), "old "+string(rune('a'+i)), sessions.YourTurn)
+		x.Updated = now.Add(-time.Duration(i+5) * time.Hour)
+		list = append(list, x)
+	}
+	pr := sess("p", "pr-watch", sessions.YourTurn)
+	pr.Parked = true
+	pr.Summary = &summary.Summary{Status: "Waiting: approval to push", Overview: []string{"Done: three commits", "Open: push needs their go-ahead"}}
+	gone := sess("s", "finished long ago", sessions.Stopped)
+	gone.Attachable = false
+	focus := func(id string, state string, at time.Time) sessions.Session {
+		x := sess(id, "Focus", state)
+		x.Agent, x.Parked, x.Updated = "shop-focus", true, at
+		x.Summary = &summary.Summary{Status: "Notes read: 5 sessions wait on you"}
+		return x
+	}
+	list = append(list, pr, gone, focus("f1", sessions.Stopped, now.Add(-time.Hour)), focus("f2", sessions.YourTurn, now.Add(-20*time.Hour)))
+	f.observe(list, nil, none)
+	snap, _ := f.news(0, true, now)
+	for _, want := range []string{"- old h (12h ago): its turn is done", "parked, still their turn", "- pr-watch (0m ago): Waiting: approval to push | Open: push needs their go-ahead", "- @shop-focus done (20h ago): Notes read: 5 sessions wait on you"} {
+		if !strings.Contains(snap, want) {
+			t.Errorf("snapshot lacks %q:\n%s", want, snap)
+		}
+	}
+	if strings.Contains(snap, "finished long ago") || strings.Count(snap, "@shop-focus") != 1 {
+		t.Errorf("snapshot:\n%s", snap)
 	}
 }

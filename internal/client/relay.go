@@ -8,6 +8,9 @@ import (
 	"github.com/zcag/atc/internal/sessions"
 )
 
+// HubAgent is the assistant's name as an agent: its live conversation, whichever that is now.
+const HubAgent = "assistant"
+
 type Launch struct {
 	Host, Dir, Name, Preset, Prompt string
 	Worktree, Report, Approved      bool
@@ -40,6 +43,14 @@ func (c *Client) Launch(ctx context.Context, l Launch) (id, dir string, err erro
 func (c *Client) Deliver(ctx context.Context, x sessions.Session, text string, report, wake, approved bool) (id string, resumed bool, err error) {
 	live, _ := c.Live()
 	me, isSession := Self(live)
+	if x.Retired {
+		signed, err := Signed(live, Sign{Report: report, Approved: approved}, text)
+		if err != nil {
+			return "", false, err
+		}
+		id, err = c.Message(HubAgent, signed)
+		return id, false, err
+	}
 	switch {
 	case isSession && me.SessionID == x.SessionID:
 		return "", false, fmt.Errorf("that is this session itself")

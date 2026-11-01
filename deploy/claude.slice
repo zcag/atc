@@ -1,0 +1,5 @@
+[Unit]
+Description=Claude Code's background daemon and its sessions (atc starts them here)
+
+[Slice]
+MemorySwapMax=0

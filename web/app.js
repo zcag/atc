@@ -1483,8 +1483,8 @@ function sessionActions(s, say, { rename, open, after } = {}) {
   items.push({ label: "Rename", run: rename || run(() => { const n = prompt("Rename session", s.title); return n === null ? null : patch({ name: n }); }) });
   items.push({ label: s.pinned ? "Unpin" : "Pin to top", run: run(() => patch({ pinned: !s.pinned })) });
   items.push({ label: s.parked ? "Unpark" : "Park", run: run(() => patch({ parked: !s.parked })) });
+  items.push({ label: "Send to backlog", title: "Stop it and take it off the list; its backlog item resumes the same conversation. A working session stops when its turn ends", run: () => putAside(s, say).then(() => after && after()) });
   if (s.agent && s.state !== "past") items.push({ label: "Start over", title: "It writes a handover note and a new conversation starts from it", run: run(() => agentApi(s.agent, "reset"), () => say(`${s.title} is starting over.`)) });
-  items.push({ label: "Put on the backlog", title: "Set it aside to come back to: it stops unless it is working, and Resume on the backlog brings it back", run: () => putAside(s, say).then(() => after && after()) });
   if (s.attachable) items.push({ label: "Stop", run: run(() => api(`/api/sessions/${s.id}/stop`, { method: "POST" }), () => say("Stopped. Resume it any time.")) });
   if (!s.attachable && s.kind !== "interactive")
     items.push({ label: "Resume", run: run(() => api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" }), (r) => go(r.id)) });
@@ -3527,7 +3527,7 @@ const itemTitle = (it) => it.title || (it.prompt || "").split("\n")[0];
 const itemStage = (it) => it.status === "done" ? "done" : suggested(it) ? "suggested" : it.status === "ready" && it.session && !it.aside ? "started" : it.status;
 const putAside = (s, say) => api(`/api/sessions/${s.sessionId}/aside${hostQ(s.host, HERE)}`, { method: "POST", body: { title: s.title } }).then(() => {
   loadBacklog();
-  say(s.attachable && s.state !== "working" ? "On the backlog, and stopped. Resume it from there." : "On the backlog. Resume it from there.");
+  say(s.attachable && s.state !== "working" ? "On the backlog, and stopped. Resume it from there." : "On the backlog. It stops when its turn ends; resume it from there.");
 }, (e) => say(e.message));
 const STAGES = [
   ["started", "Started"],

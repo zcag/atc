@@ -38,6 +38,37 @@ func TestReviverSpotsAMassStop(t *testing.T) {
 	}
 }
 
+func TestReviverRevivesOnceAndNotAgainSoon(t *testing.T) {
+	rv := &reviver{path: filepath.Join(t.TempDir(), "running.json")}
+	live := []sessions.Session{
+		{SessionID: "a", ID: "aaaa0001", Attachable: true},
+		{SessionID: "b", ID: "bbbb0001", Attachable: true},
+	}
+	rv.observe(runningOf(live, "here"))
+	if lost := rv.observe(runningOf(nil, "here")); len(lost) != 2 {
+		t.Fatalf("want the crash noticed: %v", lost)
+	}
+	for range 3 {
+		if lost := rv.observe(runningOf(nil, "here")); lost != nil {
+			t.Fatalf("polls while the service is still empty must not start another revive: %v", lost)
+		}
+	}
+	rv.observe(runningOf(live, "here"))
+	if lost := rv.observe(runningOf(nil, "here")); lost != nil {
+		t.Fatalf("a crash while a revive runs must not start a second one: %v", lost)
+	}
+	rv.end()
+	rv.observe(runningOf(live, "here"))
+	if lost := rv.observe(runningOf(nil, "here")); lost != nil {
+		t.Fatalf("a crash minutes after a revive must not bring everything back again: %v", lost)
+	}
+	rv.revived = time.Now().Add(-reviveEvery - time.Second)
+	rv.observe(runningOf(live, "here"))
+	if lost := rv.observe(runningOf(nil, "here")); len(lost) != 2 {
+		t.Fatalf("a crash long after the last revive is revived: %v", lost)
+	}
+}
+
 func TestReviverIgnoresOpenCodeWhenClaudeStops(t *testing.T) {
 	rv := &reviver{path: filepath.Join(t.TempDir(), "running.json")}
 	oc := sessions.Session{SessionID: "ses_x", ID: "ses_x", Attachable: true, Title: "X", State: sessions.Working, Harness: "opencode"}

@@ -78,6 +78,9 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc rename <session> <name>    atc pin|unpin <session>
   atc park|unpark [session]      move it out of the way: bottom of the list, no notifications;
                                  inside a session, without one, parks that session
+  atc backlog [session]          send a session to the backlog: stopped (memory freed, a working
+                                 one when its turn ends), off the list, kept as an item that
+                                 resumes the same conversation; without one, list the backlog
   atc summary [-json] [-again] <session>
                                  its final message in short: a status line, the gist and
                                  an overview; -again summarizes it anew
@@ -181,6 +184,8 @@ func main() {
 		err = showUsage(args)
 	case "limits":
 		err = showLimits(args)
+	case "backlog":
+		err = backlogCmd(args)
 	case "resume", "stop", "rm", "rename", "pin", "unpin", "park", "unpark":
 		err = act(cmd, args)
 	case "-h", "--help", "help":
@@ -228,7 +233,8 @@ func serve(args []string) error {
 	}
 	cli := claude.CLI{Bin: bin, Args: strings.Fields(os.Getenv("ATC_CLAUDE_ARGS"))}
 	if _, err := exec.LookPath("systemd-run"); err == nil {
-		cli.Launch = []string{"systemd-run", "--user", "--scope", "--collect", "--quiet", "--slice=claude.slice"}
+		cli.Slice = "claude.slice"
+		cli.Launch = []string{"systemd-run", "--user", "--scope", "--collect", "--quiet", "--slice=" + cli.Slice}
 	}
 	sum, err := summarizer(cli)
 	if err != nil {
@@ -480,6 +486,32 @@ func act(cmd string, args []string) error {
 	default:
 		return c.Patch(s.SessionID, map[string]any{"pinned": cmd == "pin"})
 	}
+}
+
+func backlogCmd(args []string) error {
+	c := client.Load()
+	if len(args) == 0 {
+		items, err := c.Backlog()
+		for _, it := range items {
+			if it.Status != backlog.Done {
+				state := it.Status
+				if it.Aside {
+					state = "set aside"
+				}
+				fmt.Printf("%s  %-10s %s  (%s)\n", it.ID, state, it.Title, it.Dir)
+			}
+		}
+		return err
+	}
+	s, err := c.Find(args[0], true)
+	if err != nil {
+		return err
+	}
+	it, err := c.Shelve(s.SessionID, strings.Join(args[1:], " "))
+	if err == nil {
+		fmt.Printf("%s is on the backlog as %s\n", s.Title, it.ID)
+	}
+	return err
 }
 
 func printJSON(v any) error { return json.NewEncoder(os.Stdout).Encode(v) }

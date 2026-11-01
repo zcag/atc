@@ -84,13 +84,14 @@ type Server struct {
 	TrustedProxies *Proxies
 	tailnet        *tailnet
 
-	fleet   *fleet
-	feed    *feed
-	rv      *reviver
-	here    presence
-	scanner outputs.Scanner
-	stats   usage.Scanner
-	limits  usage.LimitsClient
+	fleet     *fleet
+	feed      *feed
+	rv        *reviver
+	contained time.Time
+	here      presence
+	scanner   outputs.Scanner
+	stats     usage.Scanner
+	limits    usage.LimitsClient
 
 	mu     sync.Mutex
 	subs   map[chan []byte]bool
@@ -126,7 +127,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	if s.StateDir != "" {
 		s.rv = &reviver{path: revivePath(s.StateDir)}
-		if lost := s.rv.afterReboot(); len(lost) > 0 {
+		if lost := s.rv.afterReboot(); len(lost) > 0 && s.rv.begin() {
 			go func() {
 				time.Sleep(10 * time.Second)
 				s.revive(lost, s.Host+" restarted")
@@ -802,13 +803,16 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 
 var errUnknown = errors.New("unknown session")
 
+var errRetired = errors.New("an earlier conversation of the assistant: it stays stopped, and messages for it go to the assistant (@assistant)")
+
 func (s *Server) resumeSession(ctx context.Context, sid string) (string, error) {
+	if sessions.RetiredHub(s.M.Store.Get(sid).Name) {
+		return "", errRetired
+	}
 	agents, _ := s.M.CLI.Agents(ctx)
 	chain := s.chain(sid, agents)
-	for _, c := range slices.Backward(chain) {
-		if i := slices.IndexFunc(agents, func(a claude.Agent) bool { return a.SessionID == c && a.PID > 0 }); i >= 0 {
-			return agents[i].ID, nil
-		}
+	if id, ok := s.liveIn(chain, agents); ok {
+		return id, nil
 	}
 	for i, c := range slices.Backward(chain) {
 		if t, _ := s.M.Index.Find(c); t.StartCwd != "" && (i == 0 || t.SessionID == c) {
@@ -816,6 +820,15 @@ func (s *Server) resumeSession(ctx context.Context, sid string) (string, error) 
 		}
 	}
 	return "", fmt.Errorf("%w %s", errUnknown, sid)
+}
+
+func (s *Server) liveIn(chain []string, agents []claude.Agent) (string, bool) {
+	for _, c := range slices.Backward(chain) {
+		if i := slices.IndexFunc(agents, func(a claude.Agent) bool { return a.SessionID == c && a.PID > 0 }); i >= 0 {
+			return agents[i].ID, true
+		}
+	}
+	return "", false
 }
 
 func (s *Server) act(f func(context.Context, string) error) http.HandlerFunc {
@@ -1041,6 +1054,17 @@ func (s *Server) watch(list []sessions.Session) {
 	}
 	if err := claude.KeepAlive(ids); err != nil {
 		log.Printf("keep alive: %v", err)
+	}
+	if time.Since(s.contained) > 30*time.Second {
+		s.contained = time.Now()
+		go s.retireIdle(list)
+		go s.shelveFinished(list)
+		go s.closeRetiredHub(list)
+		if unit, err := s.M.CLI.Contain(); err != nil {
+			log.Printf("contain claude's daemon: %v", err)
+		} else if unit != "" {
+			log.Printf("moved claude's daemon into %s", unit)
+		}
 	}
 }
 
@@ -1380,10 +1404,13 @@ func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, e
 	if ok {
 		extra = append(extra, e.args()...)
 	}
+	was := s.M.Store.Get(sid)
 	id, err := s.M.CLI.Resume(ctx, dir, sid, extra...)
 	if err == nil {
 		s.superseded(sid, id)
-		s.tag(ctx, id, func(m *store.Meta) { m.Engine = cmp.Or(e.Name, m.Engine) })
+		s.tag(ctx, id, func(m *store.Meta) {
+			m.Engine, m.Name, m.Pinned = cmp.Or(e.Name, m.Engine, was.Engine), cmp.Or(m.Name, was.Name), m.Pinned || was.Pinned
+		})
 	}
 	return id, err
 }

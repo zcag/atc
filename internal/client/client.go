@@ -185,6 +185,11 @@ func (c *Client) Backlog() (items []backlog.Item, err error) {
 	return items, c.do("GET", "/api/backlog", nil, &items)
 }
 
+// Shelve sends a session to the backlog: stopped and off the list, its item resuming it.
+func (c *Client) Shelve(sid, title string) (it backlog.Item, err error) {
+	return it, c.do("POST", "/api/sessions/"+sid+"/aside", map[string]string{"title": title}, &it)
+}
+
 func (c *Client) AddBacklog(host string, req map[string]any) (it backlog.Item, err error) {
 	path := "/api/backlog"
 	if host != "" {
