@@ -122,8 +122,9 @@ export class Mind {
     this.postPitch = new Spring(.25);
     this.postRoll = new Spring(.2);
     this.greet = rand(.5, .9);
-    this.eyes = new Drawing(.03);
-    this.mouth = new Drawing(.04);
+    this.eyes = new Drawing(.035);
+    this.brows = new Drawing(.12);
+    this.mouth = new Drawing(.035);
   }
 
   enter(state) {
@@ -260,41 +261,33 @@ export class Mind {
     if (s === "listening" && chance(dt / 25)) this.sigh = 1;
     const breath = .005 * Math.sin(this.breathPhase) + .006 * this.sigh * Math.sin(Math.min(PI, (1 - this.sigh) * PI * 2));
 
-    // Eyes and open mouths are never morphed: an iris passing under a lid or teeth appearing cannot be warped
-    // cleanly, so like drawn animation they switch between whole painted drawings, held for a moment, with a
-    // cross-fade short enough to read as motion blur. A blink steps open, half, shut, half, open.
-    const shut = lid > .72, mid = lid > .22 && !shut, tx = this.gx.to, ty = this.gy.to;
+    // Eyes, brows and mouth switch between renders of one model of his face (a gaze grid, blink steps, mouth
+    // openings by shape): neighbours differ little, so stepping through them at frame rate reads as motion.
+    const tx = this.gx.to, ty = this.gy.to;
     let eye = null;
-    if (shut) eye = "blink";
-    else if (mid) eye = "half";
-    else if (wide > .25) eye = "wide";
-    else if (ty < -.4) eye = "gaze_down";
-    else if (ty > .3 && thinking) eye = "think";
-    else if (ty > .2 && speaking && Math.abs(tx) > .2) eye = "recall";
-    else if (Math.max(Math.abs(tx), ty) > .3) eye = Math.abs(tx) > ty ? (tx > 0 ? "gaze_r" : "gaze_l") : "gaze_up";
-    else if (half > .2) eye = "half";
-    else if (smile > .52 || this.pulse > .5) eye = "smile_eyes";
+    if (lid > .72) eye = "b3";
+    else if (lid > .45) eye = "b2";
+    else if (lid > .2) eye = "b1";
+    else {
+      const gx = clamp(Math.round(tx * 2.4), -2, 2) * 6, gy = clamp(Math.round(ty * 1.6), -1, 1) * 10;
+      eye = gx || gy ? `g_${gx}_${gy}` : half > .2 ? "rest" : null;
+    }
     this.eyes.set(eye, t);
+
+    const up = browUp + wide, down = knit;
+    this.brows.set(up > .55 ? "br_u2" : up > .22 ? "br_u1" : down > .5 ? "br_k2" : down > .22 ? "br_k1" : null, t);
 
     let mouth = null;
     if (speaking) {
-      const lvl = open < .35 ? 0 : open < .65 ? 1 : 2;
-      if (this.sib > .4) mouth = "m_e";
-      else if (open > .04 && open <= .12) mouth = "m_slight";
-      else if (open > .12) mouth = round > .65 ? (lvl ? "m_o" : "m_u") : spread > .4 ? "m_e" : ["m_small", "m_open", "m_a"][lvl];
-    } else if ((s === "listening" || s === "hearing") && this.pulse > .45) mouth = "smile_open";
-    this.mouth.set(mouth, t, mouth ? .07 : .05);
-    const shown = this.mouth.shown(t);
+      const i = clamp(Math.round((open - .06) / .94 * 4), 0, 4);
+      if (this.sib > .4) mouth = "e_0";
+      else if (open > .06) mouth = (round > .65 ? "o_" : spread > .45 ? "e_" : "m_") + i;
+    } else if (press > .3 || purse > .3) mouth = "press";
+    else if ((s === "listening" || s === "hearing") && this.pulse > .6) mouth = "smile2";
+    else if (smile > .45) mouth = "smile1";
+    this.mouth.set(mouth, t);
 
-    const face = {
-      ...this.eyes.weights(t),
-      ...this.mouth.weights(t),
-      brows_up: clamp(browUp),
-      brows_knit: clamp(knit),
-      smile: clamp(smile) * (1 - shown),
-      purse: purse * (1 - shown),
-      m_m: clamp(press) * (1 - shown),
-    };
+    const face = { ...this.eyes.weights(t), ...this.brows.weights(t), ...this.mouth.weights(t) };
     return {
       face,
       head: { head_r: clamp(yaw, 0, .6), head_l: clamp(-yaw, 0, .6), head_up: clamp(pitch - nod, 0, 1), head_down: clamp(nod - pitch, 0, 1.1), lean: clamp(lean) },
