@@ -309,8 +309,8 @@ class Line(private val c: Context, private val url: String, private val voice: V
         if (live) ws?.send(frame.toByteString())
     }
 
-    fun stats(o: JSONObject) {
-        if (live) ws?.send(o.put("cmd", "stats").toString())
+    fun report(o: JSONObject) {
+        if (live) ws?.send(o.toString())
     }
 
     fun close() {
@@ -334,6 +334,7 @@ class Voice {
         private const val MIN_HOLD = 3
         private const val MAX_HOLD = 15
         private const val SLACK = 10
+        private val GAP_STEPS = intArrayOf(100, 250, 500, 1000)
     }
 
     @Volatile var muted = false
@@ -353,6 +354,14 @@ class Voice {
     private var played = 0
     private var deepest = 0
     private var holdMax = hold
+    private class Arrival(val gap: Int, val speech: Boolean, val wall: Long)
+    private val arrivals = java.util.concurrent.ConcurrentLinkedQueue<Arrival>()
+    @Volatile private var lastArrival = 0L
+    private var gapMax = 0
+    private val gapsOver = IntArray(4)
+    private var speechDropped = 0
+    private var breaks = 0
+    private var breakMs = 0L
     private class Heard(val at: Long, val v: FloatArray)
     private val heard = java.util.concurrent.ConcurrentLinkedDeque<Heard>()
     @Volatile private var now = Heard(0, FloatArray(3))
@@ -401,7 +410,30 @@ class Voice {
     }
 
     fun play(frame: ByteArray) {
-        if (running) queue.offer(frame)
+        if (!running) return
+        val now = SystemClock.elapsedRealtime()
+        arrivals.offer(Arrival(if (lastArrival == 0L) 0 else (now - lastArrival).toInt(), !silent(frame), System.currentTimeMillis()))
+        lastArrival = now
+        queue.offer(frame)
+    }
+
+    private fun silent(f: ByteArray) = f.all { it == 0.toByte() }
+
+    /** When each of delta's frames reached the phone since the last trace: the gap after the previous one in ms and
+     *  whether it was speech, so delta-call can line it up with what atc's relay sent and replay it in tests. */
+    private fun trace(line: Line) {
+        val gaps = org.json.JSONArray()
+        val speech = StringBuilder()
+        var at = 0L
+        while (true) {
+            val a = arrivals.poll() ?: break
+            if (at == 0L) at = a.wall
+            gaps.put(a.gap)
+            speech.append(if (a.speech) '1' else '0')
+            gapMax = maxOf(gapMax, a.gap)
+            GAP_STEPS.forEachIndexed { i, step -> if (a.gap >= step) gapsOver[i]++ }
+        }
+        if (at != 0L) line.report(JSONObject().put("cmd", "trace").put("at", at).put("gaps", gaps).put("speech", speech))
     }
 
     fun stop() {
@@ -451,13 +483,17 @@ class Voice {
         var started = false
         var clean = SystemClock.elapsedRealtime()
         var report = clean
+        var lastPlayed = clean
+        var lastSpeech = false
+        var dry = false
         try {
             track.play()
             while (running) {
                 val now = SystemClock.elapsedRealtime()
                 if (now - report >= 10_000) {
                     report = now
-                    line.stats(stats())
+                    trace(line)
+                    line.report(stats())
                 }
                 if (buffering) {
                     if (queue.size < hold) {
@@ -471,6 +507,7 @@ class Voice {
                 if (f == null) {
                     buffering = true
                     if (started) {
+                        dry = true
                         underruns++
                         hold = minOf(hold + 2, MAX_HOLD)
                         holdMax = maxOf(holdMax, hold)
@@ -484,15 +521,24 @@ class Voice {
                 }
                 deepest = maxOf(deepest, queue.size)
                 while (queue.size > hold + SLACK) {
-                    queue.poll()
+                    if (!silent(queue.poll() ?: break)) speechDropped++
                     dropped++
                 }
+                val speech = !silent(f)
+                if (dry && speech && lastSpeech) {
+                    breaks++
+                    breakMs += now - lastPlayed - 20
+                }
+                dry = false
+                lastSpeech = speech
+                lastPlayed = now
                 played++
                 track.write(if (held) silence else f, 0, f.size)
                 measure(if (held) silence else f, 1000L * track.bufferSizeInFrames / OUT_RATE)
             }
         } finally {
-            line.stats(stats())
+            trace(line)
+            line.report(stats())
             queue.clear()
             track.release()
         }
@@ -508,7 +554,9 @@ class Voice {
         return minOf(1f, (Math.sqrt(sum / (frame.size / 2)) / 32768 * 6).toFloat())
     }
 
-    private fun stats() = JSONObject()
+    private fun stats() = JSONObject().put("cmd", "stats")
+        .put("speech_dropped", speechDropped).put("breaks", breaks).put("break_ms", breakMs)
+        .put("gap_max_ms", gapMax).put("gaps_over", org.json.JSONObject().apply { GAP_STEPS.forEachIndexed { i, s -> put("$s", gapsOver[i]) } })
         .put("played", played).put("underruns", underruns).put("dropped", dropped)
         .put("hold_ms", hold * 20).put("hold_max_ms", holdMax * 20).put("deepest_ms", deepest * 20)
         .put("route", route).put("aec", aec)
