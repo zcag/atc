@@ -1,6 +1,8 @@
 package hub
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
@@ -48,6 +50,34 @@ func TestGuestReachesNoOneAndKeepsHisChannel(t *testing.T) {
 	defer mu.Unlock()
 	if last := written[len(written)-1]; strings.Contains(last, "talk-mode") {
 		t.Fatalf("whatsapp mode resent after a guest: %s", last)
+	}
+}
+
+func TestOnCallAsksTheLine(t *testing.T) {
+	var mu sync.Mutex
+	state := "idle"
+	line := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		w.Write([]byte(`{"call":"` + state + `"}`))
+	}))
+	defer line.Close()
+	r := newRig(t, CallConfig{URL: line.URL})
+	r.dial(Phone)
+	for r.h.Status().Channels[Phone] == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	r.h.mu.Lock()
+	idle := r.h.onCall()
+	r.h.mu.Unlock()
+	mu.Lock()
+	state = "offhook"
+	mu.Unlock()
+	r.h.mu.Lock()
+	on := r.h.onCall()
+	r.h.mu.Unlock()
+	if idle || !on {
+		t.Fatalf("idle line: %v, call on: %v", idle, on)
 	}
 }
 

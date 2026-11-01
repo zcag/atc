@@ -307,11 +307,18 @@ func (h *Hub) asideNote(ch string) string {
 	return note + "[now: " + where + "]\n[message]\n"
 }
 
-// onCall is whether delta's talk.py is connected: its phone channel lives exactly as long as a call.
+// onCall is whether the user is on a call: delta's talk.py holds its phone channel (it connects
+// before a call rings and keeps it between calls, and a guest's call is guest-call instead) and
+// the line says a call is on.
 func (h *Hub) onCall() bool {
 	for s := range h.subs {
 		if !s.all && s.channel == Phone {
-			return true
+			if h.cfg.Call.URL == "" {
+				return true
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+			defer cancel()
+			return h.cfg.Call.onCall(ctx)
 		}
 	}
 	return false
