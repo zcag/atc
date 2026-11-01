@@ -222,7 +222,7 @@ class Orb(c: Context) : View(c), Persona {
               float amp = 0.025 + 0.015 * think + lv * (0.045 * speak + 0.035 * hear + 0.015);
               float d = sin(p.x * 2.1 + t * 1.3) * sin(p.y * 2.4 - t * 1.1) * sin(p.z * 1.9 + t * 0.9);
               d += 0.5 * sin(p.x * 4.3 - t * 2.1 + p.y * 1.7) * sin(p.z * 3.9 + t * 1.7);
-              d += (0.2 + 0.5 * think + 0.6 * speak * lv) * sin(dot(p, float3(5.1, 6.7, 4.3)) + t * (3.0 + 4.0 * lv));
+              d += (0.2 + 0.5 * think + 0.6 * speak * lv) * sin(dot(p, float3(3.1, 4.2, 2.6)) + t * (3.0 + 4.0 * lv));
               return length(p) - (1.0 + 0.025 * sin(t * 1.2) + 0.07 * lv) - d * amp;
             }
             float3 normalAt(float3 p, float lv) {
@@ -283,12 +283,12 @@ class Orb(c: Context) : View(c), Persona {
                 float dist = -b - sqrt(max(h, 0.0)), best = 9.0;
                 float3 near = p + rdo * dist;
                 if (h > 0.0) {
-                  for (int i = 0; i < 26; i++) {
+                  for (int i = 0; i < 34; i++) {
                     float3 x = p + rdo * dist;
                     float d = blob(x, lv);
                     if (d < best) { best = d; near = x; }
                     if (d < 0.001) break;
-                    dist += d * 0.6;
+                    dist += d * 0.55;
                     if (dist > 7.0) break;
                   }
                 }

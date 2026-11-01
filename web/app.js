@@ -627,7 +627,7 @@ float blob(vec3 p, float lv) {
   float amp = .025 + .015 * think + lv * (.045 * speak + .035 * hear + .015);
   float d = sin(p.x * 2.1 + t * 1.3) * sin(p.y * 2.4 - t * 1.1) * sin(p.z * 1.9 + t * .9);
   d += .5 * sin(p.x * 4.3 - t * 2.1 + p.y * 1.7) * sin(p.z * 3.9 + t * 1.7);
-  d += (.2 + .5 * think + .6 * speak * lv) * sin(dot(p, vec3(5.1, 6.7, 4.3)) + t * (3. + 4. * lv));
+  d += (.2 + .5 * think + .6 * speak * lv) * sin(dot(p, vec3(3.1, 4.2, 2.6)) + t * (3. + 4. * lv));
   return length(p) - (1. + .025 * sin(t * 1.2) + .07 * lv) - d * amp;
 }
 vec3 normalAt(vec3 p, float lv) {
@@ -687,12 +687,12 @@ void main() {
     float dist = -b - sqrt(max(h, 0.)), best = 9.;
     vec3 near = p + rdo * dist;
     if (h > 0.) {
-      for (int i = 0; i < 26; i++) {
+      for (int i = 0; i < 34; i++) {
         vec3 x = p + rdo * dist;
         float d = blob(x, lv);
         if (d < best) { best = d; near = x; }
         if (d < .001) break;
-        dist += d * .6;
+        dist += d * .55;
         if (dist > 7.) break;
       }
     }
