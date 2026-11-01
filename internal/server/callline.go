@@ -80,7 +80,7 @@ func (t *relayTrace) frame(read time.Time, wrote time.Duration) {
 	}
 	gap := 0
 	if !t.last.IsZero() {
-		gap = int(read.Sub(t.last).Milliseconds())
+		gap = int(read.UnixMilli() - t.last.UnixMilli())
 	}
 	t.last = read
 	t.gaps = append(t.gaps, gap)
