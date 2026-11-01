@@ -1,15 +1,19 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"net/http"
 	"slices"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/zcag/atc/internal/opencode"
+	"github.com/zcag/atc/internal/sessions"
+	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/usage"
 )
 
@@ -28,19 +32,73 @@ func (s *Server) sessionUsage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no transcript", http.StatusNotFound)
 		return
 	}
+	reply(w, s.usageOf(r, t.Path))
+}
+
+type usageReply struct {
+	usage.Stats
+	WeekCost      *float64       `json:"weekCost,omitempty"`
+	FiveHourCost  *float64       `json:"fiveHourCost,omitempty"`
+	Conversations []conversation `json:"conversations,omitempty"`
+}
+
+type conversation struct {
+	ID    string    `json:"sessionId"`
+	Title string    `json:"title"`
+	Cost  float64   `json:"cost"`
+	Total int64     `json:"total"`
+	Turns int       `json:"turns"`
+	Start time.Time `json:"start,omitzero"`
+	End   time.Time `json:"end,omitzero"`
+}
+
+func (s *Server) usageOf(r *http.Request, paths ...string) usageReply {
 	since := func(k string) *float64 {
 		v, err := strconv.ParseInt(r.URL.Query().Get(k), 10, 64)
 		if err != nil {
 			return nil
 		}
-		c := s.stats.SessionCostSince(t.Path, time.Unix(v, 0))
+		c := s.stats.CostSince(time.Unix(v, 0), paths...)
 		return &c
 	}
-	reply(w, struct {
-		usage.Stats
-		WeekCost     *float64 `json:"weekCost,omitempty"`
-		FiveHourCost *float64 `json:"fiveHourCost,omitempty"`
-	}{s.stats.Session(t.Path), since("week"), since("fiveHour")})
+	return usageReply{Stats: s.stats.Session(paths...), WeekCost: since("week"), FiveHourCost: since("fiveHour")}
+}
+
+func (s *Server) agentUsage(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	ids := s.agentConversations(name)
+	var paths []string
+	var convs []conversation
+	for _, id := range ids {
+		t, ok := s.M.Index.Find(id)
+		if !ok {
+			continue
+		}
+		st := s.stats.Session(t.Path)
+		paths = append(paths, t.Path)
+		convs = append(convs, conversation{id, cmp.Or(s.M.Store.Get(id).Name, t.Title), st.Cost, st.Total, st.Turns, st.Start, st.End})
+	}
+	if len(paths) == 0 {
+		http.Error(w, "no conversations of "+name+" on "+s.Host, http.StatusNotFound)
+		return
+	}
+	sort.Slice(convs, func(i, j int) bool { return convs[i].End.After(convs[j].End) })
+	out := s.usageOf(r, paths...)
+	out.Conversations = convs
+	reply(w, out)
+}
+
+func (s *Server) agentConversations(name string) []string {
+	if l := s.hubNamed(name); l != nil {
+		ids := s.M.Store.Find(func(_ string, m store.Meta) bool {
+			return m.Name == name || strings.HasPrefix(m.Name, name+" ") || name == hubName && sessions.RetiredHub(m.Name)
+		})
+		if sid := l.session(); sid != "" && !slices.Contains(ids, sid) {
+			ids = append(ids, sid)
+		}
+		return ids
+	}
+	return s.M.Store.Find(func(_ string, m store.Meta) bool { return m.Agent == name })
 }
 
 type spentIn struct {

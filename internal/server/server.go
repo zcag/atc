@@ -181,6 +181,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/agents", s.agents)
 	mux.HandleFunc("POST /api/agents/{name}/message", s.agentMessage)
 	mux.HandleFunc("POST /api/agents/{name}/reset", s.agentReset)
+	mux.HandleFunc("GET /api/agents/{name}/usage", s.agentUsage)
 	mux.HandleFunc("GET /api/engines", s.engines)
 	mux.HandleFunc("POST /api/presence", s.presencePost)
 	mux.HandleFunc("POST /api/termlog", s.termLog)

@@ -291,15 +291,19 @@ func subagentFiles(transcript string) []string {
 	return paths
 }
 
-func (s *Scanner) Session(transcript string) Stats {
+func (s *Scanner) Session(transcripts ...string) Stats {
 	st := Stats{PricesAt: PricesAsOf}
 	models := map[string]*ModelPart{}
 	unpriced, local := map[string]bool{}, map[string]bool{}
-	agents := map[string]bool{}
+	agents, seen := map[string]bool{}, map[string]bool{}
 	take := func(f *file, sub bool) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
-		for _, m := range f.msgs {
+		for id, m := range f.msgs {
+			if seen[id] {
+				continue
+			}
+			seen[id] = true
 			st.add(m)
 			if models[m.model] == nil {
 				models[m.model] = &ModelPart{Model: m.model}
@@ -316,16 +320,25 @@ func (s *Scanner) Session(transcript string) Stats {
 		}
 		st.ToolCalls += f.tools + f.subTools
 		if !sub {
-			st.Turns, st.Start, st.End, st.Active = f.turns, f.start, f.end, int64(f.active.Seconds())
+			st.Turns += f.turns
+			st.Active += int64(f.active.Seconds())
+			if !f.start.IsZero() && (st.Start.IsZero() || f.start.Before(st.Start)) {
+				st.Start = f.start
+			}
+			if f.end.After(st.End) {
+				st.End = f.end
+			}
 			for a := range f.agents {
 				agents[a] = true
 			}
 		}
 	}
-	take(s.get(transcript), false)
-	for _, p := range subagentFiles(transcript) {
-		agents[strings.TrimPrefix(strings.TrimSuffix(filepath.Base(p), ".jsonl"), "agent-")] = true
-		take(s.get(p), true)
+	for _, t := range transcripts {
+		take(s.get(t), false)
+		for _, p := range subagentFiles(t) {
+			agents[strings.TrimPrefix(strings.TrimSuffix(filepath.Base(p), ".jsonl"), "agent-")] = true
+			take(s.get(p), true)
+		}
 	}
 	st.Subagents.Count = len(agents)
 	if !st.Start.IsZero() {
@@ -409,10 +422,13 @@ func (s *Scanner) Spend(root string, from time.Time) Spend {
 	return sp
 }
 
-func (s *Scanner) SessionCostSince(transcript string, from time.Time) float64 {
-	files := []*file{s.get(transcript)}
-	for _, p := range subagentFiles(transcript) {
-		files = append(files, s.get(p))
+func (s *Scanner) CostSince(from time.Time, transcripts ...string) float64 {
+	var files []*file
+	for _, t := range transcripts {
+		files = append(files, s.get(t))
+		for _, p := range subagentFiles(t) {
+			files = append(files, s.get(p))
+		}
 	}
 	return costSince(files, from, map[string]bool{})
 }
