@@ -275,8 +275,16 @@ func (s *Server) waGuest(d whatsapp.Message) {
 		head += ", a voice note"
 	}
 	log.Printf("whatsapp: guest %s wrote (%s)", name, d.Type)
-	if err := s.hubSend(ctx, hub.Guest, head+"]\n"+text); err != nil {
-		log.Printf("whatsapp: guest %s: %v", name, err)
+	for try := 1; ; try++ {
+		err := s.hubSend(ctx, hub.Guest, head+"]\n"+text)
+		if err == nil {
+			return
+		}
+		log.Printf("whatsapp: guest %s (try %d): %v", name, try, err)
+		if try == 6 {
+			return
+		}
+		time.Sleep(10 * time.Second)
 	}
 }
 
