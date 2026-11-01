@@ -28,6 +28,9 @@ Runs Claude as a stream-json process that each channel talks into, so a reply st
 whoever asked while the others wait or join. Runs as its own service (atc-hub.service), so
 restarting atc never cuts a call. atc finds it at $ATC_HUB.
 
+Guests (atc guest) get a conversation of their own beside it (@guests, working in ~/guests):
+the guest and guest-call channels go there, and its API is under /guests/.
+
   -quiet 6h -small 80000      quiet this long and past this many tokens: start over
   -cap-quiet 10m -cap 150000  quiet this long and past this many: start over
 Starting over has the session write a handover note that opens the next one.
@@ -75,6 +78,7 @@ func hubCmd(args []string) error {
 	home, _ := os.UserHomeDir()
 	state := fs.String("state", filepath.Join(home, ".local/state/atc/hub"), "where the session id and handover notes live")
 	dir := fs.String("dir", home, "the folder the session works in")
+	guestState := fs.String("guest-state", filepath.Join(home, ".local/state/atc/guests"), "the guests' conversation's session id and handover notes")
 	d := startover.Default
 	quiet := fs.Duration("quiet", d.Quiet, "")
 	small := fs.Int("small", d.Small, "")
@@ -85,17 +89,35 @@ func hubCmd(args []string) error {
 	bin := cmp.Or(os.Getenv("ATC_CLAUDE_BIN"), "claude")
 	cargs := append([]string{"--model", *model, "--effort", *effort}, server.HubArgs()...)
 	cargs = append(cargs, strings.Fields(os.Getenv("ATC_HUB_CLAUDE_ARGS"))...)
-	h := hub.New(hub.Config{
-		Bin: bin, Args: cargs, Dir: *dir, State: *state, Mode: modes.Text, News: atcNews(),
-		Reset: startover.Policy{Quiet: *quiet, Small: *small, CapQuiet: *capQuiet, Cap: *cap},
-		Call:  hub.CallConfig{URL: cmp.Or(os.Getenv("ATC_DELTA_CALL"), "http://127.0.0.1:8807"), Number: callNumber()},
+	policy := startover.Policy{Quiet: *quiet, Small: *small, CapQuiet: *capQuiet, Cap: *cap}
+	line := cmp.Or(os.Getenv("ATC_DELTA_CALL"), "http://127.0.0.1:8807")
+	gdir := filepath.Join(home, "guests")
+	os.MkdirAll(gdir, 0o755)
+	gargs := append([]string{"--model", *model, "--effort", *effort}, server.GuestsArgs()...)
+	guests := hub.New(hub.Config{
+		Bin: bin, Args: gargs, Dir: gdir, State: *guestState, Mode: guestsMode, Reset: policy,
+		Call: hub.CallConfig{URL: line}, GuestDesk: true,
 	})
-	if err := h.Start(); err != nil {
-		return err
+	h := hub.New(hub.Config{
+		Bin: bin, Args: cargs, Dir: *dir, State: *state, Mode: modes.Text, News: atcNews(), Reset: policy,
+		Call:   hub.CallConfig{URL: line, Number: callNumber()},
+		Guests: guests,
+	})
+	for _, x := range []*hub.Hub{h, guests} {
+		if err := x.Start(); err != nil {
+			return err
+		}
+		go x.Watch(context.Background(), time.Minute)
 	}
-	go h.Watch(context.Background(), time.Minute)
 	log.Printf("atc hub listening on http://%s", *addr)
 	return http.ListenAndServe(*addr, h.Handler())
+}
+
+func guestsMode(ch string) string {
+	if ch == hub.Agent {
+		return modes.Text("guests-agent")
+	}
+	return modes.Text(ch)
 }
 
 func atcNews() func(bool) string {

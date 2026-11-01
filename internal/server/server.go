@@ -70,6 +70,7 @@ type Server struct {
 	// CallNumber is the assistant's own phone line, which the app logs its calls under.
 	CallNumber string
 	hub        *hubLink
+	guests     *hubLink
 	// PublicURL is where the user reaches atc (links in messages), LocalURL where this
 	// machine's own browser does.
 	PublicURL, LocalURL string
@@ -744,7 +745,7 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 		s.done(w, id, s.sendOpenCode(r.Context(), id, req.Text))
 		return
 	}
-	if s.hubSession(id) {
+	if l := s.linkOf(id); l != nil {
 		channel := "atc"
 		switch {
 		case req.From != "":
@@ -752,7 +753,7 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 		case req.Voice:
 			channel = "atc-voice"
 		}
-		s.done(w, id, s.hubSend(r.Context(), channel, req.Text))
+		s.done(w, id, s.linkSend(r.Context(), l, channel, req.Text))
 		return
 	}
 	if req.From == "" {
@@ -769,9 +770,9 @@ func (s *Server) keys(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	if s.hubSession(id) {
+	if l := s.linkOf(id); l != nil {
 		if req.Keys == "\x1b" {
-			_, err := s.Hub.Interrupt(r.Context(), "atc")
+			_, err := l.c.Interrupt(r.Context(), "atc")
 			s.done(w, id, err)
 			return
 		}
@@ -1047,7 +1048,8 @@ func (s *Server) notify(list []sessions.Session) {
 	prev := s.seen
 	s.seen = states(list)
 	viewing := func(x sessions.Session) bool {
-		return s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) || s.hub != nil && s.hubQuiet(x)
+		return s.Term.Viewing(x.ID) || s.fleet.viewing(x.Host, x.ID) || s.hub != nil && s.hubQuiet(x) ||
+			guestWork(x) && x.State != sessions.NeedsYou
 	}
 	shown, showing := pageAlerts(s.shown, list, viewing)
 	s.shown = shown

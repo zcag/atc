@@ -107,7 +107,7 @@ function App() {
   const [runs, setLive] = useState(null);
   const live = useMemo(() => runs && runs.filter((x) => !hiddenRun(x)), [runs]);
   const reach = useMemo(() => runs && runs.filter((x) => !hiddenRun(x) || x.kind === "hub"), [runs]);
-  const hub = runs?.find((x) => x.kind === "hub");
+  const hub = runs?.find((x) => x.kind === "hub" && x.agent === "assistant");
   const [agents, setAgents] = useState(null);
   const [up, setUp] = useState(true);
   const [past, setPast] = useState({});
@@ -941,7 +941,7 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
   }, [tabs, only, agents]);
-  const mine = (s) => (only === AGENTS ? !!s.agent : !only || (!homeless(s) && project(s.cwd).name === only));
+  const mine = (s) => (only === AGENTS ? !!s.agent : !only ? !guestWork(s) || s.state === "needs-you" : !homeless(s) && project(s.cwd).name === only);
   const restingHub = (s) => s.kind === "hub" && s.state === "your-turn";
   const live = only === AGENTS ? runs && runs.filter((s) => s.agent && !restingHub(s)) : all && all.filter(mine);
   const [hist, setHist] = useState(null);
@@ -3699,6 +3699,7 @@ const AGENTS = "@agents";
 let AGENT_INFO = {};
 const away = (s) => !!s.parked && s.state !== "needs-you";
 const homeless = (s) => !!s.agent && !AGENT_INFO[s.agent]?.dir;
+const guestWork = (s) => s.agent === "guests" || project(s.cwd).name === "guests";
 const hiddenRun = (s) => (s.kind === "hub" || (!!s.agent && !!s.parked)) && s.state !== "needs-you";
 const agentApi = (a, what, body) => api(`/api/agents/${encodeURIComponent(a)}/${what}`, { method: "POST", body });
 const mins = (ns) => Math.round(ns / 6e10);
@@ -3766,6 +3767,7 @@ function AgentSheet({ name, live, say, onClose, reload }) {
 const SourceTag = ({ s, full }) => (s.agent ? html`<${AgentTag} s=${s} />` : html`<${ProjectTag} path=${s.cwd} full=${full} />`);
 
 const APP_ICONS = {
+  people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 13.8c2.1.8 3.5 2.9 3.5 5.2"/>',
   mail: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>',
   present: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8M7 12l3-3 2 2 4-4"/>',
@@ -4936,7 +4938,7 @@ const Node = ({ t, live }) => html`<span class="node ${shipped(t) ? "ship" : ""}
 
 const lastAt = (body) => (body?.items || []).map((it) => it.out?.time || it.time).filter(Boolean).sort().pop();
 
-const HUB_CHANNEL = { phone: "On the call", whatsapp: "On WhatsApp", "atc-voice": "By voice", agent: "To a session" };
+const HUB_CHANNEL = { phone: "On the call", whatsapp: "On WhatsApp", "atc-voice": "By voice", agent: "To a session", guest: "To a guest", "guest-call": "On a guest's call" };
 
 // useHubStream follows the assistant's reply as the hub streams it: what it writes after its
 // last tool call, since everything before that is already in the transcript.

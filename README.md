@@ -716,12 +716,20 @@ say. `atc guest add sam 905321234567` adds one (`atc guest` lists them, `atc gue
 the list is `~/.config/atc/guests` on the machine WhatsApp runs on, read fresh on every message, so a
 change needs no restart. The assistant adds someone only when you ask, and first shows you the
 introduction it will send them. atc registers a third webhook for every direct message (a guest may write from an `@lid` only atc
-can resolve) and drops anyone who is neither the owner nor a guest. A guest's message goes to the
-assistant on the `guest` channel (`[guest sam on WhatsApp]` in front, photos and voice notes as for
-the owner), where, as with another session's report, the reply reaches no one. The assistant answers
-the guest with `atc wa --to sam` (text, files, a voice note; no polls), which refuses any name not
-in the list, and brings what the guest needs to the user, who says yes before anything is changed for
-them (`modes/guest.md`). It needs the hub.
+can resolve) and drops anyone who is neither the owner nor a guest. Guests never reach the assistant:
+the hub runs a second conversation for them, **guests** (`@guests`, working in `~/guests`), and a
+guest's message goes there on the `guest` channel (`[guest sam on WhatsApp]` in front, photos and
+voice notes as for the owner), where the reply reaches no one. It answers the guest with `atc wa --to
+sam` (text, files, a voice note; no polls), which refuses any name not in the list. One conversation
+serves every guest, so it keeps each one's context in `~/guests/<name>/notes.md` (who they are, their
+open threads, files made for them) and starts work for them as sessions in `~/guests/<name>`, which
+report back to it. What needs the user it brings to the assistant with `report`; the assistant asks them
+on whatever channel they are on and passes their yes back with `send @guests` and `approved`. Only the
+assistant can mark a message as their go-ahead (atc refuses `approved` from any other session, the
+guests' conversation included), so nothing a guest says can approve anything. Its Claude loads only
+atc's MCP (`--strict-mcp-config`): no WhatsApp, mail or browser of their. In atc it shows under
+`@agents`, sessions in `~/guests` group under one **guests** project and stay out of the full list
+unless one needs them, and none of it pushes to their phone. It needs the hub.
 
 The conversation is one session, kept and resumed like `assistant` (in `ATC_ASSIST_DIR`), parked so
 atc's own pushes don't repeat what WhatsApp already told you. Dropped from Claude's background list,
@@ -776,10 +784,12 @@ writes to it, the reply appears as it is written, and Esc or Stop interrupts it.
 third channel: delta's `talk.py` connects as `phone` (`ws://127.0.0.1:8820/ws?channel=phone`).
 
 **Channels.** Each message is tagged with where it came from: `atc`, `atc-voice` (the Voice button),
-`whatsapp`, `phone`, `agent` (another session's `send`), `guest` (someone else on WhatsApp, above) and
-`guest-call` (a guest calling delta's line: delta-talk answers the numbers in the guest list too and
-connects as this channel, so the reply is spoken to them under `modes/guest-call.md`; like `phone`
-its turns go first and hold the others, and neither guest channel gets atc's feed of their sessions). When the channel changes, the message
+`whatsapp`, `phone` and `agent` (another session's `send`). The guest channels, `guest` (someone else
+on WhatsApp, above) and `guest-call` (a guest calling delta's line: delta-talk answers the numbers in
+the guest list too and connects as this channel, so the reply is spoken to them under
+`modes/guest-call.md`), are served on the same paths but go to the guests' conversation, whose own API
+is under `/guests/` (`/guests/status`, `/guests/events`); there a guest call's turns go first and hold
+its WhatsApp guests, and neither gets atc's feed of their sessions. When the channel changes, the message
 carries that channel's rules from `modes/<channel>.md` (built in; a file of the same name in
 `~/.config/atc/modes/` takes its place), so the session writes Markdown for atc, short spoken
 sentences on a call, and phone-screen messages on WhatsApp. A report from another session gets

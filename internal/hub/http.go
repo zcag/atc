@@ -12,9 +12,17 @@ import (
 	"github.com/coder/websocket/wsjson"
 )
 
+// Handler serves the hub. With a guests hub (cfg.Guests), what guests say goes to that one, on the
+// same paths, and its own API is under /guests/.
 func (h *Hub) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /ws", func(w http.ResponseWriter, r *http.Request) { h.serveWS(w, r, r.URL.Query().Get("channel"), true) })
+	if g := h.cfg.Guests; g != nil {
+		mux.Handle("/guests/", http.StripPrefix("/guests", g.Handler()))
+	}
+	mux.HandleFunc("GET /ws", func(w http.ResponseWriter, r *http.Request) {
+		ch := r.URL.Query().Get("channel")
+		h.forChannel(ch).serveWS(w, r, ch, true)
+	})
 	mux.HandleFunc("GET /events", func(w http.ResponseWriter, r *http.Request) { h.serveWS(w, r, "", false) })
 	mux.HandleFunc("GET /status", func(w http.ResponseWriter, r *http.Request) { reply(w, h.Status()) })
 	mux.HandleFunc("POST /message", func(w http.ResponseWriter, r *http.Request) {
@@ -23,7 +31,7 @@ func (h *Hub) Handler() http.Handler {
 			http.Error(w, "channel and text are required", http.StatusBadRequest)
 			return
 		}
-		st, err := h.Say(req.Channel, req.Text)
+		st, err := h.forChannel(req.Channel).Say(req.Channel, req.Text)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
@@ -33,7 +41,7 @@ func (h *Hub) Handler() http.Handler {
 	mux.HandleFunc("POST /interrupt", func(w http.ResponseWriter, r *http.Request) {
 		var req struct{ Channel string }
 		json.NewDecoder(r.Body).Decode(&req)
-		reply(w, map[string]bool{"interrupted": h.Interrupt(req.Channel, true)})
+		reply(w, map[string]bool{"interrupted": h.forChannel(req.Channel).Interrupt(req.Channel, true)})
 	})
 	mux.HandleFunc("POST /notice", func(w http.ResponseWriter, r *http.Request) {
 		joined, err := h.Notice()
@@ -68,6 +76,13 @@ func (h *Hub) Handler() http.Handler {
 		reply(w, map[string]string{"outcome": out})
 	})
 	return mux
+}
+
+func (h *Hub) forChannel(ch string) *Hub {
+	if g := h.cfg.Guests; g != nil && guest(ch) {
+		return g
+	}
+	return h
 }
 
 // serveWS is one channel's connection (or, with no channel, a watcher of all of them).

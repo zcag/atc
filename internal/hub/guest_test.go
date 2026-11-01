@@ -126,3 +126,45 @@ func TestGuestCallIsSpokenAndHoldsHim(t *testing.T) {
 		t.Fatalf("home %q", b)
 	}
 }
+
+func TestGuestsHaveTheirOwnConversation(t *testing.T) {
+	exe, _ := os.Executable()
+	t.Setenv("HUB_FAKE_CLAUDE", "1")
+	mode := func(ch string) string { return "MODE " + ch }
+	g := New(Config{Bin: exe, Dir: t.TempDir(), State: t.TempDir(), Mode: mode, GuestDesk: true})
+	h := New(Config{Bin: exe, Dir: t.TempDir(), State: t.TempDir(), Mode: mode, Guests: g})
+	for _, x := range []*Hub{g, h} {
+		if err := x.Start(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	srv := httptest.NewServer(h.Handler())
+	t.Cleanup(func() { srv.Close(); h.Stop(); g.Stop() })
+	r := &rig{t, h, srv}
+
+	mine := r.dial("")
+	call := r.dial(GuestCall)
+	call.send("message", "[guest sam on the phone] alo")
+	if es := call.until("done"); es[len(es)-1].Channel != GuestCall {
+		t.Fatalf("guest call %v", es)
+	}
+	resp, err := http.Post(srv.URL+"/message", "application/json", strings.NewReader(`{"channel":"guest","text":"[guest kim on WhatsApp]\nselam"}`))
+	if err != nil || resp.StatusCode != 200 {
+		t.Fatalf("guest message: %v %v", resp, err)
+	}
+	time.Sleep(300 * time.Millisecond)
+	for len(mine.ev) > 0 {
+		if e := <-mine.ev; e.Type != "session" {
+			t.Fatalf("the assistant's conversation saw a guest: %v", e)
+		}
+	}
+	if st := h.Status(); st.Session == g.Status().Session || st.Channels[GuestCall] != 0 {
+		t.Fatalf("assistant %+v", st)
+	}
+	if st := g.Status(); st.Channels[GuestCall] != 1 {
+		t.Fatalf("guests %+v", st)
+	}
+	if resp, err = http.Get(srv.URL + "/guests/status"); err != nil || resp.StatusCode != 200 {
+		t.Fatalf("guests status: %v %v", resp, err)
+	}
+}
