@@ -257,6 +257,10 @@ class Orb(c: Context) : View(c), Persona {
                 float refl = (smoothstep(r, r - 0.08, md) * 0.3 + exp(-max(md - r, 0.0) * 7.0) * 0.1) * below * exp(-(floorY - uv.y) * 6.0);
                 col += tint * refl;
                 a += refl;
+                float2 half = 0.5 * size / min(size.x, size.y);
+                float keep = smoothstep(half.x, half.x - 0.12, abs(uv.x)) * smoothstep(half.y, half.y - 0.12, abs(uv.y));
+                col *= keep;
+                a *= keep;
                 if (d < r) {
                     float z = sqrt(max(r * r - d * d, 0.0)) / r;
                     float3 nrm = normalize(float3(q / r, z));
