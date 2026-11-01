@@ -523,7 +523,7 @@ function Assist({ live, onOpen }) {
     <div class="assist">
       ${!APP && html`<button class="icon close" onClick=${onOpen} aria-label="Close">✕</button>`}
       <header class="ahello">
-        <span class="time">${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+        <span class="time">${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
         <span class="date">${hello} · ${now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}</span>
       </header>
       <div class="ahero" onClick=${CAN_CALL ? callAssistant : null}>
