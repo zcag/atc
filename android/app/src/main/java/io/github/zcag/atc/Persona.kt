@@ -98,7 +98,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
             when (made?.second?.optString("kind")) {
                 "head3d" -> Head3D(context, made.first, made.second)
                 "live2d" -> Live2D(context, made.first, made.second)
-                "illustration" -> Illustration(context, made.first)
+                "illustration" -> WebPersona(context, made.first, Prefs(context).server.orEmpty().trimEnd('/'))
                 else -> Orb(context)
             }
         }.onFailure { Log.w("atc", "persona: ${it.message}") }.getOrElse { Orb(context) }

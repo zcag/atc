@@ -22,6 +22,8 @@ import javax.net.ssl.X509TrustManager
 object Net {
     fun get(c: Context, url: String) = call(c, url) { it.inputStream.bufferedReader().readText() }
 
+    fun bytes(c: Context, url: String) = call(c, url) { it.inputStream.readBytes() }
+
     fun download(c: Context, url: String, to: File) =
         call(c, url) { conn -> conn.inputStream.use { i -> to.outputStream().use { i.copyTo(it) } } }
 

@@ -1,208 +1,317 @@
-// The call screen's illustrated characters ("kind": "illustration"): one painted portrait, edits of its face
-// (blink, glances, brows, mouth shapes) in an atlas, the room without him and his matte. Every frame the face
-// controller (a port of Animator.kt) picks how much of each edit shows in the eye, brow and mouth regions and how
-// far to turn, nod, tilt and breathe him over the room. Android draws the same shader (Illustration.kt).
+// The call screen's illustrated characters ("kind": "illustration"). One painted portrait and edits of it: face
+// variants (blinks, glances, brows, smiles, mouth shapes) and whole-head variants (turns, nods, a lean). Each
+// variant comes with optical flow to and from the portrait, so the shader morphs: eyelids slide, lips part,
+// irises travel and the head turns by moving pixels, and only what is new (teeth, a closed lid) fades in.
+// A behaviour model (Mind) decides every frame where he looks and how he moves, from the call's state and both
+// voices' loudness. The phone's call screen runs this same file in a WebView (persona.html).
 
-const PI = Math.PI, rad = (d) => d * PI / 180, clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+const PI = Math.PI, clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const lerp = (a, b, t) => a + (b - a) * t;
+const rand = (a, b) => a + Math.random() * (b - a);
+const chance = (p) => Math.random() < p;
+const pick = (list) => { let r = Math.random() * list.reduce((a, [, w]) => a + w, 0); for (const [n, w] of list) if ((r -= w) <= 0) return n; return list[0][0]; };
 
+/** Critically damped follower: x reaches its target smoothly in about 1/hz seconds. */
 class Spring {
-  constructor(hz) { this.x = 0; this.v = 0; this.hz = hz; }
+  constructor(hz, x = 0) { this.hz = hz; this.x = x; this.v = 0; }
   to(target, dt) {
     const w = 2 * PI * this.hz, f = 1 + 2 * dt * w, dtw2 = dt * w * w;
     this.v = (this.v + dtw2 * (target - this.x)) / (f + dt * dtw2);
     this.x += this.v * dt;
     return this.x;
   }
+  kick(v) { this.v += v; }
 }
 
-class Animator {
+/** A quick move from where it is to a target along a minimum-jerk curve, the way eyes jump. */
+class Saccade {
+  constructor() { this.from = 0; this.to = 0; this.t = 1; this.dur = .1; this.x = 0; }
+  go(to, dur) { this.from = this.x; this.to = to; this.t = 0; this.dur = dur; }
+  step(dt) {
+    this.t = Math.min(1, this.t + dt / this.dur);
+    const s = this.t, k = s * s * s * (10 - 15 * s + 6 * s * s);
+    return (this.x = lerp(this.from, this.to, k));
+  }
+}
+
+/** Short gestures that rise and fall back: a nod, a brow flash, an "mm". hit(amount, rise, fall) adds one. */
+class Pulses {
+  constructor() { this.list = []; this.x = 0; }
+  hit(amount, rise = .08, fall = .35) { this.list.push({ a: amount, rise, fall, t: 0 }); }
+  step(dt) {
+    let x = 0;
+    for (const p of this.list) {
+      p.t += dt;
+      x += p.a * (p.t < p.rise ? smooth(0, p.rise, p.t) : 1 - smooth(0, p.fall, p.t - p.rise));
+    }
+    this.list = this.list.filter((p) => p.t < p.rise + p.fall);
+    return (this.x = x);
+  }
+}
+
+/** Slow wandering noise in -1..1 from a few incommensurate sines. */
+const wander = (t, seed) => (Math.sin(t * .23 + seed) + Math.sin(t * .37 + seed * 2.1) * .7 + Math.sin(t * .61 + seed * 3.7) * .4) / 2.1;
+
+/** The behaviour: from the call's state and both voices' loudness to the face's weights and the head's pose. */
+export class Mind {
   constructor() {
-    Object.assign(this, { t: 0, s: {}, blinkAt: 1.5, blinkStart: -1, gazeAt: 0, gazeYaw: 0, gazePitch: 0, slow: 0, nod: 0, brow: 0, youSince: -1, lastState: "" });
-    for (const [k, hz] of [["eyeYaw", 9], ["eyePitch", 9], ["headYaw", 1.2], ["headPitch", 1.2], ["headRoll", .9], ["jaw", 11], ["smile", .8], ["focus", 1.5], ["tilt", .7]]) this[k + "S"] = new Spring(hz);
+    this.t = 0;
+    this.state = "listening";
+    this.since = 0;
+    this.gx = new Saccade();
+    this.gy = new Saccade();
+    this.nextGaze = 1;
+    this.fixUntil = 0;
+    this.blinkAt = 2;
+    this.blinkT = -1;
+    this.blinkLen = .2;
+    this.headYaw = new Spring(1.3);
+    this.headPitch = new Spring(1.1);
+    this.nod = new Pulses();
+    this.lean = new Spring(.5);
+    this.tilt = new Spring(.45);
+    this.smile = new Spring(.9);
+    this.smileOpen = new Spring(1.6);
+    this.browUp = new Spring(2);
+    this.flash = new Pulses();
+    this.knit = new Spring(.8);
+    this.half = new Spring(1.2);
+    this.wide = new Pulses();
+    this.purse = new Spring(1.2);
+    this.press = new Pulses();
+    this.rising = false;
+    this.roundT = 0;
+    this.spreadT = 0;
+    this.open = new Spring(9);
+    this.round = new Spring(5);
+    this.spread = new Spring(5);
+    this.level = 0;
+    this.slow = 0;
+    this.peak = 0;
+    this.lastSyl = -1;
+    this.voiceOn = 0;
+    this.youOn = 0;
+    this.youSince = -1;
+    this.youQuiet = 0;
+    this.pulse = 0;
+    this.breathPhase = 0;
+    this.breathRate = 1 / 4.2;
+    this.sigh = 0;
+    this.read = 0;
   }
-  wave(a, b) { return (Math.sin(this.t * a * 2 * PI) + Math.sin(this.t * b * 2 * PI * 1.618 + 1.3)) * .5; }
+
+  enter(state) {
+    const was = this.state;
+    this.state = state;
+    this.since = this.t;
+    this.nextGaze = this.t + (state === "thinking" || state === "tool" ? .05 : rand(.15, .4));
+    if (chance(.75)) this.blink(this.t + rand(0, .08));
+    if (state === "hearing") { this.wide.hit(.45, .12, .7); this.flash.hit(.5, .12, .8); }
+    if (state === "speaking" && was !== "speaking") { this.sigh = Math.max(this.sigh, .6); if (chance(.5)) this.nextGaze = this.t; }
+    if (state === "thinking" && chance(.5)) this.nod.hit(-.25, .25, .6);
+  }
+
+  blink(at, len = rand(.17, .26)) { if (this.blinkT < 0) { this.blinkAt = at; this.blinkLen = len; } }
+
+  lookAt(x, y, hold) {
+    const amp = Math.hypot(x - this.gx.to, y - this.gy.to);
+    const dur = .045 + .09 * Math.min(1, amp);
+    this.gx.go(x, dur);
+    this.gy.go(y, dur);
+    this.fixUntil = this.t + hold;
+    if (amp > .45 && chance(.55)) this.blink(this.t + .01);
+  }
+
+  /** Where to look next, by state: people hold eye contact while listening, look away to think, read while working. */
+  gaze() {
+    const s = this.state, k = this.t - this.since;
+    if (s === "thinking") {
+      const side = chance(.5) ? 1 : -1;
+      return this.lookAt(side * rand(.35, .8), rand(.45, .9), rand(.9, 2.2));
+    }
+    if (s === "tool") {
+      if (chance(.15) && k > 2) return this.lookAt(rand(-.1, .1), rand(-.05, .05), rand(.6, 1.1));
+      this.read = (this.read + 1) % 5;
+      return this.lookAt(-.45 + this.read * .22, -rand(.7, .9), this.read === 4 ? rand(.4, .7) : rand(.18, .32));
+    }
+    if (s === "speaking" && (k < .5 && chance(.6) || chance(.12))) return this.lookAt(rand(.3, .6) * (chance(.5) ? 1 : -1), rand(-.25, .35), rand(.4, .9));
+    if (s === "listening" && chance(.18)) {
+      const where = pick([["desk", 1], ["window", 1], ["aside", 1]]);
+      if (where === "desk") return this.lookAt(rand(-.5, -.2), -rand(.5, .8), rand(.8, 1.6));
+      if (where === "window") return this.lookAt(rand(.55, .9), rand(-.05, .2), rand(.7, 1.4));
+      return this.lookAt(rand(-.6, .6), rand(-.2, .3), rand(.5, 1));
+    }
+    const micro = s === "hearing" ? .04 : .06;
+    this.lookAt(rand(-micro, micro), rand(-micro, micro) * .7, rand(.5, 1.8));
+  }
+
   step(dt, state, you, it) {
-    const t = (this.t += dt), s = this.s;
-    const speaking = state === "speaking", thinking = state === "thinking" || state === "tool", listening = state === "listening" || state === "hearing";
-    if (state !== this.lastState) { this.gazeAt = t; this.lastState = state; }
-    this.blink(thinking ? 4.5 : speaking ? 2.6 : 3.4);
-    this.gaze(thinking, speaking);
-    this.listen(dt, you, listening);
-    const voice = speaking ? it : 0;
-    this.emphasis(dt, voice);
-    const sway = listening ? .6 : 1;
-    this.eyeYaw = this.eyeYawS.to(this.gazeYaw, dt);
-    this.eyePitch = this.eyePitchS.to(this.gazePitch, dt);
-    this.yaw = this.headYawS.to(this.gazeYaw * .35 + rad(2.2) * sway * this.wave(.13, .07), dt);
-    this.pitch = this.headPitchS.to(this.gazePitch * .3 + rad(1.2) * sway * this.wave(.11, .17) + rad(.6) * Math.sin(2 * PI * .22 * t) + this.nod, dt);
-    this.roll = this.headRollS.to(rad(1.4) * sway * this.wave(.09, .05) + this.tiltS.to(state === "hearing" ? rad(3) : thinking ? rad(-2) : 0, dt), dt);
-    s.jawOpen = this.jawS.to(speaking ? Math.min(.6, Math.pow(voice, .8) * .55) : 0, dt);
-    s.smile = this.smileS.to(listening ? .22 : speaking ? .12 : .02, dt);
-    s.focus = this.focusS.to(thinking ? 1 : 0, dt);
-    s.browUp = .06 + this.brow * .55 + (state === "hearing" ? .12 : 0);
-    return this;
-  }
-  blink(every) {
-    const t = this.t;
-    if (this.blinkStart < 0 && t >= this.blinkAt) this.blinkStart = t;
-    let shut = 0;
-    if (this.blinkStart >= 0) {
-      const k = t - this.blinkStart;
-      if (k < .07) shut = k / .07;
-      else if (k < .1) shut = 1;
-      else if (k < .22) shut = 1 - (k - .1) / .12;
-      else { this.blinkStart = -1; this.blinkAt = t + (Math.random() < .12 ? .18 : every * (.45 + Math.random() * 1.1)); }
+    this.t += dt;
+    if (state !== this.state) this.enter(state);
+    const s = this.state, t = this.t, speaking = s === "speaking", thinking = s === "thinking", tool = s === "tool";
+    const hearing = s === "hearing" || (s === "listening" && you > .1);
+
+    if (t >= this.fixUntil && t >= this.nextGaze) this.gaze();
+    const ex = this.gx.step(dt), ey = this.gy.step(dt);
+
+    if (this.blinkT < 0 && t >= this.blinkAt) this.blinkT = 0;
+    let lid = 0;
+    if (this.blinkT >= 0) {
+      this.blinkT += dt;
+      const k = this.blinkT / this.blinkLen;
+      lid = k < .35 ? smooth(0, .35, k) : k < .45 ? 1 : 1 - smooth(.45, 1, k);
+      if (k >= 1) {
+        this.blinkT = -1;
+        const every = thinking ? 5 : speaking ? 2.8 : tool ? 4.5 : 3.6;
+        this.blinkAt = t + (chance(.1) ? rand(.12, .25) : every * rand(.4, 1.5));
+      }
     }
-    this.s.blink = shut;
-  }
-  gaze(thinking, speaking) {
-    const t = this.t;
-    if (t < this.gazeAt) return;
-    if (thinking || (speaking && Math.random() < .18)) {
-      this.gazeYaw = rad(9 + Math.random() * 8) * (Math.random() < .5 ? 1 : -1);
-      this.gazePitch = rad(thinking ? 5 + Math.random() * 6 : -2 + Math.random() * 4);
-      this.gazeAt = t + (thinking ? 1.4 + Math.random() * 1.6 : .5 + Math.random() * .5);
-    } else {
-      this.gazeYaw = rad((Math.random() - .5) * 3);
-      this.gazePitch = rad((Math.random() - .5) * 2);
-      this.gazeAt = t + .6 + Math.random() * 1.6;
-    }
-    if (Math.abs(this.gazeYaw - this.eyeYawS.x) > rad(8) && this.blinkStart < 0 && Math.random() < .5) this.blinkAt = t;
-  }
-  listen(dt, you, listening) {
-    if (you > .12) { if (this.youSince < 0) this.youSince = this.t; }
-    else if (this.youSince >= 0) {
-      if (listening && this.t - this.youSince > .9 && Math.random() < .7) this.nod += rad(4);
+
+    // His voice: an onset after quiet raises attention, a pause after talking earns a nod and an "mm".
+    if (you > .1) {
+      if (this.youSince < 0) { this.youSince = t; if (t - this.youQuiet > 1.2) { this.flash.hit(.35, .1, .6); this.wide.hit(.2, .1, .5); } }
+      this.youQuiet = t;
+    } else if (this.youSince >= 0 && t - this.youQuiet > .45) {
+      if (t - this.youSince > .8 && !speaking && chance(.75)) { this.nod.hit(rand(.3, .5), .18, .45); if (chance(.5)) this.press.hit(.6, .1, .35); this.pulse = 1; }
       this.youSince = -1;
     }
-    this.nod *= Math.exp(-dt * 5);
-  }
-  emphasis(dt, voice) {
-    this.slow += (voice - this.slow) * Math.min(1, dt * 2.5);
-    if (voice - this.slow > .22 && this.brow < .3) { this.brow = 1; this.nod += rad(1.8); }
-    this.brow *= Math.exp(-dt * 3.5);
-  }
-}
+    this.youOn = lerp(this.youOn, hearing ? 1 : 0, 1 - Math.exp(-dt * 3));
 
-const pick = (list) => {
-  let r = Math.random() * list.reduce((a, [, w]) => a + w, 0);
-  for (const [n, w] of list) if ((r -= w) <= 0) return n;
-  return list[0][0];
-};
-
-const MOUTHS = ["m_small", "m_a", "m_o", "m_u", "m_e", "m_m"];
-
-// A new mouth shape each time the jaw starts to open (a syllable), sometimes pressed lips in a short gap.
-class Mouth {
-  constructor() { this.w = Object.fromEntries(MOUTHS.map((n) => [n, new Spring(14)])); this.cur = "m_small"; this.gap = null; this.prev = 0; this.rising = false; }
-  step(dt, open, speaking) {
-    if (open > this.prev + .004 && !this.rising && open > .06) {
+    // His own voice: a rise well above its recent level is a stressed syllable, which lifts the brows and nods.
+    const v = speaking ? it : 0;
+    this.level = v > this.level ? lerp(this.level, v, 1 - Math.exp(-dt * 60)) : lerp(this.level, v, 1 - Math.exp(-dt * 18));
+    this.slow = lerp(this.slow, this.level, 1 - Math.exp(-dt * 2));
+    if (this.level - this.slow > .18 && t - this.lastSyl > .35) {
+      this.lastSyl = t;
+      if (chance(.6)) this.nod.hit(rand(.15, .3), .12, .3);
+      if (chance(.4)) this.flash.hit(rand(.3, .6), .1, .45);
+    }
+    if (!this.rising && this.level > .1 && this.level > this.slow) {
       this.rising = true;
-      this.cur = pick([["m_a", 3], ["m_e", 2.5], ["m_o", 1.6], ["m_small", 2], ["m_u", .8]]);
-    }
-    if (open < this.prev - .004 && this.rising) {
-      this.rising = false;
-      if (speaking && open < .18 && Math.random() < .25) this.gap = "m_m";
-    }
-    if (open > .15) this.gap = null;
-    this.prev = open;
-    const level = smooth(.02, .3, open);
-    return Object.fromEntries(MOUTHS.map((n) => [n, this.w[n].to(n === this.cur ? level : n === this.gap ? (1 - level) * .9 : 0, dt)]));
+      const r = Math.random();
+      this.roundT = r < .2 ? rand(.5, 1) : 0;
+      this.spreadT = r > .75 ? rand(.4, .9) : 0;
+    } else if (this.rising && this.level < .06) this.rising = false;
+    this.voiceOn = lerp(this.voiceOn, speaking ? 1 : 0, 1 - Math.exp(-dt * 2));
+    const open = this.open.to(.9 * smooth(.04, .8, this.level), dt);
+    const round = this.round.to(this.roundT, dt), spread = this.spread.to(this.spreadT, dt);
+    if (speaking && this.level < .03 && this.slow > .1 && chance(dt * 2)) this.press.hit(.7, .05, .2);
+
+    this.pulse = Math.max(0, this.pulse - dt * 1.2);
+    const smileBase = { listening: .35, hearing: .25, thinking: .05, tool: .1, speaking: .2 }[s] ?? .2;
+    const smile = this.smile.to(smileBase + this.pulse * .35 + .12 * wander(t, 4) * (s === "listening" ? 1 : .3), dt);
+    const smileOpen = this.smileOpen.to(speaking ? 0 : this.pulse * .3, dt);
+    const knit = this.knit.to(thinking ? .55 + .2 * wander(t, 9) : tool ? .3 : 0, dt);
+    const half = this.half.to(thinking ? .25 : tool ? .35 : s === "listening" ? .08 : 0, dt);
+    const wide = this.wide.step(dt);
+    const browUp = this.browUp.to(hearing ? .12 : 0, dt) + this.flash.step(dt);
+    const purse = this.purse.to(thinking && wander(t, 2) > .2 ? .5 : 0, dt);
+    const press = this.press.step(dt);
+
+    const sway = speaking ? 1.3 : hearing ? .7 : 1;
+    const yaw = this.headYaw.to(ex * .45 + .18 * sway * wander(t, 1) + (hearing ? .08 : 0), dt);
+    const pitch = this.headPitch.to(ey * .4 + .1 * sway * wander(t, 5) + (tool ? -.55 : thinking ? .25 : 0), dt);
+    const nod = this.nod.step(dt);
+    const lean = this.lean.to(hearing ? .55 : speaking ? .2 : tool ? .25 : 0, dt);
+    const roll = this.tilt.to(hearing ? .05 : thinking ? -.035 : 0, dt) + .012 * wander(t, 7) * sway;
+
+    this.sigh = Math.max(0, this.sigh - dt * .5);
+    this.breathRate = lerp(this.breathRate, speaking ? 1 / 3.2 : 1 / 4.4, 1 - Math.exp(-dt));
+    this.breathPhase += dt * this.breathRate * 2 * PI;
+    if (s === "listening" && chance(dt / 25)) this.sigh = 1;
+    const breath = .005 * Math.sin(this.breathPhase) + .006 * this.sigh * Math.sin(Math.min(PI, (1 - this.sigh) * PI * 2));
+
+    const face = {
+      blink: lid,
+      half: half * (1 - lid),
+      squint: clamp(smile - .15) * .7 * (1 - lid),
+      wide: clamp(wide) * (1 - lid),
+      gaze_r: clamp(ex) * (1 - lid),
+      gaze_l: clamp(-ex) * (1 - lid),
+      gaze_up: clamp(ey) * (1 - lid),
+      gaze_down: clamp(-ey) * (1 - lid * .5),
+      brows_up: clamp(browUp),
+      brows_knit: clamp(knit),
+      smile: clamp(smile) * (1 - open * .7),
+      smile_open: clamp(smileOpen),
+      purse: purse * (1 - open),
+      m_m: clamp(press) * (1 - open),
+      m_small: smooth(0, .2, open) * (1 - smooth(.3, .6, open)) * (1 - round),
+      m_open: smooth(.25, .6, open) * (1 - .6 * smooth(.7, 1, open)) * (1 - round) * (1 - spread),
+      m_a: smooth(.7, 1, open) * .7 * (1 - round) * (1 - spread),
+      m_e: smooth(.2, .6, open) * spread,
+      m_o: smooth(.2, .7, open) * round,
+      m_u: open * (1 - smooth(.2, .7, open)) * round,
+    };
+    return {
+      face,
+      head: { head_r: clamp(yaw, 0, 1.2), head_l: clamp(-yaw, 0, 1.2), head_up: clamp(pitch - nod, 0, 1), head_down: clamp(nod - pitch, 0, 1.1), lean: clamp(lean) },
+      roll, breath, light: .03 * Math.sin(t * 1.7) * Math.sin(t * .37),
+      parallax: [-yaw * .006, pitch * .003],
+    };
   }
 }
 
 const VS = `#version 300 es
 in vec2 p; out vec2 v; void main() { v = vec2(p.x * .5 + .5, .5 - p.y * .5); gl_Position = vec4(p, 0., 1.); }`;
 
-export const ILLUSTRATION_FS = `#version 300 es
+const FS = `#version 300 es
 precision highp float;
 in vec2 v; out vec4 o;
-uniform sampler2D plate, chr, atlas;
-uniform vec4 box, eyes, mouth, brows, fade;
-uniform vec2 grid, span, center, head, pivot, iris, parallax;
-uniform float W[18];
-uniform float roll, turn, nodY, breath, light, premul;
-vec4 cell(int i, vec2 f) {
-  vec2 g = vec2(float(i % int(grid.x)), float(i / int(grid.x)));
-  return texture(atlas, (g + clamp(f, .002, .998)) / grid);
-}
-float region(vec2 f, vec4 r) {
-  vec2 d = abs(f - r.xy) / r.zw;
-  return smoothstep(1., .55, max(d.x, d.y * 1.15) + .25 * min(d.x, d.y));
-}
-vec3 blend(vec3 col, vec2 f, int a, int b, float m) {
-  float s = 0.; vec3 acc = vec3(0.);
-  for (int i = a; i < b; i++) { acc += cell(i, f).rgb * W[i]; s += W[i]; }
-  return s > .001 ? mix(col, acc / s, min(s, 1.) * m) : col;
-}
+uniform sampler2D plate, chr, face, fflow, fmask, head;
+uniform vec4 box, fade;
+uniform vec2 size, fgrid, hgrid, span, center, pivot, headc, parallax;
+uniform float fid[8], fw[8], hw[6];
+uniform float fscale, hscale, roll, breath, light, premul;
+vec2 cell(float i, vec2 grid, vec2 f) { return (vec2(mod(i, grid.x), floor(i / grid.x)) + clamp(f, .002, .998)) / grid; }
 void main() {
   vec2 uv = center + (v - .5) * span;
   vec2 q = uv;
-  float hw = exp(-pow(length((q - head) * vec2(1., 1.25)) / .24, 2.6));
-  float a = -roll * hw;
-  q = pivot + mat2(cos(a), -sin(a), sin(a), cos(a)) * (q - pivot);
-  q.x -= turn * exp(-pow(length((q - head) * vec2(1., 1.1)) / .17, 2.));
-  q.y -= nodY * hw;
+  float near = exp(-pow(length((q - headc) * vec2(1., 1.25)) / .26, 2.6));
+  float a = -roll * near;
+  vec2 r = (q - pivot) * vec2(size.x / size.y, 1.);
+  q = pivot + vec2(cos(a) * r.x - sin(a) * r.y, sin(a) * r.x + cos(a) * r.y) * vec2(size.y / size.x, 1.);
   float body = smoothstep(.45, .62, q.y);
   q.y -= breath * body * (q.y - 1.);
   q.x -= breath * .35 * body * (q.x - .5);
+  vec2 dh = vec2(0.);
+  for (int j = 0; j < 6; j++) if (hw[j] > .001) dh += hw[j] * (texture(head, cell(float(j), hgrid, q)).rg * 255. - 128.) / hscale;
+  q -= dh / size;
   vec4 c = texture(chr, q);
   if (premul > .5) c.rgb /= max(c.a, .001);
+  vec2 bpx = box.zw * size;
   vec2 f = (q - box.xy) / box.zw;
   if (all(greaterThan(f, vec2(0.))) && all(lessThan(f, vec2(1.)))) {
-    float fm = smoothstep(0., .08, min(min(f.x, f.y), min(1. - f.x, 1. - f.y)));
-    vec3 col = blend(cell(0, f).rgb, f, 1, 3, 1.);
-    col = blend(col, f, 3, 5, region(f, brows));
-    float me = region(f, eyes);
-    col = mix(col, blend(cell(0, f - iris * me).rgb, f, 5, 11, 1.), me);
-    col = blend(col, f, 11, 18, region(f, mouth));
-    c.rgb = mix(c.rgb, col, fm * c.a);
+    vec4 F[8]; float m[8];
+    vec2 D = vec2(0.);
+    for (int k = 0; k < 8; k++) {
+      if (fw[k] <= .001) continue;
+      F[k] = (texture(fflow, cell(fid[k], fgrid, f)) * 255. - 128.) / fscale;
+      m[k] = texture(fmask, cell(fid[k], fgrid, f)).r;
+      D += fw[k] * m[k] * F[k].xy;
+    }
+    vec3 acc = vec3(0.); float A = 0.;
+    for (int k = 0; k < 8; k++) {
+      if (fw[k] <= .001) continue;
+      float wk = fw[k] * m[k];
+      if (wk < .002) continue;
+      vec2 dk = D - wk * F[k].xy + (1. - fw[k]) * m[k] * F[k].zw;
+      acc += wk * texture(face, cell(fid[k], fgrid, f - dk / bpx)).rgb;
+      A += wk;
+    }
+    if (A > 1.) { acc /= A; A = 1.; }
+    vec3 col = texture(face, cell(0., fgrid, f - D / bpx)).rgb * (1. - A) + acc;
+    float edge = smoothstep(0., .06, min(min(f.x, f.y), min(1. - f.x, 1. - f.y)));
+    c.rgb = mix(c.rgb, col, edge * c.a);
   }
   vec3 rgb = mix(texture(plate, uv + parallax).rgb, c.rgb, c.a);
   rgb *= 1. + light * exp(-pow(length((uv - vec2(.17, .41)) * vec2(1., .6)) / .35, 2.));
-  float edge = smoothstep(0., fade.x, v.y) * smoothstep(0., fade.y, 1. - v.y) * smoothstep(0., fade.z, v.x) * smoothstep(0., fade.z, 1. - v.x);
-  o = vec4(rgb * edge, edge);
+  float e = smoothstep(0., fade.x, v.y) * smoothstep(0., fade.y, 1. - v.y) * smoothstep(0., fade.z, v.x) * smoothstep(0., fade.z, 1. - v.x);
+  o = vec4(rgb * e, e);
 }`;
 
-const CELLS = ["base", "smile", "laugh", "brows_up", "brows_knit", "blink", "half", "gaze_l", "gaze_r", "gaze_up", "gaze_down", ...MOUTHS, "m_f"];
-
-/** The face's state for one frame: the edit weights by atlas cell and the warp, from the controller's pose. */
-export class Face {
-  constructor(rig) {
-    this.rig = rig;
-    this.idx = Object.fromEntries(rig.cells.map((n, i) => [n, i]));
-    this.anim = new Animator();
-    this.mouth = new Mouth();
-    this.half = new Spring(3);
-    this.w = new Float32Array(18);
-  }
-  step(dt, state, you, it) {
-    const a = this.anim.step(dt, state, you, it), s = a.s, w = this.w, i = this.idx;
-    w.fill(0);
-    const set = (n, x) => { if (n in i) w[i[n]] = x; };
-    set("smile", smooth(.1, .3, s.smile) * .6);
-    set("brows_up", clamp((s.browUp - .06) * 1.6));
-    set("brows_knit", s.focus * .7);
-    const yawN = a.eyeYaw / rad(17), pitN = a.eyePitch / rad(11), open = 1 - smooth(0, .4, s.blink), shut = smooth(.45, .95, s.blink);
-    set("gaze_l", smooth(.35, .8, -yawN) * open);
-    set("gaze_r", smooth(.35, .8, yawN) * open);
-    set("gaze_up", smooth(.3, .8, pitN) * .9 * open);
-    set("gaze_down", smooth(.3, .8, -pitN) * open);
-    set("half", Math.max(this.half.to(s.focus * .45 + s.smile * .3, dt), smooth(0, .4, s.blink)) * (1 - shut));
-    set("blink", shut);
-    for (const [n, x] of Object.entries(this.mouth.step(dt, s.jawOpen / .6, state === "speaking"))) set(n, x);
-    const small = 1 - smooth(.35, .8, Math.abs(yawN)), [, , bw, bh] = this.rig.box, [W, H] = this.rig.size;
-    return {
-      w, roll: a.roll, turn: a.yaw * .055, nodY: -a.pitch * .03, breath: .006 * Math.sin(a.t * 2 * PI / 4.2),
-      iris: [a.eyeYaw * this.rig.irisPx[0] / rad(10) / bw * small, -a.eyePitch * this.rig.irisPx[1] / rad(10) / bh * small],
-      parallax: [a.yaw * -.01, a.pitch * .006], light: .03 * Math.sin(a.t * 1.7) * Math.sin(a.t * .37),
-      box: [this.rig.box[0] / W, this.rig.box[1] / H, bw / W, bh / H],
-    };
-  }
-}
-
-/** How much of the picture a w x h view shows (cover, zoomed by view.zoom) and where, kept inside the picture. */
+/** How much of the portrait a w x h view shows (it covers the view, zoomed by view.zoom) and where. */
 export function framing(rig, w, h) {
   const [W, H] = rig.size, view = rig.view || {}, zoom = view.zoom || 1, [fx, fy] = view.focus || [.5, .4];
   let sx = 1, sy = (h * W) / (w * H);
@@ -211,14 +320,14 @@ export function framing(rig, w, h) {
   return { span: [sx, sy], center: [clamp(fx, sx / 2, 1 - sx / 2), clamp(fy, sy / 2, 1 - sy / 2)] };
 }
 
-/** Draws the character at `base` (a persona folder URL) into a canvas until the returned stop is called. */
-export async function illustration(canvas, base, now) {
+/** Draws the character at `base` (a persona folder URL) into a canvas. now() gives {state, you, it}. Returns stop;
+ *  with opts.dt it draws nothing by itself and returns a frame function for fixed-step recording instead. */
+export async function illustration(canvas, base, now, opts = {}) {
   const rig = await (await fetch(base + "rig.json")).json();
-  rig.cells ||= CELLS;
-  const gl = canvas.getContext("webgl2", { premultipliedAlpha: true, alpha: true });
+  const gl = canvas.getContext("webgl2", { premultipliedAlpha: true, alpha: true, preserveDrawingBuffer: !!opts.dt });
   if (!gl) throw new Error("no WebGL2");
   const prog = gl.createProgram();
-  for (const [type, src] of [[gl.VERTEX_SHADER, VS], [gl.FRAGMENT_SHADER, ILLUSTRATION_FS]]) {
+  for (const [type, src] of [[gl.VERTEX_SHADER, VS], [gl.FRAGMENT_SHADER, FS]]) {
     const sh = gl.createShader(type);
     gl.shaderSource(sh, src);
     gl.compileShader(sh);
@@ -232,8 +341,11 @@ export async function illustration(canvas, base, now) {
   const loc = gl.getAttribLocation(prog, "p");
   gl.enableVertexAttribArray(loc);
   gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
-  const U = (n) => gl.getUniformLocation(prog, n);
-  await Promise.all([["plate.jpg", "plate"], ["char.png", "chr"], ["atlas.jpg", "atlas"]].map(async ([file, name], unit) => {
+  const U = {};
+  const u = (n) => (U[n] ??= gl.getUniformLocation(prog, n));
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+  const files = [["plate.jpg", "plate"], ["char.png", "chr"], ["face.jpg", "face"], ["faceflow.png", "fflow"], ["facemask.jpg", "fmask"], ["head.png", "head"]];
+  await Promise.all(files.map(async ([file, name], unit) => {
     const img = new Image();
     img.src = base + file;
     await img.decode();
@@ -242,35 +354,54 @@ export async function illustration(canvas, base, now) {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     for (const k of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE);
-    gl.uniform1i(U(name), unit);
+    gl.uniform1i(u(name), unit);
   }));
-  gl.uniform2f(U("grid"), ...rig.grid);
-  for (const k of ["eyes", "mouth", "brows"]) gl.uniform4f(U(k), ...rig.regions[k]);
-  gl.uniform2f(U("head"), ...rig.head);
-  gl.uniform2f(U("pivot"), ...rig.pivot);
-  gl.uniform4f(U("fade"), ...(rig.view?.fade || [.06, .12, .04]), 0);
-  gl.uniform1f(U("premul"), 0);
-  const face = new Face(rig);
-  let raf, last = performance.now();
+  const [W, H] = rig.size, [bx, by, bw, bh] = rig.box;
+  gl.uniform2f(u("size"), W, H);
+  gl.uniform4f(u("box"), bx / W, by / H, bw / W, bh / H);
+  gl.uniform2f(u("fgrid"), ...rig.face.grid);
+  gl.uniform2f(u("hgrid"), ...rig.head.grid);
+  gl.uniform1f(u("fscale"), rig.face.scale);
+  gl.uniform1f(u("hscale"), rig.head.scale);
+  gl.uniform2f(u("pivot"), ...(rig.pivot || [.55, .52]));
+  gl.uniform2f(u("headc"), ...(rig.head_center || [.52, .35]));
+  gl.uniform4f(u("fade"), ...(rig.view?.fade || [.001, .3, .001]), 0);
+  gl.uniform1f(u("premul"), 0);
+  const fidx = Object.fromEntries(rig.face.cells.map((n, i) => [n, i]));
+  const hidx = Object.fromEntries(rig.head.cells.map((n, i) => [n, i]));
+  const mind = new Mind();
+  const fid = new Float32Array(8), fw = new Float32Array(8), hw = new Float32Array(6);
+  let last = performance.now(), raf, drew = false;
   const frame = (ms) => {
-    raf = requestAnimationFrame(frame);
-    const dt = Math.min(.1, (ms - last) / 1000);
+    if (!opts.dt) raf = requestAnimationFrame(frame);
+    const dt = opts.dt || Math.min(.1, (ms - last) / 1000);
     last = ms;
-    const k = Math.min(devicePixelRatio || 1, 2), w = Math.round(canvas.clientWidth * k), h = Math.round(canvas.clientHeight * k);
+    const k = Math.min(devicePixelRatio || 1, 2), w = opts.dt ? canvas.width : Math.round(canvas.clientWidth * k), h = opts.dt ? canvas.height : Math.round(canvas.clientHeight * k);
     if (!w || !h) return;
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     const { state, you, it } = now();
-    const f = face.step(dt, state, you, it), view = framing(rig, w, h);
-    gl.uniform1fv(U("W"), f.w);
-    gl.uniform4f(U("box"), ...f.box);
-    gl.uniform2f(U("span"), ...view.span);
-    gl.uniform2f(U("center"), ...view.center);
-    gl.uniform2f(U("iris"), ...f.iris);
-    gl.uniform2f(U("parallax"), ...f.parallax);
-    for (const k of ["roll", "turn", "nodY", "breath", "light"]) gl.uniform1f(U(k), f[k]);
+    const pose = mind.step(dt, state, you, it);
+    const active = Object.entries(pose.face).filter(([n, x]) => x > .004 && n in fidx).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    fid.fill(0); fw.fill(0);
+    active.forEach(([n, x], i) => { fid[i] = fidx[n]; fw[i] = Math.min(1, x); });
+    hw.fill(0);
+    for (const [n, x] of Object.entries(pose.head)) if (n in hidx) hw[hidx[n]] = x;
+    const view = framing(rig, w, h);
+    gl.uniform1fv(u("fid"), fid);
+    gl.uniform1fv(u("fw"), fw);
+    gl.uniform1fv(u("hw"), hw);
+    gl.uniform2f(u("span"), ...view.span);
+    gl.uniform2f(u("center"), ...view.center);
+    gl.uniform2f(u("parallax"), ...pose.parallax);
+    gl.uniform1f(u("roll"), pose.roll);
+    gl.uniform1f(u("breath"), pose.breath);
+    gl.uniform1f(u("light"), pose.light);
     gl.viewport(0, 0, w, h);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    opts.tick?.(pose);
+    if (!drew) { drew = true; opts.first?.(); }
   };
+  if (opts.dt) return frame;
   raf = requestAnimationFrame(frame);
   return () => cancelAnimationFrame(raf);
 }
