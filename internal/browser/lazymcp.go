@@ -75,6 +75,7 @@ type rpc struct {
 	Method string          `json:"method,omitempty"`
 	Params json.RawMessage `json:"params,omitempty"`
 	Result json.RawMessage `json:"result,omitempty"`
+	Error  json.RawMessage `json:"error,omitempty"`
 }
 
 func (l *lazy) handle(line []byte) error {
@@ -102,6 +103,8 @@ func (l *lazy) handle(line []byte) error {
 		return l.reply(m.ID, l.saved.Tools)
 	case m.Method == "ping":
 		return l.reply(m.ID, json.RawMessage("{}"))
+	case l.initReq == nil:
+		return l.write(map[string]any{"jsonrpc": "2.0", "id": m.ID, "error": map[string]any{"code": -32601, "message": "Method not found"}})
 	}
 	return l.start(line)
 }
@@ -167,7 +170,7 @@ func (l *lazy) call(id, method string, params json.RawMessage) (json.RawMessage,
 	}
 	r, ok := <-ch
 	if !ok {
-		return nil, fmt.Errorf("%s exited before answering %s", l.argv[0], method)
+		return nil, fmt.Errorf("%s did not answer %s", l.argv[0], method)
 	}
 	return r, nil
 }
@@ -183,7 +186,12 @@ func (l *lazy) relay(stdout io.Reader) {
 			delete(l.replies, string(m.ID))
 			l.mu.Unlock()
 			if ours {
-				ch <- m.Result
+				if m.Error != nil {
+					fmt.Fprintf(os.Stderr, "atc: %s answered with an error: %s\n", l.argv[0], m.Error)
+					close(ch)
+				} else {
+					ch <- m.Result
+				}
 				continue
 			}
 		}
@@ -225,7 +233,7 @@ func (l *lazy) write(v any) error {
 func (l *lazy) load() *saved {
 	b, err := os.ReadFile(l.cache)
 	var s saved
-	if err != nil || json.Unmarshal(b, &s) != nil || !slices.Equal(s.Key, l.key) || s.Init == nil || s.Tools == nil {
+	if err != nil || json.Unmarshal(b, &s) != nil || !slices.Equal(s.Key, l.key) || !isObject(s.Init) || !isObject(s.Tools) {
 		return nil
 	}
 	return &s
@@ -245,7 +253,7 @@ func withVersion(init, params json.RawMessage) json.RawMessage {
 		ProtocolVersion string `json:"protocolVersion"`
 	}
 	var r map[string]json.RawMessage
-	if json.Unmarshal(params, &p) != nil || p.ProtocolVersion == "" || json.Unmarshal(init, &r) != nil {
+	if json.Unmarshal(params, &p) != nil || p.ProtocolVersion == "" || json.Unmarshal(init, &r) != nil || r == nil {
 		return init
 	}
 	r["protocolVersion"], _ = json.Marshal(p.ProtocolVersion)
@@ -257,4 +265,9 @@ func compact(b json.RawMessage) []byte {
 	var buf bytes.Buffer
 	json.Compact(&buf, b)
 	return buf.Bytes()
+}
+
+func isObject(b json.RawMessage) bool {
+	var m map[string]json.RawMessage
+	return json.Unmarshal(b, &m) == nil && m != nil
 }

@@ -127,3 +127,26 @@ func TestLazyMCPStartsOnFirstToolCall(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestLazyMCPProbeBeforeInitialize(t *testing.T) {
+	dir := t.TempDir()
+	cache, marker := filepath.Join(dir, "cache.json"), filepath.Join(dir, "marker")
+	os.WriteFile(cache, []byte(`{"key":["fake"],"init":null,"tools":{"tools":[]}}`), 0o600)
+
+	s := run(t, cache, marker)
+	s.send(`{"jsonrpc":"2.0","id":0,"method":"server/discover"}`)
+	if r := s.read(); r["error"] == nil || starts(marker) != 0 {
+		t.Fatalf("a probe before initialize is answered method-not-found without starting: %v", r)
+	}
+	s.send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`)
+	r := s.read()
+	if r["result"].(map[string]any)["serverInfo"] == nil || starts(marker) != 1 {
+		t.Fatalf("a broken cache is ignored and the real answer used: %v", r)
+	}
+	s.in.Close()
+	<-s.done
+	b, _ := os.ReadFile(cache)
+	if !strings.Contains(string(b), `"serverInfo"`) {
+		t.Fatalf("cache refilled: %s", b)
+	}
+}
