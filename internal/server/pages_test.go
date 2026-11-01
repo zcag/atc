@@ -158,3 +158,27 @@ func TestPageAlerts(t *testing.T) {
 		t.Fatalf("shown at a section: %+v", ms)
 	}
 }
+
+func TestAssistantOpensAnotherSessionsPage(t *testing.T) {
+	s, ts := hubServer(t, newFakeHub(t, "hub-sid"), nil)
+	eventually(t, "hub sid", func() bool { return s.hubSID() == "hub-sid" })
+	f := filepath.Join(t.TempDir(), "picks.html")
+	os.WriteFile(f, []byte("<title>Picks</title>"), 0o644)
+	s.Pages.Show(pages.Page{Session: "@shopping", Name: "picks", Path: f})
+	open := func(sid, body string) int {
+		res, _ := do(t, "POST", ts.URL+"/api/sessions/"+sid+"/open", "tok", body)
+		return res.StatusCode
+	}
+	if st := open("l1", `{"session":"@shopping","name":"picks"}`); st != 403 {
+		t.Fatalf("a session other than the assistant: %d", st)
+	}
+	if st := open("hub-sid", `{"session":"@shopping","name":"nope"}`); st != 404 {
+		t.Fatalf("a page nobody shows: %d", st)
+	}
+	if st := open("hub-sid", `{"session":"@shopping","name":"picks","at":"a b"}`); st != 400 {
+		t.Fatalf("a bad id: %d", st)
+	}
+	if st := open("hub-sid", `{"session":"@shopping","name":"picks","at":"towel"}`); st != 503 {
+		t.Fatalf("an existing page, with no phone to push to: %d", st)
+	}
+}

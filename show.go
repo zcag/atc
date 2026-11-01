@@ -44,6 +44,13 @@ dashboards all go here; don't publish them anywhere else.
                away, over whatever is there (a call). Only when they asked to see it, or
                must; never as a way to get attention.
 
+  atc open <session|@agent>/<page>[#id]
+               the assistant only: open a page another session or agent already shows on
+               the phone's screen, as --open does, at the section with that id when given
+               (atc open @shopping/picks#towel). It is that page itself, with its own state,
+               so never show a copy of someone else's page. A page of your own is just
+               <page>[#id]. Same rules as --open.
+
 A folder shows its index.html, and files beside it (img/, css) load by relative
 path, so keep screenshots as files instead of inlining them. HTML, images, markdown,
 PDF, CSV/TSV, video and audio render. Make HTML work at phone width, in light and
@@ -242,6 +249,36 @@ func show(args []string) error {
 	for _, k := range slices.Sorted(maps.Keys(p.Actions)) {
 		fmt.Printf("  atc.run(%q, args) runs %s\n", k, strings.Join(p.Actions[k], " "))
 	}
+	return nil
+}
+
+func openPage(args []string) error {
+	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
+		fmt.Print("usage: atc open <session|@agent>/<page>[#id]   (atc show -h)\n")
+		os.Exit(2)
+	}
+	ref, at, _ := strings.Cut(args[0], "#")
+	owner, name := "", ref
+	if i := strings.LastIndex(ref, "/"); i >= 0 {
+		owner, name = ref[:i], ref[i+1:]
+	}
+	c := client.Load()
+	sid := os.Getenv("CLAUDE_CODE_SESSION_ID")
+	if sid == "" {
+		return fmt.Errorf("only the assistant opens pages on the phone, from inside its session")
+	}
+	if owner != "" && !strings.HasPrefix(owner, "@") {
+		s, err := c.Find(owner, true)
+		if err != nil {
+			return err
+		}
+		owner = s.SessionID
+	}
+	r, err := c.OpenPage(sid, map[string]any{"session": owner, "name": name, "at": at})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Opened on the phone: %s\n", r.Link)
 	return nil
 }
 
