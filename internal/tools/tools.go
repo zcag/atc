@@ -642,11 +642,9 @@ func (t *tools) report(ctx context.Context, _ *mcp.CallToolRequest, in reportIn)
 	if err != nil {
 		return nil, done{}, err
 	}
-	id, err := t.c.Message(hubAgent, text)
+	id, err := t.c.Message(client.HubAgent, text)
 	return nil, done{Ref: id, Title: "assistant", State: "sent"}, err
 }
-
-const hubAgent = "assistant"
 
 func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*mcp.CallToolResult, done, error) {
 	x, err := t.find(in.Session, false)

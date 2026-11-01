@@ -253,6 +253,9 @@ func (s *Server) reviveOne(r running) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	was := s.M.Store.Get(r.SID)
+	if sessions.RetiredHub(was.Name) {
+		return "", errRetired
+	}
 	if was.Agent != "" {
 		mu := s.agentLock(was.Agent)
 		mu.Lock()

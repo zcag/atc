@@ -53,3 +53,20 @@ func TestSortParked(t *testing.T) {
 		t.Errorf("order %v, want %s", got, want)
 	}
 }
+
+func TestRetiredHub(t *testing.T) {
+	for name, want := range map[string]bool{
+		"assistant 11-01 16:41":            true,
+		"whatsapp 10-30 21:02":             true,
+		"whatsapp (continued as 92e37934)": true,
+		"assistant":                        false,
+		"whatsapp":                         false,
+		"Tracker 10-31 15:01":              false,
+		"guests 11-01 12:00":               false,
+		"assistant notes":                  false,
+	} {
+		if RetiredHub(name) != want {
+			t.Errorf("RetiredHub(%q) = %v", name, !want)
+		}
+	}
+}

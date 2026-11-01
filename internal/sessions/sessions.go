@@ -69,7 +69,14 @@ type Session struct {
 	Agent          string           `json:"agent,omitempty"`
 	Root           string           `json:"root,omitempty"`
 	ReportsTo      string           `json:"reportsTo,omitempty"`
+	Retired        bool             `json:"retired,omitempty"`
 }
+
+var retiredHub = regexp.MustCompile(`^(assistant|whatsapp) (\d\d-\d\d \d\d:\d\d|\(continued as [0-9a-f]+\))$`)
+
+// RetiredHub is an earlier conversation of the assistant (or of WhatsApp before the hub took it
+// over), named so when a newer one replaced it. Whatever is meant for it goes to the assistant.
+func RetiredHub(name string) bool { return retiredHub.MatchString(name) }
 
 func (s Session) Lineage() string { return cmp.Or(s.Root, s.SessionID) }
 
@@ -145,6 +152,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		s.Title = first(meta.Name, s.Title, a.Name, base(s.Cwd))
 		s.Pinned, s.Parked, s.Engine, s.Agent = meta.Pinned, meta.Parked, meta.Engine, meta.Agent
 		s.Root, s.ReportsTo = m.lineage(a.SessionID)
+		s.Retired = RetiredHub(meta.Name)
 		out = append(out, s)
 	}
 	out = append(out, m.openCode(ctx)...)
@@ -187,6 +195,7 @@ func (m *Manager) build(t history.Transcript) Session {
 		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, Context: t.Context, PromptAt: t.PromptAt,
 		Activity: t.Activity, LastReply: t.LastReply, Summary: m.Summary.Get(t),
 		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine, Harness: t.Harness, Agent: meta.Agent,
+		Retired: RetiredHub(meta.Name),
 	}
 }
 

@@ -803,7 +803,12 @@ func (s *Server) resume(w http.ResponseWriter, r *http.Request) {
 
 var errUnknown = errors.New("unknown session")
 
+var errRetired = errors.New("an earlier conversation of the assistant: it stays stopped, and messages for it go to the assistant (@assistant)")
+
 func (s *Server) resumeSession(ctx context.Context, sid string) (string, error) {
+	if sessions.RetiredHub(s.M.Store.Get(sid).Name) {
+		return "", errRetired
+	}
 	agents, _ := s.M.CLI.Agents(ctx)
 	chain := s.chain(sid, agents)
 	if id, ok := s.liveIn(chain, agents); ok {
@@ -1054,6 +1059,7 @@ func (s *Server) watch(list []sessions.Session) {
 		s.contained = time.Now()
 		go s.retireIdle(list)
 		go s.shelveFinished(list)
+		go s.closeRetiredHub(list)
 		if unit, err := s.M.CLI.Contain(); err != nil {
 			log.Printf("contain claude's daemon: %v", err)
 		} else if unit != "" {
