@@ -50,6 +50,24 @@ class Pulses {
   }
 }
 
+/** Which drawing a feature shows: a change of drawing is held at least `hold` seconds and cross-fades in `fade`. */
+class Drawing {
+  constructor(fade) { this.fade = fade; this.cur = null; this.prev = null; this.at = -9; }
+  set(name, t, hold = 0) {
+    if (name === this.cur || t - this.at < hold) return;
+    this.prev = this.cur;
+    this.cur = name;
+    this.at = t;
+  }
+  shown(t) { return this.cur ? clamp((t - this.at) / this.fade) : this.prev ? 1 - clamp((t - this.at) / this.fade) : 0; }
+  weights(t) {
+    const k = clamp((t - this.at) / this.fade), w = {};
+    if (this.prev && k < 1) w[this.prev] = 1 - k;
+    if (this.cur) w[this.cur] = k;
+    return w;
+  }
+}
+
 /** Slow wandering noise in -1..1 from a few incommensurate sines. */
 const wander = (t, seed) => (Math.sin(t * .23 + seed) + Math.sin(t * .37 + seed * 2.1) * .7 + Math.sin(t * .61 + seed * 3.7) * .4) / 2.1;
 
@@ -104,6 +122,8 @@ export class Mind {
     this.postPitch = new Spring(.25);
     this.postRoll = new Spring(.2);
     this.greet = rand(.5, .9);
+    this.eyes = new Drawing(.03);
+    this.mouth = new Drawing(.04);
   }
 
   enter(state) {
@@ -203,7 +223,7 @@ export class Mind {
     this.sib = lerp(this.sib ?? 0, sib, 1 - Math.exp(-dt * 20));
     if (!this.rising && this.level > .1 && this.level > this.slow) { this.rising = true; this.jitter = rand(-.25, .25); }
     else if (this.rising && this.level < .06) this.rising = false;
-    this.roundT = clamp(smooth(.12, .06, this.bright) + (this.jitter ?? 0)) * (1 - this.sib);
+    this.roundT = clamp(smooth(.09, .05, this.bright) + (this.jitter ?? 0) * .6) * (1 - this.sib);
     this.spreadT = clamp(smooth(.13, .22, this.bright) - (this.jitter ?? 0) * .5) * (1 - this.sib);
     this.voiceOn = lerp(this.voiceOn, speaking ? 1 : 0, 1 - Math.exp(-dt * 2));
     const open = this.open.to(.9 * smooth(.04, .8, this.level) * (1 - .75 * this.sib), dt);
@@ -228,7 +248,7 @@ export class Mind {
     const py = this.postYaw.to(this.posture.yaw, dt), pp = this.postPitch.to(this.posture.pitch, dt), pr = this.postRoll.to(this.posture.roll, dt);
     const sway = speaking ? 1.3 : hearing ? .7 : 1;
     const yaw = this.headYaw.to(ex * .45 + py + .1 * sway * wander(t, 1) + (hearing ? .08 : 0), dt);
-    const pitch = this.headPitch.to(ey * .4 + pp + .06 * sway * wander(t, 5) + (tool ? -.55 : thinking ? .25 : 0), dt);
+    const pitch = this.headPitch.to(ey * .4 + pp + .06 * sway * wander(t, 5) + (tool ? -.4 : thinking ? .25 : 0), dt);
     const nod = this.nod.step(dt);
     const lean = this.lean.to(hearing ? .55 : speaking ? .2 : tool ? .25 : 0, dt);
     const roll = this.tilt.to(hearing ? .05 : thinking ? -.035 : 0, dt) + pr + .008 * wander(t, 7) * sway;
@@ -239,30 +259,36 @@ export class Mind {
     if (s === "listening" && chance(dt / 25)) this.sigh = 1;
     const breath = .005 * Math.sin(this.breathPhase) + .006 * this.sigh * Math.sin(Math.min(PI, (1 - this.sigh) * PI * 2));
 
-    // A blink is drawn the way animators draw it, in held steps (open, half, shut, half, open): a lid sliding
-    // over the iris cannot be morphed, and a cross-fade shows the iris through the lid.
-    const shut = lid > .72 ? 1 : 0, mid = lid > .22 && !shut ? 1 : 0;
+    // Eyes and open mouths are never morphed: an iris passing under a lid or teeth appearing cannot be warped
+    // cleanly, so like drawn animation they switch between whole painted drawings, held for a moment, with a
+    // cross-fade short enough to read as motion blur. A blink steps open, half, shut, half, open.
+    const shut = lid > .72, mid = lid > .22 && !shut, tx = this.gx.to, ty = this.gy.to;
+    let eye = null;
+    if (shut) eye = "blink";
+    else if (mid) eye = "half";
+    else if (wide > .25) eye = "wide";
+    else if (ty < -.4) eye = "gaze_down";
+    else if (Math.max(Math.abs(tx), ty) > .3) eye = Math.abs(tx) > ty ? (tx > 0 ? "gaze_r" : "gaze_l") : "gaze_up";
+    else if (half > .2) eye = "half";
+    this.eyes.set(eye, t);
+
+    let mouth = null;
+    if (speaking) {
+      const lvl = open < .35 ? 0 : open < .65 ? 1 : 2;
+      if (this.sib > .4) mouth = "m_e";
+      else if (open > .1) mouth = round > .65 ? (lvl ? "m_o" : "m_u") : spread > .4 ? "m_e" : ["m_small", "m_open", "m_a"][lvl];
+    } else if ((s === "listening" || s === "hearing") && this.pulse > .45) mouth = "smile_open";
+    this.mouth.set(mouth, t, mouth ? .07 : .05);
+    const shown = this.mouth.shown(t);
+
     const face = {
-      blink: shut,
-      half: mid ? 1 : half * (1 - lid),
-      squint: clamp(smile - .15) * .7 * (1 - lid),
-      wide: clamp(wide) * (1 - lid),
-      gaze_r: clamp(ex) * (1 - lid),
-      gaze_l: clamp(-ex) * (1 - lid),
-      gaze_up: clamp(ey) * (1 - lid),
-      gaze_down: clamp(-ey) * (1 - lid * .5),
+      ...this.eyes.weights(t),
+      ...this.mouth.weights(t),
       brows_up: clamp(browUp),
       brows_knit: clamp(knit),
-      smile: clamp(smile) * (1 - open * .7),
-      smile_open: clamp(smileOpen),
-      purse: purse * (1 - open),
-      m_m: clamp(press) * (1 - open),
-      m_small: smooth(0, .2, open) * (1 - smooth(.3, .6, open)) * (1 - round) * (1 - this.sib),
-      m_open: smooth(.25, .6, open) * (1 - .6 * smooth(.7, 1, open)) * (1 - round) * (1 - spread),
-      m_a: smooth(.7, 1, open) * .7 * (1 - round) * (1 - spread),
-      m_e: Math.max(smooth(.2, .6, open) * spread, this.sib * .8),
-      m_o: smooth(.2, .7, open) * round,
-      m_u: open * (1 - smooth(.2, .7, open)) * round,
+      smile: clamp(smile) * (1 - shown),
+      purse: purse * (1 - shown),
+      m_m: clamp(press) * (1 - shown),
     };
     return {
       face,
@@ -282,9 +308,9 @@ in vec2 v; out vec4 o;
 uniform sampler2D plate, chr, face, fflow, fmask, head;
 uniform vec4 box, fade;
 uniform vec2 size, fgrid, hgrid, span, center, pivot, headc, parallax;
-uniform float fid[8], fw[8], hw[6];
+uniform float fid[8], fw[8], fm[8], hw[6];
 uniform float fscale, hscale, roll, breath, light, premul;
-vec2 cell(float i, vec2 grid, vec2 f) { return (vec2(mod(i, grid.x), floor(i / grid.x)) + clamp(f, .002, .998)) / grid; }
+vec2 cell(float i, vec2 grid, vec2 f) { float r = floor((i + .5) / grid.x); return (vec2(i - r * grid.x, r) + clamp(f, .002, .998)) / grid; }
 void main() {
   vec2 uv = center + (v - .5) * span;
   vec2 q = uv;
@@ -307,7 +333,7 @@ void main() {
     vec2 D = vec2(0.);
     for (int k = 0; k < 8; k++) {
       if (fw[k] <= .001) continue;
-      F[k] = (texture(fflow, cell(fid[k], fgrid, f)) * 255. - 128.) / fscale;
+      F[k] = fm[k] > .5 ? (texture(fflow, cell(fid[k], fgrid, f)) * 255. - 128.) / fscale : vec4(0.);
       m[k] = texture(fmask, cell(fid[k], fgrid, f)).r;
       D += fw[k] * m[k] * F[k].xy;
     }
@@ -316,7 +342,7 @@ void main() {
       if (fw[k] <= .001) continue;
       float wk = fw[k] * m[k];
       if (wk < .002) continue;
-      vec2 dk = D - wk * F[k].xy + (1. - fw[k]) * m[k] * F[k].zw;
+      vec2 dk = fm[k] > .5 ? D - wk * F[k].xy + (1. - fw[k]) * m[k] * F[k].zw : vec2(0.);
       acc += wk * texture(face, cell(fid[k], fgrid, f - dk / bpx)).rgb;
       A += wk;
     }
@@ -390,7 +416,8 @@ export async function illustration(canvas, base, now, opts = {}) {
   const fidx = Object.fromEntries(rig.face.cells.map((n, i) => [n, i]));
   const hidx = Object.fromEntries(rig.head.cells.map((n, i) => [n, i]));
   const mind = new Mind();
-  const fid = new Float32Array(8), fw = new Float32Array(8), hw = new Float32Array(6);
+  const fid = new Float32Array(8), fw = new Float32Array(8), fm = new Float32Array(8), hw = new Float32Array(6);
+  const morphs = rig.face.morph || rig.face.cells.map(() => true);
   let last = performance.now(), raf, drew = false;
   const frame = (ms) => {
     if (!opts.dt) raf = requestAnimationFrame(frame);
@@ -402,13 +429,14 @@ export async function illustration(canvas, base, now, opts = {}) {
     const { state, you, it, lo, hi } = now();
     const pose = (opts.pose || ((p) => p))(mind.step(dt, state, you, it, lo, hi));
     const active = Object.entries(pose.face).filter(([n, x]) => x > .004 && n in fidx).sort((a, b) => b[1] - a[1]).slice(0, 8);
-    fid.fill(0); fw.fill(0);
-    active.forEach(([n, x], i) => { fid[i] = fidx[n]; fw[i] = Math.min(1, x); });
+    fid.fill(0); fw.fill(0); fm.fill(0);
+    active.forEach(([n, x], i) => { fid[i] = fidx[n]; fw[i] = Math.min(1, x); fm[i] = morphs[fidx[n]] ? 1 : 0; });
     hw.fill(0);
     for (const [n, x] of Object.entries(pose.head)) if (n in hidx) hw[hidx[n]] = x;
     const view = framing(rig, w, h);
     gl.uniform1fv(u("fid"), fid);
     gl.uniform1fv(u("fw"), fw);
+    gl.uniform1fv(u("fm"), fm);
     gl.uniform1fv(u("hw"), hw);
     gl.uniform2f(u("span"), ...view.span);
     gl.uniform2f(u("center"), ...view.center);
