@@ -3,7 +3,7 @@ import { marked as Marked } from "./vendor/marked.esm.js";
 import hljs from "./vendor/highlight.min.js";
 import { diffLines } from "./vendor/diff.mjs";
 import { Call } from "./call.js";
-import { illustration } from "./persona.js";
+import { persona } from "./persona.js";
 
 const BAYS = [
   ["needs-you", "Needs you"],
@@ -815,7 +815,7 @@ async function personaList() {
   const index = await (await fetch(PERSONAS + "index.json")).json();
   const all = index.personas || [];
   const kinds = await Promise.all(all.map(({ name }) => fetch(`${PERSONAS}${name}/persona.json`).then((r) => r.json()).then((p) => p.kind).catch(() => null)));
-  return { names: ["orb", ...all.filter((_, i) => kinds[i] === "illustration").map((p) => p.name)], def: index.default || "orb" };
+  return { names: ["orb", ...all.filter((_, i) => ["illustration", "footage"].includes(kinds[i])).map((p) => p.name)], def: index.default || "orb" };
 }
 
 /** The call's persona slot: the orb, or an illustrated character from /app/personas. Holding it (or a right click)
@@ -852,7 +852,7 @@ function Drawn({ name, state, on, onTap }) {
   now.current = state;
   useEffect(() => {
     let stop = null, gone = false;
-    illustration(ref.current, `${PERSONAS}${name}/`, () => { const [you] = Call.levels(), [it, lo, hi] = Call.speech(); return { state: now.current, you, it, lo, hi }; })
+    persona(ref.current, `${PERSONAS}${name}/`, () => { const [you] = Call.levels(), [it, lo, hi] = Call.speech(); return { state: now.current, you, it, lo, hi }; })
       .then((s) => (gone ? s() : (stop = s)))
       .catch((e) => console.warn("persona", name, e));
     return () => { gone = true; stop?.(); };

@@ -467,3 +467,98 @@ export async function illustration(canvas, base, now, opts = {}) {
   raf = requestAnimationFrame(frame);
   return () => cancelAnimationFrame(raf);
 }
+
+/** A footage character ("kind": "footage"): his face rendered offline as whole frames, driven by recorded human
+ *  performances, in one video (footage.mp4) whose stretches are tagged by call state (footage.json). It keeps playing
+ *  the stretch that fits the call; to change state, or before a stretch runs out, it waits for a precomputed jump to
+ *  a frame that looks and moves alike, pre-seeks a second video there and cross-fades. */
+export async function footage(canvas, base, now, opts = {}) {
+  const meta = await (await fetch(base + "footage.json")).json();
+  const src = URL.createObjectURL(await (await fetch(base + "footage.mp4")).blob());
+  const fps = meta.fps, segOf = new Int32Array(meta.frames);
+  meta.segments.forEach((s, i) => segOf.fill(i, s.start, s.end + 1));
+  const from = new Map();
+  for (const [a, b, c] of meta.jumps) (from.get(a) || from.set(a, []).get(a)).push([b, c]);
+  const has = new Set(meta.segments.map((s) => s.state));
+  const video = () => Object.assign(document.createElement("video"), { src, muted: true, playsInline: true, preload: "auto" });
+  let cur = video(), next = video();
+  await Promise.all([cur, next].map((v) => new Promise((r) => (v.readyState >= 2 ? r() : v.addEventListener("loadeddata", r, { once: true })))));
+  const first = meta.segments.find((s) => s.state === "listening") || meta.segments[0];
+  cur.currentTime = (first.start + .5) / fps;
+  await cur.play().catch(() => {});
+  const g = canvas.getContext("2d");
+  let plan = null, fade = null, voiceAt = -9, raf, stateSince = performance.now(), lastWant = "", drew = false;
+  const frame = (v) => Math.min(meta.frames - 1, Math.floor(v.currentTime * fps + .02));
+  const want = (state, t) => {
+    const w = state === "speaking" ? (t - voiceAt < .5 ? "speaking" : "listening") : state === "thinking" || state === "tool" ? state : "listening";
+    return has.has(w) ? w : "listening";
+  };
+  const choose = (fi, target, wide) => {
+    let best = null;
+    for (let a = fi + 3; a <= fi + (wide ? 50 : 20); a++) {
+      for (const [b, c] of from.get(a) || []) {
+        const s = meta.segments[segOf[b]];
+        if (s.state !== target || b > s.end - 40) continue;
+        const cost = c + (a - fi) * .002;
+        if (!best || cost < best.cost) best = { a, b, cost };
+      }
+    }
+    return best;
+  };
+  const draw = (v, alpha) => {
+    const W = canvas.width, H = canvas.height, [vw, vh] = meta.size, view = framing({ size: meta.size, view: meta.view }, W, H);
+    const sw = view.span[0] * vw, sh = view.span[1] * vh, sx = view.center[0] * vw - sw / 2, sy = view.center[1] * vh - sh / 2;
+    g.globalAlpha = alpha;
+    g.drawImage(v, sx, sy, sw, sh, 0, 0, W, H);
+  };
+  const tick = (ms) => {
+    raf = requestAnimationFrame(tick);
+    const t = ms / 1000, k = Math.min(devicePixelRatio || 1, 2), W = Math.round(canvas.clientWidth * k), H = Math.round(canvas.clientHeight * k);
+    if (!W || !H) return;
+    if (canvas.width !== W || canvas.height !== H) { canvas.width = W; canvas.height = H; }
+    const { state, it } = now();
+    if (it > .06) voiceAt = t;
+    const target = want(state, t);
+    if (target !== lastWant) { lastWant = target; stateSince = ms; plan = null; }
+    const fi = frame(cur), seg = meta.segments[segOf[fi]];
+    if (!fade && !plan && (seg.state !== target || fi > seg.end - 30)) {
+      plan = choose(fi, target, ms - stateSince > 800 || fi > seg.end - 30);
+      if (!plan && (ms - stateSince > 1500 || fi >= seg.end - 3)) {
+        const s = meta.segments.filter((x) => x.state === target).sort(() => Math.random() - .5)[0];
+        plan = { a: fi + 2, b: s.start + Math.floor(Math.random() * Math.max(1, s.end - s.start - 120)), hard: true };
+      }
+      if (plan) { next.currentTime = (plan.b + .5) / fps; next.pause(); }
+    }
+    if (!fade && fi >= seg.end - 1 && !cur.paused) cur.pause();
+    if (plan && !fade && (fi >= plan.a || cur.paused) && !next.seeking && next.readyState >= 2) {
+      next.play().catch(() => {});
+      fade = { at: ms, len: plan.hard ? 400 : 160 };
+      plan = null;
+    }
+    g.clearRect(0, 0, W, H);
+    g.globalCompositeOperation = "source-over";
+    draw(cur, 1);
+    if (fade) {
+      const x = Math.min(1, (ms - fade.at) / fade.len);
+      draw(next, x * x * (3 - 2 * x));
+      if (x >= 1) { cur.pause(); [cur, next] = [next, cur]; fade = null; }
+    }
+    const fadeAt = meta.view?.fade?.[1] ?? .3, grad = g.createLinearGradient(0, H * (1 - fadeAt), 0, H);
+    grad.addColorStop(0, "rgba(0,0,0,1)");
+    grad.addColorStop(1, "rgba(0,0,0,0)");
+    g.globalAlpha = 1;
+    g.globalCompositeOperation = "destination-in";
+    g.fillStyle = grad;
+    g.fillRect(0, 0, W, H);
+    g.globalCompositeOperation = "source-over";
+    if (!drew) { drew = true; opts.first?.(); }
+  };
+  raf = requestAnimationFrame(tick);
+  return () => { cancelAnimationFrame(raf); cur.pause(); next.pause(); URL.revokeObjectURL(src); };
+}
+
+/** Draws whichever kind of character lives at `base`. */
+export async function persona(canvas, base, now, opts) {
+  const spec = await (await fetch(base + "persona.json")).json();
+  return spec.kind === "footage" ? footage(canvas, base, now, opts) : illustration(canvas, base, now, opts);
+}

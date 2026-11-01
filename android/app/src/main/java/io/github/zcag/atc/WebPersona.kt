@@ -26,6 +26,7 @@ class WebPersona(c: Context, private val dir: File, private val server: String) 
     init {
         setBackgroundColor(Color.TRANSPARENT)
         settings.javaScriptEnabled = true
+        settings.mediaPlaybackRequiresUserGesture = false
         addJavascriptInterface(Bridge(), "AtcPersona")
         webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse {
@@ -70,6 +71,7 @@ class WebPersona(c: Context, private val dir: File, private val server: String) 
         "json" -> "application/json"
         "png" -> "image/png"
         "jpg" -> "image/jpeg"
+        "mp4" -> "video/mp4"
         else -> "application/octet-stream"
     }
 }
