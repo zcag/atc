@@ -71,6 +71,7 @@ class WebPersona(c: Context, private val dir: File, private val server: String) 
         "json" -> "application/json"
         "png" -> "image/png"
         "jpg" -> "image/jpeg"
+        "webp" -> "image/webp"
         "mp4" -> "video/mp4"
         else -> "application/octet-stream"
     }

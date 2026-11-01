@@ -1,0 +1,30 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>html,body{margin:0;background:#151c27;overflow:hidden} canvas{display:block;width:432px;height:936px}</style>
+<canvas id="c"></canvas>
+<script type="module">
+import { persona } from "./persona.js";
+const tl = await (await fetch("timeline.json")).json();
+const c = document.getElementById("c");
+let t0 = 0;
+const at = (track, s) => track[Math.min(track.length - 1, Math.floor(s * 50))] || 0;
+const now = () => {
+  const s = t0 ? (performance.now() - t0) / 1000 : 0;
+  let k = s, state = "listening";
+  for (const [st, d] of tl.plan) { if ((k -= d) < 0) { state = st; break; } }
+  return { state, you: at(tl.you, s), it: at(tl.it, s), lo: at(tl.lo, s), hi: at(tl.hi, s) };
+};
+await persona(c, "./p/", now, { first: () => {} });
+const gaps = [];
+let last = 0;
+const watch = (ms) => { if (last) gaps.push(ms - last); last = ms; requestAnimationFrame(watch); };
+requestAnimationFrame(watch);
+await new Promise((r) => setTimeout(r, 300));
+t0 = performance.now();
+document.title = "go";
+setTimeout(() => {
+  gaps.sort((a, b) => a - b);
+  console.log(`frames ${gaps.length} median ${gaps[gaps.length >> 1].toFixed(1)} ms p99 ${gaps[Math.floor(gaps.length * .99)].toFixed(1)} ms max ${gaps.at(-1).toFixed(1)} ms`);
+  document.title = "done";
+}, tl.plan.reduce((a, [, d]) => a + d, 0) * 1000 + 300);
+</script>

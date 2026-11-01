@@ -1,0 +1,23 @@
+[
+  {},
+  {"jaw": 1},
+  {"jaw": 1, "round": 1},
+  {"jaw": 0.5, "wide": 1, "lipup": 0.6, "lipdown": 1},
+  {"smile": 1},
+  {"smile": 1, "jaw": 0.6},
+  {"yaw": 0.8},
+  {"yaw": -0.8},
+  {"pitch": 0.6},
+  {"pitch": -0.6},
+  {"roll": 0.8, "sway": 1},
+  {"yaw": 0.6, "pitch": 0.4, "jaw": 0.8},
+  {"blinkR": 1, "blinkL": 1},
+  {"blinkR": 0.5, "blinkL": 0.5},
+  {"gazeX": 1},
+  {"gazeX": -1},
+  {"gazeY": 1, "blinkR": 0.3, "blinkL": 0.3},
+  {"gazeY": -1, "browR": 0.5, "browL": 0.5},
+  {"browR": 1, "browL": 1},
+  {"knit": 1, "browR": -0.3, "browL": -0.3},
+  {"yaw": -0.6, "gazeX": 0.6, "blinkR": 1, "blinkL": 1}
+]

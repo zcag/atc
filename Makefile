@@ -5,6 +5,7 @@ check:
 	gofmt -l . | (! grep .)
 	go vet ./...
 	go test ./...
+	if command -v node >/dev/null; then node --test web/; fi
 
 install: check build
 	install -m755 atc ~/.local/bin/atc

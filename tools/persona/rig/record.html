@@ -1,0 +1,27 @@
+<!doctype html>
+<meta charset="utf-8">
+<body style="margin:0;background:#000">
+<canvas id="c" width="720" height="1560"></canvas>
+<script type="module">
+import { rig } from "./rig.js";
+const q = new URLSearchParams(location.search);
+const tl = await (await fetch(q.get("tl") || "timeline.json")).json();
+const fps = 30, total = Math.round(tl.plan.reduce((a, [, d]) => a + d, 0) * fps);
+const c = document.getElementById("c");
+if (q.get("w")) { c.width = +q.get("w"); c.height = +q.get("h"); }
+let i = 0;
+const at = (track) => track[Math.min(track.length - 1, Math.floor(i / fps * 50))] || 0;
+const state = () => { let k = i / fps; for (const [s, d] of tl.plan) { if ((k -= d) < 0) return s; } return "listening"; };
+const fixed = q.get("pose") ? JSON.parse(q.get("pose")) : null;
+const poses = q.get("poses") ? await (await fetch(q.get("poses"))).json() : null;
+const log = [];
+const frame = await rig(c, "./p/", () => ({ state: state(), you: at(tl.you), it: at(tl.it), lo: at(tl.lo), hi: at(tl.hi) }),
+  { dt: 1 / fps, params: poses ? () => poses[i] : fixed ? (p) => ({ ...p, ...fixed }) : undefined, tick: (p) => log.push(p) });
+for (const n = poses ? poses.length : total; i < n; i++) {
+  frame(i * 1000 / fps);
+  const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", .92));
+  await fetch(`/f/${String(i).padStart(4, "0")}`, { method: "POST", body: blob });
+}
+await fetch("/f/states", { method: "POST", body: JSON.stringify(log) });
+document.title = "done";
+</script>
