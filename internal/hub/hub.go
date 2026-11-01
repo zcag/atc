@@ -38,6 +38,8 @@ const (
 	// Guest is someone other than the user writing in (a WhatsApp guest); like an agent's report,
 	// the reply reaches no one.
 	Guest = "guest"
+	// GuestCall is a guest calling delta's line: spoken like the phone, but not the user.
+	GuestCall = "guest-call"
 	reset = "reset"
 )
 
@@ -226,7 +228,7 @@ func newID() string {
 func (h *Hub) Left(channel string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if channel == Phone && h.last == Phone {
+	if spoken(channel) && h.last == channel {
 		h.last = ""
 	}
 }
@@ -270,7 +272,7 @@ func (h *Hub) say(ch, text string) (string, error) {
 			}
 		}
 		h.last = ch
-		if ch != Phone && ch != h.home {
+		if !spoken(ch) && ch != h.home {
 			h.home = ch
 			os.WriteFile(h.homePath(), []byte(ch+"\n"), 0o644)
 		}
@@ -281,6 +283,11 @@ func (h *Hub) say(ch, text string) (string, error) {
 
 // aside is a channel whose messages are not the user talking: the reply reaches no one.
 func aside(ch string) bool { return ch == Agent || ch == Guest }
+
+// spoken is a live call, whose turns go first and whose reply is said out loud.
+func spoken(ch string) bool { return ch == Phone || ch == GuestCall }
+
+func guest(ch string) bool { return ch == Guest || ch == GuestCall }
 
 // asideNote tells the session that its reply to a report or a guest reaches no one, and where
 // the user is now, so it can decide whether and how to tell them.
@@ -320,10 +327,10 @@ func (h *Hub) holds(ch string) bool {
 	if h.handover != nil {
 		return true
 	}
-	if ch == Phone {
+	if spoken(ch) {
 		return false
 	}
-	return slices.Contains(h.busy(), Phone)
+	return slices.ContainsFunc(h.busy(), spoken)
 }
 
 func (h *Hub) busy() []string {

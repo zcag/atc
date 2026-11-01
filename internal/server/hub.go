@@ -23,7 +23,7 @@ import (
 const hubName = "assistant"
 
 const hubPrompt = `Messages reach you from several channels: atc (typed on a screen), atc-voice (spoken in atc), whatsapp, phone ` +
-	`(a live call, on delta's phone line or in the atc app) agent (other sessions reporting back) and guest (someone else writing to delta's WhatsApp, answered with atc wa --to). When the channel changes, a "[talk-mode: ...]" line ` +
+	`(a live call, on delta's phone line or in the atc app) agent (other sessions reporting back), guest (someone else writing to delta's WhatsApp, answered with atc wa --to) and guest-call (a guest calling delta's line; your reply is spoken to them). When the channel changes, a "[talk-mode: ...]" line ` +
 	`brings how to talk there; follow it until the next one. Answer where the message came from; a reply to an agent or guest message reaches no one. To reach the user elsewhere use ` +
 	"`atc wa` (WhatsApp) or `atc call --reason TEXT` (the atc app on their phone rings, or delta's phone line when the app can't, " +
 	"and the call comes to you; `atc call -h`; `--whatsapp` only when they ask for a WhatsApp call). " +
@@ -33,7 +33,9 @@ const hubPrompt = `Messages reach you from several channels: atc (typed on a scr
 	`they keep you current on their sessions and machines. Answer "how do things stand" from them and from nothing older; what you remember ` +
 	`from earlier in the conversation may be stale. Call status, read or sessions only for detail they don't give. ` +
 	`Guests are the few people besides them who may write to delta's WhatsApp (atc guest). Add one only when they ask in their own words: ` +
-	`draft a short introduction for that person, in their language, saying who you are and what they can write to you about, show it to them, ` +
+	`draft a short introduction for that person, in their language and with "sen" unless they say otherwise, saying who you are (delta, their assistant), ` +
+	`that they opened this number for them and that they can write (text, photos, voice notes) when they need something and you will pass it on to them; ` +
+	`keep it generic, and mention their site or app only if they have one they named; show it to them, ` +
 	`and only after their yes run atc guest add NAME NUMBER, then send it with atc wa --to NAME. `
 
 // HubArgs are the flags for the hub's Claude: the same tools and switchboard as atc's standing
@@ -237,7 +239,7 @@ func (s *Server) hubMark(ctx context.Context, list []sessions.Session) []session
 	x.Asks, x.TurnDone = nil, false
 	if len(st.Owners) > 0 || len(st.Pending) > 0 {
 		x.State = sessions.Working
-		where := map[string]string{hub.Phone: "on a call", waName: "on WhatsApp", "atc-voice": "by voice"}[cmp.Or(st.Route, append(st.Pending, "")[0])]
+		where := map[string]string{hub.Phone: "on a call", hub.GuestCall: "on a guest's call", waName: "on WhatsApp", "atc-voice": "by voice"}[cmp.Or(st.Route, append(st.Pending, "")[0])]
 		x.Activity = strings.Join(slices.DeleteFunc([]string{where, x.Activity}, func(p string) bool { return p == "" }), " · ")
 	} else {
 		x.State, x.Activity = sessions.YourTurn, ""

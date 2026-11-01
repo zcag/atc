@@ -776,7 +776,10 @@ writes to it, the reply appears as it is written, and Esc or Stop interrupts it.
 third channel: delta's `talk.py` connects as `phone` (`ws://127.0.0.1:8820/ws?channel=phone`).
 
 **Channels.** Each message is tagged with where it came from: `atc`, `atc-voice` (the Voice button),
-`whatsapp`, `phone`, `agent` (another session's `send`) and `guest` (someone else on WhatsApp, above). When the channel changes, the message
+`whatsapp`, `phone`, `agent` (another session's `send`), `guest` (someone else on WhatsApp, above) and
+`guest-call` (a guest calling delta's line: delta-talk answers the numbers in the guest list too and
+connects as this channel, so the reply is spoken to them under `modes/guest-call.md`; like `phone`
+its turns go first and hold the others, and neither guest channel gets atc's feed of their sessions). When the channel changes, the message
 carries that channel's rules from `modes/<channel>.md` (built in; a file of the same name in
 `~/.config/atc/modes/` takes its place), so the session writes Markdown for atc, short spoken
 sentences on a call, and phone-screen messages on WhatsApp. A report from another session gets

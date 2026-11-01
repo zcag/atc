@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -47,5 +48,51 @@ func TestGuestReachesNoOneAndKeepsHisChannel(t *testing.T) {
 	defer mu.Unlock()
 	if last := written[len(written)-1]; strings.Contains(last, "talk-mode") {
 		t.Fatalf("whatsapp mode resent after a guest: %s", last)
+	}
+}
+
+func TestGuestCallIsSpokenAndHoldsHim(t *testing.T) {
+	r := newRig(t, CallConfig{})
+	var mu sync.Mutex
+	var written []string
+	in := r.h.in
+	r.h.mu.Lock()
+	r.h.cfg.News = func(bool) string { return "[atc now] their sessions" }
+	r.h.in = writerFunc(func(b []byte) (int, error) {
+		mu.Lock()
+		written = append(written, string(b))
+		mu.Unlock()
+		return in.Write(b)
+	})
+	r.h.mu.Unlock()
+	wa := r.dial("whatsapp")
+	wa.send("message", "hi")
+	wa.until("done")
+	call := r.dial(GuestCall)
+	call.send("message", "TOOL [guest sam on the phone] site")
+	first := call.until("tool")
+	wa.send("message", "hello")
+	if es := wa.until("held"); len(es) != 1 {
+		t.Fatalf("whatsapp got %v before held", es)
+	}
+	if got := said(append(first, call.until("done")...)); !strings.HasPrefix(got, "looking") {
+		t.Fatalf("guest heard %q", got)
+	}
+	if got := said(wa.until("done")); !strings.HasSuffix(got, "hello") {
+		t.Fatalf("whatsapp got %q", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	var callMsg string
+	for _, w := range written {
+		if strings.Contains(w, "guest sam on the phone") {
+			callMsg = w
+		}
+	}
+	if strings.Contains(callMsg, "their sessions") || !strings.Contains(callMsg, "MODE guest-call") {
+		t.Fatalf("guest call message %s", callMsg)
+	}
+	if b, _ := os.ReadFile(r.h.homePath()); strings.TrimSpace(string(b)) != "whatsapp" {
+		t.Fatalf("home %q", b)
 	}
 }
