@@ -1533,15 +1533,20 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 }
 
 .callview {
-  position: fixed; inset: 0; z-index: 26; background: var(--board); display: flex; flex-direction: column; align-items: center;
+  position: fixed; inset: 0; z-index: 26; background: #05070d; color: #fff; --ink: #fff; --dim: rgba(255,255,255,.72); --faint: rgba(255,255,255,.5); --board: #05070d;
+  color-scheme: dark; display: flex; flex-direction: column; align-items: center;
   padding: max(56px, calc(env(safe-area-inset-top) + 40px)) 20px max(36px, calc(env(safe-area-inset-bottom) + 24px)); text-align: center;
 }
 .callview .close { position: absolute; top: max(14px, env(safe-area-inset-top)); right: 16px; font-size: 20px; line-height: 1; }
 .callhead h1 { margin: 0; font-size: 34px; font-weight: 500; letter-spacing: -.01em; }
 .callstate { font-size: 18px; color: var(--dim); margin-top: 4px; min-height: 26px; }
 .calltime { font: 16px var(--mono); color: var(--faint); min-height: 24px; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.callview .orb { flex: 1; width: 100%; max-width: 560px; min-height: 160px; cursor: pointer; transition: opacity .4s; -webkit-tap-highlight-color: transparent; }
-.callview .orb.idle { opacity: .35; }
+.callview .orb { position: absolute; inset: 0; width: 100%; height: 100%; cursor: pointer; transition: opacity .6s; -webkit-tap-highlight-color: transparent; }
+.callview .orb.idle { opacity: .45; }
+.callview > :not(.orb) { position: relative; z-index: 1; }
+.callview > .close { position: absolute; }
+.callhead { pointer-events: none; text-shadow: 0 1px 12px rgba(0,0,0,.5); }
+.callview .calltext { margin-top: auto; pointer-events: none; text-shadow: 0 1px 14px rgba(0,0,0,.7); }
 .calltext { width: min(640px, 100%); min-height: 7.5em; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; }
 .calltext p { margin: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; }
 .calltext .you { font-size: 15px; color: var(--dim); -webkit-line-clamp: 3; }
@@ -1551,12 +1556,13 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .callrow .round {
   width: 68px; height: 68px; border-radius: 50%; border: 0; display: grid; place-items: center;
   background: color-mix(in srgb, var(--ink) 12%, transparent); color: var(--ink);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
 }
 .callrow .round:hover { background: color-mix(in srgb, var(--ink) 20%, transparent); }
 .callrow .round.on { background: var(--ink); color: var(--board); }
 .callrow .round.end { background: #e5484d; color: #fff; }
 .callrow .round.dial { background: #30a46c; color: #fff; }
-.callview.ended .orb { opacity: .15; }
+.callview.ended .orb { opacity: .2; }
 .callpill {
   position: fixed; left: 50%; bottom: calc(48px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 24;
   display: flex; align-items: center; gap: 8px; border: 0; border-radius: 999px; padding: 9px 16px;

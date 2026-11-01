@@ -581,7 +581,7 @@ function CallView() {
         <div class="callstate">${status}</div>
         <div class="calltime">${st.phase === "active" ? clock(Date.now() - st.since) : " "}</div>
       </div>
-      <${Orb} state=${f.state} on=${st.phase === "active"} onTap=${Call.interrupt} />
+      <${Orb} full state=${f.state} on=${st.phase === "active"} onTap=${Call.interrupt} />
       <div class="calltext">
         <p class="you ${f.hearing ? "hearing" : ""}">${f.hearing || f.you}</p>
         <p class="said">${f.said}</p>
@@ -609,66 +609,125 @@ const HANG_UP = html`<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden
 const CHEVRON_DOWN = html`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 
 const ORB_LOOKS = {
-  listening: [[.18, .42, 1], [.35, .85, .95], [.85, .95, 1]],
-  hearing: [[.12, .7, .55], [.45, .95, .75], [.9, 1, .85]],
-  thinking: [[.45, .25, .95], [.9, .45, .85], [1, .8, .95]],
-  tool: [[.95, .5, .15], [1, .8, .4], [1, .95, .8]],
-  speaking: [[.3, .42, 1], [.62, .7, 1], [.95, .85, 1]],
+  listening: [[.08, .25, .9], [.2, .75, 1], [.75, .5, 1]],
+  hearing: [[.02, .42, .4], [.2, .95, .7], [.85, 1, .5]],
+  thinking: [[.3, .1, .85], [.85, .3, .95], [.3, .75, 1]],
+  tool: [[.8, .25, .05], [1, .65, .2], [1, .3, .5]],
+  speaking: [[.12, .18, .95], [.35, .65, 1], [1, .45, .85]],
 };
 const ORB_SRC = `precision highp float;
-uniform vec2 size; uniform float t, level, think, hear, speak; uniform vec3 c1, c2, c3;
+uniform vec2 size; uniform float t, level, think, hear, speak, bg, rad, lift; uniform vec3 c1, c2, c3;
 float hash(vec3 p) { p = fract(p * .3183099 + .1); p *= 17.; return fract(p.x * p.y * p.z * (p.x + p.y + p.z)); }
+float hash2(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float noise(vec3 x) { vec3 i = floor(x), f = fract(x); f = f * f * (3. - 2. * f);
   return mix(mix(mix(hash(i), hash(i + vec3(1,0,0)), f.x), mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x), mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y), f.z); }
-float fbm(vec3 p) { float a = .5, s = 0.; for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + 3.1; a *= .5; } return s; }
+float fbm(vec3 p) { float a = .5, s = 0.; for (int i = 0; i < 3; i++) { s += a * noise(p); p = p * 2.03 + 3.1; a *= .5; } return s; }
+float blob(vec3 p, float lv) {
+  float amp = .025 + .015 * think + lv * (.045 * speak + .035 * hear + .015);
+  float d = sin(p.x * 2.1 + t * 1.3) * sin(p.y * 2.4 - t * 1.1) * sin(p.z * 1.9 + t * .9);
+  d += .5 * sin(p.x * 4.3 - t * 2.1 + p.y * 1.7) * sin(p.z * 3.9 + t * 1.7);
+  d += (.2 + .5 * think + .6 * speak * lv) * sin(dot(p, vec3(5.1, 6.7, 4.3)) + t * (3. + 4. * lv));
+  return length(p) - (1. + .025 * sin(t * 1.2) + .07 * lv) - d * amp;
+}
+vec3 normalAt(vec3 p, float lv) {
+  vec2 e = vec2(.003, -.003);
+  return normalize(e.xyy * blob(p + e.xyy, lv) + e.yyx * blob(p + e.yyx, lv) + e.yxy * blob(p + e.yxy, lv) + e.xxx * blob(p + e.xxx, lv));
+}
 void main() {
   vec2 uv = (gl_FragCoord.xy - .5 * size) / min(size.x, size.y);
-  float floorY = -.3, lv = min(level, 1.);
+  float lv = min(level, 1.);
+  vec2 ctr = vec2(0., lift + .012 * sin(t * .8));
+  vec2 q = (uv - ctr) / rad;
+  float dq = length(q);
   vec3 tint = mix(c1, c2, .55);
-  float haze = fbm(vec3(uv * 1.4 + vec2(t * .015, t * .008), t * .025));
-  float a = .1 * smoothstep(.35, .85, haze) * smoothstep(.75, .1, length(uv * vec2(.8, 1.)));
-  vec3 col = tint * a;
-  float line = .08 * exp(-abs(uv.y - floorY) * 30.) * smoothstep(.5, 0., abs(uv.x));
-  col += tint * line; a += line;
-  vec2 o = vec2(0., .05 + .012 * sin(t * .8));
-  float r = .2 + .01 * sin(t * 1.25) + .03 * lv;
-  vec2 q = uv - o;
-  float ang = atan(q.y, q.x);
-  r += (.002 + .01 * speak * lv) * sin(ang * 3. + t * 2.2) + (.002 + .008 * hear * lv) * sin(ang * 4. - t * 2.9);
-  float d = length(q);
-  float glow = exp(-max(d - r, 0.) * (7. - 3. * lv)) * (.22 + .45 * lv) * smoothstep(.62, .22, d);
-  col += tint * glow; a += glow * .9;
-  float below = smoothstep(floorY + .01, floorY - .02, uv.y);
-  vec2 m = vec2(uv.x, 2. * floorY - uv.y) - o;
-  float md = length(m);
-  float refl = (smoothstep(r, r - .08, md) * .3 + exp(-max(md - r, 0.) * 7.) * .1) * below * exp(-(floorY - uv.y) * 6.);
-  col += tint * refl; a += refl;
-  vec2 e = .5 * size / min(size.x, size.y);
-  float keep = smoothstep(e.x, e.x - .12, abs(uv.x)) * smoothstep(e.y, e.y - .12, abs(uv.y));
-  col *= keep; a *= keep;
-  if (d < r) {
-    float z = sqrt(max(r * r - d * d, 0.)) / r;
-    vec3 nrm = normalize(vec3(q / r, z));
-    float spin = t * (.12 + .45 * think);
-    vec3 pp = nrm * 1.3;
-    pp = vec3(cos(spin) * pp.x - sin(spin) * pp.z, pp.y, sin(spin) * pp.x + cos(spin) * pp.z);
-    vec3 w = vec3(fbm(pp * 1.7 + t * .06), fbm(pp * 1.7 + 4.3 - t * .05), fbm(pp * 1.7 + 8.1));
-    float bands = fbm(pp * .9 + w * (.9 + .8 * lv) + vec3(0., 0., t * (.12 + .4 * lv)));
-    float stripe = smoothstep(.42, .62, bands) - smoothstep(.62, .8, bands);
-    vec3 inner = mix(mix(c1, c2, .25) * .7, c1, smoothstep(.2, .55, bands));
-    inner = mix(inner, c2, smoothstep(.5, .78, bands));
-    inner += c3 * stripe * (.1 + .22 * lv);
-    inner *= .75 + .45 * z;
-    inner += mix(c2, vec3(1.), .3) * pow(z, 3.) * .35;
-    float fres = pow(1. - z, 3.);
-    float rim = smoothstep(0., .12, 1. - z) * smoothstep(.35, .05, 1. - z);
-    float spec = pow(max(dot(nrm, normalize(vec3(-.45, .6, .75))), 0.), 22.);
-    vec3 orb = inner + fres * mix(c2, vec3(1.), .5) * .55 + rim * tint * .25 + spec * .35;
-    orb = orb / (1. + orb * .35);
-    float edge = smoothstep(r, r - .004, d);
-    col = col * (1. - edge) + orb * edge;
-    a = a * (1. - edge) + edge;
+  vec3 col = vec3(0.);
+  float a = 0.;
+  if (bg > 0.) {
+    float n1 = fbm(vec3(uv * 1.3, t * .04));
+    float n2 = fbm(vec3(uv * 1.1 + n1 * 1.8 + vec2(t * .03, -t * .02), t * .05 + 5.));
+    col = (vec3(.01, .013, .025) + c1 * .03) * (1.25 - .45 * length(uv * vec2(.8, .55)));
+    col += mix(c1, c2, n1) * smoothstep(.38, .9, n2) * (.12 + .2 * lv) * smoothstep(2.2, .3, length(uv - ctr * .5));
+    float ring = pow(.5 + .5 * sin(dq * 8. - t * 3.5 * (speak >= hear ? 1. : -1.)), 8.);
+    col += tint * ring * smoothstep(1., 1.3, dq) * exp(-(dq - 1.) * .8) * lv * (.25 * speak + .2 * hear);
+    for (int i = 0; i < 2; i++) {
+      float fi = float(i);
+      vec2 g = uv * (11. + 9. * fi) + vec2(fi * 3.7, t * (.04 + .03 * fi));
+      vec2 id = floor(g), f = fract(g) - .5;
+      float h = hash2(id + fi * 7.1);
+      vec2 off = vec2(hash2(id + 3.3), hash2(id + 9.7)) - .5;
+      float s = smoothstep(.07, 0., length(f - off * .7)) * step(.82, h) * (.55 + .45 * sin(t * (.7 + 2. * h) + h * 40.));
+      col += mix(c3, vec3(1.), .5) * s * (.25 + .35 * smoothstep(3., .8, dq) + .3 * lv);
+    }
+    a = 1.;
+  }
+  float glow = exp(-max(dq - 1., 0.) * (7. - 3. * lv)) * (.35 + .5 * lv) + exp(-max(dq - 1., 0.) * 1.6) * (.07 + .12 * lv);
+  if (bg <= 0.) glow *= smoothstep(2.8, 1.2, dq);
+  col += tint * glow;
+  a += glow * .9;
+  vec3 back = vec3(0.), front = vec3(0.);
+  for (int i = 0; i < 9; i++) {
+    float fi = float(i);
+    float an = t * (.5 + .07 * fi) + fi * .698;
+    float orbit = 1.32 + .12 * sin(t * 1.1 + fi * 2.3);
+    vec2 pos = vec2(cos(an), sin(an) * .3) * orbit;
+    pos = vec2(pos.x * .96 - pos.y * .28, pos.x * .28 + pos.y * .96);
+    float sp = (exp(-length(q - pos) * 40.) * 2.5 + exp(-length(q - pos) * 12.) * .35) * think;
+    if (sin(an) > 0.) back += c3 * sp; else front += c3 * sp;
+  }
+  col += back;
+  a += length(back);
+  if (dq < 1.45) {
+    float cs = cos(t * (.15 + .5 * think)), sn = sin(t * (.15 + .5 * think)), tx = .25 * sin(t * .2);
+    mat3 m = mat3(cs, 0., -sn, 0., 1., 0., sn, 0., cs) * mat3(1., 0., 0., 0., cos(tx), sin(tx), 0., -sin(tx), cos(tx));
+    vec3 ro = vec3(0., 0., 4.), rd = normalize(vec3(q, -4.));
+    vec3 rdo = m * rd;
+    vec3 p = m * ro;
+    float b = dot(p, rdo), c = dot(p, p) - 2.1, h = b * b - c;
+    float dist = -b - sqrt(max(h, 0.)), best = 9.;
+    vec3 near = p + rdo * dist;
+    if (h > 0.) {
+      for (int i = 0; i < 26; i++) {
+        vec3 x = p + rdo * dist;
+        float d = blob(x, lv);
+        if (d < best) { best = d; near = x; }
+        if (d < .001) break;
+        dist += d * .6;
+        if (dist > 7.) break;
+      }
+    }
+    float cov = 1. - smoothstep(0., 2. / (min(size.x, size.y) * rad), best);
+    if (cov > 0.) {
+      vec3 no = normalAt(near, lv);
+      vec3 n = no * m;
+      vec3 v = -rd;
+      float z = max(dot(n, v), 0.);
+      float fres = pow(1. - z, 3.);
+      float ph = dot(n, vec3(sin(t * .3), cos(t * .23), .5)) * 2.2 + fbm(no * 1.6 + t * .08) * 4. + t * .3;
+      vec3 iri = mix(c1, c2, .5 + .5 * sin(ph * 2.2));
+      iri = mix(iri, c3, smoothstep(.55, 1., sin(ph * 1.3 + 1.7)) * .6);
+      vec3 ip = near + refract(rdo, no, .72) * .7;
+      float sw = fbm(ip * 1.7 + vec3(0., t * (.12 + .35 * lv), t * .07));
+      vec3 inner = mix(c1 * .12, c1, smoothstep(.25, .55, sw));
+      inner = mix(inner, c2, smoothstep(.5, .75, sw)) + c3 * pow(smoothstep(.45, .85, sw), 2.) * (.4 + .9 * lv);
+      inner += mix(c3, vec3(1.), .3) * pow(max(1. - abs(sw - .52) * 7., 0.), 3.) * (.35 + .7 * lv);
+      vec3 sc = mix(inner, iri, .25 + .55 * fres);
+      sc += mix(c2, c3, .4) * pow(z, 3.) * (.22 + .35 * lv);
+      sc += fres * mix(c2, c3, .5 + .5 * sin(ph)) * .8;
+      vec3 rf = reflect(rd, n);
+      sc += pow(max(dot(rf, normalize(vec3(-.5, .7, .6))), 0.), 48.) * .7;
+      sc += c2 * pow(max(dot(rf, normalize(vec3(.6, -.5, .4))), 0.), 6.) * .25;
+      sc = 1. - exp(-sc * 1.5);
+      col = mix(col, sc, cov);
+      a = mix(a, 1., cov);
+    }
+  }
+  col += front;
+  a += length(front);
+  if (bg <= 0.) {
+    vec2 e = .5 * size / min(size.x, size.y);
+    float keep = smoothstep(e.x, e.x - .12, abs(uv.x)) * smoothstep(e.y, e.y - .12, abs(uv.y));
+    col *= keep; a *= keep;
   }
   a = clamp(a, 0., 1.);
   gl_FragColor = vec4(min(col, vec3(a)), a);
@@ -677,7 +736,13 @@ void main() {
 function orbGL(canvas) {
   const gl = canvas.getContext("webgl", { premultipliedAlpha: true, antialias: false });
   if (!gl) return null;
-  const sh = (type, src) => { const x = gl.createShader(type); gl.shaderSource(x, src); gl.compileShader(x); return x; };
+  const sh = (type, src) => {
+    const x = gl.createShader(type);
+    gl.shaderSource(x, src);
+    gl.compileShader(x);
+    if (!gl.getShaderParameter(x, gl.COMPILE_STATUS)) console.warn("orb:", gl.getShaderInfoLog(x));
+    return x;
+  };
   const prog = gl.createProgram();
   gl.attachShader(prog, sh(gl.VERTEX_SHADER, "attribute vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }"));
   gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, ORB_SRC));
@@ -688,7 +753,7 @@ function orbGL(canvas) {
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
   gl.enableVertexAttribArray(0);
   gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-  const u = Object.fromEntries(["size", "t", "level", "think", "hear", "speak", "c1", "c2", "c3"].map((k) => [k, gl.getUniformLocation(prog, k)]));
+  const u = Object.fromEntries(["size", "t", "level", "think", "hear", "speak", "bg", "rad", "lift", "c1", "c2", "c3"].map((k) => [k, gl.getUniformLocation(prog, k)]));
   return (w, h, t, o) => {
     gl.viewport(0, 0, w, h);
     gl.clearColor(0, 0, 0, 0);
@@ -699,6 +764,10 @@ function orbGL(canvas) {
     gl.uniform1f(u.think, o.think);
     gl.uniform1f(u.hear, o.hear);
     gl.uniform1f(u.speak, o.speak);
+    const tall = h > w * 1.3;
+    gl.uniform1f(u.bg, o.full ? 1 : 0);
+    gl.uniform1f(u.rad, o.full ? (tall ? .27 : .19) : .22);
+    gl.uniform1f(u.lift, o.full ? (tall ? .1 : .07) : .02);
     gl.uniform3fv(u.c1, o.c[0]);
     gl.uniform3fv(u.c2, o.c[1]);
     gl.uniform3fv(u.c3, o.c[2]);
@@ -711,6 +780,7 @@ function orb2D(canvas) {
   const css = (c, al = 1) => `rgba(${c.map((v) => Math.round(v * 255)).join(",")},${al})`;
   return (w, h, t, o) => {
     g.clearRect(0, 0, w, h);
+    if (o.full) { g.fillStyle = "#05070d"; g.fillRect(0, 0, w, h); }
     const r = Math.min(w, h) * (.22 + .08 * Math.min(o.level, 1));
     let gr = g.createRadialGradient(w / 2, h / 2, r * .6, w / 2, h / 2, r * 1.6);
     gr.addColorStop(0, css(o.c[1], .45));
@@ -725,14 +795,14 @@ function orb2D(canvas) {
   };
 }
 
-function Orb({ state, on, onTap }) {
+function Orb({ state, on, onTap, full }) {
   const ref = useRef(null);
   const now = useRef(state);
   now.current = state;
   useEffect(() => {
     const cv = ref.current;
     const draw = orbGL(cv) || orb2D(cv);
-    const o = { level: 0, think: 0, hear: 0, speak: 0, c: ORB_LOOKS.listening.map((c) => [...c]) };
+    const o = { full, level: 0, think: 0, hear: 0, speak: 0, c: ORB_LOOKS.listening.map((c) => [...c]) };
     const start = performance.now();
     let raf;
     const frame = (ms) => {
@@ -745,14 +815,14 @@ function Orb({ state, on, onTap }) {
       o.hear += ((st === "hearing") - o.hear) * .06;
       o.speak += ((st === "speaking") - o.speak) * .06;
       look.forEach((c, i) => c.forEach((v, j) => (o.c[i][j] += (v - o.c[i][j]) * .04)));
-      const k = Math.min(devicePixelRatio || 1, 2), w = Math.round(cv.clientWidth * k), h = Math.round(cv.clientHeight * k);
+      const k = Math.min(devicePixelRatio || 1, full ? 1.25 : 2), w = Math.round(cv.clientWidth * k), h = Math.round(cv.clientHeight * k);
       if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
       if (w && h) draw(w, h, t, o);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
   }, []);
-  return html`<canvas ref=${ref} class="orb ${on ? "" : "idle"}" onClick=${onTap} aria-label="The assistant. Tap to stop it while it speaks"></canvas>`;
+  return html`<canvas ref=${ref} class="orb ${full ? "full" : ""} ${on ? "" : "idle"}" onClick=${onTap} aria-label="The assistant. Tap to stop it while it speaks"></canvas>`;
 }
 
 function Login({ onDone }) {
