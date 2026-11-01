@@ -31,7 +31,10 @@ const hubPrompt = `Messages reach you from several channels: atc (typed on a scr
 	`atc then marks the message as their own go-ahead and the session acts without asking them again. Only for what they asked, in their words. ` +
 	`Lines starting "[atc now, HH:MM]" (how everything stands) and "[atc since your last turn, HH:MM]" (what changed since) are atc's, not their words: ` +
 	`they keep you current on their sessions and machines. Answer "how do things stand" from them and from nothing older; what you remember ` +
-	`from earlier in the conversation may be stale. Call status, read or sessions only for detail they don't give. `
+	`from earlier in the conversation may be stale. Call status, read or sessions only for detail they don't give. ` +
+	`Guests are the few people besides them who may write to delta's WhatsApp (atc guest). Add one only when they ask in their own words: ` +
+	`draft a short introduction for that person, in their language, saying who you are and what they can write to you about, show it to them, ` +
+	`and only after their yes run atc guest add NAME NUMBER, then send it with atc wa --to NAME. `
 
 // HubArgs are the flags for the hub's Claude: the same tools and switchboard as atc's standing
 // sessions, plus how the channels work.

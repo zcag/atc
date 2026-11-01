@@ -27,13 +27,12 @@ type Client struct {
 	URL, Key, Session string
 	Owner             string
 	OwnerIDs          []string
-	// Guests are the other people atc listens to, by name: number (no +).
-	Guests map[string]string
-	Secret string
-	Hook   string
-	Votes  atomic.Bool
-	chat   atomic.Value
-	http   *http.Client
+	Guests            *Guests
+	Secret            string
+	Hook              string
+	Votes             atomic.Bool
+	chat              atomic.Value
+	http              *http.Client
 }
 
 func FromEnv() *Client {
@@ -46,15 +45,6 @@ func FromEnv() *Client {
 	for _, id := range strings.Split(os.Getenv("ATC_WHATSAPP_OWNER"), ",") {
 		if id = strings.TrimPrefix(strings.TrimSpace(id), "+"); id != "" {
 			c.OwnerIDs = append(c.OwnerIDs, id)
-		}
-	}
-	for _, g := range strings.Split(os.Getenv("ATC_WHATSAPP_GUESTS"), ",") {
-		name, num, ok := strings.Cut(strings.TrimSpace(g), ":")
-		if num = strings.TrimPrefix(strings.TrimSpace(num), "+"); ok && name != "" && num != "" {
-			if c.Guests == nil {
-				c.Guests = map[string]string{}
-			}
-			c.Guests[strings.ToLower(strings.TrimSpace(name))] = num
 		}
 	}
 	if len(c.OwnerIDs) > 0 {
@@ -88,29 +78,6 @@ func (c *Client) chatOf(ctx context.Context) string {
 		return chat
 	}
 	return c.OwnerChat()
-}
-
-// GuestChat is the chat of the guest with this name.
-func (c *Client) GuestChat(name string) (string, bool) {
-	num, ok := c.Guests[strings.ToLower(name)]
-	return num + "@c.us", ok
-}
-
-// Guest is the name of the guest a sender id belongs to, "" for none.
-func (c *Client) Guest(ctx context.Context, from, senderPhone string) string {
-	num := strings.TrimSuffix(from, "@c.us")
-	if strings.HasSuffix(from, "@lid") {
-		num = strings.TrimPrefix(senderPhone, "+")
-		if num == "" {
-			num, _ = c.Phone(ctx, from)
-		}
-	}
-	for name, n := range c.Guests {
-		if num != "" && n == num {
-			return name
-		}
-	}
-	return ""
 }
 
 func (c *Client) UseChat(id string) {
@@ -263,7 +230,7 @@ func (c *Client) Verify(body []byte, sig string) bool {
 // EnsureHook registers the two webhooks that bring the owner's side of the chat to atc, or
 // brings the ones already registered at the same URLs up to date: messages, filtered by
 // sender, and reactions, edits and poll votes, filtered by chat (a sender condition drops
-// reactions, which carry no sender field). With guests, a third brings every direct message,
+// reactions, which carry no sender field). With a guest list, a third brings every direct message,
 // unfiltered by sender: a guest may write from an @lid only atc can resolve, so atc picks them
 // out itself. The secret is write-only in OpenWA, so it is set
 // on every start rather than compared.
@@ -287,7 +254,7 @@ func (c *Client) EnsureHook(ctx context.Context) error {
 		{c.Hook, []string{"message.received"}, map[string]any{"field": "sender", "operator": "is", "value": c.OwnerIDs}},
 		{c.Hook + sep + "changes=1", []string{"message.reaction", "message.edited", "poll.vote"}, map[string]any{"field": "chatId", "operator": "is", "value": c.OwnerIDs}},
 	}
-	if len(c.Guests) > 0 {
+	if c.Guests != nil {
 		want = append(want, struct {
 			url    string
 			events []string

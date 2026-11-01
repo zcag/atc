@@ -5,6 +5,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -24,13 +26,34 @@ func TestGuests(t *testing.T) {
 		}
 	}))
 	defer gw.Close()
-	for k, v := range map[string]string{"URL": gw.URL, "KEY": "k", "SESSION": "s", "OWNER": "15550100", "SECRET": "0123456789abcdef", "GUESTS": " Sam:+905320000000, bad , x:"} {
+	for k, v := range map[string]string{"URL": gw.URL, "KEY": "k", "SESSION": "s", "OWNER": "15550100", "SECRET": "0123456789abcdef"} {
 		t.Setenv("ATC_WHATSAPP_"+k, v)
 	}
 	c := FromEnv()
-	if len(c.Guests) != 1 || c.Guests["sam"] != "905320000000" {
-		t.Fatalf("guests %v", c.Guests)
+	path := filepath.Join(t.TempDir(), "guests")
+	c.Guests = &Guests{Path: path}
+	if len(c.Guests.List()) != 0 || c.Guest(context.Background(), "905320000000@c.us", "") != "" {
+		t.Fatal("no file is no guests")
 	}
+	for _, bad := range [][2]string{{"Sam Ali", "905320000000"}, {"sam", "0532"}, {"sam", "+90 532 abc"}} {
+		if c.Guests.Add(bad[0], bad[1]) == nil {
+			t.Errorf("added %v", bad)
+		}
+	}
+	if err := c.Guests.Add("Sam", "+90 532 000 0000"); err != nil {
+		t.Fatal(err)
+	}
+	if c.Guests.Add("friend", "905320000000") == nil {
+		t.Error("the same number twice")
+	}
+	c.Guests.Add("pat", "905330000000")
+	if err := c.Guests.Remove("pat"); err != nil || c.Guests.Remove("pat") == nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if b, _ := os.ReadFile(path); !strings.HasSuffix(string(b), "\nsam 905320000000\n") {
+		t.Fatalf("file %q", b)
+	}
+
 	ctx := context.Background()
 	for from, want := range map[string]string{
 		"905320000000@c.us": "sam",

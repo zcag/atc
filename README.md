@@ -712,8 +712,10 @@ atc registers two webhooks at that URL: messages, filtered by sender, and reacti
 votes, filtered by chat (a sender filter would drop reactions, which carry no sender).
 
 **Guests.** A few other people can write to the same account: a friend asking about a site of theirs,
-say. `ATC_WHATSAPP_GUESTS=sam:905321234567,pat:905331234567` names them (name, colon, number). atc
-then registers a third webhook for every direct message (a guest may write from an `@lid` only atc
+say. `atc guest add sam 905321234567` adds one (`atc guest` lists them, `atc guest rm` removes one);
+the list is `~/.config/atc/guests` on the machine WhatsApp runs on, read fresh on every message, so a
+change needs no restart. The assistant adds someone only when you ask, and first shows you the
+introduction it will send them. atc registers a third webhook for every direct message (a guest may write from an `@lid` only atc
 can resolve) and drops anyone who is neither the owner nor a guest. A guest's message goes to the
 assistant on the `guest` channel (`[guest sam on WhatsApp]` in front, photos and voice notes as for
 the owner), where, as with another session's report, the reply reaches no one. The assistant answers

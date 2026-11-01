@@ -16,8 +16,8 @@ const waHelp = `atc wa: send the user something on WhatsApp, from the account at
   atc wa --poll QUESTION --option A --option B... [--multi]
   atc wa --to NAME [--file PATH]... [--voice TEXT] [text...]
 
-It reaches the user, or with --to one of the guests atc listens to (ATC_WHATSAPP_GUESTS on
-desktop); anyone else is refused. In the whatsapp session your replies are delivered
+It reaches the user, or with --to one of the guests atc listens to (atc guest); anyone
+else is refused. In the whatsapp session your replies are delivered
 already; use this for what a reply can't carry:
 
   --file PATH      a file: images and videos show inline, audio plays, anything else
