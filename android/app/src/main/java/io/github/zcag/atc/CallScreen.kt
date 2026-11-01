@@ -25,6 +25,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
+import android.window.OnBackInvokedDispatcher
 import android.widget.Chronometer
 import android.widget.FrameLayout
 import android.widget.ImageButton
@@ -189,6 +190,7 @@ class CallActivity : Activity() {
         window.navigationBarColor = Color.TRANSPARENT
         window.setDecorFitsSystemWindows(false)
         setContentView(layout())
+        if (Build.VERSION.SDK_INT >= 33) onBackInvokedDispatcher.registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT) { back() }
         proximity = getSystemService(PowerManager::class.java)
             .takeIf { it.isWakeLockLevelSupported(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK) }
             ?.newWakeLock(PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "atc:call")
@@ -303,8 +305,18 @@ class CallActivity : Activity() {
         layoutParams = LinearLayout.LayoutParams(dp(68), dp(68)).apply { setMargins(dp(18), 0, dp(18), 0) }
     }
 
+    /** atc's sessions over the call, which goes on in its service; the green bar there (or the notification) brings
+     *  this screen back as it was. */
+    private fun toSessions() = startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+
+    private fun back() = if (Calls.state.value.live) toSessions() else finish()
+
+    @Deprecated("Below Android 13 only; newer ones use the callback registered in onCreate")
+    override fun onBackPressed() = back()
+
     /** The ⋯ button: options that don't need a button of their own. */
     private fun menu(anchor: View) = PopupMenu(this, anchor).apply {
+        menu.add("Sessions (the call keeps going)").setOnMenuItemClickListener { toSessions(); true }
         menu.add("Character…").setOnMenuItemClickListener { pickPersona(); true }
         show()
     }
