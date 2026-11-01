@@ -266,7 +266,7 @@ export class Mind {
     };
     return {
       face,
-      head: { head_r: clamp(yaw, 0, 1.2), head_l: clamp(-yaw, 0, 1.2), head_up: clamp(pitch - nod, 0, 1), head_down: clamp(nod - pitch, 0, 1.1), lean: clamp(lean) },
+      head: { head_r: clamp(yaw, 0, .6), head_l: clamp(-yaw, 0, .6), head_up: clamp(pitch - nod, 0, 1), head_down: clamp(nod - pitch, 0, 1.1), lean: clamp(lean) },
       roll, breath, light: .03 * Math.sin(t * 1.7) * Math.sin(t * .37),
       parallax: [-yaw * .006, pitch * .003],
     };
@@ -400,7 +400,7 @@ export async function illustration(canvas, base, now, opts = {}) {
     if (!w || !h) return;
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     const { state, you, it, lo, hi } = now();
-    const pose = mind.step(dt, state, you, it, lo, hi);
+    const pose = (opts.pose || ((p) => p))(mind.step(dt, state, you, it, lo, hi));
     const active = Object.entries(pose.face).filter(([n, x]) => x > .004 && n in fidx).sort((a, b) => b[1] - a[1]).slice(0, 8);
     fid.fill(0); fw.fill(0);
     active.forEach(([n, x], i) => { fid[i] = fidx[n]; fw[i] = Math.min(1, x); });
