@@ -3,6 +3,7 @@ import { marked as Marked } from "./vendor/marked.esm.js";
 import hljs from "./vendor/highlight.min.js";
 import { diffLines } from "./vendor/diff.mjs";
 import { Call } from "./call.js";
+import { illustration } from "./persona.js";
 
 const BAYS = [
   ["needs-you", "Needs you"],
@@ -580,7 +581,7 @@ function CallView() {
         <div class="callstate">${status}</div>
         <div class="calltime">${st.phase === "active" ? clock(Date.now() - st.since) : " "}</div>
       </div>
-      <${Orb} state=${f.state} on=${st.phase === "active"} onTap=${Call.interrupt} />
+      <${Persona} state=${f.state} on=${st.phase === "active"} onTap=${Call.interrupt} />
       <div class="calltext">
         <p class="you ${f.hearing ? "hearing" : ""}">${f.hearing || f.you}</p>
         <p class="said">${f.said}</p>
@@ -721,6 +722,61 @@ function orb2D(canvas) {
     g.fillStyle = gr;
     g.beginPath(); g.arc(w / 2, h / 2, r, 0, 7); g.fill();
   };
+}
+
+const PERSONAS = "/app/personas/";
+const personaPick = {
+  get: () => { try { return localStorage.getItem("atc.persona"); } catch { return null; } },
+  set: (n) => { try { localStorage.setItem("atc.persona", n); } catch {} },
+};
+
+async function personaList() {
+  const index = await (await fetch(PERSONAS + "index.json")).json();
+  const all = index.personas || [];
+  const kinds = await Promise.all(all.map(({ name }) => fetch(`${PERSONAS}${name}/persona.json`).then((r) => r.json()).then((p) => p.kind).catch(() => null)));
+  return { names: ["orb", ...all.filter((_, i) => kinds[i] === "illustration").map((p) => p.name)], def: index.default || "orb" };
+}
+
+/** The call's persona slot: the orb, or an illustrated character from /app/personas. Holding it (or a right click)
+ *  switches to the next one, and the choice is kept in this browser. */
+function Persona({ state, on, onTap }) {
+  const [list, setList] = useState({ names: ["orb"], def: "orb" });
+  const [name, setName] = useState(personaPick.get);
+  const [label, setLabel] = useState(null);
+  const hold = useRef(null);
+  const held = useRef(false);
+  useEffect(() => { personaList().then(setList).catch(() => {}); }, []);
+  const want = name ?? list.def;
+  const shown = list.names.includes(want) ? want : "orb";
+  const next = (e) => {
+    e?.preventDefault();
+    const n = list.names[(list.names.indexOf(shown) + 1) % list.names.length];
+    personaPick.set(n);
+    setName(n);
+    setLabel(n);
+    setTimeout(() => setLabel(null), 1200);
+  };
+  const down = () => { held.current = false; hold.current = setTimeout(() => { held.current = true; next(); }, 600); };
+  const up = () => clearTimeout(hold.current);
+  const tap = () => { if (!held.current) onTap(); };
+  return html`<div class="persona" onPointerDown=${down} onPointerUp=${up} onPointerLeave=${up} onContextMenu=${next}>
+    ${shown === "orb" ? html`<${Orb} state=${state} on=${on} onTap=${tap} />` : html`<${Drawn} key=${shown} name=${shown} state=${state} on=${on} onTap=${tap} />`}
+    ${label && html`<span class="personaname">${label}</span>`}
+  </div>`;
+}
+
+function Drawn({ name, state, on, onTap }) {
+  const ref = useRef(null);
+  const now = useRef(state);
+  now.current = state;
+  useEffect(() => {
+    let stop = null, gone = false;
+    illustration(ref.current, `${PERSONAS}${name}/`, () => { const [you, it] = Call.levels(); return { state: now.current, you, it }; })
+      .then((s) => (gone ? s() : (stop = s)))
+      .catch((e) => console.warn("persona", name, e));
+    return () => { gone = true; stop?.(); };
+  }, [name]);
+  return html`<canvas ref=${ref} class="orb ${on ? "" : "idle"}" onClick=${onTap} aria-label="The assistant. Tap to stop it while it speaks"></canvas>`;
 }
 
 function Orb({ state, on, onTap }) {

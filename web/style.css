@@ -1520,7 +1520,9 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .callhead h1 { margin: 0; font-size: 34px; font-weight: 500; letter-spacing: -.01em; }
 .callstate { font-size: 18px; color: var(--dim); margin-top: 4px; min-height: 26px; }
 .calltime { font: 16px var(--mono); color: var(--faint); min-height: 24px; margin-top: 2px; font-variant-numeric: tabular-nums; }
-.callview .orb { flex: 1; width: 100%; max-width: 560px; min-height: 160px; cursor: pointer; transition: opacity .4s; -webkit-tap-highlight-color: transparent; }
+.callview .persona { flex: 1; width: 100%; max-width: 560px; min-height: 160px; position: relative; display: flex; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.callview .orb { flex: 1; width: 100%; min-height: 0; cursor: pointer; transition: opacity .4s; -webkit-tap-highlight-color: transparent; }
+.personaname { position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); padding: 4px 12px; border-radius: 999px; font-size: 13px; background: color-mix(in srgb, var(--ink) 14%, transparent); pointer-events: none; }
 .callview .orb.idle { opacity: .35; }
 .calltext { width: min(640px, 100%); min-height: 7.5em; display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; }
 .calltext p { margin: 0; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; }
