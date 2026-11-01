@@ -472,7 +472,7 @@ export async function illustration(canvas, base, now, opts = {}) {
  *  performances, in one video (footage.mp4) whose stretches are tagged by call state (footage.json). It keeps playing
  *  the stretch that fits the call; to change state, or before a stretch runs out, it waits for a precomputed jump to
  *  a frame that looks and moves alike, pre-seeks a second video there and cross-fades. */
-export async function footage(canvas, base, now, opts = {}) {
+export async function footage(canvas, base, now, opts = {}, failed) {
   const meta = await (await fetch(base + "footage.json")).json();
   const src = URL.createObjectURL(await (await fetch(base + "footage.mp4")).blob());
   const fps = meta.fps, segOf = new Int32Array(meta.frames);
@@ -486,7 +486,44 @@ export async function footage(canvas, base, now, opts = {}) {
   const first = meta.segments.find((s) => s.state === "listening") || meta.segments[0];
   cur.currentTime = (first.start + .5) / fps;
   await cur.play().catch(() => {});
-  const g = canvas.getContext("2d");
+  const gl = canvas.getContext("webgl2", { premultipliedAlpha: true, alpha: true, preserveDrawingBuffer: !!opts.dt });
+  const prog = gl.createProgram();
+  for (const [type, src] of [[gl.VERTEX_SHADER, VS], [gl.FRAGMENT_SHADER, `#version 300 es
+precision highp float;
+in vec2 v; out vec4 o;
+uniform sampler2D a, b;
+uniform vec2 span, center;
+uniform float mixb, fade;
+void main() {
+  vec2 uv = center + (v - .5) * span;
+  vec3 c = mix(texture(a, uv).rgb, texture(b, uv).rgb, mixb);
+  float e = smoothstep(0., fade, 1. - v.y);
+  o = vec4(c * e, e);
+}`]]) {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    gl.attachShader(prog, sh);
+  }
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  const pl = gl.getAttribLocation(prog, "p");
+  gl.enableVertexAttribArray(pl);
+  gl.vertexAttribPointer(pl, 2, gl.FLOAT, false, 0, 0);
+  const U = (n) => gl.getUniformLocation(prog, n);
+  const tex = [0, 1].map((i) => {
+    const t = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0 + i);
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    for (const w of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, w, gl.CLAMP_TO_EDGE);
+    gl.uniform1i(U(i ? "b" : "a"), i);
+    return t;
+  });
+  gl.uniform1f(U("fade"), meta.view?.fade?.[1] ?? .3);
+  const upload = (i, v) => { gl.activeTexture(gl.TEXTURE0 + i); gl.bindTexture(gl.TEXTURE_2D, tex[i]); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, v); };
   let plan = null, fade = null, voiceAt = -9, jumpedAt = 0, raf, stateSince = performance.now(), lastWant = "", drew = false;
   const frame = (v) => Math.min(meta.frames - 1, Math.floor(v.currentTime * fps + .02));
   const want = (state, t) => {
@@ -504,12 +541,6 @@ export async function footage(canvas, base, now, opts = {}) {
       }
     }
     return best;
-  };
-  const draw = (v, alpha) => {
-    const W = canvas.width, H = canvas.height, [vw, vh] = meta.size, view = framing({ size: meta.size, view: meta.view }, W, H);
-    const sw = view.span[0] * vw, sh = view.span[1] * vh, sx = view.center[0] * vw - sw / 2, sy = view.center[1] * vh - sh / 2;
-    g.globalAlpha = alpha;
-    g.drawImage(v, sx, sy, sw, sh, 0, 0, W, H);
   };
   const tick = (ms) => {
     raf = requestAnimationFrame(tick);
@@ -535,30 +566,52 @@ export async function footage(canvas, base, now, opts = {}) {
       jumpedAt = ms;
       plan = null;
     }
-    g.clearRect(0, 0, W, H);
-    g.globalCompositeOperation = "source-over";
-    draw(cur, 1);
+    const view = framing({ size: meta.size, view: meta.view }, W, H);
+    upload(0, cur);
+    let x = 0;
     if (fade) {
-      const x = Math.min(1, (ms - fade.at) / fade.len);
-      draw(next, x * x * (3 - 2 * x));
-      if (x >= 1) { cur.pause(); [cur, next] = [next, cur]; fade = null; }
+      x = Math.min(1, (ms - fade.at) / fade.len);
+      upload(1, next);
     }
-    const fadeAt = meta.view?.fade?.[1] ?? .3, grad = g.createLinearGradient(0, H * (1 - fadeAt), 0, H);
-    grad.addColorStop(0, "rgba(0,0,0,1)");
-    grad.addColorStop(1, "rgba(0,0,0,0)");
-    g.globalAlpha = 1;
-    g.globalCompositeOperation = "destination-in";
-    g.fillStyle = grad;
-    g.fillRect(0, 0, W, H);
-    g.globalCompositeOperation = "source-over";
-    if (!drew) { drew = true; opts.first?.(); }
+    gl.useProgram(prog);
+    gl.uniform2f(U("span"), ...view.span);
+    gl.uniform2f(U("center"), ...view.center);
+    gl.uniform1f(U("mixb"), x * x * (3 - 2 * x));
+    gl.viewport(0, 0, W, H);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    if (fade && x >= 1) { cur.pause(); [cur, next] = [next, cur]; fade = null; }
+    if (!drew && cur.currentTime > .3) {
+      const px = new Uint8Array(4);
+      gl.readPixels(Math.floor(W / 2), Math.floor(H * .65), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+      if (px[3] === 0 || px[0] + px[1] + px[2] === 0) {
+        cancelAnimationFrame(raf);
+        cur.pause(); next.pause();
+        return failed?.(new Error("video frames cannot be drawn here"));
+      }
+      drew = true;
+      opts.first?.();
+    }
   };
   raf = requestAnimationFrame(tick);
   return () => { cancelAnimationFrame(raf); cur.pause(); next.pause(); URL.revokeObjectURL(src); };
 }
 
-/** Draws whichever kind of character lives at `base`. */
-export async function persona(canvas, base, now, opts) {
+/** Draws whichever kind of character lives at `base`. A footage character that cannot draw video on this device
+ *  (it checks its first frames) is replaced by its "fallback" folder, an illustration. */
+export async function persona(canvas, base, now, opts = {}) {
   const spec = await (await fetch(base + "persona.json")).json();
-  return spec.kind === "footage" ? footage(canvas, base, now, opts) : illustration(canvas, base, now, opts);
+  if (spec.kind !== "footage") return illustration(canvas, base, now, opts);
+  let stop = () => {};
+  const fallback = async (e) => {
+    console.warn("persona: footage failed, using the illustration:", e?.message || e);
+    stop();
+    stop = await illustration(canvas, base + spec.fallback, now, opts);
+  };
+  try {
+    stop = await footage(canvas, base, now, opts, spec.fallback && fallback);
+  } catch (e) {
+    if (!spec.fallback) throw e;
+    await fallback(e);
+  }
+  return () => stop();
 }
