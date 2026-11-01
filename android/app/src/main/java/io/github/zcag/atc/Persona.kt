@@ -121,27 +121,29 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
     }
 }
 
-/** A living orb: it swells with their voice while they talk, with the assistant's while it speaks, turns slowly
- *  while it thinks and warms to amber while a tool runs. Drawn by a shader on Android 13+, a soft disc before. */
+/** The assistant as a living orb: a glassy sphere with light flowing inside, a soft glow and haze behind it, a floor
+ *  line and its reflection, all drawn with transparency over the call screen. It breathes and drifts, swells and
+ *  ripples with their voice while they talk and with its own while it speaks, swirls faster and turns violet while it
+ *  thinks, warms to amber while a tool runs. A shader on Android 13+, a soft disc before. */
 class Orb(c: Context) : View(c), Persona {
     override val view get() = this
 
-    private class Look(val a: FloatArray, val b: FloatArray, val spin: Float)
+    private class Look(val a: FloatArray, val b: FloatArray, val c: FloatArray)
 
     private val looks = mapOf(
-        "listening" to Look(floatArrayOf(.25f, .55f, 1f), floatArrayOf(.45f, .9f, .95f), .6f),
-        "hearing" to Look(floatArrayOf(.2f, .85f, .55f), floatArrayOf(.6f, 1f, .7f), .8f),
-        "thinking" to Look(floatArrayOf(.55f, .35f, 1f), floatArrayOf(.95f, .5f, .9f), 2.2f),
-        "tool" to Look(floatArrayOf(1f, .6f, .2f), floatArrayOf(1f, .85f, .45f), 2.6f),
-        "speaking" to Look(floatArrayOf(.35f, .6f, 1f), floatArrayOf(.95f, .95f, 1f), 1f),
+        "listening" to Look(floatArrayOf(.18f, .42f, 1f), floatArrayOf(.35f, .85f, .95f), floatArrayOf(.85f, .95f, 1f)),
+        "hearing" to Look(floatArrayOf(.12f, .7f, .55f), floatArrayOf(.45f, .95f, .75f), floatArrayOf(.9f, 1f, .85f)),
+        "thinking" to Look(floatArrayOf(.45f, .25f, .95f), floatArrayOf(.9f, .45f, .85f), floatArrayOf(1f, .8f, .95f)),
+        "tool" to Look(floatArrayOf(.95f, .5f, .15f), floatArrayOf(1f, .8f, .4f), floatArrayOf(1f, .95f, .8f)),
+        "speaking" to Look(floatArrayOf(.3f, .42f, 1f), floatArrayOf(.62f, .7f, 1f), floatArrayOf(.95f, .85f, 1f)),
     )
     private var state = "listening"
-    private val a = looks.getValue(state).a.copyOf()
-    private val b = looks.getValue(state).b.copyOf()
-    private var spin = 1f
+    private val col = Array(3) { looks.getValue(state).let { l -> listOf(l.a, l.b, l.c)[it].copyOf() } }
     private var level = 0f
-    private var phase = 0f
-    private var last = System.nanoTime()
+    private var think = 0f
+    private var hear = 0f
+    private var speak = 0f
+    private var start = System.nanoTime()
     private val shader = if (Build.VERSION.SDK_INT >= 33) RuntimeShader(SRC) else null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
 
@@ -150,40 +152,39 @@ class Orb(c: Context) : View(c), Persona {
     }
 
     override fun onDraw(canvas: Canvas) {
-        val now = System.nanoTime()
-        val dt = ((now - last) / 1e9f).coerceIn(0f, .1f)
-        last = now
-        val t = now / 1e9f
+        val t = (System.nanoTime() - start) / 1e9f
         val (you, it) = Calls.levels()
         val target = when (state) {
-            "speaking" -> .15f + it
-            "hearing" -> .1f + you
+            "speaking" -> .1f + it
+            "hearing" -> .08f + you
             "thinking", "tool" -> .22f + .1f * sin(t * 3f)
-            else -> .06f + .03f * sin(t * 1.4f) + you * .5f
+            else -> .05f + you * .4f
         }
-        level += (target - level) * if (target > level) .35f else .12f
+        level += (target - level) * if (target > level) .35f else .1f
+        think += ((if (state == "thinking" || state == "tool") 1f else 0f) - think) * .04f
+        hear += ((if (state == "hearing") 1f else 0f) - hear) * .06f
+        speak += ((if (state == "speaking") 1f else 0f) - speak) * .06f
         val look = looks.getValue(state)
-        for (i in 0..2) {
-            a[i] += (look.a[i] - a[i]) * .06f
-            b[i] += (look.b[i] - b[i]) * .06f
-        }
-        spin += (look.spin - spin) * .05f
-        phase += dt * spin
+        listOf(look.a, look.b, look.c).forEachIndexed { i, want -> for (j in 0..2) col[i][j] += (want[j] - col[i][j]) * .04f }
         val w = width.toFloat()
         val h = height.toFloat()
         if (shader != null) {
             shader.setFloatUniform("size", w, h)
-            shader.setFloatUniform("t", phase)
+            shader.setFloatUniform("t", t)
             shader.setFloatUniform("level", level.coerceIn(0f, 1.2f))
-            shader.setFloatUniform("c1", a[0], a[1], a[2])
-            shader.setFloatUniform("c2", b[0], b[1], b[2])
+            shader.setFloatUniform("think", think)
+            shader.setFloatUniform("hear", hear)
+            shader.setFloatUniform("speak", speak)
+            shader.setFloatUniform("c1", col[0][0], col[0][1], col[0][2])
+            shader.setFloatUniform("c2", col[1][0], col[1][1], col[1][2])
+            shader.setFloatUniform("c3", col[2][0], col[2][1], col[2][2])
             paint.shader = shader
             canvas.drawPaint(paint)
         } else {
-            val r = minOf(w, h) * (.28f + .12f * level)
-            paint.shader = RadialGradient(w / 2, h / 2, r * 1.4f, rgb(b), Color.TRANSPARENT, Shader.TileMode.CLAMP)
-            canvas.drawCircle(w / 2, h / 2, r * 1.4f, paint)
-            paint.shader = RadialGradient(w / 2, h / 2, r, rgb(b), rgb(a), Shader.TileMode.CLAMP)
+            val r = minOf(w, h) * (.22f + .08f * level)
+            paint.shader = RadialGradient(w / 2, h / 2, r * 1.6f, rgb(col[1]), Color.TRANSPARENT, Shader.TileMode.CLAMP)
+            canvas.drawCircle(w / 2, h / 2, r * 1.6f, paint)
+            paint.shader = RadialGradient(w / 2, h / 2, r, rgb(col[2]), rgb(col[0]), Shader.TileMode.CLAMP)
             canvas.drawCircle(w / 2, h / 2, r, paint)
         }
         postInvalidateOnAnimation()
@@ -196,25 +197,91 @@ class Orb(c: Context) : View(c), Persona {
             uniform float2 size;
             uniform float t;
             uniform float level;
+            uniform float think;
+            uniform float hear;
+            uniform float speak;
             uniform float3 c1;
             uniform float3 c2;
+            uniform float3 c3;
 
-            half4 main(float2 p) {
-                float2 uv = (p - size * 0.5) / min(size.x, size.y);
-                float r = length(uv);
-                float a = atan(uv.y, uv.x);
-                float wob = 0.030 * sin(a * 3.0 + t * 1.3) + 0.022 * sin(a * 5.0 - t * 1.7) + 0.016 * sin(a * 7.0 + t * 2.3);
+            float hash(float3 p) {
+                p = fract(p * 0.3183099 + 0.1);
+                p *= 17.0;
+                return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+            }
+
+            float noise(float3 x) {
+                float3 i = floor(x);
+                float3 f = fract(x);
+                f = f * f * (3.0 - 2.0 * f);
+                return mix(mix(mix(hash(i), hash(i + float3(1, 0, 0)), f.x), mix(hash(i + float3(0, 1, 0)), hash(i + float3(1, 1, 0)), f.x), f.y),
+                           mix(mix(hash(i + float3(0, 0, 1)), hash(i + float3(1, 0, 1)), f.x), mix(hash(i + float3(0, 1, 1)), hash(i + float3(1, 1, 1)), f.x), f.y), f.z);
+            }
+
+            float fbm(float3 p) {
+                float a = 0.5;
+                float s = 0.0;
+                for (int i = 0; i < 4; i++) {
+                    s += a * noise(p);
+                    p = p * 2.03 + 3.1;
+                    a *= 0.5;
+                }
+                return s;
+            }
+
+            half4 main(float2 px) {
+                float2 uv = (px - 0.5 * size) / min(size.x, size.y);
+                uv.y = -uv.y;
+                float floorY = -0.3;
+                float3 tint = mix(c1, c2, 0.55);
                 float lv = min(level, 1.0);
-                float radius = 0.25 + 0.08 * lv + wob * (0.5 + 1.2 * lv);
-                float d = r - radius;
-                float body = smoothstep(0.008, -0.008, d);
-                float glow = exp(-max(d, 0.0) * (14.0 - 4.0 * lv)) * (0.2 + 0.45 * lv) * smoothstep(0.5, 0.36, r);
-                float swirl = 0.5 + 0.5 * sin(a * 2.0 + t * 0.9 + r * 9.0 - level * 3.0);
-                float3 col = mix(c1, c2, swirl);
-                float core = 0.75 + 0.35 * (1.0 - clamp(r / radius, 0.0, 1.0));
-                float alpha = clamp(body + glow * 0.85, 0.0, 1.0);
-                float3 rgb = col * (body * core + glow * (1.0 - body));
-                return half4(half3(rgb), half(alpha));
+                float haze = fbm(float3(uv * 1.4 + float2(t * 0.015, t * 0.008), t * 0.025));
+                float vig = smoothstep(0.75, 0.1, length(uv * float2(0.8, 1.0)));
+                float a = 0.1 * smoothstep(0.35, 0.85, haze) * vig;
+                float3 col = tint * a;
+                float line = 0.08 * exp(-abs(uv.y - floorY) * 30.0) * smoothstep(0.5, 0.0, abs(uv.x));
+                col += tint * line;
+                a += line;
+                float2 o = float2(0.0, 0.05 + 0.012 * sin(t * 0.8));
+                float r = 0.2 + 0.01 * sin(t * 1.25) + 0.03 * lv;
+                float2 q = uv - o;
+                float ang = atan(q.y, q.x);
+                r += (0.002 + 0.01 * speak * lv) * sin(ang * 3.0 + t * 2.2) + (0.002 + 0.008 * hear * lv) * sin(ang * 4.0 - t * 2.9);
+                float d = length(q);
+                float glow = exp(-max(d - r, 0.0) * (7.0 - 3.0 * lv)) * (0.22 + 0.45 * lv) * smoothstep(0.62, 0.22, d);
+                col += tint * glow;
+                a += glow * 0.9;
+                float below = smoothstep(floorY + 0.01, floorY - 0.02, uv.y);
+                float2 m = float2(uv.x, 2.0 * floorY - uv.y) - o;
+                float md = length(m);
+                float refl = (smoothstep(r, r - 0.08, md) * 0.3 + exp(-max(md - r, 0.0) * 7.0) * 0.1) * below * exp(-(floorY - uv.y) * 6.0);
+                col += tint * refl;
+                a += refl;
+                if (d < r) {
+                    float z = sqrt(max(r * r - d * d, 0.0)) / r;
+                    float3 nrm = normalize(float3(q / r, z));
+                    float spin = t * (0.12 + 0.45 * think);
+                    float3 pp = nrm * 1.3;
+                    pp = float3(cos(spin) * pp.x - sin(spin) * pp.z, pp.y, sin(spin) * pp.x + cos(spin) * pp.z);
+                    float3 w = float3(fbm(pp * 1.7 + t * 0.06), fbm(pp * 1.7 + 4.3 - t * 0.05), fbm(pp * 1.7 + 8.1));
+                    float bands = fbm(pp * 0.9 + w * (0.9 + 0.8 * lv) + float3(0.0, 0.0, t * (0.12 + 0.4 * lv)));
+                    float stripe = smoothstep(0.42, 0.62, bands) - smoothstep(0.62, 0.8, bands);
+                    float3 inner = mix(mix(c1, c2, 0.25) * 0.7, c1, smoothstep(0.2, 0.55, bands));
+                    inner = mix(inner, c2, smoothstep(0.5, 0.78, bands));
+                    inner += c3 * stripe * (0.1 + 0.22 * lv);
+                    inner *= 0.75 + 0.45 * z;
+                    inner += mix(c2, float3(1.0), 0.3) * pow(z, 3.0) * 0.35;
+                    float fres = pow(1.0 - z, 3.0);
+                    float rim = smoothstep(0.0, 0.12, 1.0 - z) * smoothstep(0.35, 0.05, 1.0 - z);
+                    float spec = pow(max(dot(nrm, normalize(float3(-0.45, 0.6, 0.75))), 0.0), 22.0);
+                    float3 orb = inner + fres * mix(c2, float3(1.0), 0.5) * 0.55 + rim * tint * 0.25 + spec * 0.35;
+                    orb = orb / (1.0 + orb * 0.35);
+                    float edge = smoothstep(r, r - 0.004, d);
+                    col = col * (1.0 - edge) + orb * edge;
+                    a = a * (1.0 - edge) + edge;
+                }
+                a = clamp(a, 0.0, 1.0);
+                return half4(half3(min(col, float3(a))), half(a));
             }
         """
     }
