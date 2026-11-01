@@ -31,33 +31,40 @@ interface Persona {
      *  calls [go] on the UI thread once that frame is up; the host keeps the old one on screen until then and fades
      *  the new one in over it. One that draws at once returns false and is swapped in directly. */
     fun drawn(go: () -> Unit) = false
-
-    companion object {
-        fun make(c: Context): Persona = PersonaHost(c)
-    }
 }
 
 /** The call screen's persona slot: the orb at once, then the chosen character once its files are on the phone.
  *  Characters are folders on the server under /app/personas/<name>/ (persona.json with "kind" and "files", plus
  *  those files), listed in /app/personas/index.json ({"default": name, "personas": [{"name", "rev"}]}), and
- *  cached on the phone until their rev changes. A long press switches to the next one, and the choice is kept. */
+ *  cached on the phone until their rev changes. The call screen's picker (or a long press, the next one) chooses,
+ *  and the choice is kept. */
 class PersonaHost(c: Context) : FrameLayout(c), Persona {
     override val view get() = this
     private var current: Persona = Orb(c)
     private var face = Calls.Face()
-    private var names = listOf("orb")
     private val ui = Handler(Looper.getMainLooper())
+
+    /** Every character the server lists, the orb first. */
+    var names = listOf("orb")
+        private set
+
+    /** The one on screen (or loading): the kept choice, else the server's default. */
+    var shown = "orb"
+        private set
 
     init {
         addView(current.view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         setOnLongClickListener {
-            val next = names[(names.indexOf(Prefs(context).persona ?: "orb") + 1) % names.size]
-            Prefs(context).persona = next
-            Toast.makeText(context, next, Toast.LENGTH_SHORT).show()
-            load(next)
+            pick(names[(names.indexOf(shown) + 1) % names.size])
+            Toast.makeText(context, shown, Toast.LENGTH_SHORT).show()
             true
         }
         load(Prefs(c).persona)
+    }
+
+    fun pick(name: String) {
+        Prefs(context).persona = name
+        load(name)
     }
 
     override fun face(f: Calls.Face) {
@@ -71,8 +78,9 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
             val index = JSONObject(Net.get(context, "$server/app/personas/index.json"))
             val list = index.optJSONArray("personas") ?: JSONArray()
             names = listOf("orb") + List(list.length()) { list.getJSONObject(it).getString("name") }
-            val name = chosen ?: index.optString("default", "orb")
-            if (name == "orb" || name !in names) return@runCatching null
+            val name = (chosen ?: index.optString("default", "orb")).takeIf { it in names } ?: "orb"
+            shown = name
+            if (name == "orb") return@runCatching null
             val rev = List(list.length()) { list.getJSONObject(it) }.first { it.getString("name") == name }.optString("rev")
             val dir = File(context.filesDir, "personas/$name")
             val spec = File(dir, "persona.json")
@@ -89,7 +97,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
             }
             dir to JSONObject(spec.readText())
         }.onFailure { Log.w("atc", "persona: ${it.message}") }.getOrNull()
-        ui.post { show(made) }
+        ui.post { if (made == null || made.first.name == shown) show(made) }
     }
 
     private fun show(made: Pair<File, JSONObject>?) {

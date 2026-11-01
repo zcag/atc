@@ -2,6 +2,7 @@ package io.github.zcag.atc
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlertDialog
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -28,6 +29,7 @@ import android.widget.Chronometer
 import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
+import android.widget.PopupMenu
 import android.widget.Space
 import android.widget.TextView
 import kotlinx.coroutines.Job
@@ -175,7 +177,7 @@ class CallActivity : Activity() {
     private lateinit var callRow: LinearLayout
     private lateinit var mute: ImageButton
     private lateinit var speaker: ImageButton
-    private lateinit var persona: Persona
+    private lateinit var persona: PersonaHost
     private lateinit var youView: TextView
     private lateinit var saidView: TextView
 
@@ -301,6 +303,23 @@ class CallActivity : Activity() {
         layoutParams = LinearLayout.LayoutParams(dp(68), dp(68)).apply { setMargins(dp(18), 0, dp(18), 0) }
     }
 
+    /** The ⋯ button: options that don't need a button of their own. */
+    private fun menu(anchor: View) = PopupMenu(this, anchor).apply {
+        menu.add("Character…").setOnMenuItemClickListener { pickPersona(); true }
+        show()
+    }
+
+    private fun pickPersona() {
+        val names = persona.names
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Character")
+            .setSingleChoiceItems(names.toTypedArray(), names.indexOf(persona.shown)) { d, i ->
+                persona.pick(names[i])
+                d.dismiss()
+            }
+            .show()
+    }
+
     private fun tint(b: ImageButton, on: Boolean) {
         (b.background as GradientDrawable).setColor(if (on) Color.WHITE else 0x33ffffff)
         b.setColorFilter(if (on) 0xff151c27.toInt() else Color.WHITE)
@@ -331,8 +350,11 @@ class CallActivity : Activity() {
         )
         mute = round(R.drawable.ic_mic_off, 0x33ffffff) { Calls.send(Calls.Cmd.Mute) }
         speaker = round(R.drawable.ic_speaker, 0x33ffffff) { Calls.send(Calls.Cmd.Speaker) }
-        callRow = row(mute, round(R.drawable.ic_call_end, 0xffe5484d.toInt()) { Calls.send(Calls.Cmd.Hangup) }, speaker)
-        persona = Persona.make(this)
+        persona = PersonaHost(this)
+        val more = round(R.drawable.ic_more, 0x33ffffff) {}
+        more.setOnClickListener { menu(more) }
+        callRow = row(mute, round(R.drawable.ic_call_end, 0xffe5484d.toInt()) { Calls.send(Calls.Cmd.Hangup) }, speaker, more)
+        for (i in 0 until callRow.childCount) (callRow.getChildAt(i).layoutParams as LinearLayout.LayoutParams).setMargins(dp(9), 0, dp(9), 0)
         persona.view.setOnClickListener {
             if (Calls.state.value.held) Calls.send(Calls.Cmd.Resume)
             else if (Calls.face.value.state in setOf("speaking", "thinking", "tool")) Calls.send(Calls.Cmd.Interrupt)

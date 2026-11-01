@@ -43,6 +43,10 @@ class WebPersona(c: Context, private val dir: File, private val server: String) 
         loadUrl("https://persona.atc/persona.html")
     }
 
+    /** Touches go to the host behind it (tap to stop, long press), never to the page. */
+    @SuppressLint("ClickableViewAccessibility")
+    override fun dispatchTouchEvent(event: android.view.MotionEvent) = false
+
     override fun face(f: Calls.Face) {
         state = f.state
         evaluateJavascript("window.persona?.state(${JSONObject.quote(state)})", null)
