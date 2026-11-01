@@ -763,8 +763,11 @@ third channel: delta's `talk.py` connects as `phone` (`ws://127.0.0.1:8820/ws?ch
 `whatsapp`, `phone`, and `agent` (another session's `send`). When the channel changes, the message
 carries that channel's rules from `modes/<channel>.md` (built in; a file of the same name in
 `~/.config/atc/modes/` takes its place), so the session writes Markdown for atc, short spoken
-sentences on a call, and phone-screen messages on WhatsApp. A report from another session is
-answered on the channel they last wrote from.
+sentences on a call, and phone-screen messages on WhatsApp. A report from another session gets
+an answer that goes to no one: it stays in the conversation. The report carries `modes/agent.md`
+and a line saying whether they are on a call and which channel they last wrote from, so the session
+decides whether to tell them (`atc notify`, `atc wa`). During a call, their next message on the call
+reminds the session that a report came in, so it says what matters in that spoken reply.
 
 **Several at once.** A message that arrives while the session works joins the turn it is on, and
 each part of the reply goes to the channel of the newest message the session had read when it wrote

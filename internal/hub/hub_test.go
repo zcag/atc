@@ -412,17 +412,54 @@ func TestJoinRoutesToNewest(t *testing.T) {
 	}
 }
 
-func TestAgentReportGoesHome(t *testing.T) {
+func TestAgentReportReachesNoOne(t *testing.T) {
 	r := newRig(t, CallConfig{})
-	wa, ag := r.dial("whatsapp"), r.dial("agent")
+	var mu sync.Mutex
+	var written []string
+	in := r.h.in
+	r.h.mu.Lock()
+	r.h.in = writerFunc(func(b []byte) (int, error) {
+		mu.Lock()
+		written = append(written, string(b))
+		mu.Unlock()
+		return in.Write(b)
+	})
+	r.h.mu.Unlock()
+	wa, all := r.dial("whatsapp"), r.dial("")
 	wa.send("message", "start it")
 	wa.until("done")
-	ag.send("message", "report: done")
-	if got := said(wa.until("done")); got != "echo: report: done" {
-		t.Fatalf("whatsapp got %q", got)
+	all.until("done")
+	r.h.Say(Agent, "report: done")
+	if es := all.until("done"); said(es) != "echo: report: done" || es[len(es)-1].Channel != Agent {
+		t.Fatalf("agent turn %v", es)
 	}
-	if es := ag.until("done"); said(es) != "" {
-		t.Fatalf("agent channel got text %v", es)
+	select {
+	case e := <-wa.ev:
+		t.Fatalf("whatsapp got %v", e)
+	case <-time.After(200 * time.Millisecond):
+	}
+	mu.Lock()
+	note := written[len(written)-1]
+	mu.Unlock()
+	if !strings.Contains(note, "not on a call; they last wrote from whatsapp") {
+		t.Fatalf("agent note %s", note)
+	}
+
+	ph := r.dial(Phone)
+	for r.h.Status().Channels[Phone] == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	r.h.Say(Agent, "report: merged")
+	all.until("done")
+	ph.send("message", "ne oldu")
+	if got := said(ph.until("done")); got != "echo: ne oldu" {
+		t.Fatalf("phone got %q", got)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	agent, phone := written[len(written)-2], written[len(written)-1]
+	if !strings.Contains(agent, "on a call with you right now") || !strings.Contains(phone, "a session reported while you were on the call") {
+		t.Fatalf("agent %s\nphone %s", agent, phone)
 	}
 }
 

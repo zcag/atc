@@ -1,4 +1,4 @@
-// Package modes holds how the assistant talks on each channel (phone, whatsapp, atc, atc-voice).
+// Package modes holds how the assistant talks on each channel (phone, whatsapp, atc, atc-voice, agent).
 // A file of the same name in Dir takes the place of the built-in one.
 package modes
 
