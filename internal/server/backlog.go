@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -213,13 +214,42 @@ func (s *Server) putAside(w http.ResponseWriter, r *http.Request) {
 			Session: x.ID, SID: x.SessionID, Aside: true})
 	}
 	if err == nil && x.Attachable && x.State != sessions.Working {
-		if s.rv != nil {
-			s.rv.stopping(x.ID)
-		}
-		err = s.stop(r.Context(), cmp.Or(x.ID, x.SessionID))
-		s.refresh()
+		err = s.shelve(r.Context(), x)
 	}
 	s.backlogDone(w, it, err)
+}
+
+// shelve takes a session put on the backlog out of Claude's list: stopped, its memory freed,
+// its conversation kept for the item to resume.
+func (s *Server) shelve(ctx context.Context, x sessions.Session) error {
+	if s.rv != nil {
+		s.rv.stopping(x.ID)
+	}
+	err := s.stop(ctx, cmp.Or(x.ID, x.SessionID))
+	if err == nil && x.ID != "" && x.Harness == "" {
+		err = s.remove(ctx, x.ID)
+	}
+	s.refresh()
+	return err
+}
+
+// shelveFinished shelves sessions put on the backlog while they were working, once their turn ends.
+func (s *Server) shelveFinished(list []sessions.Session) {
+	aside := map[string]bool{}
+	for _, it := range s.Backlog.List() {
+		if it.Aside && it.SID != "" {
+			aside[it.SID] = true
+		}
+	}
+	for _, x := range list {
+		if aside[x.SessionID] && x.Attachable && x.State != sessions.Working && cmp.Or(x.Host, s.Host) == s.Host {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			if err := s.shelve(ctx, x); err != nil {
+				log.Printf("backlog: shelve %s: %v", x.ID, err)
+			}
+			cancel()
+		}
+	}
 }
 
 func backlogFail(w http.ResponseWriter, err error) {

@@ -1053,6 +1053,7 @@ func (s *Server) watch(list []sessions.Session) {
 	if time.Since(s.contained) > 30*time.Second {
 		s.contained = time.Now()
 		go s.retireIdle(list)
+		go s.shelveFinished(list)
 		if unit, err := s.M.CLI.Contain(); err != nil {
 			log.Printf("contain claude's daemon: %v", err)
 		} else if unit != "" {

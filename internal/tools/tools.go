@@ -151,6 +151,11 @@ type parkIn struct {
 	Session string `json:"session,omitempty" jsonschema:"a session ref or title; default this session"`
 }
 
+type shelveIn struct {
+	Session string `json:"session" jsonschema:"a session ref or title"`
+	Title   string `json:"title,omitempty" jsonschema:"the backlog item's title; default the session's"`
+}
+
 type markIn struct {
 	Status string `json:"status" jsonschema:"done, blocked or ready"`
 	Why    string `json:"why,omitempty" jsonschema:"for blocked: what it waits on, in a few words"`
@@ -279,6 +284,9 @@ func Run(ctx context.Context, c *client.Client) error {
 		"A session started from the backlog marks its own item: done when the work has shipped, blocked when it cannot go on without something."}, t.mark)
 	mcp.AddTool(s, &mcp.Tool{Name: "park", Description: "Park a session (default: this one): it leaves the user's list and sends no pushes until it needs them " +
 		"(a question or a permission brings it back). An agent parks itself when its work with the user is done, and unparks when it has something for them."}, t.park)
+	mcp.AddTool(s, &mcp.Tool{Name: "shelve", Description: "Send a session to the backlog: it stops (its memory freed; a working one at the end of its turn), " +
+		"leaves the user's list, and becomes a backlog item that resumes the same conversation where it left off when started. " +
+		"For sessions the user won't come back to for a while; park keeps one warm instead. Only on the user's word."}, t.shelve)
 	mcp.AddTool(s, &mcp.Tool{Name: "backlog", Description: "List the user's backlog: tasks they or agents put aside per project to start later, with status ready, blocked, started or done."}, t.backlog)
 	mcp.AddTool(s, &mcp.Tool{Name: "history", Description: "Search earlier conversations by title, prompts or folder, newest first."}, t.history)
 	return s.Run(ctx, &mcp.StdioTransport{})
@@ -842,6 +850,19 @@ func (t *tools) backlog(ctx context.Context, _ *mcp.CallToolRequest, in backlogI
 		}
 	}
 	return nil, out, err
+}
+
+func (t *tools) shelve(ctx context.Context, _ *mcp.CallToolRequest, in shelveIn) (*mcp.CallToolResult, done, error) {
+	x, err := t.find(in.Session, true)
+	if err != nil {
+		return nil, done{}, err
+	}
+	it, err := t.c.Shelve(x.SessionID, in.Title)
+	state := "on the backlog, stopped"
+	if x.State == sessions.Working {
+		state = "on the backlog, stops when its turn ends"
+	}
+	return nil, done{Ref: it.ID, Title: x.Title, State: state}, err
 }
 
 func (t *tools) mark(ctx context.Context, _ *mcp.CallToolRequest, in markIn) (*mcp.CallToolResult, backlogItem, error) {
