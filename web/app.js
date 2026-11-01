@@ -928,7 +928,12 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
     return n;
   });
   PICK_PROJECT = (name) => setOnly((o) => (o === name ? null : name));
-  const tabs = useMemo(() => projectTabs(all || [], only === AGENTS ? null : only), [all, only]);
+  const desk = (runs || []).filter((s) => s.kind === "hub" && s.agent === GUESTS);
+  const tabs = useMemo(() => {
+    const t = projectTabs(all || [], only === AGENTS ? null : only);
+    if (desk.length && !t.some((x) => x.name === GUESTS)) t.push({ name: GUESTS, pips: [], summary: "" });
+    return t;
+  }, [all, only, desk.length]);
   TABS = { only, tabs, set: setOnly };
   useEffect(() => {
     const k = (e) => {
@@ -990,7 +995,7 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
   const earlierBay = html`<section class="bay earlier"><h2>Earlier</h2>${search}${past}</section>`;
   const classic = html`
     ${live.length === 0
-      ? html`<p class="calm">${only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below."}</p>`
+      ? !(only === GUESTS && desk.length) && html`<p class="calm">${only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below."}</p>`
       : !waiting && html`<p class="calm">${working ? `Nothing needs you. ${working} working.` : "All quiet."}</p>`}
     <${BacklogLine} only=${only} />
     ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
@@ -1018,8 +1023,9 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
               ${t.pips.length > 0 && html`<span class="pips">${t.pips.slice(0, 5).map((st) => html`<i class=${st}></i>`)}${t.pips.length > 5 && html`<em>+${t.pips.length - 5}</em>`}</span>`}
             </button>`)}
         </nav>`}
+      ${only === GUESTS && html`<${Bay} title="Conversation" list=${desk} sel=${sel} cursor=${cursor} size="lrow" />`}
       ${only === AGENTS ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />
-        <${Bay} title="Assistant" list=${(runs || []).filter(restingHub)} sel=${sel} cursor=${cursor} size="lrow" />${(() => {
+        ${[["assistant", "Assistant"], [GUESTS, "Guests"]].map(([a, title]) => html`<${Bay} title=${title} list=${(runs || []).filter((s) => restingHub(s) && s.agent === a)} sel=${sel} cursor=${cursor} size="lrow" />`)}${(() => {
           const idle = (agents || []).filter((a) => !a.error && !(runs || []).some((x) => x.agent === a.name));
           return idle.length > 0 && html`<p class="calm idleagents">Not running: ${idle.map((a) => html`<button class="link" onClick=${() => AGENT_SHEET(a.name)}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</button>`)}</p>`;
         })()}`
@@ -3699,7 +3705,8 @@ const AGENTS = "@agents";
 let AGENT_INFO = {};
 const away = (s) => !!s.parked && s.state !== "needs-you";
 const homeless = (s) => !!s.agent && !AGENT_INFO[s.agent]?.dir;
-const guestWork = (s) => s.agent === "guests" || project(s.cwd).name === "guests";
+const GUESTS = "guests";
+const guestWork = (s) => s.agent === GUESTS || project(s.cwd).name === GUESTS;
 const hiddenRun = (s) => (s.kind === "hub" || (!!s.agent && !!s.parked)) && s.state !== "needs-you";
 const agentApi = (a, what, body) => api(`/api/agents/${encodeURIComponent(a)}/${what}`, { method: "POST", body });
 const mins = (ns) => Math.round(ns / 6e10);
