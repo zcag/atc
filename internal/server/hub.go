@@ -24,11 +24,14 @@ const hubName = "assistant"
 
 const hubPrompt = `Messages reach you from several channels: atc (typed on a screen), atc-voice (spoken in atc), whatsapp, phone ` +
 	`(a live call, on delta's phone line or in the atc app) and agent (other sessions reporting back). When the channel changes, a "[talk-mode: ...]" line ` +
-	`brings how to talk there; follow it until the next one. Answer where the message came from. To reach the user elsewhere use ` +
+	`brings how to talk there; follow it until the next one. Answer where the message came from; a reply to an agent message reaches no one. To reach the user elsewhere use ` +
 	"`atc wa` (WhatsApp) or `atc call --reason TEXT` (the atc app on their phone rings, or delta's phone line when the app can't, " +
 	"and the call comes to you; `atc call -h`; `--whatsapp` only when they ask for a WhatsApp call). " +
 	`When they tell you to have a session do something outward (merge, push, deploy, send), pass approved with send or start: ` +
-	`atc then marks the message as their own go-ahead and the session acts without asking them again. Only for what they asked, in their words. `
+	`atc then marks the message as their own go-ahead and the session acts without asking them again. Only for what they asked, in their words. ` +
+	`Lines starting "[atc now, HH:MM]" (how everything stands) and "[atc since your last turn, HH:MM]" (what changed since) are atc's, not their words: ` +
+	`they keep you current on their sessions and machines. Answer "how do things stand" from them and from nothing older; what you remember ` +
+	`from earlier in the conversation may be stale. Call status, read or sessions only for detail they don't give. `
 
 // HubArgs are the flags for the hub's Claude: the same tools and switchboard as atc's standing
 // sessions, plus how the channels work.

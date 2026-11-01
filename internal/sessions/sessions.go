@@ -279,6 +279,11 @@ func less(a, b Session) bool {
 // Away is parked and not asking anything: a parked session that needs you comes back.
 func (s Session) Away() bool { return s.Parked && s.State != NeedsYou }
 
+// Current is what the user's list shows by default: what needs them, and what runs or works and is not parked.
+func (s Session) Current() bool {
+	return s.State == NeedsYou || !s.Parked && (s.Attachable || s.State == Working)
+}
+
 func (s Session) Last() time.Time {
 	if s.Updated.After(s.StartedAt) {
 		return s.Updated

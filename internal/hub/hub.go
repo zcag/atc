@@ -45,6 +45,8 @@ type Config struct {
 	State string
 	// Mode is the text that tells the session how to talk on a channel, "" for none.
 	Mode func(channel string) string
+	// News is what changed in atc since it was last asked, or with full how things stand; "" for nothing.
+	News func(full bool) string
 
 	Reset startover.Policy
 
@@ -116,6 +118,8 @@ type Hub struct {
 	held     []msg
 	turn     *turn
 	cutEarly bool
+	unsaid   bool
+	fresh    bool
 	last     string
 	home     string
 	context  int
@@ -179,7 +183,7 @@ func (h *Hub) start() error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	h.cmd, h.in, h.alive = cmd, in, true
+	h.cmd, h.in, h.alive, h.fresh = cmd, in, true, true
 	log.Printf("hub: claude %d on %s", cmd.Process.Pid, h.sid)
 	go h.read(cmd, out)
 	if h.seed != "" {
@@ -241,12 +245,20 @@ func (h *Hub) say(ch, text string) (string, error) {
 		log.Printf("hub: held %s behind %v", ch, h.busy())
 		return "held", nil
 	}
+	text = h.withNews(ch, text)
 	if c := h.call; ch == Phone && c != nil && !c.told {
 		text = c.envelope(h.cfg.Now()) + "\n" + text
 		c.told = true
 		if c.answered {
 			h.call = nil
 		}
+	}
+	if ch == Agent {
+		text = h.agentNote() + text
+	}
+	if ch == Phone && h.unsaid {
+		text = "[hub: a session reported while you were on the call, see above; tell them in this reply what they need to hear of it]\n" + text
+		h.unsaid = false
 	}
 	if ch != Agent && ch != reset {
 		if ch != h.last {
@@ -262,6 +274,34 @@ func (h *Hub) say(ch, text string) (string, error) {
 	}
 	h.pending = append(h.pending, msg{ch, text})
 	return "sent", h.write(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}})
+}
+
+// agentNote tells the session that its reply to another session's report reaches no one, and
+// where the user is now, so it can decide whether and how to tell them.
+func (h *Hub) agentNote() string {
+	where := "the user is not on a call"
+	if h.onCall() {
+		where = "the user is on a call with you right now"
+		h.unsaid = true
+	}
+	if h.home != "" {
+		where += "; they last wrote from " + h.home
+	}
+	note := "[talk-mode: agent, for this message only]\n"
+	if mode := h.cfg.Mode(Agent); mode != "" {
+		note += mode + "\n"
+	}
+	return note + "[now: " + where + "]\n[message]\n"
+}
+
+// onCall is whether delta's talk.py is connected: its phone channel lives exactly as long as a call.
+func (h *Hub) onCall() bool {
+	for s := range h.subs {
+		if !s.all && s.channel == Phone {
+			return true
+		}
+	}
+	return false
 }
 
 // holds is the routing rule for a message that arrives while the session is busy: it joins the
@@ -434,10 +474,6 @@ func (h *Hub) event(l line) {
 		m := h.pending[0]
 		h.pending = h.pending[1:]
 		ch := m.channel
-		route := ch
-		if ch == Agent && h.home != "" {
-			route = h.home
-		}
 		h.emit(Event{Type: "read", Channel: ch})
 		if h.turn == nil {
 			h.turn = &turn{channels: []string{ch}, wrote: map[string]bool{}, interrupted: h.cutEarly}
@@ -447,10 +483,7 @@ func (h *Hub) event(l line) {
 			h.turn.channels = append(h.turn.channels, ch)
 			h.emit(Event{Type: "joined", Channel: ch})
 		}
-		if !slices.Contains(h.turn.channels, route) {
-			h.turn.channels = append(h.turn.channels, route)
-		}
-		h.turn.route = route
+		h.turn.route = ch
 	case l.Type == "user" && !l.IsReplay && l.Parent == "" && h.turn != nil && h.turn.tools > 0:
 		var blocks []struct{ Type string }
 		json.Unmarshal(l.Message.Content, &blocks)

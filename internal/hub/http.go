@@ -35,6 +35,14 @@ func (h *Hub) Handler() http.Handler {
 		json.NewDecoder(r.Body).Decode(&req)
 		reply(w, map[string]bool{"interrupted": h.Interrupt(req.Channel, true)})
 	})
+	mux.HandleFunc("POST /notice", func(w http.ResponseWriter, r *http.Request) {
+		joined, err := h.Notice()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		reply(w, map[string]bool{"joined": joined})
+	})
 	mux.HandleFunc("POST /reset", func(w http.ResponseWriter, r *http.Request) {
 		if err := h.Reset("asked"); err != nil {
 			code := http.StatusServiceUnavailable

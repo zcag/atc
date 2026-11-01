@@ -380,3 +380,30 @@ func (c *Client) WhatsApp(req map[string]any) ([]string, error) {
 	var r struct{ Sent []string }
 	return r.Sent, c.do("POST", "/api/whatsapp/send", req, &r)
 }
+
+// Feed is what changed in atc after seq since, or with full how things stand now: one short try,
+// since the assistant's message waits on it.
+func (c *Client) Feed(since int64, full bool) (text string, seq int64, err error) {
+	u := fmt.Sprintf("%s/api/feed?since=%d", c.URL, since)
+	if full {
+		u += "&full=1"
+	}
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return "", since, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	res, err := (&http.Client{Timeout: 700 * time.Millisecond}).Do(req)
+	if err != nil {
+		return "", since, err
+	}
+	defer res.Body.Close()
+	var r struct {
+		Seq  int64  `json:"seq"`
+		Text string `json:"text"`
+	}
+	if res.StatusCode != http.StatusOK || json.NewDecoder(res.Body).Decode(&r) != nil {
+		return "", since, fmt.Errorf("feed: %s", res.Status)
+	}
+	return r.Text, r.Seq, nil
+}

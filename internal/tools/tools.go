@@ -26,7 +26,7 @@ const instructions = `atc is how the user runs Claude Code sessions on their mac
 	`"status" says in one line each what waits on the user, what is running and what just finished, "sessions" shows the same in full, "read" before you summarize or answer about a session, ` +
 	`"start" for new work in a folder on a machine, "send" to pass something on, "wait" for its answer, "outputs" for what it produced ` +
 	`(running servers, pages it showed, files), "state" for what agents keep track of (what is open, counts, statuses: ` +
-	`read it before asking an agent), "later" to put a task on the user's backlog when they ask for that, "backlog" to see it, "mark" to mark an item done or blocked. Refer to sessions by their title. Never send to the session marked as you. ` +
+	`read it before asking an agent), "later" to put a task on the user's backlog when they ask for that, "backlog" to see it, "mark" to mark an item done or blocked. Refer to sessions by their title. Never send to the session marked as you. When a message from the assistant asks you to report back, use "report". ` +
 	`An agent is a standing conversation under one name: send to it as @name and it wakes, resumed or started as needed.
 
 ` +
@@ -234,7 +234,7 @@ func Run(ctx context.Context, c *client.Client) error {
 	s := mcp.NewServer(&mcp.Implementation{Name: "atc", Version: "1"}, &mcp.ServerOptions{Instructions: in})
 
 	mcp.AddTool(s, &mcp.Tool{Name: "status", Description: "The short answer to what is going on: the sessions waiting on the user (with what they ask), " +
-		"the ones working (with what they do), the ones that finished a turn (with their result in one line), and machines that are offline. " +
+		"the ones working (with what they do), the ones that finished a turn (with their result in one line), every standing agent with its state and last result, and machines that are offline. " +
 		"One line per session; use it first, and sessions or read only when you need more about one."}, t.status)
 	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "List the user's Claude Code sessions on all their machines, most urgent first: what each is doing, what it is asking the user, and its last reply in short. " +
 		"By default only the running ones that are not parked, and any that need the user; all adds the stopped and parked ones. For a quick overview, status is shorter."},
@@ -245,7 +245,7 @@ func Run(ctx context.Context, c *client.Client) error {
 			}
 			shown := live
 			if !in.All {
-				shown = slices.DeleteFunc(slices.Clone(live), func(x sessions.Session) bool { return !current(x) })
+				shown = slices.DeleteFunc(slices.Clone(live), func(x sessions.Session) bool { return !x.Current() })
 			}
 			out := t.list(shown, live)
 			out.Hidden = len(live) - len(shown)
@@ -253,6 +253,8 @@ func Run(ctx context.Context, c *client.Client) error {
 		})
 	mcp.AddTool(s, &mcp.Tool{Name: "read", Description: "Read a session (open or past): its last reply in short, one line per turn (what was asked, files changed, tests, commits, pushes, deploys, failures), then the last messages in full."}, t.read)
 	mcp.AddTool(s, &mcp.Tool{Name: "send", Description: "Send a message to a session, signed with a last line saying it comes from you and whether to answer (report). A stopped or past session is resumed first, but only when it is waiting on your report or the user asked for the message (wake). Returns right away; use wait for the answer."}, t.send)
+	mcp.AddTool(s, &mcp.Tool{Name: "report", Description: "Report to the assistant (the session the user talks to by phone, WhatsApp and atc): " +
+		"what you did, what came out of it and anything it must decide. It reaches only the assistant, so it works where send is not allowed."}, t.report)
 	mcp.AddTool(s, &mcp.Tool{Name: "wait", Description: "Wait until a session finishes its turn or needs the user, then return its reply in short and the start of the reply itself."}, t.wait)
 	mcp.AddTool(s, &mcp.Tool{Name: "start", Description: "Start a new Claude Code session in a folder on one of the user's machines, running in the background where the user can follow it in atc. Use it whenever the user asks to start, open or spin up a session or agent. The first message ends with a line saying you started it and, with report, asking it to report back to you."}, t.start)
 	mcp.AddTool(s, &mcp.Tool{Name: "presets", Description: "List the named presets for new sessions (a folder plus standing instructions, like a dedicated agent). Start one with start and its name."},
@@ -315,10 +317,6 @@ func asking(x sessions.Session) []Ask {
 	return out
 }
 
-func current(x sessions.Session) bool {
-	return x.State == sessions.NeedsYou || !x.Parked && (x.Attachable || x.State == sessions.Working)
-}
-
 func (t *tools) list(xs []sessions.Session, pool []sessions.Session) list {
 	var self *sessions.Session
 	if me, ok := client.Self(pool); ok {
@@ -362,6 +360,7 @@ type brief struct {
 	Title  string `json:"title"`
 	Host   string `json:"host,omitempty"`
 	Agent  string `json:"agent,omitempty"`
+	State  string `json:"state,omitempty" jsonschema:"for agents: working, your-turn (done) or stopped"`
 	Asking []Ask  `json:"asking,omitempty"`
 	Doing  string `json:"doing,omitempty"`
 	Result string `json:"result,omitempty" jsonschema:"its last reply in one line"`
@@ -373,6 +372,7 @@ type statusOut struct {
 	NeedsYou []brief  `json:"needsYou"`
 	Working  []brief  `json:"working"`
 	Finished []brief  `json:"finished" jsonschema:"finished a turn and is open for the next message, newest first"`
+	Agents   []brief  `json:"agents" jsonschema:"the standing agents, parked or not: working, or done with their last result"`
 	Offline  []string `json:"offline,omitempty" jsonschema:"machines that do not answer: their sessions are missing here"`
 	Hidden   int      `json:"hidden,omitempty" jsonschema:"stopped and parked sessions left out; sessions with all lists them"`
 }
@@ -382,7 +382,7 @@ func (t *tools) status(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) 
 	if err != nil {
 		return nil, statusOut{}, err
 	}
-	out := statusOut{NeedsYou: []brief{}, Working: []brief{}, Finished: []brief{}}
+	out := statusOut{NeedsYou: []brief{}, Working: []brief{}, Finished: []brief{}, Agents: []brief{}}
 	for _, p := range t.c.Me().Peers {
 		if strings.HasPrefix(p.Error, "offline") {
 			out.Offline = append(out.Offline, p.Name)
@@ -390,31 +390,45 @@ func (t *tools) status(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) 
 	}
 	me, _ := client.Self(live)
 	for _, x := range live {
-		if x.SessionID == me.SessionID && me.SessionID != "" {
+		if x.Kind == "hub" || x.SessionID == me.SessionID && me.SessionID != "" {
 			continue
 		}
-		if !current(x) {
+		if !x.Current() && x.Agent == "" {
 			out.Hidden++
 			continue
 		}
 		b := brief{Ref: client.Ref(x), Title: x.Title, Host: x.Host, Agent: x.Agent, Ago: ago(x.Last()), at: x.Last()}
-		switch x.State {
-		case sessions.NeedsYou:
+		switch {
+		case x.State == sessions.NeedsYou:
 			b.Asking = asking(x)
 			out.NeedsYou = append(out.NeedsYou, b)
-		case sessions.Working:
+		case x.Agent != "":
+			b.Title, b.State = "@"+x.Agent, x.State
+			if x.State == sessions.Working {
+				b.Doing = clip(x.Activity, 120)
+			} else {
+				b.Result = result(x)
+			}
+			out.Agents = append(out.Agents, b)
+		case x.State == sessions.Working:
 			b.Doing = clip(x.Activity, 120)
 			out.Working = append(out.Working, b)
 		default:
-			b.Result = clip(x.LastReply, 140)
-			if x.Summary != nil && x.Summary.Status != "" {
-				b.Result = x.Summary.Status
-			}
+			b.Result = result(x)
 			out.Finished = append(out.Finished, b)
 		}
 	}
-	slices.SortStableFunc(out.Finished, func(a, b brief) int { return b.at.Compare(a.at) })
+	newest := func(a, b brief) int { return b.at.Compare(a.at) }
+	slices.SortStableFunc(out.Finished, newest)
+	slices.SortStableFunc(out.Agents, newest)
 	return nil, out, nil
+}
+
+func result(x sessions.Session) string {
+	if x.Summary != nil && x.Summary.Status != "" {
+		return x.Summary.Status
+	}
+	return clip(x.LastReply, 140)
 }
 
 func ago(at time.Time) string {
@@ -606,6 +620,25 @@ func (t *tools) send(ctx context.Context, _ *mcp.CallToolRequest, in sendIn) (*m
 	}
 	return nil, out, nil
 }
+
+type reportIn struct {
+	Text string `json:"text" jsonschema:"the report: what you did, what came out of it, what the assistant must decide"`
+}
+
+func (t *tools) report(ctx context.Context, _ *mcp.CallToolRequest, in reportIn) (*mcp.CallToolResult, done, error) {
+	live, _ := t.c.Live()
+	if client.IsAssistant(live) {
+		return nil, done{}, fmt.Errorf("this is the assistant itself")
+	}
+	text, err := client.Signed(live, client.Sign{}, in.Text)
+	if err != nil {
+		return nil, done{}, err
+	}
+	id, err := t.c.Message(hubAgent, text)
+	return nil, done{Ref: id, Title: "assistant", State: "sent"}, err
+}
+
+const hubAgent = "assistant"
 
 func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*mcp.CallToolResult, done, error) {
 	x, err := t.find(in.Session, false)

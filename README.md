@@ -582,14 +582,18 @@ not billed per token.
 
 - `status`: the short overview, one line per session: what waits on you (with the question),
   what is working (with what it does), what finished a turn (its result in one line), and which
-  machines are offline. The voice assistant reaches for it first; it is about a sixth of
-  `sessions`' size.
+  machines are offline, plus every standing agent (parked or not) with its state and last result.
+  The assistant needs it only for detail, since atc keeps it current on its own (see
+  [One assistant on every channel](#one-assistant-on-every-channel)).
 - `sessions`: every open session with what it is doing, what it is asking you (the question and
   its options, or the permission it wants), and its last reply in short (status and gist).
   Both answer from atc's last poll when that is at most a few seconds old (whenever atc is open
   somewhere), so they cost nothing to call.
 - `read`: a session's last reply in short, one line per turn (what was asked, files changed,
   tests, commits, pushes, deploys, failures, how long), then its last messages in full.
+- `report` sends a report to the assistant and nowhere else, so an agent whose settings deny `send`
+  (to keep it from messaging or starting sessions) can still answer the assistant; the assistant's
+  messages ask for it in their last line.
 - `start` a session in a folder on any machine (optionally in its own worktree), `send` a
   message to one (resuming it first if it was stopped), `wait` for its answer, `outputs` for the
   servers, pages and files it produced, `stop`, `history`, `presets`.
@@ -763,8 +767,23 @@ third channel: delta's `talk.py` connects as `phone` (`ws://127.0.0.1:8820/ws?ch
 `whatsapp`, `phone`, and `agent` (another session's `send`). When the channel changes, the message
 carries that channel's rules from `modes/<channel>.md` (built in; a file of the same name in
 `~/.config/atc/modes/` takes its place), so the session writes Markdown for atc, short spoken
-sentences on a call, and phone-screen messages on WhatsApp. A report from another session is
-answered on the channel they last wrote from.
+sentences on a call, and phone-screen messages on WhatsApp. A report from another session gets
+an answer that goes to no one: it stays in the conversation. The report carries `modes/agent.md`
+and a line saying whether they are on a call and which channel they last wrote from, so the session
+decides whether to tell them (`atc notify`, `atc wa`). During a call, their next message on the call
+reminds the session that a report came in, so it says what matters in that spoken reply.
+
+**Kept current.** The assistant never has to poll atc or answer from memory. atc keeps a feed of
+what changes in the list: a session that needs them, finishes a turn, starts or stops, and a machine
+that goes offline or comes back. The hub puts that feed in front of every message: the whole state
+(`[atc now, HH:MM] needs them: …. working: …. finished lately: …. offline: …`) on the first message of a
+conversation and whenever the channel changes (so each call starts with it), and otherwise only
+what changed since the last message (`[atc since your last turn, HH:MM]`, one line per session).
+When a session starts needing them while a phone turn is running a tool, the change joins that turn
+at once, so the assistant can judge whether to say it now, in a line, or later (`modes/phone.md`).
+A call only speaks answers to their own words, so between turns the change waits for their next one.
+The hub reads the feed from `GET /api/feed?since=SEQ[&full=1]` on atc; atc wakes it with
+`POST /notice`.
 
 **Several at once.** A message that arrives while the session works joins the turn it is on, and
 each part of the reply goes to the channel of the newest message the session had read when it wrote
@@ -785,7 +804,7 @@ its own transcript, and if Claude gave it a new session id, the hub does not see
 Endpoints, for clients other than atc: `GET /ws?channel=NAME` (send `{"type":"message","text"}`,
 `{"type":"note","text"}` or `{"type":"interrupt"}`; get `text`, `tool`, `block`, `read`, `joined`,
 `held`, `done`, `error`, `notice`), `GET /events` (every channel's events), `GET /status`,
-`POST /message {channel, text}`, `POST /interrupt {channel}`, `POST /reset`,
+`POST /message {channel, text}`, `POST /interrupt {channel}`, `POST /reset`, `POST /notice`,
 `POST /call {reason, from, notify, timeout, whatsapp}`.
 
 ## Calling the user
