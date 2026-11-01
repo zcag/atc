@@ -9,13 +9,12 @@ from PIL import Image
 from common import *
 
 W_DIR, P_DIR, OUT = sys.argv[1:4]
-base1 = load(os.path.join(W_DIR, "..", "..", "src", "base.png"))
+base1 = load(os.path.join(W_DIR, "base.png"))
 H1, W1 = base1.shape[:2]
-P = landmarks(base1, os.path.join(W_DIR, "..", "face_landmarker.task"))
+P = landmarks(base1, MODEL)
 face = cv2.dilate(poly_mask(base1.shape, P[OVAL, :2]), np.ones((9, 9), np.uint8)) > 0
 below_lip = P[17, 1] + 30
 beard = cv2.dilate(face.astype(np.uint8), np.ones((51, 51), np.uint8)) > 0
-ESR = os.path.join(W_DIR, "..", "esr")
 import torch
 from transformers import SamModel, SamProcessor
 sam, samp = SamModel.from_pretrained("facebook/sam-vit-base"), SamProcessor.from_pretrained("facebook/sam-vit-base")

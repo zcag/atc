@@ -50,6 +50,10 @@ test("the director picks the nearest head angle, with hysteresis, and drawings b
   assert.equal(d.eyes.cur, "g12_-10", "looking down is negative in the drawings");
   run({ jaw: .6, round: .6 });
   assert.equal(d.mouth.cur, "o2");
+  run({ smile: .9 });
+  assert.equal(d.mouth.cur, "s2", "a broad smile when not speaking");
+  run({ smile: .9, jaw: .5 }, 2);
+  assert.equal(d.mouth.cur, "a2", "speech takes the mouth back at once");
   run({ pose: "read", pitch: .95, gazeY: .9, gazeX: -.5 });
   assert.equal(d.angle.cur, "y0p12");
   assert.equal(d.eyes.cur, "r-12");
@@ -83,6 +87,12 @@ test("thinking and tool use bring their poses, the others none", () => {
     seen[s].add(b.step(1 / 30, s, 0, 0, 0, 0).pose);
   }
   assert.deepEqual([...seen.speaking], [null]);
+  const b = new Behaviour(), poses = new Set();
+  for (let i = 0; i < 30 * 120; i++) {
+    const t = i / 30, it = (t % 3) < 2.2 ? Math.abs(Math.sin(t * 9)) * .8 : 0;
+    poses.add(b.step(1 / 30, "speaking", 0, it, it * .8, it * .1).pose);
+  }
+  assert.ok(poses.has("explain"), "speaking gestures now and then");
   assert.ok(seen.thinking.has("think"));
   assert.ok(seen.tool.has("read") && seen.tool.has("write") && !seen.tool.has(null));
 });

@@ -11,7 +11,7 @@ short dissolve (20-120 ms), instead of stretching one painting.
 - **Drawings**, all rendered by LivePortrait from the one painted portrait, so they keep its look
   (`tools/persona/rig/drawings.py`): the head at 10 angles (yaw -8/0/+8 x pitch -6/0/+6, and a bowed 0/+12 for
   reading); per angle eyes (8 gaze directions, half shut, shut; reading: hard down at a low page), brows (up, knit),
-  mouth shapes (a, o, e open at several sizes, a small u).
+  mouth shapes (a, o, e open at several sizes, a small u, two smiles).
 - **Patches**: for each angle and feature class (eyes, brows, mouth) the part of each drawing that differs from that
   angle's neutral drawing, under one feathered mask per class, so swaps never show a seam. Brows are drawn before
   eyes, so an eye drawing always wins where they overlap.
@@ -20,7 +20,7 @@ short dissolve (20-120 ms), instead of stretching one painting.
   degree from the drawings' own nose tips. The nearest angle is drawn and the rest of the turn is bent (at most a
   few degrees); a new angle dissolves in over 110 ms, with hysteresis so it doesn't flicker at a midpoint.
 - **Poses**: layers cut (SAM) from image edits of the portrait: a hand to the chin (thinking), a notebook in both
-  hands (reading), a pen and notebook (writing). They rise into frame from below and sink back out.
+  hands (reading), a pen and notebook (writing), an open hand explaining (now and then at a phrase start while speaking). They rise into frame from below and sink back out.
 - **Mood**: a grade (contrast, cool shadows, warm highlights, a key light on the face from the lamp side), the room
   darkened and softened for depth, a vignette, the lamp's glow with a slow flicker, dust drifting in its light.
 - **Acting** (`Behaviour` in `web/rig.js`): eyes lead, the head follows on springs, the body trails; blinks every
@@ -34,16 +34,20 @@ short dissolve (20-120 ms), instead of stretching one painting.
 Scripts in `tools/persona/rig/`, run with the venv in desktop `~/.local/share/persona2d/rig/.venv` (mediapipe,
 torch CPU, transformers, simple-lama-inpainting, triangle). Working files in `~/.local/share/persona2d/rig/`.
 
-1. Upscale the portrait 2x (`esr/realesrgan-ncnn-vulkan -n realesrgan-x4plus`, then down to 2x): `work/base2.png`;
-   LaMa fills of the room without him and the body without the head are cached in `work/fill_*.png`.
-2. `drawings.py draw/list.json`, then on gpu in the LivePortrait checkout:
-   `render_lp.py <crop.png> <list.json> <out>` (`tools/persona/render_lp.py`, ~0.6 s a drawing); copy to `draw/lp/`.
-   `draw/crop.json` says where the crop sits in the 2x portrait.
-3. Pose edits: `tools/persona/edit.py` on gpu with `poses_edit.json` (FLUX.2 klein), then
-   `poses.py work poses work name=file=x0,y0,x1,y1;...` (boxes around each piece at 1x) writes `work/pose_<name>.png`.
-4. `build.py work draw out`: per angle landmarks, face parse, head mesh, patches into one atlas per angle, poses,
+Each character has a work dir with its portrait as `base.png` (768x1344): the professor's is
+`~/.local/share/persona2d/rig/work`, the young woman's `~/.local/share/persona2d/her/work` (her portrait: `tools/persona/gen.py`
+with `her/jobs4.json`, seed 51; an original face, not a likeness of anyone).
+
+1. `prep.py <work>`: 2x upscale, figure matte, LaMa fills (room, body without the head), the head crop the drawings
+   are rendered from (`crop.png`, `crop.json`) and the lamp position (`char.json`).
+2. `drawings.py list.json`, then on gpu in the LivePortrait checkout:
+   `render_lp.py <crop.png> <list.json> <out>` (`tools/persona/render_lp.py`, ~0.6 s a drawing); copy to `<draw>/lp/`.
+3. Pose edits: `tools/persona/edit.py` on gpu with `poses_edit.json` (FLUX.2 klein; `her/poses_edit.json`,
+   `*/gesture_edit.json` for the explaining hand), then `poses.py <work> <poses> <work> name=file=x0,y0,x1,y1;...`
+   (boxes around each piece at 1x) writes `<work>/pose_<name>.png`.
+4. `build.py <work> <draw> <out>`: per angle landmarks, face parse, head mesh, patches into one atlas per angle, poses,
    overlays, `rig.json` and `persona.json`.
-5. `publish.py out professor-2d`: copies it to atc's personas folder and bumps its rev.
+5. `publish.py <out> professor-2d` (or `woman-2d`): copies it to atc's personas folder and bumps its rev.
 
 ## Checking it
 

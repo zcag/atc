@@ -17,11 +17,10 @@ W_DIR, D_DIR, OUT = sys.argv[1:4]
 POSES = sys.argv[4] if len(sys.argv) > 4 else None
 os.makedirs(OUT, exist_ok=True)
 w = lambda f: os.path.join(W_DIR, f)
-MODEL = os.path.join(W_DIR, "..", "face_landmarker.task")
 SCALE = .65  # texture resolution relative to the 2x portrait: a phone canvas (824 px wide at DPR 2) shows it at about .6
 base = load(w("base2.png"))
 H, W = base.shape[:2]
-cx0, cy0, cx1, cy1 = json.load(open(os.path.join(D_DIR, "crop.json")))["box"]
+cx0, cy0, cx1, cy1 = json.load(open(w("crop.json")))["box"]
 P0 = landmarks(base, MODEL)
 P2 = P0[:, :2]
 FW = np.linalg.norm(P2[454] - P2[234])
@@ -29,9 +28,14 @@ hc = P2[OVAL].mean(0)
 yy, xx = np.mgrid[0:H, 0:W].astype(np.float32)
 
 # ---- the grade -----------------------------------------------------------------------------------------------
-LAMP = np.array([262., 1100.])  # the desk lamp's bulb in the portrait
+LAMP = np.array(json.load(open(w("char.json")))["lamp"], float)
 key_c = hc + np.array([-.25, -.1]) * FW
 KEY = .74 + .36 * np.exp(-(((xx - key_c[0]) / (1.05 * FW)) ** 2 + ((yy - key_c[1]) / (1.5 * FW)) ** 2))
+
+
+def sharpen(img):
+    """LivePortrait draws a little softer than the painting: an unsharp mask brings the detail back."""
+    return np.clip(img + .45 * (img - cv2.GaussianBlur(img, (0, 0), 1.4)), 0, 255)
 
 
 def grade(rgb, key=None):
@@ -158,7 +162,7 @@ def bone_weights(dep, ear=0):
 
 
 # ---- room and body --------------------------------------------------------------------------------------------
-matte = cv2.resize(np.array(Image.open(os.path.join(W_DIR, "..", "..", "matte.png")).convert("RGBA"))[..., 3], (W, H), interpolation=cv2.INTER_CUBIC).astype(np.float32) / 255
+matte = cv2.resize(np.array(Image.open(w("matte.png")).convert("RGBA"))[..., 3], (W, H), interpolation=cv2.INTER_CUBIC).astype(np.float32) / 255
 plate = grade(load(w("fill_plate.png"))) * .62
 plate = cv2.GaussianBlur(plate, (0, 0), 5)
 write_tex("plate.webp", plate, .5, 86)
@@ -215,7 +219,7 @@ def feather(m, grow, soft):
 for a in angles:
     at = Atlas(f"head_{a}.webp")
     atlases.append(at)
-    img0 = load(os.path.join(D_DIR, "lp", f"{a}.base.png"))
+    img0 = sharpen(load(os.path.join(D_DIR, "lp", f"{a}.base.png")))
     P = landmarks(img0, MODEL)
     lab = parse(img0)
     hm = head_mask(lab).astype(np.float32)
@@ -232,7 +236,7 @@ for a in angles:
     part(f"head.{a}", hv, ht, at.name, [hb[0] + cx0, hb[1] + cy0, hb[2], hb[3]], bone_weights(dep(hv), ev), rect, angle=a)
     for cls in ("eyes", "brows", "mouth"):
         feats = [n for n in names if n.startswith(f"{a}.{cls}.")]
-        imgs = {n: load(os.path.join(D_DIR, "lp", n + ".png")) for n in feats}
+        imgs = {n: sharpen(load(os.path.join(D_DIR, "lp", n + ".png"))) for n in feats}
         z = zone(P, cls, img0.shape)
         diff = np.zeros(img0.shape[:2], bool)
         for im in imgs.values():

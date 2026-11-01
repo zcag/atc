@@ -148,7 +148,10 @@ export class Director {
       const lvl = open < .38 ? 1 : open < .7 ? 2 : 3;
       m = p.round > .35 ? `o${Math.min(2, lvl)}` : p.wide > .3 ? `e${Math.min(2, lvl)}` : `a${lvl}`;
     } else if (p.round > .5) m = "u";
-    this.mouth.to(m, .045, .07);
+    else if (p.smile > .72) m = "s2";
+    else if (p.smile > .5) m = "s1";
+    const calm = (n) => n === "base" || n[0] === "s";
+    this.mouth.to(m, calm(m) && calm(this.mouth.cur) ? .15 : .045, calm(m) && this.mouth.cur[0] === "s" ? .4 : .07);
     for (const s of [this.angle, this.eyes, this.brows, this.mouth]) s.step(dt);
     const Z = this.pose;
     if (Z.cur !== (p.pose || null)) {
@@ -162,7 +165,9 @@ export class Director {
 /** The behaviour: from the call's state and both voices to acting, every frame. Eyes lead, the head follows on a
  *  spring, the body trails; blinks, breaths and glances come at human intervals. Each state has its own business:
  *  listening is relaxed, hearing him leans in and nods, thinking puts a hand to the chin or looks up and away, a tool
- *  means reading or writing in a notebook, speaking looks at him with beats on stressed syllables. */
+ *  means reading or writing in a notebook, speaking looks at him with beats on stressed syllables and now and then
+ *  an open-handed gesture at the start of a phrase. Warm smiles come when he finishes a thought and now and then
+ *  while waiting. */
 export class Behaviour {
   constructor() {
     this.t = 0;
@@ -191,6 +196,7 @@ export class Behaviour {
     this.bright = 0;
     this.youSince = -1; this.youQuiet = -9;
     this.pose = null;
+    this.gestureUntil = 0; this.lastGesture = -9; this.quietSince = 0; this.nextWarm = rand(6, 12);
   }
 
   enter(state) {
@@ -286,7 +292,7 @@ export class Behaviour {
       if (this.youSince < 0) { this.youSince = t; if (t - this.youQuiet > 1.2) this.brow.hit(.45, .12, .6); }
       this.youQuiet = t;
     } else if (this.youSince >= 0 && t - this.youQuiet > .45) {
-      if (t - this.youSince > .8 && !speaking && chance(.75)) { this.nod.hit(rand(.18, .3), .22, .5); if (chance(.4)) this.nod.hit(rand(.1, .18), .7, .5); }
+      if (t - this.youSince > .8 && !speaking && chance(.75)) { this.nod.hit(rand(.18, .3), .22, .5); if (chance(.4)) this.nod.hit(rand(.1, .18), .7, .5); if (chance(.45)) this.smileP.hit(rand(.25, .45), .4, 2.2); }
       this.youSince = -1;
     }
 
@@ -298,7 +304,11 @@ export class Behaviour {
       if (chance(.55)) this.nod.hit(rand(.08, .16), .16, .4);
       if (chance(.4)) this.brow.hit(rand(.4, .7), .1, .5);
       if (chance(.2)) this.tilt.hit(rand(-.15, .15), .2, .8);
+      if (t - this.quietSince < .5 && t - this.lastGesture > 7 && chance(.4)) { this.lastGesture = t; this.gestureUntil = t + rand(1.8, 3.4); }
     }
+    if (v < .03 && this.level < .05) this.quietSince = t;
+    if (!speaking) this.gestureUntil = 0;
+    if (s === "listening" && t > this.nextWarm) { this.nextWarm = t + rand(8, 16); if (chance(.6)) this.smileP.hit(rand(.2, .4), .6, 2.5); }
     const bright = v > .03 ? hi / (lo + hi + .02) : this.bright;
     this.bright = lerp(this.bright, bright, 1 - Math.exp(-dt * 20));
     const sib = speaking ? smooth(.28, .45, this.bright) * smooth(.03, .1, this.level) : 0;
@@ -345,7 +355,7 @@ export class Behaviour {
       yaw, pitch, roll, sway, lean, breath,
       gazeX: clamp(gx, -1, 1), gazeY: clamp(gy, -1, 1),
       blinkR: blink, blinkL: blink, brow, knit,
-      smile: smile * (1 - .5 * jaw), jaw, round, wide, pose: this.pose,
+      smile: smile * (1 - .5 * jaw), jaw, round, wide, pose: this.pose || (t < this.gestureUntil ? "explain" : null),
     };
   }
 }
