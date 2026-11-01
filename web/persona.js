@@ -121,6 +121,8 @@ export class Mind {
     this.postYaw = new Spring(.25);
     this.postPitch = new Spring(.25);
     this.postRoll = new Spring(.2);
+    this.torsoX = new Spring(.35);
+    this.torsoR = new Spring(.3);
     this.greet = rand(.5, .9);
     this.eyes = new Drawing(.035);
     this.brows = new Drawing(.12);
@@ -243,14 +245,19 @@ export class Mind {
     const purse = this.purse.to(thinking && wander(t, 2) > .2 ? .5 : 0, dt);
     const press = this.press.step(dt);
 
+    if (speaking && this.level > .12 && this.slow < .06 && t - (this.phraseAt ?? 0) > 1.2) {
+      this.phraseAt = t;
+      this.posture = { yaw: rand(-.3, .3), pitch: rand(-.18, .12), roll: rand(-.035, .035), until: t + rand(4, 8) };
+    }
     if (t > this.posture.until) {
       const calm = speaking ? 1 : .7;
       this.posture = { yaw: rand(-.18, .18) * calm, pitch: rand(-.12, .1) * calm, roll: rand(-.025, .025), until: t + rand(6, 14) };
     }
+    this.postYaw.hz = this.postPitch.hz = speaking ? .7 : .25;
     const py = this.postYaw.to(this.posture.yaw, dt), pp = this.postPitch.to(this.posture.pitch, dt), pr = this.postRoll.to(this.posture.roll, dt);
     const sway = speaking ? 1.3 : hearing ? .7 : 1;
     const yaw = this.headYaw.to(ex * .45 + py + .1 * sway * wander(t, 1) + (hearing ? .08 : 0), dt);
-    const pitch = this.headPitch.to(ey * .4 + pp + .06 * sway * wander(t, 5) + (tool ? -.4 : thinking ? .25 : 0), dt);
+    const pitch = this.headPitch.to(ey * .4 + pp - (speaking ? this.level * .12 : 0) + .06 * sway * wander(t, 5) + (tool ? -.4 : thinking ? .25 : 0), dt);
     const nod = this.nod.step(dt);
     const lean = this.lean.to(hearing ? .55 : speaking ? .2 : tool ? .25 : 0, dt);
     const roll = this.tilt.to(hearing ? .05 : thinking ? -.035 : 0, dt) + pr + .008 * wander(t, 7) * sway;
@@ -259,6 +266,8 @@ export class Mind {
     this.breathRate = lerp(this.breathRate, speaking ? 1 / 3.2 : 1 / 4.4, 1 - Math.exp(-dt));
     this.breathPhase += dt * this.breathRate * 2 * PI;
     if (s === "listening" && chance(dt / 25)) this.sigh = 1;
+    const torso = [this.torsoX.to(yaw * .012 + .004 * wander(t * .6, 11), dt), this.torsoR.to(roll * .35 + yaw * .01 + .006 * wander(t * .5, 13), dt),
+      .004 * (.5 + .5 * Math.sin(this.breathPhase)) + .003 * this.sigh];
     const breath = .005 * Math.sin(this.breathPhase) + .006 * this.sigh * Math.sin(Math.min(PI, (1 - this.sigh) * PI * 2));
 
     // Eyes, brows and mouth switch between renders of one model of his face (a gaze grid, blink steps, mouth
@@ -279,9 +288,9 @@ export class Mind {
 
     let mouth = null;
     if (speaking) {
-      const i = clamp(Math.round((open - .06) / .94 * 4), 0, 4);
-      if (this.sib > .4) mouth = "e_0";
-      else if (open > .06) mouth = (round > .65 ? "o_" : spread > .45 ? "e_" : "m_") + i;
+      const i = clamp(Math.floor(Math.pow(open, 1.4) * 5), 0, 4);
+      if (this.sib > .45) mouth = "e_0";
+      else if (open > .05) mouth = round > .65 ? `o_${Math.min(2, i >> 1)}` : spread > .6 && i < 3 ? `e_${i >> 1}` : `m_${i}`;
     } else if (press > .3 || purse > .3) mouth = "press";
     else if ((s === "listening" || s === "hearing") && this.pulse > .6) mouth = "smile2";
     else if (smile > .45) mouth = "smile1";
@@ -291,7 +300,7 @@ export class Mind {
     return {
       face,
       head: { head_r: clamp(yaw, 0, 1), head_l: clamp(-yaw, 0, 1), head_up: clamp(pitch - nod, 0, 1), head_down: clamp(nod - pitch, 0, 1.1), lean: clamp(lean) },
-      roll, breath, light: .03 * Math.sin(t * 1.7) * Math.sin(t * .37),
+      roll, breath, torso, light: .03 * Math.sin(t * 1.7) * Math.sin(t * .37),
       parallax: [-yaw * .006, pitch * .003],
     };
   }
@@ -308,10 +317,16 @@ uniform vec4 box, fade;
 uniform vec2 size, fgrid, hgrid, span, center, pivot, headc, parallax;
 uniform float fid[8], fw[8], fm[8], hw[6];
 uniform float fscale, hscale, roll, breath, light, premul;
+uniform vec3 torso;
 vec2 cell(float i, vec2 grid, vec2 f) { float r = floor((i + .5) / grid.x); return (vec2(i - r * grid.x, r) + clamp(f, .002, .998)) / grid; }
 void main() {
   vec2 uv = center + (v - .5) * span;
   vec2 q = uv;
+  vec2 hip = vec2(.5, 1.25), d = (q - hip) * vec2(size.x / size.y, 1.);
+  float ta = -torso.y;
+  q = hip + vec2(cos(ta) * d.x - sin(ta) * d.y, sin(ta) * d.x + cos(ta) * d.y) * vec2(size.y / size.x, 1.);
+  q.x -= torso.x * smoothstep(1.1, .3, q.y);
+  q.y += torso.z * smoothstep(.85, .6, q.y) * smoothstep(.35, .55, q.y);
   float near = exp(-pow(length((q - headc) * vec2(1., 1.25)) / .26, 2.6));
   float a = -roll * near;
   vec2 r = (q - pivot) * vec2(size.x / size.y, 1.);
@@ -441,6 +456,7 @@ export async function illustration(canvas, base, now, opts = {}) {
     gl.uniform2f(u("parallax"), ...pose.parallax);
     gl.uniform1f(u("roll"), pose.roll);
     gl.uniform1f(u("breath"), pose.breath);
+    gl.uniform3f(u("torso"), ...(pose.torso || [0, 0, 0]));
     gl.uniform1f(u("light"), pose.light);
     gl.viewport(0, 0, w, h);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
