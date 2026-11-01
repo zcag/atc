@@ -14,8 +14,10 @@ const waHelp = `atc wa: send the user something on WhatsApp, from the account at
 
   atc wa [--file PATH]... [--render PAGE.html]... [--caption TEXT] [--voice TEXT] [text...]
   atc wa --poll QUESTION --option A --option B... [--multi]
+  atc wa --to NAME [--file PATH]... [--voice TEXT] [text...]
 
-It only ever reaches the user. In the whatsapp session your replies are delivered
+It reaches the user, or with --to one of the guests atc listens to (ATC_WHATSAPP_GUESTS on
+desktop); anyone else is refused. In the whatsapp session your replies are delivered
 already; use this for what a reply can't carry:
 
   --file PATH      a file: images and videos show inline, audio plays, anything else
@@ -27,6 +29,7 @@ already; use this for what a reply can't carry:
   --poll QUESTION  a poll they answer with a tap, with 2 to 12 --option (each up to 100
                    characters); --multi lets them pick several. Their vote comes back
                    into the whatsapp session as a "[poll vote]" message.
+  --to NAME        send to that guest instead of the user (no polls)
   text...          a text message, Markdown converted to WhatsApp's own markup
                    (reads stdin when nothing else is given)
 
@@ -35,7 +38,7 @@ The files must be on the machine atc runs on (desktop).
 
 func wa(args []string) error {
 	var files, render, words []string
-	var caption, voice, poll string
+	var caption, voice, poll, to string
 	var options []string
 	var multi bool
 	for i := 0; i < len(args); i++ {
@@ -69,6 +72,8 @@ func wa(args []string) error {
 				x, err = filepath.Abs(x)
 				render = append(render, x)
 			}
+		case flag == "to":
+			to, err = val()
 		case flag == "caption":
 			caption, err = val()
 		case flag == "voice":
@@ -103,7 +108,7 @@ func wa(args []string) error {
 		fmt.Print(waHelp)
 		os.Exit(2)
 	}
-	req := map[string]any{"text": text, "files": files, "render": render, "caption": caption, "voice": voice}
+	req := map[string]any{"to": to, "text": text, "files": files, "render": render, "caption": caption, "voice": voice}
 	if poll != "" {
 		req["poll"] = map[string]any{"question": poll, "options": options, "multi": multi}
 	}
@@ -111,6 +116,10 @@ func wa(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Println("Sent on WhatsApp: " + strings.Join(sent, ", "))
+	where := ""
+	if to != "" {
+		where = " to " + to
+	}
+	fmt.Println("Sent on WhatsApp" + where + ": " + strings.Join(sent, ", "))
 	return nil
 }

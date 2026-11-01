@@ -185,6 +185,7 @@ func mimeOf(path string, data []byte) string {
 // waOut is what `atc wa` asks for: files, rendered pages, a poll, a voice note or text, always
 // to the owner and nobody else.
 type waOut struct {
+	To      string   `json:"to"`
 	Text    string   `json:"text"`
 	Files   []string `json:"files"`
 	Render  []string `json:"render"`
@@ -216,6 +217,18 @@ func (s *Server) waPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	if in.To != "" {
+		chat, ok := s.WhatsApp.GuestChat(in.To)
+		if !ok {
+			http.Error(w, fmt.Sprintf("%s is not a guest (ATC_WHATSAPP_GUESTS)", in.To), http.StatusForbidden)
+			return
+		}
+		if in.Poll != nil {
+			http.Error(w, "polls go only to the owner: a guest's vote would never come back", http.StatusBadRequest)
+			return
+		}
+		ctx = whatsapp.To(ctx, chat)
+	}
 	var sent []string
 	send := func(what string, err error) bool {
 		if err != nil {

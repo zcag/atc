@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/whatsapp"
 )
@@ -171,7 +172,11 @@ func (s *Server) waHook(w http.ResponseWriter, r *http.Request) {
 	switch ev.Event {
 	case "message.received":
 		var m whatsapp.Message
-		if decode(&m) {
+		switch {
+		case !decode(&m):
+		case r.URL.Query().Get("guests") == "1":
+			go s.waGuest(m)
+		default:
 			go s.waReceive(m)
 		}
 	case "message.reaction":
@@ -235,6 +240,44 @@ func (s *Server) waReceive(d whatsapp.Message) {
 		}
 	}
 	s.waFailed(ctx, msg, err)
+}
+
+// waGuest passes a guest's message to the assistant on the guest channel, where its reply reaches
+// no one: it answers the guest with atc wa --to. Everyone else, the owner included (whose
+// messages come through the owner's own webhook), is dropped here.
+func (s *Server) waGuest(d whatsapp.Message) {
+	ctx, cancel := waContext()
+	defer cancel()
+	wa := s.WhatsApp
+	if d.FromMe || d.IsGroup || d.Kind != "" && d.Kind != "individual" || wa.IsOwner(ctx, d.From, d.SenderPhone) {
+		return
+	}
+	name := wa.Guest(ctx, d.From, d.SenderPhone)
+	if name == "" {
+		log.Printf("whatsapp: ignored a %s message from %s", d.Type, d.From)
+		return
+	}
+	if strings.TrimSpace(d.Body) == "" && d.Media == nil && d.Location == nil || !s.wa.first(d.ID) {
+		return
+	}
+	if s.Hub == nil {
+		log.Printf("whatsapp: guest %s wrote, but there is no hub to take it", name)
+		return
+	}
+	wa.Read(ctx, cmp.Or(d.ChatID, d.From))
+	text, voice, err := s.waPrompt(ctx, d)
+	if err != nil {
+		log.Printf("whatsapp: guest %s: %v", name, err)
+		return
+	}
+	head := fmt.Sprintf("[guest %s on WhatsApp", name)
+	if voice != "" {
+		head += ", a voice note"
+	}
+	log.Printf("whatsapp: guest %s wrote (%s)", name, d.Type)
+	if err := s.hubSend(ctx, hub.Guest, head+"]\n"+text); err != nil {
+		log.Printf("whatsapp: guest %s: %v", name, err)
+	}
 }
 
 func (s *Server) waFailed(ctx context.Context, msg waMsg, err error) {

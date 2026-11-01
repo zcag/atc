@@ -711,6 +711,16 @@ ATC_PUBLIC_URL=https://atc.example                # optional: where links in mes
 atc registers two webhooks at that URL: messages, filtered by sender, and reactions, edits and poll
 votes, filtered by chat (a sender filter would drop reactions, which carry no sender).
 
+**Guests.** A few other people can write to the same account: a friend asking about a site of theirs,
+say. `ATC_WHATSAPP_GUESTS=sam:905321234567,pat:905331234567` names them (name, colon, number). atc
+then registers a third webhook for every direct message (a guest may write from an `@lid` only atc
+can resolve) and drops anyone who is neither the owner nor a guest. A guest's message goes to the
+assistant on the `guest` channel (`[guest sam on WhatsApp]` in front, photos and voice notes as for
+the owner), where, as with another session's report, the reply reaches no one. The assistant answers
+the guest with `atc wa --to sam` (text, files, a voice note; no polls), which refuses any name not
+in the list, and brings what the guest needs to the user, who says yes before anything is changed for
+them (`modes/guest.md`). It needs the hub.
+
 The conversation is one session, kept and resumed like `assistant` (in `ATC_ASSIST_DIR`), parked so
 atc's own pushes don't repeat what WhatsApp already told you. Dropped from Claude's background list,
 it is resumed from its transcript. What you send is typed into it: text, a reply to an earlier
@@ -764,7 +774,7 @@ writes to it, the reply appears as it is written, and Esc or Stop interrupts it.
 third channel: delta's `talk.py` connects as `phone` (`ws://127.0.0.1:8820/ws?channel=phone`).
 
 **Channels.** Each message is tagged with where it came from: `atc`, `atc-voice` (the Voice button),
-`whatsapp`, `phone`, and `agent` (another session's `send`). When the channel changes, the message
+`whatsapp`, `phone`, `agent` (another session's `send`) and `guest` (someone else on WhatsApp, above). When the channel changes, the message
 carries that channel's rules from `modes/<channel>.md` (built in; a file of the same name in
 `~/.config/atc/modes/` takes its place), so the session writes Markdown for atc, short spoken
 sentences on a call, and phone-screen messages on WhatsApp. A report from another session gets

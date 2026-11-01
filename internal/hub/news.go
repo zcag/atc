@@ -11,7 +11,7 @@ func (h *Hub) withNews(ch, text string) string {
 	if h.cfg.News == nil || ch == reset {
 		return text
 	}
-	news := h.cfg.News(h.fresh || ch != Agent && ch != h.last)
+	news := h.cfg.News(h.fresh || !aside(ch) && ch != h.last)
 	if news == "" {
 		return text
 	}

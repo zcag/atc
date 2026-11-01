@@ -1,5 +1,5 @@
 // Package whatsapp talks to an OpenWA gateway (github.com/rmyndharis/OpenWA) on behalf of
-// one WhatsApp account that only ever converses with its owner.
+// one WhatsApp account that converses with its owner and the few guests atc listens to.
 package whatsapp
 
 import (
@@ -27,11 +27,13 @@ type Client struct {
 	URL, Key, Session string
 	Owner             string
 	OwnerIDs          []string
-	Secret            string
-	Hook              string
-	Votes             atomic.Bool
-	chat              atomic.Value
-	http              *http.Client
+	// Guests are the other people atc listens to, by name: number (no +).
+	Guests map[string]string
+	Secret string
+	Hook   string
+	Votes  atomic.Bool
+	chat   atomic.Value
+	http   *http.Client
 }
 
 func FromEnv() *Client {
@@ -44,6 +46,15 @@ func FromEnv() *Client {
 	for _, id := range strings.Split(os.Getenv("ATC_WHATSAPP_OWNER"), ",") {
 		if id = strings.TrimPrefix(strings.TrimSpace(id), "+"); id != "" {
 			c.OwnerIDs = append(c.OwnerIDs, id)
+		}
+	}
+	for _, g := range strings.Split(os.Getenv("ATC_WHATSAPP_GUESTS"), ",") {
+		name, num, ok := strings.Cut(strings.TrimSpace(g), ":")
+		if num = strings.TrimPrefix(strings.TrimSpace(num), "+"); ok && name != "" && num != "" {
+			if c.Guests == nil {
+				c.Guests = map[string]string{}
+			}
+			c.Guests[strings.ToLower(strings.TrimSpace(name))] = num
 		}
 	}
 	if len(c.OwnerIDs) > 0 {
@@ -63,6 +74,43 @@ func (c *Client) OwnerChat() string {
 		return id
 	}
 	return c.Owner + "@c.us"
+}
+
+type chatKey struct{}
+
+// To makes everything sent with ctx go to chat instead of the owner's.
+func To(ctx context.Context, chat string) context.Context {
+	return context.WithValue(ctx, chatKey{}, chat)
+}
+
+func (c *Client) chatOf(ctx context.Context) string {
+	if chat, _ := ctx.Value(chatKey{}).(string); chat != "" {
+		return chat
+	}
+	return c.OwnerChat()
+}
+
+// GuestChat is the chat of the guest with this name.
+func (c *Client) GuestChat(name string) (string, bool) {
+	num, ok := c.Guests[strings.ToLower(name)]
+	return num + "@c.us", ok
+}
+
+// Guest is the name of the guest a sender id belongs to, "" for none.
+func (c *Client) Guest(ctx context.Context, from, senderPhone string) string {
+	num := strings.TrimSuffix(from, "@c.us")
+	if strings.HasSuffix(from, "@lid") {
+		num = strings.TrimPrefix(senderPhone, "+")
+		if num == "" {
+			num, _ = c.Phone(ctx, from)
+		}
+	}
+	for name, n := range c.Guests {
+		if num != "" && n == num {
+			return name
+		}
+	}
+	return ""
 }
 
 func (c *Client) UseChat(id string) {
@@ -104,7 +152,7 @@ type Sent struct {
 
 func (c *Client) Text(ctx context.Context, text, quoted string) (string, error) {
 	var s Sent
-	body := map[string]any{"chatId": c.OwnerChat(), "text": text}
+	body := map[string]any{"chatId": c.chatOf(ctx), "text": text}
 	if quoted != "" {
 		body["quotedMessageId"] = quoted
 	}
@@ -112,7 +160,7 @@ func (c *Client) Text(ctx context.Context, text, quoted string) (string, error) 
 }
 
 func (c *Client) Edit(ctx context.Context, id, text string) error {
-	return c.do(ctx, "POST", "/messages/edit", map[string]any{"chatId": c.OwnerChat(), "messageId": id, "body": text}, nil)
+	return c.do(ctx, "POST", "/messages/edit", map[string]any{"chatId": c.chatOf(ctx), "messageId": id, "body": text}, nil)
 }
 
 func (c *Client) React(ctx context.Context, chat, id, emoji string) error {
@@ -120,7 +168,7 @@ func (c *Client) React(ctx context.Context, chat, id, emoji string) error {
 }
 
 func (c *Client) Typing(ctx context.Context, state string) error {
-	return c.do(ctx, "POST", "/chats/typing", map[string]any{"chatId": c.OwnerChat(), "state": state}, nil)
+	return c.do(ctx, "POST", "/chats/typing", map[string]any{"chatId": c.chatOf(ctx), "state": state}, nil)
 }
 
 func (c *Client) Read(ctx context.Context, chat string) error {
@@ -159,7 +207,7 @@ func (c *Client) Media(ctx context.Context, data []byte, mime, filename, caption
 	case strings.HasPrefix(mime, "audio/"):
 		kind = "audio"
 	}
-	body := map[string]any{"chatId": c.OwnerChat(), "base64": base64.StdEncoding.EncodeToString(data), "mimetype": mime}
+	body := map[string]any{"chatId": c.chatOf(ctx), "base64": base64.StdEncoding.EncodeToString(data), "mimetype": mime}
 	if kind == "document" {
 		body["filename"] = cmp.Or(filename, "file")
 	}
@@ -215,7 +263,9 @@ func (c *Client) Verify(body []byte, sig string) bool {
 // EnsureHook registers the two webhooks that bring the owner's side of the chat to atc, or
 // brings the ones already registered at the same URLs up to date: messages, filtered by
 // sender, and reactions, edits and poll votes, filtered by chat (a sender condition drops
-// reactions, which carry no sender field). The secret is write-only in OpenWA, so it is set
+// reactions, which carry no sender field). With guests, a third brings every direct message,
+// unfiltered by sender: a guest may write from an @lid only atc can resolve, so atc picks them
+// out itself. The secret is write-only in OpenWA, so it is set
 // on every start rather than compared.
 func (c *Client) EnsureHook(ctx context.Context) error {
 	if c.Hook == "" {
@@ -237,14 +287,24 @@ func (c *Client) EnsureHook(ctx context.Context) error {
 		{c.Hook, []string{"message.received"}, map[string]any{"field": "sender", "operator": "is", "value": c.OwnerIDs}},
 		{c.Hook + sep + "changes=1", []string{"message.reaction", "message.edited", "poll.vote"}, map[string]any{"field": "chatId", "operator": "is", "value": c.OwnerIDs}},
 	}
+	if len(c.Guests) > 0 {
+		want = append(want, struct {
+			url    string
+			events []string
+			match  map[string]any
+		}{c.Hook + sep + "guests=1", []string{"message.received"}, nil})
+	}
 	for _, w := range want {
+		conds := []map[string]any{
+			{"field": "isGroup", "operator": "is", "value": false},
+			{"field": "fromMe", "operator": "is", "value": false},
+		}
+		if w.match != nil {
+			conds = append([]map[string]any{w.match}, conds...)
+		}
 		body := map[string]any{
 			"url": w.url, "events": w.events, "secret": c.Secret, "retryCount": 3,
-			"filters": map[string]any{"conditions": []map[string]any{
-				w.match,
-				{"field": "isGroup", "operator": "is", "value": false},
-				{"field": "fromMe", "operator": "is", "value": false},
-			}},
+			"filters": map[string]any{"conditions": conds},
 		}
 		method, path := "POST", "/webhooks"
 		for _, h := range hooks {
@@ -274,7 +334,7 @@ var ErrNoVotes = errors.New("this OpenWA does not report poll votes (0.26.0 or l
 
 func (c *Client) Poll(ctx context.Context, question string, options []string, multi bool) (string, error) {
 	var s Sent
-	body := map[string]any{"chatId": c.OwnerChat(), "name": question, "options": options, "allowMultipleAnswers": multi}
+	body := map[string]any{"chatId": c.chatOf(ctx), "name": question, "options": options, "allowMultipleAnswers": multi}
 	return s.MessageID, c.do(ctx, "POST", "/messages/send-poll", body, &s)
 }
 

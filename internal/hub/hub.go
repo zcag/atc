@@ -35,6 +35,9 @@ import (
 const (
 	Phone = "phone"
 	Agent = "agent"
+	// Guest is someone other than the user writing in (a WhatsApp guest); like an agent's report,
+	// the reply reaches no one.
+	Guest = "guest"
 	reset = "reset"
 )
 
@@ -253,14 +256,14 @@ func (h *Hub) say(ch, text string) (string, error) {
 			h.call = nil
 		}
 	}
-	if ch == Agent {
-		text = h.agentNote() + text
+	if aside(ch) {
+		text = h.asideNote(ch) + text
 	}
 	if ch == Phone && h.unsaid {
-		text = "[hub: a session reported while you were on the call, see above; tell them in this reply what they need to hear of it]\n" + text
+		text = "[hub: a report or a guest's message came in while you were on the call, see above; tell them in this reply what they need to hear of it]\n" + text
 		h.unsaid = false
 	}
-	if ch != Agent && ch != reset {
+	if !aside(ch) && ch != reset {
 		if ch != h.last {
 			if mode := h.cfg.Mode(ch); mode != "" {
 				text = fmt.Sprintf("[talk-mode: %s, until the next talk-mode line]\n%s\n[message]\n%s", ch, mode, text)
@@ -276,9 +279,12 @@ func (h *Hub) say(ch, text string) (string, error) {
 	return "sent", h.write(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}})
 }
 
-// agentNote tells the session that its reply to another session's report reaches no one, and
-// where the user is now, so it can decide whether and how to tell them.
-func (h *Hub) agentNote() string {
+// aside is a channel whose messages are not the user talking: the reply reaches no one.
+func aside(ch string) bool { return ch == Agent || ch == Guest }
+
+// asideNote tells the session that its reply to a report or a guest reaches no one, and where
+// the user is now, so it can decide whether and how to tell them.
+func (h *Hub) asideNote(ch string) string {
 	where := "the user is not on a call"
 	if h.onCall() {
 		where = "the user is on a call with you right now"
@@ -287,8 +293,8 @@ func (h *Hub) agentNote() string {
 	if h.home != "" {
 		where += "; they last wrote from " + h.home
 	}
-	note := "[talk-mode: agent, for this message only]\n"
-	if mode := h.cfg.Mode(Agent); mode != "" {
+	note := "[talk-mode: " + ch + ", for this message only]\n"
+	if mode := h.cfg.Mode(ch); mode != "" {
 		note += mode + "\n"
 	}
 	return note + "[now: " + where + "]\n[message]\n"

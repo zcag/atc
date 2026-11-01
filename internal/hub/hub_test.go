@@ -458,7 +458,7 @@ func TestAgentReportReachesNoOne(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	agent, phone := written[len(written)-2], written[len(written)-1]
-	if !strings.Contains(agent, "on a call with you right now") || !strings.Contains(phone, "a session reported while you were on the call") {
+	if !strings.Contains(agent, "on a call with you right now") || !strings.Contains(phone, "a report or a guest's message came in while you were on the call") {
 		t.Fatalf("agent %s\nphone %s", agent, phone)
 	}
 }
