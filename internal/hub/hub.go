@@ -40,7 +40,7 @@ const (
 	Guest = "guest"
 	// GuestCall is a guest calling delta's line: spoken like the phone, but not the user.
 	GuestCall = "guest-call"
-	reset = "reset"
+	reset     = "reset"
 )
 
 type Config struct {
