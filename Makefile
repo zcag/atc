@@ -43,8 +43,13 @@ install-mac: check build
 	while launchctl print gui/$$(id -u)/io.github.zcag.atc >/dev/null 2>&1; do sleep 0.2; done
 	launchctl bootstrap gui/$$(id -u) ~/Library/LaunchAgents/io.github.zcag.atc.plist
 
+ifeq ($(shell uname),Darwin)
 JAVA_HOME ?= /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
 ANDROID_HOME ?= $(HOME)/Library/Android/sdk
+else
+JAVA_HOME ?= $(HOME)/.local/opt/jdk17
+ANDROID_HOME ?= $(HOME)/Android/sdk
+endif
 APP_HOST ?= desktop
 APP_DIR ?= .local/share/atc/app
 
