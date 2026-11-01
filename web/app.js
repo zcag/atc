@@ -118,7 +118,7 @@ function App() {
   const [quick, setQuick] = useState(null);
   QUICK = (s, rect) => setQuick({ s, rect });
   const [agentSheet, setAgentSheet] = useState(null);
-  AGENT_SHEET = setAgentSheet;
+  AGENT_SHEET = (name, view) => setAgentSheet(name && { name, view });
   const [help, setHelp] = useState(false);
   const [toast, setToast] = useState(null);
   const [limits, setLimits] = useState(null);
@@ -407,7 +407,7 @@ function App() {
     ${calling ? html`<${CallView} />` : html`<${CallPill} />`}
     ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
-    ${agentSheet && html`<${AgentSheet} name=${agentSheet} live=${all} say=${say} onClose=${() => setAgentSheet(null)} reload=${loadAgents} />`}
+    ${agentSheet && html`<${AgentSheet} key=${agentSheet.name + agentSheet.view} name=${agentSheet.name} view=${agentSheet.view} live=${all} say=${say} onClose=${() => setAgentSheet(null)} reload=${loadAgents} />`}
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
     ${notifAsk && me && !updated && html`<div class="appbar" role="status">
       <span>Get a desktop notification when a session finishes or needs you, while this tab is in the background?</span>
@@ -1500,10 +1500,18 @@ function QuickMenu({ quick, say, onClose }) {
   }, []);
   const { s, rect } = quick;
   const items = sessionActions(s, say, { open: true });
-  const style = touch || !rect ? "" : `position: fixed; left: ${Math.min(rect.left, innerWidth - 220)}px; top: ${Math.min(rect.bottom + 4, innerHeight - 320)}px`;
+  const box = useRef();
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (touch || !rect || !el) return;
+    const h = el.offsetHeight, below = rect.bottom + 4, above = rect.top - 4 - h;
+    el.style.top = `${Math.max(8, below + h <= innerHeight - 8 ? below : above >= 8 ? above : innerHeight - 8 - h)}px`;
+    el.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - 8 - el.offsetWidth))}px`;
+  }, [rect]);
+  const style = touch || !rect ? "" : "position: fixed; max-height: calc(100vh - 16px); overflow-y: auto";
   return html`
     <div class="veil quick ${touch ? "sheetish" : ""}" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
-      <div class="sheet qmenu" style=${style}>
+      <div class="sheet qmenu" ref=${box} style=${style}>
         <div class="qtitle">${s.title || "Untitled"}</div>
         ${items.map((it) => html`<button class="btn ${it.danger ? "danger" : ""}" onClick=${() => { onClose(); it.run(); }}>${it.label}</button>`)}
       </div>
@@ -2593,19 +2601,22 @@ function pace(w) {
     : { text: `At this pace you end near ${Math.round(w.percent / gone)}% (${Math.round(gone * 100)}% of the window has passed).` };
 }
 
-function useSessionUsage(s, every) {
+const useSessionUsage = (s, every) => useUsage(`/api/sessions/${s.sessionId}/usage`, every);
+
+function useUsage(path, every) {
   const [data, setData] = useState(null);
-  useEffect(() => setData(null), [s.sessionId]);
+  useEffect(() => setData(null), [path]);
   useEffect(() => {
+    if (!path) return;
     let live = true;
     const load = () => loadWindows().then((u) => {
       const q = [["week", winOf(u, "weekly_all")], ["fiveHour", winOf(u, "session")]].filter(([, w]) => w).map(([k, w]) => `${k}=${Math.floor(Date.parse(w.from) / 1000)}`);
-      return api(`/api/sessions/${s.sessionId}/usage${q.length ? `?${q.join("&")}` : ""}`);
+      return api(`${path}${q.length ? `?${q.join("&")}` : ""}`);
     }).then((d) => live && setData({ ...d, wins: WINS }), () => live && setData((d) => d || { failed: true }));
     load();
     const t = setInterval(load, every);
     return () => { live = false; clearInterval(t); };
-  }, [s.sessionId, every]);
+  }, [path, every]);
   return data;
 }
 
@@ -2880,8 +2891,11 @@ function UsagePage({ limits, multi, onClose, onOpen }) {
     </div>`;
 }
 
-function SessionUsage({ s, use, onClose }) {
+function SessionUsage({ s, use, onClose, agent }) {
   const sub = use?.subagents;
+  const convs = use?.conversations || [];
+  const what = agent ? "agent" : "session";
+  const day = (t) => new Date(t).toLocaleDateString([], { month: "short", day: "numeric" });
   const sh = shares(use);
   const week = winOf(use?.wins, "weekly_all");
   const cin = use ? use.input + use.cacheRead + use.cacheWrite : 0;
@@ -2901,7 +2915,7 @@ function SessionUsage({ s, use, onClose }) {
   ];
   return html`
     <${Sheet} cls="usage" title="Usage" sub=${s.title} onClose=${onClose}>
-      ${!use ? html`<p class="note">Reading the transcript…</p>` : use.failed ? html`<p class="note">Couldn't read this session's usage.</p>` : html`
+      ${!use ? html`<p class="note">Reading the transcript${agent ? "s" : ""}…</p>` : use.failed ? html`<p class="note">Couldn't read this ${what}'s usage.</p>` : html`
         <div class="tiles">
           ${sh.map((x) => html`<div>
             <span class="n">${x.p != null ? approx(x.p) : `${usd(x.cost)}`}</span>
@@ -2910,7 +2924,7 @@ function SessionUsage({ s, use, onClose }) {
           </div>`)}
           <div>
             <span class="n">${usd(use.cost)}</span>
-            <span class="l">whole session${asPct(use.cost, week) != null ? `, ${approx(asPct(use.cost, week))} of a week` : ""}</span>
+            <span class="l">${agent ? `all ${convs.length} conversation${convs.length === 1 ? "" : "s"}` : "whole session"}${asPct(use.cost, week) != null ? `, ${approx(asPct(use.cost, week))} of a week` : ""}</span>
             <span class="l faint">${tokens(use.total)} tokens</span>
           </div>
           <div>
@@ -2920,6 +2934,11 @@ function SessionUsage({ s, use, onClose }) {
           </div>
         </div>
         ${use.local?.length > 0 && html`<p class="quiet">${use.local.join(", ")} is not Claude: its part costs nothing and doesn't count toward your plan.</p>`}
+        ${convs.length > 1 && html`
+          <h4>Conversations</h4>
+          <${ShareRows} w=${week} total=${Math.max(...convs.map((c) => c.cost))} onPick=${(r) => { onClose(); go(r.id); }}
+            rows=${convs.map((c) => ({ id: c.sessionId, label: c.title || "Untitled", cost: c.cost,
+              sub: [c.start && (c.end && day(c.end) !== day(c.start) ? `${day(c.start)} to ${day(c.end)}` : day(c.start)), `${c.turns} turns`, `${tokens(c.total)} tokens`].filter(Boolean).join(" · ") }))} />`}
         ${kinds && use.cost > 0 && html`
           <h4>Where the cost goes</h4>
           <${ShareRows} w=${week} total=${Math.max(...kinds.map((k) => k.cost))} rows=${kinds} />`}
@@ -2929,7 +2948,8 @@ function SessionUsage({ s, use, onClose }) {
             rows=${use.models.map((m) => ({ label: modelName(m.model), sub: `${tokens(m.total)} tokens · ${m.messages} replies`, cost: m.cost }))} />`}
         <h4>Activity</h4>
         <dl class="facts">${rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
-        <p class="note">The share of a limit counts this session's spend since that window opened. ${RATE} ${ESTIMATE(use.pricesAsOf)}${use.unpriced?.length ? ` No price known for ${use.unpriced.join(", ")}, so it counts as $0.` : ""} Working time adds up the gaps between messages in each turn, at most 10 minutes per gap.</p>`}
+        ${!agent && s.agent && AGENT_INFO[s.agent] && html`<button class="btn" onClick=${() => { onClose(); AGENT_SHEET(s.agent, "usage"); }}>All of ${agentLabel(AGENT_INFO[s.agent])}'s conversations</button>`}
+        <p class="note">The share of a limit counts this ${what}'s spend since that window opened. ${RATE} ${ESTIMATE(use.pricesAsOf)}${use.unpriced?.length ? ` No price known for ${use.unpriced.join(", ")}, so it counts as $0.` : ""} Working time adds up the gaps between messages in each turn, at most 10 minutes per gap.</p>`}
     <//>`;
 }
 
@@ -3723,15 +3743,20 @@ function AgentTag({ s }) {
     onClick=${(e) => { e.stopPropagation(); AGENT_SHEET(a.name); }}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</span>`;
 }
 
-function AgentSheet({ name, live, say, onClose, reload }) {
+function AgentSheet({ name, view, live, say, onClose, reload }) {
   const [busy, setBusy] = useState(false);
+  const [showUse, setShowUse] = useState(view === "usage");
+  const use = useUsage(AGENT_INFO[name] && `/api/agents/${encodeURIComponent(name)}/usage`, showUse ? 15000 : 120000);
   useEffect(() => {
-    const k = (e) => e.key === "Escape" && onClose();
+    const k = (e) => e.key === "Escape" && !showUse && onClose();
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
-  }, []);
+  }, [showUse]);
   const a = AGENT_INFO[name];
   if (!a) return null;
+  if (showUse) return html`<${SessionUsage} s=${{ title: `${agentLabel(a)}, every conversation` }} use=${use} agent onClose=${() => (view === "usage" ? onClose() : setShowUse(false))} />`;
+  const weekPct = use && !use.failed && asPct(use.weekCost, winOf(use.wins, "weekly_all"));
+  const nConv = use?.conversations?.length || 1;
   const x = live.filter((v) => v.agent === name).sort((p, q) => Date.parse(q.startedAt || 0) - Date.parse(p.startedAt || 0))[0];
   const act = (fn, done) => async () => {
     setBusy(true);
@@ -3748,6 +3773,7 @@ function AgentSheet({ name, live, say, onClose, reload }) {
     a.prompt && ["Prompt", a.prompt],
     ["Starts over", rule],
     a.lastReset && ["Last did", agoLong(a.lastReset)],
+    use && !use.failed && ["Usage", html`<button class="link" onClick=${() => setShowUse(true)}>${usd(use.cost)} over ${nConv} conversation${nConv === 1 ? "" : "s"}${weekPct != null ? `, ${approx(weekPct)} of this week` : ""}</button>`],
     a.pages?.length > 0 && ["Pages", a.pages.map((g) => pageTitle(g)).join(", ")],
     ["Folder", tilde(a.folder)],
     MULTI && ["Runs on", a.host],
