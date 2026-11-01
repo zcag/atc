@@ -163,6 +163,9 @@ code { font: .92em var(--mono); }
 @keyframes a-pop { from { transform: scale(.4); opacity: 0; } }
 @keyframes a-rise { from { transform: translateY(8px); opacity: 0; } }
 @keyframes a-gone { to { opacity: 0; transform: translateX(24px); } }
+@keyframes a-at { from { outline: 2px solid var(--turn); background-color: color-mix(in srgb, var(--turn) 18%, transparent); } to { outline: 2px solid transparent; } }
+[id] { scroll-margin-top: 12px; }
+:target { outline-offset: 3px; border-radius: 4px; animation: a-at 2.6s ease-in; }
 @media (prefers-color-scheme: dark) { .empty.done::before { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233ccf8e' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12.5l4.5 4.5L19 7.5'/%3E%3C/svg%3E"); } }
 @media (prefers-reduced-motion: reduce) { *, ::before { animation: none !important; transition: none !important; } }
 @media (min-width: 900px) {

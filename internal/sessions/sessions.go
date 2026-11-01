@@ -77,6 +77,7 @@ type Note struct {
 	Text    string    `json:"text"`
 	Urgent  bool      `json:"urgent,omitempty"`
 	Replies []string  `json:"replies,omitempty"`
+	Page    string    `json:"page,omitempty"`
 	At      time.Time `json:"at"`
 }
 

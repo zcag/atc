@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/sessions"
 )
@@ -43,6 +44,19 @@ func (s *Server) postNote(w http.ResponseWriter, r *http.Request) {
 	}
 	note.Text, note.At = strings.TrimSpace(note.Text), time.Now()
 	sid := r.PathValue("sid")
+	if note.Page != "" {
+		name, at, _ := strings.Cut(note.Page, "#")
+		if _, ok := s.Pages.Get(s.owner(sid), name); !ok {
+			http.Error(w, "no page named "+name+" (atc show --list)", http.StatusNotFound)
+			return
+		}
+		ref, err := pages.Ref(name, at)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		note.Page = ref
+	}
 	list, err := s.M.Live(r.Context())
 	if err != nil {
 		fail(w, err)
@@ -73,6 +87,9 @@ func noteAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 			continue
 		}
 		m := push.Message{Title: x.Title, Body: x.Note.Text, Tag: x.SessionID + "/note", URL: "/#/s/" + x.SessionID}
+		if x.Note.Page != "" {
+			m.URL = pages.Link(x.SessionID, x.Note.Page)
+		}
 		if len(x.Note.Replies) > 0 && x.Attachable && x.ID != "" {
 			m.Session, m.Replies = x.ID, x.Note.Replies
 		}

@@ -24,6 +24,7 @@ type Page struct {
 	Title   string              `json:"title,omitempty"`
 	Path    string              `json:"path"`
 	Note    string              `json:"note,omitempty"`
+	At      string              `json:"at,omitempty"`
 	Shown   time.Time           `json:"shown"`
 	Kind    string              `json:"kind,omitempty"`
 	Updated time.Time           `json:"updated,omitzero"`
@@ -62,7 +63,27 @@ var (
 	nameRe  = regexp.MustCompile(`[^a-z0-9]+`)
 	titleRe = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 	h1Re    = regexp.MustCompile(`(?m)^#\s+(.+)$`)
+	atRe    = regexp.MustCompile(`^[A-Za-z0-9][\w.:-]*$`)
 )
+
+var ErrAt = errors.New("a section is an element id: letters, digits and - _ . :")
+
+func Ref(name, at string) (string, error) {
+	if at == "" {
+		return name, nil
+	}
+	if !atRe.MatchString(at) {
+		return "", ErrAt
+	}
+	return name + "#" + at, nil
+}
+
+func (p Page) Ref() string {
+	r, _ := Ref(p.Name, p.At)
+	return r
+}
+
+func Link(sid, ref string) string { return "/#/s/" + sid + "/p/" + ref }
 
 func Open(path string) (*Store, error) {
 	st := &Store{path: path, s: saved{Pages: map[string][]Page{}, State: map[string]json.RawMessage{}}, titles: map[string]titled{}}

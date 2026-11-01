@@ -40,9 +40,9 @@ func (s *Server) sessionPages(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Path, Name, Title, Note string
-		Actions                 map[string][]string
-		Open                    bool
+		Path, Name, Title, Note, At string
+		Actions                     map[string][]string
+		Open                        bool
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || !filepath.IsAbs(req.Path) {
 		http.Error(w, "path must be absolute", http.StatusBadRequest)
@@ -75,7 +75,12 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	p, created, err := s.Pages.Show(pages.Page{Session: s.owner(r.PathValue("sid")), Name: name, Title: strings.TrimSpace(req.Title), Path: target, Note: strings.TrimSpace(req.Note), Shown: time.Now(), Actions: req.Actions})
+	at := strings.TrimPrefix(strings.TrimSpace(req.At), "#")
+	if _, err := pages.Ref(name, at); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	p, created, err := s.Pages.Show(pages.Page{Session: s.owner(r.PathValue("sid")), Name: name, Title: strings.TrimSpace(req.Title), Path: target, Note: strings.TrimSpace(req.Note), At: at, Shown: time.Now(), Actions: req.Actions})
 	if err != nil {
 		fail(w, err)
 		return
@@ -86,7 +91,7 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 		go s.waPage(p)
 	}
 	if req.Open && s.Push != nil {
-		go s.Push.Send(push.Message{Title: hubName, Tag: p.Session + "/" + p.Name, URL: "/#/s/" + p.Session + "/p/" + p.Name,
+		go s.Push.Send(push.Message{Title: hubName, Tag: p.Session + "/" + p.Name, URL: pages.Link(p.Session, p.Ref()),
 			Body: "Showing you " + cmp.Or(p.Title, p.Name) + prefixed(": ", p.Note), Open: true})
 	}
 	reply(w, map[string]any{"page": s.pageURLs([]pages.Page{p})[0], "created": created})
@@ -222,7 +227,7 @@ func pageAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 			if prev == nil || (ok && !p.Shown.After(was)) || x.Away() || viewing(x) {
 				continue
 			}
-			out = append(out, push.Message{Title: x.Title, Tag: key, URL: "/#/s/" + x.SessionID + "/p/" + p.Name,
+			out = append(out, push.Message{Title: x.Title, Tag: key, URL: pages.Link(x.SessionID, p.Ref()),
 				Body: "Showing you " + cmp.Or(p.Title, p.Name) + prefixed(": ", p.Note)})
 		}
 	}

@@ -20,7 +20,7 @@ import (
 const showHelp = `atc show: put a page in front of the user, in the session they are reading.
 
   atc show <file|folder> [--as name] [--title T] [--note "what to look at"]
-           [--action name='command args']... [--open]
+           [--at id] [--action name='command args']... [--open]
 
 The user sees the page in atc next to this conversation (a button on the session's
 header lists its pages), gets a push on their phone, and can open it full size.
@@ -34,6 +34,9 @@ dashboards all go here; don't publish them anywhere else.
                thing its own name and keep it current, rather than a copy per change.
   --title T    defaults to the page's <title> or first # heading
   --note N     one line on what to look at or decide; it goes in the push
+  --at id      open it at one section: the element with that id, scrolled to the top
+               and briefly marked. The push, --open and the card in the transcript all
+               land there. Show again without --at to point back at the top.
   --action name='command args'
                a command the page may run with atc.run (repeatable). Showing the page
                again replaces its actions, so repeat every --action you still want.
@@ -47,6 +50,13 @@ PDF, CSV/TSV, video and audio render. Make HTML work at phone width, in light an
 dark (prefers-color-scheme). Keep it dense, like a dashboard (tables and compact
 rows, not big cards), and on a phone reflow rather than cut: a longer page is fine,
 a hidden column or truncated field is not.
+
+Give every section of an HTML page an id (<section id="towel">), so it can be linked
+to: a page's address is name#id. --at uses it, atc notify --page picks#towel opens the
+page there, and a link from another page or a message goes to
+/#/p/<session or @agent>/<name>#<id> (https://atc.example/#/p/@shopping/picks#towel);
+inside the page itself it is plain href="#towel". A section the page draws later
+from atc.state is found once it appears, when the page loads /atc.js.
 
 To look like atc, link its kit: <link rel="stylesheet" href="/atc.css">. It sets
 atc's fonts and colors in light and dark, styles plain markup, and is dense by
@@ -108,7 +118,7 @@ next one shows and reads the same pages and state (atc state @<name>).
 `
 
 func show(args []string) error {
-	var path, name, title, note, ref, mode string
+	var path, name, title, note, at, ref, mode string
 	actions, set, open := map[string][]string{}, false, false
 	for i := 0; i < len(args); i++ {
 		a := args[i]
@@ -136,6 +146,8 @@ func show(args []string) error {
 			name, err = val()
 		case flag == "title":
 			title, err = val()
+		case flag == "at":
+			at, err = val()
 		case flag == "note":
 			note, err = val()
 		case flag == "session":
@@ -214,7 +226,7 @@ func show(args []string) error {
 	if err != nil {
 		return err
 	}
-	r, err := c.Show(sid, map[string]any{"path": abs, "name": name, "title": title, "note": note, "actions": actions, "open": open})
+	r, err := c.Show(sid, map[string]any{"path": abs, "name": name, "title": title, "note": note, "at": at, "actions": actions, "open": open})
 	if err != nil {
 		return err
 	}
@@ -223,7 +235,7 @@ func show(args []string) error {
 	if !r.Created {
 		verb = "Updated"
 	}
-	fmt.Printf("%s %q (%s) in atc, live from %s.\n", verb, cmp.Or(p.Title, p.Name), p.Name, tilde(p.Path))
+	fmt.Printf("%s %q (%s) in atc, live from %s.\n", verb, cmp.Or(p.Title, p.Name), p.Ref(), tilde(p.Path))
 	if r.Created {
 		fmt.Println("Edit the file to update it; the user's view redraws on every change.")
 	}

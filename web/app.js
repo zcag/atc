@@ -187,7 +187,13 @@ function App() {
   const [usage, setUsage] = useState(location.hash === USAGE);
   const shareRoute = () => (location.hash.startsWith("#/share") ? location.hash : null);
   const [sharing, setSharing] = useState(shareRoute);
-  const aloneRoute = () => { const m = location.hash.match(/^#\/p\/([^/]+)(?:\/(.+))?$/); return m && (m[2] || false) && { sid: decodeURIComponent(m[1]), name: m[2] && decodeURIComponent(m[2]) }; };
+  const aloneRoute = () => {
+    const m = location.hash.match(/^#\/p\/([^/]+)(?:\/(.+))?$/);
+    if (!m || !m[2]) return m && false;
+    const sid = decodeURIComponent(m[1]), ref = decodeURIComponent(m[2]), at = atOf(ref), name = splitRef(ref)[0];
+    if (at) history.replaceState(null, "", aloneLink(sid, name));
+    return { sid, name, at };
+  };
   const [alone, setAlone] = useState(aloneRoute);
   const [pagesHome, setPagesHome] = useState(location.hash === PAGES);
   const [backlog, setBacklog] = useState(location.hash === BACKLOG);
@@ -396,7 +402,7 @@ function App() {
     ${assisting && html`<${Assist} live=${reach} onOpen=${() => go(null)} />`}
     ${pagesHome && html`<${PagesHome} live=${all} say=${say} onClose=${closePages} />`}
     ${backlog && html`<${BacklogPage} live=${all} say=${say} onClose=${closeBacklog} onAdd=${setCreating} />`}
-    ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} live=${all} say=${say} />`}
+    ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} at=${alone.at} live=${all} say=${say} />`}
     ${calling ? html`<${CallView} />` : html`<${CallPill} />`}
     ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
@@ -1462,7 +1468,8 @@ function Session({ s, say, live }) {
   const [kept] = useState(() => { const n = !auto.current && !routePage() && stored(SESSION_PAGE, {})[s.sessionId]; return n && shown.some((p) => p.name === n) ? n : null; });
   const agentPage = !auto.current && !routePage() && !kept && !!s.agent && shown[0]?.name;
   const [mode, setMode] = useState(() => { AUTO_PANE = null; return auto.current || (routePage() || kept || agentPage ? "page" : paneFor(s)); });
-  const [pg, setPg] = useState(() => routePage() || kept || agentPage);
+  const [pg, setPg] = useState(() => splitRef(routePage())[0] || kept || agentPage);
+  const [at, setAt] = useState(() => atOf(routePage()));
   const [split, setSplitRaw] = useState(() => { const v = AUTO_SPLIT || !!agentPage || stored(PAGE_SPLIT, true); AUTO_SPLIT = false; return v; });
   const setSplit = (v) => { setSplitRaw(v); store(PAGE_SPLIT, v); };
   const wideNow = useWide();
@@ -1474,9 +1481,9 @@ function Session({ s, say, live }) {
     if (name) m[s.sessionId] = name;
     store(SESSION_PAGE, Object.fromEntries(Object.entries(m).slice(-100)));
   };
-  const openPage = (name) => { setPg(name); setMode("page"); keep(name); history.replaceState(null, "", `${base()}/p/${encodeURIComponent(name)}`); };
+  const openPage = (ref) => { const [name] = splitRef(ref); setPg(name); setAt(atOf(ref)); setMode("page"); keep(name); history.replaceState(null, "", `${base()}/p/${encodeURIComponent(name)}`); };
   const leavePage = (m) => { setMode(m); keep(null); history.replaceState(null, "", base()); };
-  useEffect(() => { if (kept) history.replaceState(null, "", `${base()}/p/${encodeURIComponent(kept)}`); }, []);
+  useEffect(() => { if (kept || at) history.replaceState(null, "", `${base()}/p/${encodeURIComponent(pg)}`); }, []);
   const [slot, setSlot] = useState(null);
   const choose = (m) => { if (m === "page") return openPage(pg || shown[0]?.name); leavePage(m); try { localStorage.setItem(PANE, m); } catch {} };
   useEffect(() => {
@@ -1490,9 +1497,10 @@ function Session({ s, say, live }) {
     const prev = known.current;
     known.current = now;
     const p = prev && shown.find((x) => prev[x.name] !== x.shown);
+    if (p && mode === "page" && pg === p.name && p.at) return setAt(atOf(pageRef(p)));
     if (!p || (mode === "page" && (pg === p.name || sideBySide))) return;
     const idle = Date.now() - LAST_KEY > 8000 && !document.activeElement?.closest?.("textarea, input, .xterm");
-    if (idle && wideNow && split && mode !== "page" && p.kind !== "browser") openPage(p.name);
+    if (idle && wideNow && split && mode !== "page" && p.kind !== "browser") openPage(pageRef(p));
     else say(p.kind === "browser" ? "It opened a browser tab. It's on the page button up top." : `Showing you “${pageTitle(p)}”. It's on the page button up top.`);
   }, [shown.map((p) => p.name + p.shown).join()]);
   const [busy, setBusy] = useState(false);
@@ -1581,7 +1589,7 @@ function Session({ s, say, live }) {
     ${mode !== "chat" && !sideBySide && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
     ${mode === "page" && shown.length > 0
       ? (() => {
-          const pane = html`<${PagePane} s=${s} list=${shown} cur=${pg} pick=${openPage} split=${sideBySide} setSplit=${wideNow ? setSplit : null} say=${say}
+          const pane = html`<${PagePane} s=${s} list=${shown} cur=${pg} at=${at} pick=${openPage} split=${sideBySide} setSplit=${wideNow ? setSplit : null} say=${say}
             onClose=${() => leavePage(paneFor(s))} />`;
           return sideBySide
             ? html`<${PageSplit}><${Transcript} s=${s} say=${say} slot=${slot} resume=${() => resume("chat")} busy=${busy} voice=${voice && canAttach} onVoiceOff=${() => setVoice(false)} />${pane}<//>`
@@ -3056,6 +3064,11 @@ const pageSrc = (p) => p.url && `${p.url}?v=${pageAt(p)}`;
 const pageInfo = (p) => p.gone ? "file is gone" : `${KIND_LABEL[p.kind] || "Page"} · updated ${agoLong(p.updated || p.shown)}`;
 const pageLink = (sid, name) => `#/s/${sid}/p/${encodeURIComponent(name)}`;
 const aloneLink = (sid, name) => `#/p/${sid}/${encodeURIComponent(name)}`;
+const splitRef = (r) => { const i = (r || "").indexOf("#"); return i < 0 ? [r, null] : [r.slice(0, i), r.slice(i + 1)]; };
+const pageRef = (p) => (p.at ? `${p.name}#${p.at}` : p.name);
+let AT_SEQ = 0;
+const atOf = (ref) => { const [name, id] = splitRef(ref); return id ? { name, id, seq: ++AT_SEQ } : null; };
+const atcRoute = (href) => { const u = new URL(href, location.href); return u.origin === location.origin && u.pathname === "/" && u.hash ? u.hash : null; };
 const routePage = () => { const m = location.hash.match(/^#\/s\/[^/]+\/p\/(.+)$/); return m ? decodeURIComponent(m[1]) : null; };
 let LAST_KEY = 0;
 addEventListener("keydown", () => { LAST_KEY = Date.now(); }, true);
@@ -3101,7 +3114,7 @@ async function takeDown(p, say) {
   } catch (e) { say?.(e.message); return false; }
 }
 
-function PageFrame({ p, onSend, say }) {
+function PageFrame({ p, at, onSend, say }) {
   const src = pageSrc(p);
   const [cur, setCur] = useState(src);
   const [next, setNext] = useState(null);
@@ -3116,7 +3129,7 @@ function PageFrame({ p, onSend, say }) {
       run: (a) => api(`${base}/run${q}`, { method: "POST", body: a }),
       copy: (t) => { copyText(t); say(t.length < 60 ? `Copied “${t}”.` : "Copied."); },
       copyImage: (u) => (APP?.copyImage ? APP.copyImage(u) : copyImage(u).then(() => say("Image copied."))),
-      open: (u) => openOut(u),
+      open: (u) => { const h = atcRoute(u); h ? (location.hash = h) : openOut(u); },
       send: (t) => onSend(t),
     };
     const f = (e) => {
@@ -3132,19 +3145,27 @@ function PageFrame({ p, onSend, say }) {
     addEventListener("message", f);
     return () => removeEventListener("message", f);
   }, [p.session, p.name, p.host, onSend]);
+  const jump = useRef(null);
+  useEffect(() => {
+    if (!at) return;
+    const id = (jump.current = encodeURIComponent(at.id));
+    for (const [u, el] of Object.entries(frames.current)) if (el) el.src = `${u}#${id}`;
+    const t = setTimeout(() => jump.current === id && (jump.current = null), 3000);
+    return () => clearTimeout(t);
+  }, [at?.seq]);
   useEffect(() => {
     if (p.stateAt) for (const w of Object.values(frames.current)) w?.contentWindow?.postMessage({ atc: 1, op: "state" }, "*");
   }, [p.stateAt]);
-  const frame = (u, hidden) => html`<iframe key=${u} ref=${(el) => { frames.current[u] = el; }} src=${u} class=${hidden ? "next" : ""}
+  const frame = (u, hidden) => html`<iframe key=${u} ref=${(el) => { frames.current[u] = el; }} src=${hidden && jump.current ? `${u}#${jump.current}` : u} class=${hidden ? "next" : ""}
     sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
     onLoad=${hidden ? () => { delete frames.current[cur]; setCur(u); setNext(null); } : null}></iframe>`;
   return html`<div class="pframe">${frame(cur, false)}${next && frame(next, true)}</div>`;
 }
 
-function PageBody({ p, onSend, say }) {
+function PageBody({ p, at, onSend, say }) {
   if (p.kind === "browser") return html`<${BrowserView} p=${p} say=${say} />`;
   if (p.gone) return html`<div class="fbody"><div class="none"><p>The file behind this page is gone.</p><p class="sub">${tilde(p.path)}</p></div></div>`;
-  return html`<${FileBody} f=${{ ...p, url: pageSrc(p) }} frame=${p.kind === "html" && html`<${PageFrame} key=${pkey(p)} p=${p} onSend=${onSend} say=${say} />`} />`;
+  return html`<${FileBody} f=${{ ...p, url: pageSrc(p) }} frame=${p.kind === "html" && html`<${PageFrame} key=${pkey(p)} p=${p} at=${at} onSend=${onSend} say=${say} />`} />`;
 }
 
 const BROWSER_KEYS = { Enter: 13, Backspace: 8, Tab: 9, Escape: 27, Delete: 46, ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Home: 36, End: 35, PageUp: 33, PageDown: 34 };
@@ -3315,7 +3336,7 @@ async function deliver(s, text) {
   }
 }
 
-function PagePane({ s, list, cur, pick, split, setSplit, onClose, say, alone }) {
+function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, say, alone }) {
   useNow(15000);
   useSeenTick();
   const p = list.find((x) => x.name === cur) || list[0];
@@ -3349,7 +3370,7 @@ function PagePane({ s, list, cur, pick, split, setSplit, onClose, say, alone }) 
         ${onClose && html`<button class="icon" title="Close" aria-label="Close" onClick=${onClose}>✕</button>`}
       </div>
       ${p.note && html`<div class="pnote">${p.note}</div>`}
-      <${PageBody} key=${`${pkey(p)}:${nonce}`} p=${p} onSend=${onSend} say=${say} />
+      <${PageBody} key=${`${pkey(p)}:${nonce}`} p=${p} at=${at?.name === p.name ? at : null} onSend=${onSend} say=${say} />
     </div>`;
 }
 
@@ -3391,7 +3412,7 @@ function PageCard({ p, onOpen, sub, onDown }) {
 
 function ShownStep({ b, s }) {
   useSeenTick();
-  const p = (s.shown || []).find((x) => x.name === b.ref);
+  const p = (s.shown || []).find((x) => x.name === splitRef(b.ref)[0]);
   return html`<button class="shown ${p && pageFresh(p) ? "fresh" : ""}" onClick=${() => SESSION_API?.page(b.ref)} title=${p ? tilde(p.path) : ""}>
     <span class="th">${ICON.page}</span>
     <span class="tx"><b>${p ? pageTitle(p) : b.text}</b><small>${p ? `Showed you a page · ${pageInfo(p)}` : s.state === "past" ? "Showed you a page" : "Page taken down"}</small></span>
@@ -3716,7 +3737,7 @@ function AppTile({ a, size = 32, dot }) {
 
 const agentLabel = (a) => a.title || a.name.replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
 
-function PageAlone({ sid, name, live, say }) {
+function PageAlone({ sid, name, at, live, say }) {
   const [got, setGot] = useState(null);
   const s = live.find((x) => x.sessionId === sid);
   useEffect(() => {
@@ -3733,7 +3754,7 @@ function PageAlone({ sid, name, live, say }) {
     <div class="palone">
       ${got?.err ? html`<div class="fbody"><p class="empty">${got.err}</p></div>`
         : !s && !got ? html`<div class="fbody"><p class="empty">Loading…</p></div>`
-        : list.some((p) => p.name === name) ? html`<${PagePane} s=${owner} list=${list} cur=${name} pick=${(n) => location.replace(aloneLink(sid, n))} say=${say} onClose=${back} alone />`
+        : list.some((p) => p.name === name) ? html`<${PagePane} s=${owner} list=${list} cur=${name} at=${at} pick=${(n) => location.replace(aloneLink(sid, n))} say=${say} onClose=${back} alone />`
         : html`<div class="fbody"><div class="none"><p>This page was taken down.</p><button class="btn" onClick=${() => (location.hash = "#/pages")}>All pages</button></div></div>`}
     </div>`;
 }
@@ -4926,9 +4947,10 @@ document.addEventListener("click", (e) => {
   if (c) { copyText(c.parentElement.querySelector("code").innerText); c.textContent = "Copied"; setTimeout(() => (c.textContent = "Copy"), 1200); return; }
   const a = e.target.closest?.("a[data-out]");
   if (!a) return;
-  const u = new URL(a.getAttribute("href"), location.href);
-  if (u.origin === location.origin && u.pathname === "/" && u.hash && !(e.metaKey || e.ctrlKey || e.shiftKey)) { e.preventDefault(); location.hash = u.hash; return; }
-  e.preventDefault(); openOut(u.href);
+  const h = atcRoute(a.getAttribute("href"));
+  e.preventDefault();
+  if (h && !(e.metaKey || e.ctrlKey || e.shiftKey)) location.hash = h;
+  else openOut(new URL(a.getAttribute("href"), location.href).href);
 });
 
 function useDirs(host, home) {
