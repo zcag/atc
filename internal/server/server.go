@@ -90,15 +90,16 @@ type Server struct {
 	stats   usage.Scanner
 	limits  usage.LimitsClient
 
-	mu    sync.Mutex
-	subs  map[chan []byte]bool
-	last  []byte
-	kick  chan struct{}
-	seen  map[string]string
-	shown map[string]time.Time
-	noted map[string]time.Time
-	held  map[string]held
-	notes notes
+	mu     sync.Mutex
+	subs   map[chan []byte]bool
+	last   []byte
+	lastAt time.Time
+	kick   chan struct{}
+	seen   map[string]string
+	shown  map[string]time.Time
+	noted  map[string]time.Time
+	held   map[string]held
+	notes  notes
 
 	web        string
 	widgetSent string
@@ -112,7 +113,7 @@ func (s *Server) Handler() http.Handler {
 		s.tailnet = &tailnet{bin: s.TrustTailnet}
 	}
 	s.web = webVersion(s.Web)
-	s.fleet = &fleet{peers: s.Peers, client: &http.Client{}, owner: map[string]string{}, status: map[string]string{}, views: map[string]int{}}
+	s.fleet = newFleet(s.Peers)
 	s.kick = make(chan struct{}, 1)
 	if s.Pages == nil {
 		s.Pages, _ = pages.Open("")
@@ -534,7 +535,19 @@ func (s *Server) running(ctx context.Context, sid string) bool {
 	return slices.ContainsFunc(agents, func(a claude.Agent) bool { return a.SessionID == sid })
 }
 
+// live with recent=1 answers from the poll's snapshot while one is at most a poll old: a reader that
+// only looks (the assistant mid-call) then pays nothing for listing every machine's sessions.
 func (s *Server) live(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Query().Get("recent") != "" && r.URL.Query().Get("local") == "" {
+		s.mu.Lock()
+		b, fresh := s.last, time.Since(s.lastAt) < 3*time.Second
+		s.mu.Unlock()
+		if fresh && b != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write(b)
+			return
+		}
+	}
 	list, err := s.liveAll(r.Context(), r.URL.Query().Get("local") != "")
 	if err != nil {
 		fail(w, err)
@@ -562,6 +575,7 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 	s.attachPages(list)
 	s.notes.attach(list)
 	s.attachTabs(list)
+	s.fleet.remember(s.Host, list)
 	if localOnly || len(s.Peers) == 0 {
 		return list, nil
 	}
@@ -988,6 +1002,7 @@ func (s *Server) poll() {
 		s.notify(list)
 		b, _ := json.Marshal(list)
 		s.mu.Lock()
+		s.lastAt = time.Now()
 		if !bytes.Equal(b, s.last) {
 			s.last = b
 			for ch := range s.subs {

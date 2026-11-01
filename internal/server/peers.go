@@ -3,7 +3,9 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -46,6 +48,59 @@ type fleet struct {
 	owner  map[string]string
 	status map[string]string
 	views  map[string]int
+	down   map[string]bool
+}
+
+const probeEvery = 10 * time.Second
+
+func newFleet(peers []Peer) *fleet {
+	dial := &net.Dialer{Timeout: 2 * time.Second}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.DialContext = dial.DialContext
+	return &fleet{peers: peers, client: &http.Client{Transport: tr}, owner: map[string]string{}, status: map[string]string{},
+		views: map[string]int{}, down: map[string]bool{}}
+}
+
+type offline struct{ name string }
+
+func (e offline) Error() string { return e.name + " is offline" }
+
+// offline peers are skipped at once rather than waited on by every request: the first failure marks
+// one down and a probe brings it back when it answers again.
+func (f *fleet) isDown(name string) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.down[name]
+}
+
+func (f *fleet) failed(p Peer, err error) {
+	if errors.Is(err, context.Canceled) {
+		return
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.status[p.Name] = err.Error()
+	if f.down[p.Name] {
+		return
+	}
+	f.down[p.Name] = true
+	go f.probe(p)
+}
+
+func (f *fleet) probe(p Peer) {
+	for {
+		time.Sleep(probeEvery)
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		var me map[string]any
+		err := f.fetch(ctx, p, "/api/me", &me)
+		cancel()
+		if err == nil {
+			f.mu.Lock()
+			f.down[p.Name], f.status[p.Name] = false, ""
+			f.mu.Unlock()
+			return
+		}
+	}
 }
 
 func (f *fleet) peer(name string) *Peer {
@@ -85,6 +140,18 @@ func (f *fleet) ownerOf(key string) string {
 }
 
 func (f *fleet) get(ctx context.Context, p Peer, path string, out any) error {
+	if f.isDown(p.Name) {
+		return offline{p.Name}
+	}
+	err := f.fetch(ctx, p, path, out)
+	var ne net.Error
+	if errors.As(err, &ne) || errors.Is(err, context.DeadlineExceeded) {
+		f.failed(p, err)
+	}
+	return err
+}
+
+func (f *fleet) fetch(ctx context.Context, p Peer, path string, out any) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", strings.TrimRight(p.URL, "/")+path, nil)
 	if err != nil {
 		return err
@@ -112,14 +179,7 @@ func (f *fleet) gather(ctx context.Context, path string) []sessions.Session {
 			ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 			defer cancel()
 			var list []sessions.Session
-			err := f.get(ctx, p, path, &list)
-			f.mu.Lock()
-			f.status[p.Name] = ""
-			if err != nil {
-				f.status[p.Name] = err.Error()
-			}
-			f.mu.Unlock()
-			if err != nil {
+			if f.get(ctx, p, path, &list) != nil {
 				return
 			}
 			for i := range list {
@@ -140,7 +200,11 @@ func (f *fleet) statuses() []peerStatus {
 	defer f.mu.Unlock()
 	out := []peerStatus{}
 	for _, p := range f.peers {
-		out = append(out, peerStatus{p.Name, f.status[p.Name]})
+		st := f.status[p.Name]
+		if f.down[p.Name] {
+			st = "offline: " + st
+		}
+		out = append(out, peerStatus{p.Name, st})
 	}
 	return out
 }
@@ -152,6 +216,10 @@ func (f *fleet) viewing(host, id string) bool {
 }
 
 func (f *fleet) proxy(w http.ResponseWriter, r *http.Request, p *Peer, attachID string) {
+	if f.isDown(p.Name) {
+		http.Error(w, p.Name+" is offline", http.StatusBadGateway)
+		return
+	}
 	target, err := url.Parse(p.URL)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
@@ -175,7 +243,12 @@ func (f *fleet) proxy(w http.ResponseWriter, r *http.Request, p *Peer, attachID 
 			pr.Out.Header.Set("Authorization", "Bearer "+p.Token)
 		},
 		FlushInterval: -1,
+		Transport:     f.client.Transport,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
+			var ne net.Error
+			if errors.As(err, &ne) {
+				f.failed(*p, err)
+			}
 			http.Error(w, p.Name+" is unreachable: "+err.Error(), http.StatusBadGateway)
 		},
 	}

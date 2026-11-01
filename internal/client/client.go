@@ -116,6 +116,10 @@ type Me struct {
 	Host  string   `json:"host"`
 	Home  string   `json:"home"`
 	Hosts []string `json:"hosts"`
+	Peers []struct {
+		Name  string `json:"name"`
+		Error string `json:"error"`
+	} `json:"peers"`
 }
 
 func (c *Client) Me() Me {
@@ -130,6 +134,11 @@ func (c *Client) ServerHome() string { return c.Me().Home }
 
 func (c *Client) Live() (list []sessions.Session, err error) {
 	return list, c.do("GET", "/api/sessions", nil, &list)
+}
+
+// Recent is Live as of the server's last poll when that is a few seconds old at most: for looking, not acting.
+func (c *Client) Recent() (list []sessions.Session, err error) {
+	return list, c.do("GET", "/api/sessions?recent=1", nil, &list)
 }
 
 func (c *Client) History(q, dir string, limit int) (list []sessions.Session, err error) {

@@ -155,7 +155,9 @@ in your browser, list the others in `~/.config/atc/peers.json` and restart it:
 Sessions from every machine appear together, tagged with their machine. Opening, stopping,
 resuming or uploading to one is forwarded to the machine it lives on, and **New session** asks
 which machine to start on (`atc new -host laptop` from a terminal). A machine that is off shows as
-unreachable and the rest keep working.
+offline and the rest keep working: after its first failed request atc stops asking it (requests
+for its sessions fail at once instead of waiting out a timeout) and checks every ten seconds
+whether it is back.
 
 ## Android app and notifications
 
@@ -578,8 +580,14 @@ not billed per token.
 
 `atc mcp` gives Claude tools to see and drive your other sessions:
 
+- `status`: the short overview, one line per session: what waits on you (with the question),
+  what is working (with what it does), what finished a turn (its result in one line), and which
+  machines are offline. The voice assistant reaches for it first; it is about a sixth of
+  `sessions`' size.
 - `sessions`: every open session with what it is doing, what it is asking you (the question and
   its options, or the permission it wants), and its last reply in short (status and gist).
+  Both answer from atc's last poll when that is at most a few seconds old (whenever atc is open
+  somewhere), so they cost nothing to call.
 - `read`: a session's last reply in short, one line per turn (what was asked, files changed,
   tests, commits, pushes, deploys, failures, how long), then its last messages in full.
 - `start` a session in a folder on any machine (optionally in its own worktree), `send` a

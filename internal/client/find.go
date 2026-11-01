@@ -13,6 +13,9 @@ func (c *Client) Find(q string, withPast bool) (sessions.Session, error) {
 	if err != nil {
 		return sessions.Session{}, err
 	}
+	if x, err := Resolve(q, pool); err == nil || !withPast {
+		return x, err
+	}
 	if withPast {
 		past, err := c.History("", "", 0)
 		if err != nil {

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -22,7 +23,7 @@ import (
 const instructions = `atc is how the user runs Claude Code sessions on their machines: these tools list, start, read and message them. ` +
 	`Use them whenever the user asks to start, open, spin up or hand work to a session or agent ("start a session on laptop in ~/proj/x", ` +
 	`"have another agent look at this"), or talks about another session, project or task by name, even without naming atc. ` +
-	`"sessions" shows what is open and what each is doing or asking, "read" before you summarize or answer about a session, ` +
+	`"status" says in one line each what waits on the user, what is running and what just finished, "sessions" shows the same in full, "read" before you summarize or answer about a session, ` +
 	`"start" for new work in a folder on a machine, "send" to pass something on, "wait" for its answer, "outputs" for what it produced ` +
 	`(running servers, pages it showed, files), "state" for what agents keep track of (what is open, counts, statuses: ` +
 	`read it before asking an agent), "later" to put a task on the user's backlog when they ask for that, "backlog" to see it, "mark" to mark an item done or blocked. Refer to sessions by their title. Never send to the session marked as you. ` +
@@ -232,10 +233,13 @@ func Run(ctx context.Context, c *client.Client) error {
 	}
 	s := mcp.NewServer(&mcp.Implementation{Name: "atc", Version: "1"}, &mcp.ServerOptions{Instructions: in})
 
+	mcp.AddTool(s, &mcp.Tool{Name: "status", Description: "The short answer to what is going on: the sessions waiting on the user (with what they ask), " +
+		"the ones working (with what they do), the ones that finished a turn (with their result in one line), and machines that are offline. " +
+		"One line per session; use it first, and sessions or read only when you need more about one."}, t.status)
 	mcp.AddTool(s, &mcp.Tool{Name: "sessions", Description: "List the user's Claude Code sessions on all their machines, most urgent first: what each is doing, what it is asking the user, and its last reply in short. " +
-		"By default only the running ones that are not parked, and any that need the user; all adds the stopped and parked ones."},
+		"By default only the running ones that are not parked, and any that need the user; all adds the stopped and parked ones. For a quick overview, status is shorter."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, in sessionsIn) (*mcp.CallToolResult, list, error) {
-			live, err := c.Live()
+			live, err := c.Recent()
 			if err != nil {
 				return nil, list{}, err
 			}
@@ -353,6 +357,82 @@ func (t *tools) view(x sessions.Session, self *sessions.Session) Session {
 	return v
 }
 
+type brief struct {
+	Ref    string `json:"ref"`
+	Title  string `json:"title"`
+	Host   string `json:"host,omitempty"`
+	Agent  string `json:"agent,omitempty"`
+	Asking []Ask  `json:"asking,omitempty"`
+	Doing  string `json:"doing,omitempty"`
+	Result string `json:"result,omitempty" jsonschema:"its last reply in one line"`
+	Ago    string `json:"ago,omitempty" jsonschema:"since its last activity, like 4m or 2h"`
+	at     time.Time
+}
+
+type statusOut struct {
+	NeedsYou []brief  `json:"needsYou"`
+	Working  []brief  `json:"working"`
+	Finished []brief  `json:"finished" jsonschema:"finished a turn and is open for the next message, newest first"`
+	Offline  []string `json:"offline,omitempty" jsonschema:"machines that do not answer: their sessions are missing here"`
+	Hidden   int      `json:"hidden,omitempty" jsonschema:"stopped and parked sessions left out; sessions with all lists them"`
+}
+
+func (t *tools) status(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, statusOut, error) {
+	live, err := t.c.Recent()
+	if err != nil {
+		return nil, statusOut{}, err
+	}
+	out := statusOut{NeedsYou: []brief{}, Working: []brief{}, Finished: []brief{}}
+	for _, p := range t.c.Me().Peers {
+		if strings.HasPrefix(p.Error, "offline") {
+			out.Offline = append(out.Offline, p.Name)
+		}
+	}
+	me, _ := client.Self(live)
+	for _, x := range live {
+		if x.SessionID == me.SessionID && me.SessionID != "" {
+			continue
+		}
+		if !current(x) {
+			out.Hidden++
+			continue
+		}
+		b := brief{Ref: client.Ref(x), Title: x.Title, Host: x.Host, Agent: x.Agent, Ago: ago(x.Last()), at: x.Last()}
+		switch x.State {
+		case sessions.NeedsYou:
+			b.Asking = asking(x)
+			out.NeedsYou = append(out.NeedsYou, b)
+		case sessions.Working:
+			b.Doing = clip(x.Activity, 120)
+			out.Working = append(out.Working, b)
+		default:
+			b.Result = clip(x.LastReply, 140)
+			if x.Summary != nil && x.Summary.Status != "" {
+				b.Result = x.Summary.Status
+			}
+			out.Finished = append(out.Finished, b)
+		}
+	}
+	slices.SortStableFunc(out.Finished, func(a, b brief) int { return b.at.Compare(a.at) })
+	return nil, out, nil
+}
+
+func ago(at time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	switch d := time.Since(at); {
+	case d < time.Minute:
+		return "now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 48*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
+}
+
 func (t *tools) find(q string, past bool) (sessions.Session, error) {
 	return t.c.Find(q, past)
 }
@@ -363,7 +443,19 @@ func (t *tools) read(ctx context.Context, _ *mcp.CallToolRequest, in readIn) (*m
 		return nil, transcript{}, err
 	}
 	out := transcript{Title: x.Title, State: x.State, Summary: x.Summary}
+	var wg sync.WaitGroup
+	var turns []history.Turn
+	var terr error
+	wg.Go(func() { turns, terr = t.c.Turns(x.SessionID) })
+	if out.Summary == nil && x.State != sessions.Working {
+		wg.Go(func() {
+			if r, err := t.c.Summary(x.SessionID, 0, false); err == nil {
+				out.Summary = r.Summary
+			}
+		})
+	}
 	p, err := t.c.Transcript(x.SessionID)
+	wg.Wait()
 	if err != nil {
 		if strings.Contains(err.Error(), "no transcript") {
 			out.Note = "it has not written anything yet; wait for its first turn"
@@ -371,12 +463,7 @@ func (t *tools) read(ctx context.Context, _ *mcp.CallToolRequest, in readIn) (*m
 		}
 		return nil, transcript{}, err
 	}
-	if out.Summary == nil && x.State != sessions.Working {
-		if r, err := t.c.Summary(x.SessionID, 0, false); err == nil {
-			out.Summary = r.Summary
-		}
-	}
-	if turns, err := t.c.Turns(x.SessionID); err == nil {
+	if terr == nil {
 		n := in.Turns
 		if n <= 0 {
 			n = 30
