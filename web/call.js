@@ -8,7 +8,7 @@ const subs = new Set();
 const emit = () => subs.forEach((f) => f());
 const set = (p) => { st = { ...st, ...p }; emit(); };
 
-let ctx, mic, up, down, ears, mouth, ws, live = false, lostAt = 0, closed = true, stats = {}, timers = [], lock = null, sink = null;
+let ctx, mic, up, down, ears, mouth, low, high, ws, live = false, lostAt = 0, closed = true, stats = {}, timers = [], lock = null, sink = null;
 
 const rms = (an, buf) => {
   if (!an) return 0;
@@ -25,6 +25,7 @@ export const Call = {
   live: () => st.phase === "calling" || st.phase === "active",
   subscribe(f) { subs.add(f); return () => subs.delete(f); },
   levels: () => [st.muted ? 0 : rms(ears, scratch), rms(mouth, scratch)],
+  speech: () => [rms(mouth, scratch), rms(low, scratch), rms(high, scratch)],
   supported: () => !!(navigator.mediaDevices?.getUserMedia && window.AudioWorkletNode && window.WebSocket),
 
   async dial() {
@@ -54,6 +55,10 @@ export const Call = {
     down.port.onmessage = (e) => (stats = e.data);
     mouth = new AnalyserNode(ctx, { fftSize: 1024 });
     down.connect(mouth);
+    low = new AnalyserNode(ctx, { fftSize: 1024 });
+    high = new AnalyserNode(ctx, { fftSize: 1024 });
+    down.connect(new BiquadFilterNode(ctx, { type: "lowpass", frequency: 700, Q: .5 })).connect(low);
+    down.connect(new BiquadFilterNode(ctx, { type: "highpass", frequency: 3000, Q: .5 })).connect(high);
     play(down);
     open("call");
     timers.push(setTimeout(() => st.phase === "calling" && hangup("no answer"), 20000));
@@ -157,7 +162,7 @@ function teardown() {
   mic?.getTracks().forEach((t) => t.stop());
   sink?.pause();
   ctx?.close();
-  ctx = mic = up = down = ears = mouth = sink = null;
+  ctx = mic = up = down = ears = mouth = low = high = sink = null;
   lock?.release().catch(() => {});
   lock = null;
 }

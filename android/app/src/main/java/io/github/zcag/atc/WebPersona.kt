@@ -54,7 +54,7 @@ class WebPersona(c: Context, private val dir: File, private val server: String) 
 
     private inner class Bridge {
         @JavascriptInterface
-        fun levels(): String = Calls.levels().let { (you, it) -> "$you,$it" }
+        fun levels(): String = Calls.speech().let { "${Calls.levels().first},${it[0]},${it[1]},${it[2]}" }
 
         @JavascriptInterface
         fun drawn() = post {

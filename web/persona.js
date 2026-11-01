@@ -146,7 +146,7 @@ export class Mind {
     this.lookAt(rand(-micro, micro), rand(-micro, micro) * .7, rand(.5, 1.8));
   }
 
-  step(dt, state, you, it) {
+  step(dt, state, you, it, lo = it * .9, hi = it * .1) {
     this.t += dt;
     if (state !== this.state) this.enter(state);
     const s = this.state, t = this.t, speaking = s === "speaking", thinking = s === "thinking", tool = s === "tool";
@@ -187,14 +187,18 @@ export class Mind {
       if (chance(.6)) this.nod.hit(rand(.15, .3), .12, .3);
       if (chance(.4)) this.flash.hit(rand(.3, .6), .1, .45);
     }
-    if (!this.rising && this.level > .1 && this.level > this.slow) {
-      this.rising = true;
-      const r = Math.random();
-      this.roundT = r < .2 ? rand(.5, 1) : 0;
-      this.spreadT = r > .75 ? rand(.4, .9) : 0;
-    } else if (this.rising && this.level < .06) this.rising = false;
+    // What is being said, roughly, from where its energy sits: high-band frames are s, sh, f, t (teeth together,
+    // lips spread), dark vowels round the lips, bright ones widen them.
+    const bright = v > .03 ? hi / (lo + hi + .02) : 0;
+    this.bright = lerp(this.bright ?? 0, bright, 1 - Math.exp(-dt * 25));
+    const sib = speaking ? smooth(.3, .5, this.bright) * smooth(.02, .08, this.level) : 0;
+    this.sib = lerp(this.sib ?? 0, sib, 1 - Math.exp(-dt * 20));
+    if (!this.rising && this.level > .1 && this.level > this.slow) { this.rising = true; this.jitter = rand(-.25, .25); }
+    else if (this.rising && this.level < .06) this.rising = false;
+    this.roundT = clamp(smooth(.12, .06, this.bright) + (this.jitter ?? 0)) * (1 - this.sib);
+    this.spreadT = clamp(smooth(.13, .22, this.bright) - (this.jitter ?? 0) * .5) * (1 - this.sib);
     this.voiceOn = lerp(this.voiceOn, speaking ? 1 : 0, 1 - Math.exp(-dt * 2));
-    const open = this.open.to(.9 * smooth(.04, .8, this.level), dt);
+    const open = this.open.to(.9 * smooth(.04, .8, this.level) * (1 - .75 * this.sib), dt);
     const round = this.round.to(this.roundT, dt), spread = this.spread.to(this.spreadT, dt);
     if (speaking && this.level < .03 && this.slow > .1 && chance(dt * 2)) this.press.hit(.7, .05, .2);
 
@@ -237,10 +241,10 @@ export class Mind {
       smile_open: clamp(smileOpen),
       purse: purse * (1 - open),
       m_m: clamp(press) * (1 - open),
-      m_small: smooth(0, .2, open) * (1 - smooth(.3, .6, open)) * (1 - round),
+      m_small: smooth(0, .2, open) * (1 - smooth(.3, .6, open)) * (1 - round) * (1 - this.sib),
       m_open: smooth(.25, .6, open) * (1 - .6 * smooth(.7, 1, open)) * (1 - round) * (1 - spread),
       m_a: smooth(.7, 1, open) * .7 * (1 - round) * (1 - spread),
-      m_e: smooth(.2, .6, open) * spread,
+      m_e: Math.max(smooth(.2, .6, open) * spread, this.sib * .8),
       m_o: smooth(.2, .7, open) * round,
       m_u: open * (1 - smooth(.2, .7, open)) * round,
     };
@@ -379,8 +383,8 @@ export async function illustration(canvas, base, now, opts = {}) {
     const k = Math.min(devicePixelRatio || 1, 2), w = opts.dt ? canvas.width : Math.round(canvas.clientWidth * k), h = opts.dt ? canvas.height : Math.round(canvas.clientHeight * k);
     if (!w || !h) return;
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-    const { state, you, it } = now();
-    const pose = mind.step(dt, state, you, it);
+    const { state, you, it, lo, hi } = now();
+    const pose = mind.step(dt, state, you, it, lo, hi);
     const active = Object.entries(pose.face).filter(([n, x]) => x > .004 && n in fidx).sort((a, b) => b[1] - a[1]).slice(0, 8);
     fid.fill(0); fw.fill(0);
     active.forEach(([n, x], i) => { fid[i] = fidx[n]; fw[i] = Math.min(1, x); });

@@ -852,7 +852,7 @@ function Drawn({ name, state, on, onTap }) {
   now.current = state;
   useEffect(() => {
     let stop = null, gone = false;
-    illustration(ref.current, `${PERSONAS}${name}/`, () => { const [you, it] = Call.levels(); return { state: now.current, you, it }; })
+    illustration(ref.current, `${PERSONAS}${name}/`, () => { const [you] = Call.levels(), [it, lo, hi] = Call.speech(); return { state: now.current, you, it, lo, hi }; })
       .then((s) => (gone ? s() : (stop = s)))
       .catch((e) => console.warn("persona", name, e));
     return () => { gone = true; stop?.(); };

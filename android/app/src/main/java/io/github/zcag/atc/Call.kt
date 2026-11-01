@@ -63,7 +63,10 @@ object Calls {
     @Volatile var voice: Voice? = null
 
     /** Their voice's and the assistant's loudness right now, 0 to 1, measured on the phone. */
-    fun levels() = voice?.let { it.you to it.it } ?: (0f to 0f)
+    fun levels() = voice?.let { it.you to it.heard()[0] } ?: (0f to 0f)
+
+    /** The assistant's voice as it is heard now: [loudness, below 700 Hz, above 3 kHz], each 0..1. */
+    fun speech() = voice?.heard() ?: FloatArray(3)
 
     fun persona(o: JSONObject) {
         val f = face.value
@@ -337,7 +340,6 @@ class Voice {
     @Volatile var systemMuted = false
     @Volatile var held = false
     @Volatile var you = 0f
-    @Volatile var it = 0f
     @Volatile var route = ""
     @Volatile private var aec = "off"
     @Volatile private var micFrames = 0
@@ -351,6 +353,45 @@ class Voice {
     private var played = 0
     private var deepest = 0
     private var holdMax = hold
+    private class Heard(val at: Long, val v: FloatArray)
+    private val heard = java.util.concurrent.ConcurrentLinkedDeque<Heard>()
+    @Volatile private var now = Heard(0, FloatArray(3))
+    private var low = 0f
+    private var high = 0f
+
+    /** What the speaker is playing now, from the frames written to it: [loudness, low band, high band]. Silence
+     *  once nothing has played for a little while (an underrun, the end of a reply). */
+    fun heard(): FloatArray {
+        val t = SystemClock.elapsedRealtime()
+        while (true) {
+            val h = heard.peekFirst() ?: break
+            if (h.at > t) break
+            now = heard.pollFirst() ?: break
+        }
+        return if (t - now.at > 120) FloatArray(3) else now.v
+    }
+
+    /** Loudness overall and in a low and a high band of one frame, as one-pole filters see them, stamped with when
+     *  the speaker plays it: a written frame waits behind the track's buffer. */
+    private fun measure(frame: ByteArray, delay: Long) {
+        val a = .167f
+        val b = .545f
+        var all = 0.0
+        var lo = 0.0
+        var hi = 0.0
+        for (i in 0 until frame.size / 2) {
+            val v = ((frame[2 * i + 1].toInt() shl 8) or (frame[2 * i].toInt() and 0xff)) / 32768f
+            low += a * (v - low)
+            high += b * (v - high)
+            all += v * v
+            lo += low * low
+            hi += (v - high) * (v - high)
+        }
+        val n = frame.size / 2
+        val k = { e: Double -> minOf(1f, (Math.sqrt(e / n) * 6).toFloat()) }
+        heard.offerLast(Heard(SystemClock.elapsedRealtime() + delay, floatArrayOf(k(all), k(lo), k(hi))))
+        while (heard.size > 64) heard.pollFirst()
+    }
 
     fun start(line: Line) {
         if (running) return
@@ -428,7 +469,6 @@ class Voice {
                 }
                 val f = queue.poll(60, TimeUnit.MILLISECONDS)
                 if (f == null) {
-                    it = 0f
                     buffering = true
                     if (started) {
                         underruns++
@@ -448,8 +488,8 @@ class Voice {
                     dropped++
                 }
                 played++
-                it = if (held) 0f else loudness(f)
                 track.write(if (held) silence else f, 0, f.size)
+                measure(if (held) silence else f, 1000L * track.bufferSizeInFrames / OUT_RATE)
             }
         } finally {
             line.stats(stats())

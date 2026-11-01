@@ -12,8 +12,8 @@ import { illustration } from "./persona.js";
 let state = "listening";
 window.persona = { state: (s) => (state = s) };
 const bridge = window.AtcPersona;
-const levels = () => (bridge ? bridge.levels().split(",").map(Number) : [0, 0]);
-illustration(document.querySelector("canvas"), "/p/", () => { const [you, it] = levels(); return { state, you, it }; }, { first: () => bridge?.drawn() })
+const levels = () => (bridge ? bridge.levels().split(",").map(Number) : [0, 0, 0, 0]);
+illustration(document.querySelector("canvas"), "/p/", () => { const [you, it, lo, hi] = levels(); return { state, you, it, lo, hi }; }, { first: () => bridge?.drawn() })
   .catch((e) => console.warn("persona", e));
 </script>
 </body>
