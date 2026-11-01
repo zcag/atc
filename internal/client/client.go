@@ -376,6 +376,15 @@ func (c *Client) Events(ctx context.Context, fn func([]sessions.Session)) error 
 	return io.ErrUnexpectedEOF
 }
 
+func (c *Client) Guests() (map[string]string, error) {
+	var r map[string]string
+	return r, c.do("GET", "/api/whatsapp/guests", nil, &r)
+}
+
+func (c *Client) GuestEdit(op, name, number string) error {
+	return c.do("POST", "/api/whatsapp/guests", map[string]string{"op": op, "name": name, "number": number}, nil)
+}
+
 func (c *Client) WhatsApp(req map[string]any) ([]string, error) {
 	var r struct{ Sent []string }
 	return r.Sent, c.do("POST", "/api/whatsapp/send", req, &r)

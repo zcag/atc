@@ -39,7 +39,6 @@ import (
 	"github.com/zcag/atc/internal/tools"
 	"github.com/zcag/atc/internal/tui"
 	limits "github.com/zcag/atc/internal/usage"
-	"github.com/zcag/atc/internal/whatsapp"
 	"github.com/zcag/atc/modes"
 	"github.com/zcag/atc/web"
 )
@@ -160,6 +159,8 @@ func main() {
 		err = show(args)
 	case "wa":
 		err = wa(args)
+	case "guest", "guests":
+		err = guest(args)
 	case "call":
 		err = callCmd(args)
 	case "hub":
@@ -249,7 +250,7 @@ func serve(args []string) error {
 		Roots: roots,
 		Voice: server.VoiceFromEnv(),
 
-		WhatsApp: whatsapp.FromEnv(),
+		WhatsApp: waClient(),
 		Hub:      hubClient(),
 		CallLine: callLine(),
 

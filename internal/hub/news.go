@@ -8,10 +8,10 @@ import (
 // withNews puts what changed in atc in front of a message: the whole state on the first message of
 // a conversation and whenever the channel changes (a call starting), else only what is new.
 func (h *Hub) withNews(ch, text string) string {
-	if h.cfg.News == nil || ch == reset {
+	if h.cfg.News == nil || ch == reset || guest(ch) {
 		return text
 	}
-	news := h.cfg.News(h.fresh || ch != Agent && ch != h.last)
+	news := h.cfg.News(h.fresh || !aside(ch) && ch != h.last)
 	if news == "" {
 		return text
 	}

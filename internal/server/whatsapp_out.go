@@ -185,6 +185,7 @@ func mimeOf(path string, data []byte) string {
 // waOut is what `atc wa` asks for: files, rendered pages, a poll, a voice note or text, always
 // to the owner and nobody else.
 type waOut struct {
+	To      string   `json:"to"`
 	Text    string   `json:"text"`
 	Files   []string `json:"files"`
 	Render  []string `json:"render"`
@@ -195,6 +196,35 @@ type waOut struct {
 		Options  []string `json:"options"`
 		Multi    bool     `json:"multi"`
 	} `json:"poll"`
+}
+
+// waGuests lists the guests, or adds ({op: add, name, number}) or removes ({op: rm, name}) one.
+func (s *Server) waGuests(w http.ResponseWriter, r *http.Request) {
+	if s.WhatsApp == nil || s.WhatsApp.Guests == nil {
+		http.Error(w, "WhatsApp is not set up on "+s.Host, http.StatusNotImplemented)
+		return
+	}
+	g := s.WhatsApp.Guests
+	if r.Method == "POST" {
+		var in struct{ Op, Name, Number string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		err := fmt.Errorf("op is add or rm, not %q", in.Op)
+		switch in.Op {
+		case "add":
+			err = g.Add(in.Name, in.Number)
+		case "rm":
+			err = g.Remove(in.Name)
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		log.Printf("whatsapp: guest %s %s", in.Op, in.Name)
+	}
+	reply(w, g.List())
 }
 
 func (s *Server) waPost(w http.ResponseWriter, r *http.Request) {
@@ -216,6 +246,18 @@ func (s *Server) waPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	if in.To != "" {
+		chat, ok := s.WhatsApp.GuestChat(in.To)
+		if !ok {
+			http.Error(w, fmt.Sprintf("%s is not a guest (atc guest)", in.To), http.StatusForbidden)
+			return
+		}
+		if in.Poll != nil {
+			http.Error(w, "polls go only to the owner: a guest's vote would never come back", http.StatusBadRequest)
+			return
+		}
+		ctx = whatsapp.To(ctx, chat)
+	}
 	var sent []string
 	send := func(what string, err error) bool {
 		if err != nil {

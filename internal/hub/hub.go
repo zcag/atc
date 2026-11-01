@@ -35,7 +35,12 @@ import (
 const (
 	Phone = "phone"
 	Agent = "agent"
-	reset = "reset"
+	// Guest is someone other than the user writing in (a WhatsApp guest); like an agent's report,
+	// the reply reaches no one.
+	Guest = "guest"
+	// GuestCall is a guest calling delta's line: spoken like the phone, but not the user.
+	GuestCall = "guest-call"
+	reset     = "reset"
 )
 
 type Config struct {
@@ -223,7 +228,7 @@ func newID() string {
 func (h *Hub) Left(channel string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if channel == Phone && h.last == Phone {
+	if spoken(channel) && h.last == channel {
 		h.last = ""
 	}
 }
@@ -253,21 +258,21 @@ func (h *Hub) say(ch, text string) (string, error) {
 			h.call = nil
 		}
 	}
-	if ch == Agent {
-		text = h.agentNote() + text
+	if aside(ch) {
+		text = h.asideNote(ch) + text
 	}
 	if ch == Phone && h.unsaid {
-		text = "[hub: a session reported while you were on the call, see above; tell them in this reply what they need to hear of it]\n" + text
+		text = "[hub: a report or a guest's message came in while you were on the call, see above; tell them in this reply what they need to hear of it]\n" + text
 		h.unsaid = false
 	}
-	if ch != Agent && ch != reset {
+	if !aside(ch) && ch != reset {
 		if ch != h.last {
 			if mode := h.cfg.Mode(ch); mode != "" {
 				text = fmt.Sprintf("[talk-mode: %s, until the next talk-mode line]\n%s\n[message]\n%s", ch, mode, text)
 			}
 		}
 		h.last = ch
-		if ch != Phone && ch != h.home {
+		if !spoken(ch) && ch != h.home {
 			h.home = ch
 			os.WriteFile(h.homePath(), []byte(ch+"\n"), 0o644)
 		}
@@ -276,9 +281,17 @@ func (h *Hub) say(ch, text string) (string, error) {
 	return "sent", h.write(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": text}})
 }
 
-// agentNote tells the session that its reply to another session's report reaches no one, and
-// where the user is now, so it can decide whether and how to tell them.
-func (h *Hub) agentNote() string {
+// aside is a channel whose messages are not the user talking: the reply reaches no one.
+func aside(ch string) bool { return ch == Agent || ch == Guest }
+
+// spoken is a live call, whose turns go first and whose reply is said out loud.
+func spoken(ch string) bool { return ch == Phone || ch == GuestCall }
+
+func guest(ch string) bool { return ch == Guest || ch == GuestCall }
+
+// asideNote tells the session that its reply to a report or a guest reaches no one, and where
+// the user is now, so it can decide whether and how to tell them.
+func (h *Hub) asideNote(ch string) string {
 	where := "the user is not on a call"
 	if h.onCall() {
 		where = "the user is on a call with you right now"
@@ -287,8 +300,8 @@ func (h *Hub) agentNote() string {
 	if h.home != "" {
 		where += "; they last wrote from " + h.home
 	}
-	note := "[talk-mode: agent, for this message only]\n"
-	if mode := h.cfg.Mode(Agent); mode != "" {
+	note := "[talk-mode: " + ch + ", for this message only]\n"
+	if mode := h.cfg.Mode(ch); mode != "" {
 		note += mode + "\n"
 	}
 	return note + "[now: " + where + "]\n[message]\n"
@@ -314,10 +327,10 @@ func (h *Hub) holds(ch string) bool {
 	if h.handover != nil {
 		return true
 	}
-	if ch == Phone {
+	if spoken(ch) {
 		return false
 	}
-	return slices.Contains(h.busy(), Phone)
+	return slices.ContainsFunc(h.busy(), spoken)
 }
 
 func (h *Hub) busy() []string {
