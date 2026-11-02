@@ -815,7 +815,7 @@ async function personaList() {
   const index = await (await fetch(PERSONAS + "index.json")).json();
   const all = index.personas || [];
   const kinds = await Promise.all(all.map(({ name }) => fetch(`${PERSONAS}${name}/persona.json`).then((r) => r.json()).then((p) => p.kind).catch(() => null)));
-  return { names: ["orb", ...all.filter((_, i) => ["illustration", "footage", "rig"].includes(kinds[i])).map((p) => p.name)], def: index.default || "orb" };
+  return { names: ["orb", ...all.filter((_, i) => ["illustration", "footage", "rig", "minimal"].includes(kinds[i])).map((p) => p.name)], def: index.default || "orb" };
 }
 
 /** The call's persona slot: the orb, or an illustrated character from /app/personas. Holding it (or a right click)

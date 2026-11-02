@@ -7,6 +7,7 @@
 
 import { PI, clamp, smooth, lerp, rand, chance, pick, Spring, Saccade, Pulses, Drawing, wander } from "./motion.js";
 import { rig } from "./rig.js";
+import { minimal } from "./minimal.js";
 
 /** The behaviour: from the call's state and both voices' loudness to the face's weights and the head's pose. */
 export class Mind {
@@ -543,6 +544,7 @@ void main() {
  *  (it checks its first frames), is replaced by its "fallback" folder. */
 export async function persona(canvas, base, now, opts = {}) {
   const spec = await (await fetch(base + "persona.json")).json();
+  if (spec.kind === "minimal") return minimal(canvas, spec, now, opts);
   if (spec.kind === "rig") return rig(canvas, base, now, opts).catch((e) => {
     if (!spec.fallback) throw e;
     console.warn("persona: rig failed, using the fallback:", e?.message || e);
