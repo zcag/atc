@@ -125,3 +125,22 @@ func TestSnapshotListsEverythingThatMayWaitOnHim(t *testing.T) {
 		t.Errorf("snapshot:\n%s", snap)
 	}
 }
+
+func TestSnapshotMarksOnDemandAgentsNotLive(t *testing.T) {
+	f := newFeed()
+	f.onDemand = func() map[string]bool { return map[string]bool{"email": true} }
+	now := time.Now()
+	agent := func(id, name string) sessions.Session {
+		x := sess(id, name, sessions.YourTurn)
+		x.Agent, x.Updated = name, now.Add(-7*time.Hour)
+		x.Summary = &summary.Summary{Status: "1 needs you"}
+		return x
+	}
+	f.observe([]sessions.Session{agent("e", "email"), agent("t", "tracker")}, nil, func(sessions.Session) bool { return false })
+	snap, _ := f.news(0, true, now)
+	for _, want := range []string{"- @email (your turn, last run 7h ago, runs only when woken, so not live): 1 needs you", "- @tracker (your turn, 7h ago): 1 needs you"} {
+		if !strings.Contains(snap, want) {
+			t.Errorf("snapshot lacks %q:\n%s", want, snap)
+		}
+	}
+}

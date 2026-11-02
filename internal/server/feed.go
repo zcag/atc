@@ -23,6 +23,9 @@ type feed struct {
 	down  map[string]bool
 	list  []sessions.Session
 	since time.Time
+	// onDemand names the agents without a schedule: their last result is from whenever someone last
+	// woke them, so the snapshot says so instead of passing it off as how things stand.
+	onDemand func() map[string]bool
 }
 
 type feedEvent struct {
@@ -231,11 +234,19 @@ func (f *feed) snapshot(now time.Time) string {
 	slices.SortStableFunc(mine, func(a, b sessions.Session) int {
 		return cmp.Compare(boolInt(a.State != sessions.NeedsYou), boolInt(b.State != sessions.NeedsYou))
 	})
+	var onDemand map[string]bool
+	if f.onDemand != nil {
+		onDemand = f.onDemand()
+	}
 	var turn, pinned, working, parked, stopped []string
 	for _, x := range mine {
 		name := label(x, len(hosts) > 1)
 		tag := func(words ...string) string {
-			return name + " (" + strings.Join(append(words, ago(now.Sub(x.Last()))+" ago"), ", ") + ")"
+			when := ago(now.Sub(x.Last())) + " ago"
+			if onDemand[x.Agent] && x.State != sessions.Working {
+				when = "last run " + when + ", runs only when woken, so not live"
+			}
+			return name + " (" + strings.Join(append(words, when), ", ") + ")"
 		}
 		waits := x.State == sessions.NeedsYou || x.State != sessions.Working && len(x.Open()) > 0 || x.State == sessions.YourTurn && !x.Parked && !x.Pinned
 		switch {

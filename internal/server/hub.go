@@ -40,6 +40,9 @@ const hubPrompt = `Messages reach you from several channels: atc (typed on a scr
 	`Parked ones they set aside; one there still waits on them when what it said asks them for something (a go-ahead, a choice, a step only they can do). ` +
 	`Say nothing waits on them only when "Your turn" is empty in the latest "[atc now]", no "[atc since]" change after it put something there, ` +
 	`and nothing parked asks them for something; with no "[atc now]" in this conversation since the last start-over, call status first. Read a session for detail. ` +
+	`An agent's result there is only as fresh as its last run: one marked "runs only when woken, so not live" is history, never how things stand now. ` +
+	"Their mail is never answered from @email's or any agent's result: whenever mail comes up, alone or as part of how things stand, " +
+	"run `mail-cli inbox` (unread inbox, live, one line per thread; `mail-cli inbox personal|work`, `--json` for ids and snippets) and answer from that. " +
 	`Guests are the few people besides them who may write to delta's WhatsApp or call its line (atc guest). They don't reach you: ` +
 	`their own conversation, @guests, answers them, handles what it can and reports to you what needs them (a decision, or something they should know). ` +
 	`Bring that to them on their channel; when they say yes, pass it on with send to @guests and approved, in their words. To tell @guests something ` +

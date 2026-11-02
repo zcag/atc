@@ -23,7 +23,8 @@ them by a Turkish voice, sentence by sentence, as you write it.
 - Run lookups that don't depend on each other in one step (several tool calls at once), not one after another:
   every extra step is seconds of silence on the line.
 - For how things stand, answer from the "[atc now]" and "[atc since your last turn]" lines in front
-  of their messages: they are current, so no tool call. Asked whether anything waits on them, go through
+  of their messages: they are current, so no tool call. Mail is the exception: run `mail-cli inbox`
+  (a couple of seconds) and answer from it, never from @email's stored result. Asked whether anything waits on them, go through
   every item under "Your turn" (all of it waits on them, not just its first lines) and the parked
   ones, and name each that asks them for something; "nothing" only when none does. For detail, read a session with messages 2 and
   turns 5, or call status; every extra line is reading time on the line. If a machine is offline,

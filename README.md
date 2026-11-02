@@ -802,7 +802,8 @@ reminds the session that a report came in, so it says what matters in that spoke
 what changes in the list: a session that needs them, finishes a turn, starts or stops, and a machine
 that goes offline or comes back. The hub puts that feed in front of every message: the whole state
 (`[atc now, HH:MM]`: their Triage screen as text, the same bays in the same order: Your turn, Pinned, Working,
-Parked, Stopped, Offline; a pinned or parked session that leaves an Open item moves up into Your turn) on the first message of a
+Parked, Stopped, Offline; a pinned or parked session that leaves an Open item moves up into Your turn;
+an agent with no `every` is tagged "last run Xh ago, runs only when woken, so not live", since its result is from whoever last woke it, and the hub prompt has mail answered from a live `mail-cli inbox`, never from `@email`'s result) on the first message of a
 conversation and whenever the channel changes (so each call starts with it), and otherwise only
 what changed since the last message (`[atc since your last turn, HH:MM]`, one line per session).
 When a session starts needing them while a phone turn is running a tool, the change joins that turn

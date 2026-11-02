@@ -166,6 +166,16 @@ func exists(p string) bool {
 
 func (s *Server) agentList() []Agent { return loadAgents(s.AgentsDir) }
 
+func (s *Server) onDemandAgents() map[string]bool {
+	out := map[string]bool{}
+	for _, a := range s.agentList() {
+		if a.Every == "" {
+			out[a.Name] = true
+		}
+	}
+	return out
+}
+
 // agentHost is the machine an agent runs on, from its folder, which every machine sees.
 func (s *Server) agentHost(name string) string {
 	for _, a := range s.agentList() {

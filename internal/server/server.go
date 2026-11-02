@@ -120,6 +120,7 @@ func (s *Server) Handler() http.Handler {
 	s.web = webVersion(s.Web)
 	s.fleet = newFleet(s.Peers)
 	s.feed = newFeed()
+	s.feed.onDemand = s.onDemandAgents
 	s.kick = make(chan struct{}, 1)
 	if s.Pages == nil {
 		s.Pages, _ = pages.Open("")
