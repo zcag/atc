@@ -4,8 +4,10 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -107,9 +109,13 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		byID[t.SessionID] = t
 	}
 	resumed := m.Index.Resumed()
+	ids := slices.Collect(maps.Keys(byID))
+	for _, a := range agents {
+		ids = append(ids, a.ID)
+	}
 	out := make([]Session, 0, len(agents))
 	for _, a := range agents {
-		if (resumed[a.SessionID] || m.Store.Get(a.SessionID).Next != "") && a.PID == 0 {
+		if (resumed[a.SessionID] || m.carriedOn(a.SessionID, ids)) && a.PID == 0 {
 			continue
 		}
 		t, ok := byID[a.SessionID]
@@ -160,12 +166,22 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 	return out, nil
 }
 
+func (m *Manager) carriedOn(sid string, ids []string) bool {
+	next := m.Store.Get(sid).Next
+	return next != "" && slices.ContainsFunc(ids, func(id string) bool { return strings.HasPrefix(id, next) })
+}
+
 func (m *Manager) History(q, dir string, limit int) []Session {
 	q = strings.ToLower(q)
 	var out []Session
 	resumed := m.Index.Resumed()
-	for _, t := range m.transcripts() {
-		if resumed[t.SessionID] || m.Store.Get(t.SessionID).Next != "" {
+	ts := m.transcripts()
+	ids := make([]string, len(ts))
+	for i, t := range ts {
+		ids[i] = t.SessionID
+	}
+	for _, t := range ts {
+		if resumed[t.SessionID] || m.carriedOn(t.SessionID, ids) {
 			continue
 		}
 		s := m.build(t)
