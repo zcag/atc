@@ -819,23 +819,24 @@ async function personaList() {
   const index = await (await fetch(PERSONAS + "index.json")).json();
   const all = index.personas || [];
   const kinds = await Promise.all(all.map(({ name }) => fetch(`${PERSONAS}${name}/persona.json`).then((r) => r.json()).then((p) => p.kind).catch(() => null)));
-  return { names: ["orb", ...all.filter((_, i) => ["illustration", "footage", "rig", "minimal"].includes(kinds[i])).map((p) => p.name)], def: index.default || "orb" };
+  const usable = all.map((p, i) => [p.name, kinds[i]]).filter(([, k]) => ["illustration", "footage", "rig", "minimal"].includes(k));
+  return { names: ["orb", ...usable.map(([n]) => n)], kinds: Object.fromEntries(usable), def: index.default || "orb" };
 }
 
 /** Which character the call shows: the orb or one from /app/personas, the choice kept in this browser. */
 function usePersona() {
-  const [list, setList] = useState({ names: ["orb"], def: "orb" });
+  const [list, setList] = useState({ names: ["orb"], kinds: {}, def: "orb" });
   const [name, setName] = useState(personaPick.get);
   useEffect(() => { personaList().then(setList).catch(() => {}); }, []);
   const want = name ?? list.def;
   const shown = list.names.includes(want) ? want : "orb";
   const pick = (n) => { personaPick.set(n); setName(n); };
-  return { names: list.names, shown, pick };
+  return { names: list.names, shown, pick, framed: !["orb", "minimal"].includes(list.kinds[shown] || shown) };
 }
 
 /** The call's persona slot. Holding it (or a right click) switches to the next character. */
 function Persona({ look, state, on, onTap }) {
-  const { names, shown, pick } = look;
+  const { names, shown, pick, framed } = look;
   const [label, setLabel] = useState(null);
   const hold = useRef(null);
   const held = useRef(false);
@@ -849,7 +850,7 @@ function Persona({ look, state, on, onTap }) {
   const down = () => { held.current = false; hold.current = setTimeout(() => { held.current = true; next(); }, 600); };
   const up = () => clearTimeout(hold.current);
   const tap = () => { if (!held.current) onTap(); };
-  return html`<div class="orb persona" onPointerDown=${down} onPointerUp=${up} onPointerLeave=${up} onContextMenu=${next}>
+  return html`<div class="orb persona ${framed ? "framed" : ""}" onPointerDown=${down} onPointerUp=${up} onPointerLeave=${up} onContextMenu=${next}>
     ${shown === "orb" ? html`<${Orb} full state=${state} on=${on} onTap=${tap} />` : html`<${Drawn} key=${shown} name=${shown} state=${state} on=${on} onTap=${tap} />`}
     ${label && html`<span class="personaname">${label}</span>`}
   </div>`;
