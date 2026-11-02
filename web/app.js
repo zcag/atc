@@ -564,6 +564,8 @@ const callDoing = (f) => ({
 
 function CallView() {
   const [st, f] = useCall();
+  const look = usePersona();
+  const [opts, setOpts] = useState(false);
   useNow(1000);
   useEffect(() => {
     if (st.phase !== "ended") return;
@@ -588,7 +590,7 @@ function CallView() {
         <div class="callstate">${status}</div>
         <div class="calltime">${st.phase === "active" ? clock(Date.now() - st.since) : " "}</div>
       </div>
-      <${Persona} state=${f.state} on=${st.phase === "active"} onTap=${Call.interrupt} />
+      <${Persona} look=${look} state=${f.state} on=${st.phase === "active"} onTap=${Call.interrupt} />
       <div class="calltext">
         <p class="you ${f.hearing ? "hearing" : ""}">${f.hearing || f.you}</p>
         <p class="said">${f.said}</p>
@@ -598,7 +600,9 @@ function CallView() {
           <button class="round ${st.muted ? "on" : ""}" onClick=${Call.mute} aria-label=${st.muted ? "Unmute" : "Mute"} title=${st.muted ? "Unmute" : "Mute"}>${MIC_OFF}</button>
           <button class="round end" onClick=${Call.hangup} aria-label="Hang up" title="Hang up">${HANG_UP}</button>`
         : st.phase !== "ended" && CAN_CALL && html`<button class="round dial" onClick=${callAssistant} aria-label="Call" title="Call the assistant">${DIAL}</button>`}
+        ${st.phase !== "ended" && html`<button class="round more" onClick=${() => setOpts(true)} aria-label="Character and voice" title="Character and voice">${ICON.more}</button>`}
       </div>
+      ${opts && html`<${CallOptions} look=${look} onClose=${() => setOpts(false)} />`}
     </div>`;
 }
 
@@ -818,22 +822,27 @@ async function personaList() {
   return { names: ["orb", ...all.filter((_, i) => ["illustration", "footage", "rig", "minimal"].includes(kinds[i])).map((p) => p.name)], def: index.default || "orb" };
 }
 
-/** The call's persona slot: the orb, or an illustrated character from /app/personas. Holding it (or a right click)
- *  switches to the next one, and the choice is kept in this browser. */
-function Persona({ state, on, onTap }) {
+/** Which character the call shows: the orb or one from /app/personas, the choice kept in this browser. */
+function usePersona() {
   const [list, setList] = useState({ names: ["orb"], def: "orb" });
   const [name, setName] = useState(personaPick.get);
-  const [label, setLabel] = useState(null);
-  const hold = useRef(null);
-  const held = useRef(false);
   useEffect(() => { personaList().then(setList).catch(() => {}); }, []);
   const want = name ?? list.def;
   const shown = list.names.includes(want) ? want : "orb";
+  const pick = (n) => { personaPick.set(n); setName(n); };
+  return { names: list.names, shown, pick };
+}
+
+/** The call's persona slot. Holding it (or a right click) switches to the next character. */
+function Persona({ look, state, on, onTap }) {
+  const { names, shown, pick } = look;
+  const [label, setLabel] = useState(null);
+  const hold = useRef(null);
+  const held = useRef(false);
   const next = (e) => {
     e?.preventDefault();
-    const n = list.names[(list.names.indexOf(shown) + 1) % list.names.length];
-    personaPick.set(n);
-    setName(n);
+    const n = names[(names.indexOf(shown) + 1) % names.length];
+    pick(n);
     setLabel(n);
     setTimeout(() => setLabel(null), 1200);
   };
@@ -844,6 +853,30 @@ function Persona({ state, on, onTap }) {
     ${shown === "orb" ? html`<${Orb} full state=${state} on=${on} onTap=${tap} />` : html`<${Drawn} key=${shown} name=${shown} state=${state} on=${on} onTap=${tap} />`}
     ${label && html`<span class="personaname">${label}</span>`}
   </div>`;
+}
+
+/** The call's ⋯: the character, and the assistant's voice (Turkish, then English), which applies from its next reply. */
+function CallOptions({ look, onClose }) {
+  const [voices, setVoices] = useState(null);
+  const [note, setNote] = useState("");
+  const load = () => fetch("/api/call/voices").then((r) => (r.ok ? r.json() : Promise.reject())).then(setVoices).catch(() => setNote("Voices not reachable"));
+  useEffect(() => { load(); }, []);
+  const choose = async (lang, voice) => {
+    setNote("Switching…");
+    const r = await fetch("/api/call/voices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lang, voice }) }).catch(() => null);
+    setNote(r?.ok ? `${voice} from the next reply` : "Couldn't switch the voice");
+    if (r?.ok) load();
+  };
+  const chips = (items, on, run) => html`<div class="callpicks">${items.map((n) => html`<button class="btn ${n === on ? "primary" : ""}" onClick=${() => run(n)}>${n}</button>`)}</div>`;
+  return html`<${Sheet} cls="callopts" title="Character and voice" onClose=${onClose}>
+    <p class="h">Character</p>
+    ${chips(look.names, look.shown, look.pick)}
+    ${[["tr", "Voice"], ["en", "English voice"]].map(([lang, title]) => voices?.[lang] && html`
+      <p class="h">${title}</p>
+      ${chips(voices[lang].voices, voices[lang].current, (v) => choose(lang, v))}`)}
+    ${!voices && !note && html`<p class="sub">Loading voices…</p>`}
+    ${note && html`<p class="sub">${note}</p>`}
+  <//>`;
 }
 
 function Drawn({ name, state, on, onTap }) {

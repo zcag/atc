@@ -1545,6 +1545,15 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .callview .orb.idle { opacity: .45; }
 .callview > :not(.orb) { position: relative; z-index: 1; }
 .callview > .close { position: absolute; }
+.callview > .veil {
+  position: fixed; z-index: 30; background: rgba(0,0,0,.5);
+  --board: #151c27; --strip: #1f2836; --strip-hi: #273243; --sunk: #111720; --line: #2c3748; --ink: #e6e9ef; --dim: #9aa4b5; --faint: #6b7689;
+}
+.callrow .round.more svg { width: 26px; height: 26px; }
+.callopts .h { margin: 14px 0 8px; font-weight: 600; }
+.callopts .h:first-of-type { margin-top: 4px; }
+.callpicks { display: flex; flex-wrap: wrap; gap: 8px; }
+.callopts .sub { color: var(--dim); margin: 12px 0 0; }
 .callhead { pointer-events: none; text-shadow: 0 1px 12px rgba(0,0,0,.5); }
 .callview .calltext { margin-top: auto; pointer-events: none; text-shadow: 0 1px 14px rgba(0,0,0,.7); }
 .personaname { position: absolute; left: 50%; top: 42%; transform: translateX(-50%); padding: 4px 12px; border-radius: 999px; font-size: 13px; background: color-mix(in srgb, var(--ink) 14%, transparent); pointer-events: none; }
