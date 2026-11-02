@@ -47,7 +47,7 @@ with `her/jobs4.json`, seed 51; an original face, not a likeness of anyone).
    (boxes around each piece at 1x) writes `<work>/pose_<name>.png`.
 4. `build.py <work> <draw> <out>`: per angle landmarks, face parse, head mesh, patches into one atlas per angle, poses,
    overlays, `rig.json` and `persona.json`.
-5. `publish.py <out> professor-2d` (or `woman-2d`): copies it to atc's personas folder and bumps its rev.
+5. `publish.py <out> professor` (or `woman`): copies it to atc's personas folder and bumps its rev.
 
 ## Checking it
 

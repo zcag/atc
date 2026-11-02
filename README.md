@@ -905,8 +905,8 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
   and body parameters, the model's own physics its hair and clothes, its motions stay off. It fades in
   over the previous persona once its first frame is drawn. The Cubism SDK for Java sits in
   `android/live2d/` with its licences (Framework as source, patched to compile blend mode shaders on
-  first use; Core for arm64 only); `hiyori` and `natori` are Live2D's sample models, used under their
-  sample model terms.
+  first use; Core for arm64 only); Live2D's sample models `hiyori` and `natori` were installed under their
+  sample model terms and are retired (no longer listed).
 - **Android Auto** sees atc as a calling app (`CarCalls.kt`, category `CALLING`, Car App library):
   a Call button on the car screen, and Android Auto's own in-call view for every app call. A
   sideloaded app only shows up after Android Auto's developer settings allow unknown sources.
