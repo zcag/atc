@@ -1550,6 +1550,11 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
   --board: #151c27; --strip: #1f2836; --strip-hi: #273243; --sunk: #111720; --line: #2c3748; --ink: #e6e9ef; --dim: #9aa4b5; --faint: #6b7689;
 }
 .callrow .round.more svg { width: 26px; height: 26px; }
+.callopts { text-align: left; }
+@media (max-width: 600px) {
+  .callview > .veil { place-items: end stretch; }
+  .callview .callopts { max-height: 75dvh; border-radius: 16px 16px 0 0; padding-top: 18px; padding-bottom: max(18px, env(safe-area-inset-bottom)); }
+}
 .callopts .h { margin: 14px 0 8px; font-weight: 600; }
 .callopts .h:first-of-type { margin-top: 4px; }
 .callpicks { display: flex; flex-wrap: wrap; gap: 8px; }
