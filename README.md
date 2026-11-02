@@ -801,7 +801,8 @@ reminds the session that a report came in, so it says what matters in that spoke
 **Kept current.** The assistant never has to poll atc or answer from memory. atc keeps a feed of
 what changes in the list: a session that needs them, finishes a turn, starts or stops, and a machine
 that goes offline or comes back. The hub puts that feed in front of every message: the whole state
-(`[atc now, HH:MM] needs them: …. working: …. finished lately: …. offline: …`) on the first message of a
+(`[atc now, HH:MM]`: their Triage screen as text, the same bays in the same order: Your turn, Pinned, Working,
+Parked, Stopped, Offline; a pinned or parked session that leaves an Open item moves up into Your turn) on the first message of a
 conversation and whenever the channel changes (so each call starts with it), and otherwise only
 what changed since the last message (`[atc since your last turn, HH:MM]`, one line per session).
 When a session starts needing them while a phone turn is running a tool, the change joins that turn

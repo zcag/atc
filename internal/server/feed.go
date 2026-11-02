@@ -171,9 +171,12 @@ func (f *feed) line(e feedEvent) string {
 		if x.State != sessions.NeedsYou {
 			return ""
 		}
-		return name + " needs them: " + cmp.Or(clipText(x.Activity, 160), "waiting on them")
+		return name + " needs you, now in Your turn (waiting on them): " + cmp.Or(clipText(x.Activity, 160), "a question or permission is open")
 	case evDone:
-		return name + " finished: " + result(x)
+		if x.Parked && len(x.Open()) == 0 {
+			return name + " finished, Parked: " + said(x)
+		}
+		return name + " finished, now in Your turn (waiting on them): " + said(x)
 	case evStarted:
 		if x.Agent != "" {
 			return name + " started working"
@@ -204,47 +207,54 @@ func said(x sessions.Session) string {
 	return strings.Join(append([]string{clipText(result(x), 160)}, x.Open()...), " | ")
 }
 
-// snapshot is everything that may wait on them, in full: no session that finished its turn is left
-// out for age or count, since one that ends asking them something looks just like one that is done.
+// snapshot is the list bay by bay as their Triage screen shows it, except that a pinned or parked
+// session whose turn is their and that leaves an Open item moves up into Your turn.
 func (f *feed) snapshot(now time.Time) string {
-	var needs, turn, parked, working []string
-	agents := map[string]sessions.Session{}
-	hosts := map[string]bool{}
 	var mine []sessions.Session
+	hosts := map[string]bool{}
+	agent := map[string]sessions.Session{}
 	for _, x := range f.list {
-		if _, ok := f.prev[x.SessionID]; ok {
-			mine = append(mine, x)
-			hosts[x.Host] = true
+		if _, ok := f.prev[x.SessionID]; !ok {
+			continue
 		}
+		if x.Agent != "" {
+			if a, ok := agent[x.Agent]; ok && (x.State == sessions.Stopped || a.State != sessions.Stopped) {
+				continue
+			}
+			agent[x.Agent] = x
+		}
+		mine = append(mine, x)
+		hosts[x.Host] = true
 	}
+	mine = slices.DeleteFunc(mine, func(x sessions.Session) bool { return x.Agent != "" && agent[x.Agent].SessionID != x.SessionID })
 	slices.SortStableFunc(mine, func(a, b sessions.Session) int { return b.Last().Compare(a.Last()) })
-	when := func(x sessions.Session) string { return " (" + ago(now.Sub(x.Last())) + " ago): " }
+	slices.SortStableFunc(mine, func(a, b sessions.Session) int {
+		return cmp.Compare(boolInt(a.State != sessions.NeedsYou), boolInt(b.State != sessions.NeedsYou))
+	})
+	var turn, pinned, working, parked, stopped []string
 	for _, x := range mine {
 		name := label(x, len(hosts) > 1)
-		switch {
-		case x.State == sessions.NeedsYou:
-			needs = append(needs, name+": "+cmp.Or(clipText(x.Activity, 160), "waiting on them"))
-		case x.Agent != "":
-			if a, ok := agents[x.Agent]; !ok || a.State == sessions.Stopped && x.State != sessions.Stopped {
-				agents[x.Agent] = x
-			}
-		case x.State == sessions.Working:
-			working = append(working, name)
-		case x.State != sessions.YourTurn:
-		case x.Parked:
-			parked = append(parked, name+when(x)+said(x))
-		case x.Attachable:
-			turn = append(turn, name+when(x)+said(x))
+		tag := func(words ...string) string {
+			return name + " (" + strings.Join(append(words, ago(now.Sub(x.Last()))+" ago"), ", ") + ")"
 		}
-	}
-	var ags []string
-	for _, x := range mine {
-		if a, ok := agents[x.Agent]; ok && a.SessionID == x.SessionID {
-			if x.State == sessions.Working {
-				ags = append(ags, "@"+x.Agent+" working: "+cmp.Or(clipText(x.Activity, 120), "on it"))
-			} else {
-				ags = append(ags, "@"+x.Agent+" "+cmp.Or(map[string]string{sessions.YourTurn: "done"}[x.State], x.State)+when(x)+said(x))
+		waits := x.State == sessions.NeedsYou || x.State != sessions.Working && len(x.Open()) > 0 || x.State == sessions.YourTurn && !x.Parked && !x.Pinned
+		switch {
+		case waits && x.State == sessions.NeedsYou:
+			turn = append(turn, tag("needs you")+": "+cmp.Or(clipText(x.Activity, 160), "a question or permission is open"))
+		case waits:
+			words := []string{stateWord(x.State)}
+			if x.Parked {
+				words = append(words, "parked")
 			}
+			turn = append(turn, tag(words...)+": "+said(x))
+		case x.Pinned && !x.Away():
+			pinned = append(pinned, tag(stateWord(x.State))+": "+said(x))
+		case x.State == sessions.Working:
+			working = append(working, name+": "+cmp.Or(clipText(x.Activity, 100), "working"))
+		case x.Away():
+			parked = append(parked, tag(stateWord(x.State))+": "+said(x))
+		case x.State == sessions.Stopped:
+			stopped = append(stopped, name)
 		}
 	}
 	list := func(head string, items []string) string {
@@ -253,18 +263,21 @@ func (f *feed) snapshot(now time.Time) string {
 		}
 		return head + ":\n- " + strings.Join(items, "\n- ")
 	}
-	parts := []string{
-		list("needs them (a question or permission is open)", needs),
-		list("their turn (each finished its turn and waits for their next message; the text after the colon says whether it asks them for something)", turn),
-	}
-	if len(parked) > 0 {
-		parts = append(parts, list("parked, still their turn (they set these aside; any that asks them something still waits on them)", parked))
-	}
-	if len(ags) > 0 {
-		parts = append(parts, list("agents (their last result, and what it leaves open for them)", ags))
+	parts := []string{list("Your turn: waiting on them, needs-you first (a question or permission is open), then each that finished its turn and waits for their reply with what it said and every Open item", turn)}
+	if len(pinned) > 0 {
+		parts = append(parts, list("Pinned", pinned))
 	}
 	if len(working) > 0 {
-		parts = append(parts, "working: "+strings.Join(working, ", "))
+		parts = append(parts, list("Working (busy, not waiting on them)", working))
+	}
+	if len(parked) > 0 {
+		parts = append(parts, list("Parked (set aside, no Open item; read one if what it said asks them for something)", parked))
+	}
+	if n := len(stopped) - 8; n > 0 {
+		stopped = append(stopped[:8], fmt.Sprintf("and %d more", n))
+	}
+	if len(stopped) > 0 {
+		parts = append(parts, "Stopped: "+strings.Join(stopped, ", "))
 	}
 	var off []string
 	for h, d := range f.down {
@@ -274,9 +287,20 @@ func (f *feed) snapshot(now time.Time) string {
 	}
 	if len(off) > 0 {
 		slices.Sort(off)
-		parts = append(parts, "offline: "+strings.Join(off, ", ")+" (its sessions are missing)")
+		parts = append(parts, "Offline: "+strings.Join(off, ", ")+" (its sessions are missing)")
 	}
 	return strings.Join(parts, "\n")
+}
+
+func stateWord(st string) string {
+	return cmp.Or(map[string]string{sessions.YourTurn: "your turn", sessions.NeedsYou: "needs you"}[st], st)
+}
+
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 func ago(d time.Duration) string {

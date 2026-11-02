@@ -23,7 +23,7 @@ func TestFeedLinesAndSnapshot(t *testing.T) {
 		t.Fatalf("first look reported changes: %q", text)
 	}
 	text, seq := f.news(0, true, now)
-	if !strings.Contains(text, "is open): none") || !strings.Contains(text, "working: build") || !strings.Contains(text, "- docs (0m ago): its turn is done") {
+	if !strings.Contains(text, "Your turn: waiting on them") || !strings.Contains(text, "- build: working") || !strings.Contains(text, "- docs (your turn, 0m ago): its turn is done") {
 		t.Fatalf("snapshot %q", text)
 	}
 
@@ -36,7 +36,7 @@ func TestFeedLinesAndSnapshot(t *testing.T) {
 		t.Fatal("a session that needs them was not flagged")
 	}
 	text, seq = f.news(seq, false, now)
-	for _, want := range []string{"build (desktop) finished: Done: tests pass", "docs (desktop) needs them: Approve: git push", "new one (desktop) started", "laptop went offline"} {
+	for _, want := range []string{"build (desktop) finished, now in Your turn (waiting on them): Done: tests pass", "docs (desktop) needs you, now in Your turn (waiting on them): Approve: git push", "new one (desktop) started", "laptop went offline"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("news %q lacks %q", text, want)
 		}
@@ -47,10 +47,10 @@ func TestFeedLinesAndSnapshot(t *testing.T) {
 
 	f.observe([]sessions.Session{done, sess("b", "docs", sessions.Working)}, []peerStatus{{Name: "laptop", Error: "offline: timeout"}}, none)
 	text, _ = f.news(seq, false, now)
-	if !strings.Contains(text, "new one (desktop) stopped") || strings.Contains(text, "needs them") {
+	if !strings.Contains(text, "new one (desktop) stopped") || strings.Contains(text, "needs you") {
 		t.Fatalf("news after the ask was answered %q", text)
 	}
-	if snap, _ := f.news(0, true, now); !strings.Contains(snap, "offline: laptop") {
+	if snap, _ := f.news(0, true, now); !strings.Contains(snap, "Offline: laptop") {
 		t.Fatalf("snapshot without the offline machine %q", snap)
 	}
 }
@@ -84,10 +84,10 @@ func TestFeedFollowsParkedAgents(t *testing.T) {
 	done := agent(sessions.YourTurn)
 	done.Summary = &summary.Summary{Status: "Picks: towel"}
 	f.observe([]sessions.Session{done}, nil, none)
-	if text, _ = f.news(seq, false, time.Now()); !strings.Contains(text, "@shopping finished: Picks: towel") {
+	if text, _ = f.news(seq, false, time.Now()); !strings.Contains(text, "@shopping finished, Parked: Picks: towel") {
 		t.Fatalf("agent done and parked: %q", text)
 	}
-	if snap, _ := f.news(0, true, time.Now()); !strings.Contains(snap, "- @shopping done (0m ago): Picks: towel") {
+	if snap, _ := f.news(0, true, time.Now()); !strings.Contains(snap, "Parked (set aside, no Open item; read one if what it said asks them for something):\n- @shopping (your turn, 0m ago): Picks: towel") {
 		t.Fatalf("snapshot %q", snap)
 	}
 }
@@ -116,12 +116,12 @@ func TestSnapshotListsEverythingThatMayWaitOnHim(t *testing.T) {
 	list = append(list, pr, gone, focus("f1", sessions.Stopped, now.Add(-time.Hour)), focus("f2", sessions.YourTurn, now.Add(-20*time.Hour)))
 	f.observe(list, nil, none)
 	snap, _ := f.news(0, true, now)
-	for _, want := range []string{"- old h (12h ago): its turn is done", "parked, still their turn", "- pr-watch (0m ago): Waiting: approval to push | Open: push needs their go-ahead", "- @shop-focus done (20h ago): Notes read: 5 sessions wait on you"} {
+	for _, want := range []string{"- old h (your turn, 12h ago): its turn is done", "- pr-watch (your turn, parked, 0m ago): Waiting: approval to push | Open: push needs their go-ahead", "- @shop-focus (your turn, 20h ago): Notes read: 5 sessions wait on you", "Stopped: finished long ago"} {
 		if !strings.Contains(snap, want) {
 			t.Errorf("snapshot lacks %q:\n%s", want, snap)
 		}
 	}
-	if strings.Contains(snap, "finished long ago") || strings.Count(snap, "@shop-focus") != 1 {
+	if strings.Count(snap, "@shop-focus") != 1 || strings.Index(snap, "pr-watch") > strings.Index(snap, "Parked") {
 		t.Errorf("snapshot:\n%s", snap)
 	}
 }
