@@ -824,7 +824,27 @@ func (s *Server) resumeSession(ctx context.Context, sid string) (string, error) 
 			return s.relaunch(ctx, s.standingName(c, t.AgentName), t.StartCwd, c)
 		}
 	}
+	if t, ok := s.recorded(sid); ok && t.StartCwd != "" {
+		return s.relaunch(ctx, s.standingName(sid, t.AgentName), t.StartCwd, t.SessionID)
+	}
 	return "", fmt.Errorf("%w %s", errUnknown, sid)
+}
+
+func (s *Server) recorded(sid string) (history.Transcript, bool) {
+	for range 50 {
+		if t, ok := s.M.Index.Find(sid); ok {
+			return t, true
+		}
+		if a := s.M.Store.Get(sid).Agent; a != "" {
+			return s.lastAgentTranscript(a)
+		}
+		prev := s.M.Store.Find(func(_ string, m store.Meta) bool { return m.Next != "" && strings.HasPrefix(sid, m.Next) })
+		if len(prev) == 0 {
+			break
+		}
+		sid = prev[0]
+	}
+	return history.Transcript{}, false
 }
 
 func (s *Server) liveIn(chain []string, agents []claude.Agent) (string, bool) {

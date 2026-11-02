@@ -243,6 +243,11 @@ func (s *Server) lastAgentTranscript(name string) (history.Transcript, bool) {
 	return last, last.SessionID != ""
 }
 
+func (s *Server) hasTranscript(sid string) bool {
+	_, ok := s.M.Index.Find(sid)
+	return ok
+}
+
 func (s *Server) wakeAgent(ctx context.Context, a Agent, text string) (string, error) {
 	mu := s.agentLock(a.Name)
 	mu.Lock()
@@ -262,7 +267,7 @@ func (s *Server) deliverAgent(ctx context.Context, a Agent, text string) (string
 		return cur.ID, s.Term.Send(ctx, cur.ID, text)
 	}
 	sid := ""
-	if cur != nil {
+	if cur != nil && s.hasTranscript(cur.SessionID) {
 		sid = cur.SessionID
 	} else if t, ok := s.lastAgentTranscript(a.Name); ok {
 		sid = t.SessionID
