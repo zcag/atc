@@ -22,6 +22,7 @@ var Prompt string
 
 const (
 	verbatimUpTo = 160
+	overviewFrom = 1200
 	maxReplies   = 3
 	keep         = 400
 	retryAfter   = 10 * time.Minute
@@ -186,22 +187,15 @@ func (s *Summarizer) make(j job) (Summary, error) {
 		return Summary{}, err
 	}
 	text = strings.TrimSpace(text)
-	s.mu.Lock()
-	open := s.done[j.sid].Open()
-	s.mu.Unlock()
-	ask := fmt.Sprintf("The person asked:\n%s\n\nThe assistant's final message:\n%s", j.prompt, text)
-	if len(open) > 0 {
-		ask = "Still open before this message:\n" + strings.Join(open, "\n") + "\n\n" + ask
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	out, err := s.complete(ctx, Prompt, ask)
+	out, err := s.complete(ctx, Prompt, fmt.Sprintf("The person asked:\n%s\n\nThe assistant's final message:\n%s", j.prompt, text))
 	x, perr := Parse(out)
 	line := clean(text)
 	short := len([]rune(line)) <= verbatimUpTo
 	switch {
 	case short && (err != nil || perr != nil):
-		x = Summary{Status: line, Overview: open}
+		x = Summary{Status: line}
 	case err != nil:
 		return Summary{}, err
 	case perr != nil:
@@ -209,18 +203,11 @@ func (s *Summarizer) make(j job) (Summary, error) {
 	case short:
 		x.Status, x.Gist = line, nil
 	}
+	if len([]rune(text)) < overviewFrom {
+		x.Overview = nil
+	}
 	x.Reply, x.Model, x.At = j.reply, s.Model, time.Now()
 	return x, nil
-}
-
-func (x Summary) Open() []string {
-	var open []string
-	for _, l := range x.Overview {
-		if strings.HasPrefix(l, "Open:") {
-			open = append(open, l)
-		}
-	}
-	return open
 }
 
 var object = regexp.MustCompile(`(?s)\{.*\}`)

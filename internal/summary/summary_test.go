@@ -110,26 +110,6 @@ func TestShortReplyKeepsItsText(t *testing.T) {
 	}
 }
 
-func TestShortMessageKeepsWhatWasOpen(t *testing.T) {
-	tr := transcript(t, "Drafted the email.")
-	var asked string
-	s, _ := Open(filepath.Join(t.TempDir(), "s.json"), "test", func(_ context.Context, _, user string) (string, error) {
-		asked = user
-		return `{"status": "Done: email drafted", "overview": ["Done: email drafted", "Open: option A or B"]}`, nil
-	})
-	s.done[tr.SessionID] = Summary{Reply: "a1", Overview: []string{"Plan: tomorrow's steps", "Open: option A or B"}}
-	s.Want(tr)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	x := s.Wait(ctx, tr)
-	if !strings.HasPrefix(asked, "Still open before this message:\nOpen: option A or B") {
-		t.Fatalf("model was asked: %q", asked)
-	}
-	if x == nil || strings.Join(x.Open(), "|") != "Open: option A or B" {
-		t.Fatalf("a short message lost its Open lines: %+v", x)
-	}
-}
-
 func TestNilSummarizer(t *testing.T) {
 	var s *Summarizer
 	if s.Get(history.Transcript{ReplyID: "x"}) != nil || s.Want(history.Transcript{ReplyID: "x", Path: "p"}) {
