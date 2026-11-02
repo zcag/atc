@@ -77,7 +77,7 @@ func hubCmd(args []string) error {
 	effort := fs.String("effort", "medium", "Claude effort")
 	home, _ := os.UserHomeDir()
 	state := fs.String("state", filepath.Join(home, ".local/state/atc/hub"), "where the session id and handover notes live")
-	dir := fs.String("dir", home, "the folder the session works in")
+	dir := fs.String("dir", filepath.Join(home, ".local/share/atc/assistant"), "the folder a new session starts in")
 	guestState := fs.String("guest-state", filepath.Join(home, ".local/state/atc/guests"), "the guests' conversation's session id and handover notes")
 	d := startover.Default
 	quiet := fs.Duration("quiet", d.Quiet, "")
@@ -86,6 +86,7 @@ func hubCmd(args []string) error {
 	cap := fs.Int("cap", d.Cap, "")
 	fs.Parse(args)
 	modes.Dir = filepath.Join(client.ConfigDir(), "modes")
+	os.MkdirAll(*dir, 0o755)
 	bin := cmp.Or(os.Getenv("ATC_CLAUDE_BIN"), "claude")
 	cargs := append([]string{"--model", *model, "--effort", *effort}, server.HubArgs()...)
 	cargs = append(cargs, strings.Fields(os.Getenv("ATC_HUB_CLAUDE_ARGS"))...)

@@ -13,7 +13,9 @@ status: one line, at most 10 words: what the message is about. May start with a 
 
 gist: a list with one line per topic: one line if the message is about one thing, up to four if it covers several. Each line at most 15 words.
 
-overview: the message's content grouped by kind, a list of 2 to 4 lines, each starting with a label: "Answer:", "Plan:", "Found:", "Done:", "Proposes:", "Open:" or similar, at most 12 words per line. No positions in the message ("last paragraph"), no reading advice.
+overview: the message's content grouped by kind, a list of 1 to 4 lines plus the Open lines below, each starting with a label: "Answer:", "Plan:", "Found:", "Done:", "Proposes:" or similar, at most 12 words per line. No positions in the message ("last paragraph"), no reading advice.
+
+Open lines are what still waits on the person: a question or choice put to them, a go-ahead, a step only they can do. One "Open:" line for each, however short the message. When the input starts with "Still open before this message", keep each of those as an "Open:" line too, unless the person's request or the message settles it.
 
 replies: 0 to 3 messages the person is likely to send next, each one they could send as is with one tap. Most likely first. First decide how the message ends, then use only that case:
 - It asks permission to go ahead with one thing ("Should I build it?", "Go ahead?"): "ok go". If it names a smaller or safer variant, that too, in a few words ("ok but only the backend part").

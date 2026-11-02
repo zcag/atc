@@ -174,12 +174,12 @@ func (f *feed) line(e feedEvent) string {
 		if x.State != sessions.NeedsYou {
 			return ""
 		}
-		return name + " needs you, now in Your turn (waiting on them): " + cmp.Or(clipText(x.Activity, 160), "a question or permission is open")
+		return name + " needs you: " + cmp.Or(clipText(x.Activity, 160), "a question or permission is open")
 	case evDone:
-		if x.Parked && len(x.Open()) == 0 {
+		if x.Parked {
 			return name + " finished, Parked: " + said(x)
 		}
-		return name + " finished, now in Your turn (waiting on them): " + said(x)
+		return name + " finished, now in Your turn: " + said(x)
 	case evStarted:
 		if x.Agent != "" {
 			return name + " started working"
@@ -210,8 +210,8 @@ func said(x sessions.Session) string {
 	return strings.Join(append([]string{clipText(result(x), 160)}, x.Open()...), " | ")
 }
 
-// snapshot is the list bay by bay as their Triage screen shows it, except that a pinned or parked
-// session whose turn is their and that leaves an Open item moves up into Your turn.
+// snapshot is the list as their Triage screen shows it, bay by bay: Your turn, Pinned, Working,
+// Parked. Stopped sessions are left out: they no longer wait on them.
 func (f *feed) snapshot(now time.Time) string {
 	var mine []sessions.Session
 	hosts := map[string]bool{}
@@ -238,34 +238,27 @@ func (f *feed) snapshot(now time.Time) string {
 	if f.onDemand != nil {
 		onDemand = f.onDemand()
 	}
-	var turn, pinned, working, parked, stopped []string
+	var turn, pinned, working, parked []string
 	for _, x := range mine {
 		name := label(x, len(hosts) > 1)
-		tag := func(words ...string) string {
-			when := ago(now.Sub(x.Last())) + " ago"
-			if onDemand[x.Agent] && x.State != sessions.Working {
-				when = "last run " + when + ", runs only when woken, so not live"
-			}
-			return name + " (" + strings.Join(append(words, when), ", ") + ")"
+		when := ago(now.Sub(x.Last())) + " ago"
+		if onDemand[x.Agent] && x.State != sessions.Working {
+			when = "last run " + when + ", not live"
 		}
-		waits := x.State == sessions.NeedsYou || x.State != sessions.Working && len(x.Open()) > 0 || x.State == sessions.YourTurn && !x.Parked && !x.Pinned
+		line := name + " (" + when + "): " + said(x)
 		switch {
-		case waits && x.State == sessions.NeedsYou:
-			turn = append(turn, tag("needs you")+": "+cmp.Or(clipText(x.Activity, 160), "a question or permission is open"))
-		case waits:
-			words := []string{stateWord(x.State)}
-			if x.Parked {
-				words = append(words, "parked")
-			}
-			turn = append(turn, tag(words...)+": "+said(x))
+		case x.State == sessions.NeedsYou:
+			turn = append(turn, name+" (needs you, "+when+"): "+cmp.Or(clipText(x.Activity, 160), "a question or permission is open"))
 		case x.Pinned && !x.Away():
-			pinned = append(pinned, tag(stateWord(x.State))+": "+said(x))
+			pinned = append(pinned, line)
 		case x.State == sessions.Working:
 			working = append(working, name+": "+cmp.Or(clipText(x.Activity, 100), "working"))
 		case x.Away():
-			parked = append(parked, tag(stateWord(x.State))+": "+said(x))
-		case x.State == sessions.Stopped:
-			stopped = append(stopped, name)
+			if x.Result() != "" {
+				parked = append(parked, line)
+			}
+		case x.State == sessions.YourTurn:
+			turn = append(turn, line)
 		}
 	}
 	list := func(head string, items []string) string {
@@ -274,21 +267,15 @@ func (f *feed) snapshot(now time.Time) string {
 		}
 		return head + ":\n- " + strings.Join(items, "\n- ")
 	}
-	parts := []string{list("Your turn: waiting on them, needs-you first (a question or permission is open), then each that finished its turn and waits for their reply with what it said and every Open item", turn)}
+	parts := []string{list("Your turn (each waits on them)", turn)}
 	if len(pinned) > 0 {
 		parts = append(parts, list("Pinned", pinned))
 	}
 	if len(working) > 0 {
-		parts = append(parts, list("Working (busy, not waiting on them)", working))
+		parts = append(parts, list("Working", working))
 	}
 	if len(parked) > 0 {
-		parts = append(parts, list("Parked (set aside, no Open item; read one if what it said asks them for something)", parked))
-	}
-	if n := len(stopped) - 8; n > 0 {
-		stopped = append(stopped[:8], fmt.Sprintf("and %d more", n))
-	}
-	if len(stopped) > 0 {
-		parts = append(parts, "Stopped: "+strings.Join(stopped, ", "))
+		parts = append(parts, list("Parked (they set these aside)", parked))
 	}
 	var off []string
 	for h, d := range f.down {
@@ -301,10 +288,6 @@ func (f *feed) snapshot(now time.Time) string {
 		parts = append(parts, "Offline: "+strings.Join(off, ", ")+" (its sessions are missing)")
 	}
 	return strings.Join(parts, "\n")
-}
-
-func stateWord(st string) string {
-	return cmp.Or(map[string]string{sessions.YourTurn: "your turn", sessions.NeedsYou: "needs you"}[st], st)
 }
 
 func boolInt(b bool) int {

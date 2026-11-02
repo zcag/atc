@@ -12,6 +12,7 @@ package hub
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/json"
@@ -181,7 +182,7 @@ func (h *Hub) start() error {
 		args = append(args, "--session-id", h.sid)
 	}
 	cmd := exec.Command(h.cfg.Bin, args...)
-	cmd.Dir, cmd.Stderr = h.cfg.Dir, os.Stderr
+	cmd.Dir, cmd.Stderr = cmp.Or(startedIn(h.sid), h.cfg.Dir), os.Stderr
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return err
@@ -215,9 +216,32 @@ func (h *Hub) saveSID(sid string) {
 }
 
 // written is whether the session has a transcript yet: one that never had a turn can't be resumed.
-func written(sid string) bool {
+func written(sid string) bool { return transcript(sid) != "" }
+
+func transcript(sid string) string {
 	m, _ := filepath.Glob(filepath.Join(claude.ConfigDir(), "projects", "*", sid+".jsonl"))
-	return len(m) > 0
+	if len(m) == 0 {
+		return ""
+	}
+	return m[0]
+}
+
+// startedIn is the folder a written session was started in: Claude resumes a session only from there.
+func startedIn(sid string) string {
+	f, err := os.Open(transcript(sid))
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	sc.Buffer(nil, 16<<20)
+	for sc.Scan() {
+		var l struct{ Cwd string }
+		if json.Unmarshal(sc.Bytes(), &l) == nil && l.Cwd != "" {
+			return l.Cwd
+		}
+	}
+	return ""
 }
 
 func newID() string {

@@ -317,18 +317,12 @@ func (s Session) Result() string {
 	return s.LastReply
 }
 
-// Open is what the last reply's summary leaves open: its "Open:" lines.
+// Open is what the summary leaves open: its "Open:" lines.
 func (s Session) Open() []string {
 	if s.Summary == nil {
 		return nil
 	}
-	var open []string
-	for _, l := range s.Summary.Overview {
-		if strings.HasPrefix(l, "Open:") {
-			open = append(open, l)
-		}
-	}
-	return open
+	return s.Summary.Open()
 }
 
 func (s Session) Last() time.Time {
