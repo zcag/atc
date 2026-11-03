@@ -4791,14 +4791,14 @@ function AgentThread({ st, s, zoom }) {
 
 const optIndex = (q, label) => (q.options || []).findIndex((o) => o.label === label);
 function AskedStep({ st, s }) {
-  const ans = answersOf(st);
+  const ans = answersOf(st), other = answeredElsewhere(s);
   return (st.input.questions || []).map((q) => {
     const a = ans[q.question] || "";
     if (!a && !st.out) return html`<p class="evt">${s.asks?.length ? "Asked you a question; it waits below." : "Asked a question; answer it in the terminal."}</p>`;
     const parts = a.split(/,\s*/).filter(Boolean), picked = parts.map((x) => optIndex(q, x));
     const said = picked.some((i) => i < 0) ? a : parts.map((x, j) => `${picked[j] + 1}, ${x}`).join("; ");
     return html`<${AnsweredLine} q=${q.question} options=${(q.options || []).map((o) => ({ label: o.label, note: o.description !== o.label ? o.description : "" }))}
-      chosen=${picked.filter((i) => i >= 0)} line=${a ? html`You answered <b>${said}</b>${st.out?.time && `, ${txClock(st.out.time)}`}` : "No answer was given"} />`;
+      chosen=${picked.filter((i) => i >= 0)} line=${a ? html`You answered <b>${said}</b>${st.out?.time && `, ${txClock(st.out.time)}`}${other?.what === a && fromWhere(other)}` : "No answer was given"} />`;
   });
 }
 
@@ -5407,6 +5407,9 @@ function askSpec(s, a) {
   }
   return { qs: (a.questions || []).map((q) => ({ text: q.question, multiple: q.multiple, custom: q.custom, options: (q.options || []).map((o) => ({ label: o.label, note: o.description !== o.label ? o.description : "" })) })) };
 }
+const ANSWER_VIA = { push: "the notification", widget: "the home-screen widget", web: "atc" };
+const answeredElsewhere = (s) => s.answered && !ANSWERS.has(ansKey(s.sessionId, s.answered.ask)) ? s.answered : null;
+const fromWhere = (x) => html` <span class="from">(from ${ANSWER_VIA[x.via] || x.via}${x.device ? ` on ${x.device}` : ""})</span>`;
 const askHead = (rec) => rec.i ? html`You answered <b>${rec.i}, ${rec.label}</b>` : html`You answered <b>${rec.label}</b>`;
 
 function AskState({ rec, host, retry }) {
@@ -5892,14 +5895,14 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
   const replies = live && !working && !pending.some((p) => p.state !== "failed") && s.state === "your-turn" && !s.asks?.length ? s.summary?.replies : null;
 
   const rows = [];
-  const askedQs = new Set();
+  const askedQs = new Set(), shownAns = new Set();
   turns.forEach((t, i) => {
     const b = bodies[t.from], open = isOpen(i);
     if (!open) return rows.push({ k: "fold", key: `f${t.from}`, at: t.at, i, t });
     rows.push({ k: t.notice ? "notice" : t.partial ? "partial" : "you", key: `y${t.from}`, at: t.at, i, t, b });
     if (!b) return (t.steps || t.reply) && rows.push({ k: "skel", key: `s${t.from}`, i });
     agentRows(b).forEach((r, j) => {
-      (r.steps || []).filter((x) => x.tool === "AskUserQuestion").forEach((x) => (x.input.questions || []).forEach((q) => askedQs.add(q.question)));
+      (r.steps || []).filter((x) => x.tool === "AskUserQuestion").forEach((x) => { (x.input.questions || []).forEach((q) => askedQs.add(q.question)); Object.values(answersOf(x)).forEach((a) => shownAns.add(a)); });
       rows.push({ ...r, key: `${t.from}:${j}`, i, live: working && i === turns.length - 1 });
     });
   });
@@ -5907,6 +5910,11 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
     if (r.sid !== sid || r.id === asking?.id || askedQs.has(r.q)) continue;
     const at = msOf(r.at), j = rows.findIndex((x) => msOf(x.at) > at);
     rows.splice(j < 0 ? rows.length : j, 0, { k: "answered", key: `a${r.id}`, at: r.at, rec: r });
+  }
+  const other = answeredElsewhere(s);
+  if (other && other.ask !== asking?.id && !shownAns.has(other.what)) {
+    const at = msOf(other.at), j = rows.findIndex((x) => msOf(x.at) > at);
+    rows.splice(j < 0 ? rows.length : j, 0, { k: "elsewhere", key: `e${other.ask}`, at: other.at, x: other });
   }
   pending.filter((p) => p.state !== "queued" && p.state !== "cancelled").forEach((p) => rows.push({ k: "sent", key: `p${p.id}`, at: new Date(p.at).toISOString(), p }));
   if (stream?.text) rows.push({ k: "stream", key: "stream", st: stream });
@@ -5965,6 +5973,7 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
         return [clock(r.at), html`<${AnsweredLine} q=${rec.q} cmd=${rec.cmd} options=${rec.options || []} chosen=${rec.i ? [rec.i - 1] : []}
           line=${html`${askHead(rec)}, ${txClock(rec.at)} <span class="from">(from this screen)</span>`} state=${rec.st !== "accepted" && html`<${AskState} rec=${rec} host=${s.host} retry=${() => answerAsk(s, { id: rec.id }, rec)} />`} />`];
       }
+      case "elsewhere": return [clock(r.at), html`<div class="ask line"><p class="adl"><span>You answered <b>${r.x.what}</b>, ${txClock(r.x.at)}${fromWhere(r.x)}</span></p></div>`];
       case "since": return [html`<time>${txClock(r.at)}</time>`, html`<${Since} mark=${r.at} rows=${r.after} s=${s} jump=${nextUnseen} />`, "sncm"];
       case "sent": {
         const first = rows[0] === r;

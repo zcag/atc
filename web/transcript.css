@@ -248,6 +248,8 @@
 .tx .adl b { color: var(--ink); font-weight: 620; }
 .tx .adl .from { color: var(--faint); }
 .tx .adl:hover { background: var(--strip-hi); }
+.tx p.adl { margin: 0; }
+.tx p.adl:hover { background: none; }
 .tx .adl .chev { align-self: center; }
 .tx .ask.line .ast { margin: 0 0 var(--s2) var(--s3); padding-left: var(--s4); }
 .tx .adx { padding: 0 var(--s3) var(--s3) calc(var(--s3) + 20px); }
