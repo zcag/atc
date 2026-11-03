@@ -377,7 +377,7 @@ function App() {
   }, [reach]);
 
   useEffect(() => {
-    const n = (live || []).filter((s) => s.state === "needs-you" && !away(s)).length;
+    const n = (live || []).filter(waiting).length;
     document.title = n ? `(${n}) atc` : "atc";
   }, [live]);
 
@@ -423,7 +423,7 @@ function App() {
         const b = bays[n - 1];
         if (!b) return;
         if (b.name === BAY.only && k.route) {
-          const list = bayLists(k.live, null, b.name), ring = ["needs-you", "your-turn", "working"].flatMap((g) => list[g]);
+          const list = bayLists(k.live, null, b.name), ring = [...list.waiting, ...list.working];
           const i = ring.findIndex((x) => keyOf(x) === k.route || x.sessionId === k.route);
           const next = ring[(i + 1) % ring.length];
           if (next && ring.length > 1) go(keyOf(next));
@@ -454,7 +454,7 @@ function App() {
         "+": () => setCreating(location.hash === BACKLOG ? { later: true } : true),
         n: () => {
           const bays = baysOf(k.live, BAY.only).map((b) => b.name);
-          const needs = (k.live || []).filter((x) => x.state === "needs-you" && !away(x)).sort((a, b) => bays.indexOf(bayOf(a)) - bays.indexOf(bayOf(b)));
+          const needs = (k.live || []).filter(waiting).sort((a, b) => bays.indexOf(bayOf(a)) - bays.indexOf(bayOf(b)) || (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1));
           const i = needs.findIndex((x) => keyOf(x) === k.route || x.sessionId === k.route);
           const next = needs[(i + 1) % needs.length];
           next ? go(keyOf(next)) : say("Nothing needs you.");
@@ -606,10 +606,14 @@ const rememberBay = (b, m) => {
   BAYDATA.memory = { ...BAYDATA.memory, [b]: { ...bayMem(b), ...m } };
   api(`/api/bays/${encodeURIComponent(b)}`, { method: "PATCH", body: { ...m, from: PAGE_ID } }).catch(() => {});
 };
-const bayOf = (s) => (s && !homeless(s) && s.kind !== "hub" ? project(s.cwd).name : null);
+const AGENT_BAY = "agents";
+const bayOf = (s) => (!s ? null : homeless(s) || s.kind === "hub" ? AGENT_BAY : project(s.cwd).name);
+const waiting = (s) => (s.state === "needs-you" || s.state === "your-turn") && !away(s);
 
 function baysOf(live, keep) {
   const tabs = projectTabs(live || [], keep);
+  const ag = (live || []).filter((s) => bayOf(s) === AGENT_BAY && s.state !== "stopped" && s.state !== "past");
+  if (ag.length || keep === AGENT_BAY) tabs.push({ name: AGENT_BAY, pips: ag.filter((s) => !away(s) && RANK[s.state] !== undefined).map((s) => s.state) });
   const names = tabs.map((t) => t.name);
   let order = BAYDATA.order;
   const fresh = names.filter((n) => !order.includes(n));
@@ -633,7 +637,7 @@ function goBay(name, live, session) {
   go(pick ? keyOf(pick) : null);
 }
 
-const bayWords = (b, i) => [`${b.name}, bay ${i + 1}`, [b.needs && `${b.needs} need you`, b.turn && `${b.turn} your turn`, b.work && `${b.work} working`].filter(Boolean).join(", ")].filter(Boolean).join(": ");
+const bayWords = (b, i) => [`${b.name}, bay ${i + 1}`, [b.needs + b.turn && `${b.needs + b.turn} waiting on you`, b.work && `${b.work} working`].filter(Boolean).join(", ")].filter(Boolean).join(": ");
 
 function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onPeek }) {
   const now = new Date();
@@ -646,8 +650,8 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
       const box = el.getBoundingClientRect();
       setHidden(bays.filter((b) => {
         const r = el.querySelector(`[data-bay="${CSS.escape(b.name)}"]`)?.getBoundingClientRect();
-        return b.needs > 0 && r && (r.right > box.right + 1 || r.left < box.left - 1);
-      }).reduce((n, b) => n + b.needs, 0));
+        return b.needs + b.turn > 0 && r && (r.right > box.right + 1 || r.left < box.left - 1);
+      }).reduce((n, b) => n + b.needs + b.turn, 0));
     };
     check();
     el.addEventListener("scroll", check, { passive: true });
@@ -667,7 +671,7 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
               <span class="k" aria-hidden="true">${i + 1}</span><span class="n">${b.name}</span></button>
             ${(b.needs > 0 || b.turn > 0 || b.work > 0) && html`<button class="cts" aria-label=${`Peek at ${b.name}`} aria-expanded=${peek === b.name}
               aria-keyshortcuts=${i < 9 ? `Shift+Alt+${i + 1}` : null} onClick=${() => onPeek(peek === b.name ? null : b.name)}>
-              ${b.needs > 0 && html`<i class="cn n">${b.needs}</i>`}${b.turn > 0 && html`<i class="cn t">${b.turn}</i>`}${b.work > 0 && html`<i class="cn w">${b.work}</i>`}</button>`}
+              ${b.needs + b.turn > 0 && html`<i class="cn n">${b.needs + b.turn}</i>`}${b.work > 0 && html`<i class="cn w">${b.work}</i>`}</button>`}
           </span>`)}
       </div>
       ${hidden > 0 && html`<button class="offneeds" onClick=${() => onPeek(peek === "*" ? null : "*")} aria-label=${`${hidden} more need you in other bays`}><i class="cn n">+${hidden}</i>need you</button>`}
@@ -678,8 +682,8 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
         ${kb(view === "pages", "Pages", "g", () => (location.hash = pagesHash()))}
         ${SCREENS[view] && html`<button class="kb on" aria-current="page">${SCREENS[view]}</button>`}
       </div>
-      ${view === "board" && html`<div class="tgl">${kb(only === null, html`<span class="nm">All bays</span>`, "alt 0", () => BAY.set(only === null ? bays[0]?.name || null : null), "Every bay on one board")}${kb(panes.index, html`<span class="nm">Page index</span>`, "]", () => togglePane("index"), "The bay's pages beside the board")}</div>`}
-      ${view === "pages" && html`<div class="tgl">${kb(panes.pgindex !== false, html`<span class="nm">Index</span>`, "[", () => togglePane("pgindex"), "Every page in the bay, newest first")}${kb(only === null, html`<span class="nm">All bays</span>`, "alt 0", () => { location.hash = pagesHash(only === null ? PAGES_FROM || bays[0]?.name || null : null); PAGES_FROM = only || PAGES_FROM; }, "Pages from every bay, grouped by bay")}</div>`}
+      ${view === "board" && html`<div class="tgl">${kb(only === null, html`<span class="nm">All bays</span>`, "0", () => BAY.set(only === null ? bays[0]?.name || null : null), "Every bay on one board")}${kb(panes.index, html`<span class="nm">Page index</span>`, "]", () => togglePane("index"), "The bay's pages beside the board")}</div>`}
+      ${view === "pages" && html`<div class="tgl">${kb(panes.pgindex !== false, html`<span class="nm">Index</span>`, "[", () => togglePane("pgindex"), "Every page in the bay, newest first")}${kb(only === null, html`<span class="nm">All bays</span>`, "0", () => { location.hash = pagesHash(only === null ? PAGES_FROM || bays[0]?.name || null : null); PAGES_FROM = only || PAGES_FROM; }, "Pages from every bay, grouped by bay")}</div>`}
       ${view === "session" && html`<div class="tgl">${kb(panes.rail, html`<span class="nm">Sessions</span>`, "[", () => togglePane("rail"), "The bay's sessions beside the transcript")}${kb(panes.state, html`<span class="nm">State</span>`, "\\", () => togglePane("state"), "What the session is doing, what it made, and its facts")}</div>`}
       <div class="meta">
         ${!up && html`<span class="host off" role="status">reconnecting</span>`}
@@ -692,7 +696,7 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
 function SessionStrip({ live, sel }) {
   const bay = bayOf(sel);
   const list = bayLists(live, null, bay);
-  const ring = ["needs-you", "your-turn", "working"].flatMap((g) => list[g]);
+  const ring = [...list.waiting, ...list.working];
   const items = ring.some((x) => x.sessionId === sel.sessionId) ? ring : [sel, ...ring];
   const box = useRef();
   useLayoutEffect(() => {
@@ -721,8 +725,8 @@ function BayPeek({ bay, live, say, onClose }) {
     if (!phone && at && el) el.style.left = `${Math.max(8, Math.min(at.left, innerWidth - el.offsetWidth - 8))}px`;
   });
   const every = bay === "*";
-  const mine = (live || []).filter((s) => (every ? bayOf(s) && s.state === "needs-you" : bayOf(s) === bay) && !away(s));
-  const needs = mine.filter((s) => s.state === "needs-you"), turn = mine.filter((s) => s.state === "your-turn"), work = mine.filter((s) => s.state === "working");
+  const mine = (live || []).filter((s) => (every ? waiting(s) : bayOf(s) === bay) && !away(s));
+  const wait = mine.filter(waiting).sort((a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1)), work = mine.filter((s) => s.state === "working");
   const open = (s) => { onClose(); go(keyOf(s)); };
   const row = (s) => html`<div class="pk ${s.state}" key=${s.sessionId}>
     <div class="row"><${StateBlock} s=${s} /><a class="ti" href=${`#/s/${keyOf(s)}`} onClick=${(e) => { e.preventDefault(); open(s); }}>${s.title || "Untitled"}</a><span class="ago">${every && html`<span class="bayn">${bayOf(s)}</span>`}${ago(s)}</span></div>
@@ -731,15 +735,14 @@ function BayPeek({ bay, live, say, onClose }) {
     ${replyable(s) && html`<div class="ask"><${CardReplies} s=${s} /></div>`}
   </div>`;
   const body = html`
-    ${needs.length > 0 && html`<h3 class="grp"><b>Needs you</b><span class="c">${needs.length}</span></h3>${needs.map(row)}`}
-    ${turn.length > 0 && html`<h3 class="grp"><b>Your turn</b><span class="c">${turn.length}</span></h3>${turn.map(row)}`}
+    ${wait.length > 0 && html`<h3 class="grp"><b>Waiting on you</b><span class="c">${wait.length}</span></h3>${wait.map(row)}`}
     ${work.length > 0 && html`<h3 class="grp"><b>Working</b><span class="c">${work.length}</span></h3>${work.map(row)}`}
     ${!mine.length && html`<p class="pkf"><span>Nothing running in ${bay}.</span></p>`}
     ${!every && html`<div class="pkf"><button class="kb" onClick=${() => { onClose(); goBay(bay, live); }}>Go to ${bay}</button><button class="kb" onClick=${() => { onClose(); BAY.set(bay); rememberBay(bay, { view: "board" }); go(null); }}>Its board</button></div>`}`;
   return phone
     ? html`<${Sheet} cls="peeksheet" title=${every ? "Every bay" : bay} onClose=${onClose}><div class="peek" ref=${box}>${body}</div><//>`
     : html`<div class="peek" ref=${box} role="dialog" aria-label=${`Peek at ${bay}`}>
-        <div class="pkh"><b>${bay}</b><span>${[needs.length && `${needs.length} need you`, turn.length && `${turn.length} your turn`].filter(Boolean).join(", ")}</span><span class="r"><button class="kb" onClick=${onClose}>Close <kbd aria-hidden="true">esc</kbd></button></span></div>
+        <div class="pkh"><b>${bay}</b><span>${wait.length ? `${wait.length} waiting on you` : ""}</span><span class="r"><button class="kb" onClick=${onClose}>Close <kbd aria-hidden="true">esc</kbd></button></span></div>
         ${body}
       </div>`;
 }
@@ -792,7 +795,7 @@ const KEYMAP = [
   ["Reading", [["J K", "Next, previous turn: your prompts and its replies"], ["space", "A screen down; with shift, up"], ["home end", "Top, end of the transcript"], ["N", "Next thing you have not seen here: the divider, then the question"], ["c", "Contents: every turn and heading"], ["l", "Outline, story, everything, in turn"], ["f", "Find in the session"]]],
   ["Answer", [["1..9", "With the question focused (click it, tab into it, or N): that option"]]],
   ["Composer", [["enter", "Send; while it works, queue"], ["esc", "Empty box while it works: stop it (asks first)"], ["space", "Hold in an empty box: dictate"], ["/", "At the start: slash commands"]]],
-  ["Pages", [["j k", "Next, previous page"], ["[", "The index"], ["alt 0", "This bay or every bay"], ["q w e .. p", "The 1st to 10th page in the index"], ["\\", "The page beside its session"], ["enter", "Note: its session, at the composer"], ["d", "What changed, on an updated page"]]],
+  ["Pages", [["j k", "Next, previous page"], ["[", "The index"], ["0", "This bay or every bay"], ["q w e .. p", "The 1st to 10th page in the index"], ["\\", "The page beside its session"], ["enter", "Note: its session, at the composer"], ["d", "What changed, on an updated page"]]],
   ["Palette", [["↑ ↓", "Move (also ctrl j, ctrl k)"], ["enter", "Run it"], ["tab", "Preview it behind the palette"], ["1..9", "Alone: that bay"]]],
   ["Backlog", [["j k", "Next, previous task"], ["enter", "Start, take or open it"], ["d", "Done"], ["x", "Blocked, or unblock"], ["a", "The add box"]]],
   ["Agents", [["j k", "Next, previous agent"], ["enter", "Its conversation"]]],
@@ -810,10 +813,10 @@ function KeysOverlay({ onClose }) {
     </div>`;
 }
 
-const GROUPS = [["needs-you", "Needs you"], ["your-turn", "Your turn"], ["working", "Working"], ["parked", "Parked"], ["earlier", "Earlier"]];
+const GROUPS = [["waiting", "Waiting on you"], ["working", "Working"], ["parked", "Parked"], ["earlier", "Earlier"]];
 const QWERTY = "qwertyuiop";
-const groupOf = (s) => (away(s) ? "parked" : RANK[s.state] !== undefined ? s.state : "earlier");
-const byUrgency = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
+const groupOf = (s) => (away(s) ? "parked" : waiting(s) ? "waiting" : s.state === "working" ? "working" : "earlier");
+const byUrgency = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1) || (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
 const doingLine = (s) => s.state === "working" ? doing(s) : s.state === "needs-you" && s.asks?.[0] ? oneLine(s.asks[0].questions?.[0]?.question || (s.asks[0].permission && `Wants to use ${s.asks[0].permission}`)) : "";
 const runningOf = (s) => [s.background?.length > 0 && plural(s.background.length, "task"), ...(s.servers || []).slice(0, 2).map((p) => `:${p}`), s.tabs?.length > 0 && plural(s.tabs.length, "tab")].filter(Boolean);
 const madeOf = (s) => [s.shown?.length > 0 && plural(s.shown.length, "page"), s.files > 0 && plural(s.files, "file")].filter(Boolean);
@@ -832,7 +835,7 @@ function useBayHistory(enabled, onPast) {
 }
 
 function bayLists(live, hist, only) {
-  const mine = (s) => (only ? bayOf(s) === only : !homeless(s) && s.kind !== "hub");
+  const mine = (s) => (only ? bayOf(s) === only : true);
   const now = (live || []).filter(mine);
   const ids = new Set((live || []).map((s) => s.sessionId));
   const earlier = [...now.filter((s) => groupOf(s) === "earlier"), ...(hist || []).filter((s) => !ids.has(s.sessionId) && mine(s))]
@@ -857,7 +860,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   if (rail) return html`
     <button class=${cls} data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
       <${StateBlock} s=${s} />
-      <span class="c">${title}<span class="s ${s.state === "working" ? "mono" : ""}">${s.state === "working" ? doing(s) : status}</span></span>
+      <span class="c">${title}<span class="s">${status}</span>${s.state === "working" && html`<span class="s2 mono">${doing(s)}</span>`}</span>
       <span class="e"><span class="ago">${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}</span>
     </button>`;
   return html`
@@ -901,9 +904,9 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
   }, [cursor]);
   const by = bayLists(live, hist, only);
   let qn = 0;
-  const counts = GROUPS.slice(0, 4).map(([k]) => [k, by[k].length]).filter(([, n]) => n > 0);
+  const counts = GROUPS.slice(0, 3).map(([k]) => [k, by[k].length]).filter(([, n]) => n > 0);
   const path = only && (live || []).find((s) => bayOf(s) === only);
-  const letter = { "needs-you": ["N", "needs"], "your-turn": ["T", "turn"], working: ["W", "working"], parked: ["P", "parked"] };
+  const letter = { waiting: ["N", "needs"], working: ["W", "working"], parked: ["P", "parked"] };
   const [earlierAll, setEarlierAll] = useState(false);
   const shownEarlier = earlierAll ? by.earlier : by.earlier.filter((s) => Date.now() - (Date.parse(s.updated || s.startedAt || 0) || 0) < 2 * 86400000).slice(0, 12);
   const pages = index && (live || []).filter((s) => (only ? bayOf(s) === only : !homeless(s))).flatMap((s) => (s.shown || []).map((p) => ({ p, s })))
@@ -914,7 +917,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
         <div class="bhead">
           <div class="b1"><h1>${only || "Every bay"}</h1>${path && html`<span class="w">${tilde(baseDir(path.cwd))}</span>`}
             <span class="r"><${BacklogLine} only=${only} /><button class="kb" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts="/">Search <kbd aria-hidden="true">/</kbd></button></span></div>
-          <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${k === "parked" ? "parked" : WORD[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}</div>
+          <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${{ waiting: "waiting on you", working: "working", parked: "parked" }[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}</div>
         </div>
         <div class="bcols" aria-hidden="true"><span></span><span>Session</span><span>Status, and what it last said or is doing</span><span>Context</span><span>Steps</span><span>Running, made</span><span>Since</span><span></span></div>
         ${GROUPS.map(([k, title]) => {
@@ -942,13 +945,15 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
 
 function RailList({ live, hist, only, sel, cursor }) {
   const by = bayLists(live, hist, only);
-  const active = ["needs-you", "your-turn", "working"].flatMap((k) => by[k]);
-  const rest = [...by.parked, ...by.earlier.slice(0, 8)];
+  const active = [...by.waiting, ...by.working];
+  const earlier = by.earlier.slice(0, 8);
   return html`<div class="rail" id="rscroll">
     ${active.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[i]} />`)}
-    ${rest.length > 0 && html`<h2 class="grp"><b>Parked, earlier</b><span class="c">${by.parked.length + by.earlier.length}</span></h2>
-      ${rest.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[active.length + i]} />`)}`}
-    ${!active.length && !rest.length && html`<p class="calm">Nothing here yet.</p>`}
+    ${by.parked.length > 0 && html`<h2 class="grp"><b>Parked</b><span class="c">${by.parked.length}</span><span class="r">to resume later</span></h2>
+      ${by.parked.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[active.length + i]} />`)}`}
+    ${earlier.length > 0 && html`<h2 class="grp"><b>Earlier</b><span class="c">${by.earlier.length}</span></h2>
+      ${earlier.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[active.length + by.parked.length + i]} />`)}`}
+    ${!active.length && !by.parked.length && !earlier.length && html`<p class="calm">Nothing here yet.</p>`}
   </div>`;
 }
 
@@ -6339,7 +6344,7 @@ function Palette({ live, sel, say, home, hosts, actions, onClose }) {
   const lead = (it) => it.s ? html`<${StateBlock} s=${it.s} />` : it.agent ? html`<${AgentMark} a=${it.agent} />` : it.b ? html`<span class="ic">${it.bayN}</span>`
     : html`<span class="ic" aria-hidden="true">${it.page ? "pg" : it.mono ? "dir" : ""}</span>`;
   const rt = (it) => it.bay !== undefined && (it.s || it.page) ? html`<span class="bay">${it.bay}</span><span class="ago">${it.ago}</span>`
-    : it.b ? html`<span class="cts" aria-hidden="true">${it.b.needs > 0 && html`<i class="cn n">${it.b.needs}</i>`}${it.b.turn > 0 && html`<i class="cn t">${it.b.turn}</i>`}${it.b.work > 0 && html`<i class="cn w">${it.b.work}</i>`}</span>${it.hint && html`<kbd>${it.hint}</kbd>`}`
+    : it.b ? html`<span class="cts" aria-hidden="true">${it.b.needs + it.b.turn > 0 && html`<i class="cn n">${it.b.needs + it.b.turn}</i>`}${it.b.work > 0 && html`<i class="cn w">${it.b.work}</i>`}</span>${it.hint && html`<kbd>${it.hint}</kbd>`}`
     : it.hint ? it.hint.split(" ").map((k) => html`<kbd>${k}</kbd>`) : "";
   let n = -1;
   return html`

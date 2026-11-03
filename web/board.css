@@ -27,7 +27,7 @@
 .bview .grp .r { margin-left: auto; }
 
 .bwrap { border-bottom: 1px solid var(--hair); position: relative; }
-.bwrap.needs-you::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--needs); }
+.bwrap.waiting::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--needs); }
 .brow { padding-top: 8px; padding-bottom: 8px; cursor: pointer; user-select: none; -webkit-user-select: none; }
 .brow:hover { background: var(--strip-hi); }
 .brow.sel, .brow.cur { background: var(--strip-hi); box-shadow: inset 3px 0 0 var(--ink); }
@@ -55,7 +55,7 @@
 .brow.open .chev { transform: rotate(45deg); }
 
 .bexp { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: var(--s5); padding: 4px var(--s4) var(--s4) calc(var(--s4) + 20px + var(--s3)); background: var(--strip-hi); }
-.bwrap.needs-you .bexp { background: var(--needs-wash); }
+.bwrap.waiting .bexp { background: var(--needs-wash); }
 .bexp ul { margin: 0; padding: 0; list-style: none; font-family: var(--read); font-size: var(--fs-body); line-height: 1.5; color: var(--ink); }
 .bexp li { padding-left: 1em; text-indent: -1em; }
 .bexp li::before { content: "- "; color: var(--faint); }
@@ -84,7 +84,9 @@
 .rail .brow:hover { background: var(--strip-hi); }
 .rail .brow.sel { background: var(--strip-hi); box-shadow: inset 3px 0 0 var(--ink); }
 .rail .brow .c { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
-.rail .brow .s { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail .brow .s { color: var(--dim); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.4; }
+.rail .brow .s2 { color: var(--work); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail .grp .r { margin-left: auto; font-weight: 400; }
 .rail .brow .e { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; white-space: nowrap; }
 .rail .brow .ago { font-family: var(--mono); font-size: var(--fs-micro); color: var(--faint); }
 .rail .brow .e b { font-size: var(--fs-small); font-weight: 620; color: var(--dim); }
