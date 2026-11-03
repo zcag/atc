@@ -131,3 +131,14 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
   .pk .chips button, .pk .askbar .btn { height: var(--hit); }
   .toast { left: var(--s4); right: var(--s4); max-width: none; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s3)); }
 }
+
+.sstrip { display: none; }
+@media (max-width: 899px) {
+  .sstrip { display: flex; flex: none; gap: 2px; overflow-x: auto; scrollbar-width: none; padding: 0 var(--s2); background: var(--board); border-bottom: 1px solid var(--line); }
+  .sstrip::-webkit-scrollbar { display: none; }
+  .sstrip button { flex: none; display: inline-flex; align-items: center; gap: var(--s2); max-width: 46vw; min-height: 44px; padding: 0 var(--s2); border: 0; background: none; color: var(--dim); font-size: var(--fs-small); position: relative; }
+  .sstrip button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sstrip button .sb { width: 18px; height: 18px; }
+  .sstrip button.on { color: var(--ink); font-weight: 620; }
+  .sstrip button.on::after { content: ""; position: absolute; left: var(--s2); right: var(--s2); bottom: 0; height: 2px; background: var(--ink); }
+}

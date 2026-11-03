@@ -13,6 +13,7 @@
     if (!inAtc || e.source !== parent || !m || m.atc !== 1) return;
     if (m.op === "scroll") return location.hash || scrollTo(0, m.y);
     if (m.op === "state") return changed.forEach((fn) => fn());
+    if (m.op === "changes") return document.documentElement.classList.toggle("atc-nochanges", !m.on);
     const w = waiting.get(m.id);
     if (!w) return;
     waiting.delete(m.id);
@@ -100,6 +101,12 @@
     if (!/^https?:$/.test(u.protocol) || (u.host === location.host && !(u.pathname === "/" && u.hash))) return;
     e.preventDefault();
     ask("open", u.href);
+  });
+  const reading = new Set([" ", "PageDown", "PageUp", "Home", "End", "ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Tab", "Enter"]);
+  addEventListener("keydown", (e) => {
+    const t = e.target;
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || reading.has(e.key) || t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || "")) return;
+    parent.postMessage({ atc: 1, op: "key", arg: { key: e.key, code: e.code, altKey: e.altKey, shiftKey: e.shiftKey } }, "*");
   });
   let t = 0;
   addEventListener("scroll", () => {
