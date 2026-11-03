@@ -121,9 +121,8 @@ let MULTI = false, HERE = "";
 let VOICE = {};
 let VOICE_OK = false;
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-let PALETTE_OPEN = () => {};
+let PALETTE_OPEN = () => {}, NEW_SESSION = () => {};
 let SESSION_API = null;
-let TABS = { only: null, tabs: [], set: () => {} };
 let ASK = null, ASKED = 0;
 const ask = (d) => new Promise((done) => (ASK ? ASK({ ...d, id: ++ASKED, done }) : done(null)));
 const focusOnMount = (el) => { if (el && !el.dataset.focused) { el.dataset.focused = "1"; requestAnimationFrame(() => el.focus({ preventScroll: true })); } };
@@ -144,13 +143,10 @@ const pagesRoute = () => {
   return { bay: bay === "all" ? null : bay, sid: m[2] ? decodeURIComponent(m[2]) : null, name: m[3] ? decodeURIComponent(m[3]) : null };
 };
 let PAGES_FROM = null;
-let usageBack = false;
-const openUsage = () => { if (location.hash !== USAGE) { usageBack = true; location.hash = USAGE; } };
-const closeUsage = () => {
-  if (location.hash !== USAGE) return;
-  usageBack ? history.back() : location.replace("#/");
-  usageBack = false;
-};
+const openUsage = () => { if (location.hash !== USAGE) location.hash = USAGE; };
+const SCREENS = { usage: "Usage", backlog: "Backlog", agents: "Agents" };
+const screenOf = () => location.hash === USAGE ? "usage" : location.hash === BACKLOG ? "backlog" : agentRoute() !== null ? "agents" : null;
+const closeScreen = () => { if (screenOf()) { rememberBay(BAY.only, { view: "board" }); go(null); } };
 
 function useRoute() {
   const read = () => (location.hash.match(/^#\/s\/([^/]+)/) || [])[1] || null;
@@ -195,15 +191,17 @@ function App() {
   const [up, setUp] = useState(true);
   const [past, setPast] = useState({});
   const [creating, setCreating] = useState(false);
+  NEW_SESSION = (start) => setCreating(start || true);
   const [palette, setPalette] = useState(false);
   PALETTE_OPEN = () => setPalette(true);
   const [cursor, setCursor] = useState(null);
   const [quick, setQuick] = useState(null);
   QUICK = (s, rect) => setQuick({ s, rect });
-  const [agentSheet, setAgentSheet] = useState(null);
-  AGENT_SHEET = (name, view) => setAgentSheet(name && { name, view });
+  const [agentUse, setAgentUse] = useState(null);
+  AGENT_SHEET = (name, view) => (view === "usage" ? setAgentUse(name) : (location.hash = `${AGENTS_ROUTE}/${encodeURIComponent(name)}`));
   const [help, setHelp] = useState(false);
   const [toast, setToast] = useState(null);
+  const [agentName, setAgentName] = useState(agentRoute);
   const [limits, setLimits] = useState(null);
   const route = useRoute();
   const [stale, setStale] = useState(null);
@@ -269,7 +267,7 @@ function App() {
   }, [me]);
 
   const [assisting, setAssisting] = useState(location.hash === "#/assist");
-  const [usage, setUsage] = useState(location.hash === USAGE);
+  const [scr, setScr] = useState(screenOf);
   const shareRoute = () => (location.hash.startsWith("#/share") ? location.hash : null);
   const [sharing, setSharing] = useState(shareRoute);
   const aloneRoute = () => {
@@ -282,11 +280,10 @@ function App() {
   const [alone, setAlone] = useState(aloneRoute);
   const readPages = () => { if (location.hash === PAGES) history.replaceState(null, "", pagesHash()); return pagesRoute(); };
   const [pagesAt, setPagesAt] = useState(readPages);
-  const [backlog, setBacklog] = useState(location.hash === BACKLOG);
   const [settings, setSettings] = useState(location.hash === SETTINGS);
   const [calling, setCalling] = useState(location.hash === CALL);
   useEffect(() => {
-    const f = () => { setCalling(location.hash === CALL); setAssisting(location.hash === "#/assist"); setUsage(location.hash === USAGE); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesAt(readPages()); setBacklog(location.hash === BACKLOG); setSettings(location.hash === SETTINGS); };
+    const f = () => { setCalling(location.hash === CALL); setAssisting(location.hash === "#/assist"); setScr(screenOf()); setAgentName(agentRoute()); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesAt(readPages()); setSettings(location.hash === SETTINGS); };
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
@@ -371,14 +368,16 @@ function App() {
     document.title = n ? `(${n}) atc` : "atc";
   }, [live]);
 
-  const say = useCallback((msg) => {
-    setToast(msg);
-    setTimeout(() => setToast((t) => (t === msg ? null : t)), 3500);
+  const say = useCallback((msg, act) => {
+    const t = { msg, undo: act?.undo };
+    setToast(t);
+    setTimeout(() => setToast((x) => (x === t ? null : x)), act?.undo ? 8000 : 3500);
   }, []);
+  const undo = () => setToast((t) => { t?.undo?.(); return null; });
 
   const ordered = arrange(live);
   const keys = useRef({});
-  keys.current = { ordered, route, cursor, creating, live, togglePane, setPeek, pages: !!pagesAt };
+  keys.current = { ordered, route, cursor, creating, live, togglePane, setPeek, pages: !!pagesAt, toast, undo, list: !screenOf() && !pagesAt };
   useEffect(() => {
     const step = (from, d) => {
       const k = keys.current;
@@ -420,13 +419,13 @@ function App() {
         return goBay(b.name, k.live);
       }
       if (e.metaKey || e.ctrlKey || e.altKey || typing) return;
-      if (document.querySelector(".veil, .pghome, .palone, .keys-ov")) {
+      if (document.querySelector(".veil, .pghome, .palone, .keys-ov, .pal")) {
         if (e.key === "Escape") setHelp(false);
         if (e.key === "?") setHelp((h) => !h);
         return;
       }
       const qi = QWERTY.indexOf(e.key);
-      if (qi >= 0 && !k.pages && !e.shiftKey) {
+      if (qi >= 0 && k.list && !e.shiftKey) {
         const rows = [...new Set([...document.querySelectorAll(".bview [data-sid], .rail [data-sid]")].map((el) => el.dataset.sid))];
         const x = rows[qi] && (k.ordered.find((v) => v.sessionId === rows[qi]) || { sessionId: rows[qi] });
         e.preventDefault(); e.stopPropagation();
@@ -448,7 +447,8 @@ function App() {
           next ? go(keyOf(next)) : say("Nothing needs you.");
         },
         "[": () => (k.route ? k.togglePane("rail") : k.pages && k.togglePane("pgindex")),
-        "\\": () => !k.route && !k.pages && k.togglePane("index"),
+        "\\": () => !k.route && k.list && k.togglePane("index"),
+        z: () => k.toast?.undo && k.undo(),
         ",": () => (location.hash === SETTINGS ? closeSettings() : (location.hash = SETTINGS)),
         "/": () => setPalette(true),
         "?": () => setHelp((h) => !h),
@@ -457,17 +457,17 @@ function App() {
         const next = step(k.route, move);
         e.preventDefault();
         if (next && next.sessionId !== k.route && keyOf(next) !== k.route) go(keyOf(next));
-      } else if (move && !k.route) {
+      } else if (move && !k.route && k.list) {
         const next = step(k.cursor || k.route, move);
         if (next) { e.preventDefault(); setCursor(next.sessionId); document.querySelector(`[data-sid="${next.sessionId}"]`)?.scrollIntoView({ block: "nearest" }); }
-      } else if (e.key === "Enter" && k.cursor && !k.pages) {
+      } else if (e.key === "Enter" && k.cursor && k.list) {
         e.preventDefault();
         const x = k.ordered.find((x) => x.sessionId === k.cursor);
         if (x) go(keyOf(x));
       } else if (act) {
         e.preventDefault(); act();
       } else if (e.key === "Escape") {
-        setHelp(false); setCursor(null); closeUsage();
+        setHelp(false); setCursor(null); closeScreen();
       }
     };
     addEventListener("keydown", onKey, true);
@@ -488,7 +488,7 @@ function App() {
 
   const all = runs || [];
   const sel = route && (all.find((s) => s.id === route || s.sessionId === route) || past[route]);
-  const screen = route ? "session" : pagesAt ? "pages" : "board";
+  const screen = route ? "session" : pagesAt ? "pages" : scr || "board";
   const bays = baysOf(live, only);
   const inBay = (live || []).filter((x) => x.state !== "stopped" && (only ? bayOf(x) === only : !homeless(x))).length;
   const remember = rememberPast;
@@ -503,6 +503,9 @@ function App() {
     <${BayBar} bays=${bays} only=${only} view=${screen} panes=${panes} togglePane=${togglePane} up=${up} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
     ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} say=${say} onClose=${() => setPeek(null)} />`}
     ${pagesAt && !route ? html`<div class="shell pagesv"><${PagesView} at=${pagesAt} live=${all} bays=${bays} say=${say} index=${panes.pgindex !== false} /></div>`
+    : scr && !route ? html`<main class="shell scr">${scr === "usage" ? html`<${UsagePage} limits=${limits} live=${all} down=${down} onOpen=${openFromUsage} />`
+      : scr === "backlog" ? html`<${BacklogPage} live=${all} say=${say} onAdd=${setCreating} only=${only} />`
+      : html`<${AgentsPage} name=${agentName} agents=${agents} live=${all} say=${say} reload=${loadAgents} />`}</main>`
     : !route ? html`<div class="shell boardv"><${BoardView} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} say=${say} index=${panes.index && wide} /></div>` : html`
     <div class="shell open ${!panes.rail ? "norail" : ""}">
       <aside class="side">
@@ -521,20 +524,20 @@ function App() {
     <${Console} hub=${hub} agents=${agents} runs=${runs} onTalk=${() => talk(false, false)} onKeys=${() => setHelp(true)} />
     <${TabBar} view=${screen} assisting=${sel?.kind === "hub"} onTalk=${() => talk(false, false)} />
     </div>
-    ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} start=${creating === true ? here(sel, live) : creating} />`}
-    ${palette && html`<${Palette} live=${reach || []} sel=${sel} say=${say} home=${me.host} onClose=${() => setPalette(false)}
-      actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: () => (location.hash = "#/assist"), ask: () => talk(false, false) }} />`}
+    ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${me.hosts || [me.host]} down=${down} home=${me.host} live=${all}
+      start=${creating === true ? null : creating} context=${creating === true ? here(sel, live) : null} />`}
+    ${palette && html`<${Palette} live=${reach || []} sel=${sel} say=${say} home=${me.host} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} onClose=${() => setPalette(false)}
+      actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: () => (location.hash = "#/assist"), ask: () => talk(false, false),
+        pane: togglePane, next: () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true })) }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${reach} onOpen=${() => go(null)} />`}
     ${settings && html`<${SettingsPage} me=${me} onClose=${closeSettings} />`}
-    ${backlog && html`<${BacklogPage} live=${all} say=${say} onClose=${closeBacklog} onAdd=${setCreating} />`}
     ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} at=${alone.at} live=${all} say=${say} />`}
     ${calling ? html`<${CallView} />` : html`<${CallPill} />`}
-    ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
-    ${agentSheet && html`<${AgentSheet} key=${agentSheet.name + agentSheet.view} name=${agentSheet.name} view=${agentSheet.view} live=${all} say=${say} onClose=${() => setAgentSheet(null)} reload=${loadAgents} />`}
+    ${agentUse && html`<${AgentUsage} name=${agentUse} onClose=${() => setAgentUse(null)} />`}
     <${Dialogs} />
-    ${toast && html`<div class="toast" role="status">${toast}</div>`}
+    ${toast && html`<div class="toast" role="status">${toast.msg}${toast.undo && html` <button class="tundo" onClick=${undo} aria-keyshortcuts="z">Undo <kbd aria-hidden="true">z</kbd></button>`}</div>`}
     ${notifAsk && me && !updated && !settings && html`<div class="appbar" role="status">
       <span>Get a desktop notification when a session finishes or needs you, while this tab is in the background?</span>
       <button class="btn primary" onClick=${() => notifDone(true)}>Turn on</button>
@@ -660,6 +663,7 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
         ${kb(view === "session", "Session", "s", () => goBay(only, live, true))}
         ${kb(view === "board", "Board", "b", () => { rememberBay(only, { view: "board" }); go(null); })}
         ${kb(view === "pages", "Pages", "g", () => (location.hash = pagesHash()))}
+        ${SCREENS[view] && html`<button class="kb on" aria-current="page">${SCREENS[view]}</button>`}
       </div>
       ${view === "board" && html`<div class="tgl">${kb(only === null, html`<span class="nm">All bays</span>`, "alt 0", () => BAY.set(only === null ? bays[0]?.name || null : null), "Every bay on one board")}${kb(panes.index, html`<span class="nm">Page index</span>`, "\\", () => togglePane("index"), "The bay's pages beside the board")}</div>`}
       ${view === "pages" && html`<div class="tgl">${kb(panes.pgindex !== false, html`<span class="nm">Index</span>`, "[", () => togglePane("pgindex"), "Every page in the bay, newest first")}${kb(only === null, html`<span class="nm">All bays</span>`, "alt 0", () => { location.hash = pagesHash(only === null ? PAGES_FROM || bays[0]?.name || null : null); PAGES_FROM = only || PAGES_FROM; }, "Pages from every bay, grouped by bay")}</div>`}
@@ -768,13 +772,16 @@ function TabBar({ view, assisting, onTalk }) {
 
 const KEYMAP = [
   ["Views", [["s", "Session: the bay's last open one"], ["b", "Board"], ["g", "Pages"], [".", "Assistant"]]],
-  ["Bays", [["1..9", "That bay, as you left it; again: its next session"], ["shift alt 1..9", "Peek at that bay: answer without going there"], ["0", "Every bay"], ["n", "Next session that needs you, any bay"]]],
+  ["Bays", [["1..9", "That bay, as you left it; again: its next session"], ["shift alt 1..9", "Peek at that bay: answer without going there"], ["0", "Every bay"], ["n", "Next session waiting on you, any bay"]]],
   ["Sessions", [["q w e .. p", "The 1st to 10th session in the list, at once"], ["j k", "Next, previous session (on the board: the selection)"], ["enter", "On the board: open the selected session"], ["alt j k", "Next, previous session, even from a terminal"]]],
   ["Panes", [["[", "Sessions beside the transcript"], ["]", "State: now, running, made, the session's facts"], ["\\", "Its page beside the transcript (board: the page index)"]]],
   ["Session", [["enter", "Write to the session"], ["`", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
   ["Transcript", [["l", "Outline, story, everything (cycles)"], ["f", "Find in the session"]]],
   ["Pages", [["j k", "Next, previous page"], ["[", "The index"], ["alt 0", "This bay or every bay"], ["q w e .. p", "The 1st to 10th page in the index"], ["\\", "The page beside its session"], ["enter", "Note: its session, at the composer"], ["d", "What changed, on an updated page"]]],
-  ["Anywhere", [["/", "Search and commands"], ["+", "New session"], [",", "Settings"], ["?", "These keys"], ["esc", "Close what is open"]]],
+  ["Palette", [["↑ ↓", "Move (also ctrl j, ctrl k)"], ["enter", "Run it"], ["tab", "Preview it behind the palette"], ["1..9", "Alone: that bay"]]],
+  ["Backlog", [["j k", "Next, previous task"], ["enter", "Start, take or open it"], ["d", "Done"], ["x", "Blocked, or unblock"], ["a", "The add box"]]],
+  ["Agents", [["j k", "Next, previous agent"], ["enter", "Its conversation"]]],
+  ["Anywhere", [["/", "Search and commands"], ["+", "New session"], [",", "Settings"], ["z", "Undo, while an Undo toast shows"], ["?", "These keys"], ["esc", "Close what is open"]]],
 ];
 
 function KeysOverlay({ onClose }) {
@@ -2716,17 +2723,7 @@ const asPct = (cost, w) => (cost != null && perPct(w) ? cost / perPct(w) : null)
 const pct = (x) => (x < 0.1 ? "<0.1%" : x < 10 ? `${x.toFixed(1)}%` : `${Math.round(x)}%`);
 const usd = (c) => (c > 0 && c < 0.01 ? "<$0.01" : `~${dollars(c)}`);
 const approx = (x) => (x < 0.1 ? "<0.1%" : `≈${pct(x)}`);
-const resetDay = (t) => new Date(t).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
-
-function pace(w) {
-  const from = Date.parse(w.from), end = Date.parse(w.resetsAt), now = Date.now();
-  const gone = (now - from) / (end - from);
-  if (!(gone > 0.1 && gone < 1) || w.percent < 1 || w.percent >= 100) return null;
-  const at100 = from + ((now - from) * 100) / w.percent;
-  return at100 < end
-    ? { hot: true, text: `At this pace you reach 100% ${resetDay(at100)}, ${span((end - at100) / 1000)} before it resets.` }
-    : { text: `At this pace you end near ${Math.round(w.percent / gone)}% (${Math.round(gone * 100)}% of the window has passed).` };
-}
+const resetDay = (t) => new Date(t).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
 const useSessionUsage = (s, every) => useUsage(`/api/sessions/${s.sessionId}/usage`, every);
 
@@ -2894,21 +2891,7 @@ const ShareRows = ({ rows, total, w, onPick }) => html`
       </button>`)}
   </div>`;
 
-const RANGES = [7, 14, 30, 90];
-const FAMILIES = ["opus", "fable", "sonnet", "haiku"];
-const SERIES = 5;
-const modelRank = (m) => { const i = FAMILIES.findIndex((f) => m.includes(f)); return i < 0 ? FAMILIES.length : i; };
-const byModel = (a, b) => modelRank(a) - modelRank(b) || b.localeCompare(a, undefined, { numeric: true });
 const dayOf = (d, o) => new Date(d + "T12:00").toLocaleDateString([], o);
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const share = (x, of) => (of > 0 ? pct((x / of) * 100) : "");
-const ofWeek = (cost, w) => { const p = asPct(cost, w); return p != null ? `≈${pct(p)} of a week` : ""; };
-const KINDS = [
-  ["output", "Output", "What Claude wrote, thinking included"],
-  ["cacheRead", "Cache reads", "Earlier context re-read from the prompt cache on every call"],
-  ["cacheWrite", "Cache writes", "New context stored in the prompt cache"],
-  ["input", "Input", "Context sent without caching"],
-];
 
 function useReport(n) {
   const [rep, setRep] = useState(null);
@@ -2921,196 +2904,212 @@ function useReport(n) {
   return rep;
 }
 
-function LimitCard({ w, x }) {
-  useNow(60000);
-  const rate = perPct(x), p = x && pace(x);
-  const from = Date.parse(x?.from), end = Date.parse(w.resetsAt);
-  const gone = from && end > from ? Math.min(1, Math.max(0, (Date.now() - from) / (end - from))) : null;
-  return html`
-    <div class="ucard ulimit">
-      <div class="ulh"><span>${w.key === "session" ? "5-hour window" : w.label}</span><b class=${level(w.percent)}>${Math.round(w.percent)}%</b></div>
-      <div class="utrack ${level(w.percent)}" title=${gone != null ? `${Math.round(w.percent)}% used, ${Math.round(gone * 100)}% of the window passed` : ""}>
-        <i style=${`width: ${Math.min(100, w.percent)}%`}></i>
-        ${gone != null && html`<u style=${`left: ${gone * 100}%`}></u>`}
-      </div>
-      <div class="ulm">
-        <span>${x?.cost > 0 ? `${usd(x.cost)} used` : "Nothing used yet"}</span>
-        <span>${rate && w.percent < 100 ? `≈${dollars(rate * (100 - w.percent))} left` : ""}</span>
-      </div>
-      ${p ? html`<p class=${p.hot ? "hot" : ""}>${p.text}</p>` : gone != null && html`<p>${Math.round(gone * 100)}% of the window has passed.</p>`}
-      <p class="faint">${resetText(w.resetsAt)}${rate ? ` · ≈${dollars(rate)} per 1%` : ""}</p>
-    </div>`;
-}
+const hhmm = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+const whenAt = (t) => new Date(t).toDateString() === new Date().toDateString() ? hhmm(t) : `${new Date(t).toLocaleDateString([], { weekday: "short" })} ${hhmm(t)}`;
 
-function DailyChart({ days, models, color, week }) {
-  const [at, setAt] = useState(null);
-  const top = Math.max(...days.map((d) => d.cost), 0);
-  const step = top <= 0 ? 1 : 10 ** Math.floor(Math.log10(top / 3));
-  const tick = [1, 2, 5, 10].map((m) => m * step).find((t) => t * 3 >= top) || step * 10;
-  const ceil = Math.max(tick * Math.ceil(top / tick), 1);
-  const avg = days.reduce((a, d) => a + d.cost, 0) / (days.length || 1);
-  const i = at ?? days.length - 1, pick = days[i];
-  const labelAt = (d) => days.length <= 14 || new Date(d.day + "T12:00").getDay() === 1;
-  return html`
-    <div class="ureadout">
-      ${pick && html`
-        <b>${dayOf(pick.day, { weekday: "short", month: "short", day: "numeric" })}</b>
-        <span class="big">${pick.cost > 0 ? usd(pick.cost) : "No usage"}</span>
-        ${pick.cost > 0 && html`<span>${[ofWeek(pick.cost, week), `${tokens(pick.total)} tokens`, plural(pick.sessions, "session"), plural(pick.messages, "reply")].filter(Boolean).join(" · ")}</span>`}
-        <span class="umix">${models.filter((m) => pick.models?.[m] >= 0.005).map((m) => html`<span><i style=${`background: ${color(m)}`}></i>${modelName(m)} ${dollars(pick.models[m])}</span>`)}</span>`}
-    </div>
-    <div class="uchart" style=${`--cols: ${days.length}`}>
-      <div class="ugrid">
-        ${[3, 2, 1, 0].map((k) => html`<span style=${`bottom: ${(k * tick / ceil) * 100}%`}><em>${k ? dollars(k * tick).replace(".00", "") : "$0"}</em></span>`)}
-        ${avg > 0 && html`<span class="avg" style=${`bottom: ${(avg / ceil) * 100}%`}><em>avg ${dollars(avg)}</em></span>`}
-      </div>
-      <div class="ubars" onPointerLeave=${() => setAt(null)}>
-        ${days.map((d, j) => html`
-          <button class="ubar ${j === i ? "on" : ""}" onPointerEnter=${() => setAt(j)} onFocus=${() => setAt(j)} onClick=${() => setAt(j)}
-            aria-label=${`${d.day}: about ${dollars(d.cost)}, ${tokens(d.total)} tokens`}>
-            <span class="stack" style=${`height: ${(d.cost / ceil) * 100}%`}>
-              ${models.filter((m) => d.models?.[m] > 0).map((m) => html`<i style=${`flex: ${d.models[m]} 1 0; background: ${color(m)}`}></i>`)}
-            </span>
-            ${labelAt(d) && html`<small>${j === 0 || +d.day.slice(8) <= (days.length <= 14 ? 1 : 7) ? dayOf(d.day, { month: "short", day: "numeric" }) : +d.day.slice(8)}</small>`}
-          </button>`)}
-      </div>
-    </div>`;
-}
-
-function Heatmap({ days }) {
-  const [at, setAt] = useState(null);
-  const grid = WEEKDAYS.map(() => Array(24).fill(0)), count = Array(7).fill(0);
-  for (const d of days) {
-    const wd = (new Date(d.day + "T12:00").getDay() + 6) % 7;
-    count[wd]++;
-    d.hours?.forEach((c, h) => (grid[wd][h] += c));
+function limitRow(w, x) {
+  const from = Date.parse(x?.from), end = Date.parse(w.resetsAt), now = Date.now();
+  const gone = from && end > from ? Math.min(1, Math.max(0, (now - from) / (end - from))) : null;
+  const name = w.key === "session" ? "This 5-hour window" : w.label;
+  const reset = w.key === "session" && from ? `${hhmm(from)} to ${hhmm(end)}` : `resets ${resetDay(end)}`;
+  const r = { w, name, reset, used: Math.min(100, w.percent), pace: gone != null ? gone * 100 : null };
+  if (gone == null || gone < 0.03 || w.percent < 1) {
+    r.say = gone == null ? resetText(w.resetsAt) : w.percent < 1 ? "Nothing used yet." : "Too early in the window to tell a pace.";
+    r.why = { used: `${Math.round(w.percent)}% of ${name.toLowerCase()} used.`, proj: r.say };
+    return r;
   }
-  const top = Math.max(...grid.flat(), 0);
-  const hours = Array(24).fill(0).map((_, h) => grid.reduce((a, r) => a + r[h], 0));
-  const busiest = hours.indexOf(Math.max(...hours));
-  const hh = (h) => `${String(h).padStart(2, "0")}:00`;
-  const cell = at && grid[at[0]][at[1]];
-  return html`
-    <div class="ureadout sm">
-      ${at ? html`<b>${WEEKDAYS[at[0]]} ${hh(at[1])}–${hh((at[1] + 1) % 24)}</b><span>${cell > 0 ? `${usd(cell)} over ${plural(count[at[0]], WEEKDAYS[at[0]])}` : "Nothing"}</span>`
-        : top > 0 && html`<span>Busiest hour: <b>${hh(busiest)}–${hh((busiest + 1) % 24)}</b>, ${usd(hours[busiest])} in this range</span>`}
-    </div>
-    <div class="uheat" onPointerLeave=${() => setAt(null)}>
-      ${grid.map((row, r) => html`
-        <span class="rl">${WEEKDAYS[r]}</span>
-        ${row.map((c, h) => html`<i class=${at && at[0] === r && at[1] === h ? "on" : ""} onPointerEnter=${() => setAt([r, h])} onClick=${() => setAt([r, h])}
-          style=${c > 0 ? `--a: ${Math.round(12 + 88 * Math.sqrt(c / top))}%` : ""}></i>`)}`)}
-      <span></span>
-      ${Array(24).fill(0).map((_, h) => html`<span class="cl">${h % 3 ? "" : h}</span>`)}
-    </div>`;
+  const perHour = w.percent / ((now - from) / 3.6e6);
+  r.proj = Math.min(100, w.percent / gone);
+  r.hit = w.percent / gone >= 100 && w.percent < 100;
+  const at100 = from + ((now - from) * 100) / w.percent;
+  r.say = w.percent >= 100 ? html`<b>Used up.</b> ${resetText(w.resetsAt)}.`
+    : r.hit ? html`Runs out <b>about ${whenAt(at100)}</b>, ${span((end - at100) / 1000)} before it resets.`
+    : html`Lasts to the reset at this rate, about ${Math.round(r.proj)}% by ${resetDay(end)}.`;
+  r.when = r.hit && whenAt(at100);
+  r.left = r.hit && span((end - at100) / 1000);
+  r.why = {
+    used: `${Math.round(w.percent)}% of ${name.toLowerCase()}, since ${resetDay(from)}${x?.cost > 0 ? `; about ${usd(x.cost)} at API prices` : ""}. Anthropic reports whole percents.`,
+    pace: `Even pace: ${Math.round(gone * 100)}% of the window has passed, so ${Math.round(gone * 100)}% used would last exactly to the reset.`,
+    proj: `The average since the window opened is ${perHour.toFixed(1)}% an hour${r.hit ? `; the remaining ${Math.round(100 - w.percent)}% lasts until ${whenAt(at100)}` : `, about ${Math.round(r.proj)}% by the reset`}.`,
+  };
+  return r;
 }
 
-function UsagePage({ limits, multi, onClose, onOpen }) {
-  const [n, setN] = useState(() => { try { return +localStorage.getItem("atc.usage.days") || 30; } catch { return 30; } });
-  const pickN = (v) => { setN(v); try { localStorage.setItem("atc.usage.days", v); } catch {} };
-  const [order, setOrder] = useState("cost");
-  const [all, setAll] = useState(false);
+function X({ why, label, xp }) {
+  return html`<button type="button" class="x" aria-expanded=${xp.at?.why === why} onPointerEnter=${(e) => matchMedia("(hover: hover)").matches && xp.show(e.currentTarget, why)}
+    onPointerLeave=${() => matchMedia("(hover: hover)").matches && xp.hide()} onFocus=${(e) => xp.show(e.currentTarget, why)} onBlur=${xp.hide}
+    onClick=${(e) => { e.stopPropagation(); xp.show(e.currentTarget, why, true); }}>${label}</button>`;
+}
+
+function useExplain() {
+  const [at, setAt] = useState(null);
+  useEffect(() => {
+    if (!at?.pin) return;
+    const f = () => setAt(null);
+    addEventListener("pointerdown", f);
+    return () => removeEventListener("pointerdown", f);
+  }, [at]);
+  const show = (el, why, pin) => { const r = el.getBoundingClientRect(); setAt({ why, pin, x: r.left, top: r.top, bottom: r.bottom }); };
+  return { at, show, hide: () => setAt((a) => (a?.pin ? a : null)) };
+}
+
+function Explain({ at }) {
+  const ref = useRef();
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.left = `${Math.max(8, Math.min(at.x, innerWidth - el.offsetWidth - 8))}px`;
+    el.style.top = `${at.bottom + el.offsetHeight + 12 > innerHeight ? at.top - el.offsetHeight - 6 : at.bottom + 6}px`;
+  }, [at]);
+  return at && html`<div class="xp" role="tooltip" ref=${ref}>${at.why}</div>`;
+}
+
+const USAGE_COLS = [["title", "Session", ""], ["bay", "Bay", "c-bay"], ["model", "Model", "c-m"], ["msgs", "Replies", "n c-st"], ["today", "Today", "n"], ["week", "7 days", "n c-wk"], ["last", "Last", "n"]];
+
+function UsagePage({ limits, live, down, onOpen }) {
+  useNow(60000);
   const [u, setU] = useState(WINS);
   useEffect(() => { loadWindows(true).then(setU); }, []);
-  const rep = useReport(n);
+  const today = useReport(1), seven = useReport(7);
+  const [v, setV] = useState(() => ({ sort: "today", dir: -1, bay: null, q: "", ...stored("atc.usage", {}) }));
+  const set = (p) => setV((x) => { const n = { ...x, ...p }; store("atc.usage", n); return n; });
+  const [cell, setCell] = useState(null);
+  const xp = useExplain();
+  const scroll = useRef();
+  useLayoutEffect(() => { if (scroll.current) scroll.current.scrollTop = stored("atc.usage.scroll", 0); }, [!!today]);
+
   const ws = limits?.windows || [];
-  const week = winOf(u, "weekly_all");
-  const firstUsed = (rep?.days || []).findIndex((d) => d.cost > 0);
-  const days = (rep?.days || []).slice(Math.max(0, firstUsed));
-  const since = firstUsed > 0 && dayOf(days[0].day, { month: "short", day: "numeric" });
-  const sum = days.reduce((a, d) => {
-    for (const k of ["cost", "total", "messages", "input", "cacheRead", "cacheWrite", "output"]) a[k] += d[k] || 0;
-    for (const [k] of KINDS) a.costs[k] += d.costs?.[k] || 0;
-    for (const [m, c] of Object.entries(d.models || {})) a.models[m] = (a.models[m] || 0) + c;
-    return a;
-  }, { cost: 0, total: 0, messages: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, costs: Object.fromEntries(KINDS.map(([k]) => [k, 0])), models: {} });
-  const models = Object.keys(sum.models).filter((m) => sum.models[m] >= 0.005).sort(byModel);
-  const color = (m) => { const i = models.indexOf(m); return i >= 0 && i < SERIES ? `var(--series-${i + 1})` : "var(--faint)"; };
-  const active = days.filter((d) => d.cost > 0).length;
-  const today = days.at(-1);
-  const restAvg = days.length > 1 ? (sum.cost - (today?.cost || 0)) / (days.length - 1) : 0;
-  const cin = sum.input + sum.cacheRead + sum.cacheWrite;
-  const projects = Object.values((rep?.projects || []).reduce((a, p) => {
-    const name = project(p.cwd).name || "other";
-    const x = (a[name] ||= { label: name, cost: 0, sessions: 0, total: 0, hosts: new Set() });
-    x.cost += p.cost; x.sessions += p.sessions; x.total += p.total;
-    p.hosts?.forEach((h) => x.hosts.add(h));
-    return a;
-  }, {})).sort((a, b) => b.cost - a.cost);
-  const nSessions = projects.reduce((a, p) => a + p.sessions, 0);
-  const sessions = [...(rep?.sessions || [])].sort(order === "cost" ? (a, b) => b.cost - a.cost : order === "tokens" ? (a, b) => b.total - a.total : (a, b) => Date.parse(b.last) - Date.parse(a.last));
-  const shown = all ? sessions : sessions.slice(0, 12);
-  const src = !limits ? "Checking…"
-    : limits.source === "live" ? `Checked ${agoLong(limits.fetchedAt)} with your Claude account.`
-    : limits.source === "cached" ? `Not current: from Claude Code's last check, ${agoLong(limits.fetchedAt)}.`
-    : limits.source === "statusline" ? `From Claude Code's status line, ${agoLong(limits.fetchedAt)}.` : "";
-  const kpis = rep && !rep.failed && [
-    [usd(sum.cost), since ? `spent since ${since}` : `spent in ${n} days`, perPct(week) ? `≈${(sum.cost / (perPct(week) * 100)).toFixed(1)}× a full week's limit` : ""],
-    [usd(active ? sum.cost / active : 0), "per active day", `${active} of ${days.length} days active`],
-    [usd(today?.cost || 0), "today", restAvg > 0 && today ? `${today.cost >= restAvg ? "+" : "−"}${Math.round(Math.abs(today.cost / restAvg - 1) * 100)}% vs the daily average` : ""],
-    [tokens(sum.total), "tokens", `${tokens(sum.output)} written · ${plural(sum.messages, "reply")}`],
-    [String(nSessions), nSessions === 1 ? "session" : "sessions", plural(projects.length, "project")],
-    [cin ? `${Math.round((sum.cacheRead / cin) * 100)}%` : "–", "context from cache", "cache reads cost a tenth of fresh input"],
-  ];
+  const rows = ws.map((w) => limitRow(w, winOf(u, w.key)));
+  const hit = rows.find((r) => r.hit);
+  const day = today?.days?.at(-1);
+  const week = u?.week;
+  const isDown = (h) => down.some((p) => p.name === h);
+  const status = !limits ? "Checking the limits…" : !ws.length ? `Limits are not available here${limits.error ? `: ${limits.error}` : ""}`
+    : hit ? `${hit.name} runs out ${hit.when} at this rate, ${hit.left} before the reset` : "Every limit lasts to its reset at this rate";
+  const src = limits && (limits.source === "live" ? `checked ${agoLong(limits.fetchedAt)}` : limits.source === "cached" ? `from Claude Code's last check, ${agoLong(limits.fetchedAt)}` : limits.source === "statusline" ? `from Claude Code's status line, ${agoLong(limits.fetchedAt)}` : "");
+
+  const sessions = new Map();
+  const row = (x) => { const r = sessions.get(x.sessionId) || { ...x, today: 0, week: 0, msgs: 0 }; sessions.set(x.sessionId, r); return r; };
+  for (const x of seven?.sessions || []) { const r = row(x); r.week = x.cost; r.msgs = x.messages || 0; }
+  for (const x of today?.sessions || []) { const r = row(x); r.today = x.cost; r.week = Math.max(r.week, x.cost); r.msgs = Math.max(r.msgs, x.messages || 0); r.last = r.last && Date.parse(r.last) > Date.parse(x.last) ? r.last : x.last; }
+  const all = [...sessions.values()].map((r) => ({ ...r, bay: project(r.cwd).name || "other", s: live.find((x) => x.sessionId === r.sessionId) }));
+  const sum = (l, k) => l.reduce((a, r) => a + (r[k] || 0), 0);
+
+  const byModel = Object.entries(day?.models || {}).filter(([, c]) => c >= 0.005).sort((a, b) => b[1] - a[1]);
+  const mTotal = byModel.reduce((a, [, c]) => a + c, 0);
+  const bayRows = {};
+  const bayOfP = (p) => (bayRows[project(p.cwd).name || "other"] ||= { name: project(p.cwd).name || "other", today: 0, week: 0, n: 0 });
+  for (const p of seven?.projects || []) bayOfP(p).week += p.cost;
+  for (const p of today?.projects || []) { const b = bayOfP(p); b.today += p.cost; b.n += p.sessions || 0; }
+  for (const b of Object.values(bayRows)) b.week = Math.max(b.week, b.today);
+  const bays = Object.values(bayRows).sort((a, b) => b.week - a.week || b.today - a.today);
+  const bayMax = Math.max(0.01, ...bays.map((b) => b.week));
+  const key = (r, k) => k === "title" ? (r.title || "").toLowerCase() : k === "last" ? -Date.parse(r.last || 0) : k === "model" ? r.model || "" : r[k];
+  const ql = v.q.trim().toLowerCase();
+  const shown = all.filter((r) => (!v.bay || r.bay === v.bay) && (!ql || `${r.title} ${r.bay}`.toLowerCase().includes(ql)))
+    .sort((a, b) => { const A = key(a, v.sort), B = key(b, v.sort); return (A > B ? 1 : A < B ? -1 : 0) * v.dir; });
+  const sortBy = (k) => set({ sort: k, dir: v.sort === k ? -v.dir : ["title", "bay", "model", "last"].includes(k) ? 1 : -1 });
+
+  const days = (seven?.days || []).slice(-7);
+  const hmax = Math.max(0.01, ...days.flatMap((d) => d.hours || []));
+  const nowH = new Date().getHours(), todayKey = new Date().toLocaleDateString("en-CA");
+  const lvl = (c) => (c > 0 ? [0.14, 0.3, 0.5, 0.7, 0.9][Math.min(4, Math.floor((c / hmax) * 5))] : 0);
+  const at = cell || (days.length ? [days.length - 1, nowH] : null);
+  const atCost = at && days[at[0]]?.hours?.[at[1]];
+  const fut = (d, h) => d.day === todayKey && h > nowH;
+  const moveCell = (e) => {
+    if (!at || !e.key.startsWith("Arrow")) return;
+    e.preventDefault();
+    let [d, h] = at;
+    if (e.key === "ArrowLeft") h = Math.max(0, h - 1);
+    if (e.key === "ArrowRight") h = Math.min(23, h + 1);
+    if (e.key === "ArrowUp") d = Math.max(0, d - 1);
+    if (e.key === "ArrowDown") d = Math.min(days.length - 1, d + 1);
+    if (!fut(days[d], h)) setCell([d, h]);
+  };
+  const empty = today && seven && !all.length && !days.some((d) => d.cost > 0);
+  const money = (c) => (c > 0 ? dollars(c) : html`<span class="dim">0</span>`);
   return html`
-    <div class="usepage" role="dialog" aria-label="Usage">
-      <header class="uphead">
-        <button class="icon back" onClick=${onClose} aria-label="Back">←</button>
-        <div class="who"><h2>Usage</h2><span class="sub">${[limits?.plan && `${limits.plan} plan`, multi && "all machines"].filter(Boolean).join(" · ")}</span></div>
-        <div class="seg">${RANGES.map((r) => html`<button class=${r === n ? "on" : ""} onClick=${() => pickN(r)}>${r}d</button>`)}</div>
-        <button class="icon close" onClick=${onClose} aria-label="Close" title="Close (Esc)">✕</button>
+    <section class="scrpane usage" aria-label="Usage">
+      <header class="hd">
+        <div class="l1"><h1>Usage</h1><span class="where">Claude Code${MULTI ? " on every host" : ""}${limits?.plan ? `, ${limits.plan} plan` : ""}</span></div>
+        <div class="l2 no-block"><span class="stat">${status}</span>
+          ${day && html`<span class="rd"><span class="l">today</span>${dollars(day.cost)}</span>`}
+          ${week && html`<span class="rd"><span class="l">week</span>${dollars(week.cost)}</span>`}
+          ${src && html`<span class="rd"><span class="l">limits</span>${src}</span>`}</div>
       </header>
-      <div class="upbody ${rep?.loading ? "loading" : ""}">
-        <section class="ulimits">
-          ${ws.map((w) => html`<${LimitCard} w=${w} x=${winOf(u, w.key)} />`)}
-          ${limits && !ws.length && html`<p class="unote">Limits are not available here${limits.error ? `: ${limits.error}` : "."}</p>`}
-        </section>
-        <p class="unote">${src}${ws.length && limits?.error ? ` ${limits.error}.` : ""}${ws.length ? " The bar is what you've used; the tick is how much of the window has passed." : ""}</p>
-        ${!rep ? html`<p class="unote">Adding up transcripts…</p>` : rep.failed ? html`<p class="unote">Couldn't add up the transcripts.</p>` : html`
-          <section class="ukpis">${kpis.map(([v, l, s]) => html`<div><span class="n">${v}</span><span class="l">${l}</span>${s && html`<span class="s">${s}</span>`}</div>`)}</section>
-          <section class="ugrid2">
-            <div class="ucard wide">
-              <h4>Spend by day</h4>
-              <${DailyChart} days=${days} models=${models} color=${color} week=${week} />
-              ${since && html`<p class="unote">Nothing before ${since}: Claude Code deletes transcripts after 30 days unless <code>cleanupPeriodDays</code> in its settings says otherwise.</p>`}
-              <div class="ulegend">${models.map((m, i) => html`<span><i style=${`background: ${color(m)}`}></i>${i < SERIES ? modelName(m) : `${modelName(m)} (other)`}<b>${usd(sum.models[m])}</b><small>${share(sum.models[m], sum.cost)}</small></span>`)}</div>
-            </div>
-            <div class="ucard">
-              <h4>Where the cost goes</h4>
-              <${ShareRows} w=${week} total=${Math.max(...KINDS.map(([k]) => sum.costs[k]), 0.01)}
-                rows=${KINDS.map(([k, label, hint]) => ({ label, hint, cost: sum.costs[k], sub: `${tokens(sum[k])} tokens · ${share(sum.costs[k], sum.cost)}` }))} />
-            </div>
-            <div class="ucard wide">
-              <h4>When you use it</h4>
-              <${Heatmap} days=${days} />
-            </div>
-            <div class="ucard">
-              <h4>Projects</h4>
-              <${ShareRows} w=${week} total=${projects[0]?.cost || 1}
-                rows=${projects.slice(0, 8).map((p) => ({ ...p, sub: `${plural(p.sessions, "session")}${multi ? ` · ${[...p.hosts].join(", ")}` : ""}` }))} />
-            </div>
+      <div class="scroll" ref=${scroll} onScroll=${(e) => store("atc.usage.scroll", e.currentTarget.scrollTop)}>
+        <div class="ubody">
+          <section class="sec" aria-labelledby="u-lim">
+            <div class="sh"><h2 id="u-lim">Limits</h2><span class="n">${ws.length ? `Claude Code${MULTI ? ", every host" : ""}. ${touch ? "Tap" : "Point at"} a number for how it is worked out.` : ""}</span></div>
+            ${!ws.length && html`<p class="none">${limits ? `Limits are not available here${limits.error ? `: ${limits.error}` : "."}` : "Checking…"}</p>`}
+            ${rows.map((r) => html`
+              <div class="lim ${r.hit ? "hit" : ""}">
+                <div class="nm"><b>${r.name}</b><span>${r.reset}</span></div>
+                <div class="gauge" role="img" aria-label=${`${Math.round(r.used)}% used${r.pace != null ? `; even pace ${Math.round(r.pace)}%` : ""}${r.proj != null ? `; ${r.hit ? "projected to run out" : `about ${Math.round(r.proj)}% at the reset`}` : ""}`}>
+                  <span class="tr"></span><span class="used" style=${`width:${r.used}%`}></span>
+                  ${r.proj > r.used && html`<span class="prj" style=${`left:${r.used}%;width:${r.proj - r.used}%`}></span>`}
+                  <span class="ticks"></span>
+                  ${r.pace != null && html`<span class="pace" style=${`left:calc(${r.pace}% - 1px)`} data-l=${`pace ${Math.round(r.pace)}%`}></span>`}
+                </div>
+                <div class="pct"><${X} xp=${xp} why=${r.why.used} label=${html`${Math.round(r.w.percent)}<small>%</small>`} /></div>
+                <div class="say"><${X} xp=${xp} why=${r.why.proj} label=${r.say} /></div>
+              </div>`)}
+            ${rows.length > 0 && html`<div class="legend"><span><i class="u"></i>used</span><span><i class="p"></i>at this rate, by the reset</span><span><i class="t"></i>even pace: where you would be if it lasted exactly</span></div>`}
           </section>
-          <section class="ucard">
-            <div class="uthead">
-              <h4>Sessions${sessions.length >= 60 ? `, top ${sessions.length}` : ""}</h4>
-              <div class="seg">${[["cost", "Cost"], ["tokens", "Tokens"], ["last", "Recent"]].map(([k, l]) => html`<button class=${order === k ? "on" : ""} onClick=${() => setOrder(k)}>${l}</button>`)}</div>
+          ${empty ? html`
+            <div class="uempty"><h2>No usage yet</h2><p>atc reads usage from Claude Code once a session has run. Today's models, the hour map and cost per session fill in from the first session on.</p>
+              <button class="btn primary" onClick=${() => NEW_SESSION()}>New session</button></div>`
+          : html`
+          <section class="sec l5"><div class="sh"><h2>Today by model</h2><span class="n">API prices; a plan is not billed per token</span></div>
+            ${!today ? html`<p class="none">Adding up today's transcripts…</p>` : today.failed ? html`<p class="none">Couldn't add up the transcripts.</p>` : html`
+            <table><thead><tr><th>Model</th><th class="n c-st">Sessions</th><th class="n">Cost</th><th class="c-sh">Share</th></tr></thead><tbody>
+              ${byModel.map(([m, c]) => html`<tr><td>${modelName(m)}${local(m) && html`<span class="s2">not Claude, not in the limits</span>`}</td>
+                <td class="n c-st">${today.sessions.filter((x) => x.model === m).length || ""}</td>
+                <td class="n"><${X} xp=${xp} why=${`${dollars(c)} at API list prices for ${modelName(m)} today. ${asPct(c, winOf(u, "weekly_all")) != null ? `About ${approx(asPct(c, winOf(u, "weekly_all")))} of the week's limit.` : ""}`} label=${dollars(c)} /></td>
+                <td class="c-sh"><span class="wb" style=${`width:${Math.round((c / (mTotal || 1)) * 70)}%`}></span><span class="dim">${Math.round((c / (mTotal || 1)) * 100)}%</span></td></tr>`)}
+              ${!byModel.length && html`<tr><td colspan="4" class="none">Nothing ran today yet.</td></tr>`}</tbody>
+              <tfoot><tr><td>Today, to ${hhmm(Date.now())}</td><td class="n c-st">${today.sessions.length}</td><td class="n">${dollars(mTotal)}</td><td class="c-sh dim">${day ? `${tokens(day.total)} tokens` : ""}</td></tr></tfoot></table>`}
+          </section>
+          <section class="sec l7"><div class="sh"><h2>Hours</h2><span class="n">cost per hour, last 7 days</span></div>
+            ${!seven ? html`<p class="none">Adding up the week…</p>` : html`
+            <div class="hm" tabindex="0" role="grid" aria-label="Cost per hour, last 7 days. Arrow keys move; the line below reads the cell." onKeyDown=${moveCell}
+              onPointerLeave=${() => matchMedia("(hover: hover)").matches && setCell(null)}>
+              ${days.map((d, di) => html`<span class="dl ${d.day === todayKey ? "today" : ""}">${dayOf(d.day, { weekday: "short" })}</span>${(d.hours || Array(24).fill(0)).map((c, h) => html`
+                <i class="${fut(d, h) ? "fut" : !c ? "z" : ""} ${at && at[0] === di && at[1] === h ? "on" : ""} ${d.day === todayKey && h === nowH ? "nowc" : ""}" style=${`--o:${lvl(c)}`}
+                  onPointerEnter=${() => !fut(d, h) && matchMedia("(hover: hover)").matches && setCell([di, h])} onClick=${() => !fut(d, h) && setCell([di, h])}></i>`)}`)}
             </div>
-            <div class="utable">
-              ${shown.map((x) => html`
-                <button class="urow" onClick=${() => onOpen(x)} title=${tilde(x.cwd)}>
-                  <span class="t">${x.title || x.sessionId.slice(0, 8)}</span>
-                  <span class="p">${x.cwd && html`<span class="proj" style=${`--ph: ${hueOf(project(x.cwd).name)}`}>${project(x.cwd).name}</span>`}${multi && x.host && html`<small>${x.host}</small>`}</span>
-                  <span class="m">${x.model ? modelName(x.model) : ""}</span>
-                  <span class="k">${tokens(x.total || 0)}</span>
-                  <span class="w">${agoLong(x.last)}</span>
-                  <span class="c">${usd(x.cost)}<small>${asPct(x.cost, week) != null ? approx(asPct(x.cost, week)) : ""}</small></span>
-                </button>`)}
-            </div>
-            ${sessions.length > 12 && html`<button class="btn umore" onClick=${() => setAll(!all)}>${all ? "Show fewer" : `Show all ${sessions.length}`}</button>`}
+            <div class="hx"><span></span>${["0", "6", "12", "18"].map((t) => html`<span>${t}</span>`)}</div>
+            ${at && days[at[0]] && html`<div class="ro" aria-live="polite"><span>${dayOf(days[at[0]].day, { weekday: "short", day: "numeric", month: "short" })}, ${String(at[1]).padStart(2, "0")}:00 to ${String((at[1] + 1) % 24).padStart(2, "0")}:00${days[at[0]].day === todayKey && at[1] === nowH ? ", so far" : ""}</span>
+              <b>${atCost > 0 ? usd(atCost) : "nothing"}</b>
+              <span class="scale">less ${[0.14, 0.3, 0.5, 0.7, 0.9].map((o) => html`<i style=${`opacity:${o}`}></i>`)} more, max ${usd(hmax)} an hour</span></div>`}`}
+          </section>
+          <section class="sec l4"><div class="sh"><h2>Per bay</h2><span class="n">pick one to filter sessions</span></div>
+            <table><thead><tr><th>Bay</th><th class="n c-st">Sessions</th><th class="n">Today</th><th class="n">7 days</th><th class="c-sh"></th></tr></thead><tbody>
+              ${bays.map((b) => html`<tr class="pick" tabindex="0" aria-selected=${v.bay === b.name} onClick=${() => set({ bay: v.bay === b.name ? null : b.name })}
+                onKeyDown=${(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), set({ bay: v.bay === b.name ? null : b.name }))}>
+                <td>${b.name}</td><td class="n c-st">${b.n || ""}</td><td class="n">${money(b.today)}</td><td class="n">${dollars(b.week)}</td>
+                <td class="c-sh"><span class="wb" style=${`width:${Math.round((b.week / bayMax) * 100)}%`}></span></td></tr>`)}</tbody>
+              <tfoot><tr><td>All bays</td><td class="n c-st">${sum(bays, "n")}</td><td class="n">${dollars(sum(bays, "today"))}</td><td class="n">${dollars(sum(bays, "week"))}</td><td class="c-sh"></td></tr></tfoot></table>
+          </section>
+          <section class="sec l8"><div class="sh"><h2>Per session</h2><span class="n">today and the last 7 days</span>
+            <span class="r tools">${v.bay && html`<button class="btn" onClick=${() => set({ bay: null })}>${v.bay} only, show all</button>`}
+              <input class="filt" type="search" placeholder="Filter sessions" aria-label="Filter sessions" value=${v.q} onInput=${(e) => set({ q: e.target.value })} /></span></div>
+            <table><thead><tr>${USAGE_COLS.map(([k, n, c]) => html`<th class=${c} aria-sort=${v.sort === k ? (v.dir > 0 ? "ascending" : "descending") : "none"}><button class="sort" onClick=${() => sortBy(k)}>${n}</button></th>`)}</tr></thead>
+              <tbody>${shown.map((r) => html`<tr>
+                <td class="t"><span class="uses">${r.s ? html`<${StateBlock} s=${r.s} />` : html`<span class="sb earlier" role="img" aria-label="earlier">E</span>`}
+                  <a href=${`#/s/${r.sessionId}`} onClick=${(e) => { e.preventDefault(); onOpen(r); }}>${r.title || r.sessionId.slice(0, 8)}</a><span class="bay2">${r.bay}</span></span></td>
+                <td class="c-bay">${r.bay}</td><td class="m c-m">${r.model ? modelName(r.model) : ""}</td><td class="n c-st">${r.msgs || ""}</td>
+                <td class="n">${money(r.today)}</td><td class="n c-wk">${dollars(r.week)}</td>
+                <td class="n m">${isDown(r.host) ? html`<span class="stale" title=${`${r.host} is unreachable; this is what it used until then`}>${ago({ updated: r.last })}</span>` : ago({ updated: r.last })}</td></tr>`)}
+                ${!shown.length && html`<tr><td colspan="7" class="none">${all.length ? html`No session matches${ql ? ` “${v.q}”` : ""}${v.bay ? ` in ${v.bay}` : ""}. <button class="clr" onClick=${() => set({ bay: null, q: "" })}>Clear the filter</button>` : "No sessions this week."}</td></tr>`}</tbody>
+              <tfoot><tr><td>${plural(shown.length, "session")}</td><td class="c-bay"></td><td class="c-m"></td><td class="n c-st">${sum(shown, "msgs")}</td><td class="n">${dollars(sum(shown, "today"))}</td><td class="n c-wk">${dollars(sum(shown, "week"))}</td><td></td></tr></tfoot></table>
           </section>`}
-        <p class="unote">${ESTIMATE()} ${RATE}</p>
+          <p class="unote">${ESTIMATE()} ${RATE}</p>
+        </div>
       </div>
-    </div>`;
+      <${Explain} at=${xp.at} />
+    </section>`;
 }
 
 function SessionUsage({ s, use, onClose, agent }) {
@@ -3928,7 +3927,6 @@ function PagesView({ at, live, bays, say, index }) {
 }
 
 const BACKLOG = "#/backlog";
-const closeBacklog = () => (history.length > 1 ? history.back() : location.replace("#/"));
 const itemQ = (it) => hostQ(it.host, HERE);
 const itemRun = (it, live) => it.session && live.find((s) => (it.sid && s.sessionId === it.sid) || s.id === it.session);
 const suggested = (it) => !!it.by && !it.accepted;
@@ -3945,11 +3943,10 @@ const STAGES = [
   ["suggested", "Suggested by agents"],
   ["done", "Done"],
 ];
-const FOLDED = new Set(["suggested", "done"]);
 const baseDir = (d) => (d || "").replace(/\/\.claude\/worktrees\/[^/]+$/, "");
 const here = (sel, live) => {
   if (sel?.cwd) return { dir: baseDir(sel.cwd), host: sel.host };
-  const s = TABS.only && live?.find((x) => x.cwd && project(x.cwd).name === TABS.only);
+  const s = BAY.only && live?.find((x) => x.cwd && project(x.cwd).name === BAY.only);
   if (!s) return true;
   const { rest } = project(s.cwd), dir = baseDir(s.cwd);
   return { dir: rest ? dir.slice(0, -rest.length - 1) : dir, host: s.host };
@@ -3976,142 +3973,182 @@ const backlogCounts = (items, only) => {
 
 function BacklogLine({ only }) {
   const counts = backlogCounts(useBacklog(), only);
-  return counts && html`<button class="blline" onClick=${() => (location.hash = BACKLOG)} title="Open the backlog (b)"><span class="mi">${ICON.list}</span>Backlog${only ? ` in ${only}` : ""}: ${counts}</button>`;
+  return counts && html`<button class="blline" onClick=${() => (location.hash = BACKLOG)} title="Open the backlog"><span class="mi">${ICON.list}</span>Backlog${only ? ` in ${only}` : ""}: ${counts}</button>`;
 }
 
-function BacklogPage({ live, say, onClose, onAdd }) {
+const BK_FILTERS = [
+  ["open", "Open", (st) => st !== "done"],
+  ["ready", "Ready", (st) => st === "ready"],
+  ["started", "Started", (st) => st === "started"],
+  ["blocked", "Blocked", (st) => st === "blocked"],
+  ["suggested", "Suggested", (st) => st === "suggested"],
+  ["done", "Done", (st) => st === "done"],
+  ["all", "All", () => true],
+];
+const BK_ORDER = ["started", "ready", "blocked", "suggested", "done"];
+
+function BacklogPage({ live, say, onAdd, only }) {
   useNow(30000);
   const list = useBacklog();
-  const [only, setOnly] = useState(TABS.only);
-  const [open, setOpen] = useState({});
+  const [scope, setScope] = useState(only ? "bay" : "all");
+  const bay = scope === "bay" ? only : null;
+  const [v, setV] = useState(() => ({ f: "open", sort: "stage", ...stored("atc.backlog", {}) }));
+  const set = (p) => setV((x) => { const n = { ...x, ...p }; store("atc.backlog", n); return n; });
+  const [sel, setSel] = useState(null);
+  const [edit, setEdit] = useState(null);
+  const [text, setText] = useState("");
+  const [adding, setAdding] = useState(false);
   const load = () => loadBacklog((e) => say(e.message));
   useEffect(() => { load(); }, []);
+  const call = (it, method, body, sub = "") => api(`/api/backlog/${it.id}${sub}${itemQ(it)}`, { method, body });
+  const all = list || [];
+  const scoped = all.filter((it) => !bay || project(it.dir).name === bay);
+  const n = (st) => scoped.filter((it) => itemStage(it) === st).length;
+  const keep = BK_FILTERS.find((f) => f[0] === v.f) || BK_FILTERS[0];
+  const shown = scoped.filter((it) => keep[2](itemStage(it))).sort((a, b) =>
+    v.sort === "new" ? Date.parse(b.created) - Date.parse(a.created)
+    : v.sort === "bay" ? project(a.dir).name.localeCompare(project(b.dir).name) || Date.parse(b.created) - Date.parse(a.created)
+    : BK_ORDER.indexOf(itemStage(a)) - BK_ORDER.indexOf(itemStage(b)) || Date.parse(a.created) - Date.parse(b.created));
+  const cur = shown.find((it) => it.id === sel) || shown[0];
+
+  const patch = async (it, body, verb, back) => {
+    try {
+      await call(it, "PATCH", body);
+      load();
+      say(`${verb}: ${itemTitle(it)}`, back && { undo: () => call(it, "PATCH", back).then(load, (e) => say(e.message)) });
+    } catch (e) { say(`Not ${verb.toLowerCase()}: ${e.message}`); }
+  };
+  const remove = async (it) => { try { await call(it, "DELETE"); load(); say(`Deleted: ${itemTitle(it)}`); } catch (e) { say(e.message); } };
+  const start = async (it) => { try { go((await call(it, "POST", undefined, "/start")).id); say(it.aside ? "Resumed." : "Session started."); load(); } catch (e) { say(e.message); } };
+  const run = (it) => itemRun(it, live);
+  const primary = (it) => {
+    const st = itemStage(it), r = run(it);
+    if (st === "suggested") return patch(it, { accepted: true }, "Taken");
+    if (st === "started") return r && r.state !== "stopped" ? go(keyOf(r)) : null;
+    if (st === "done") return patch(it, { status: "ready" }, "Reopened", { status: "done" });
+    return start(it);
+  };
+  const done = (it) => itemStage(it) !== "done" && patch(it, { status: "done" }, "Done", { status: it.status });
+  const block = (it) => {
+    const st = itemStage(it);
+    if (st === "done" || st === "suggested") return;
+    if (st === "blocked") return patch(it, { status: "ready" }, "Unblocked", { status: "blocked", why: it.why || "" });
+    setEdit({ id: it.id, mode: "why", why: "", title: "", prompt: "" });
+  };
+  const known = [...all.map((it) => ({ dir: it.dir, host: it.host })), ...live.filter((s) => s.cwd).map((s) => ({ dir: baseDir(s.cwd), host: s.host }))];
+  const where = bay && known.find((x) => project(x.dir).name === bay && !project(x.dir).rest);
+  const addIt = async () => {
+    const t = text.trim();
+    if (!t) return;
+    if (!where) return onAdd({ later: true, title: t, dir: undefined });
+    setAdding(true);
+    try {
+      await api(`/api/backlog${hostQ(where.host, HERE)}`, { method: "POST", body: { dir: where.dir, title: t } });
+      setText("");
+      await load();
+      set({ f: v.f === "done" ? "open" : v.f });
+    } catch (e) { say(`Not added: ${e.message}`); }
+    setAdding(false);
+  };
+  const keys = useRef();
+  keys.current = { shown, cur, primary, done, block, edit };
   useEffect(() => {
-    const k = (e) => e.key === "Escape" && !/^(INPUT|TEXTAREA)$/.test(e.target.tagName) && !document.querySelector(".veil") && onClose();
+    const k = (e) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || document.querySelector(".nsveil, .pal, .veil, .keys-ov")) return;
+      const { shown, cur, primary, done, block, edit } = keys.current, i = shown.indexOf(cur);
+      const f = {
+        j: () => shown[i + 1] && setSel(shown[i + 1].id), ArrowDown: () => shown[i + 1] && setSel(shown[i + 1].id),
+        k: () => i > 0 && setSel(shown[i - 1].id), ArrowUp: () => i > 0 && setSel(shown[i - 1].id),
+        Enter: () => cur && !edit && primary(cur), d: () => cur && done(cur), x: () => cur && block(cur),
+        a: () => document.getElementById("bk-add")?.focus(),
+      }[e.key];
+      if (f) { e.preventDefault(); f(); }
+    };
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
   }, []);
-  const act = async (f, done) => {
-    try { await f(); if (done) say(done); } catch (e) { say(e.message); }
-    load();
-  };
-  const call = (it, method, body, sub = "") => api(`/api/backlog/${it.id}${sub}${itemQ(it)}`, { method, body });
-  const patch = (it, body, done) => act(() => call(it, "PATCH", body), done);
-  const remove = (it) => act(() => call(it, "DELETE"));
-  const start = (it) => act(async () => go((await call(it, "POST", undefined, "/start")).id), "Session started.");
-  const all = list || [];
-  const waiting = (it) => it.status !== "done" && !suggested(it);
-  const projects = [...new Set(all.filter((it) => it.status !== "done").map((it) => project(it.dir).name))].sort();
-  if (only && !projects.includes(only)) projects.unshift(only);
-  const shown = all.filter((it) => !only || project(it.dir).name === only);
-  const by = Object.fromEntries(STAGES.map(([k]) => [k, []]));
-  for (const it of shown) by[itemStage(it)].push(it);
-  for (const k in by) by[k].sort((a, b) => k === "done" ? Date.parse(b.updated) - Date.parse(a.updated) : Date.parse(a.created) - Date.parse(b.created));
-  const add = () => {
-    const known = shown.map((it) => ({ dir: it.dir, host: it.host })).concat(live.map((s) => ({ dir: baseDir(s.cwd), host: s.host })));
-    const at = only && known.find((x) => project(x.dir).name === only);
-    onAdd({ dir: at?.dir, host: at?.host, later: true });
-  };
-  const counts = backlogCounts(list, only);
+  useEffect(() => { document.querySelector(".bk-it.sel")?.scrollIntoView({ block: "nearest" }); }, [cur?.id]);
+
+  const seg = (opts, key, label) => html`<span class="seg" role="group" aria-label=${label}>${opts.map(([k, name, f]) =>
+    html`<button aria-pressed=${v[key] === k} onClick=${() => set({ [key]: k })}>${name}${f && key === "f" && html`<span class="c">${scoped.filter((it) => f(itemStage(it))).length}</span>`}</button>`)}</span>`;
+  const counts = !list ? "Loading…" : BK_ORDER.filter((k) => k !== "done" && n(k)).map((k) => `${n(k)} ${k}`).join(", ") || (scoped.length ? "Nothing open" : "Empty");
   return html`
-    <div class="pghome backlog" role="dialog" aria-label="Backlog">
-      <header class="pghead">
-        <button class="icon" onClick=${onClose} aria-label="Back">←</button>
-        <div class="who"><h2>Backlog</h2><span class="sub">${list ? counts || "Nothing waiting" : "Loading…"}</span></div>
-        <button class="btn primary" onClick=${add} title="Put a task on the backlog (n)"><span class="mi">${ICON.plus}</span> Add</button>
+    <section class="scrpane backlogv" aria-label="Backlog">
+      <header class="hd">
+        <div class="l1"><h1>${bay ? "Backlog" : "Backlog, all bays"}</h1><span class="where">${bay ? `${bay}${where ? `, ${tilde(where.dir)}` : ""}` : plural(new Set(all.map((it) => project(it.dir).name)).size, "bay")}</span>
+          <span class="r">${only && html`<button class="kb ${scope === "all" ? "on" : ""}" aria-pressed=${scope === "all"} onClick=${() => setScope(scope === "all" ? "bay" : "all")}>All bays</button>`}</span></div>
+        <div class="l2 no-block"><span class="stat">${counts}</span><span class="rd"><span class="l">done</span>${n("done")}</span><span class="rd"><span class="l">from agents</span>${scoped.filter((it) => it.by && it.status !== "done").length}</span></div>
       </header>
-      ${projects.length > 1 && html`
-        <nav class="projtabs" aria-label="Projects">
-          <button class=${only ? "" : "on"} onClick=${() => setOnly(null)}>All</button>
-          ${projects.map((p) => {
-            const n = all.filter((it) => project(it.dir).name === p && waiting(it)).length;
-            return html`<button class=${only === p ? "on" : ""} style=${`--ph: ${hueOf(p)}`} onClick=${() => setOnly(only === p ? null : p)}>
-              <span class="nm">${p}</span>${n > 0 && html`<span class="count">${n}</span>`}</button>`;
-          })}
-        </nav>`}
-      <div class="pgbody">
-        ${list && !shown.length && html`<div class="none"><p>Nothing on the backlog${only ? ` for ${only}` : ""}.</p>
-          <p class="sub">Put work here to start later: <b>Add</b>, or <b>Later</b> in the new session dialog. Agents add to it when you ask them to, and what they add waits under Suggested until you take it.</p></div>`}
-        <div class="bl">
-          ${STAGES.map(([k, title]) => by[k].length > 0 && html`
-            <section class="blsec ${k}">
-              ${FOLDED.has(k)
-                ? html`<button class="blhead fold" aria-expanded=${!!open[k]} onClick=${() => setOpen({ ...open, [k]: !open[k] })}><h3>${title}</h3><span class="count">${by[k].length}</span><i class="caret">${open[k] ? "▾" : "▸"}</i></button>`
-                : html`<div class="blhead"><h3>${title}</h3><span class="count">${by[k].length}</span></div>`}
-              ${(!FOLDED.has(k) || open[k]) && html`
-                ${by[k].map((it) => html`<${BacklogRow} key=${it.id} it=${it} stage=${k} run=${itemRun(it, live)} tag=${!only} patch=${patch} remove=${remove} start=${start} />`)}
-                ${k === "done" && html`<button class="btn clear" onClick=${() => ask({ title: `Delete ${plural(by.done.length, "finished item")}?`, body: "They leave the backlog for good.", ok: "Delete", busy: "Deleting…", danger: true,
-                  run: () => Promise.all(by.done.map((it) => call(it, "DELETE"))) }).then((ok) => ok && (say("Cleared."), load()))}>Clear done</button>`}`}
-            </section>`)}
+      <div class="scroll"><div class="bk ${bay ? "single" : ""}">
+        <div class="bk-bar">
+          <form class="bk-add" onSubmit=${(e) => { e.preventDefault(); addIt(); }}><span class="pr" aria-hidden="true">add</span>
+            <input id="bk-add" value=${text} onInput=${(e) => setText(e.target.value)} onKeyDown=${(e) => e.key === "Escape" && e.target.blur()} autocomplete="off"
+              placeholder=${`${bay ? `A task for ${bay}` : "A task; you pick its folder next"}${touch ? "" : ", enter adds it"}`} aria-label=${`Add a task to ${bay || "the"} backlog`} />
+            <button class="btn" disabled=${adding || !text.trim()}>${adding ? "Adding…" : "Add"}</button></form>
+          ${seg(BK_FILTERS, "f", "Show")}${seg([["stage", "Stage"], ["new", "Newest"], ...(bay ? [] : [["bay", "Bay"]])], "sort", "Order")}
         </div>
-      </div>
-    </div>`;
+        <div class="bk-h" role="presentation"><span>Stage</span><span>Task</span><span class="c-bay">Bay</span><span class="c-by">Added by</span><span class="n">Age</span><span></span></div>
+        <div role="grid" aria-label="Backlog">
+          ${list && !scoped.length && html`<div class="bk-empty"><b>Nothing on ${bay ? `${bay}'s` : "the"} backlog</b><p>Add a task above and it waits here until you start it. Agents add to it too: tell the assistant <code>later: …</code> from anywhere, and what they add waits under Suggested until you take it.</p></div>`}
+          ${list && scoped.length > 0 && !shown.length && html`<div class="bk-empty"><b>No ${keep[1].toLowerCase()} tasks${bay ? ` in ${bay}` : ""}</b><p>${scoped.filter((it) => itemStage(it) !== "done").length} open in other stages.</p><button class="btn" onClick=${() => set({ f: "open" })}>Show open</button></div>`}
+          ${shown.map((it) => html`<${BacklogRow} key=${it.id} it=${it} stage=${itemStage(it)} run=${run(it)} sel=${cur === it} tag=${!bay}
+            select=${() => setSel(it.id)} primary=${primary} done=${done} block=${block} patch=${patch} remove=${remove}
+            edit=${edit?.id === it.id ? edit : null} setEdit=${setEdit} />`)}
+          ${v.f === "done" && n("done") > 0 && html`<button class="btn bk-clear" onClick=${() => ask({ title: `Delete ${plural(n("done"), "finished item")}?`, body: "They leave the backlog for good.", ok: "Delete", busy: "Deleting…", danger: true,
+            run: () => Promise.all(scoped.filter((it) => itemStage(it) === "done").map((it) => call(it, "DELETE"))) }).then((ok) => ok && (say("Cleared."), load()))}>Clear done</button>`}
+        </div>
+        <div class="bk-f"><span><kbd>j</kbd><kbd>k</kbd>move</span><span><kbd>enter</kbd>start, take or open</span><span><kbd>d</kbd>done</span><span><kbd>x</kbd>blocked</span><span><kbd>a</kbd>add</span><span>with Undo, <kbd>z</kbd></span></div>
+      </div></div>
+    </section>`;
 }
 
-function BacklogRow({ it, stage, run, tag, patch, remove, start }) {
-  const [edit, setEdit] = useState(null);
-  const [why, setWhy] = useState("");
-  const [title, setTitle] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [showPrompt, setShowPrompt] = useState(false);
-  const begin = (mode) => { setEdit(mode); setWhy(it.why || ""); setTitle(it.title || ""); setPrompt(it.prompt || ""); };
+function BacklogRow({ it, stage, run, sel, tag, select, primary, done, block, patch, remove, edit, setEdit }) {
+  const head = itemTitle(it);
+  const ended = stage === "started" && (!run || run.state === "stopped");
   const save = () => {
-    if (edit === "why") patch(it, { status: "blocked", why });
-    else if (title.trim() || prompt.trim()) patch(it, { title, prompt });
+    if (edit.mode === "why") patch(it, { status: "blocked", why: edit.why }, "Blocked", { status: it.status, why: it.why || "" });
+    else if (edit.title.trim() || edit.prompt.trim()) patch(it, { title: edit.title, prompt: edit.prompt }, "Saved");
     setEdit(null);
   };
-  const head = itemTitle(it);
-  const extra = it.title && it.prompt && it.prompt !== it.title;
-  const ended = stage === "started" && (!run || run.state === "stopped");
+  const note = it.why ? `Waiting on ${it.why}` : run || it.aside ? null : it.title && it.prompt && it.prompt !== it.title ? oneLine(it.prompt) : "";
+  const by = it.by ? html`<span class="by" role=${it.from ? "link" : null} onClick=${it.from ? (e) => { e.stopPropagation(); go(it.from); } : null} title=${it.from ? "Open the session that added it" : ""}>@${it.by}</span>` : html`<span class="by you">you</span>`;
+  const act = (label, key, f, prime) => html`<button class="btn ${prime ? "primary" : ""}" onClick=${(e) => { e.stopPropagation(); f(it); }} aria-keyshortcuts=${key || null}>${label}${key && html` <kbd aria-hidden="true">${key === "Enter" ? "enter" : key}</kbd>`}</button>`;
   const menu = [
-    stage !== "blocked" && stage !== "done" && { label: "Blocked…", run: () => begin("why") },
-    (stage === "blocked" || stage === "done") && { label: "Ready", run: () => patch(it, { status: "ready" }) },
-    stage !== "done" && { label: "Done", run: () => patch(it, { status: "done" }) },
-    { label: "Edit", run: () => begin("text") },
-    !it.session && stage !== "done" && { label: it.worktree ? "Start in the folder itself" : "Start in a git worktree", run: () => patch(it, { worktree: !it.worktree }) },
-    { label: "Delete", danger: true, run: () => ask({ title: "Delete this item?", body: it.title || it.prompt, ok: "Delete", danger: true }).then((ok) => ok && remove(it)) },
+    { label: "Edit", run: () => setEdit({ id: it.id, mode: "text", title: it.title || "", prompt: it.prompt || "" }) },
+    !it.session && stage !== "done" && { label: it.worktree ? "Start in the folder itself" : "Start in a git worktree", run: () => patch(it, { worktree: !it.worktree }, it.worktree ? "Starts in the folder" : "Starts in a worktree") },
+    { label: "Delete", danger: true, run: () => ask({ title: "Delete this item?", body: head, ok: "Delete", danger: true }).then((ok) => ok && remove(it)) },
   ].filter(Boolean);
   return html`
-    <div class="blrow ${stage} ${edit ? "editing" : ""}">
-      <div class="bltx">
-        ${edit ? html`
-          <form onSubmit=${(e) => { e.preventDefault(); save(); }}>
-            ${edit === "why"
-              ? html`<input value=${why} onInput=${(e) => setWhy(e.target.value)} placeholder="Waiting on what?" ref=${focusOnMount} />`
-              : html`<input value=${title} onInput=${(e) => setTitle(e.target.value)} placeholder="Title: what the backlog shows" ref=${focusOnMount} />
-                <textarea rows="5" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} placeholder="Prompt: the session's first message. Empty: the title."
+    <div class="bk-it ${stage} ${sel ? "sel" : ""}" role="row" aria-selected=${sel} tabindex=${sel ? 0 : -1} onClick=${select}>
+      <span class="stg ${stage}">${stage}</span>
+      <span class="ti">
+        ${edit ? html`<form class="bk-edit" onSubmit=${(e) => { e.preventDefault(); save(); }} onClick=${(e) => e.stopPropagation()}>
+            ${edit.mode === "why"
+              ? html`<input value=${edit.why} onInput=${(e) => setEdit({ ...edit, why: e.target.value })} placeholder="Blocked: waiting on what? (optional, enter saves)" ref=${focusOnMount}
+                  onKeyDown=${(e) => e.key === "Escape" && (e.stopPropagation(), setEdit(null))} />`
+              : html`<input value=${edit.title} onInput=${(e) => setEdit({ ...edit, title: e.target.value })} placeholder="Title: what the backlog shows" ref=${focusOnMount} />
+                <textarea rows="4" value=${edit.prompt} onInput=${(e) => setEdit({ ...edit, prompt: e.target.value })} placeholder="Prompt: the session's first message. Empty: the title."
                   onKeyDown=${(e) => e.key === "Enter" && (e.metaKey || e.ctrlKey) && save()}></textarea>`}
-            <div class="actions"><button type="button" class="btn" onClick=${() => setEdit(null)}>Cancel</button><button class="btn primary">${edit === "why" ? "Mark blocked" : "Save"}</button></div>
+            <span class="acts2"><button type="button" class="btn" onClick=${() => setEdit(null)}>Cancel</button><button class="btn primary">${edit.mode === "why" ? "Mark blocked" : "Save"}</button></span>
           </form>`
-        : html`
-          <button class="txt" title="Edit" onClick=${() => begin("text")}><b>${head}</b></button>
-          ${showPrompt && html`<pre class="prompt">${it.prompt}</pre>`}
-          ${it.why && html`<p class="why">Waiting on ${it.why}</p>`}`}
-      </div>
-      ${!edit && html`
-        <p class="m">
-          ${tag && html`<${ProjectTag} path=${it.dir} />`}
-          ${MULTI && it.host && html`<span class="host">${it.host}</span>`}
-          ${it.by && html`<span class="by" role=${it.from ? "link" : null} title=${it.from ? "Open the session that added it" : ""} onClick=${it.from ? () => go(it.from) : null}>${ICON.chat}${it.by}</span>`}
-          ${run || it.aside
-            ? html`<a class="run" href=${`#/s/${run ? keyOf(run) : it.sid}`}>${run && html`<i class="st ${run.state}"></i>`}${(run?.title || it.title) === head ? "session" : run?.title || "session"}</a><span>${it.aside ? "put aside" : ended ? "ended" : WORD[run.state] || run.state}</span>`
-            : html`<span>${stage === "started" ? "session ended" : agoLong(stage === "done" ? it.updated : it.created)}${it.worktree && !it.session ? " · worktree" : ""}</span>`}
-          ${extra && html`<button class="pr" aria-expanded=${showPrompt} onClick=${() => setShowPrompt(!showPrompt)}>prompt ${showPrompt ? "▾" : "▸"}</button>`}
-        </p>
-        <div class="acts">
-          ${stage === "suggested" ? html`
-            <button class="btn" onClick=${() => remove(it)}>Dismiss</button>
-            <button class="btn primary" onClick=${() => patch(it, { accepted: true }, "Moved to your backlog.")}>Take it</button>`
-          : stage === "ready" ? html`<button class="btn primary" title=${it.aside ? "Bring back the session you put aside" : "Start a session with this as its first message"} onClick=${() => start(it)}><span class="mi">${ICON.play}</span>${it.aside ? "Resume" : "Start"}</button>`
-          : stage === "blocked" ? html`<button class="btn" onClick=${() => patch(it, { status: "ready" })}>Unblock</button>`
-          : ended ? html`<button class="btn primary" onClick=${() => patch(it, { status: "done" })}>Done</button>`
-          : run ? html`<button class="btn" onClick=${() => go(keyOf(run))}>Open</button>` : null}
-          <${Menu} items=${menu} label=${html`<span class="mi">${ICON.more}</span>`} />
-        </div>`}
+        : html`<b>${head}</b>
+          ${note ? html`<span class="nt">${note}</span>`
+            : run || it.aside ? html`<span class="nt">${run && html`<${StateBlock} s=${run} /> `}<a href=${`#/s/${run ? keyOf(run) : it.sid}`} onClick=${(e) => e.stopPropagation()}>${run?.title && run.title !== head ? run.title : "its session"}</a>, ${it.aside ? "put aside" : ended ? "ended" : WORD[run.state] || run.state}</span>` : ""}`}
+        <span class="meta2">${[tag && project(it.dir).name, it.by ? `@${it.by}` : "you", agoLong(stage === "done" ? it.updated : it.created)].filter(Boolean).join(", ")}</span>
+      </span>
+      <span class="bayn">${project(it.dir).name}${MULTI && it.host ? html` <span class="dim">${it.host}</span>` : ""}</span>
+      <span class="byc">${by}</span>
+      <span class="ag">${ago({ updated: stage === "done" ? it.updated : it.created })}${it.worktree && !it.session ? html`<span class="wt" title="Starts in its own worktree">wt</span>` : ""}</span>
+      <span class="acts" onClick=${(e) => e.stopPropagation()}>
+        ${stage === "suggested" ? html`${act("Take it", "Enter", primary, true)}${act("Dismiss", "", remove)}`
+          : stage === "done" ? act("Reopen", "Enter", primary)
+          : stage === "started" ? html`${!ended && run ? act("Open", "Enter", primary, true) : ""}${act("Done", "d", done, ended)}`
+          : html`${act(it.aside ? "Resume" : "Start", "Enter", primary, stage === "ready")}${act("Done", "d", done)}${act(stage === "blocked" ? "Unblock" : "Blocked", "x", block)}`}
+        <${Menu} items=${menu} cls="btn" label="More" aria="More for this task" />
+      </span>
     </div>`;
 }
 
-const AGENTS = "@agents";
 let AGENT_INFO = {};
 const away = (s) => !!s.parked && s.state !== "needs-you";
 const homeless = (s) => !!s.agent && !AGENT_INFO[s.agent]?.dir;
@@ -4135,57 +4172,120 @@ function AgentTag({ s }) {
     onClick=${(e) => { e.stopPropagation(); AGENT_SHEET(a.name); }}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</span>`;
 }
 
-function AgentSheet({ name, view, live, say, onClose, reload }) {
-  const [busy, setBusy] = useState(false);
-  const [showUse, setShowUse] = useState(view === "usage");
-  const use = useUsage(AGENT_INFO[name] && `/api/agents/${encodeURIComponent(name)}/usage`, showUse ? 15000 : 120000);
+const AGENTS_ROUTE = "#/agents";
+const agentRoute = () => { const m = location.hash.match(/^#\/agents(?:\/([^/?]+))?$/); return m ? decodeURIComponent(m[1] || "") : null; };
+const monogram = (n) => { const w = n.split(/[-_ ]+/).filter(Boolean); return (w.length > 1 ? w[0][0] + w[1][0] : n.slice(0, 2)).toUpperCase(); };
+
+function AgentMark({ a, lg }) {
+  return html`<span class="am ${lg ? "lg" : ""}" data-ag=${a.name === "assistant" ? "assistant" : null} style=${`--am-c: ${appColor(a)}`} aria-hidden="true">${monogram(a.name)}</span>`;
+}
+
+const agentRun = (live, name) => live.filter((v) => v.agent === name).sort((p, q) => Date.parse(q.startedAt || 0) - Date.parse(p.startedAt || 0))[0];
+const agentBadge = (a) => { const b = a.badge == null ? null : typeof a.badge === "object" ? a.badge.n ?? a.badge.count ?? a.badge.text : a.badge; return b == null || b === "" ? null : String(b); };
+const agentKeeps = (a) => a.headline || (agentBadge(a) ? `${agentBadge(a)} on its page` : "");
+const agentWakes = (a) => a.every ? `every ${a.every}${a.from ? ` from ${a.from.replace("T", " ")}` : ""}` : "when messaged";
+
+function AgentsPage({ name, agents, live, say, reload }) {
+  useNow(30000);
+  const wide = useWide();
+  const list = (agents || []).filter((a) => a.name);
+  const cur = list.find((a) => a.name === name) || (wide && !name ? list.find((a) => a.name === stored("atc.agentsel", "")) || list[0] : null);
+  useEffect(() => { if (cur) store("atc.agentsel", cur.name); }, [cur?.name]);
+  const keys = useRef();
+  keys.current = { list, cur };
   useEffect(() => {
-    const k = (e) => e.key === "Escape" && !showUse && onClose();
+    const k = (e) => {
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || document.querySelector(".nsveil, .pal, .veil, .keys-ov")) return;
+      const { list, cur } = keys.current, i = list.indexOf(cur);
+      const to = (a) => a && location.replace(`${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`);
+      const f = { j: () => to(list[i + 1]), k: () => to(list[i - 1]), ArrowDown: () => to(list[i + 1]), ArrowUp: () => to(list[i - 1]),
+        Enter: () => document.querySelector(".agd .conv")?.click() }[e.key];
+      if (f) { e.preventDefault(); f(); }
+    };
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
-  }, [showUse]);
-  const a = AGENT_INFO[name];
-  if (!a) return null;
-  if (showUse) return html`<${SessionUsage} s=${{ title: `${agentLabel(a)}, every conversation` }} use=${use} agent onClose=${() => (view === "usage" ? onClose() : setShowUse(false))} />`;
-  const weekPct = use && !use.failed && asPct(use.weekCost, winOf(use.wins, "weekly_all"));
-  const nConv = use?.conversations?.length || 1;
-  const x = live.filter((v) => v.agent === name).sort((p, q) => Date.parse(q.startedAt || 0) - Date.parse(p.startedAt || 0))[0];
+  }, []);
+  return html`
+    <section class="scrpane agentsv ${cur ? "has-a" : "no-a"}" aria-label="Agents">
+      <aside class="agl" aria-label="Agents">
+        <div class="ph"><b>Agents</b><span>${list.length}</span></div>
+        <div class="scroll" role="listbox" aria-label="Agents">
+          ${!agents && html`<p class="none">Loading…</p>`}
+          ${agents && !list.length && html`<p class="none">No standing agents. An agent is a folder with a brief under ~/.config/atc/agents.</p>`}
+          ${list.map((a) => { const x = agentRun(live, a.name), keeps = agentKeeps(a); return html`
+            <a class="ar ${a === cur ? "sel" : ""}" role="option" aria-selected=${a === cur} href=${`${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`}
+              onClick=${(e) => { e.preventDefault(); const to = `${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`; wide ? location.replace(to) : (location.hash = to); }}>
+              <${AgentMark} a=${a} /><b>${a.name === "assistant" ? "Assistant" : `@${a.name}`}${x?.parked && html`<span class="pz">parked</span>`}</b>
+              <span class="ago">${a.last ? ago({ updated: a.last }) : ""}</span>
+              <span class="k ${keeps ? "" : "none"}">${a.error ? "Can't start: see why" : keeps || "Keeps nothing"}</span>
+              <span class="l">${oneLine(x?.summary?.status || x?.lastReply) || `wakes ${agentWakes(a)}`}</span></a>`; })}
+        </div>
+      </aside>
+      ${cur ? html`<${AgentDetail} key=${cur.name} a=${cur} live=${live} say=${say} reload=${reload} />` : html`<section class="agd"></section>`}
+    </section>`;
+}
+
+function AgentDetail({ a, live, say, reload }) {
+  const [busy, setBusy] = useState(false);
+  const [use, setUse] = useState(false);
+  const x = agentRun(live, a.name);
+  const title = a.name === "assistant" ? "Assistant" : `@${a.name}`;
   const act = (fn, done) => async () => {
     setBusy(true);
     try { const r = await fn(); done && done(r); reload(); } catch (e) { say(e.message); }
     setBusy(false);
   };
-  const open = (id) => { onClose(); go(id); };
+  const conv = x ? () => go(keyOf(x)) : a.sessionId ? () => go(a.sessionId) : act(() => agentApi(a.name, "message"), (r) => go(r.id));
+  const keeps = agentKeeps(a);
+  const said = oneLine(x?.summary?.status || x?.lastReply);
   const rule = a.rule && `${spanOf(a.rule.Quiet)} quiet past ${ktok(a.rule.Small)} tokens, or ${spanOf(a.rule.CapQuiet)} quiet past ${ktok(a.rule.Cap)}`;
-  const rows = [
-    ["Now", x ? `${WORD[x.state] || x.state}${x.parked ? ", parked" : ""}${x.context ? ` · ${ktok(x.context)} context` : ""}` : "no conversation"],
-    ["Wakes", a.every ? `every ${a.every}${a.from ? ` from ${a.from.replace("T", " ")}` : ""}` : "only when messaged"],
+  const status = a.error ? `Can't start: ${a.error}` : x ? `${WORD[x.state] || x.state}${x.parked ? ", parked" : ""}${x.state === "working" && x.activity ? `: ${oneLine(x.activity)}` : ""}` : "No conversation running";
+  const right = html`
+    ${a.prompt && x && html`<button class="btn" disabled=${busy || x.state === "working"} title=${a.prompt} onClick=${act(() => agentApi(a.name, "message"), () => say(`Woke ${title}.`))}>Wake now</button>`}
+    ${x && html`<button class="btn" disabled=${busy} onClick=${act(() => api(`/api/sessions/${x.sessionId}`, { method: "PATCH", body: { parked: !x.parked } }), () => say(x.parked ? `Unparked ${title}.` : `Parked ${title}.`))}>${x.parked ? "Unpark" : "Park"}</button>`}
+    ${x && x.state !== "past" && html`<button class="btn" disabled=${busy || x.state === "working"} onClick=${act(() => agentApi(a.name, "reset"), () => say(`${title} is starting over.`))}>Start over</button>`}
+    <button class="btn primary conv" disabled=${busy || (!x && !a.sessionId && !!a.error)} onClick=${conv} aria-keyshortcuts="Enter">Conversation <kbd aria-hidden="true">enter</kbd></button>`;
+  const facts = [
+    ["Host", a.host],
+    ["Folder", tilde(a.folder || a.dir || "")],
+    ["Wakes", agentWakes(a)],
     a.next && ["Next", soon(a.next)],
     a.check && ["Only if", html`<code>${a.check}</code> prints something`],
     a.prompt && ["Prompt", a.prompt],
-    ["Starts over", rule],
-    a.lastReset && ["Last did", agoLong(a.lastReset)],
-    use && !use.failed && ["Usage", html`<button class="link" onClick=${() => setShowUse(true)}>${usd(use.cost)} over ${nConv} conversation${nConv === 1 ? "" : "s"}${weekPct != null ? `, ${approx(weekPct)} of this week` : ""}</button>`],
-    a.pages?.length > 0 && ["Pages", a.pages.map((g) => pageTitle(g)).join(", ")],
-    ["Folder", tilde(a.folder)],
-    MULTI && ["Runs on", a.host],
+    rule && ["Starts over", rule],
+    a.lastReset && ["Last started over", agoLong(a.lastReset)],
+    x?.context && ["Context", `${ktok(x.context)} tokens`],
   ].filter(Boolean);
   return html`
-    <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
-      <div class="sheet agentsheet" role="dialog" aria-label=${`${agentLabel(a)} agent`}>
-        <h3><${AppTile} a=${a} size=${24} />${agentLabel(a)}<small>@${a.name}</small><span class="grow"></span><button class="icon" onClick=${onClose} aria-label="Close">✕</button></h3>
-        ${a.error && html`<p class="err">${a.error}</p>`}
-        <dl>${rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
-        <div class="row">
-          ${x && html`<button class="btn" disabled=${busy} onClick=${act(() => api(`/api/sessions/${x.sessionId}`, { method: "PATCH", body: { parked: !x.parked } }))}>${x.parked ? "Unpark" : "Park"}</button>`}
-          ${x && x.state !== "past" && html`<button class="btn" disabled=${busy || x.state === "working"} onClick=${act(() => agentApi(name, "reset"), () => say(`${agentLabel(a)} is starting over.`))}>Start over</button>`}
-          <span class="grow"></span>
-          ${a.prompt && x && html`<button class="btn" disabled=${busy || x.state === "working"} title=${a.prompt} onClick=${act(() => agentApi(name, "message"), () => say(`Woke ${agentLabel(a)}.`))}>Wake</button>`}
-          ${x ? html`<button class="btn primary" onClick=${() => open(keyOf(x))}>Open</button>`
-            : html`<button class="btn primary" disabled=${busy || !!a.error} onClick=${act(() => agentApi(name, "message"), (r) => open(r.id))}>Start</button>`}
-        </div>
-      </div>
-    </div>`;
+    <section class="agd">
+      <header class="hd">
+        <div class="l1"><a class="back kb" href=${AGENTS_ROUTE}>Agents</a><${AgentMark} a=${a} /><h1>${title}</h1><span class="where">${[a.host, tilde(a.folder || a.dir || "")].filter(Boolean).join(" ")}</span>
+          <span class="r">${right}</span></div>
+        <div class="l2"><span class="stat">${status}</span><span class="rd"><span class="l">wakes</span>${agentWakes(a)}</span>${a.next && html`<span class="rd"><span class="l">next</span>${soon(a.next)}</span>`}</div>
+      </header>
+      <div class="scroll"><div class="agbody">
+        <div class="acts-ph">${right}</div>
+        <section class="sec"><div class="sh"><h2>Keeps</h2><span class="n">${keeps ? "its own state, from its page" : ""}</span></div>
+          ${keeps ? html`<div class="keeps">${agentBadge(a) && html`<b>${agentBadge(a)}</b>`}<p>${a.headline || "the count on its page"}</p></div>` : html`<div class="nothing"><b>${title} keeps nothing</b><p>It writes no state of its own: it acts when asked. What it did is in its conversation and in what it said below.</p></div>`}
+        </section>
+        <section class="sec"><div class="sh"><h2>Said</h2><span class="n">${x ? ago(x) : ""}</span></div>
+          ${said ? html`<div class="said"><time>${x?.updated ? hhmm(x.updated) : ""}</time><p>${said}</p></div>` : html`<div class="nothing"><p>Nothing yet in this conversation.</p></div>`}
+        </section>
+        <section class="sec links"><div class="sh"><h2>Pages</h2><span class="n">${plural(a.pages?.length || 0, "page")}</span></div>
+          ${a.pages?.length ? a.pages.map((p) => html`<a href=${aloneLink(p.session, p.name)}><b>${pageTitle(p)}</b><span>${ago({ updated: p.updated || p.shown })}</span></a>`) : html`<div class="nothing"><p>No pages yet.</p></div>`}
+        </section>
+        <section class="sec"><div class="sh"><h2>Where it lives</h2><span class="r"><button class="kb" onClick=${() => setUse(true)}>Usage</button></span></div>
+          <dl class="kv">${facts.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
+        </section>
+      </div></div>
+      ${use && html`<${AgentUsage} name=${a.name} onClose=${() => setUse(false)} />`}
+    </section>`;
+}
+
+function AgentUsage({ name, onClose }) {
+  const use = useUsage(`/api/agents/${encodeURIComponent(name)}/usage`, 15000);
+  const a = AGENT_INFO[name] || { name };
+  return html`<${SessionUsage} s=${{ title: `${agentLabel(a)}, every conversation` }} use=${use} agent onClose=${onClose} />`;
 }
 const SourceTag = ({ s, full }) => (s.agent ? html`<${AgentTag} s=${s} />` : html`<${ProjectTag} path=${s.cwd} full=${full} />`);
 
@@ -5560,62 +5660,112 @@ function useDirs(host, home) {
 
 const hostQ = (host, home) => (host && host !== home ? `?host=${encodeURIComponent(host)}` : "");
 
-const COMMON = 8;
-const chipName = (p) => { const { name, rest } = project(p); return rest ? `${name}/${rest}` : name; };
+const NS_DRAFT = "atc.nsdraft", NS_HOSTS = "atc.nshost", NS_ROWS = 6;
+let nsSave = 0;
+const nsDraft = {
+  get: () => stored(NS_DRAFT, null),
+  set(d) {
+    store(NS_DRAFT, d);
+    clearTimeout(nsSave);
+    nsSave = setTimeout(() => api("/api/drafts/new-session", { method: "PUT", body: { text: d ? JSON.stringify(d) : "" } }).catch(() => {}), 800);
+  },
+};
 
-function FolderPicker({ dirs, dir, pick, presets = [], preset, setPreset }) {
+function rankFolder(q, path) {
+  if (!q) return { r: 0, hits: [] };
+  const pl = path.toLowerCase(), base = pl.split("/").at(-1), bi = pl.length - base.length;
+  const run = (i, n) => [...Array(n).keys()].map((k) => i + k);
+  if (base === q) return { r: 4, hits: run(bi, q.length) };
+  if (base.startsWith(q)) return { r: 3, hits: run(bi, q.length) };
+  const i = pl.indexOf(q);
+  if (i >= 0) return { r: 2, hits: run(i, q.length) };
+  const hits = [];
+  for (let j = 0; j < pl.length && hits.length < q.length; j++) if (pl[j] === q[hits.length]) hits.push(j);
+  return hits.length === q.length ? { r: 1, hits } : null;
+}
+
+function FolderField({ dirs, folder, pick, host, listHost = host, live, presets = [], preset, setPreset, onStart, home }) {
   const [q, setQ] = useState("");
-  const [at, setAt] = useState(0);
-  const common = useMemo(() => {
-    const top = dirs.map((d, i) => ({ d, i })).filter(({ d }) => d.recent)
-      .sort((a, b) => (b.d.uses || 0) - (a.d.uses || 0) || a.i - b.i).slice(0, COMMON).map(({ d }) => tilde(d.path));
-    return !preset && dir && !top.includes(dir) ? [dir, ...top] : top;
-  }, [dirs, dir, preset]);
-  const found = useMemo(() => {
-    const s = q.trim().toLowerCase().replace(/^~\/?/, "");
-    if (!q.trim()) return [];
-    const rank = (p) => {
-      const m = fuzzy(s, p.toLowerCase()), base = p.split("/").at(-1).toLowerCase();
-      return m && m.score + (base === s ? 400 : base.startsWith(s) ? 150 : 0);
-    };
-    const hits = dirs.map((d) => ({ p: tilde(d.path), score: rank(tilde(d.path)) })).filter((x) => x.score).sort((a, b) => b.score - a.score).slice(0, 30);
-    const typed = /^[~/]/.test(q.trim()) && !hits.some((h) => h.p === q.trim()) ? [{ p: q.trim(), typed: true }] : [];
-    return [...typed, ...hits];
-  }, [q, dirs]);
-  useEffect(() => setAt(0), [q]);
-  const choose = (p) => { setPreset?.(null); pick(p); setQ(""); };
-  const key = (e) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); setAt((a) => Math.max(0, Math.min(found.length - 1, a + (e.key === "ArrowDown" ? 1 : -1)))); }
-    else if (e.key === "Enter") { e.preventDefault(); if (found[at]) choose(found[at].p); }
-    else if (e.key === "Escape" && q) { e.stopPropagation(); setQ(""); }
+  const [hi, setHi] = useState(-1);
+  const [more, setMore] = useState(false);
+  const box = useRef();
+  const ql = q.trim().toLowerCase();
+  const inHere = (p) => (live || []).filter((s) => s.kind !== "hub" && (s.host || home) === host && tilde(baseDir(s.cwd)) === p).length;
+  const rows = useMemo(() => {
+    const paths = dirs.map((d) => ({ path: tilde(d.path), recent: !!d.recent, uses: d.uses || 0 }));
+    const ps = presets.map((p) => ({ preset: p, path: p.name, grp: "Presets" }));
+    if (!ql) {
+      const recent = paths.filter((d) => d.recent).sort((a, b) => b.uses - a.uses).map((d) => ({ ...d, grp: `Recent on ${listHost}` }));
+      let out = [...recent, ...paths.filter((d) => !d.recent).map((d) => ({ ...d, grp: "Other folders" }))];
+      const at = out.findIndex((d) => d.path === folder);
+      if (!preset && folder && (at < 0 || (at >= NS_ROWS && !more))) out = [{ path: folder, grp: "Picked" }, ...out.filter((d) => d.path !== folder)];
+      return { folders: out, ps };
+    }
+    const hits = paths.map((d) => { const m = rankFolder(ql, d.path); return m && { ...d, ...m, grp: "Best match first" }; }).filter(Boolean)
+      .sort((a, b) => b.r - a.r || b.recent - a.recent || a.path.length - b.path.length);
+    const typed = /^[~/]/.test(q.trim()) && !hits.some((h) => h.path === q.trim()) ? [{ path: q.trim(), typed: true, grp: "This path" }] : [];
+    const pm = ps.map((p) => { const m = rankFolder(ql, p.path.toLowerCase()); return m && { ...p, ...m }; }).filter(Boolean);
+    return { folders: [...typed, ...hits.slice(0, 30)], ps: pm };
+  }, [dirs, ql, folder, preset, listHost, presets, more]);
+  const shown = [...(ql || more ? rows.folders : rows.folders.slice(0, NS_ROWS)), ...rows.ps];
+  const hidden = ql || more ? 0 : rows.folders.length - NS_ROWS;
+  const isPick = (r) => (r.preset ? preset?.name === r.preset.name : !preset && r.path === folder);
+  const cur = hi >= 0 && hi < shown.length ? hi : Math.max(0, shown.findIndex(isPick));
+  useEffect(() => setHi(-1), [ql, host]);
+  useEffect(() => { box.current?.querySelector(".fo.on")?.scrollIntoView({ block: "nearest" }); }, [cur]);
+  const choose = (r) => {
+    if (r.preset) setPreset(preset?.name === r.preset.name ? null : r.preset);
+    else { setPreset(null); pick(r.path); }
+    setQ(""); setMore(false); setHi(-1);
   };
+  const key = (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); setHi((cur + (e.key === "ArrowDown" ? 1 : shown.length - 1)) % Math.max(1, shown.length)); }
+    else if (e.key === "Enter" && !e.isComposing) {
+      e.preventDefault();
+      const r = shown[cur];
+      r && (ql || !isPick(r)) ? choose(r) : onStart();
+    } else if (e.key === "Escape" && q) { e.stopPropagation(); setQ(""); }
+  };
+  const meta = (r) => r.preset ? `preset: ${MULTI && r.preset.host ? `${r.preset.host} ` : ""}${tilde(r.preset.dir)}` : r.typed ? "a folder that exists on this host" : (inHere(r.path) ? plural(inHere(r.path), "session") : "");
+  let grp = "";
   return html`
-    <div class="chips">
-      ${common.map((p) => html`<button type="button" class=${!preset && p === dir ? "on" : ""} style=${`--ph: ${hueOf(project(p).name)}`} title=${p} onClick=${() => choose(p)}>${chipName(p)}</button>`)}
-      ${presets.map((p) => html`<button type="button" class="preset ${preset?.name === p.name ? "on" : ""}" style=${`--ph: ${hueOf(p.name)}`} title=${`Preset: ${MULTI && p.host ? p.host + ": " : ""}${tilde(p.dir)}`} onClick=${() => setPreset(preset?.name === p.name ? null : p)}><span class="mark">★</span>${p.name}</button>`)}
-    </div>
-    <div class="dirfind">
-      <input value=${q} onInput=${(e) => setQ(e.target.value)} onKeyDown=${key} placeholder="Another folder: search, or type a path" autocapitalize="off" autocomplete="off" spellcheck="false" />
-      ${q.trim() && html`<div class="dirs">
-        ${found.map((f, i) => html`<button type="button" class=${i === at ? "on" : ""} onPointerEnter=${() => setAt(i)} onClick=${() => choose(f.p)}>${f.typed ? html`Use <b>${f.p}</b>` : f.p}</button>`)}
-        ${found.length === 0 && html`<p class="empty" style="padding: 10px">No match. Start with ~ or / to use a path.</p>`}
-      </div>`}
+    <div class="nsfld">
+      <label class="nslb" for="ns-folder">Folder <span>${preset ? `preset ${preset.name}` : folder}</span></label>
+      <input id="ns-folder" class="nsin mono" value=${q} onInput=${(e) => setQ(e.target.value)} onKeyDown=${key} placeholder="Search folders, or type a path"
+        role="combobox" aria-expanded="true" aria-controls="ns-fl" aria-activedescendant=${shown.length ? `ns-fo${cur}` : ""} autocapitalize="off" autocomplete="off" spellcheck="false" />
+      <div class="nsfl" id="ns-fl" role="listbox" aria-label="Folders" ref=${box}>
+        ${shown.map((r, i) => {
+          const head = r.grp !== grp && html`<div class="fh" role="presentation">${r.grp}</div>`;
+          grp = r.grp;
+          return html`${head}<button type="button" tabindex="-1" role="option" id=${`ns-fo${i}`} aria-selected=${isPick(r)} class="fo ${i === cur ? "on" : ""} ${isPick(r) ? "pick" : ""}"
+            onPointerMove=${() => i !== cur && setHi(i)} onClick=${() => choose(r)}>
+            <span class="p ${r.preset ? "" : "mono"}">${r.typed ? html`Use <b>${r.path}</b>` : marked(r.path, r.hits)}${isPick(r) && html`<span class="pk">picked</span>`}</span><span class="m">${meta(r)}</span></button>`;
+        })}
+        ${hidden > 0 && html`<button type="button" class="more" onClick=${() => { setMore(true); document.getElementById("ns-folder")?.focus(); }}>More folders, ${hidden} <span>(or type to search)</span></button>`}
+        ${ql && !shown.length && html`<p class="none">No folder matches. Type a path that starts with ~ or / to use it.</p>`}
+      </div>
     </div>`;
 }
 
-function WorktreeField({ dirs, dir, on, setOn }) {
-  const d = dirs.find((d) => tilde(d.path) === dir.trim() || d.path === dir.trim());
-  if (!d?.git) return null;
-  return html`
-    <label class="tog" title="A separate checkout on a new branch, so it can't clash with other sessions in this repo.">
-      <input type="checkbox" checked=${on} onChange=${(e) => setOn(e.target.checked)} /> Own worktree
-    </label>`;
+function HostPick({ hosts, down, host, setHost }) {
+  if (hosts.length < 2) return null;
+  const off = (h) => down.find((p) => p.name === h);
+  return html`<span class="nsseg" role="radiogroup" aria-labelledby="ns-hl">${hosts.map((h) => html`
+    <button type="button" role="radio" aria-checked=${h === host} disabled=${!!off(h)} class=${off(h) ? "off" : ""}
+      title=${off(h) ? `${h} is unreachable${off(h).error ? `: ${off(h).error}` : ""}` : ""} onClick=${() => setHost(h)}>${h}</button>`)}</span>`;
 }
 
-function HostField({ hosts, host, setHost }) {
-  if (hosts.length < 2) return null;
-  return html`<div class="seg">${hosts.map((h) => html`<button type="button" class=${h === host ? "on" : ""} onClick=${() => setHost(h)}>${h}</button>`)}</div>`;
+function WorktreeSwitch({ on, setOn, why }) {
+  return html`<div class="nsfld">
+    <div class="nslb" id="ns-wl">Worktree</div>
+    <div class="nswt"><button type="button" class="sw" role="switch" aria-checked=${on} aria-labelledby="ns-wl" onClick=${() => setOn(!on)}></button>
+      <span class="d">${on ? "on: a separate checkout on a new branch" : "off: works in the folder itself"}</span></div>
+    <div class="why">${why}</div>
+  </div>`;
 }
+
+const workingIn = (live, dir, host, home) => (live || []).filter((s) => s.kind !== "hub" && s.state === "working" && (s.host || home) === host && tilde(baseDir(s.cwd)) === dir);
+const wtWhy = (n, dir, host) => n ? html`<b>On because ${plural(n, "session")} ${n === 1 ? "is" : "are"} working in ${dir} on ${host}.</b>` : "Nothing else is working in this folder.";
 
 const untrusted = "Claude Code hasn't been trusted in this folder yet. Open Claude there once and accept the prompt, then try again.";
 const submitOnEnter = (e) => {
@@ -5625,41 +5775,73 @@ const submitOnEnter = (e) => {
   e.target.form?.requestSubmit();
 };
 
-function NewSession({ onClose, say, hosts, home, start: from }) {
+function NewSession({ onClose, say, hosts, down = [], home, live, start: from, context }) {
   const later = !!from?.later;
-  const [host, setHost] = useState(from?.host || home);
-  const dirs = useDirs(host, home);
-  const near = from?.dir && (from.host || home) === host ? tilde(from.dir) : null;
-  const [chosen, setChosen] = useState(null);
-  const [name, setName] = useState("");
+  const seeded = !!(from?.dir || from?.prompt);
+  const [saved] = useState(() => (later || seeded ? null : nsDraft.get()));
+  const ctxDir = context?.dir ? tilde(context.dir) : null;
+  const [folder, setFolder] = useState(() => (from?.dir && tilde(from.dir)) || saved?.folder || ctxDir);
+  const isDown = (h) => down.some((p) => p.name === h);
+  const lastHosts = stored(NS_HOSTS, {});
+  const [host, setHostRaw] = useState(() => from?.host || saved?.host || (folder && lastHosts[folder]) || context?.host || home);
+  const [prompt, setPrompt] = useState(from?.prompt || saved?.prompt || "");
+  const [name, setName] = useState(from?.title || "");
   const [naming, setNaming] = useState(false);
-  const [prompt, setPrompt] = useState("");
-  const [worktree, setWorktree] = useState(false);
+  const [wt, setWt] = useState(null);
   const [presets, setPresets] = useState([]);
   const [preset, setPreset] = useState(null);
-  useEffect(() => { api("/api/presets").then((p) => setPresets(p || []), () => {}); }, []);
   const [engines, setEngines] = useState([]);
   const [engine, setEngine] = useState("");
-  useEffect(() => { api("/api/engines").then((e) => setEngines(e || []), () => {}); }, []);
+  const [engOpen, setEngOpen] = useState(false);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const up = hosts.filter((h) => !isDown(h));
+  const listHost = isDown(host) ? up[0] || home : host;
+  const dirs = useDirs(listHost, home);
+  useEffect(() => { api("/api/presets").then((p) => setPresets(p || []), () => {}); api("/api/engines").then((e) => setEngines(e || []), () => {}); }, []);
+  useEffect(() => {
+    if (later || seeded || saved) return;
+    api("/api/drafts").then((m) => {
+      let d = null;
+      try { d = JSON.parse(m?.["new-session"]?.text || "null"); } catch {}
+      if (!d) return;
+      setPrompt((p) => p || d.prompt || "");
+      if (d.folder) setFolder(d.folder);
+      if (d.host) setHostRaw(d.host);
+    }, () => {});
+  }, []);
   const recent = dirs.find((d) => d.recent);
-  const dir = chosen ?? near ?? (recent ? tilde(recent.path) : "~");
+  const dir = folder ?? (recent ? tilde(recent.path) : "~");
   const target = preset ? preset.host || home : host;
   const usable = engines.filter((e) => (e.host || home) === target);
   useEffect(() => { if (!usable.some((e) => e.name === engine)) setEngine(""); }, [target, engines]);
-  const harness = usable.find((e) => e.name === engine)?.harness;
-  const [err, setErr] = useState(null);
-  const [busy, setBusy] = useState(false);
+  const eng = usable.find((e) => e.name === engine);
+  const harness = eng?.harness;
+  const git = !!dirs.find((d) => tilde(d.path) === dir)?.git;
+  const busyHere = workingIn(live, dir, target, home);
+  const wtOn = git && !harness && !preset && (wt ?? busyHere.length > 0);
+  const hostDown = isDown(target);
+  const other = up.find((h) => h !== target);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current || later) { first.current = false; return; }
+    nsDraft.set(prompt.trim() || (folder && folder !== ctxDir) ? { prompt, folder, host } : null);
+  }, [prompt, folder, host]);
   useEffect(() => {
     const f = (e) => e.key === "Escape" && onClose();
     addEventListener("keydown", f);
     return () => removeEventListener("keydown", f);
   }, []);
+  const setHost = (h) => { setHostRaw(h); setWt(null); setErr(null); };
+  const pick = (p) => { setFolder(p); setWt(null); setErr(null); const h = stored(NS_HOSTS, {})[p]; if (h && hosts.includes(h) && !isDown(h)) setHostRaw(h); };
+  const clear = () => { nsDraft.set(null); setPrompt(""); setFolder(ctxDir); setHostRaw(context?.host || home); setPreset(null); setWt(null); setErr(null); };
 
   const putAside = async () => {
     setBusy(true);
     setErr(null);
     try {
-      await api(`/api/backlog${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), title: name, prompt, worktree: worktree && !harness } });
+      await api(`/api/backlog${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), title: name, prompt, worktree: wtOn } });
+      if (!later) nsDraft.set(null);
       onClose();
       say("On the backlog.");
       loadBacklog();
@@ -5668,51 +5850,73 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
     }
     setBusy(false);
   };
-  const start = async (e) => {
-    e.preventDefault();
+  const start = async (onHost) => {
     if (busy) return;
     if (later) return putAside();
-    setBusy(true);
+    const h = onHost || target;
+    if (onHost && !preset) setHostRaw(onHost);
+    setBusy(h);
     setErr(null);
     try {
       const r = preset
         ? await api(`/api/sessions${hostQ(preset.host, home)}`, { method: "POST", body: { preset: preset.name, name: name.trim(), prompt, engine } })
-        : await api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt, worktree: worktree && !harness, engine } });
+        : await api(`/api/sessions${hostQ(h, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt, worktree: wtOn, engine } });
+      if (!preset) store(NS_HOSTS, { ...stored(NS_HOSTS, {}), [dir]: h });
+      nsDraft.set(null);
       onClose();
-      say("Session started.");
+      say(`Started on ${h}.`);
       go(r.id);
     } catch (e) {
       setErr(e.status === 409 ? untrusted : e.message);
     }
     setBusy(false);
   };
+  const submit = (e) => { e.preventDefault(); start(hostDown && !later && other ? other : null); };
 
-  const where = preset
-    ? html`<b>${tilde(preset.dir)}</b>${MULTI && preset.host ? html` on <b>${preset.host}</b>` : ""}${preset.brief ? html`, with <b>${preset.brief}</b>` : ""}`
-    : html`<b>${dir}</b>`;
+  const off = down.find((p) => p.name === target);
+  const why = hostDown
+    ? html`<b>${target} is unreachable${off?.error ? `: ${off.error}` : ""}.</b> ${lastHosts[dir] === target ? `You usually start ${dir} there. ` : ""}${other ? `Start on ${other} instead, or come back when ${target} is up.` : ""}`
+    : down.length ? `${down.map((p) => p.name).join(" and ")} ${down.length === 1 ? "is" : "are"} unreachable, so ${down.length === 1 ? "it" : "they"} can't be picked.`
+    : lastHosts[dir] === host ? `Last time you used ${host} for this folder.` : "";
+  const draft = !later && !!(prompt.trim() || (folder && folder !== ctxDir));
+  const engLine = eng ? `${eng.name}${eng.harness ? `, ${eng.harness}` : ""}${eng.model ? `, ${eng.model}` : ""}` : "Claude, as configured";
+  const startLabel = busy ? `Starting on ${busy}…` : later ? "Add to backlog" : hostDown && other ? `Start on ${other} instead` : "Start";
   return html`
-    <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
-      <form class="sheet newsess" onSubmit=${start}>
-        <h3>${later ? "Put on the backlog" : "New session"}</h3>
-        ${later && html`<input class="title" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} placeholder="Title: what the backlog shows, in a few words" ref=${touch ? null : focusOnMount} />`}
-        <textarea class="ask" rows=${later ? 4 : 3} ref=${touch || later ? null : focusOnMount} value=${prompt} onInput=${(e) => setPrompt(e.target.value)} onKeyDown=${submitOnEnter}
-          placeholder=${later ? "The session's first message when you start it (optional)" : `What should it do? (optional${touch ? "" : ", Enter starts"})`}></textarea>
-        <div class="wherehead"><span>Where</span>${!preset && html`<${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setChosen(null); }} />`}</div>
-        <${FolderPicker} dirs=${dirs} dir=${dir} pick=${setChosen} presets=${later ? [] : presets} preset=${preset} setPreset=${setPreset} />
-        <div class="opts">
-          <span class="at">${where}</span>
-          ${!preset && !harness && html`<${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />`}
-          ${!later && usable.length > 0 && html`<span class="models">${[{ name: "" }, ...usable].map((e) => html`<button type="button" class="pick ${e.name === engine ? "on" : ""}" title=${e.harness ? `${e.harness}${e.model ? ` on ${e.model}` : ""}` : e.model || "Claude, as configured"}
-            onClick=${() => setEngine(e.name)}>${e.name || "Claude"}</button>`)}</span>`}
-          ${!later && (naming
-            ? html`<input class="name" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} placeholder=${preset ? preset.name : "Session name"} ref=${focusOnMount} />`
-            : html`<button type="button" class="pick" title=${`Without one, ${harness || "Claude"} titles the session from what you ask`} onClick=${() => setNaming(true)}>Name it</button>`)}
+    <div class="nsveil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
+      <form class="nsdlg" role="dialog" aria-modal="true" aria-label=${later ? "Put on the backlog" : "New session"} onSubmit=${submit}>
+        <div class="dh"><b>${later ? "Put on the backlog" : "New session"}</b><span class="r"><button type="button" class="kb" onClick=${onClose} aria-keyshortcuts="Escape">Close <kbd aria-hidden="true">esc</kbd></button></span></div>
+        <div class="db">
+          ${later && html`<div class="nsfld"><label class="nslb" for="ns-title">Title <span>what the backlog shows, in a few words</span></label>
+            <input id="ns-title" class="nsin" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} ref=${touch ? null : focusOnMount} /></div>`}
+          <div class="nsfld"><label class="nslb" for="ns-prompt">Prompt <span>${later ? "the session's first message when you start it" : "optional; without one you start in an empty session with the composer ready"}</span></label>
+            <textarea id="ns-prompt" class="nsprompt" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} onKeyDown=${submitOnEnter}
+              ref=${touch || later ? null : focusOnMount} placeholder="What should it do?"></textarea></div>
+          <${FolderField} dirs=${dirs} folder=${dir} pick=${pick} host=${target} listHost=${listHost} live=${live} presets=${later ? [] : presets} preset=${preset} setPreset=${setPreset} home=${home}
+            onStart=${() => start(hostDown && !later && other ? other : null)} />
+          <div class="nsrow2">
+            ${!preset && hosts.length > 1 && html`<div class="nsfld"><div class="nslb" id="ns-hl">Host</div><${HostPick} hosts=${hosts} down=${down} host=${host} setHost=${setHost} />
+              ${why && html`<div class="why">${why}</div>`}</div>`}
+            ${!later && git && !harness && !preset && html`<${WorktreeSwitch} on=${wtOn} setOn=${setWt} why=${wtWhy(busyHere.length, dir, target)} />`}
+            ${later && git && html`<${WorktreeSwitch} on=${wtOn} setOn=${setWt} why="The session starts in its own checkout when you start it." />`}
+          </div>
+          ${!later && html`<div class="nsfld"><div class="nslb">Engine</div>
+            <div class="nseng">
+              ${engOpen && usable.length
+                ? html`<select aria-label="Engine" value=${engine} onChange=${(e) => setEngine(e.target.value)} ref=${focusOnMount}>
+                    ${[{ name: "" }, ...usable].map((e) => html`<option value=${e.name}>${e.name ? `${e.name}${e.harness ? `, ${e.harness}` : ""}${e.model ? `, ${e.model}` : ""}` : "Claude, as configured"}</option>`)}</select>`
+                : html`<span>${engLine}</span>${usable.length > 0 && html`<button type="button" class="kb" onClick=${() => setEngOpen(true)}>Change</button>`}`}
+              ${naming
+                ? html`<input class="nsin nsname" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} placeholder=${preset ? preset.name : "Session name"} aria-label="Session name" ref=${focusOnMount} />`
+                : html`<button type="button" class="kb" title=${`Without one, ${harness || "Claude"} titles the session from what you ask`} onClick=${() => setNaming(true)}>Name it</button>`}
+            </div></div>`}
+          ${err && html`<div class="nserr" role="alert"><b>Couldn't ${later ? "add it" : `start on ${preset ? preset.host || home : host}`}.</b> ${err}</div>`}
         </div>
-        ${err && html`<p class="err">${err}</p>`}
-        <div class="actions">
-          <button type="button" class="btn" onClick=${onClose}>Cancel</button>
-          ${!later && !preset && html`<button type="button" class="btn" title="Put it on the backlog to start later" disabled=${!dir.trim() || !(name.trim() || prompt.trim()) || busy} onClick=${putAside}>Later</button>`}
-          <button class="btn primary" disabled=${(!preset && !dir.trim()) || (later && !(name.trim() || prompt.trim())) || busy}>${later ? "Add to backlog" : busy ? "Starting…" : "Start session"}</button>
+        <div class="df">
+          <span class="sum">${preset ? html`preset <b>${preset.name}</b>, ${tilde(preset.dir)}` : html`<b>${dir}</b> on ${hostDown && other ? other : host}${wtOn ? ", own worktree" : ""}`}</span>
+          ${draft && html`<button type="button" class="btn clr" onClick=${clear} title="Empty the sheet; it keeps what you typed until you start or clear it">Clear</button>`}
+          <button type="button" class="btn nsx" onClick=${onClose}>Cancel</button>
+          ${!later && !preset && html`<button type="button" class="btn" title="Put it on the backlog to start later" disabled=${!dir.trim() || !(name.trim() || prompt.trim()) || !!busy} onClick=${putAside}>Later</button>`}
+          <button class="btn primary go" disabled=${(!preset && !dir.trim()) || (later && !(name.trim() || prompt.trim())) || !!busy || (hostDown && !other && !later)}>${startLabel}${!busy && html` <kbd aria-hidden="true">enter</kbd>`}</button>
         </div>
       </form>
     </div>
@@ -5721,15 +5925,19 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
 
 function fuzzy(q, text) {
   if (!q) return { score: 1, hits: [] };
-  const t = text.toLowerCase();
-  const i = t.indexOf(q);
-  if (i >= 0) return { score: 200 - i + (i === 0 || /[\s/_-]/.test(t[i - 1]) ? 50 : 0), hits: [...Array(q.length).keys()].map((k) => i + k) };
-  const hits = [];
-  let j = 0, gaps = 0, last = -1;
-  for (let k = 0; k < t.length && j < q.length; k++) {
-    if (t[k] === q[j]) { hits.push(k); if (last >= 0) gaps += k - last - 1; last = k; j++; }
+  const t = text.toLowerCase(), sub = t.indexOf(q);
+  if (sub >= 0) return { score: 100 + q.length * 3 + (sub === 0 ? 40 : /[\s\-_:/#.(@]/.test(t[sub - 1]) ? 25 : 0) - sub * 0.3, hits: [...Array(q.length).keys()].map((k) => sub + k) };
+  const qq = q.replace(/\s+/g, ""), hits = [];
+  let score = 0, last = -2;
+  for (let i = 0; i < t.length && hits.length < qq.length; i++) {
+    if (t[i] !== qq[hits.length]) continue;
+    score += 1 + (last === i - 1 ? 6 : 0) + (i === 0 || /[\s\-_:/#.(@]/.test(t[i - 1]) ? 9 : 0);
+    hits.push(i);
+    last = i;
   }
-  return j === q.length ? { score: 100 - gaps - hits[0], hits } : null;
+  if (hits.length < qq.length) return null;
+  score -= (hits.at(-1) - hits[0]) * 0.15;
+  return score < qq.length * 5 ? null : { score, hits };
 }
 
 function marked(text, hits) {
@@ -5746,126 +5954,179 @@ function marked(text, hits) {
   return out;
 }
 
-function Palette({ live, sel, say, home, actions, onClose }) {
+const PAL_RECENT = "atc.palrecent";
+const PAL_CAP = { Sessions: 6, Pages: 4, Actions: 6, Folders: 4, Agents: 4, Earlier: 4, Bays: 4, Appearance: 4 };
+const STATE_BOOST = { "needs-you": 30, "your-turn": 12, working: 6 };
+
+function Palette({ live, sel, say, home, hosts, actions, onClose }) {
   const [q, setQ] = useState("");
   const [at, setAt] = useState(0);
   const [presets, setPresets] = useState([]);
   const [dirs, setDirs] = useState([]);
+  const [pages, setPages] = useState([]);
   const [past, setPast] = useState([]);
-  const list = useRef();
+  const [preview, setPreview] = useState(null);
+  const list = useRef(), input = useRef(), from = useRef(location.hash);
   useEffect(() => {
     api("/api/presets").then((p) => setPresets(p || []), () => {});
-    api("/api/dirs").then((d) => setDirs(d || []), () => {});
+    api("/api/pages").then((p) => setPages(p || []), () => {});
+    Promise.all(hosts.map((h) => api(`/api/dirs${hostQ(h, home)}`).then((d) => (d || []).map((x) => ({ ...x, host: h })), () => []))).then((l) => setDirs(l.flat()));
   }, []);
   useEffect(() => {
     const t = setTimeout(() => api(`/api/history?limit=${q ? 12 : 6}&q=${encodeURIComponent(q)}`).then((h) => setPast(h || []), () => {}), q ? 120 : 0);
     return () => clearTimeout(t);
   }, [q]);
 
-  const run = (f) => () => { onClose(); f(); };
+  const remember = (k) => store(PAL_RECENT, [k, ...stored(PAL_RECENT, []).filter((x) => x !== k)].slice(0, 8));
+  const leave = (ran) => { if (!ran && preview && location.hash !== from.current) history.back(); onClose(); };
   const items = [];
   const add = (group, label, opts) => items.push({ group, label, ...opts });
+  const run = (key, f) => () => { if (key) remember(key); onClose(); f(); };
+  const bays = baysOf(live, BAY.only);
   const cur = SESSION_API;
   if (cur && sel) {
-    const s = cur.s;
-    const act = (label, f, kw = "") => add(`This session: ${s.title || "Untitled"}`, label, { run: run(f), kw, glyph: "›" });
-    if (cur.canAttach) act("Terminal", () => cur.mode("term"), "shell attach");
+    const s = cur.s, g = "This session";
+    const act = (label, f, kw = "", hint) => add(g, label, { run: run(null, f), kw, hint, sub: s.title || "Untitled" });
+    if (cur.canAttach) act("Terminal", () => cur.mode("term"), "shell attach", "t");
     act("Transcript", () => cur.mode("chat"), "read conversation");
     act("Outputs", () => cur.mode("out"), "files servers links");
+    act("Sessions pane", () => actions.pane("rail"), "rail list", "[");
+    act("State pane", () => actions.pane("state"), "summary facts", "]");
     for (const p of cur.pages || []) act(`Page: ${pageTitle(p)}`, () => cur.page(p.name), `show ${p.name}`);
     if (cur.canAttach && VOICE_OK) act("Voice", cur.voice, "talk speak mic");
-    act("Usage", cur.usage, "tokens cost limit");
+    act("Session usage", cur.usage, "tokens cost limit");
     act("Rename", cur.rename, "title name");
     act(s.pinned ? "Unpin" : "Pin to top", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }));
     act(s.parked ? "Unpark" : "Park", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { parked: !s.parked } }), "hide quiet");
     if (s.attachable) act("Stop", () => api(`/api/sessions/${s.sessionId}/stop`, { method: "POST" }).then(() => say("Stopped. Resume it any time.")), "end");
     act("Put on the backlog", () => putAside(s, say), "later aside backlog");
   }
-  for (const s of live) add("Sessions", s.title || "Untitled", { s, kw: `${project(s.cwd).name} ${s.host || ""} ${s.lastPrompt || ""}`, run: run(() => go(keyOf(s))) });
+  for (const s of live) add("Sessions", s.title || "Untitled", { key: `s:${s.sessionId}`, s, extra: bayOf(s) || project(s.cwd).name, boost: STATE_BOOST[s.state] || 0,
+    sub: s.state === "working" ? doing(s) : oneLine(s.summary?.status || s.lastReply), bay: bayOf(s) || project(s.cwd).name, ago: ago(s),
+    to: `#/s/${keyOf(s)}`, run: run(`s:${s.sessionId}`, () => go(keyOf(s))) });
   const liveIDs = new Set(live.map((s) => s.sessionId));
-  for (const s of past.filter((s) => !liveIDs.has(s.sessionId))) add("Earlier", s.title || "Untitled", { s, kw: project(s.cwd).name, run: run(() => go(s.sessionId)) });
-  if (TABS.tabs.length > 1) {
-    const tab = (label, name, sub, opts) => add("Tabs", label, { kw: "tab project", sub: [TABS.only === name && "shown", sub].filter(Boolean).join(" · "), run: run(() => { TABS.set(name); if (matchMedia("(max-width: 899px)").matches) go(null); }), ...opts });
-    tab("All", null, "", { glyph: "◌" });
-    for (const t of TABS.tabs) tab(t.name, t.name, t.summary, { proj: t.name });
+  for (const s of past.filter((s) => !liveIDs.has(s.sessionId))) add("Earlier", s.title || "Untitled", { s, extra: project(s.cwd).name, bay: project(s.cwd).name, ago: ago(s), sub: oneLine(s.lastPrompt), to: `#/s/${s.sessionId}`, run: run(null, () => go(s.sessionId)) });
+  for (const p of pages) {
+    const owner = live.find((x) => x.sessionId === p.session), to = owner ? pageLink(p.session, p.name) : aloneLink(p.session, p.name);
+    add("Pages", pageTitle(p), { key: `p:${pkey(p)}`, page: true, sub: `${p.kind || "page"}, from ${owner?.title || p.of || "an earlier session"}`, bay: owner ? bayOf(owner) || project(owner.cwd).name : "",
+      ago: ago({ updated: p.updated || p.shown }), to, run: run(`p:${pkey(p)}`, () => (location.hash = to)) });
   }
-  add("Actions", "New session", { glyph: "+", hint: "n", run: run(() => actions.create()) });
-  for (const p of presets) add("Actions", `Start ${p.name}`, { proj: p.name, kw: `preset ${p.dir}`, sub: tilde(p.dir), run: run(() => api(`/api/sessions${hostQ(p.host, home)}`, { method: "POST", body: { preset: p.name } }).then((r) => { say(`Started ${p.name}.`); go(r.id); }, (e) => say(e.message))) });
-  add("Actions", "Assistant", { glyph: "◇", hint: "a", kw: "ask chat switchboard", run: run(actions.ask) });
-  if (VOICE_OK) add("Actions", "Talk to Claude", { glyph: "◉", hint: "t", kw: "voice assistant", run: run(actions.talk) });
-  add("Actions", "Backlog", { glyph: "☰", hint: "b", kw: "later todo tasks ideas", run: run(() => (location.hash = BACKLOG)) });
-  add("Actions", "New backlog item", { glyph: "+", kw: "later todo task add put", run: run(() => actions.create({ later: true })) });
-  add("Actions", "All pages", { glyph: "▣", hint: "g", kw: "shown html reports gallery", run: run(() => (location.hash = pagesHash())) });
-  add("Actions", "Usage and limits", { glyph: "%", kw: "tokens cost week", run: run(actions.usage) });
-  add("Actions", "Settings", { glyph: "⚙", hint: ",", kw: "preferences options theme appearance reading notifications", run: run(() => (location.hash = SETTINGS)) });
-  add("Actions", "Keyboard shortcuts", { glyph: "?", hint: "?", kw: "help keys", run: run(actions.help) });
+  const action = (label, hint, sub, f, kw = "") => add("Actions", label, { key: `a:${label}`, hint, sub, kw, boost: 4, run: run(`a:${label}`, f) });
+  action("New session", "+", "start a session in a folder", () => actions.create(), "start folder");
+  action("Session", "s", "the open session of this bay", () => goBay(BAY.only, live, true));
+  action("Board", "b", "every session of this bay", () => { rememberBay(BAY.only, { view: "board" }); go(null); });
+  action("Pages", "g", "every page your sessions showed you", () => (location.hash = pagesHash()), "shown html reports gallery");
+  action("Assistant", ".", "your conversation with it", actions.ask, "ask chat switchboard");
+  if (CAN_CALL) action("Call the assistant", "", "a voice call", callAssistant, "phone voice");
+  if (VOICE_OK) action("Talk to Claude", "", "voice, hands free", actions.talk, "voice assistant");
+  action("All bays", "0", "the board across every bay", () => { BAY.set(null); go(null); });
+  action("Next session that needs you", "n", "any bay, in bay order", actions.next);
+  action("Usage", "", "limits, pace, cost per bay and session", actions.usage, "tokens cost week limits");
+  action("Backlog", "", "future tasks of this bay", () => (location.hash = BACKLOG), "later todo tasks ideas");
+  action("New backlog item", "", "put a task aside for later", () => actions.create({ later: true }), "later todo task add put");
+  action("Agents", "", "standing agents and what they keep", () => (location.hash = AGENTS_ROUTE), "tracker standing");
+  action("Settings", ",", "appearance, reading, notifications", () => (location.hash = SETTINGS), "preferences options theme");
+  action("Keys", "?", "every key", actions.help, "help shortcuts keyboard");
+  for (const p of presets) action(`Start ${p.name}`, "", `preset, ${MULTI && p.host ? `${p.host} ` : ""}${tilde(p.dir)}`, () => api(`/api/sessions${hostQ(p.host, home)}`, { method: "POST", body: { preset: p.name } }).then((r) => { say(`Started ${p.name}.`); go(r.id); }, (e) => say(e.message)), "preset");
   for (const [v, label] of [["auto", "Match the system"], ["light", "Light"], ["dark", "Dark"]])
-    add("Appearance", label, { glyph: "◐", kw: "appearance scheme mode light dark night day", sub: LOOK.scheme === v ? "current" : "", run: run(() => LOOK.set("scheme", v)) });
+    add("Appearance", label, { kw: "appearance scheme mode light dark night day theme", sub: LOOK.scheme === v ? "current" : "light and dark", run: run(null, () => LOOK.set("scheme", v)) });
   for (const [v, label] of Object.entries(THEMES))
-    add("Appearance", `Theme: ${label}`, { glyph: "◑", kw: "appearance theme colors look", sub: LOOK.theme === v ? "current" : "", run: run(() => LOOK.set("theme", v)) });
-  if (q.length > 1) for (const d of dirs.slice(0, 60)) add("New session in", tilde(d.path), { glyph: "+", kw: "folder", run: run(() => actions.create({ dir: d.path })) });
+    add("Appearance", `Theme: ${label}`, { kw: "appearance theme colors look", sub: LOOK.theme === v ? "current" : "", run: run(null, () => LOOK.set("theme", v)) });
+  const seenDir = new Set();
+  for (const d of [...dirs].sort((a, b) => !!b.recent - !!a.recent || (b.uses || 0) - (a.uses || 0))) {
+    const k = `${d.host} ${d.path}`;
+    if (seenDir.has(k)) continue;
+    seenDir.add(k);
+    add("Folders", tilde(d.path), { mono: true, sub: `new session on ${d.host}`, run: run(null, () => actions.create({ dir: d.path, host: d.host })) });
+  }
+  for (const a of Object.values(AGENT_INFO)) add("Agents", a.name === "assistant" ? "the assistant" : `@${a.name}`, { key: `g:${a.name}`, agent: a, boost: 2,
+    sub: a.headline || a.error || (a.every ? `wakes every ${a.every}` : "wakes when messaged"), run: run(`g:${a.name}`, () => AGENT_SHEET(a.name)) });
+  bays.forEach((b, i) => add("Bays", b.name, { bayN: i + 1, b, hint: i < 9 ? `alt ${i + 1}` : "", sub: bayWords(b, i).split(": ")[1] || "nothing open", run: run(null, () => goBay(b.name, live)) }));
 
   const ql = q.trim().toLowerCase();
-  const shown = [];
-  for (const it of items) {
-    const m = fuzzy(ql, it.label) || (ql && fuzzy(ql, `${it.label} ${it.kw || ""}`) && { score: 10, hits: [] });
-    if (m) shown.push({ ...it, ...m });
-  }
-  const order = ["Tabs", "Sessions", "Actions", "This session", "Earlier", "New session in"];
-  const gi = (g) => order.findIndex((o) => g.startsWith(o));
-  if (ql) shown.sort((a, b) => b.score - a.score);
-  else shown.sort((a, b) => gi(a.group) - gi(b.group));
-  const top = (ql ? shown.slice(0, 40) : shown.filter((x) => x.group !== "Earlier" || past.indexOf(x.s) < 4).slice(0, 40));
-  const groups = [];
-  for (const it of top) {
-    let g = groups.find((g) => g[0] === it.group);
-    if (!g) groups.push((g = [it.group, []]));
-    g[1].push(it);
+  let groups;
+  if (!ql) {
+    const byKey = Object.fromEntries(items.filter((it) => it.key).map((it) => [it.key, it]));
+    groups = [
+      ["Recent", [...new Set([...stored(PAL_RECENT, []).map((k) => byKey[k]).filter(Boolean),
+        ...items.filter((it) => it.group === "Sessions" && !away(it.s)).sort((x, y) => (Date.parse(y.s.updated || 0) || 0) - (Date.parse(x.s.updated || 0) || 0))])].slice(0, 6)],
+      ["Needs you", items.filter((it) => it.group === "Sessions" && it.s.state === "needs-you" && !away(it.s))],
+      ["This session", items.filter((it) => it.group === "This session")],
+      ["Actions", items.filter((it) => it.group === "Actions").slice(0, 5), items.filter((it) => it.group === "Actions").length - 5],
+    ].filter(([, l]) => l.length);
+  } else {
+    const by = {};
+    for (const it of items) {
+      if (it.group === "Folders" && ql.length < 2) continue;
+      const m = fuzzy(ql, it.label), m2 = !m && fuzzy(ql, `${it.extra || ""} ${it.kw || ""}`);
+      if (!m && !m2) continue;
+      (by[it.group] ||= []).push({ ...it, hits: m ? m.hits : [], score: (m ? m.score : m2.score * 0.6) + (it.boost || 0) });
+    }
+    groups = Object.entries(by).map(([g, l]) => { l.sort((a, b) => b.score - a.score); return [g, l.slice(0, PAL_CAP[g] || 6), l.length - (PAL_CAP[g] || 6), l[0].score]; })
+      .sort((a, b) => b[3] - a[3]);
+    const n = /^[1-9]$/.test(ql) && bays[+ql - 1];
+    if (n) groups.unshift(["Bay", [items.find((it) => it.group === "Bays" && it.b === n)], 0]);
   }
   const flat = groups.flatMap((g) => g[1]);
   const pick = Math.min(at, Math.max(0, flat.length - 1));
+  const top = flat[pick];
   useEffect(() => setAt(0), [q]);
-  useEffect(() => { list.current?.querySelector(".pi.on")?.scrollIntoView({ block: "nearest" }); }, [pick]);
+  useEffect(() => { list.current?.querySelector(".pal-o.on")?.scrollIntoView({ block: "nearest" }); }, [pick, q]);
 
-  const key = (e) => {
-    if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "n")) { e.preventDefault(); setAt((pick + 1) % Math.max(1, flat.length)); }
-    else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "p")) { e.preventDefault(); setAt((pick - 1 + flat.length) % Math.max(1, flat.length)); }
-    else if (e.key === "Enter") { e.preventDefault(); flat[pick]?.run(); }
-    else if (e.key === "Escape") { e.preventDefault(); onClose(); }
+  const peek = () => {
+    if (!top?.to) return;
+    setPreview(top.label);
+    if (location.hash !== top.to) location.hash = top.to;
+    setTimeout(() => input.current?.focus(), 60);
   };
   const keyRef = useRef();
-  keyRef.current = key;
+  keyRef.current = (e) => {
+    const c = e.ctrlKey;
+    if (e.key === "ArrowDown" || (c && (e.key === "j" || e.key === "n"))) { e.preventDefault(); setAt((pick + 1) % Math.max(1, flat.length)); }
+    else if (e.key === "ArrowUp" || (c && (e.key === "k" || e.key === "p"))) { e.preventDefault(); setAt((pick - 1 + flat.length) % Math.max(1, flat.length)); }
+    else if (e.key === "Tab") { e.preventDefault(); peek(); }
+    else if (e.key === "Enter") { e.preventDefault(); top?.run(); }
+    else if (e.key === "Escape") { e.preventDefault(); leave(false); }
+    else return false;
+  };
   useEffect(() => {
     const k = (e) => {
-      if (!["ArrowDown", "ArrowUp", "Enter", "Escape"].includes(e.key) && !(e.ctrlKey && (e.key === "n" || e.key === "p"))) return;
-      e.stopPropagation();
-      keyRef.current(e);
+      if (!["ArrowDown", "ArrowUp", "Enter", "Escape", "Tab"].includes(e.key) && !(e.ctrlKey && "jknp".includes(e.key))) return;
+      if (keyRef.current(e) !== false) e.stopPropagation();
     };
     addEventListener("keydown", k, true);
     return () => removeEventListener("keydown", k, true);
   }, []);
+  const lead = (it) => it.s ? html`<${StateBlock} s=${it.s} />` : it.agent ? html`<${AgentMark} a=${it.agent} />` : it.b ? html`<span class="ic">${it.bayN}</span>`
+    : html`<span class="ic" aria-hidden="true">${it.page ? "pg" : it.mono ? "dir" : ""}</span>`;
+  const rt = (it) => it.bay !== undefined && (it.s || it.page) ? html`<span class="bay">${it.bay}</span><span class="ago">${it.ago}</span>`
+    : it.b ? html`<span class="cts" aria-hidden="true">${it.b.needs > 0 && html`<i class="cn n">${it.b.needs}</i>`}${it.b.turn > 0 && html`<i class="cn t">${it.b.turn}</i>`}${it.b.work > 0 && html`<i class="cn w">${it.b.work}</i>`}</span>${it.hint && html`<kbd>${it.hint}</kbd>`}`
+    : it.hint ? it.hint.split(" ").map((k) => html`<kbd>${k}</kbd>`) : "";
   let n = -1;
   return html`
-    <div class="veil palveil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
-      <div class="palette" role="dialog" aria-label="Command palette">
-        <div class="pq">
-          <span class="ps">${ICON.search}</span>
-          <input ref=${focusOnMount} value=${q} onInput=${(e) => setQ(e.target.value)} placeholder="Jump to a tab, session or action" autocapitalize="off" autocomplete="off" spellcheck="false" />
-          <kbd>esc</kbd>
-        </div>
-        <div class="plist" ref=${list}>
-          ${groups.map(([g, its]) => html`
-            <div class="pg">${g}</div>
-            ${its.map((it) => { n++; const idx = n; return html`
-              <button class=${`pi ${idx === pick ? "on" : ""}`} onPointerMove=${() => idx !== pick && setAt(idx)} onClick=${it.run}>
-                ${it.s ? html`<i class=${`dot ${away(it.s) ? "parked" : it.s.state}`}></i>` : it.proj ? html`<span class="proj" style=${`--ph: ${hueOf(it.proj)}`}>${it.proj.slice(0, 2)}</span>` : html`<span class="gl">${it.glyph || "›"}</span>`}
-                <span class="pl">${marked(it.label, it.hits)}${it.s && it.s.state === "working" && it.s.activity ? html`<small>${oneLine(it.s.activity)}</small>` : it.sub ? html`<small>${it.sub}</small>` : ""}</span>
-                ${it.s ? html`<span class="pr"><${ProjectTag} path=${it.s.cwd} /><span class="when">${ago(it.s)}</span></span>` : it.hint ? html`<kbd>${it.hint}</kbd>` : ""}
-              </button>`; })}`)}
-          ${flat.length === 0 && html`<p class="calm">Nothing matches "${q}".</p>`}
-        </div>
-        <div class="pf"><span><kbd>↑</kbd><kbd>↓</kbd> move</span><span><kbd>↵</kbd> open</span><span><kbd>${MAC ? "⌘" : "Ctrl"}</kbd><kbd>K</kbd> toggle</span></div>
+    <div class="pal-scrim ${preview ? "previewing" : ""}" onPointerDown=${() => leave(false)}></div>
+    <div class="pal" role="dialog" aria-modal="true" aria-label="Palette">
+      <div class="pal-hd"><b>Go to</b><button class="pal-x" onClick=${() => leave(false)}>Close</button></div>
+      <div class="pal-in"><span class="pr" aria-hidden="true">/</span>
+        <input ref=${(el) => { input.current = el; focusOnMount(el); }} value=${q} onInput=${(e) => setQ(e.target.value)} role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list"
+          aria-activedescendant=${flat.length ? `pal-o${pick}` : ""} aria-label="Search sessions, pages, actions, folders and agents"
+          placeholder=${PHONE.matches ? "Sessions, pages, actions, folders" : "Go to a session, page, action, folder or agent"} autocapitalize="off" autocomplete="off" spellcheck="false" />
+        <span class="cnt">${ql ? flat.length : ""}</span></div>
+      <div class="pal-list" id="pal-list" role="listbox" aria-label="Results" ref=${list}>
+        ${groups.map(([g, its, more]) => html`
+          <div role="group" aria-label=${g}>
+            <div class="pal-g"><b>${g}</b><span class="c">${its.length}</span>${g === "Sessions" && html`<span>all bays, needs you first</span>`}${g === "Folders" && html`<span>to start a session</span>`}${more > 0 && html`<span class="r">${more} more, keep typing</span>`}</div>
+            ${its.map((it) => { n++; const i = n; return html`
+              <div class="pal-o ${i === pick ? "on" : ""}" role="option" id=${`pal-o${i}`} aria-selected=${i === pick} onPointerMove=${() => i !== pick && setAt(i)} onClick=${it.run}>
+                ${lead(it)}<span class="lb ${it.mono ? "mono" : ""}">${marked(it.label, it.hits)}</span><span class="sub">${it.sub || ""}</span>
+                <span class="rt">${preview === it.label && i === pick && html`<span class="pv">previewing</span>`}${rt(it)}</span>
+              </div>`; })}
+          </div>`)}
+        ${!flat.length && html`<div class="pal-none">Nothing matches <b>${q}</b>. Start a session with it as the prompt: <button class="btn" onClick=${run(null, () => actions.create({ prompt: q }))}>New session</button></div>`}
       </div>
+      <div class="pal-top">${top && html`<span class="w">Opens</span><span class="t">${top.label}</span><button class="btn primary" onClick=${top.run}>Go</button>`}</div>
+      <div class="pal-f"><span><kbd>enter</kbd>runs</span><span><kbd>tab</kbd>previews behind</span><span><kbd>↑</kbd><kbd>↓</kbd><kbd>ctrl j</kbd><kbd>ctrl k</kbd>move</span><span><kbd>2</kbd>alone: bay 2</span><span><kbd>esc</kbd>closes</span></div>
+      <div class="sr" aria-live="polite">${ql ? `${flat.length} results${top ? `, first: ${top.label}` : ""}` : ""}</div>
     </div>`;
 }
 
@@ -5896,7 +6157,10 @@ function Share({ live, hosts, home, say }) {
   const dirs = useDirs(host, home);
   const [chosen, setChosen] = useState(null);
   const dir = chosen ?? "~";
-  const [worktree, setWorktree] = useState(false);
+  const [worktree, setWorktree] = useState(null);
+  const git = !!dirs.find((d) => tilde(d.path) === dir)?.git;
+  const busyHere = workingIn(live, dir, host, home);
+  const wtOn = git && (worktree ?? busyHere.length > 0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
 
@@ -5919,7 +6183,7 @@ function Share({ live, hosts, home, say }) {
       }
       const prompt = [ask.trim(), text.trim(), paths.map(quote).join("\n")].filter(Boolean).join("\n\n");
       if (to === "new") {
-        const r = await api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), prompt, worktree } });
+        const r = await api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), prompt, worktree: wtOn } });
         say("Session started.");
         close(r.id);
       } else {
@@ -5950,11 +6214,10 @@ function Share({ live, hosts, home, say }) {
           </div>
         </div>
         ${to === "new" ? html`
-          <div class="wherehead"><span>Folder</span><${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setChosen(null); }} /></div>
-          <${FolderPicker} dirs=${dirs} dir=${dir} pick=${setChosen} />
-          <div class="opts">
-            <span class="at"><b>${dir}</b></span>
-            <${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />
+          <${FolderField} dirs=${dirs} folder=${dir} pick=${(p) => { setChosen(p); setWorktree(null); }} host=${host} live=${live} home=${home} onStart=${() => {}} />
+          <div class="nsrow2">
+            ${hosts.length > 1 && html`<div class="nsfld"><div class="nslb" id="ns-hl">Host</div><${HostPick} hosts=${hosts} down=${[]} host=${host} setHost=${(h) => { setHost(h); setChosen(null); setWorktree(null); }} /></div>`}
+            ${git && html`<${WorktreeSwitch} on=${wtOn} setOn=${setWorktree} why=${wtWhy(busyHere.length, dir, host)} />`}
           </div>
         ` : html`
           <div class="targets">
