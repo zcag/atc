@@ -110,6 +110,7 @@ type Server struct {
 	web        string
 	widgetSent string
 	widgetAt   time.Time
+	answers    answers
 }
 
 func (s *Server) Handler() http.Handler {
@@ -595,6 +596,7 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 	}
 	s.attachPages(list)
 	s.notes.attach(list)
+	s.answers.attach(list)
 	s.attachTabs(list)
 	s.fleet.remember(s.Host, list)
 	if localOnly || len(s.Peers) == 0 {
@@ -650,6 +652,9 @@ func (s *Server) route(next http.Handler) http.Handler {
 		attachID := ""
 		if len(parts) == 5 && parts[4] == "attach" {
 			attachID = parts[3]
+			s.nameViewer(r)
+		}
+		if len(parts) == 6 && parts[4] == "asks" {
 			s.nameViewer(r)
 		}
 		s.fleet.proxy(w, r, p, attachID)
@@ -1138,14 +1143,36 @@ func (s *Server) notify(list []sessions.Session) {
 }
 
 type widgetFeed struct {
-	Type     string          `json:"type"`
-	At       time.Time       `json:"at"`
-	Sessions []widgetSession `json:"sessions"`
-	Look     Look            `json:"look"`
+	Type      string          `json:"type"`
+	At        time.Time       `json:"at"`
+	Sessions  []widgetSession `json:"sessions"`
+	Assistant *widgetSaid     `json:"assistant,omitempty"`
+	Look      Look            `json:"look"`
+}
+
+type widgetSaid struct {
+	Text string    `json:"text"`
+	At   time.Time `json:"at,omitzero"`
 }
 
 func (s *Server) widgetFeed(list []sessions.Session) widgetFeed {
-	return widgetFeed{"sessions", time.Now(), widgetList(list), s.look()}
+	return widgetFeed{"sessions", time.Now(), widgetList(list), assistantSaid(list), s.look()}
+}
+
+func assistantSaid(list []sessions.Session) *widgetSaid {
+	for _, x := range list {
+		if x.Kind != "hub" {
+			continue
+		}
+		said := x.LastReply
+		if said == "" && x.Summary != nil {
+			said = x.Summary.Status
+		}
+		if t := strings.Join(strings.Fields(said), " "); t != "" {
+			return &widgetSaid{t, x.Updated}
+		}
+	}
+	return nil
 }
 
 type widgetSession struct {
@@ -1157,6 +1184,8 @@ type widgetSession struct {
 	Pinned  bool      `json:"pinned,omitempty"`
 	Since   time.Time `json:"since,omitzero"`
 	Summary string    `json:"summary,omitempty"`
+	Bay     string    `json:"bay,omitempty"`
+	Ask     *push.Ask `json:"ask,omitempty"`
 }
 
 func widgetList(list []sessions.Session) []widgetSession {
@@ -1169,7 +1198,7 @@ func widgetList(list []sessions.Session) []widgetSession {
 		if x.State == sessions.Working && !x.PromptAt.IsZero() {
 			since = x.PromptAt
 		}
-		ws := widgetSession{x.ID, x.SessionID, x.Title, x.State, x.Host, x.Pinned, since, ""}
+		ws := widgetSession{x.ID, x.SessionID, x.Title, x.State, x.Host, x.Pinned, since, "", bayOf(x), pushAsk(x)}
 		if x.Summary != nil && x.State != sessions.Working {
 			ws.Summary = x.Summary.Status
 		}
@@ -1184,7 +1213,11 @@ func widgetList(list []sessions.Session) []widgetSession {
 func widgetKey(ws []widgetSession) string {
 	var b strings.Builder
 	for _, w := range ws {
-		fmt.Fprintf(&b, "%s|%s|%s|%s|%v|%s\n", w.SID, w.ID, w.Title, w.State, w.Pinned, w.Summary)
+		fmt.Fprintf(&b, "%s|%s|%s|%s|%v|%s|%s", w.SID, w.ID, w.Title, w.State, w.Pinned, w.Summary, w.Bay)
+		if w.Ask != nil {
+			b.WriteString("|" + w.Ask.Key)
+		}
+		b.WriteString("\n")
 	}
 	return b.String()
 }
@@ -1234,12 +1267,15 @@ func alerts(prev map[string]string, list []sessions.Session, viewing func(sessio
 		if !ok || was == x.State || x.Away() || viewing(x) {
 			continue
 		}
-		m := push.Message{Title: x.Title, Tag: x.SessionID, URL: "/#/s/" + x.SessionID}
+		m := push.Message{Title: x.Title, Tag: x.SessionID, URL: "/#/s/" + x.SessionID, Bay: bayOf(x)}
 		switch {
 		case x.State == sessions.NeedsYou:
 			m.Body = "Needs you"
 			if x.Activity != "" {
 				m.Body += ": " + x.Activity
+			}
+			if m.Ask = pushAsk(x); m.Ask != nil {
+				m.Body = askBody(m.Ask)
 			}
 		case x.State == sessions.YourTurn && was == sessions.Working:
 			m.Body = cmp.Or(pushBody(x.Summary), x.LastReply, "Finished. Your turn.")

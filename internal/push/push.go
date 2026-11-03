@@ -19,6 +19,22 @@ type Message struct {
 	Session string   `json:"session,omitempty"`
 	Replies []string `json:"replies,omitempty"`
 	Open    bool     `json:"open,omitempty"`
+	Bay     string   `json:"bay,omitempty"`
+	Ask     *Ask     `json:"ask,omitempty"`
+}
+
+// Ask is a session's question or permission as the phone answers it, from a push's actions or the
+// widget, through POST /api/sessions/{sid}/asks/{id}?key=, which refuses once the session asks
+// something else. A permission has a Tool; a question has Options when one tap answers it.
+type Ask struct {
+	SID     string   `json:"sid"`
+	ID      string   `json:"id"`
+	Key     string   `json:"key"`
+	Host    string   `json:"host,omitempty"`
+	Text    string   `json:"text,omitempty"`
+	Tool    string   `json:"tool,omitempty"`
+	Cmd     string   `json:"cmd,omitempty"`
+	Options []string `json:"options,omitempty"`
 }
 
 type Device struct {

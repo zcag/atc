@@ -1,6 +1,7 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,6 +20,7 @@ import (
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/outputs"
+	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
 )
 
@@ -73,16 +75,27 @@ func (s *Server) sendOpenCode(ctx context.Context, sid, text string) error {
 
 func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 	sid := r.PathValue("sid")
-	if !s.M.OpenCode(sid) {
-		s.answerClaude(w, r, sid)
-		return
-	}
 	var a opencode.Answer
 	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	s.done(w, sid, s.M.OC.Respond(r.Context(), sid, r.PathValue("ask"), a))
+	s.nameViewer(r)
+	q := r.URL.Query()
+	got := sessions.Answered{Ask: r.PathValue("ask"), Key: q.Get("key"), What: answerWhat(a), Via: cmp.Or(q.Get("via"), "web"), Device: q.Get("device")}
+	done := func(id string, err error) {
+		if err == nil {
+			got.At = time.Now()
+			s.answers.mark(sid, got)
+			log.Printf("answered %s from %s on %q: %s", sid, got.Via, got.Device, got.What)
+		}
+		s.done(w, id, err)
+	}
+	if !s.M.OpenCode(sid) {
+		s.answerClaude(w, r, sid, a, got.Key, done)
+		return
+	}
+	done(sid, s.M.OC.Respond(r.Context(), sid, r.PathValue("ask"), a))
 }
 
 func (s *Server) stop(ctx context.Context, id string) error {
@@ -117,21 +130,20 @@ func (s *Server) openCodeFound(ctx context.Context, sid string) ([]outputs.File,
 	return s.M.OC.Outputs(ctx, sid, home)
 }
 
-func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string) {
-	var a opencode.Answer
-	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string, a opencode.Answer, key string, done func(string, error)) {
 	id := s.agentID(r.Context(), sid)
 	b := claude.Asking(id)
+	if key != "" && sessions.ClaudeAsk(id, b).Fingerprint() != key {
+		http.Error(w, "it no longer asks that: open it to see what it asks now", http.StatusConflict)
+		return
+	}
 	if b.Approve != "" {
 		log.Printf("approve %s: reject=%v %q", id, a.Reject, b.Approve)
 		err := s.Term.Drive(r.Context(), id, func(t *attach.Typist) error { return claudeApprove(t, a.Reject) })
 		if errors.Is(err, errNoDialog) {
 			err = s.Term.Send(r.Context(), id, map[bool]string{false: "yes", true: "no"}[a.Reject])
 		}
-		s.done(w, id, err)
+		done(id, err)
 		return
 	}
 	qs := b.Questions
@@ -152,7 +164,7 @@ func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string
 		}
 	}
 	if a.Reject {
-		s.done(w, id, s.Term.Keys(r.Context(), id, "\x1b"))
+		done(id, s.Term.Keys(r.Context(), id, "\x1b"))
 		return
 	}
 	if len(a.Answers) != len(qs) {
@@ -160,7 +172,7 @@ func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string
 		return
 	}
 	log.Printf("answer %s: %q", id, a.Answers)
-	s.done(w, id, s.Term.Drive(r.Context(), id, func(t *attach.Typist) error { return claudeAnswer(t, qs, a.Answers) }))
+	done(id, s.Term.Drive(r.Context(), id, func(t *attach.Typist) error { return claudeAnswer(t, qs, a.Answers) }))
 }
 
 type typist interface {

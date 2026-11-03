@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -227,6 +229,19 @@ type Ask struct {
 	Questions  []Question `json:"questions,omitempty"`
 	Permission string     `json:"permission,omitempty"`
 	Patterns   []string   `json:"patterns,omitempty"`
+	Key        string     `json:"key,omitempty"`
+}
+
+func (a Ask) Fingerprint() string {
+	h := sha256.New()
+	fmt.Fprintf(h, "%s\x00%s", a.Permission, strings.Join(a.Patterns, "\x00"))
+	for _, q := range a.Questions {
+		fmt.Fprintf(h, "\x01%s", q.Question)
+		for _, o := range q.Options {
+			fmt.Fprintf(h, "\x02%s", o.Label)
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil))[:12]
 }
 
 type Question struct {
