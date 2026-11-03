@@ -120,7 +120,10 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		}
 		t, ok := byID[a.SessionID]
 		if !ok {
-			t = byID[m.Index.ForkedFrom(a.SessionID)]
+			t, ok = byID[m.Index.ForkedFrom(a.SessionID)]
+		}
+		if !ok && a.PID == 0 {
+			continue
 		}
 		s := m.build(t)
 		s.SessionID, s.ID, s.Kind, s.Name = a.SessionID, a.ID, a.Kind, a.Name
