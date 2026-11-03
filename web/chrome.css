@@ -115,6 +115,8 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
 .pk .askbar::before { display: none; }
 .pk .chips { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .pk .chips button { height: var(--btn-h); padding: 0 var(--s3); border: 0; border-radius: var(--r-sm); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--strip); color: var(--ink); font-size: var(--fs-ui); font-variation-settings: var(--v-you); }
+.offneeds { flex: none; display: none; align-items: center; gap: 6px; padding: 0 var(--s3); border: 0; background: var(--sunk); box-shadow: -1px 0 0 var(--line), -8px 0 8px -4px var(--sunk); color: var(--ink); font-size: var(--fs-small); white-space: nowrap; position: relative; z-index: 2; }
+.pk .ago .bayn { font-family: var(--sans); font-size: var(--fs-small); color: var(--dim); margin-right: var(--s2); }
 .peek .pkf { display: flex; justify-content: space-between; align-items: center; margin: 0; padding: 6px var(--s2); font-size: var(--fs-small); color: var(--faint); }
 
 .toast { left: var(--s4); right: auto; bottom: calc(var(--console-h) + var(--s3)); transform: none; max-width: min(560px, calc(100vw - 32px)); padding: 8px var(--s3); border-radius: var(--r-sm); background: var(--toast-bg); color: var(--toast-ink); box-shadow: var(--shadow-pop); font-size: var(--fs-ui); }
@@ -122,6 +124,7 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
 @media (max-width: 899px) {
   .bay .bn { padding: 0 4px 0 var(--s3); min-height: 44px; }
   .bay .cts { min-width: 32px; padding: 0 var(--s3) 0 4px; }
+  .offneeds { display: inline-flex; min-height: 44px; }
   .peeksheet .peek { position: static; width: auto; max-height: 70vh; box-shadow: none; background: none; }
   .pk { padding: var(--s3) var(--s4); }
   .pk .ask, .pk .what { margin-left: 0; }

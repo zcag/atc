@@ -587,10 +587,27 @@ const bayWords = (b, i) => [`${b.name}, bay ${i + 1}`, [b.needs && `${b.needs} n
 
 function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onPeek }) {
   const now = new Date();
+  const scroller = useRef();
+  const [hidden, setHidden] = useState(0);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const check = () => {
+      const box = el.getBoundingClientRect();
+      setHidden(bays.filter((b) => {
+        const r = el.querySelector(`[data-bay="${CSS.escape(b.name)}"]`)?.getBoundingClientRect();
+        return b.needs > 0 && r && (r.right > box.right + 1 || r.left < box.left - 1);
+      }).reduce((n, b) => n + b.needs, 0));
+    };
+    check();
+    el.addEventListener("scroll", check, { passive: true });
+    addEventListener("resize", check);
+    return () => { el.removeEventListener("scroll", check); removeEventListener("resize", check); };
+  }, [bays.map((b) => b.name + b.needs).join()]);
   const kb = (on, label, key, run, title) => html`<button class="kb ${on ? "on" : ""}" aria-pressed=${on} aria-keyshortcuts=${key} title=${title || ""} onClick=${run}>${label} <kbd aria-hidden="true">${key}</kbd></button>`;
   return html`
     <nav class="bays" aria-label="Bays">
-      <div class="bays-scroll">
+      <div class="bays-scroll" ref=${scroller}>
         ${only === null && html`<span class="bay on"><button class="bn" aria-current="true" title="Every bay (alt 0)"><span class="k">0</span><span class="n">All</span></button></span>`}
         ${bays.map((b, i) => html`
           <span class="bay ${only === b.name ? "on" : ""} ${peek === b.name ? "peeking" : ""}" data-bay=${b.name}>
@@ -603,6 +620,7 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
               ${b.needs > 0 && html`<i class="cn n">${b.needs}</i>`}${b.turn > 0 && html`<i class="cn t">${b.turn}</i>`}${b.work > 0 && html`<i class="cn w">${b.work}</i>`}</button>`}
           </span>`)}
       </div>
+      ${hidden > 0 && html`<button class="offneeds" onClick=${() => onPeek(peek === "*" ? null : "*")} aria-label=${`${hidden} more need you in other bays`}><i class="cn n">+${hidden}</i>need you</button>`}
       <span class="sp"></span>
       <div class="views">
         ${kb(view === "session", "Session", "s", () => goBay(only, live, true))}
@@ -630,14 +648,15 @@ function BayPeek({ bay, live, say, onClose }) {
     return () => { removeEventListener("keydown", k, true); removeEventListener("pointerdown", out); };
   }, []);
   useLayoutEffect(() => {
-    const at = document.querySelector(`.bays .bay[data-bay="${CSS.escape(bay)}"]`)?.getBoundingClientRect(), el = box.current;
+    const at = document.querySelector(every ? ".bays .offneeds" : `.bays .bay[data-bay="${CSS.escape(bay)}"]`)?.getBoundingClientRect(), el = box.current;
     if (!phone && at && el) el.style.left = `${Math.max(8, Math.min(at.left, innerWidth - el.offsetWidth - 8))}px`;
   });
-  const mine = (live || []).filter((s) => bayOf(s) === bay && !away(s));
+  const every = bay === "*";
+  const mine = (live || []).filter((s) => (every ? bayOf(s) && s.state === "needs-you" : bayOf(s) === bay) && !away(s));
   const needs = mine.filter((s) => s.state === "needs-you"), turn = mine.filter((s) => s.state === "your-turn"), work = mine.filter((s) => s.state === "working");
   const open = (s) => { onClose(); go(keyOf(s)); };
   const row = (s) => html`<div class="pk ${s.state}" key=${s.sessionId}>
-    <div class="row"><${StateBlock} s=${s} /><a class="ti" href=${`#/s/${keyOf(s)}`} onClick=${(e) => { e.preventDefault(); open(s); }}>${s.title || "Untitled"}</a><span class="ago">${ago(s)}</span></div>
+    <div class="row"><${StateBlock} s=${s} /><a class="ti" href=${`#/s/${keyOf(s)}`} onClick=${(e) => { e.preventDefault(); open(s); }}>${s.title || "Untitled"}</a><span class="ago">${every && html`<span class="bayn">${bayOf(s)}</span>`}${ago(s)}</span></div>
     <p class="what">${s.state === "working" ? doing(s) : headline(s)}</p>
     ${s.asks?.length > 0 && html`<div class="ask"><${AskBar} s=${s} say=${say} /></div>`}
     ${replyable(s) && html`<div class="ask"><${CardReplies} s=${s} /></div>`}
@@ -647,9 +666,9 @@ function BayPeek({ bay, live, say, onClose }) {
     ${turn.length > 0 && html`<h3 class="grp"><b>Your turn</b><span class="c">${turn.length}</span></h3>${turn.map(row)}`}
     ${work.length > 0 && html`<p class="pkf"><span>${plural(work.length, "session")} working</span></p>`}
     ${!mine.length && html`<p class="pkf"><span>Nothing running in ${bay}.</span></p>`}
-    <div class="pkf"><button class="kb" onClick=${() => { onClose(); goBay(bay, live); }}>Go to ${bay}</button><button class="kb" onClick=${() => { onClose(); BAY.set(bay); rememberBay(bay, { view: "board" }); go(null); }}>Its board</button></div>`;
+    ${!every && html`<div class="pkf"><button class="kb" onClick=${() => { onClose(); goBay(bay, live); }}>Go to ${bay}</button><button class="kb" onClick=${() => { onClose(); BAY.set(bay); rememberBay(bay, { view: "board" }); go(null); }}>Its board</button></div>`}`;
   return phone
-    ? html`<${Sheet} cls="peeksheet" title=${bay} onClose=${onClose}><div class="peek" ref=${box}>${body}</div><//>`
+    ? html`<${Sheet} cls="peeksheet" title=${every ? "Every bay" : bay} onClose=${onClose}><div class="peek" ref=${box}>${body}</div><//>`
     : html`<div class="peek" ref=${box} role="dialog" aria-label=${`Peek at ${bay}`}>
         <div class="pkh"><b>${bay}</b><span>${[needs.length && `${needs.length} need you`, turn.length && `${turn.length} your turn`].filter(Boolean).join(", ")}</span><span class="r"><button class="kb" onClick=${onClose}>Close <kbd aria-hidden="true">esc</kbd></button></span></div>
         ${body}
@@ -754,7 +773,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say }) {
   const { events } = useRowEvents(s, tap, !rail && s.state !== "past" && s.state !== "stopped");
   const on = sel?.sessionId === s.sessionId, run = runningOf(s), made = madeOf(s), g = groupOf(s);
   const where = [MULTI && s.host, s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch].filter(Boolean).join(" ");
-  const status = headline(s) || WORD[s.state] || "";
+  const status = (s.state === "needs-you" ? oneLine(s.summary?.status) || oneLine(s.lastReply) || "Needs you" : headline(s)) || WORD[s.state] || "";
   const second = doingLine(s);
   const fresh = unread(s);
   const cls = `brow ${g} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""} ${open ? "open" : ""} ${fresh ? "fresh" : ""}`;
