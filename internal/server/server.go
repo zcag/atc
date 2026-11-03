@@ -172,7 +172,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/sessions/{id}/send", s.send)
 	mux.HandleFunc("POST /api/sessions/{id}/keys", s.keys)
 	mux.HandleFunc("POST /api/sessions/{sid}/asks/{ask}", s.answer)
-	mux.HandleFunc("POST /api/guess", s.guess)
 	mux.HandleFunc("GET /api/widget", s.widget)
 	mux.HandleFunc("GET /api/presets", s.presets)
 	mux.HandleFunc("GET /api/backlog", s.backlogList)
@@ -904,11 +903,10 @@ func (s *Server) done(w http.ResponseWriter, id string, err error) {
 }
 
 type dir struct {
-	Path   string   `json:"path"`
-	Recent bool     `json:"recent,omitempty"`
-	Git    bool     `json:"git,omitempty"`
-	Uses   int      `json:"uses,omitempty"`
-	Titles []string `json:"-"`
+	Path   string `json:"path"`
+	Recent bool   `json:"recent,omitempty"`
+	Git    bool   `json:"git,omitempty"`
+	Uses   int    `json:"uses,omitempty"`
 }
 
 func (s *Server) dirs(w http.ResponseWriter, r *http.Request) {
@@ -938,13 +936,8 @@ func (s *Server) dirList() []dir {
 		if _, seen := at[p]; strings.Contains(p, "/.claude/") || !seen && len(out) >= 30 {
 			continue
 		}
-		i := add(p, true)
-		if i < 0 {
-			continue
-		}
-		out[i].Uses++
-		if len(out[i].Titles) < 4 && h.Title != "" {
-			out[i].Titles = append(out[i].Titles, h.Title)
+		if i := add(p, true); i >= 0 {
+			out[i].Uses++
 		}
 	}
 	for _, root := range s.Roots {

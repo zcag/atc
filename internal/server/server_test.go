@@ -371,32 +371,6 @@ func TestMergeHistory(t *testing.T) {
 	}
 }
 
-func TestGuess(t *testing.T) {
-	root := t.TempDir()
-	for _, d := range []string{"alpha", "beta", "gamma"} {
-		os.Mkdir(filepath.Join(root, d), 0o755)
-	}
-	llm := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"choices":[{"message":{"content":"3"}}]}`))
-	}))
-	defer llm.Close()
-	ts := newTestServer(t, nil, Voice{LLM: llm.URL}, root)
-	cases := map[string][2]string{
-		"crash in Beta when saving":                 {"beta", "name"},
-		"https://github.com/someone/alpha/issues/3": {"alpha", "name"},
-		"something vague":                           {"beta", "model"},
-	}
-	for text, want := range cases {
-		b, _ := json.Marshal(map[string]string{"text": text})
-		_, body := do(t, "POST", ts.URL+"/api/guess", "tok", string(b))
-		var got struct{ Dir, By string }
-		json.Unmarshal([]byte(body), &got)
-		if got.Dir != filepath.Join(root, want[0]) || got.By != want[1] {
-			t.Errorf("%q: got %s, want %v", text, body, want)
-		}
-	}
-}
-
 func TestStartWorktreeAndSend(t *testing.T) {
 	bin := fakeClaude(t)
 	ts := serverWith(t, bin, nil, Voice{})

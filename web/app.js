@@ -5084,18 +5084,6 @@ const hostQ = (host, home) => (host && host !== home ? `?host=${encodeURICompone
 const COMMON = 8;
 const chipName = (p) => { const { name, rest } = project(p); return rest ? `${name}/${rest}` : name; };
 
-function useGuess({ text, host, home, on, byNameOnly, set }) {
-  useEffect(() => {
-    if (!on) return;
-    if (!text.trim()) { set(null); return; }
-    let live = true;
-    const t = setTimeout(() => api(`/api/guess${hostQ(host, home)}`, { method: "POST", body: { text } }).then((r) => {
-      if (live) set(r.dir && (!byNameOnly || r.by === "name") ? tilde(r.dir) : null);
-    }, () => {}), 700);
-    return () => { live = false; clearTimeout(t); };
-  }, [text, host, on]);
-}
-
 function FolderPicker({ dirs, dir, pick, presets = [], preset, setPreset }) {
   const [q, setQ] = useState("");
   const [at, setAt] = useState(0);
@@ -5164,7 +5152,6 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
   const dirs = useDirs(host, home);
   const near = from?.dir && (from.host || home) === host ? tilde(from.dir) : null;
   const [chosen, setChosen] = useState(null);
-  const [guess, setGuess] = useState(null);
   const [name, setName] = useState("");
   const [naming, setNaming] = useState(false);
   const [prompt, setPrompt] = useState("");
@@ -5176,8 +5163,7 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
   const [engine, setEngine] = useState("");
   useEffect(() => { api("/api/engines").then((e) => setEngines(e || []), () => {}); }, []);
   const recent = dirs.find((d) => d.recent);
-  const dir = chosen ?? guess ?? near ?? (recent ? tilde(recent.path) : "~");
-  useGuess({ text: prompt, host, home, on: !chosen && !preset, byNameOnly: !!near, set: setGuess });
+  const dir = chosen ?? near ?? (recent ? tilde(recent.path) : "~");
   const target = preset ? preset.host || home : host;
   const usable = engines.filter((e) => (e.host || home) === target);
   useEffect(() => { if (!usable.some((e) => e.name === engine)) setEngine(""); }, [target, engines]);
@@ -5224,7 +5210,7 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
 
   const where = preset
     ? html`<b>${tilde(preset.dir)}</b>${MULTI && preset.host ? html` on <b>${preset.host}</b>` : ""}${preset.brief ? html`, with <b>${preset.brief}</b>` : ""}`
-    : html`<b>${dir}</b>${dir === guess && !chosen ? html` <em class="note">from your message</em>` : ""}`;
+    : html`<b>${dir}</b>`;
   return html`
     <div class="veil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
       <form class="sheet newsess" onSubmit=${start}>
@@ -5232,7 +5218,7 @@ function NewSession({ onClose, say, hosts, home, start: from }) {
         ${later && html`<input class="title" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} placeholder="Title: what the backlog shows, in a few words" ref=${touch ? null : focusOnMount} />`}
         <textarea class="ask" rows=${later ? 4 : 3} ref=${touch || later ? null : focusOnMount} value=${prompt} onInput=${(e) => setPrompt(e.target.value)} onKeyDown=${submitOnEnter}
           placeholder=${later ? "The session's first message when you start it (optional)" : `What should it do? (optional${touch ? "" : ", Enter starts"})`}></textarea>
-        <div class="wherehead"><span>Where</span>${!preset && html`<${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setChosen(null); setGuess(null); }} />`}</div>
+        <div class="wherehead"><span>Where</span>${!preset && html`<${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setChosen(null); }} />`}</div>
         <${FolderPicker} dirs=${dirs} dir=${dir} pick=${setChosen} presets=${later ? [] : presets} preset=${preset} setPreset=${setPreset} />
         <div class="opts">
           <span class="at">${where}</span>
@@ -5425,12 +5411,10 @@ function Share({ live, hosts, home, say }) {
   const [host, setHost] = useState(home);
   const dirs = useDirs(host, home);
   const [chosen, setChosen] = useState(null);
-  const [guess, setGuess] = useState(null);
-  const dir = chosen ?? guess ?? "~";
+  const dir = chosen ?? "~";
   const [worktree, setWorktree] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-  useGuess({ text: [ask, text, ...files.map((f) => f.name)].join("\n"), host, home, on: !chosen && to === "new", set: setGuess });
 
   const close = (id) => { APP?.clearShared?.(); id ? go(id) : go(null); };
   const quote = (p) => (/\s/.test(p) ? `"${p}"` : p);
@@ -5482,10 +5466,10 @@ function Share({ live, hosts, home, say }) {
           </div>
         </div>
         ${to === "new" ? html`
-          <div class="wherehead"><span>Folder</span><${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setChosen(null); setGuess(null); }} /></div>
+          <div class="wherehead"><span>Folder</span><${HostField} hosts=${hosts} host=${host} setHost=${(h) => { setHost(h); setChosen(null); }} /></div>
           <${FolderPicker} dirs=${dirs} dir=${dir} pick=${setChosen} />
           <div class="opts">
-            <span class="at"><b>${dir}</b>${dir === guess && !chosen ? html` <em class="note">from what you shared</em>` : ""}</span>
+            <span class="at"><b>${dir}</b></span>
             <${WorktreeField} dirs=${dirs} dir=${dir} on=${worktree} setOn=${setWorktree} />
           </div>
         ` : html`
