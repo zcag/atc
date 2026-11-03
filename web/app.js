@@ -4,6 +4,7 @@ import hljs from "./vendor/highlight.min.js";
 import { diffLines } from "./vendor/diff.mjs";
 import { Call } from "./call.js";
 import { persona } from "./persona.js";
+import { minimal } from "./minimal.js";
 
 const BAYS = [
   ["needs-you", "Needs you"],
@@ -173,11 +174,31 @@ let AUTO_VOICE = false, AUTO_PANE = null, AUTO_SPLIT = false;
 const WEB = { at: null, fresh: false, shown: Date.now() };
 const CALL = "#/call";
 let CAN_CALL = false;
+const ASSIST = "#/assist";
+let ASSIST_FROM = null;
+const openAssistant = () => { if (location.hash === ASSIST) return; if (location.hash !== CALL) ASSIST_FROM = location.hash; location.hash = ASSIST; };
+const closeAssistant = () => (location.hash = ASSIST_FROM && ASSIST_FROM !== ASSIST ? ASSIST_FROM : "#/");
+const CALLDOCK = { open: true, set(v) { CALLDOCK.open = v; dispatchEvent(new Event("atc-calldock")); } };
+const isPhone = () => !matchMedia("(min-width: 900px)").matches;
+const returnToCall = () => (isPhone() ? (location.hash = CALL) : CALLDOCK.set(true));
 const callAssistant = () => {
   if (APP?.call) return APP.call();
+  CALLDOCK.set(true);
   Call.dial();
-  if (location.hash !== CALL) location.hash = CALL;
+  if (isPhone() && location.hash !== CALL) location.hash = CALL;
 };
+const KEYLAYERS = [];
+function useKeyLayer(fn, on = true) {
+  const ref = useRef(fn);
+  ref.current = fn;
+  useEffect(() => {
+    if (!on) return;
+    const f = (e) => ref.current(e);
+    KEYLAYERS.push(f);
+    return () => KEYLAYERS.splice(KEYLAYERS.indexOf(f), 1);
+  }, [on]);
+}
+const typingIn = (t) => t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable;
 let appSent = "";
 const FEED_STATES = ["needs-you", "your-turn", "working"];
 
@@ -205,8 +226,7 @@ function App() {
   const [limits, setLimits] = useState(null);
   const route = useRoute();
   const [stale, setStale] = useState(null);
-  const [starting, setStarting] = useState(false);
-  const [panes, setPanesRaw] = useState(() => ({ rail: true, index: true, pgindex: true, ...stored("atc.panes", {}) }));
+  const [panes, setPanesRaw] = useState(() => ({ rail: true, index: true, pgindex: true, aleft: true, ...stored("atc.panes", {}) }));
   const rememberPast = useCallback((list) => setPast((p) => Object.fromEntries([...Object.entries(p), ...list.map((s) => [s.sessionId, s])])), []);
   const [hist, moreHist, canMore] = useBayHistory(!!me, rememberPast);
   const togglePane = (k) => setPanesRaw((p) => { const n = { ...p, [k]: !p[k] }; store("atc.panes", n); return n; });
@@ -268,7 +288,8 @@ function App() {
     fetch("/app/version.json").then((r) => (r.ok ? r.json() : null)).then((v) => v && v.versionCode > APP_VERSION && setStale(v.versionName), () => {});
   }, [me]);
 
-  const [assisting, setAssisting] = useState(location.hash === "#/assist");
+  const fromCall = () => { if (location.hash !== CALL || isPhone()) return false; history.replaceState(null, "", ASSIST); CALLDOCK.set(true); return true; };
+  const [assisting, setAssisting] = useState(() => fromCall() || location.hash === ASSIST);
   const [scr, setScr] = useState(screenOf);
   const shareRoute = () => (location.hash.startsWith("#/share") ? location.hash : null);
   const [sharing, setSharing] = useState(shareRoute);
@@ -285,7 +306,7 @@ function App() {
   const [settings, setSettings] = useState(location.hash === SETTINGS);
   const [calling, setCalling] = useState(location.hash === CALL);
   useEffect(() => {
-    const f = () => { setCalling(location.hash === CALL); setAssisting(location.hash === "#/assist"); setScr(screenOf()); setAgentName(agentRoute()); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesAt(readPages()); setSettings(location.hash === SETTINGS); };
+    const f = () => { setAssisting(fromCall() || location.hash === ASSIST); setCalling(location.hash === CALL); setScr(screenOf()); setAgentName(agentRoute()); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesAt(readPages()); setSettings(location.hash === SETTINGS); };
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
@@ -296,20 +317,6 @@ function App() {
     const t = setInterval(() => document.visibilityState === "visible" && loadAgents(), 30000);
     return () => clearInterval(t);
   }, [!!me]);
-  const talk = async (fresh, voice = true) => {
-    setStarting(true);
-    try {
-      const r = await api(`/api/assist${fresh ? "?new=1" : ""}`, { method: "POST" });
-      AUTO_VOICE = voice;
-      AUTO_PANE = "chat";
-      go(r.id);
-    } catch (e) {
-      say(`Could not open the assistant: ${e.message}`);
-      go(null);
-    }
-    setTimeout(() => setStarting(false), 15000);
-  };
-
   const [notifAsk, setNotifAsk] = useState(() => {
     try { return !APP && !touch && typeof Notification !== "undefined" && Notification.permission === "default" && !localStorage.getItem("atc.notifask"); } catch { return false; }
   });
@@ -402,6 +409,8 @@ function App() {
     const onKey = (e) => {
       const k = keys.current;
       if (k.creating) return;
+      if (!document.querySelector(".veil, .keys-ov, .pal") && !e.metaKey && !e.ctrlKey && !e.altKey)
+        for (const f of [...KEYLAYERS].reverse()) if (f(e)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
       if (e.altKey && !e.ctrlKey && !e.metaKey && (e.code === "KeyJ" || e.code === "KeyK")) {
         const next = step(k.route, e.code === "KeyK" ? -1 : 1);
         if (next) { e.preventDefault(); e.stopPropagation(); go(keyOf(next)); }
@@ -450,7 +459,7 @@ function App() {
         s: () => goBay(BAY.only, k.live, true),
         b: () => { rememberBay(BAY.only, { view: "board" }); go(null); },
         g: () => (location.hash = pagesHash()),
-        ".": () => talk(false, false),
+        ".": () => (Call.live() ? returnToCall() : openAssistant()),
         "+": () => setCreating(location.hash === BACKLOG ? { later: true } : true),
         n: () => {
           const bays = baysOf(k.live, BAY.only).map((b) => b.name);
@@ -501,7 +510,8 @@ function App() {
 
   const all = runs || [];
   const sel = route && (all.find((s) => s.id === route || s.sessionId === route) || past[route]);
-  const screen = route ? "session" : pagesAt ? "pages" : scr || "board";
+  const assistView = assisting || (sel?.kind === "hub" && sel.agent === "assistant");
+  const screen = assistView ? "assistant" : route ? "session" : pagesAt ? "pages" : scr || "board";
   const bays = baysOf(live, only);
   const inBay = (live || []).filter((x) => x.state !== "stopped" && (only ? bayOf(x) === only : !homeless(x))).length;
   const remember = rememberPast;
@@ -512,10 +522,11 @@ function App() {
   };
 
   return html`
-    <div class="app">
+    <div class="app ${assistView ? "assisting" : ""}">
     <${BayBar} bays=${bays} only=${only} view=${screen} panes=${panes} togglePane=${togglePane} up=${up} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
     ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} say=${say} onClose=${() => setPeek(null)} />`}
-    ${pagesAt && !route ? html`<div class="shell pagesv"><${PagesView} at=${pagesAt} live=${all} bays=${bays} say=${say} index=${panes.pgindex !== false} /></div>`
+    ${assistView ? html`<${AssistantView} hub=${hub} live=${all} loaded=${!!runs} agents=${agents} say=${say} panes=${panes} togglePane=${togglePane} />`
+    : pagesAt && !route ? html`<div class="shell pagesv"><${PagesView} at=${pagesAt} live=${all} bays=${bays} say=${say} index=${panes.pgindex !== false} /></div>`
     : scr && !route ? html`<main class="shell scr">${scr === "usage" ? html`<${UsagePage} limits=${limits} live=${all} down=${down} onOpen=${openFromUsage} />`
       : scr === "backlog" ? html`<${BacklogPage} live=${all} say=${say} onAdd=${setCreating} only=${only} />`
       : html`<${AgentsPage} name=${agentName} agents=${agents} live=${all} say=${say} reload=${loadAgents} />`}</main>`
@@ -531,22 +542,22 @@ function App() {
         ${sel && !wide && html`<${SessionStrip} live=${live} sel=${sel} />`}
         ${sel
           ? html`<${Session} key=${sel.sessionId} s=${sel} say=${say} live=${all} panes=${panes} togglePane=${togglePane} />`
-          : html`<div class="blank">${starting || !live ? "Opening…" : "This session is gone. Pick another from the list."}</div>`}
+          : html`<div class="blank">${!live ? "Opening…" : "This session is gone. Pick another from the list."}</div>`}
       </main>
     </div>`}
-    <${Console} hub=${hub} agents=${agents} runs=${runs} onTalk=${() => talk(false, false)} onKeys=${() => setHelp(true)} />
-    <${TabBar} view=${screen} assisting=${sel?.kind === "hub"} onTalk=${() => talk(false, false)} />
+    <${Console} hub=${hub} agents=${agents} runs=${runs} onTalk=${openAssistant} onKeys=${() => setHelp(true)} />
+    ${!calling && html`<${CallPill} hub=${hub} />`}
+    <${TabBar} view=${calling ? "assistant" : screen} onTalk=${openAssistant} />
     </div>
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${me.hosts || [me.host]} down=${down} home=${me.host} live=${all}
       start=${creating === true ? null : creating} context=${creating === true ? here(sel, live) : null} />`}
     ${palette && html`<${Palette} live=${reach || []} sel=${sel} say=${say} home=${me.host} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} onClose=${() => setPalette(false)}
-      actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: () => (location.hash = "#/assist"), ask: () => talk(false, false),
+      actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: openAssistant, ask: openAssistant,
         pane: togglePane, next: () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true })) }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
-    ${assisting && html`<${Assist} live=${reach} onOpen=${() => go(null)} />`}
     ${settings && html`<${SettingsPage} me=${me} onClose=${closeSettings} />`}
     ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} at=${alone.at} live=${all} say=${say} />`}
-    ${calling ? html`<${CallView} />` : html`<${CallPill} />`}
+    ${calling ? html`<${CallScreen} hub=${hub} live=${all} />` : html`<${CallDock} hub=${hub} live=${all} assisting=${assistView} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${agentUse && html`<${AgentUsage} name=${agentUse} onClose=${() => setAgentUse(null)} />`}
     <${Dialogs} />
@@ -684,6 +695,7 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
       </div>
       ${view === "board" && html`<div class="tgl">${kb(only === null, html`<span class="nm">All bays</span>`, "0", () => BAY.set(only === null ? bays[0]?.name || null : null), "Every bay on one board")}${kb(panes.index, html`<span class="nm">Page index</span>`, "]", () => togglePane("index"), "The bay's pages beside the board")}</div>`}
       ${view === "pages" && html`<div class="tgl">${kb(panes.pgindex !== false, html`<span class="nm">Index</span>`, "[", () => togglePane("pgindex"), "Every page in the bay, newest first")}${kb(only === null, html`<span class="nm">All bays</span>`, "0", () => { location.hash = pagesHash(only === null ? PAGES_FROM || bays[0]?.name || null : null); PAGES_FROM = only || PAGES_FROM; }, "Pages from every bay, grouped by bay")}</div>`}
+      ${view === "assistant" && html`<div class="tgl">${kb(panes.aleft, html`<span class="nm">Touched today</span>`, "[", () => togglePane("aleft"), "Sessions it started or told today, and the agents")}</div>`}
       ${view === "session" && html`<div class="tgl">${kb(panes.rail, html`<span class="nm">Sessions</span>`, "[", () => togglePane("rail"), "The bay's sessions beside the transcript")}${kb(panes.state, html`<span class="nm">State</span>`, "\\", () => togglePane("state"), "What the session is doing, what it made, and its facts")}</div>`}
       <div class="meta">
         ${!up && html`<span class="host off" role="status">reconnecting</span>`}
@@ -763,6 +775,9 @@ function ConsoleAgents({ agents, runs }) {
 }
 
 function Console({ hub, agents, runs, onTalk, onKeys }) {
+  useCall();
+  const docked = useCallDock();
+  if (Call.live()) return html`<${CallLine} docked=${docked} />`;
   return html`
     <footer class="console" aria-label="Assistant">
       <button class="pr" onClick=${onTalk} aria-keyshortcuts=".">assistant<span>></span></button>
@@ -775,24 +790,27 @@ function Console({ hub, agents, runs, onTalk, onKeys }) {
     </footer>`;
 }
 
-function TabBar({ view, assisting, onTalk }) {
+function TabBar({ view, onTalk }) {
   const tab = (on, label, run) => html`<button class=${on ? "on" : ""} aria-current=${on ? "page" : null} onClick=${run}>${label}</button>`;
   return html`
     <nav class="tabbar" aria-label="Views">
       ${tab(view === "board", "Board", () => { rememberBay(BAY.only, { view: "board" }); go(null); })}
       ${tab(view === "pages", "Pages", () => (location.hash = pagesHash()))}
-      ${tab(assisting, "Assistant", onTalk)}
+      ${tab(view === "assistant", "Assistant", onTalk)}
       ${tab(false, "Go", () => PALETTE_OPEN())}
     </nav>`;
 }
 
 const KEYMAP = [
-  ["Views", [["s", "Session: the bay's last open one"], ["b", "Board"], ["g", "Pages"], [".", "Assistant"]]],
+  ["Views", [["s", "Session: the bay's last open one"], ["b", "Board"], ["g", "Pages"], [".", "Assistant; on a call, back to the call"]]],
   ["Bays", [["1..9", "That bay, as you left it; again: its next session"], ["shift alt 1..9", "Peek at that bay: answer without going there"], ["0", "Every bay"], ["n", "Next session waiting on you, any bay"]]],
   ["Sessions", [["q w e .. p", "The 1st to 10th session in the list, at once"], ["j k", "Next, previous session (on the board: the selection)"], ["enter", "On the board: open the selected session"], ["alt j k", "Next, previous session, even from a terminal"]]],
   ["Panes", [["[", "Sessions beside the transcript"], ["]", "Its page beside the transcript (board: the page index)"], ["\\", "State: now, running, made, the session's facts"]]],
   ["Session", [["enter", "Write to the session (on a stopped one: Resume)"], ["`", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
   ["Reading", [["J K", "Next, previous turn: your prompts and its replies"], ["space", "A screen down; with shift, up"], ["home end", "Top, end of the transcript"], ["N", "Next thing you have not seen here: the divider, then the question"], ["c", "Contents: every turn and heading"], ["l", "Outline, story, everything, in turn"], ["f", "Find in the session"]]],
+  ["Assistant", [[".", "Tap: call it; hold: voice mode"], ["[", "Touched today and the agents"], ["esc", "Close the assistant"]]],
+  ["Call", [["m", "Mute, unmute"], ["E", "End the call (shift e)"], [".", "Back to the call, from anywhere"], ["esc", "Minimize the call to the console line"]]],
+  ["Voice", [["m", "Mute, unmute"], ["esc", "Leave voice mode"]]],
   ["Answer", [["1..9", "With the question focused (click it, tab into it, or N): that option"]]],
   ["Composer", [["enter", "Send; while it works, queue"], ["esc", "Empty box while it works: stop it (asks first)"], ["space", "Hold in an empty box: dictate"], ["/", "At the start: slash commands"]]],
   ["Pages", [["j k", "Next, previous page"], ["[", "The index"], ["0", "This bay or every bay"], ["q w e .. p", "The 1st to 10th page in the index"], ["\\", "The page beside its session"], ["enter", "Note: its session, at the composer"], ["d", "What changed, on an updated page"]]],
@@ -970,39 +988,88 @@ function arrange(list) {
     .concat(bay("stopped"));
 }
 
-function Assist({ live, onOpen }) {
-  useEffect(() => {
-    const k = (e) => { if (e.key === "Escape") onOpen(); };
-    addEventListener("keydown", k);
-    return () => removeEventListener("keydown", k);
-  }, []);
-  const open = (live || []).filter((s) => !away(s));
-  const count = (st) => open.filter((s) => s.state === st).length;
-  const summary = [["needs-you", "needs you"], ["your-turn", "your turn"], ["working", "working"]]
-    .map(([st, word]) => count(st) && html`<span class=${st}>${count(st)} ${word}</span>`).filter(Boolean);
-  const top = open.filter((s) => s.state !== "stopped" && s.name !== "assistant").slice(0, 4);
+const lineageOf = (s) => s && (s.root || s.sessionId);
+const startOfDay = () => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const touchedBy = (hub, live, since) => {
+  const me = lineageOf(hub);
+  return me ? (live || []).filter((s) => s.reportsTo === me && s.kind !== "hub" && (Date.parse(s.updated || s.startedAt || 0) || 0) >= since).sort(byRecent) : [];
+};
+
+function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
+  const phone = usePhone();
+  useCall();
+  const docked = useCallDock() && Call.live() && !phone;
+  const [voice, setVoice] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const [leftCall, setLeftCall] = useState(false);
+  const left = docked ? leftCall : panes.aleft;
+  const asked = useRef(false), dot = useRef(null);
   useNow(30000);
-  const now = new Date(), hr = now.getHours();
-  const hello = hr < 5 ? "Good night" : hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
-  return html`
-    <div class="assist">
-      ${!APP && html`<button class="icon close" onClick=${onOpen} aria-label="Close">✕</button>`}
-      <header class="ahello">
-        <span class="time">${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
-        <span class="date">${hello} · ${now.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" })}</span>
-      </header>
-      <div class="ahero" onClick=${CAN_CALL ? callAssistant : null}>
-        <${Orb} state="listening" on=${CAN_CALL} />
+  useEffect(() => {
+    if (!loaded || hub || asked.current) return;
+    asked.current = true;
+    api("/api/assist", { method: "POST" }).catch((e) => say(`Could not start the assistant: ${e.message}`));
+  }, [loaded, !!hub]);
+  useKeyLayer((e) => {
+    if (typingIn(e.target)) return false;
+    if (e.key === "Escape") return !docked && (closeAssistant(), true);
+    if (e.key === "[") return (docked ? setLeftCall((v) => !v) : togglePane("aleft")), true;
+    if (e.key !== "." || Call.live()) return false;
+    if (!e.repeat && !dot.current) dot.current = setTimeout(() => { dot.current = "held"; if (hub) setVoice(true); }, 350);
+    return true;
+  });
+  useEffect(() => {
+    const up = (e) => {
+      if (e.key !== "." || !dot.current) return;
+      if (dot.current !== "held") { clearTimeout(dot.current); CAN_CALL ? callAssistant() : say("Calls need atc's call line and a microphone."); }
+      dot.current = null;
+    };
+    addEventListener("keyup", up);
+    return () => removeEventListener("keyup", up);
+  }, []);
+
+  const touched = touchedBy(hub, live, startOfDay());
+  const shown = (agents || []).filter((a) => !a.error && a.name !== "assistant");
+  const runOf = (a) => live.filter((x) => x.agent === a.name).sort(byRecent)[0];
+  const pane = html`<aside class="aleft" aria-label="Touched today">
+    <h3 class="grp"><b>Touched today</b><span class="c">${touched.length}</span></h3>
+    ${touched.length ? touched.map((s) => html`<a class="tr" href=${`#/s/${keyOf(s)}`} data-sid=${s.sessionId} onClick=${() => setSheet(false)}>
+        <${StateBlock} s=${s} /><b>${s.title || "Untitled"}</b><span class="ago">${txClock(s.updated)}</span>
+        <span class="l">${[bayOf(s), s.state === "working" ? doing(s) : headline(s)].filter(Boolean).join(", ")}</span></a>`)
+      : html`<p class="none">Nothing yet today. Sessions it starts or tells show here.</p>`}
+    <h3 class="grp"><b>Agents</b><span class="c">${shown.length}</span></h3>
+    ${shown.map((a) => { const r = runOf(a); return html`<a class="tr ag" href=${`${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`} onClick=${() => setSheet(false)}>
+      <b>@${a.name}</b><span class="ago">${r?.updated ? txClock(r.updated) : ""}</span>
+      <span class="l">${oneLine(r?.summary?.status) || oneLine(r?.lastReply) || a.title || ""}</span></a>`; })}
+  </aside>`;
+
+  const busy = touched.filter((s) => s.state === "working" || s.state === "needs-you").slice(0, 3);
+  const strips = busy.length > 0 && html`<div class="alive" aria-label="What it set going">${busy.map((s) => html`
+    <a class="ls ${s.state}" href=${`#/s/${keyOf(s)}`}><${StateBlock} s=${s} /><span class="ti">${s.title || "Untitled"}</span><span class="bayn">${bayOf(s) || ""}</span>
+      <span class="now"><span>${s.state === "needs-you" ? doingLine(s) || "Waiting on you" : doing(s)}</span><span class="el">${s.promptAt ? txSpan(Date.now() - Date.parse(s.promptAt)) : ""}</span></span></a>`)}</div>`;
+  const onCall = Call.live();
+  const cmp = {
+    prompt: onCall ? html`<span class="apr call"><${CallMark} />${!docked && html`<${Trace} />`}</span>` : html`<span class="apr">assistant<span>></span></span>`,
+    hint: onCall ? "Type while you talk" : phone ? "Ask the assistant" : "Start, steer or ask about any session",
+    doors: !onCall && html`<button class="kb vo" onClick=${() => setVoice(true)} title="Voice mode: talk with it and it answers aloud (hold .)">Voice</button>
+      ${CAN_CALL && html`<button class="kb cl" onClick=${callAssistant} aria-keyshortcuts=".">Call <kbd aria-hidden="true">.</kbd></button>`}`,
+    top: strips,
+  };
+  return html`<div class="shell assistv assist ${left && !phone ? "" : "noleft"}">
+    ${left && !phone && pane}
+    <main class="amain">
+      <header class="ahd">
+        ${hub ? html`<${StateBlock} s=${hub} />` : html`<span class="sb earlier" aria-hidden="true">E</span>`}
         <h1>Assistant</h1>
-        <p>${CAN_CALL ? "Tap to call" : "Calls need atc's call line and a microphone"}</p>
-        ${CAN_CALL && html`<button class="round dial" aria-label="Call the assistant"><i></i><i></i>${DIAL}</button>`}
-      </div>
-      <button class="aopen" onClick=${onOpen}>
-        <span class="head"><b>Open atc</b><span class="sum">${!live ? "Loading…" : summary.length ? summary : "Nothing open"}</span><span class="go">›</span></span>
-        ${top.map((s) => html`<span class="row"><i class=${s.state}></i>${s.title}</span>`)}
-      </button>
-    </div>
-  `;
+        <span class="r">${phone ? html`<button class="kb" onClick=${() => setSheet(true)}>Today</button>`
+          : html`<button class="kb" onClick=${closeAssistant} aria-keyshortcuts="Escape">Close <kbd aria-hidden="true">esc</kbd></button>`}</span>
+        <p class="stat">${hubLine(hub)}</p>
+      </header>
+      ${hub ? html`<${Transcript} key=${hub.sessionId} s=${hub} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} cmp=${cmp} />`
+        : html`<div class="blank">${loaded ? "Starting the assistant…" : "Opening…"}</div>`}
+    </main>
+    ${sheet && html`<${Sheet} cls="asheet" title="Today" onClose=${() => setSheet(false)}>${pane}<//>`}
+  </div>`;
 }
 
 function useCall() {
@@ -1010,72 +1077,148 @@ function useCall() {
   useEffect(() => Call.subscribe(() => tick((n) => n + 1)), []);
   return [Call.get(), Call.face()];
 }
+function useCallDock() {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const f = () => tick((n) => n + 1);
+    addEventListener("atc-calldock", f);
+    return () => removeEventListener("atc-calldock", f);
+  }, []);
+  return CALLDOCK.open;
+}
 
 const closeCall = () => (history.length > 1 ? history.back() : location.replace("#/"));
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 const callDoing = (f) => ({
   hearing: "Hearing you",
-  thinking: "Thinking…",
-  tool: `Using ${(f.tool.split("__").pop() || "a tool").replace(/_/g, " ")}…`,
-  speaking: "Speaking · tap to stop",
+  thinking: "Thinking",
+  tool: `Using ${(f.tool.split("__").pop() || "a tool").replace(/_/g, " ")}`,
+  speaking: "Speaking",
 })[f.state] || "Listening";
+const callWord = (st, f) => st.phase === "calling" ? "calling"
+  : st.phase === "ended" ? `call ended${st.why ? `: ${st.why}` : ""}`
+  : st.phase !== "active" ? (CAN_CALL ? "not on a call" : "calls need atc's call line and a microphone")
+  : st.muted ? "muted" : ({ hearing: "hearing you", thinking: "thinking", tool: "working", speaking: "speaking, tap to stop it" })[f.state] || "listening";
 
-function CallView() {
+/** The call's level, drawn by the "line" character (minimal.js) small and in the page's ink: a hairline that ripples with the voices. */
+function Trace() {
+  const ref = useRef(null);
+  useEffect(() => {
+    const cv = ref.current;
+    return minimal(cv, { style: "line" }, () => { const [you, it] = Call.levels(); return { state: Call.face().state, you, it }; }, { gain: 4.5, ink: () => getComputedStyle(cv).color });
+  }, []);
+  return html`<canvas class="ctrace" ref=${ref} aria-hidden="true"></canvas>`;
+}
+
+function CallMark() {
+  useNow(1000);
+  const st = Call.get();
+  return html`<span class="oncall"><b>On a call</b><span class="tm">${st.phase === "active" ? clock(Date.now() - st.since) : "ringing"}</span></span>`;
+}
+
+function useCallKeys(onEsc, esc) {
+  useKeyLayer((e) => {
+    if (!Call.live() || typingIn(e.target)) return false;
+    if (e.key === "m") return Call.mute(), true;
+    if (e.key === "E") return Call.hangup(), true;
+    if (e.key === ".") return returnToCall(), true;
+    if (e.key === "Escape" && esc) return onEsc(), true;
+    return false;
+  });
+}
+
+/** The call itself: the persona, what it is doing now, captions when the conversation is not beside it, and the controls. */
+function CallPanel({ hub, live, captions, full, onMin }) {
   const [st, f] = useCall();
   const look = usePersona();
   const [opts, setOpts] = useState(false);
   useNow(1000);
+  const on = Call.live();
+  const mine = on ? touchedBy(hub, live, st.since || Date.now()) : [];
+  const now = st.phase === "calling" ? "Ringing the assistant" : f.state === "tool" ? callDoing(f) : hub?.state === "working" && hub.activity ? doing(hub) : callDoing(f);
+  return html`<aside class="callp ${full ? "full" : ""} ${st.phase}" aria-label="Call with the assistant">
+    <div class="cph">
+      ${on ? html`<${CallMark} /><span class="w">assistant</span>` : html`<b>${st.phase === "ended" ? "Call ended" : "Call"}</b><span class="w">assistant</span>`}
+      <span class="sp"></span>
+      <button class="kb" onClick=${onMin} aria-keyshortcuts="Escape">${on ? "Minimize" : "Close"} <kbd aria-hidden="true">esc</kbd></button>
+    </div>
+    <div class="cpers">
+      <div class="fr"><${Persona} look=${look} state=${f.state} on=${st.phase === "active"} onTap=${Call.interrupt} /></div>
+      <p class="st" aria-live="polite">${callWord(st, f)}</p>
+    </div>
+    ${on && html`<div class="cnow">
+      <div class="h">Doing now${mine.length > 0 && html`<span>${plural(mine.length, "session")} on this call</span>`}</div>
+      <div class="d">${now}</div>
+      ${mine.length > 0 && html`<ol class="plan">${mine.map((s, i) => html`<li class=${s.state === "working" ? "run" : ""}>
+        <span>${i + 1}</span><a href=${`#/s/${keyOf(s)}`}>${s.title || "Untitled"}</a><em>${away(s) ? "parked" : WORD[s.state] || "earlier"}</em></li>`)}</ol>`}
+    </div>`}
+    ${captions && on && html`<div class="caps" aria-live="polite">
+      ${(f.hearing || f.you) && html`<div class="cap you ${f.hearing ? "" : "old"}"><span class="w">you</span><p>${f.hearing || f.you}${f.hearing && html`<span class="caret"></span>`}</p></div>`}
+      ${f.said && html`<div class="cap it"><span class="w">assistant</span><p>${f.said}${f.state === "speaking" && html`<span class="caret"></span>`}</p></div>`}
+    </div>`}
+    <div class="ctl">
+      ${on ? html`
+        <button class="btn ${st.muted ? "on" : ""}" aria-pressed=${st.muted} onClick=${Call.mute} aria-keyshortcuts="m">${st.muted ? "Unmute" : "Mute"} <kbd aria-hidden="true">m</kbd></button>
+        <button class="btn" onClick=${() => setOpts(true)} title="The character on the call, and the assistant's voice">Voice</button>
+        <button class="btn end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>`
+      : st.phase !== "ended" && CAN_CALL && html`<button class="btn prime" onClick=${callAssistant}>Call the assistant</button>`}
+    </div>
+    ${opts && html`<${CallOptions} look=${look} onClose=${() => setOpts(false)} />`}
+  </aside>`;
+}
+
+/** Desktop: the call docked on the right of whatever is open. Minimized, the console line carries it. */
+function CallDock({ hub, live, assisting }) {
+  const [st] = useCall();
+  const open = useCallDock();
+  const phone = usePhone();
+  const [linger, setLinger] = useState(false);
+  useEffect(() => {
+    if (st.phase !== "ended") return;
+    setLinger(true);
+    const t = setTimeout(() => setLinger(false), 2500);
+    return () => clearTimeout(t);
+  }, [st.phase]);
+  const show = !phone && open && (Call.live() || linger);
+  useEffect(() => { document.body.classList.toggle("docked", show); }, [show]);
+  useEffect(() => () => document.body.classList.remove("docked"), []);
+  useCallKeys(() => CALLDOCK.set(false), show);
+  return show ? html`<${CallPanel} hub=${hub} live=${live} captions=${!assisting} onMin=${() => CALLDOCK.set(false)} />` : null;
+}
+
+/** Phone: the call full screen, over everything but the tab bar. */
+function CallScreen({ hub, live }) {
+  const [st] = useCall();
   useEffect(() => {
     if (st.phase !== "ended") return;
     const t = setTimeout(() => location.hash === CALL && !Call.live() && closeCall(), 1500);
     return () => clearTimeout(t);
   }, [st.phase]);
-  useEffect(() => {
-    const k = (e) => { if (e.key === "Escape") closeCall(); };
-    addEventListener("keydown", k);
-    return () => removeEventListener("keydown", k);
-  }, []);
-  const live = Call.live();
-  const status = st.phase === "calling" ? "Calling…"
-    : st.phase === "active" ? (st.muted ? "Muted" : callDoing(f))
-    : st.phase === "ended" ? `Call ended${st.why ? `: ${st.why}` : ""}`
-    : CAN_CALL ? "A phone call with the assistant, through atc" : "Calls need atc's call line and a microphone";
-  return html`
-    <div class="callview ${st.phase}">
-      <button class="icon close" onClick=${closeCall} aria-label=${live ? "Back to atc, the call goes on" : "Close"} title=${live ? "Back to atc (the call goes on)" : "Close"}>${live ? CHEVRON_DOWN : "✕"}</button>
-      <div class="callhead">
-        <h1>Assistant</h1>
-        <div class="callstate">${status}</div>
-        <div class="calltime">${st.phase === "active" ? clock(Date.now() - st.since) : " "}</div>
-      </div>
-      <${Persona} look=${look} state=${f.state} on=${st.phase === "active"} onTap=${Call.interrupt} />
-      <div class="calltext">
-        <p class="you ${f.hearing ? "hearing" : ""}">${f.hearing || f.you}</p>
-        <p class="said">${f.said}</p>
-      </div>
-      <div class="callrow">
-        ${live ? html`
-          <button class="round ${st.muted ? "on" : ""}" onClick=${Call.mute} aria-label=${st.muted ? "Unmute" : "Mute"} title=${st.muted ? "Unmute" : "Mute"}>${MIC_OFF}</button>
-          <button class="round end" onClick=${Call.hangup} aria-label="Hang up" title="Hang up">${HANG_UP}</button>`
-        : st.phase !== "ended" && CAN_CALL && html`<button class="round dial" onClick=${callAssistant} aria-label="Call" title="Call the assistant">${DIAL}</button>`}
-        ${st.phase !== "ended" && html`<button class="round more" onClick=${() => setOpts(true)} aria-label="Character and voice" title="Character and voice">${ICON.more}</button>`}
-      </div>
-      ${opts && html`<${CallOptions} look=${look} onClose=${() => setOpts(false)} />`}
-    </div>`;
+  useCallKeys(closeCall, true);
+  return html`<${CallPanel} full hub=${hub} live=${live} captions onMin=${closeCall} />`;
 }
 
+/** Phone: on a call and not on the call screen, a live row above the tab bar. */
 function CallPill() {
-  const [st] = useCall();
-  useNow(1000);
-  if (!Call.live()) return null;
-  return html`<button class="callpill" onClick=${() => (location.hash = CALL)} title="Back to the call">
-    <i></i>Assistant · ${st.phase === "active" ? clock(Date.now() - st.since) : "Calling…"}
-  </button>`;
+  useCall();
+  const phone = usePhone();
+  if (!phone || !Call.live()) return null;
+  return html`<div class="callpill" role="group" aria-label="Call">
+    <button class="back" onClick=${returnToCall} aria-label="Back to the call"><${CallMark} /><${Trace} /><span class="w">assistant</span></button>
+    <button class="btn end" onClick=${Call.hangup}>End</button>
+  </div>`;
 }
 
-const DIAL = html`<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M20 15.4c-1.2 0-2.4-.2-3.5-.6a1 1 0 0 0-1 .3l-1.6 2a15 15 0 0 1-6.9-6.9l2-1.6c.3-.3.4-.7.2-1-.4-1.1-.6-2.3-.6-3.5 0-.6-.4-1-1-1H4.2C3.6 3 3 3.2 3 4c0 9.3 7.7 17 17 17 .7 0 1-.6 1-1.2v-3.4c0-.6-.4-1-1-1z" fill="currentColor"/></svg>`;
-const HANG_UP = html`<svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="M3.4 14.6a1.2 1.2 0 0 1 0-1.7C5.7 10.6 8.7 9.4 12 9.4s6.3 1.2 8.6 3.5a1.2 1.2 0 0 1 0 1.7l-1.7 1.7a1.2 1.2 0 0 1-1.6.1l-2-1.5a1.2 1.2 0 0 1-.5-1v-1.7a9.5 9.5 0 0 0-5.6 0v1.7a1.2 1.2 0 0 1-.5 1l-2 1.5a1.2 1.2 0 0 1-1.6-.1z" fill="currentColor"/></svg>`;
-const CHEVRON_DOWN = html`<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+/** Desktop: the console line while on a call. The line moves only when the panel is minimized, since the persona moves otherwise. */
+function CallLine({ docked }) {
+  const f = Call.face();
+  return html`<footer class="console callline" aria-label="Call">
+    <button class="back" onClick=${returnToCall} aria-keyshortcuts="." title=${docked ? "The call" : "Back to the call"}>
+      <${CallMark} />${!docked && html`<${Trace} />`}<span class="w">assistant</span><span class="said">${f.said || callDoing(f)}</span></button>
+    ${!docked && html`<button class="kb" onClick=${returnToCall} tabindex="-1">Return <kbd aria-hidden="true">.</kbd></button>`}
+    <button class="kb end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>
+  </footer>`;
+}
 
 const ORB_LOOKS = {
   listening: [[.08, .25, .9], [.2, .75, 1], [.75, .5, 1]],
@@ -2432,13 +2575,10 @@ const sentences = (t) => (t.match(/[^.!?…]+[.!?…]+["')]?(\s|$)|[^.!?…]+$/g
 const turkish = (t) => /[çğıöşüÇĞİÖŞÜ]/.test(t);
 const HOLD_MS = 3000;
 const PHANTOM = /^(thank you|thanks for watching|you|bye|altyazı.*|abone olmayı unutmayın.*|\.+)[.!]?$/i;
-const PHASE = { starting: "Starting the microphone…", listening: "Listening", hearing: "Hearing you…", thinking: "Transcribing…", holding: "Keep talking · tap to send now", speaking: "Speaking · tap to stop", muted: "Muted · tap to talk", error: "Voice is not available" };
+const VOICE_WORD = { starting: "starting", listening: "listening", hearing: "hearing you", thinking: "writing it down", holding: "keep talking", speaking: "speaking", muted: "mic off", error: "not available" };
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
 const transcribe = (wav) => fetch("/api/voice/stt", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav });
-const MIC = html`<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v5"/></svg>`;
-const MIC_OFF = html`<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 2l20 20M9 9v1a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.9-.8M5 10a7 7 0 0 0 11.9 5M19 10a7 7 0 0 1-.6 2.9M12 17v5"/></svg>`;
-const STOP = html`<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/></svg>`;
 
 function finalReplies(msgs) {
   const out = [];
@@ -2453,12 +2593,11 @@ const VOICE_LEFT = new Map();
 
 function VoiceBar({ s, say, type, press, onClose, top }) {
   const sid = s.sessionId, left = VOICE_LEFT.get(sid) || {}, muteKey = `atc.mute.${sid}`;
-  const who = s.harness || "Claude";
+  const who = s.kind === "hub" ? "the assistant" : s.harness || "Claude";
   const [phase, setPhase] = useState("starting");
   const [heard, setHeard] = useState(left.heard || "");
   const [spoken, setSpoken] = useState(left.spoken || "");
   const [muted, setMuted] = useState(() => pref(muteKey, "") === "on");
-  const [holdMs, setHoldMs] = useState(0);
   const [source, setSource] = useState(() => pref("atc.voicesrc", VOICE.tts ? "mine" : "device"));
   const [bargeIn, setBargeIn] = useState(() => pref("atc.bargein", "off") === "on");
   const st = useRef({ awaiting: !!left.awaiting, sentAt: left.sentAt || 0, permission: false, speaking: false, audio: null, vad: null, turns: [], at: -1 });
@@ -2590,7 +2729,6 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
   const hold = (ms) => {
     clearTimeout(st.current.hold);
     st.current.hold = setTimeout(dispatch, ms);
-    setHoldMs(ms);
     if (!live.current.muted) listen(true);
     setPhase("holding");
   };
@@ -2598,7 +2736,6 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
     clearTimeout(st.current.hold);
     const text = st.current.buf;
     st.current.buf = "";
-    setHoldMs(0);
     if (!text) return rest();
     type(text);
     st.current.awaiting = true;
@@ -2656,53 +2793,57 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
       dead = true; st.current.vad?.destroy(); stopSpeaking(); lock?.release?.(); APP?.keepScreenOn(false); };
   }, []);
 
-  const tapMic = () => {
-    if (phase === "speaking") { stopSpeaking(); return rest(); }
-    if (st.current.buf) return dispatch();
-    const m = !muted;
+  const toggleMute = () => {
+    const m = !live.current.muted;
     setMuted(m);
     setPref(muteKey, m ? "on" : "");
     live.current.muted = m;
+    if (m && st.current.speaking) stopSpeaking();
     listen(!m);
     setPhase(m ? "muted" : st.current.awaiting ? "waiting" : "listening");
   };
+  const stopIt = () => { stopSpeaking(); rest(); };
   const pick = (v) => { setSource(v); setPref("atc.voicesrc", v); };
   const toggleBarge = () => { setBargeIn(!bargeIn); setPref("atc.bargein", bargeIn ? "off" : "on"); };
+  useKeyLayer((e) => {
+    if (typingIn(e.target)) return false;
+    if (e.key === "m") return toggleMute(), true;
+    if (e.key === "Escape") return onClose(), true;
+    return false;
+  });
 
+  const word = muted ? "mic off" : phase === "waiting" ? `${who} is working` : VOICE_WORD[phase];
+  const hint = muted ? "" : phase === "speaking" ? (bargeIn ? "Talk to cut in; it stops at once." : "Stop it, or say something when it ends.")
+    : phase === "holding" ? "Keep talking, or send it now." : phase === "waiting" ? "It answers out loud when it is done."
+    : phase === "listening" || phase === "hearing" ? (touch ? "A pause sends it." : "A pause sends it. Esc leaves voice mode.") : "";
+  const cap = muted ? html`<span class="int">Muted. It hears nothing until you unmute.</span>`
+    : phase === "speaking" && spoken ? spoken
+    : heard ? html`${heard}${(phase === "holding" || phase === "hearing") && html` <span class="int">…</span>`}`
+    : html`<span class="int">${phase === "error" ? "Voice is not available here." : `Say what you want ${who} to do.`}</span>`;
+  const more = [
+    { label: "Read the last reply again", run: replay },
+    { label: "Read the reply before", run: earlier },
+    VOICE.condense && { label: "Read it short", run: short },
+    VOICE.tts && { label: source === "mine" ? "Use this device's voice" : "Use the server's voice", run: () => pick(source === "mine" ? "device" : "mine") },
+    { label: bargeIn ? "Talking over a reply: on" : "Talking over a reply: off", run: toggleBarge },
+  ].filter(Boolean);
   return html`
-    <div class="voicebar" role="region" aria-label="Voice">
+    <div class="voicebar" role="region" aria-label="Voice"><div class="cols"><div class="mg"></div><div class="cx">
       ${top}
-      <div class="vtext" aria-live="polite">
-        ${heard && html`<div class="vline ${phase === "holding" || (phase === "hearing" && st.current.buf) ? "more" : ""}"><b>You</b> ${heard}</div>`}
-        ${spoken && html`<div class="vline said"><b>${who}</b> ${spoken}</div>`}
-        ${!heard && !spoken && html`<div class="vline">Say what you want ${who} to do. It answers out loud when it is done.</div>`}
+      <div class="vstrip ${muted ? "muted" : phase}" role="group" aria-label="Voice mode">
+        <span class="vs"><b>Voice</b><span class="w">${word}</span>${!muted && (phase === "listening" || phase === "hearing") && html`<span class="lvl" aria-hidden="true"><i></i><i></i><i></i><i></i></span>`}</span>
+        <div class="vcap ${phase === "speaking" && !muted ? "said" : ""}" aria-live="polite">${cap}</div>
+        ${hint && html`<div class="hint">${hint}</div>`}
+        <span class="vb">
+          ${phase === "speaking" && !muted && html`<button class="kb" onClick=${stopIt}>Stop it</button>`}
+          ${phase === "holding" && html`<button class="kb" onClick=${dispatch}>Send now</button>`}
+          ${phase === "waiting" && html`<button class="kb" onClick=${() => press("\x1b")} title=${`Send Esc to ${who} (or say stop)`}>Stop ${who}</button>`}
+          <button class="kb" onClick=${toggleMute} aria-pressed=${muted} aria-keyshortcuts="m">${muted ? "Unmute" : "Mute"} <kbd aria-hidden="true">m</kbd></button>
+          <${Menu} cls="kb" label="More" aria="More voice options" up width=${250} items=${more} />
+          <button class="kb" onClick=${onClose} aria-keyshortcuts="Escape">Leave <kbd aria-hidden="true">esc</kbd></button>
+        </span>
       </div>
-      <div class="vrow">
-        <div class="vside">
-          <button class="vbtn" onClick=${replay} title="Read the last reply again (or say “repeat”)">Replay</button>
-          <button class="vbtn" onClick=${earlier} title="Read the reply before (or say “previous”)">Earlier</button>
-          ${VOICE.condense && html`<button class="vbtn" onClick=${short} title="A one or two sentence summary of the reply, written by the server's model">Short</button>`}
-        </div>
-        <div class="vmain">
-          <button class="mic ${phase} ${muted ? "off" : ""}" onClick=${tapMic} aria-pressed=${!muted}
-            aria-label=${phase === "speaking" ? "Stop speaking" : phase === "holding" ? "Send now" : muted ? "Unmute microphone" : "Mute microphone"}>
-            ${phase === "speaking" ? STOP : muted ? MIC_OFF : MIC}
-          </button>
-          <div class="vphase">${phase === "waiting" ? `${who} is working` : PHASE[phase]}</div>
-          ${phase === "holding" && holdMs > 0 && html`<div class="vhold" key=${Math.random()} style=${`animation-duration:${holdMs}ms`}></div>`}
-        </div>
-        <div class="vside right">
-          ${phase === "waiting" && html`<button class="vbtn" onClick=${() => send("\x1b")} title=${`Send Esc to ${who} (or say “stop”)`}>Stop ${who}</button>`}
-          ${VOICE.tts && html`<div class="seg">
-            <button class=${source === "device" ? "on" : ""} onClick=${() => pick("device")} title="This device's built-in voice: instant">Device</button>
-            <button class=${source === "mine" ? "on" : ""} onClick=${() => pick("mine")} title="The server's voice: slower">Server</button>
-          </div>`}
-          <button class="vbtn ${bargeIn ? "on" : ""}" onClick=${toggleBarge} aria-pressed=${bargeIn}
-            title="Talking over a reply stops it. Use with headphones: through a speaker, its own sound cuts it off.">Talk over replies</button>
-          <button class="icon" onClick=${onClose} aria-label="Turn voice off">✕</button>
-        </div>
-      </div>
-    </div>
+    </div></div></div>
   `;
 }
 
@@ -4965,7 +5106,7 @@ const SLASH = [["/compact", "summarize the conversation to free context"], ["/cl
   ["/agents", "subagents it can call"], ["/init", "write a CLAUDE.md for this repo"], ["/add-dir", "let it read another folder"], ["/mcp", "MCP servers and their tools"], ["/status", "model, account, connections"]];
 const fileSize2 = (n) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
 
-function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, focusRef, uploadRef, working, asking, interrupt, top }) {
+function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, focusRef, uploadRef, working, asking, interrupt, top, prompt, doors, hintFor }) {
   const ta = useRef(), file = useRef();
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -5054,7 +5195,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   const hasText = !!(draft.trim() || atts.length || quotes.length);
   const ready = hasText && !busy && !atts.some((a) => !a.path);
   const short = s.title && s.title.length > 30 ? s.title.slice(0, 28).replace(/\s+\S*$/, "") + "..." : s.title || "this session";
-  const hint = asking ? (phone ? "Or type your answer" : "Or type your own answer; enter sends") : working ? (phone ? "Queue a reply" : "Queue a reply for when it stops; esc in an empty box stops it") : phone ? "Reply" : `Reply to ${short}; enter sends`;
+  const hint = hintFor && !asking && !working ? hintFor : asking ? (phone ? "Or type your answer" : "Or type your own answer; enter sends") : working ? (phone ? "Queue a reply" : "Queue a reply for when it stops; esc in an empty box stops it") : phone ? "Reply" : `Reply to ${short}; enter sends`;
   const chips = !hasText && !asking && replies?.length > 0 ? replies : [];
   const strip = confirm ? html`<div class="cstrip confirm" role="alert"><b>Stop the agent?</b><span class="h"><kbd>enter</kbd> stops it, <kbd>esc</kbd> keeps it going</span><span class="sp"></span>
       <button class="btn" onClick=${() => { setConfirm(false); ta.current?.focus(); }}>Keep going</button><button class="btn prime" onClick=${() => { setConfirm(false); interrupt(); }}>Stop it</button></div>`
@@ -5072,6 +5213,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
         <div class="cbox ${chips.length ? "has-chips" : ""}">
           ${chips.length > 0 && html`<div class="chips" aria-label="Suggested replies">${chips.map((r) => html`<button class="chip" onClick=${() => { setDraft(r); requestAnimationFrame(() => { ta.current?.focus(); ta.current?.setSelectionRange(1e4, 1e4); }); }}>${r}</button>`)}</div>`}
           <div class="box" onClick=${(e) => e.target === e.currentTarget && ta.current?.focus()}>
+            ${prompt}
             ${atts.length > 0 && html`<div class="atts" aria-label="Attached">${atts.map((a) => html`<span class="att ${a.path ? "" : "up"}">
               ${a.url ? html`<img src=${a.url} alt="" onClick=${() => setBig(a.url)} />` : html`<span class="fi" aria-hidden="true">${(a.name.split(".").pop() || "").slice(0, 4)}</span>`}
               <span class="nm">${a.name}</span><span class="sz">${a.path ? (a.size ? fileSize2(a.size) : "") : "uploading"}</span>
@@ -5083,6 +5225,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
               onPaste=${(e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); upload(fs); } }}></textarea>
             ${VOICE_OK && html`<button class="kb mic ${dict.state === "rec" ? "on" : ""}" aria-pressed=${dict.state === "rec"} disabled=${dict.state === "busy"} title="Hold to dictate into the box; it never sends"
               onPointerDown=${talkDown} onPointerUp=${talkUp} onPointerCancel=${talkUp} onContextMenu=${(e) => e.preventDefault()}>Talk</button>`}
+            ${doors}
             <button class="btn prime send" disabled=${!ready} onClick=${go} title=${working ? "It is working: this waits and sends when it stops" : "Send (enter)"}>${working ? "Queue" : "Send"}</button>
           </div>
         </div>
@@ -5418,7 +5561,7 @@ let TX_API = null;
 const shortDay = (ts) => new Date(ts).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
 const msOf = (at) => (at ? Date.parse(at) || 0 : 0);
 
-function Transcript({ s, say, resume, busy, voice, onVoiceOff }) {
+function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
   useSync();
   const sid = s.sessionId;
   const [idx, setIdx] = useState(null);
@@ -5623,7 +5766,7 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff }) {
     const sc = box.current;
     if (!el || !sc) return;
     letGo();
-    sc.scrollTo({ top: el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 12, behavior: smooth && !matchMedia("(prefers-reduced-motion: reduce)").matches ? "smooth" : "instant" });
+    sc.scrollTo({ top: el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 12, behavior: smooth ? "smooth" : "instant" });
   };
   const step = (sel, d) => {
     const sc = box.current;
@@ -5816,10 +5959,11 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff }) {
     </div>
     ${drop && html`<div class="droptarget" aria-hidden="true"><span>Drop to attach to <b>${s.title || "this session"}</b></span></div>`}
     ${!live && resume && s.kind !== "interactive" && html`<${EndBar} s=${s} resume=${resume} busy=${busy} />`}
-    ${live && voice && html`<${VoiceBar} s=${s} say=${say} type=${(t) => send(t, { voice: true })} onClose=${onVoiceOff} top=${html`<${BgStrip} s=${s} />`}
+    ${live && voice && html`<${VoiceBar} s=${s} say=${say} type=${(t) => send(t, { voice: true })} onClose=${onVoiceOff} top=${html`${cmp.top}<${BgStrip} s=${s} />`}
       press=${(k) => api(`/api/sessions/${s.id || sid}/keys`, { method: "POST", body: { keys: k } }).catch((e) => say(e.message))} />`}
     ${live && !voice && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies}
-      focusRef=${focusInput} uploadRef=${uploadRef} working=${working} asking=${!!asking && !asking.permission} interrupt=${interrupt} top=${html`<${BgStrip} s=${s} />`} />`}
+      focusRef=${focusInput} uploadRef=${uploadRef} working=${working} asking=${!!asking && !asking.permission} interrupt=${interrupt}
+      prompt=${cmp.prompt} doors=${cmp.doors} hintFor=${cmp.hint} top=${html`${cmp.top}<${BgStrip} s=${s} />`} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
   </div>`;
 }
