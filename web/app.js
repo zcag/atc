@@ -435,7 +435,7 @@ function App() {
         const b = bays[n - 1];
         if (!b) return;
         if (b.name === BAY.only && k.route) {
-          const list = bayLists(k.live, null, b.name), ring = [...list.waiting, ...list.working];
+          const ring = railRing(bayLists(k.live, null, b.name));
           const i = ring.findIndex((x) => keyOf(x) === k.route || x.sessionId === k.route);
           const next = ring[(i + 1) % ring.length];
           if (next && ring.length > 1) go(keyOf(next));
@@ -710,8 +710,7 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
 
 function SessionStrip({ live, sel }) {
   const bay = bayOf(sel);
-  const list = bayLists(live, null, bay);
-  const ring = [...list.waiting, ...list.working];
+  const ring = railRing(bayLists(live, null, bay));
   const items = ring.some((x) => x.sessionId === sel.sessionId) ? ring : [sel, ...ring];
   const box = useRef();
   useLayoutEffect(() => {
@@ -834,10 +833,10 @@ function KeysOverlay({ onClose }) {
     </div>`;
 }
 
-const GROUPS = [["waiting", "Waiting on you"], ["working", "Working"], ["parked", "Parked"], ["earlier", "Earlier"]];
+const GROUPS = [["pinned", "Pinned"], ["waiting", "Waiting on you"], ["working", "Working"], ["parked", "Parked"], ["earlier", "Earlier"]];
 const QWERTY = "qwertyuiop";
-const groupOf = (s) => (away(s) ? "parked" : waiting(s) ? "waiting" : s.state === "working" ? "working" : "earlier");
-const byUrgency = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1) || (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
+const groupOf = (s) => (away(s) ? "parked" : s.pinned ? "pinned" : waiting(s) ? "waiting" : s.state === "working" ? "working" : "earlier");
+const byUrgency = (a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1) || (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
 const doingLine = (s) => s.state === "working" ? doing(s) : s.state === "needs-you" && s.asks?.[0] ? oneLine(s.asks[0].questions?.[0]?.question || (s.asks[0].permission && `Wants to use ${s.asks[0].permission}`)) : "";
 const runningOf = (s) => [s.background?.length > 0 && plural(s.background.length, "task"), ...(s.servers || []).slice(0, 2).map((p) => `:${p}`), s.tabs?.length > 0 && plural(s.tabs.length, "tab")].filter(Boolean);
 const madeOf = (s) => [s.shown?.length > 0 && plural(s.shown.length, "page"), s.files > 0 && plural(s.files, "file")].filter(Boolean);
@@ -855,6 +854,8 @@ function useBayHistory(enabled, onPast) {
   return [hist, () => setLimit(limit + 40), hist && hist.length >= limit];
 }
 
+const railRing = (by) => [...by.pinned, ...by.waiting, ...by.working];
+
 function bayLists(live, hist, only) {
   const mine = (s) => (only ? bayOf(s) === only : true);
   const now = (live || []).filter(mine);
@@ -864,6 +865,7 @@ function bayLists(live, hist, only) {
   const by = Object.fromEntries(GROUPS.map(([k]) => [k, []]));
   for (const s of now) if (groupOf(s) !== "earlier") by[groupOf(s)].push(s);
   for (const k in by) by[k].sort(byUrgency);
+  by.pinned.sort(byStart);
   by.earlier = earlier;
   return by;
 }
@@ -871,7 +873,7 @@ function bayLists(live, hist, only) {
 function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   const tap = rail ? null : () => toggle(s.sessionId);
   const { events } = useRowEvents(s, tap, !rail && s.state !== "past" && s.state !== "stopped");
-  const on = sel?.sessionId === s.sessionId, run = runningOf(s), made = madeOf(s), g = groupOf(s);
+  const on = sel?.sessionId === s.sessionId, run = runningOf(s), made = madeOf(s), g = s.pinned && waiting(s) ? "pinned waiting" : groupOf(s);
   const where = [MULTI && s.host, s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch].filter(Boolean).join(" ");
   const status = (s.state === "needs-you" ? oneLine(s.summary?.status) || oneLine(s.lastReply) || "Needs you" : headline(s)) || WORD[s.state] || "";
   const second = doingLine(s);
@@ -925,9 +927,10 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
   }, [cursor]);
   const by = bayLists(live, hist, only);
   let qn = 0;
-  const counts = GROUPS.slice(0, 3).map(([k]) => [k, by[k].length]).filter(([, n]) => n > 0);
-  const path = only && (live || []).find((s) => bayOf(s) === only);
   const letter = { waiting: ["N", "needs"], working: ["W", "working"], parked: ["P", "parked"] };
+  const pinnedIn = { waiting: by.pinned.filter(waiting).length, working: by.pinned.filter((s) => s.state === "working").length };
+  const counts = GROUPS.filter(([k]) => k in letter).map(([k]) => [k, by[k].length + (pinnedIn[k] || 0)]).filter(([, n]) => n > 0);
+  const path = only && (live || []).find((s) => bayOf(s) === only);
   const [earlierAll, setEarlierAll] = useState(false);
   const shownEarlier = earlierAll ? by.earlier : by.earlier.filter((s) => Date.now() - (Date.parse(s.updated || s.startedAt || 0) || 0) < 2 * 86400000).slice(0, 12);
   const pages = index && (live || []).filter((s) => (only ? bayOf(s) === only : !homeless(s))).flatMap((s) => (s.shown || []).map((p) => ({ p, s })))
@@ -967,14 +970,17 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
 function RailList({ live, hist, only, sel, cursor }) {
   const by = bayLists(live, hist, only);
   const active = [...by.waiting, ...by.working];
-  const earlier = by.earlier.slice(0, 8);
+  const earlier = by.earlier.slice(0, 8), np = by.pinned.length;
   return html`<div class="rail" id="rscroll">
-    ${active.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[i]} />`)}
+    ${np > 0 && html`<h2 class="grp"><b>Pinned</b><span class="c">${np}</span></h2>
+      ${by.pinned.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[i]} />`)}
+      ${active.length > 0 && html`<h2 class="grp"><b>Now</b><span class="c">${active.length}</span></h2>`}`}
+    ${active.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + i]} />`)}
     ${by.parked.length > 0 && html`<h2 class="grp"><b>Parked</b><span class="c">${by.parked.length}</span><span class="r">to resume later</span></h2>
-      ${by.parked.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[active.length + i]} />`)}`}
+      ${by.parked.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + i]} />`)}`}
     ${earlier.length > 0 && html`<h2 class="grp"><b>Earlier</b><span class="c">${by.earlier.length}</span></h2>
-      ${earlier.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[active.length + by.parked.length + i]} />`)}`}
-    ${!active.length && !by.parked.length && !earlier.length && html`<p class="calm">Nothing here yet.</p>`}
+      ${earlier.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + by.parked.length + i]} />`)}`}
+    ${!np && !active.length && !by.parked.length && !earlier.length && html`<p class="calm">Nothing here yet.</p>`}
   </div>`;
 }
 
@@ -1785,7 +1791,7 @@ function sessionActions(s, say, { rename, open, after } = {}) {
   if (open) items.push({ label: "Open", run: () => go(keyOf(s)) });
   items.push({ label: "Rename", run: rename || (() => ask({ title: "Rename session", input: { value: s.title, placeholder: "Session name" }, ok: "Rename", busy: "Renaming…",
     run: (name) => name !== s.title && patch({ name }) }).then(after)) });
-  items.push({ label: s.pinned ? "Unpin" : "Pin to top", run: run(() => patch({ pinned: !s.pinned })) });
+  items.push({ label: s.pinned ? "Unpin" : "Pin", run: run(() => patch({ pinned: !s.pinned })) });
   items.push({ label: s.parked ? "Unpark" : "Park", run: run(() => patch({ parked: !s.parked })) });
   items.push({ label: "Send to backlog", title: "Stop it and take it off the list; its backlog item resumes the same conversation. A working session stops when its turn ends", run: () => putAside(s, say).then(() => after && after()) });
   if (s.agent && s.state !== "past") items.push({ label: "Start over", title: "It writes a handover note and a new conversation starts from it", run: run(() => agentApi(s.agent, "reset"), () => say(`${s.title} is starting over.`)) });
@@ -1971,6 +1977,8 @@ function Session({ s, say, live, panes, togglePane }) {
         ${where && html`<span class="where">${where}</span>`}
         <span class="r">
           ${shown.length > 0 && html`<${PagesButton} list=${shown} open=${openPage} on=${mode === "page"} />`}
+          <button class="kb pin ${s.pinned ? "on" : ""}" aria-pressed=${!!s.pinned} aria-label=${s.pinned ? "Unpin" : "Pin"} title=${s.pinned ? "Pinned to the top of the bay; unpin" : "Pin to the top of the bay"}
+            onClick=${() => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }).catch((e) => say(e.message))}>${ICON.pin}</button>
           ${VOICE.stt && html`<button class="kb ${voice ? "on" : ""}" aria-pressed=${voice}
             onClick=${() => canAttach ? (voice || setMode("chat"), setVoice(!voice))
               : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
@@ -2151,7 +2159,7 @@ function Menu({ busy, items, render, label = "•••", cls = "icon", aria = "
     <div ref=${ref} style="position: relative">
       <button class=${cls} aria-label=${aria} aria-expanded=${open} onClick=${() => setOpen(!open)}>${label}</button>
       ${open && html`
-        <div ref=${sheet} class="sheet ${sheetCls}" style="position: absolute; ${left ? "left" : "right"}: 0; ${up ? "bottom" : "top"}: calc(100% + 6px); width: ${typeof width === "number" ? `min(${width}px, calc(100vw - 16px))` : width}; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
+        <div ref=${sheet} class="sheet ${sheetCls}" style="position: absolute; ${left ? "left" : "right"}: 0; ${up ? "bottom" : "top"}: calc(100% + 6px); ${typeof width !== "number" ? `width: ${width}` : render ? `width: min(${width}px, calc(100vw - 16px))` : `width: max-content; min-width: min(${width}px, calc(100vw - 16px)); max-width: calc(100vw - 16px)`}; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
           ${render ? render(() => setOpen(false)) : items.map((it) => {
             const b = html`<button class="btn ${it.danger ? "danger" : ""} ${it.cls || ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`;
             return it.side ? html`<div class="mrow">${b}${it.side}</div>` : b;
@@ -6411,7 +6419,7 @@ function Palette({ live, sel, say, home, hosts, actions, onClose }) {
     if (cur.canAttach && VOICE_OK) act("Voice", cur.voice, "talk speak mic");
     act("Session usage", cur.usage, "tokens cost limit");
     act("Rename", cur.rename, "title name");
-    act(s.pinned ? "Unpin" : "Pin to top", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }));
+    act(s.pinned ? "Unpin" : "Pin", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }));
     act(s.parked ? "Unpark" : "Park", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { parked: !s.parked } }), "hide quiet");
     if (s.attachable) act("Stop", () => api(`/api/sessions/${s.sessionId}/stop`, { method: "POST" }).then(() => say("Stopped. Resume it any time.")), "end");
     act("Put on the backlog", () => putAside(s, say), "later aside backlog");

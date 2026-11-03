@@ -14,7 +14,7 @@
 .hd .where { font-family: var(--mono); font-size: var(--fs-small); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 100 auto; margin-left: var(--s1); }
 .hd .l1 .r { margin-left: auto; display: flex; align-items: center; gap: 2px; flex: none; }
 .hd .back { display: none; }
-.hd .more { position: relative; }
+.hd .more { position: relative; margin: 0; }
 .hd .more .sheet { font-size: var(--fs-ui); }
 .hd .l2 { display: flex; align-items: center; gap: 0 var(--s4); min-height: 20px; margin-top: 2px; padding-left: 28px; min-width: 0; overflow: hidden; color: var(--dim); cursor: pointer; border-radius: var(--r-sm); }
 .hd .l2:hover .stat { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
@@ -58,3 +58,5 @@
 .hd .pgbtn .mi { display: none; }
 .hd .pgbtn .dot { width: 6px; height: 6px; background: var(--ink); }
 .hd .pgbtn em, .hd .pgbtn .caret { color: var(--faint); }
+.hd .kb.pin svg { width: 14px; height: 14px; }
+.hd .kb.pin.on { color: var(--ink); box-shadow: none; }

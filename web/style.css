@@ -479,3 +479,4 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
   .dlg .dinput { font-size: var(--fs-3xl); padding: var(--sp-6) var(--sp-6); }
   .dlg .actions .btn { flex: 1; padding: var(--sp-6); font-size: var(--fs-3xl); }
 }
+.sheet > .btn, .mrow > .btn { white-space: normal; overflow-wrap: anywhere; }
