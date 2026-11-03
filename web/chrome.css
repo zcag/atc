@@ -17,15 +17,15 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
 .bays-scroll::-webkit-scrollbar { display: none; }
 .bay { display: flex; align-items: center; gap: 7px; padding: 0 10px; border: 0; background: none; color: var(--faint); white-space: nowrap; position: relative; flex: none; }
 .bay .k { font-family: var(--mono); font-size: var(--fs-small); }
-.bay .n { color: var(--dim); }
+.bn > .n { color: var(--dim); }
 .bay:hover { background: var(--strip-hi); }
 .bay:focus-visible, .views .kb:focus-visible, .tabbar > :focus-visible { outline-offset: -2px; }
-.bay.on .n { color: var(--ink); font-weight: 650; }
+.bay.on .bn > .n { color: var(--ink); font-weight: 650; }
 .bay.on .k { color: var(--dim); }
 .bay.on::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 0; height: 2px; background: var(--ink); }
 .cts { display: inline-flex; align-items: center; gap: 4px; }
 .cn { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 3px; font-family: var(--mono); font-size: var(--fs-micro); font-weight: 700; line-height: 1; font-style: normal; }
-.cn.n { background: var(--needs); color: var(--needs-ink); box-shadow: inset 0 0 0 1px var(--needs-edge); }
+.cn.n { background: var(--needs-wash); color: var(--needs-text); }
 .cn.t { box-shadow: inset 0 0 0 1.5px var(--dim); color: var(--dim); }
 .cn.w { display: inline-flex; gap: 3px; padding: 0 1px; min-width: 0; color: var(--faint); font-weight: 500; }
 .cn.w::before { content: ""; width: 3px; height: 10px; background: var(--faint); }

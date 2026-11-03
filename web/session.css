@@ -1,6 +1,6 @@
 .sb { flex: none; width: 20px; height: 20px; display: inline-grid; place-items: center; font-family: var(--mono); font-weight: 700; font-size: var(--fs-micro); line-height: 1; }
 .sb.needs { background: var(--needs); color: var(--needs-ink); box-shadow: inset 0 0 0 1px var(--needs-edge); }
-.sb.turn { box-shadow: inset 0 0 0 1.5px var(--needs-text); color: var(--needs-text); }
+.sb.turn { box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--needs-text); }
 .sb.working { color: var(--work); background: var(--work-wash); box-shadow: inset 3px 0 0 var(--work); }
 .sb.parked { color: var(--faint); box-shadow: inset 0 0 0 1px var(--faint); border-radius: 50%; }
 .sb.earlier { color: var(--faint); box-shadow: inset 0 0 0 1px var(--line-strong); }
