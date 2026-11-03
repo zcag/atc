@@ -3,6 +3,7 @@ package history
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"io"
 	"os"
@@ -18,6 +19,7 @@ type Transcript struct {
 	Path           string    `json:"-"`
 	Cwd            string    `json:"cwd"`
 	StartCwd       string    `json:"startCwd"`
+	Origin         string    `json:"-"`
 	Title          string    `json:"title"`
 	AITitle        string    `json:"aiTitle"`
 	AgentName      string    `json:"agentName"`
@@ -110,7 +112,7 @@ func read(path string, st os.FileInfo) *Transcript {
 		SessionID: strings.TrimSuffix(filepath.Base(path), ".jsonl"),
 		Path:      path, Size: st.Size(), modTime: st.ModTime(),
 	}
-	t.StartCwd = headCwd(path)
+	t.StartCwd, t.Origin = head(path)
 	for _, n := range []int64{64 << 10, 1 << 20, 4 << 20} {
 		parseTail(path, n, t)
 		if t.Title != "" && !t.PromptAt.IsZero() || n >= st.Size() {
@@ -152,23 +154,27 @@ func parseTail(path string, n int64, t *Transcript) {
 	t.Title = first(custom, t.AITitle)
 }
 
-func headCwd(path string) string {
+func head(path string) (cwd, origin string) {
 	f, err := os.Open(path)
 	if err != nil {
-		return ""
+		return "", ""
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(io.LimitReader(f, 256<<10))
 	sc.Buffer(make([]byte, 64<<10), 256<<10)
 	for sc.Scan() {
 		var e struct {
-			Cwd string `json:"cwd"`
+			Cwd  string `json:"cwd"`
+			UUID string `json:"uuid"`
 		}
-		if json.Unmarshal(sc.Bytes(), &e) == nil && e.Cwd != "" {
-			return e.Cwd
+		if json.Unmarshal(sc.Bytes(), &e) == nil {
+			origin = cmp.Or(origin, e.UUID)
+			if cwd = cmp.Or(cwd, e.Cwd); cwd != "" && origin != "" {
+				break
+			}
 		}
 	}
-	return ""
+	return cwd, origin
 }
 
 func apply(t *Transcript, e *entry, custom *string) {

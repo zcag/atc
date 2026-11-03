@@ -114,6 +114,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		ids = append(ids, a.ID)
 	}
 	out := make([]Session, 0, len(agents))
+	origin := map[string]string{}
 	for _, a := range agents {
 		if (resumed[a.SessionID] || m.carriedOn(a.SessionID, ids)) && a.PID == 0 {
 			continue
@@ -125,6 +126,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		if !ok && a.PID == 0 {
 			continue
 		}
+		origin[a.SessionID] = t.Origin
 		s := m.build(t)
 		s.SessionID, s.ID, s.Kind, s.Name = a.SessionID, a.ID, a.Kind, a.Name
 		s.State, s.Attachable, s.PID = state(a), a.Kind == "background" && a.PID > 0, a.PID
@@ -164,9 +166,19 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		s.Retired = RetiredHub(meta.Name)
 		out = append(out, s)
 	}
+	all := slices.Clone(out)
+	out = slices.DeleteFunc(out, func(s Session) bool { return s.State == Stopped && copied(s, all, origin) })
 	out = append(out, m.openCode(ctx)...)
 	Sort(out)
 	return out, nil
+}
+
+func copied(s Session, all []Session, origin map[string]string) bool {
+	o := origin[s.SessionID]
+	return o != "" && slices.ContainsFunc(all, func(x Session) bool {
+		return x.SessionID != s.SessionID && origin[x.SessionID] == o &&
+			(x.State != Stopped || x.Last().After(s.Last()) || x.Last().Equal(s.Last()) && x.SessionID > s.SessionID)
+	})
 }
 
 func (m *Manager) carriedOn(sid string, ids []string) bool {
