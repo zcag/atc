@@ -5,6 +5,7 @@ import { diffLines } from "./vendor/diff.mjs";
 import { Call } from "./call.js";
 import { persona } from "./persona.js";
 import { minimal } from "./minimal.js";
+import { cube, niceMax } from "./usage-cube.js";
 
 const BAYS = [
   ["needs-you", "Needs you"],
@@ -3043,14 +3044,19 @@ const ShareRows = ({ rows, total, w, onPick }) => html`
 
 const dayOf = (d, o) => new Date(d + "T12:00").toLocaleDateString([], o);
 
-function useReport(n) {
-  const [rep, setRep] = useState(null);
+const RANGES = [["24h", "24h", "the last 24 hours", "hours=24"], ["7d", "7d", "the last 7 days", "days=7"], ["30d", "30d", "the last 30 days", "days=30"], ["90d", "90d", "the last 90 days", "days=90"], ["all", "All", "all time", "days=all"]];
+const REPORTS = {};
+
+function useReport(q) {
+  const [rep, setRep] = useState(REPORTS[q] || null);
   useEffect(() => {
     let live = true;
-    setRep((r) => r && { ...r, loading: true });
-    api(`/api/usage/report?days=${n}`).then((r) => live && setRep(r), () => live && setRep({ days: [], sessions: [], projects: [], failed: true }));
-    return () => (live = false);
-  }, [n]);
+    const load = () => api(`/api/usage/report?${q}`).then((r) => { REPORTS[q] = r; live && setRep(r); }, () => live && setRep((x) => (x && !x.failed ? x : { days: [], sessions: [], failed: true })));
+    setRep(REPORTS[q] ? { ...REPORTS[q], loading: true } : null);
+    load();
+    const t = setInterval(load, 120000);
+    return () => { live = false; clearInterval(t); };
+  }, [q]);
   return rep;
 }
 
@@ -3114,77 +3120,203 @@ function Explain({ at }) {
   return at && html`<div class="xp" role="tooltip" ref=${ref}>${at.why}</div>`;
 }
 
-const USAGE_COLS = [["title", "Session", ""], ["bay", "Bay", "c-bay"], ["model", "Model", "c-m"], ["msgs", "Replies", "n c-st"], ["today", "Today", "n"], ["week", "7 days", "n c-wk"], ["last", "Last", "n"]];
+const USAGE_COLS = [["title", "Session", ""], ["bay", "Bay", "c-bay"], ["model", "Model", "c-m"], ["msgs", "Replies", "n c-st"], ["cost", "Cost", "n"], ["share", "Share", "c-sh"], ["last", "Last", "n"]];
+const MODEL_ORDER = ["opus", "fable", "sonnet", "haiku"];
+const modelFamily = (m) => MODEL_ORDER.find((f) => m.includes(f)) || "other";
+const modelColor = (m) => `var(--um-${modelFamily(m)})`;
+const modelRank = (m) => (MODEL_ORDER.indexOf(modelFamily(m)) + 5) % 5;
+const KINDS = ["Input", "Output", "Cache reads", "Cache writes"];
+const SHOWN_ROWS = 10;
 
-function UsagePage({ limits, live, down, onOpen }) {
-  useNow(60000);
-  const [u, setU] = useState(WINS);
-  useEffect(() => { loadWindows(true).then(setU); }, []);
-  const today = useReport(1), seven = useReport(7);
-  const [v, setV] = useState(() => ({ sort: "today", dir: -1, bay: null, q: "", ...stored("atc.usage", {}) }));
-  const set = (p) => setV((x) => { const n = { ...x, ...p }; store("atc.usage", n); return n; });
+const bucketDate = (k) => new Date(k.length > 10 ? `${k}:00` : `${k}T12:00`);
+const bucketName = (k) => k.length > 10
+  ? `${bucketDate(k).toLocaleDateString([], { weekday: "short" })} ${k.slice(11)}:00`
+  : dayOf(k, { weekday: "short", day: "numeric", month: "short" });
+const bucketTick = (k, n) => k.length > 10 ? `${k.slice(11)}` : n <= 7 ? dayOf(k, { weekday: "short" }) : dayOf(k, { day: "numeric", month: "short" });
+const tickEvery = (hourly, n) => (hourly ? 6 : n <= 7 ? 1 : n <= 16 ? 2 : n <= 40 ? 7 : 14);
+
+function PickRows({ rows, total, on, onPick, name = (r) => r.name, sub, color }) {
+  const [all, setAll] = useState(false);
+  const top = all ? rows : rows.slice(0, 8);
+  return html`
+    <div class="upicks">
+      ${top.map((r) => html`<button class="upick" aria-pressed=${on === r.name} onClick=${() => onPick(on === r.name ? null : r.name)}>
+        <span class="nm">${color && html`<i class="umsw" style=${`background:${color(r.name)}`}></i>`}${name(r)}${sub && html`<small>${sub(r)}</small>`}</span>
+        <span class="v">${dollars(r.cost)}<small>${Math.round((r.cost / (total || 1)) * 100)}%</small></span>
+        <i class="b" style=${`width:${total > 0 ? Math.max(0.5, (r.cost / total) * 100) : 0}%`}></i></button>`)}
+      ${rows.length > 8 && html`<button class="clr" onClick=${() => setAll(!all)}>${all ? "Show fewer" : `Show all ${rows.length}`}</button>`}
+    </div>`;
+}
+
+function SpendBars({ days, data, models, sel, hourly, onPick, onPickModel, partial }) {
+  const [hover, setHover] = useState(null);
+  const box = useRef();
+  const n = days.length;
+  const top = niceMax(Math.max(0, ...days.map((d) => data.buckets[d]?.cost || 0)));
+  const every = tickEvery(hourly, n);
+  const focusAt = days.includes(sel.bucket) ? days.indexOf(sel.bucket) : n - 1;
+  const move = (e) => {
+    const dir = e.key === "ArrowLeft" ? -1 : e.key === "ArrowRight" ? 1 : 0;
+    if (!dir) return;
+    e.preventDefault();
+    const btns = [...box.current.querySelectorAll(".ucol")];
+    btns[Math.min(n - 1, Math.max(0, btns.indexOf(document.activeElement) + dir))]?.focus();
+  };
+  const at = hover || sel.bucket;
+  const b = at && data.buckets[at];
+  return html`
+    <div class="ubars" onKeyDown=${move} onPointerLeave=${() => setHover(null)}>
+      <div class="uplot">
+        <div class="uaxis"><span>${dollars(top)}</span><span>${dollars(top / 2)}</span><span></span></div>
+        <div class=${`ucols ${sel.bucket ? "has" : ""}`} ref=${box} role="group" aria-label="Spend per ${hourly ? "hour" : "day"}. Pick one to see its sessions.">
+          ${days.map((d, i) => {
+            const x = data.buckets[d], parts = Object.entries(x?.models || {}).sort((p, q) => modelRank(p[0]) - modelRank(q[0]));
+            return html`<button class="ucol ${sel.bucket === d ? "on" : ""} ${d === partial ? "now" : ""}" tabindex=${i === focusAt ? 0 : -1} aria-pressed=${sel.bucket === d}
+              aria-label=${`${bucketName(d)}, ${dollars(x?.cost || 0)}`} onClick=${() => onPick(sel.bucket === d ? null : d)}
+              onPointerEnter=${() => matchMedia("(hover: hover)").matches && setHover(d)} onFocus=${() => setHover(d)} onBlur=${() => setHover(null)}>
+              <span class="st" style=${`height:${x ? Math.max(1, (x.cost / top) * 100) : 0}%`}>${parts.map(([m, c]) => html`<i style=${`flex-grow:${c};background:${modelColor(m)}`}></i>`)}</span></button>`;
+          })}
+        </div>
+      </div>
+      <div class="uticks" aria-hidden="true">${days.map((d, i) => html`<span>${(n - 1 - i) % every === 0 ? html`<em class=${d === partial ? "now" : ""}>${bucketTick(d, n)}</em>` : ""}</span>`)}</div>
+      ${models.length > 1 && html`<div class="ulegend">${models.map((m) => html`<button aria-pressed=${sel.model === m.name} onClick=${() => onPickModel(sel.model === m.name ? null : m.name)}><i class="umsw" style=${`background:${modelColor(m.name)}`}></i>${modelName(m.name)}</button>`)}</div>`}
+      <div class="ro" aria-live="polite">${at
+        ? html`<span>${bucketName(at)}${at === partial ? ", so far" : ""}</span><b>${b ? dollars(b.cost) : "nothing"}</b>
+            ${b && html`<span>${plural(b.sessions, "session")}</span><span class="wide">${Object.entries(b.models).filter(([, c]) => c >= 0.005).sort((p, q) => q[1] - p[1]).slice(0, 3).map(([m, c]) => `${modelName(m)} ${dollars(c)}`).join(", ")}</span>`}`
+        : html`<span>${touch ? "Tap" : "Pick"} a ${hourly ? "bar for that hour's" : "bar for that day's"} biggest sessions</span>`}</div>
+    </div>`;
+}
+
+function HoursMap({ days, hourly, range, filtered }) {
   const [cell, setCell] = useState(null);
-  const xp = useExplain();
-  const scroll = useRef();
-  useLayoutEffect(() => { if (scroll.current) scroll.current.scrollTop = stored("atc.usage.scroll", 0); }, [!!today]);
-
-  const ws = limits?.windows || [];
-  const rows = ws.map((w) => limitRow(w, winOf(u, w.key)));
-  const hit = rows.find((r) => r.hit);
-  const day = today?.days?.at(-1);
-  const week = u?.week;
-  const isDown = (h) => down.some((p) => p.name === h);
-  const status = !limits ? "Checking the limits…" : !ws.length ? `Limits are not available here${limits.error ? `: ${limits.error}` : ""}`
-    : hit ? `${hit.name} runs out ${hit.when} at this rate, ${hit.left} before the reset` : "Every limit lasts to its reset at this rate";
-  const src = limits && (limits.source === "live" ? `checked ${agoLong(limits.fetchedAt)}` : limits.source === "cached" ? `from Claude Code's last check, ${agoLong(limits.fetchedAt)}` : limits.source === "statusline" ? `from Claude Code's status line, ${agoLong(limits.fetchedAt)}` : "");
-
-  const sessions = new Map();
-  const row = (x) => { const r = sessions.get(x.sessionId) || { ...x, today: 0, week: 0, msgs: 0 }; sessions.set(x.sessionId, r); return r; };
-  for (const x of seven?.sessions || []) { const r = row(x); r.week = x.cost; r.msgs = x.messages || 0; }
-  for (const x of today?.sessions || []) { const r = row(x); r.today = x.cost; r.week = Math.max(r.week, x.cost); r.msgs = Math.max(r.msgs, x.messages || 0); r.last = r.last && Date.parse(r.last) > Date.parse(x.last) ? r.last : x.last; }
-  const all = [...sessions.values()].map((r) => ({ ...r, bay: project(r.cwd).name || "other", s: live.find((x) => x.sessionId === r.sessionId) }));
-  const sum = (l, k) => l.reduce((a, r) => a + (r[k] || 0), 0);
-
-  const byModel = Object.entries(day?.models || {}).filter(([, c]) => c >= 0.005).sort((a, b) => b[1] - a[1]);
-  const mTotal = byModel.reduce((a, [, c]) => a + c, 0);
-  const bayRows = {};
-  const bayOfP = (p) => (bayRows[project(p.cwd).name || "other"] ||= { name: project(p.cwd).name || "other", today: 0, week: 0, n: 0 });
-  for (const p of seven?.projects || []) bayOfP(p).week += p.cost;
-  for (const p of today?.projects || []) { const b = bayOfP(p); b.today += p.cost; b.n += p.sessions || 0; }
-  for (const b of Object.values(bayRows)) b.week = Math.max(b.week, b.today);
-  const bays = Object.values(bayRows).sort((a, b) => b.week - a.week || b.today - a.today);
-  const bayMax = Math.max(0.01, ...bays.map((b) => b.week));
-  const key = (r, k) => k === "title" ? (r.title || "").toLowerCase() : k === "last" ? -Date.parse(r.last || 0) : k === "model" ? r.model || "" : r[k];
-  const ql = v.q.trim().toLowerCase();
-  const shown = all.filter((r) => (!v.bay || r.bay === v.bay) && (!ql || `${r.title} ${r.bay}`.toLowerCase().includes(ql)))
-    .sort((a, b) => { const A = key(a, v.sort), B = key(b, v.sort); return (A > B ? 1 : A < B ? -1 : 0) * v.dir; });
-  const sortBy = (k) => set({ sort: k, dir: v.sort === k ? -v.dir : ["title", "bay", "model", "last"].includes(k) ? 1 : -1 });
-
-  const days = (seven?.days || []).slice(-7);
-  const hmax = Math.max(0.01, ...days.flatMap((d) => d.hours || []));
-  const nowH = new Date().getHours(), todayKey = new Date().toLocaleDateString("en-CA");
+  useEffect(() => setCell(null), [range]);
+  if (hourly || !days.length) return null;
+  const byDay = days.length <= 7;
+  const rows = byDay ? days.map((d) => ({ key: d.day, label: dayOf(d.day, { weekday: "short" }), long: dayOf(d.day, { weekday: "short", day: "numeric", month: "short" }), hours: d.hours || Array(24).fill(0) }))
+    : [1, 2, 3, 4, 5, 6, 0].map((wd) => {
+      const hours = Array(24).fill(0);
+      for (const d of days) if (new Date(`${d.day}T12:00`).getDay() === wd) (d.hours || []).forEach((c, h) => (hours[h] += c));
+      const label = new Date(2024, 0, 7 + wd).toLocaleDateString([], { weekday: "short" });
+      return { key: `w${wd}`, label, long: `${label}s`, hours };
+    });
+  const hmax = Math.max(0.01, ...rows.flatMap((r) => r.hours));
+  const nowH = new Date().getHours(), todayKey = new Date().toLocaleDateString("en-CA"), todayW = `w${new Date().getDay()}`;
+  const isNow = (r) => r.key === todayKey || r.key === todayW;
+  const fut = (r, h) => r.key === todayKey && h > nowH;
   const lvl = (c) => (c > 0 ? [0.14, 0.3, 0.5, 0.7, 0.9][Math.min(4, Math.floor((c / hmax) * 5))] : 0);
-  const at = cell || (days.length ? [days.length - 1, nowH] : null);
-  const atCost = at && days[at[0]]?.hours?.[at[1]];
-  const fut = (d, h) => d.day === todayKey && h > nowH;
+  const at = cell || [rows.findIndex(isNow), nowH];
+  const atRow = rows[at[0]], atCost = atRow?.hours[at[1]];
   const moveCell = (e) => {
-    if (!at || !e.key.startsWith("Arrow")) return;
+    if (!e.key.startsWith("Arrow")) return;
     e.preventDefault();
     let [d, h] = at;
     if (e.key === "ArrowLeft") h = Math.max(0, h - 1);
     if (e.key === "ArrowRight") h = Math.min(23, h + 1);
     if (e.key === "ArrowUp") d = Math.max(0, d - 1);
-    if (e.key === "ArrowDown") d = Math.min(days.length - 1, d + 1);
-    if (!fut(days[d], h)) setCell([d, h]);
+    if (e.key === "ArrowDown") d = Math.min(rows.length - 1, d + 1);
+    if (!fut(rows[d], h)) setCell([d, h]);
   };
-  const empty = today && seven && !all.length && !days.some((d) => d.cost > 0);
-  const money = (c) => (c > 0 ? dollars(c) : html`<span class="dim">0</span>`);
+  return html`
+    <section class="sec"><div class="sh"><h2>Hours</h2><span class="n">cost per hour${byDay ? "" : ", by weekday"}${filtered ? ". Every bay and model, not just your selection" : ""}</span></div>
+      <div class="hm" tabindex="0" role="grid" aria-label="Cost per hour. Arrow keys move; the line below reads the cell." onKeyDown=${moveCell}
+        onPointerLeave=${() => matchMedia("(hover: hover)").matches && setCell(null)}>
+        ${rows.map((r, di) => html`<span class="dl ${isNow(r) ? "today" : ""}">${r.label}</span>${r.hours.map((c, h) => html`
+          <i class="${fut(r, h) ? "fut" : !c ? "z" : ""} ${at[0] === di && at[1] === h ? "on" : ""} ${r.key === todayKey && h === nowH ? "nowc" : ""}" style=${`--o:${lvl(c)}`}
+            onPointerEnter=${() => !fut(r, h) && matchMedia("(hover: hover)").matches && setCell([di, h])} onClick=${() => !fut(r, h) && setCell([di, h])}></i>`)}`)}
+      </div>
+      <div class="hx"><span></span>${["0", "6", "12", "18"].map((t) => html`<span>${t}</span>`)}</div>
+      ${atRow && html`<div class="ro" aria-live="polite"><span>${atRow.long}, ${String(at[1]).padStart(2, "0")}:00 to ${String((at[1] + 1) % 24).padStart(2, "0")}:00${atRow.key === todayKey && at[1] === nowH ? ", so far" : ""}</span>
+        <b>${atCost > 0 ? usd(atCost) : "nothing"}</b>
+        <span class="scale">less ${[0.14, 0.3, 0.5, 0.7, 0.9].map((o) => html`<i style=${`opacity:${o}`}></i>`)} more, max ${usd(hmax)} an hour</span></div>`}
+    </section>`;
+}
+
+function UsagePage({ limits, live, down, onOpen }) {
+  useNow(60000);
+  const [u, setU] = useState(WINS);
+  useEffect(() => { loadWindows(true).then(setU); }, []);
+  const [v, setV] = useState(() => {
+    const x = { sort: "cost", dir: -1, q: "", range: "7d", ...stored("atc.usage", {}) };
+    return USAGE_COLS.some(([k]) => k === x.sort) ? x : { ...x, sort: "cost", dir: -1 };
+  });
+  const set = (p) => setV((x) => { const n = { ...x, ...p }; store("atc.usage", n); return n; });
+  const [sel, setSel] = useState({});
+  const [more, setMore] = useState(false);
+  const pickSel = (p) => { setSel((x) => ({ ...x, ...p })); setMore(false); };
+  const rangeDef = RANGES.find((r) => r[0] === v.range) || RANGES[1];
+  const rep = useReport(rangeDef[3]);
+  const xp = useExplain();
+  const scroll = useRef(), sessionsRef = useRef();
+  useLayoutEffect(() => { if (scroll.current) scroll.current.scrollTop = stored("atc.usage.scroll", 0); }, [!!rep]);
+
+  const ws = limits?.windows || [];
+  const rows = ws.map((w) => limitRow(w, winOf(u, w.key)));
+  const hit = rows.find((r) => r.hit);
+  const isDown = (h) => down.some((p) => p.name === h);
+  const status = !limits ? "Checking the limits…" : !ws.length ? `Limits are not available here${limits.error ? `: ${limits.error}` : ""}`
+    : hit ? `${hit.name} runs out ${hit.when} at this rate, ${hit.left} before the reset` : "Every limit lasts to its reset at this rate";
+  const src = limits && (limits.source === "live" ? `checked ${agoLong(limits.fetchedAt)}` : limits.source === "cached" ? `from Claude Code's last check, ${agoLong(limits.fetchedAt)}` : limits.source === "statusline" ? `from Claude Code's status line, ${agoLong(limits.fetchedAt)}` : "");
+
+  const hourly = rangeDef[0] === "24h";
+  const todayKey = new Date().toLocaleDateString("en-CA");
+  const sessions = useMemo(() => (rep?.sessions || []).map((x) => ({ ...x, bay: project(x.cwd).name || "other" })), [rep]);
+  const data = useMemo(() => cube(sessions, sel), [sessions, sel]);
+  const liveBy = new Map(live.map((x) => [x.sessionId, x]));
+  const shownDays = (rep?.days || []).filter((d) => !rep.first || d.day.slice(0, 10) >= rep.first);
+  const dayKeys = shownDays.map((d) => d.day);
+  const partial = hourly ? `${todayKey}T${String(new Date().getHours()).padStart(2, "0")}` : todayKey;
+  const todayCost = rep?.days ? rep.days.filter((d) => d.day.startsWith(todayKey)).reduce((a, d) => a + d.cost, 0) : null;
+  const week = u?.week;
+  const trimmed = rep?.days && shownDays.length < rep.days.length;
+  const span = rep?.first && rangeDef[0] !== "24h" && rangeDef[0] !== "7d" && (trimmed || rangeDef[0] === "all");
+
+  const chips = [
+    sel.bucket && ["bucket", bucketName(sel.bucket)],
+    sel.bay && ["bay", sel.bay],
+    sel.model && ["model", modelName(sel.model)],
+    sel.host && ["host", sel.host],
+  ].filter(Boolean);
+  const filtered = chips.length > 0;
+
+  const unit = hourly ? "hour" : "day";
+  const active = Object.values(data.buckets).filter((b) => b.cost > 0);
+  const perUnit = active.length ? active.reduce((a, b) => a + b.cost, 0) / active.length : 0;
+  const busiest = Object.entries(data.buckets).sort((a, b) => b[1].cost - a[1].cost)[0];
+  const sinceFrom = rep?.days?.[0] && bucketDate(rep.days[0].day).getTime();
+  const prevStart = sinceFrom && new Date(sinceFrom - (Date.now() - sinceFrom)).toLocaleDateString("en-CA");
+  const delta = !filtered && rep?.previous > 0 && rep.first && prevStart >= rep.first ? (data.total - rep.previous) / rep.previous : null;
+  const top5 = data.rows.slice(0, 5).reduce((a, r) => a + r.cost, 0);
+  const kpis = [
+    { l: filtered ? "In this selection" : "Spent", v: dollars(data.total),
+      s: filtered ? `${pct(data.range > 0 ? (data.total / data.range) * 100 : 0)} of ${dollars(data.range)}`
+        : delta != null ? `${delta >= 0 ? "+" : ""}${Math.round(delta * 100)}% from the ${rangeDef[2].replace("the last", "previous")} (${dollars(rep.previous)})`
+        : rangeDef[2], big: true },
+    sel.bucket
+      ? { l: `Against the average ${unit}`, v: perUnit > 0 ? `${(data.total / perUnit).toFixed(1)}×` : "0", s: `average ${dollars(perUnit)} a ${unit}` }
+      : { l: `Per active ${unit}`, v: dollars(perUnit), s: busiest && busiest[1].cost > 0 ? `busiest ${bucketName(busiest[0])}, ${dollars(busiest[1].cost)}` : "" },
+    { l: "Sessions", v: data.rows.length.toLocaleString("en-US"), s: data.rows.length > 5 ? `the top 5 took ${Math.round((top5 / (data.total || 1)) * 100)}%` : data.rows.length ? `${dollars(data.total / data.rows.length)} each` : "" },
+    { l: "Replies", v: data.msgs.toLocaleString("en-US"), s: data.msgs ? `${dollars(data.total / data.msgs)} each` : "" },
+    { l: "Tokens", v: tokens(data.tokens), s: data.tokens ? `${dollars(data.total / (data.tokens / 1e6))} a million` : "" },
+  ];
+
+  const key = (r, k) => k === "title" ? (r.title || "").toLowerCase() : k === "last" ? -Date.parse(r.last || 0) : k === "share" ? r.cost : k === "bay" || k === "model" ? r[k] || "" : r[k];
+  const ql = v.q.trim().toLowerCase();
+  const matched = data.rows.filter((r) => !ql || `${r.title} ${r.bay}`.toLowerCase().includes(ql))
+    .sort((a, b) => { const A = key(a, v.sort), B = key(b, v.sort); return (A > B ? 1 : A < B ? -1 : 0) * v.dir; });
+  const shown = more ? matched : matched.slice(0, SHOWN_ROWS);
+  const sortBy = (k) => set({ sort: k, dir: v.sort === k ? -v.dir : ["title", "bay", "model", "last"].includes(k) ? 1 : -1 });
+  const sumShown = (k) => matched.reduce((a, r) => a + (r[k] || 0), 0);
+  const maxRow = Math.max(0.01, ...matched.map((r) => r.cost));
+  const pickThenShow = (p) => { pickSel(p); if (innerWidth < 900) requestAnimationFrame(() => sessionsRef.current?.scrollIntoView({ block: "start" })); };
+  const pickBucket = (d) => { pickSel({ bucket: d }); if (d && innerWidth < 900) requestAnimationFrame(() => sessionsRef.current?.scrollIntoView({ block: "nearest" })); };
+  const sliceName = chips.length ? chips.map((c) => c[1]).join(", ") : rangeDef[2];
+  const empty = rep && !rep.failed && !sessions.length;
   return html`
     <section class="scrpane usage" aria-label="Usage">
       <header class="hd">
         <div class="l1"><h1>Usage</h1><span class="where">Claude Code${MULTI ? " on every host" : ""}${limits?.plan ? `, ${limits.plan} plan` : ""}</span></div>
         <div class="l2 no-block"><span class="stat">${status}</span>
-          ${day && html`<span class="rd"><span class="l">today</span>${dollars(day.cost)}</span>`}
+          ${todayCost != null && html`<span class="rd"><span class="l">today</span>${dollars(todayCost)}</span>`}
           ${week && html`<span class="rd"><span class="l">week</span>${dollars(week.cost)}</span>`}
           ${src && html`<span class="rd"><span class="l">limits</span>${src}</span>`}</div>
       </header>
@@ -3207,54 +3339,53 @@ function UsagePage({ limits, live, down, onOpen }) {
               </div>`)}
             ${rows.length > 0 && html`<div class="legend"><span><i class="u"></i>used</span><span><i class="p"></i>at this rate, by the reset</span><span><i class="t"></i>even pace: where you would be if it lasted exactly</span></div>`}
           </section>
-          ${empty ? html`
-            <div class="uempty"><h2>No usage yet</h2><p>atc reads usage from Claude Code once a session has run. Today's models, the hour map and cost per session fill in from the first session on.</p>
-              <button class="btn primary" onClick=${() => NEW_SESSION()}>New session</button></div>`
-          : html`
-          <section class="sec l5"><div class="sh"><h2>Today by model</h2><span class="n">API prices; a plan is not billed per token</span></div>
-            ${!today ? html`<p class="none">Adding up today's transcripts…</p>` : today.failed ? html`<p class="none">Couldn't add up the transcripts.</p>` : html`
-            <table><thead><tr><th>Model</th><th class="n c-st">Sessions</th><th class="n">Cost</th><th class="c-sh">Share</th></tr></thead><tbody>
-              ${byModel.map(([m, c]) => html`<tr><td>${modelName(m)}${local(m) && html`<span class="s2">not Claude, not in the limits</span>`}</td>
-                <td class="n c-st">${today.sessions.filter((x) => x.model === m).length || ""}</td>
-                <td class="n"><${X} xp=${xp} why=${`${dollars(c)} at API list prices for ${modelName(m)} today. ${asPct(c, winOf(u, "weekly_all")) != null ? `About ${approx(asPct(c, winOf(u, "weekly_all")))} of the week's limit.` : ""}`} label=${dollars(c)} /></td>
-                <td class="c-sh"><span class="wb" style=${`width:${Math.round((c / (mTotal || 1)) * 70)}%`}></span><span class="dim">${Math.round((c / (mTotal || 1)) * 100)}%</span></td></tr>`)}
-              ${!byModel.length && html`<tr><td colspan="4" class="none">Nothing ran today yet.</td></tr>`}</tbody>
-              <tfoot><tr><td>Today, to ${hhmm(Date.now())}</td><td class="n c-st">${today.sessions.length}</td><td class="n">${dollars(mTotal)}</td><td class="c-sh dim">${day ? `${tokens(day.total)} tokens` : ""}</td></tr></tfoot></table>`}
-          </section>
-          <section class="sec l7"><div class="sh"><h2>Hours</h2><span class="n">cost per hour, last 7 days</span></div>
-            ${!seven ? html`<p class="none">Adding up the week…</p>` : html`
-            <div class="hm" tabindex="0" role="grid" aria-label="Cost per hour, last 7 days. Arrow keys move; the line below reads the cell." onKeyDown=${moveCell}
-              onPointerLeave=${() => matchMedia("(hover: hover)").matches && setCell(null)}>
-              ${days.map((d, di) => html`<span class="dl ${d.day === todayKey ? "today" : ""}">${dayOf(d.day, { weekday: "short" })}</span>${(d.hours || Array(24).fill(0)).map((c, h) => html`
-                <i class="${fut(d, h) ? "fut" : !c ? "z" : ""} ${at && at[0] === di && at[1] === h ? "on" : ""} ${d.day === todayKey && h === nowH ? "nowc" : ""}" style=${`--o:${lvl(c)}`}
-                  onPointerEnter=${() => !fut(d, h) && matchMedia("(hover: hover)").matches && setCell([di, h])} onClick=${() => !fut(d, h) && setCell([di, h])}></i>`)}`)}
+          <div class="uspend ${rep?.loading ? "loading" : ""}">
+            <div class="ubar">
+              <div class="sh"><h2>Spend</h2><span class="n">API prices; a plan is not billed per token</span>
+                <span class="r"><span class="seg" role="group" aria-label="Range">${RANGES.map((r) => html`<button aria-pressed=${r[0] === rangeDef[0]} aria-label=${r[2]} onClick=${() => { set({ range: r[0] }); pickSel({ bucket: null }); }}>${r[1]}</button>`)}</span></span></div>
+              ${chips.length > 0 && html`<div class="uchips">
+                ${chips.map(([k, l]) => html`<button class="uchip" aria-label=${`Remove ${l}`} onClick=${() => pickSel({ [k]: null })}>${l}<span aria-hidden="true">×</span></button>`)}
+                ${chips.length > 1 && html`<button class="clr" onClick=${() => setSel({})}>Clear all</button>`}</div>`}
             </div>
-            <div class="hx"><span></span>${["0", "6", "12", "18"].map((t) => html`<span>${t}</span>`)}</div>
-            ${at && days[at[0]] && html`<div class="ro" aria-live="polite"><span>${dayOf(days[at[0]].day, { weekday: "short", day: "numeric", month: "short" })}, ${String(at[1]).padStart(2, "0")}:00 to ${String((at[1] + 1) % 24).padStart(2, "0")}:00${days[at[0]].day === todayKey && at[1] === nowH ? ", so far" : ""}</span>
-              <b>${atCost > 0 ? usd(atCost) : "nothing"}</b>
-              <span class="scale">less ${[0.14, 0.3, 0.5, 0.7, 0.9].map((o) => html`<i style=${`opacity:${o}`}></i>`)} more, max ${usd(hmax)} an hour</span></div>`}`}
-          </section>
-          <section class="sec l4"><div class="sh"><h2>Per bay</h2><span class="n">pick one to filter sessions</span></div>
-            <table><thead><tr><th>Bay</th><th class="n c-st">Sessions</th><th class="n">Today</th><th class="n">7 days</th><th class="c-sh"></th></tr></thead><tbody>
-              ${bays.map((b) => html`<tr class="pick" tabindex="0" aria-selected=${v.bay === b.name} onClick=${() => set({ bay: v.bay === b.name ? null : b.name })}
-                onKeyDown=${(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), set({ bay: v.bay === b.name ? null : b.name }))}>
-                <td>${b.name}</td><td class="n c-st">${b.n || ""}</td><td class="n">${money(b.today)}</td><td class="n">${dollars(b.week)}</td>
-                <td class="c-sh"><span class="wb" style=${`width:${Math.round((b.week / bayMax) * 100)}%`}></span></td></tr>`)}</tbody>
-              <tfoot><tr><td>All bays</td><td class="n c-st">${sum(bays, "n")}</td><td class="n">${dollars(sum(bays, "today"))}</td><td class="n">${dollars(sum(bays, "week"))}</td><td class="c-sh"></td></tr></tfoot></table>
-          </section>
-          <section class="sec l8"><div class="sh"><h2>Per session</h2><span class="n">today and the last 7 days</span>
-            <span class="r tools">${v.bay && html`<button class="btn" onClick=${() => set({ bay: null })}>${v.bay} only, show all</button>`}
-              <input class="filt" type="search" placeholder="Filter sessions" aria-label="Filter sessions" value=${v.q} onInput=${(e) => set({ q: e.target.value })} /></span></div>
-            <table><thead><tr>${USAGE_COLS.map(([k, n, c]) => html`<th class=${c} aria-sort=${v.sort === k ? (v.dir > 0 ? "ascending" : "descending") : "none"}><button class="sort" onClick=${() => sortBy(k)}>${n}</button></th>`)}</tr></thead>
-              <tbody>${shown.map((r) => html`<tr>
-                <td class="t"><span class="uses">${r.s ? html`<${StateBlock} s=${r.s} />` : html`<span class="sb earlier" role="img" aria-label="earlier">E</span>`}
-                  <a href=${`#/s/${r.sessionId}`} onClick=${(e) => { e.preventDefault(); onOpen(r); }}>${r.title || r.sessionId.slice(0, 8)}</a><span class="bay2">${r.bay}</span></span></td>
-                <td class="c-bay">${r.bay}</td><td class="m c-m">${r.model ? modelName(r.model) : ""}</td><td class="n c-st">${r.msgs || ""}</td>
-                <td class="n">${money(r.today)}</td><td class="n c-wk">${dollars(r.week)}</td>
-                <td class="n m">${isDown(r.host) ? html`<span class="stale" title=${`${r.host} is unreachable; this is what it used until then`}>${ago({ updated: r.last })}</span>` : ago({ updated: r.last })}</td></tr>`)}
-                ${!shown.length && html`<tr><td colspan="7" class="none">${all.length ? html`No session matches${ql ? ` “${v.q}”` : ""}${v.bay ? ` in ${v.bay}` : ""}. <button class="clr" onClick=${() => set({ bay: null, q: "" })}>Clear the filter</button>` : "No sessions this week."}</td></tr>`}</tbody>
-              <tfoot><tr><td>${plural(shown.length, "session")}</td><td class="c-bay"></td><td class="c-m"></td><td class="n c-st">${sum(shown, "msgs")}</td><td class="n">${dollars(sum(shown, "today"))}</td><td class="n c-wk">${dollars(sum(shown, "week"))}</td><td></td></tr></tfoot></table>
-          </section>`}
+            ${span && html`<p class="ufloor">Transcripts go back to ${dayOf(rep.first, { day: "numeric", month: "short" })}. Claude Code deletes older ones, so there is nothing further to add up.</p>`}
+            ${!rep ? html`<p class="none">Adding up the transcripts…</p>` : rep.failed ? html`<p class="none">Couldn't add up the transcripts.</p>`
+            : empty && rangeDef[0] === "all" ? html`
+              <div class="uempty"><h2>No usage yet</h2><p>atc reads usage from Claude Code once a session has run. Spend per day, bay, model and session fill in from the first session on.</p>
+                <button class="btn primary" onClick=${() => NEW_SESSION()}>New session</button></div>`
+            : empty ? html`<p class="none">Nothing ran in ${rangeDef[2]}.</p>`
+            : html`
+            <div class="ukpis">${kpis.map((k) => html`<div class="ukpi ${k.big ? "big" : ""}"><span class="l">${k.l}</span><b>${k.v}</b><span class="s">${k.s}</span></div>`)}</div>
+            <${SpendBars} days=${dayKeys} data=${data} models=${data.models} sel=${sel} hourly=${hourly} partial=${partial} onPick=${pickBucket} onPickModel=${(m) => pickSel({ model: m })} />
+            <div class="ugrid">
+              <section class="sec usess" ref=${sessionsRef}><div class="sh"><h2>Biggest sessions</h2><span class="n">${sliceName}</span>
+                <span class="r tools"><input class="filt" type="search" placeholder="Filter sessions" aria-label="Filter sessions" value=${v.q} onInput=${(e) => set({ q: e.target.value })} /></span></div>
+                <table><thead><tr>${USAGE_COLS.map(([k, n, c]) => html`<th class=${c} aria-sort=${v.sort === k ? (v.dir > 0 ? "ascending" : "descending") : "none"}><button class="sort" onClick=${() => sortBy(k)}>${n}</button></th>`)}</tr></thead>
+                  <tbody>${shown.map((r) => { const ls = liveBy.get(r.sessionId); return html`<tr>
+                    <td class="t"><span class="uses">${ls ? html`<${StateBlock} s=${ls} />` : html`<span class="sb earlier" role="img" aria-label="earlier">E</span>`}
+                      <a href=${`#/s/${r.sessionId}`} onClick=${(e) => { e.preventDefault(); onOpen(r); }}>${r.title || r.sessionId.slice(0, 8)}</a><span class="bay2">${r.bay}${r.model ? `, ${modelName(r.model)}` : ""}</span></span></td>
+                    <td class="c-bay">${r.bay}</td><td class="m c-m">${r.model ? modelName(r.model) : ""}</td><td class="n c-st">${r.msgs.toLocaleString("en-US")}</td>
+                    <td class="n">${dollars(r.cost)}</td>
+                    <td class="c-sh"><span class="wb" style=${`width:${Math.round((r.cost / maxRow) * 70)}%`}></span><span class="dim">${Math.round((r.cost / (data.total || 1)) * 100)}%</span></td>
+                    <td class="n m">${isDown(r.host) ? html`<span class="stale" title=${`${r.host} is unreachable; this is what it used until then`}>${ago({ updated: r.last })}</span>` : ago({ updated: r.last })}</td></tr>`; })}
+                    ${!shown.length && html`<tr><td colspan="7" class="none">No session matches${ql ? ` “${v.q}”` : ""}. <button class="clr" onClick=${() => { setSel({}); set({ q: "" }); }}>Clear the filter</button></td></tr>`}</tbody>
+                  <tfoot><tr><td>${plural(matched.length, "session")}</td><td class="c-bay"></td><td class="c-m"></td><td class="n c-st">${sumShown("msgs").toLocaleString("en-US")}</td><td class="n">${dollars(sumShown("cost"))}</td><td class="c-sh"></td><td></td></tr></tfoot></table>
+                ${matched.length > SHOWN_ROWS && html`<button class="btn umore" onClick=${() => setMore(!more)}>${more ? "Show fewer" : `Show all ${matched.length}`}</button>`}
+              </section>
+              <div class="ubreak">
+                <section class="sec"><div class="sh"><h2>Per bay</h2></div>
+                  <${PickRows} rows=${data.bays} total=${data.bays.reduce((a, b) => a + b.cost, 0)} on=${sel.bay} onPick=${(b) => pickThenShow({ bay: b })} sub=${(r) => plural(r.sessions, "session")} /></section>
+                <section class="sec"><div class="sh"><h2>Per model</h2></div>
+                  <${PickRows} rows=${data.models} total=${data.models.reduce((a, b) => a + b.cost, 0)} on=${sel.model} onPick=${(m) => pickThenShow({ model: m })} name=${(r) => modelName(r.name)} color=${modelColor} /></section>
+                ${data.hosts.length > 1 || sel.host ? html`<section class="sec"><div class="sh"><h2>Per host</h2></div>
+                  <${PickRows} rows=${data.hosts} total=${data.hosts.reduce((a, b) => a + b.cost, 0)} on=${sel.host} onPick=${(h) => pickThenShow({ host: h })} sub=${(r) => plural(r.sessions, "session")} /></section>` : ""}
+                <section class="sec"><div class="sh"><h2>What it paid for</h2></div>
+                  <div class="upicks">${KINDS.map((k, i) => [k, data.kinds[i]]).sort((a, b) => b[1] - a[1]).map(([k, c]) => html`<div class="upick flat">
+                    <span class="nm">${k}</span><span class="v">${dollars(c)}<small>${Math.round((c / (data.total || 1)) * 100)}%</small></span>
+                    <i class="b" style=${`width:${data.total > 0 ? Math.max(0.5, (c / data.total) * 100) : 0}%`}></i></div>`)}</div></section>
+              </div>
+            </div>
+            <${HoursMap} days=${shownDays} hourly=${hourly} range=${rangeDef[0]} filtered=${filtered} />`}
+          </div>
           <p class="unote">${ESTIMATE()} ${RATE}</p>
         </div>
       </div>

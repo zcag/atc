@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"maps"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -82,11 +83,28 @@ type Day struct {
 }
 
 type SessionSpend struct {
-	Cost     float64            `json:"cost"`
-	Total    int64              `json:"total"`
-	Messages int                `json:"messages"`
-	Last     time.Time          `json:"last"`
-	Models   map[string]float64 `json:"models"`
+	Cost     float64                      `json:"cost"`
+	Total    int64                        `json:"total"`
+	Messages int                          `json:"messages"`
+	Last     time.Time                    `json:"last"`
+	Models   map[string]float64           `json:"models"`
+	Slices   map[string]map[string]*Slice `json:"slices,omitempty"`
+}
+
+// Slice is one session's use of one model in one bucket, flat so a report of a thousand sessions stays small:
+// dollars by token kind (input, output, cache read, cache write), then replies, then tokens.
+type Slice [6]float64
+
+func (c *Slice) add(m msg) {
+	for i, v := range []float64{m.costs.Input, m.costs.Output, m.costs.CacheRead, m.costs.CacheWrite, 1, float64(m.t.Total())} {
+		c[i] += v
+	}
+}
+
+func (c *Slice) round() {
+	for i := range 4 {
+		c[i] = math.Round(c[i]*1e4) / 1e4
+	}
 }
 
 func (s *SessionSpend) add(m msg) {
@@ -97,6 +115,13 @@ func (s *SessionSpend) add(m msg) {
 	if m.at.After(s.Last) {
 		s.Last = m.at
 	}
+}
+
+type Report struct {
+	Days     []Day
+	Sessions map[string]*SessionSpend
+	Previous float64
+	First    string
 }
 
 type Spend struct {
@@ -398,27 +423,33 @@ func costSince(files []*file, from time.Time, seen map[string]bool) float64 {
 	return c
 }
 
-func (s *Scanner) Spend(root string, from time.Time) Spend {
-	paths, files := s.recent(root, from)
-	sp := Spend{Models: map[string]float64{}, Sessions: map[string]*SessionSpend{}}
+func (s *Scanner) each(root string, since time.Time, fn func(sid string, m msg)) {
+	paths, files := s.recent(root, since)
 	seen := map[string]bool{}
 	for i, f := range files {
 		sid := sessionOf(paths[i])
 		f.mu.Lock()
 		for id, m := range f.msgs {
-			if m.at.Before(from) || m.local || seen[id] {
+			if m.at.Before(since) || m.local || seen[id] {
 				continue
 			}
 			seen[id] = true
-			sp.Cost += m.cost
-			sp.Models[m.model] += m.cost
-			if sp.Sessions[sid] == nil {
-				sp.Sessions[sid] = &SessionSpend{Models: map[string]float64{}}
-			}
-			sp.Sessions[sid].add(m)
+			fn(sid, m)
 		}
 		f.mu.Unlock()
 	}
+}
+
+func (s *Scanner) Spend(root string, from time.Time) Spend {
+	sp := Spend{Models: map[string]float64{}, Sessions: map[string]*SessionSpend{}}
+	s.each(root, from, func(sid string, m msg) {
+		sp.Cost += m.cost
+		sp.Models[m.model] += m.cost
+		if sp.Sessions[sid] == nil {
+			sp.Sessions[sid] = &SessionSpend{Models: map[string]float64{}}
+		}
+		sp.Sessions[sid].add(m)
+	})
 	return sp
 }
 
@@ -433,49 +464,95 @@ func (s *Scanner) CostSince(from time.Time, transcripts ...string) float64 {
 	return costSince(files, from, map[string]bool{})
 }
 
-func (s *Scanner) Days(root string, n int) []Day {
-	since := time.Now().AddDate(0, 0, -n+1)
-	first := since.Format(time.DateOnly)
-	paths, files := s.recent(root, since.AddDate(0, 0, -1))
+const hourKey = "2006-01-02T15"
 
+// Report adds up from until now per day (per hour if hourly) and each session per bucket and model. A zero from means
+// everything on disk, starting at the first day with a message. Previous is the same length of time before from.
+func (s *Scanner) Report(root string, from time.Time, hourly bool) Report {
+	rep := Report{Days: []Day{}, Sessions: map[string]*SessionSpend{}}
+	var before, first time.Time
+	if !from.IsZero() {
+		before = from.Add(-time.Since(from))
+	}
 	days := map[string]*Day{}
-	seen := map[string]bool{}
-	for i, f := range files {
-		sid := sessionOf(paths[i])
-		f.mu.Lock()
-		for id, m := range f.msgs {
-			if m.day < first || m.local || seen[id] {
-				continue
+	counted := map[string]bool{}
+	s.each(root, before, func(sid string, m msg) {
+		if first.IsZero() || m.at.Before(first) {
+			first = m.at
+		}
+		if m.at.Before(from) {
+			rep.Previous += m.cost
+			return
+		}
+		key := m.day
+		if hourly {
+			key = m.at.Local().Format(hourKey)
+		}
+		d := days[key]
+		if d == nil {
+			d = &Day{Day: key, Models: map[string]float64{}}
+			if !hourly {
+				d.Hours = make([]float64, 24)
 			}
-			seen[id] = true
-			d := days[m.day]
-			if d == nil {
-				d = &Day{Day: m.day}
-				days[m.day] = d
-			}
-			d.add(m)
-			if d.Models == nil {
-				d.Models, d.Hours = map[string]float64{}, make([]float64, 24)
-			}
-			d.Models[m.model] += m.cost
+			days[key] = d
+		}
+		d.add(m)
+		d.Models[m.model] += m.cost
+		if !hourly {
 			d.Hours[m.at.Local().Hour()] += m.cost
-			if k := m.day + "|" + sid; !seen[k] {
-				seen[k] = true
-				d.Sessions++
+		}
+		if k := key + "|" + sid; !counted[k] {
+			counted[k] = true
+			d.Sessions++
+		}
+		x := rep.Sessions[sid]
+		if x == nil {
+			x = &SessionSpend{Models: map[string]float64{}, Slices: map[string]map[string]*Slice{}}
+			rep.Sessions[sid] = x
+		}
+		x.add(m)
+		if x.Slices[key] == nil {
+			x.Slices[key] = map[string]*Slice{}
+		}
+		if x.Slices[key][m.model] == nil {
+			x.Slices[key][m.model] = &Slice{}
+		}
+		x.Slices[key][m.model].add(m)
+	})
+	for _, x := range rep.Sessions {
+		for _, models := range x.Slices {
+			for _, c := range models {
+				c.round()
 			}
 		}
-		f.mu.Unlock()
 	}
-	out := []Day{}
-	for t := since; !t.After(time.Now()); t = t.AddDate(0, 0, 1) {
-		k := t.Format(time.DateOnly)
+	if !first.IsZero() {
+		rep.First = first.Local().Format(time.DateOnly)
+	}
+	start := from
+	if start.IsZero() {
+		start = first
+	}
+	if start.IsZero() {
+		return rep
+	}
+	bucket := func(k string) {
 		if d := days[k]; d != nil {
-			out = append(out, *d)
+			rep.Days = append(rep.Days, *d)
 		} else {
-			out = append(out, Day{Day: k})
+			rep.Days = append(rep.Days, Day{Day: k})
 		}
 	}
-	return out
+	if hourly {
+		for t := start.Truncate(time.Hour); !t.After(time.Now()); t = t.Add(time.Hour) {
+			bucket(t.Local().Format(hourKey))
+		}
+		return rep
+	}
+	for t := start.Local(); t.Format(time.DateOnly) <= time.Now().Format(time.DateOnly); t = t.AddDate(0, 0, 1) {
+		bucket(t.Format(time.DateOnly))
+	}
+	return rep
 }
 
 func sessionOf(path string) string {

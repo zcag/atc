@@ -101,7 +101,7 @@ func TestSessionStats(t *testing.T) {
 	}
 }
 
-func TestDays(t *testing.T) {
+func TestReport(t *testing.T) {
 	root := t.TempDir()
 	proj := filepath.Join(root, "-p")
 	os.MkdirAll(filepath.Join(proj, "s1", "subagents"), 0o755)
@@ -117,7 +117,7 @@ func TestDays(t *testing.T) {
 	if st := s.Session(filepath.Join(proj, "s3.jsonl")); len(st.Local) != 1 || len(st.Unpriced) != 0 || st.Total != 2 {
 		t.Fatalf("local session %+v", st)
 	}
-	days := s.Days(root, 7)
+	days := s.Report(root, time.Now().AddDate(0, 0, -6), false).Days
 	last := days[len(days)-1]
 	if len(days) != 7 || last.Day != time.Now().Format(time.DateOnly) || last.Messages != 4 || last.Sessions != 2 || last.Total != 8 || !near(last.Hours[time.Now().Hour()], last.Cost) {
 		t.Fatalf("days %+v", days)
@@ -125,6 +125,38 @@ func TestDays(t *testing.T) {
 	merged := MergeDays(days, []Day{{Day: last.Day, Part: Part{Tokens: Tokens{Input: 5}, Cost: 1, Messages: 1}, Sessions: 1}})
 	if m := merged[len(merged)-1]; m.Input != 9 || m.Total != 13 || m.Sessions != 3 || len(merged) != 7 || !near(m.Hours[time.Now().Hour()], last.Cost) {
 		t.Fatalf("merged %+v", m)
+	}
+	hours := s.Report(root, time.Now().Truncate(time.Hour).Add(-23*time.Hour), true)
+	if h := hours.Days[len(hours.Days)-1]; len(hours.Days) != 24 || h.Day != time.Now().Format("2006-01-02T15") || h.Messages != 4 || h.Hours != nil {
+		t.Fatalf("hours %+v", hours.Days)
+	}
+	all := s.Report(root, time.Time{}, false)
+	if len(all.Days) != 1 || all.First != last.Day || all.Previous != 0 {
+		t.Fatalf("all time %+v", all)
+	}
+	slices := 0.0
+	for _, x := range all.Sessions {
+		for _, c := range x.Slices[last.Day] {
+			slices += c[0] + c[1] + c[2] + c[3]
+			if c[4] == 0 || c[5] == 0 {
+				t.Fatalf("slice %v", c)
+			}
+		}
+	}
+	if math.Abs(slices-last.Cost) > 0.001 {
+		t.Fatalf("slices %f, day %f", slices, last.Cost)
+	}
+	older := t.TempDir()
+	os.MkdirAll(filepath.Join(older, "-p"), 0o755)
+	stamp := func(ago time.Duration, id string) string {
+		return strings.ReplaceAll(line(id), today, time.Now().Add(-ago).UTC().Format(time.RFC3339))
+	}
+	os.WriteFile(filepath.Join(older, "-p", "s.jsonl"), []byte(stamp(time.Hour, "new")+stamp(30*time.Hour, "prev")+stamp(60*time.Hour, "gone")), 0o644)
+	var o Scanner
+	day := o.Report(older, time.Now().Add(-24*time.Hour), false)
+	one := o.Report(older, time.Time{}, false).Sessions["s"].Cost / 3
+	if !near(day.Previous, one) || !near(day.Sessions["s"].Cost, one) || day.First != time.Now().Add(-30*time.Hour).Format(time.DateOnly) {
+		t.Fatalf("previous %+v", day)
 	}
 	sp := s.Spend(root, time.Now().Add(-time.Hour))
 	if !near(sp.Cost, last.Cost) || len(sp.Sessions) != 2 || !near(sp.Sessions["s1"].Cost, 3*sp.Sessions["s2"].Cost) || sp.Sessions["s1"].Messages != 3 || len(sp.Models) != 1 {

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"net/http"
+	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -102,15 +103,16 @@ func (s *Server) agentConversations(name string) []string {
 }
 
 type spentIn struct {
-	ID       string    `json:"sessionId"`
-	Title    string    `json:"title"`
-	Host     string    `json:"host,omitempty"`
-	Cwd      string    `json:"cwd,omitempty"`
-	Model    string    `json:"model,omitempty"`
-	Cost     float64   `json:"cost"`
-	Total    int64     `json:"total,omitempty"`
-	Messages int       `json:"messages,omitempty"`
-	Last     time.Time `json:"last,omitzero"`
+	ID       string                             `json:"sessionId"`
+	Title    string                             `json:"title"`
+	Host     string                             `json:"host,omitempty"`
+	Cwd      string                             `json:"cwd,omitempty"`
+	Model    string                             `json:"model,omitempty"`
+	Cost     float64                            `json:"cost"`
+	Total    int64                              `json:"total,omitempty"`
+	Messages int                                `json:"messages,omitempty"`
+	Last     time.Time                          `json:"last,omitzero"`
+	Slices   map[string]map[string]*usage.Slice `json:"slices,omitempty"`
 }
 
 type spend struct {
@@ -127,13 +129,17 @@ func byCost(xs []spentIn) {
 
 func (s *Server) spentSince(from time.Time) (usage.Spend, []spentIn) {
 	sp := s.stats.Spend(s.M.Index.Root, from)
+	return sp, s.spentIn(sp.Sessions)
+}
+
+func (s *Server) spentIn(sessions map[string]*usage.SessionSpend) []spentIn {
 	want := map[string]bool{}
-	for id := range sp.Sessions {
+	for id := range sessions {
 		want[id] = true
 	}
 	briefs := s.M.Briefs(want)
-	out := make([]spentIn, 0, len(sp.Sessions))
-	for id, x := range sp.Sessions {
+	out := make([]spentIn, 0, len(sessions))
+	for id, x := range sessions {
 		model := ""
 		for m, c := range x.Models {
 			if model == "" || c > x.Models[model] {
@@ -141,10 +147,10 @@ func (s *Server) spentSince(from time.Time) (usage.Spend, []spentIn) {
 			}
 		}
 		b := briefs[id]
-		out = append(out, spentIn{id, b.Title, s.Host, b.Cwd, model, x.Cost, x.Total, x.Messages, x.Last})
+		out = append(out, spentIn{id, b.Title, s.Host, b.Cwd, model, x.Cost, x.Total, x.Messages, x.Last, x.Slices})
 	}
 	byCost(out)
-	return sp, out
+	return out
 }
 
 func (s *Server) localSpend(from time.Time) spend {
@@ -225,73 +231,58 @@ func (s *Server) usageLimits(w http.ResponseWriter, r *http.Request) {
 	reply(w, s.limits.Get(r.Context()))
 }
 
-type project struct {
-	Cwd      string    `json:"cwd"`
-	Hosts    []string  `json:"hosts"`
-	Cost     float64   `json:"cost"`
-	Total    int64     `json:"total"`
-	Sessions int       `json:"sessions"`
-	Last     time.Time `json:"last"`
-}
-
 type report struct {
 	Days     []usage.Day `json:"days"`
 	Sessions []spentIn   `json:"sessions"`
-	Projects []project   `json:"projects,omitempty"`
+	Previous float64     `json:"previous"`
+	First    string      `json:"first,omitempty"`
 }
 
-const reportSessions = 60
-
-func (s *Server) usageReport(w http.ResponseWriter, r *http.Request) {
+func reportSpan(q url.Values) (time.Time, bool) {
+	if q.Get("hours") != "" {
+		return time.Now().Truncate(time.Hour).Add(-23 * time.Hour), true
+	}
+	if q.Get("days") == "all" {
+		return time.Time{}, false
+	}
 	n := 30
-	if v, err := strconv.Atoi(r.URL.Query().Get("days")); err == nil {
+	if v, err := strconv.Atoi(q.Get("days")); err == nil {
 		n = min(max(v, 1), 90)
 	}
 	first := time.Now().AddDate(0, 0, -n+1)
-	_, list := s.spentSince(time.Date(first.Year(), first.Month(), first.Day(), 0, 0, 0, 0, time.Local))
-	local := report{Days: s.stats.Days(s.M.Index.Root, n), Sessions: list}
-	if r.URL.Query().Get("local") != "" {
+	return time.Date(first.Year(), first.Month(), first.Day(), 0, 0, 0, 0, time.Local), false
+}
+
+func (s *Server) usageReport(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	from, hourly := reportSpan(q)
+	rep := s.stats.Report(s.M.Index.Root, from, hourly)
+	local := report{rep.Days, s.spentIn(rep.Sessions), rep.Previous, rep.First}
+	if q.Get("local") != "" {
 		reply(w, local)
 		return
 	}
+	q.Set("local", "1")
 	reps := make([]report, len(s.Peers)+1)
 	reps[0] = local
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	var wg sync.WaitGroup
 	for i, p := range s.Peers {
-		wg.Go(func() { s.fleet.get(ctx, p, "/api/usage/report?local=1&days="+strconv.Itoa(n), &reps[i+1]) })
+		wg.Go(func() { s.fleet.get(ctx, p, "/api/usage/report?"+q.Encode(), &reps[i+1]) })
 	}
 	wg.Wait()
 	var days [][]usage.Day
-	out := report{Sessions: []spentIn{}, Projects: []project{}}
+	out := report{Sessions: []spentIn{}}
 	for _, rep := range reps {
 		days = append(days, rep.Days)
 		out.Sessions = append(out.Sessions, rep.Sessions...)
+		out.Previous += rep.Previous
+		if rep.First != "" && (out.First == "" || rep.First < out.First) {
+			out.First = rep.First
+		}
 	}
 	out.Days = usage.MergeDays(days...)
-	byCwd := map[string]*project{}
-	for _, x := range out.Sessions {
-		p := byCwd[x.Cwd]
-		if p == nil {
-			p = &project{Cwd: x.Cwd}
-			byCwd[x.Cwd] = p
-		}
-		if !slices.Contains(p.Hosts, x.Host) {
-			p.Hosts = append(p.Hosts, x.Host)
-		}
-		p.Cost += x.Cost
-		p.Total += x.Total
-		p.Sessions++
-		if x.Last.After(p.Last) {
-			p.Last = x.Last
-		}
-	}
-	for _, p := range byCwd {
-		out.Projects = append(out.Projects, *p)
-	}
-	sort.Slice(out.Projects, func(i, j int) bool { return out.Projects[i].Cost > out.Projects[j].Cost })
 	byCost(out.Sessions)
-	out.Sessions = out.Sessions[:min(len(out.Sessions), reportSessions)]
 	reply(w, out)
 }
