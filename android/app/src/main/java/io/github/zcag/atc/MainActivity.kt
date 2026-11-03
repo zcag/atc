@@ -87,6 +87,7 @@ class MainActivity : Activity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         if (Build.VERSION.SDK_INT >= 33) setRecentsScreenshotEnabled(false)
         prefs = Prefs(this)
+        paint()
         bridge = Bridge(this)
         updater = Updater(this)
         route(intent)
@@ -227,7 +228,7 @@ class MainActivity : Activity() {
     }
 
     private fun veilUntil(w: WebView, selector: String) {
-        if (veil == null) veil = View(this).apply { setBackgroundColor(getColor(R.color.board)); setOnClickListener {} }
+        if (veil == null) veil = View(this).apply { setBackgroundColor(Look.palette(this@MainActivity).board); setOnClickListener {} }
             .also { root?.addView(it, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) }
         val giveUp = SystemClock.uptimeMillis() + 2500
         val lift = Runnable { veil?.let { root?.removeView(it) }; veil = null }
@@ -351,7 +352,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(pad, pad, pad, pad)
-            setBackgroundColor(if (resources.configuration.isNightModeActive) 0xFF151C27.toInt() else 0xFFDDE2EA.toInt())
+            setBackgroundColor(Look.palette(this@MainActivity).board)
             setOnClickListener {}
             addView(TextView(context).apply { text = "Can't reach atc"; textSize = 22f; gravity = Gravity.CENTER })
             addView(TextView(context).apply {
@@ -388,7 +389,18 @@ class MainActivity : Activity() {
             WindowInsetsCompat.CONSUMED
         }
         setContentView(page)
+        paint()
         showCall(Calls.state.value)
+    }
+
+    fun paint() {
+        val pal = Look.palette(this)
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(pal.board))
+        root?.setBackgroundColor(pal.board)
+        web?.setBackgroundColor(pal.board)
+        val bars = WindowCompat.getInsetsController(window, window.decorView)
+        bars.isAppearanceLightNavigationBars = !pal.dark
+        if (lightStatus != null) lightStatus = !pal.dark else bars.isAppearanceLightStatusBars = !pal.dark
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()

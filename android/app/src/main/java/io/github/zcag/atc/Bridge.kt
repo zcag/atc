@@ -37,6 +37,11 @@ class Bridge(private val a: MainActivity) : TextToSpeech.OnInitListener {
         Live.save(a, json)
         Targets.update(a, feed.targets().take(8))
     }
+    @JavascriptInterface fun setLook(json: String) {
+        Look.save(a, json)
+        a.runOnUiThread { a.paint() }
+        Live.render(a)
+    }
     @JavascriptInterface fun openExternal(url: String) { a.openOutside(url) }
     @JavascriptInterface fun copyImage(url: String) { a.copyImage(url) }
     @JavascriptInterface fun call() = a.runOnUiThread {

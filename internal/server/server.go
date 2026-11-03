@@ -220,6 +220,7 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("GET /api/call/voices", s.callVoices)
 	mux.HandleFunc("POST /api/call/voices", s.callVoices)
+	mux.HandleFunc("PUT /api/look", s.setLook)
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/voice/stt", s.stt)
@@ -315,7 +316,7 @@ func (s *Server) me() map[string]any {
 		hosts = append(hosts, p.Name)
 	}
 	return map[string]any{"host": s.Host, "home": home, "claudeTheme": theme, "hosts": hosts, "peers": s.fleet.statuses(), "callNumber": s.CallNumber,
-		"voice": map[string]bool{"stt": s.Voice.STT != "", "tts": s.Voice.TTS != "", "condense": s.Voice.LLM != ""}, "web": s.web, "call": s.CallLine != ""}
+		"voice": map[string]bool{"stt": s.Voice.STT != "", "tts": s.Voice.TTS != "", "condense": s.Voice.LLM != ""}, "web": s.web, "call": s.CallLine != "", "look": s.look()}
 }
 
 func webVersion(web fs.FS) string {
@@ -973,11 +974,11 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	defer func() { s.mu.Lock(); delete(s.subs, ch); s.mu.Unlock() }()
 	s.refresh()
 	send := func(b []byte) bool {
-		_, err := fmt.Fprintf(w, "event: sessions\ndata: %s\n\n", b)
+		_, err := w.Write(b)
 		fl.Flush()
 		return err == nil
 	}
-	if last != nil && !send(last) {
+	if last != nil && !send(frame("sessions", last)) {
 		return
 	}
 	ping := time.NewTicker(25 * time.Second)
@@ -993,6 +994,22 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 		case <-ping.C:
 			fmt.Fprint(w, ": ping\n\n")
 			fl.Flush()
+		}
+	}
+}
+
+func frame(event string, data []byte) []byte {
+	return []byte(fmt.Sprintf("event: %s\ndata: %s\n\n", event, data))
+}
+
+func (s *Server) broadcast(event string, data []byte) {
+	b := frame(event, data)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for ch := range s.subs {
+		select {
+		case ch <- b:
+		default:
 		}
 	}
 }
@@ -1044,16 +1061,12 @@ func (s *Server) poll() {
 		b, _ := json.Marshal(list)
 		s.mu.Lock()
 		s.lastAt = time.Now()
-		if !bytes.Equal(b, s.last) {
-			s.last = b
-			for ch := range s.subs {
-				select {
-				case ch <- b:
-				default:
-				}
-			}
-		}
+		changed := !bytes.Equal(b, s.last)
+		s.last = b
 		s.mu.Unlock()
+		if changed {
+			s.broadcast("sessions", b)
+		}
 	}
 }
 
@@ -1120,6 +1133,11 @@ type widgetFeed struct {
 	Type     string          `json:"type"`
 	At       time.Time       `json:"at"`
 	Sessions []widgetSession `json:"sessions"`
+	Look     Look            `json:"look"`
+}
+
+func (s *Server) widgetFeed(list []sessions.Session) widgetFeed {
+	return widgetFeed{"sessions", time.Now(), widgetList(list), s.look()}
 }
 
 type widgetSession struct {
@@ -1169,17 +1187,17 @@ func (s *Server) widget(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	reply(w, widgetFeed{"sessions", time.Now(), widgetList(list)})
+	reply(w, s.widgetFeed(list))
 }
 
 func (s *Server) syncWidgets(list []sessions.Session) {
-	ws := widgetList(list)
-	key := widgetKey(ws)
+	feed := s.widgetFeed(list)
+	key := widgetKey(feed.Sessions)
 	if key == s.widgetSent || time.Since(s.widgetAt) < 15*time.Second {
 		return
 	}
 	s.widgetSent, s.widgetAt = key, time.Now()
-	go s.Push.SendWidget(widgetFeed{"sessions", time.Now(), ws})
+	go s.Push.SendWidget(feed)
 }
 
 func states(list []sessions.Session) map[string]string {

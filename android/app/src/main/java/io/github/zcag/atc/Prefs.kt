@@ -22,6 +22,8 @@ class Prefs(c: Context) {
     var askedContacts by string()
     var askedCallLog by string()
     var askedPhoneState by string()
+    var look by string()
+    var palettes by string()
 
     fun pinFor(host: String?) = pin?.split(" ")?.takeIf { it[0] == host }?.get(1)
 

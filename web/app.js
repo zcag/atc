@@ -48,28 +48,65 @@ const cssColors = (scheme, names) => {
   return out;
 };
 const THEMES = { "": "atc", frappe: "Frappé and Dawn" };
+const NATIVE_COLORS = ["board", "strip", "line", "ink", "dim", "faint", "needs", "turn", "work"];
+const hexColor = (css) => {
+  const g = (hexColor.g ||= document.createElement("canvas").getContext("2d", { willReadFrequently: true }));
+  g.clearRect(0, 0, 1, 1);
+  g.fillStyle = css;
+  g.fillRect(0, 0, 1, 1);
+  const [r, gr, b, a] = g.getImageData(0, 0, 1, 1).data;
+  return "#" + [a, r, gr, b].map((v) => v.toString(16).padStart(2, "0")).join("");
+};
 const LOOK = {
   scheme: "auto",
   theme: "",
+  sheets: [],
   load() {
-    try { this.scheme = localStorage.getItem("atc.scheme") || "auto"; this.theme = localStorage.getItem("atc.theme") || ""; } catch {}
-    if (!(this.theme in THEMES)) this.theme = "";
-    for (const t of Object.keys(THEMES)) if (t) document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: `themes/${t}.css`, onload: () => this.apply() }));
+    try { this.take(JSON.parse(localStorage.getItem("atc.look"))); } catch {}
+    this.sheets = Object.keys(THEMES).filter(Boolean).map((t) => new Promise((done) =>
+      document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: `themes/${t}.css`, onload: done, onerror: done }))));
+    Promise.all(this.sheets).then(() => this.apply());
     matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => this.apply());
     this.apply();
   },
+  take(l) {
+    this.scheme = ["light", "dark"].includes(l?.scheme) ? l.scheme : "auto";
+    this.theme = l?.theme in THEMES ? l.theme : "";
+  },
+  adopt(l) {
+    if (!l || (l.scheme === this.scheme && (l.theme || "") === this.theme)) return;
+    this.take(l);
+    this.apply();
+    this.restyle();
+  },
   set(k, v) {
     this[k] = v;
-    try { v && v !== "auto" ? localStorage.setItem(`atc.${k}`, v) : localStorage.removeItem(`atc.${k}`); } catch {}
     this.apply();
+    this.restyle();
+    api("/api/look", { method: "PUT", body: { scheme: this.scheme, theme: this.theme } }).catch(() => {});
+  },
+  restyle() {
     for (const d of DOCK.values()) d.term.options.theme = termTheme();
+  },
+  palettes() {
+    const r = document.documentElement, keep = r.dataset.theme;
+    const out = {};
+    for (const t of Object.keys(THEMES)) {
+      if (t) r.dataset.theme = t; else delete r.dataset.theme;
+      out[t || "atc"] = Object.fromEntries(["light", "dark"].map((sc) => [sc, Object.fromEntries(cssColors(sc, NATIVE_COLORS).map((c, i) => [NATIVE_COLORS[i], hexColor(c)]))]));
+    }
+    if (keep) r.dataset.theme = keep; else delete r.dataset.theme;
+    return out;
   },
   apply() {
     const r = document.documentElement;
     if (this.scheme === "auto") delete r.dataset.scheme; else r.dataset.scheme = this.scheme;
     if (this.theme) r.dataset.theme = this.theme; else delete r.dataset.theme;
+    try { localStorage.setItem("atc.look", JSON.stringify({ scheme: this.scheme, theme: this.theme })); } catch {}
     for (const m of document.querySelectorAll('meta[name="theme-color"]'))
       m.content = cssColors(this.scheme !== "auto" ? this.scheme : m.media.includes("dark") ? "dark" : "light", ["board"])[0];
+    if (window.AtcApp?.setLook) Promise.all(this.sheets).then(() =>
+      window.AtcApp.setLook(JSON.stringify({ look: { scheme: this.scheme, theme: this.theme || "atc" }, palettes: this.palettes() })));
   },
 };
 LOOK.load();
@@ -201,6 +238,7 @@ function App() {
       setLive(steady(JSON.parse(e.data) || []));
       setUp(true);
     });
+    es.addEventListener("look", (e) => LOOK.adopt(JSON.parse(e.data)));
     es.onerror = () => {
       setUp(false);
       api("/api/me").catch((e) => e.auth && setMe(null));
@@ -383,6 +421,7 @@ function App() {
   if (me === null) return html`<${Login} onDone=${setMe} />`;
   HOME = me.home || HOME;
   CLAUDE_THEME = me.claudeTheme || CLAUDE_THEME;
+  LOOK.adopt(me.look);
   MULTI = (me.hosts || []).length > 1;
   HERE = me.host || "";
   VOICE = me.voice || {};

@@ -7,6 +7,8 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.res.ColorStateList
+import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.service.quicksettings.TileService
@@ -48,6 +50,7 @@ object Live {
 
     private fun store(c: Context, json: String): Boolean {
         Feed.parse(json) ?: return false
+        Look.fromFeed(c, json)
         val p = Prefs(c)
         p.feed = json
         p.feedAt = "${System.currentTimeMillis()}"
@@ -122,6 +125,16 @@ object Live {
         setViewVisibility(R.id.busy, if (busy) View.VISIBLE else View.GONE)
         setViewVisibility(R.id.refresh_box, if (narrow && !busy) View.GONE else View.VISIBLE)
         setViewVisibility(R.id.body, if (compact) View.GONE else View.VISIBLE)
+        val pal = Look.palette(c)
+        if (themed) {
+            tint(android.R.id.background, "setBackgroundTintList", pal.widgetBg)
+            tint(R.id.mic, "setBackgroundTintList", pal.work)
+            tint(R.id.mic, "setImageTintList", pal.onWork)
+            tint(R.id.refresh, "setImageTintList", pal.faint)
+            tint(R.id.busy, "setIndeterminateTintList", pal.faint)
+            listOf(R.id.name to pal.ink, R.id.summary to pal.dim, R.id.message_title to pal.ink, R.id.message_body to pal.dim)
+                .forEach { (id, color) -> setTextColor(id, color) }
+        }
 
         val message = when {
             p.server == null -> "Open atc to connect" to "Enter your server's address in the app."
@@ -152,13 +165,20 @@ object Live {
 
         setPendingIntentTemplate(R.id.list, PendingIntent.getActivity(c, 4, open, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
         val items = RemoteViewsCompat.RemoteCollectionItems.Builder().setHasStableIds(true).setViewTypeCount(1)
-        feed.sessions.forEach { items.addItem(it.sid.hashCode().toLong(), row(c, it, now, feed.multiHost, live = !stale)) }
+        feed.sessions.forEach { items.addItem(it.sid.hashCode().toLong(), row(c, it, now, feed.multiHost, live = !stale, pal)) }
         RemoteViewsCompat.setRemoteAdapter(c, this, widget, R.id.list, items.build())
     }
 
-    private fun row(c: Context, r: Feed.Row, now: Long, multiHost: Boolean, live: Boolean) = RemoteViews(c.packageName, R.layout.widget_row).apply {
+    private fun row(c: Context, r: Feed.Row, now: Long, multiHost: Boolean, live: Boolean, pal: Palette) = RemoteViews(c.packageName, R.layout.widget_row).apply {
         setTextViewText(R.id.title, r.title)
-        setImageViewResource(R.id.edge, when (r.state) {
+        if (themed) {
+            setImageViewResource(R.id.edge, R.drawable.widget_edge)
+            tint(R.id.edge, "setImageTintList", when (r.state) { Feed.NEEDS -> pal.needs; Feed.TURN -> pal.turn; else -> pal.work })
+            tint(R.id.card, "setBackgroundTintList", pal.rowLine)
+            tint(R.id.fill, "setBackgroundTintList", pal.strip)
+            listOf(R.id.title to pal.ink, R.id.clock to pal.dim, R.id.detail to pal.dim, R.id.host to pal.faint)
+                .forEach { (id, color) -> setTextColor(id, color) }
+        } else setImageViewResource(R.id.edge, when (r.state) {
             Feed.NEEDS -> R.drawable.widget_edge_needs
             Feed.TURN -> R.drawable.widget_edge_turn
             else -> R.drawable.widget_edge_work
@@ -172,6 +192,12 @@ object Live {
         setViewVisibility(R.id.host, if (host != null) View.VISIBLE else View.GONE)
         if (host != null) setTextViewText(R.id.host, " · $host")
         setOnClickFillInIntent(R.id.card, Intent().putExtra(MainActivity.EXTRA_PATH, "/#/s/${r.key}"))
+    }
+
+    private val themed get() = Build.VERSION.SDK_INT >= 31
+
+    private fun RemoteViews.tint(id: Int, method: String, color: Int) {
+        if (Build.VERSION.SDK_INT >= 31) setColorStateList(id, method, ColorStateList.valueOf(color))
     }
 
     private fun activity(c: Context, code: Int, i: Intent) =

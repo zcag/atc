@@ -109,6 +109,20 @@
   --fs-7xl: calc(32px * var(--text-scale));
   --fs-hero: calc(50px * var(--text-scale));
 
+  --density: 1;
+  --sp-1: calc(2px * var(--density));
+  --sp-2: calc(4px * var(--density));
+  --sp-3: calc(6px * var(--density));
+  --sp-4: calc(8px * var(--density));
+  --sp-5: calc(10px * var(--density));
+  --sp-6: calc(12px * var(--density));
+  --sp-7: calc(14px * var(--density));
+  --sp-8: calc(16px * var(--density));
+  --sp-9: calc(18px * var(--density));
+  --sp-10: calc(20px * var(--density));
+  --sp-11: calc(24px * var(--density));
+  --sp-12: calc(32px * var(--density));
+
   --r-xs: 3px;
   --r-sm: 5px;
   --r-md: 8px;

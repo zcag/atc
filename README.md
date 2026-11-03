@@ -942,7 +942,8 @@ Every color, size, radius, shadow and timing in the web UI is a token in `web/to
 
 - **Colors** carry both modes in one line, `--board: light-dark(#dde2ea, #151c27)`, so light and
   dark never drift apart. A number that differs by mode reads `--dark` (0 or 1).
-- **Type** is a scale, `--fs-3xs` to `--fs-hero`, all multiplied by `--text-scale`. **Radii** are
+- **Type** is a scale, `--fs-3xs` to `--fs-hero`, all multiplied by `--text-scale`. **Spacing**
+  (padding, margins, gaps) is `--sp-1` (2px) to `--sp-12` (32px), multiplied by `--density`. **Radii** are
   `--r-xs` to `--r-pill`, **shadows** `--shadow-1/2/3`, `--shadow-pop/float/modal/sheet` and
   `--lift`, **motion** `--t-fast/--t/--t-slow/--t-slower` with `--ease` and `--ease-pop`.
 - **Status** colors (`--needs --turn --work --live --stop --hot`) reach any element with a state
@@ -954,10 +955,17 @@ Every color, size, radius, shadow and timing in the web UI is a token in `web/to
   the scheme Claude Code itself uses (`claudeTheme` in `/api/me`).
 
 Light, dark or the system's setting, and the theme, are picked in the command palette
-(Appearance), per device. A theme is a file in `web/themes/<name>.css` that overrides tokens under
+(Appearance). It is one setting for every device: atc keeps it in `look.json` in its config dir
+(`PUT /api/look`, read in `/api/me`), tells open pages over `/api/events`, and passes it on to its
+peers, so desktop's change reaches laptop's atc too. A page keeps the last one it saw to draw the
+first frame before `/api/me` answers.
+
+A theme is a file in `web/themes/<name>.css` that overrides tokens under
 `:root[data-theme="<name>"]`, plus its name in `THEMES` in `app.js`; `frappe.css` (Catppuccin
-Frappé dark, Rosé Pine Dawn light) is the example. The Android app's native colors
-(`android/.../res/values*/`) are a separate copy.
+Frappé dark, Rosé Pine Dawn light) is the example. Adding one needs no new APK: the page hands the
+Android app every theme's colors, light and dark (`AtcApp.setLook`), and the app paints its window,
+bars and home-screen widget from them, following the look that arrives with the widget feed
+(Android 12 and later; older versions keep the built-in colors).
 
 ## Notes
 
