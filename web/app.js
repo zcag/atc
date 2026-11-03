@@ -326,8 +326,6 @@ function App() {
         e.preventDefault(); location.hash = "#/assist";
       } else if (e.key === "n") {
         e.preventDefault(); setCreating(location.hash === BACKLOG ? { later: true } : true);
-      } else if (e.key === "u") {
-        e.preventDefault(); location.hash === USAGE ? closeUsage() : openUsage();
       } else if (e.key === "p") {
         e.preventDefault(); location.hash === PAGES ? closePages() : (location.hash = PAGES);
       } else if (e.key === "b") {
@@ -437,7 +435,6 @@ function App() {
             <dt>a</dt><dd>Assistant: ask about or drive your sessions</dd>
             <dt>t</dt><dd>Talk: a voice session with Claude</dd>
             <dt>/</dt><dd>Search earlier sessions</dd>
-            <dt>u</dt><dd>Usage: limits, spend by day, projects and sessions</dd>
             <dt>p</dt><dd>Pages: everything your sessions showed you</dd>
             <dt>b</dt><dd>Backlog: work put aside per project, to start later</dd>
             <dt>[ / ]</dt><dd>Previous or next project tab</dd>
@@ -3425,7 +3422,7 @@ function BrowserView({ p, say }) {
       <div class="bstage" ref=${stage}>
         ${frame
           ? html`<img ref=${img} src=${`data:image/jpeg;base64,${frame.data}`} alt=${info?.title || tab.title} draggable="false"
-              onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${() => (drag.current = null)} onWheel=${wheel} onContextMenu=${(e) => e.preventDefault()} />`
+              onMouseDown=${(e) => e.preventDefault()} onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${() => (drag.current = null)} onWheel=${wheel} onContextMenu=${(e) => e.preventDefault()} />`
           : html`<p class="sub">${gone ? "This tab is closed." : "Connecting to the tab…"}</p>`}
         <textarea ref=${keys} class="bkeys" aria-label="Type into the page" autocapitalize="off" autocomplete="off" spellcheck="false" onKeyDown=${key} onInput=${text}></textarea>
       </div>
@@ -5334,7 +5331,7 @@ function Palette({ live, sel, say, home, actions, onClose }) {
   add("Actions", "Backlog", { glyph: "☰", hint: "b", kw: "later todo tasks ideas", run: run(() => (location.hash = BACKLOG)) });
   add("Actions", "New backlog item", { glyph: "+", kw: "later todo task add put", run: run(() => actions.create({ later: true })) });
   add("Actions", "All pages", { glyph: "▣", hint: "p", kw: "shown html reports gallery", run: run(() => (location.hash = PAGES)) });
-  add("Actions", "Usage and limits", { glyph: "%", hint: "u", kw: "tokens cost week", run: run(actions.usage) });
+  add("Actions", "Usage and limits", { glyph: "%", kw: "tokens cost week", run: run(actions.usage) });
   add("Actions", "Keyboard shortcuts", { glyph: "?", hint: "?", kw: "help keys", run: run(actions.help) });
   if (q.length > 1) for (const d of dirs.slice(0, 60)) add("New session in", tilde(d.path), { glyph: "+", kw: "folder", run: run(() => actions.create({ dir: d.path })) });
 
