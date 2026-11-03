@@ -110,7 +110,10 @@ func Open(path string) (*Store, error) {
 }
 
 func Name(s string) string {
-	s = strings.TrimSuffix(filepath.Base(s), filepath.Ext(s))
+	return Slug(strings.TrimSuffix(filepath.Base(s), filepath.Ext(s)))
+}
+
+func Slug(s string) string {
 	return strings.Trim(nameRe.ReplaceAllString(strings.ToLower(s), "-"), "-")
 }
 

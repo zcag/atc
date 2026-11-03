@@ -282,6 +282,7 @@ func (c *Client) Call(req map[string]any) (string, error) {
 func (c *Client) Show(sid string, req map[string]any) (r struct {
 	Page    pages.Page `json:"page"`
 	Created bool       `json:"created"`
+	Link    string     `json:"link"`
 }, err error) {
 	return r, c.do("POST", "/api/sessions/"+url.PathEscape(sid)+"/pages", req, &r)
 }

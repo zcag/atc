@@ -60,8 +60,8 @@ a hidden column or truncated field is not.
 
 Give every section of an HTML page an id (<section id="towel">), so it can be linked
 to: a page's address is name#id. --at uses it, atc notify --page picks#towel opens the
-page there, and a link from another page or a message goes to
-/#/p/<session or @agent>/<name>#<id> (https://atc.example/#/p/@shopping/picks#towel);
+page there, and a link from another page or a message is the Link atc show prints,
+/#/p/<session title or @agent>/<name>#<id> (https://atc.example/#/p/@shopping/picks#towel);
 inside the page itself it is plain href="#towel". A section the page draws later
 from atc.state is found once it appears, when the page loads /atc.js.
 
@@ -262,6 +262,9 @@ func show(args []string) error {
 		verb = "Updated"
 	}
 	fmt.Printf("%s %q (%s) in atc, live from %s.\n", verb, cmp.Or(p.Title, p.Name), p.Ref(), tilde(p.Path))
+	if strings.HasPrefix(r.Link, "http") {
+		fmt.Println("Link:", r.Link)
+	}
 	if r.Created {
 		fmt.Println("Edit the file to update it; the user's view redraws on every change.")
 	}
