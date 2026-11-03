@@ -9,9 +9,8 @@ class Palette(
     val dark: Boolean, val board: Int, val strip: Int, val line: Int,
     val ink: Int, val dim: Int, val faint: Int, val needs: Int, val turn: Int, val work: Int,
 ) {
-    val widgetBg get() = if (dark) board else ColorUtils.blendARGB(board, strip, .45f)
-    val rowLine get() = if (dark) line else ColorUtils.blendARGB(line, strip, .4f)
-    val onWork get() = if (ColorUtils.calculateLuminance(work) > .4) 0xFF0B1220.toInt() else Color.WHITE
+    val onNeeds get() = ColorUtils.blendARGB(needs, Color.BLACK, .82f)
+    val lineStrong get() = ColorUtils.blendARGB(line, ink, .35f)
 }
 
 object Look {

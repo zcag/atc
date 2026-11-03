@@ -115,6 +115,10 @@
             android:name=".Reply"
             android:exported="false" />
 
+        <receiver
+            android:name=".Answer"
+            android:exported="false" />
+
         <activity
             android:name=".CallActivity"
             android:exported="false"
