@@ -122,7 +122,6 @@ button { cursor: pointer; }
 pre .copy { position: absolute; top: 8px; right: 8px; padding: var(--sp-2) var(--sp-5); border: 0; border-radius: var(--r-md); font: 500 var(--fs-2xs) var(--sans); color: var(--dim); background: var(--strip-hi); box-shadow: 0 0 0 1px var(--line); opacity: 0; transition: opacity var(--t); }
 pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 @media (hover: none) { pre .copy { opacity: .8; } }
-.askopts .btn small { display: none; }
 
 .blank { flex: 1; display: grid; place-items: center; color: var(--dim); padding: var(--sp-11); text-align: center; }
 
@@ -362,17 +361,6 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .sumbar .quick button:disabled { opacity: .5; cursor: default; }
 @media (pointer: coarse) { .sumbar .quick button { padding: var(--sp-4) var(--sp-7); font-size: var(--fs-xl); } }
 
-.askbar { position: relative; flex: none; display: flex; flex-direction: column; gap: var(--sp-5); padding: var(--sp-5) var(--sp-6) var(--sp-6) var(--sp-8); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--needs) 9%, var(--board)); }
-.askbar::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--needs); }
-.askq { display: flex; flex-direction: column; gap: var(--sp-4); }
-.asktext { margin: 0; font-size: var(--fs-xl); font-weight: 500; line-height: 1.4; }
-.asktext code { font-size: var(--fs-md); overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; margin-top: var(--sp-2); }
-.askopts { display: flex; flex-wrap: wrap; gap: var(--sp-3); }
-.askopts .btn { padding: var(--sp-3) var(--sp-6); font-size: var(--fs-md); }
-.askopts .askskip { margin-left: auto; color: var(--dim); }
-.askopts .btn.on { border-color: var(--work); box-shadow: inset 0 0 0 1px var(--work); }
-.askin { flex: 1 1 180px; min-width: 0; padding: var(--sp-3) var(--sp-5); font: inherit; font-size: var(--fs-md); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--board); color: inherit; }
-@media (pointer: coarse) { .askopts .btn { padding: var(--sp-5) var(--sp-7); font-size: var(--fs-xl); } }
 
 .veil.sumveil { place-items: end stretch; padding: 0; }
 .sumsheet {

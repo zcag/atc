@@ -743,7 +743,7 @@ function BayPeek({ bay, live, say, onClose }) {
   const row = (s) => html`<div class="pk ${s.state}" key=${s.sessionId}>
     <div class="row"><${StateBlock} s=${s} /><a class="ti" href=${`#/s/${keyOf(s)}`} onClick=${(e) => { e.preventDefault(); open(s); }}>${s.title || "Untitled"}</a><span class="ago">${every && html`<span class="bayn">${bayOf(s)}</span>`}${ago(s)}</span></div>
     <p class="what">${s.state === "working" ? doing(s) : headline(s)}</p>
-    ${s.asks?.length > 0 && html`<div class="ask"><${AskBar} s=${s} say=${say} /></div>`}
+    ${s.asks?.length > 0 && html`<${Ask} compact=${!phone} sheet=${phone} s=${s} a=${s.asks[0]} say=${say} />`}
     ${replyable(s) && html`<div class="ask"><${CardReplies} s=${s} /></div>`}
   </div>`;
   const body = html`
@@ -900,7 +900,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
           <p class="facts">${[engineTag(s) || (s.model && model(s.model)), s.permissionMode === "bypassPermissions" ? "no permission prompts" : s.permissionMode, tilde(s.cwd || "")].filter(Boolean).join(", ")}</p>
         </div>
         <div class="ax">
-          ${s.asks?.length > 0 && html`<${AskBar} s=${s} say=${say} />`}
+          ${s.asks?.length > 0 && html`<${Ask} compact s=${s} a=${s.asks[0]} say=${say} />`}
           ${replyable(s) && html`<${CardReplies} s=${s} />`}
           <div class="acts"><button class="btn" onClick=${() => go(keyOf(s))}>Open</button>
             ${s.shown?.length > 0 && html`<button class="btn" onClick=${() => (location.hash = pageLink(keyOf(s), s.shown[0].name))}>${pageTitle(s.shown[0])}</button>`}</div>
@@ -1992,7 +1992,7 @@ function Session({ s, say, live, panes, togglePane }) {
     </header>
     <div class="sbody ${panes?.state && !phoneNow ? "withstate" : ""}">
     <div class="smain">
-    ${mode !== "chat" && !sideBySide && html`<${AskBar} s=${s} say=${say} />`}
+    ${mode !== "chat" && !sideBySide && s.asks?.length > 0 && html`<div class="askstrip"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}
     ${mode !== "chat" && !sideBySide && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
     ${mode === "page" && shown.length > 0
       ? (() => {
@@ -2100,56 +2100,6 @@ function Replies({ list, pick, busy }) {
   return html`<div class="quick" role="group" aria-label="Quick replies">
     ${list.map((t) => html`<button disabled=${busy} title=${`Send “${t}”`} onClick=${() => pick(t)}>${t}</button>`)}
   </div>`;
-}
-
-function AskBar({ s, say }) {
-  const a = s.asks?.[0];
-  const [picked, setPicked] = useState([]);
-  const [typed, setTyped] = useState([]);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { setPicked([]); setTyped([]); setBusy(false); }, [a?.id]);
-  if (!a) return null;
-  const send = (body) => {
-    setBusy(true);
-    api(`/api/sessions/${s.sessionId}/asks/${a.id}`, { method: "POST", body }).catch((e) => { say(e.message); setBusy(false); });
-  };
-  if (a.permission) return html`
-    <div class="askbar" role="group" aria-label="Permission request">
-      <p class="asktext">${s.harness || "Claude"} wants to use <b>${a.permission}</b>${a.patterns?.length > 0 && html` <code title=${a.patterns.join(" ")}>${a.patterns.join(" ")}</code>`}</p>
-      <div class="askopts">
-        <button class="btn primary" disabled=${busy} onClick=${() => send({ reply: "once" })}>${s.harness ? "Allow once" : "Allow"}</button>
-        ${s.harness && html`<button class="btn" disabled=${busy} onClick=${() => send({ reply: "always" })}>Always allow</button>`}
-        <button class="btn askskip" disabled=${busy} onClick=${() => send({ reject: true })}>Reject</button>
-      </div>
-    </div>`;
-  const qs = a.questions || [];
-  const oneTap = qs.length === 1 && !qs[0].multiple && !qs[0].custom;
-  const dismiss = html`<button class="btn askskip" disabled=${busy} onClick=${() => send({ reject: true })}>Dismiss</button>`;
-  const answers = () => qs.map((_, i) => [...(picked[i] || []), ...(typed[i]?.trim() ? [typed[i].trim()] : [])]);
-  const choose = (i, label) => {
-    if (oneTap) return send({ answers: [[label]] });
-    const cur = picked[i] || [];
-    const next = qs[i].multiple ? (cur.includes(label) ? cur.filter((l) => l !== label) : [...cur, label]) : cur.includes(label) ? [] : [label];
-    setPicked(Object.assign([...picked], { [i]: next }));
-  };
-  return html`
-    <div class="askbar" role="group" aria-label="Question">
-      ${qs.map((q, i) => html`
-        <div class="askq">
-          <p class="asktext">${q.question}</p>
-          <div class="askopts">
-            ${q.options.map((o) => html`<button class="btn ${picked[i]?.includes(o.label) ? "on" : ""}" disabled=${busy} title=${o.description || ""}
-              aria-pressed=${oneTap ? null : !!picked[i]?.includes(o.label)} onClick=${() => choose(i, o.label)}><span class="ol">${o.label}</span>${o.description && o.description !== o.label && html`<small>${o.description}</small>`}</button>`)}
-            ${q.custom && html`<input class="askin" placeholder="Or type an answer" value=${typed[i] || ""} disabled=${busy}
-              onInput=${(e) => setTyped(Object.assign([...typed], { [i]: e.target.value }))} />`}
-            ${oneTap && dismiss}
-          </div>
-        </div>`)}
-      ${!oneTap && html`<div class="askopts">
-        <button class="btn primary" disabled=${busy || !answers().every((x) => x.length)} onClick=${() => send({ answers: answers() })}>Send</button>
-        ${dismiss}
-      </div>`}
-    </div>`;
 }
 
 function SummaryParts({ x }) {
@@ -5430,7 +5380,7 @@ function AnsweredLine({ q, cmd, options, chosen = [], line, state }) {
   </div>`;
 }
 
-function Ask({ s, a, say, keyRef, onType }) {
+function Ask({ s, a, say, keyRef = { current: null }, onType, compact, sheet }) {
   useSync();
   const spec = askSpec(s, a), rec = ANSWERS.get(ansKey(s.sessionId, a.id));
   const locked = rec && rec.st !== "failed";
@@ -5454,9 +5404,25 @@ function Ask({ s, a, say, keyRef, onType }) {
   useEffect(() => () => { keyRef.current = null; }, []);
   const chosen = (qi, i) => (one ? locked && rec.i === i + 1 : (picked[qi] || []).includes(i));
   const waited = ago(s);
-  return html`<div class="ask rows ${locked ? `st-${rec.st}` : "focus"}" id="pending-ask" tabindex="-1" data-ask role="group" aria-label=${spec.perm ? "Permission request" : "Question"}>
-    <div class="who2"><span>Waiting on you${waited && waited !== "now" ? `, ${waited}` : ""}${spec.perm ? ": run a command" : ""}</span>
-      ${!spec.perm && !locked && html`<button class="kb" onClick=${() => go({ reject: true }, 0, "dismissed", spec.qs[0]?.text)}>Dismiss</button>`}</div>
+  const dismiss = () => go({ reject: true }, 0, "dismissed", spec.qs[0]?.text);
+  if (compact) return html`<div class="ask compact ${locked ? `st-${rec.st}` : ""}" data-ask role="group" aria-label=${spec.perm ? "Permission request" : "Question"}
+    onKeyDown=${(e) => { if (/^[1-9]$/.test(e.key) && !e.target.matches("input") && keyRef.current) { e.preventDefault(); e.stopPropagation(); keyRef.current(+e.key); } }}>
+    ${spec.qs.map((q, qi) => html`<div class="aqb">
+      <div class="aq">${q.text}</div>
+      ${q.cmd && html`<code class="cmd">${q.cmd}</code>`}
+      <div class="acts" role="group" aria-label="Answers">
+        ${q.options.map((o, i) => html`<button class="btn ${spec.perm && i === 0 && !rec ? "primary" : ""} ${chosen(qi, i) ? "ch" : ""}" disabled=${locked && !chosen(qi, i)}
+          aria-pressed=${one ? null : chosen(qi, i)} aria-keyshortcuts=${i < 9 ? String(i + 1) : null} title=${o.note} onClick=${() => pick(qi, i)}><kbd aria-hidden="true">${i + 1}</kbd>${o.label}</button>`)}
+        ${q.custom && !locked && html`<input class="atype" value=${typed[qi] || ""} placeholder="Or type an answer" aria-label="Or type an answer"
+          onInput=${(e) => setTyped(Object.assign([...typed], { [qi]: e.target.value }))}
+          onKeyDown=${(e) => { if (e.key === "Enter" && one && typed[qi]?.trim()) go({ answers: [[typed[qi].trim()]] }, 0, typed[qi].trim(), q.text); }} />`}
+      </div></div>`)}
+    ${!one && !locked && html`<div class="acts"><button class="btn primary" disabled=${!ready} onClick=${sendAll}>Send answers</button></div>`}
+    ${rec && html`<${AskState} rec=${rec} host=${s.host} retry=${() => answerAsk(s, a, rec)} />`}
+  </div>`;
+  return html`<div class="ask rows ${locked ? `st-${rec.st}` : "focus"}" id=${sheet ? null : "pending-ask"} tabindex="-1" data-ask role="group" aria-label=${spec.perm ? "Permission request" : "Question"}>
+    ${!sheet && html`<div class="who2"><span>Waiting on you${waited && waited !== "now" ? `, ${waited}` : ""}${spec.perm ? ": run a command" : ""}</span>
+      ${!spec.perm && !locked && html`<button class="kb" onClick=${dismiss}>Dismiss</button>`}</div>`}
     ${spec.qs.map((q, qi) => html`<div class="aqb">
       <div class="aq ${spec.perm ? "ui" : ""}">${q.text}</div>
       ${q.cmd && html`<code class="cmd">${q.cmd}</code>`}
@@ -5464,7 +5430,7 @@ function Ask({ s, a, say, keyRef, onType }) {
         ${q.options.map((o, i) => html`<button class="opt ${chosen(qi, i) ? "ch" : ""}" disabled=${locked && !chosen(qi, i)} aria-disabled=${locked ? "true" : null}
           aria-pressed=${one ? null : chosen(qi, i)} aria-keyshortcuts=${i < 9 ? String(i + 1) : null} onClick=${() => pick(qi, i)}>
           <kbd aria-hidden="true">${i + 1}</kbd><span><span class="lb">${o.label}</span>${o.note && html`<span class="nt">${o.note}</span>`}</span></button>`)}
-        ${!spec.perm && !locked && (one ? html`<button class="opt type" onClick=${onType}><kbd aria-hidden="true"></kbd><span><span class="lb">Or type an answer</span></span></button>`
+        ${!spec.perm && !locked && (one ? onType && html`<button class="opt type" onClick=${onType}><kbd aria-hidden="true"></kbd><span><span class="lb">Or type an answer</span></span></button>`
           : q.custom && html`<label class="opt type"><kbd aria-hidden="true"></kbd><input value=${typed[qi] || ""} placeholder="Or type an answer" onInput=${(e) => setTyped(Object.assign([...typed], { [qi]: e.target.value }))} /></label>`)}
       </div></div>`)}
     ${!one && !locked && html`<div class="acts"><button class="btn prime" disabled=${!ready} onClick=${sendAll}>Send answers</button></div>`}
