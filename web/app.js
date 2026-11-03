@@ -201,12 +201,12 @@ function App() {
   const route = useRoute();
   const [stale, setStale] = useState(null);
   const [starting, setStarting] = useState(false);
-  const [view, setViewRaw] = useState(() => ({ list: "triage", rail: false, ...stored(VIEW, {}) }));
-  const setView = (v) => { setViewRaw(v); store(VIEW, v); };
-  const [panes, setPanesRaw] = useState(() => ({ rail: true, ...stored("atc.panes", {}) }));
+  const [panes, setPanesRaw] = useState(() => ({ rail: true, index: true, ...stored("atc.panes", {}) }));
+  const rememberPast = useCallback((list) => setPast((p) => Object.fromEntries([...Object.entries(p), ...list.map((s) => [s.sessionId, s])])), []);
+  const [hist, moreHist, canMore] = useBayHistory(!!me, rememberPast);
   const togglePane = (k) => setPanesRaw((p) => { const n = { ...p, [k]: !p[k] }; store("atc.panes", n); return n; });
   const only = useBay();
-  SET_LIST = (k) => setView({ ...view, list: k });
+  const wide = useWide();
   useNow(30000);
 
   useEffect(() => {
@@ -238,6 +238,8 @@ function App() {
       setUp(true);
     });
     es.addEventListener("look", (e) => LOOK.adopt(JSON.parse(e.data)));
+    es.addEventListener("bays", (e) => adoptBays(JSON.parse(e.data)));
+    loadBays();
     es.onerror = () => {
       setUp(false);
       api("/api/me").catch((e) => e.auth && setMe(null));
@@ -322,12 +324,14 @@ function App() {
     }
   }, [live]);
 
+  const bayFor = useRef(null);
   useEffect(() => {
     if (!live) return;
     const x = route && live.find((v) => v.id === route || v.sessionId === route);
     if (!seenMap() || x) markSeen(live, x?.sessionId);
     const b = bayOf(x);
-    if (b) { BAY.set(b); rememberBay(b, { sid: x.sessionId, view: "session" }); }
+    if (b && bayFor.current !== x.sessionId) { bayFor.current = x.sessionId; BAY.set(b); rememberBay(b, { sid: x.sessionId, view: "session" }); }
+    if (!route) bayFor.current = null;
   }, [live, route]);
 
   const warmed = useRef(false);
@@ -365,12 +369,11 @@ function App() {
 
   const ordered = arrange(live);
   const keys = useRef({});
-  keys.current = { ordered, route, cursor, creating, list: view.list, live, togglePane };
+  keys.current = { ordered, route, cursor, creating, live, togglePane };
   useEffect(() => {
     const step = (from, d) => {
       const k = keys.current;
-      const shown = [...document.querySelectorAll(".board [data-sid]:not(.row)")].map((el) => k.ordered.find((x) => x.sessionId === el.dataset.sid)).filter(Boolean);
-      const list = k.list === "classic" ? k.ordered : [...new Set(shown)];
+      const list = [...new Set([...document.querySelectorAll(".bview [data-sid], .rail [data-sid]")].map((el) => k.ordered.find((x) => x.sessionId === el.dataset.sid)).filter(Boolean))];
       if (!list.length) return null;
       const i = list.findIndex((x) => keyOf(x) === from || x.sessionId === from);
       return list[Math.max(0, Math.min(list.length - 1, i < 0 ? (d > 0 ? 0 : list.length - 1) : i + d))];
@@ -415,6 +418,7 @@ function App() {
           next ? go(keyOf(next)) : say("Nothing needs you.");
         },
         "[": () => k.route && k.togglePane("rail"),
+        p: () => !k.route && k.togglePane("index"),
         ",": () => (location.hash === SETTINGS ? closeSettings() : (location.hash = SETTINGS)),
         "/": () => setPalette(true),
         "?": () => setHelp((h) => !h),
@@ -453,7 +457,7 @@ function App() {
   const screen = route ? "session" : pagesHome ? "pages" : "board";
   const bays = baysOf(live, only);
   const inBay = (live || []).filter((x) => x.state !== "stopped" && (only ? bayOf(x) === only : !homeless(x))).length;
-  const remember = (list) => setPast((p) => Object.fromEntries([...Object.entries(p), ...list.map((s) => [s.sessionId, s])]));
+  const remember = rememberPast;
   const openFromUsage = async (x) => {
     if (!all.some((s) => s.sessionId === x.sessionId) && !past[x.sessionId])
       remember((await api(`/api/history?q=${encodeURIComponent(x.title)}&limit=50`).catch(() => [])).filter((s) => s.sessionId === x.sessionId));
@@ -463,19 +467,20 @@ function App() {
   return html`
     <div class="app">
     <${BayBar} bays=${bays} only=${only} view=${screen} panes=${panes} togglePane=${togglePane} up=${up} down=${down} live=${live} />
-    <div class="shell ${route ? "open" : ""} ${route && !panes.rail ? "norail" : ""}">
+    ${!route ? html`<div class="shell boardv"><${BoardView} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} say=${say} index=${panes.index && wide} /></div>` : html`
+    <div class="shell open ${!panes.rail ? "norail" : ""}">
       <aside class="side">
         <div class="ph"><b>${only || "Every bay"}</b><span>${plural(inBay, "session")}</span>
           <span class="r"><button class="kb" onClick=${() => setCreating(true)} aria-keyshortcuts="+">New session <kbd aria-hidden="true">+</kbd></button></span></div>
-        <${Board} live=${live} runs=${runs} agents=${agents} say=${say} sel=${sel} cursor=${cursor} onPast=${remember} mode=${view.list} />
+        <${RailList} live=${live} hist=${hist} only=${only} sel=${sel} cursor=${cursor} />
         <${UsageFoot} limits=${limits} onOpen=${openUsage} />
       </aside>
       <main class="main">
         ${sel
           ? html`<${Session} key=${sel.sessionId} s=${sel} say=${say} live=${all} panes=${panes} togglePane=${togglePane} />`
-          : html`<div class="blank">${starting || (route && !live) ? "Opening…" : route ? "This session is gone. Pick another from the list." : "Pick a session, or start a new one."}</div>`}
+          : html`<div class="blank">${starting || !live ? "Opening…" : "This session is gone. Pick another from the list."}</div>`}
       </main>
-    </div>
+    </div>`}
     <${Console} hub=${hub} agents=${agents} runs=${runs} onTalk=${() => talk(false, false)} onKeys=${() => setHelp(true)} />
     <${TabBar} view=${screen} assisting=${sel?.kind === "hub"} onTalk=${() => talk(false, false)} />
     </div>
@@ -531,16 +536,35 @@ function useBay() {
   }, []);
   return BAY.only;
 }
-const bayMem = (b) => stored("atc.baymem", {})[b] || {};
-const rememberBay = (b, m) => b && store("atc.baymem", { ...stored("atc.baymem", {}), [b]: { ...bayMem(b), ...m } });
+const PAGE_ID = Math.random().toString(36).slice(2, 10);
+let BAYDATA = { order: [], memory: {}, local: true };
+const loadBays = () => api("/api/bays").then((d) => {
+  const was = BAYDATA.local ? { order: stored("atc.bays", []), memory: stored("atc.baymem", {}), local: true } : BAYDATA;
+  BAYDATA = { order: d.order || [], memory: d.memory || {} };
+  if (was.local && !BAYDATA.order.length && was.order.length) {
+    BAYDATA = { order: was.order, memory: { ...was.memory, ...BAYDATA.memory } };
+    api("/api/bays", { method: "PUT", body: { order: was.order, from: PAGE_ID } }).catch(() => {});
+  }
+  dispatchEvent(new Event("atc-bay"));
+}, () => {});
+const adoptBays = (d) => { if (d.from === PAGE_ID) return; BAYDATA = { order: d.order || [], memory: d.memory || {} }; dispatchEvent(new Event("atc-bay")); };
+const bayMem = (b) => BAYDATA.memory[b] || {};
+const rememberBay = (b, m) => {
+  if (!b || Object.entries(m).every(([k, v]) => bayMem(b)[k] === v)) return;
+  BAYDATA.memory = { ...BAYDATA.memory, [b]: { ...bayMem(b), ...m } };
+  api(`/api/bays/${encodeURIComponent(b)}`, { method: "PATCH", body: { ...m, from: PAGE_ID } }).catch(() => {});
+};
 const bayOf = (s) => (s && !homeless(s) && s.kind !== "hub" ? project(s.cwd).name : null);
 
 function baysOf(live, keep) {
   const tabs = projectTabs(live || [], keep);
   const names = tabs.map((t) => t.name);
-  let order = stored("atc.bays", []);
+  let order = BAYDATA.order;
   const fresh = names.filter((n) => !order.includes(n));
-  if (fresh.length) store("atc.bays", (order = [...order, ...fresh]));
+  if (fresh.length && !BAYDATA.local) {
+    BAYDATA.order = order = [...order, ...fresh];
+    api("/api/bays", { method: "PUT", body: { order, from: PAGE_ID } }).catch(() => {});
+  } else if (fresh.length) order = [...order, ...fresh];
   return order.filter((n) => names.includes(n)).map((n) => {
     const t = tabs.find((x) => x.name === n), c = (st) => t.pips.filter((x) => x === st).length;
     return { name: n, needs: c("needs-you"), turn: c("your-turn"), work: c("working") };
@@ -578,6 +602,7 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live }) {
         ${kb(view === "board", "Board", "b", () => { rememberBay(only, { view: "board" }); go(null); })}
         ${kb(view === "pages", "Pages", "g", () => (location.hash = PAGES))}
       </div>
+      ${view === "board" && html`<div class="tgl">${kb(only === null, html`<span class="nm">All bays</span>`, "alt 0", () => BAY.set(only === null ? bays[0]?.name || null : null), "Every bay on one board")}${kb(panes.index, html`<span class="nm">Page index</span>`, "p", () => togglePane("index"), "The bay's pages beside the board")}</div>`}
       ${view === "session" && html`<div class="tgl">${kb(panes.rail, html`<span class="nm">Sessions</span>`, "[", () => togglePane("rail"), "The bay's sessions beside the transcript")}${kb(panes.state, html`<span class="nm">State</span>`, "]", () => togglePane("state"), "What the session is doing, what it made, and its facts")}</div>`}
       <div class="meta">
         ${!up && html`<span class="host off" role="status">reconnecting</span>`}
@@ -647,12 +672,146 @@ function KeysOverlay({ onClose }) {
     </div>`;
 }
 
-const VIEW = "atc.view";
-const LISTS = [
-  ["triage", "Triage", "What waits on you first, as cards you can answer from; the rest as one-line rows"],
-  ["lanes", "Project lanes", "Grouped by project, with each project's recent sessions and a day of activity"],
-  ["classic", "Classic", "Cards grouped by state"],
-];
+const GROUPS = [["needs-you", "Needs you"], ["your-turn", "Your turn"], ["working", "Working"], ["parked", "Parked"], ["earlier", "Earlier"]];
+const groupOf = (s) => (away(s) ? "parked" : RANK[s.state] !== undefined ? s.state : "earlier");
+const byUrgency = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
+const doingLine = (s) => s.state === "working" ? doing(s) : s.state === "needs-you" && s.asks?.[0] ? oneLine(s.asks[0].questions?.[0]?.question || (s.asks[0].permission && `Wants to use ${s.asks[0].permission}`)) : "";
+const runningOf = (s) => [s.background?.length > 0 && plural(s.background.length, "task"), ...(s.servers || []).slice(0, 2).map((p) => `:${p}`), s.tabs?.length > 0 && plural(s.tabs.length, "tab")].filter(Boolean);
+const madeOf = (s) => [s.shown?.length > 0 && plural(s.shown.length, "page"), s.files > 0 && plural(s.files, "file")].filter(Boolean);
+
+function useBayHistory(enabled, onPast) {
+  const [hist, setHist] = useState(null);
+  const [limit, setLimit] = useState(40);
+  useEffect(() => {
+    if (!enabled) return;
+    const load = () => api(`/api/history?limit=${limit}`).then((l) => { setHist(l || []); onPast?.(l || []); }, () => setHist([]));
+    load();
+    const t = setInterval(() => document.visibilityState === "visible" && load(), 60000);
+    return () => clearInterval(t);
+  }, [limit, enabled]);
+  return [hist, () => setLimit(limit + 40), hist && hist.length >= limit];
+}
+
+function bayLists(live, hist, only) {
+  const mine = (s) => (only ? bayOf(s) === only : !homeless(s) && s.kind !== "hub");
+  const now = (live || []).filter(mine);
+  const ids = new Set((live || []).map((s) => s.sessionId));
+  const earlier = [...now.filter((s) => groupOf(s) === "earlier"), ...(hist || []).filter((s) => !ids.has(s.sessionId) && mine(s))]
+    .sort((a, b) => (Date.parse(b.updated || b.startedAt || 0) || 0) - (Date.parse(a.updated || a.startedAt || 0) || 0));
+  const by = Object.fromEntries(GROUPS.map(([k]) => [k, []]));
+  for (const s of now) if (groupOf(s) !== "earlier") by[groupOf(s)].push(s);
+  for (const k in by) by[k].sort(byUrgency);
+  by.earlier = earlier;
+  return by;
+}
+
+function BoardRow({ s, open, toggle, sel, cursor, rail, say }) {
+  const tap = rail ? null : () => toggle(s.sessionId);
+  const { events } = useRowEvents(s, tap, !rail && s.state !== "past" && s.state !== "stopped");
+  const on = sel?.sessionId === s.sessionId, run = runningOf(s), made = madeOf(s), g = groupOf(s);
+  const where = [MULTI && s.host, s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch].filter(Boolean).join(" ");
+  const status = headline(s) || WORD[s.state] || "";
+  const second = doingLine(s);
+  const fresh = unread(s);
+  const cls = `brow ${g} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""} ${open ? "open" : ""} ${fresh ? "fresh" : ""}`;
+  const title = html`<span class="t">${s.title || "Untitled"}</span>`;
+  if (rail) return html`
+    <button class=${cls} data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
+      <${StateBlock} s=${s} />
+      <span class="c">${title}<span class="s ${s.state === "working" ? "mono" : ""}">${s.state === "working" ? doing(s) : status}</span></span>
+      <span class="e"><span class="ago">${ago(s)}</span>${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}</span>
+    </button>`;
+  return html`
+    <div class="bwrap ${open ? "open" : ""} ${g}">
+      <div class=${cls} data-sid=${s.sessionId} role="button" tabindex="0" aria-expanded=${open} aria-description=${fresh ? "new since you looked" : null} ...${events}
+        onDblClick=${() => go(keyOf(s))} onKeyDown=${(e) => e.target === e.currentTarget && (e.key === "Enter" ? go(keyOf(s)) : e.key === " " && (e.preventDefault(), toggle(s.sessionId)))}>
+        <${StateBlock} s=${s} />
+        <span class="ses"><a class="t" href=${`#/s/${keyOf(s)}`} onClick=${(e) => e.stopPropagation()}>${s.title || "Untitled"}</a>${where && html`<span class="w">${where}</span>`}</span>
+        <span class="st"><span class="l1">${status}</span>${second && html`<span class="l2 ${s.state === "working" ? "mono" : ""}">${second}</span>`}</span>
+        <span class="ctx">${s.context > 0 && html`<${CtxMeter} n=${s.context} /><span>${Math.round(s.context / 1000)}k</span>`}</span>
+        <span class="stp">${s.steps > 0 && s.steps}${s.failed > 0 && html`<span class="f">${s.failed} failed</span>`}</span>
+        <span class="mk">${run.length > 0 && html`<span class="run">${run.join(" ")}</span>`}${made.length > 0 && html`<span>${made.join(" ")}</span>`}</span>
+        <span class="since">${fresh && html`<i class="dot" aria-hidden="true"></i>`}${ago(s)}</span>
+        <span class="chev" aria-hidden="true"></span>
+      </div>
+      ${open && html`<div class="bexp">
+        <div class="gx">
+          ${s.summary?.gist?.length > 0 && html`<ul>${s.summary.gist.map((x) => html`<li>${x}</li>`)}</ul>`}
+          <p class="facts">${[engineTag(s) || (s.model && model(s.model)), s.permissionMode === "bypassPermissions" ? "no permission prompts" : s.permissionMode, tilde(s.cwd || "")].filter(Boolean).join(", ")}</p>
+        </div>
+        <div class="ax">
+          ${s.asks?.length > 0 && html`<${AskBar} s=${s} say=${say} />`}
+          ${replyable(s) && html`<${CardReplies} s=${s} />`}
+          <div class="acts"><button class="btn" onClick=${() => go(keyOf(s))}>Open</button>
+            ${s.shown?.length > 0 && html`<button class="btn" onClick=${() => (location.hash = pageLink(keyOf(s), s.shown[0].name))}>${pageTitle(s.shown[0])}</button>`}</div>
+        </div>
+      </div>`}
+    </div>`;
+}
+
+function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) {
+  const [open, setOpen] = useState(() => new Set());
+  const toggle = (sid) => setOpen((o) => { const n = new Set(o); n.has(sid) ? n.delete(sid) : n.add(sid); return n; });
+  useEffect(() => {
+    const k = (e) => {
+      if (e.key !== " " || !cursor || e.target !== document.body || document.querySelector(".veil, .pghome, .keys-ov")) return;
+      e.preventDefault(); toggle(cursor);
+    };
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  }, [cursor]);
+  const by = bayLists(live, hist, only);
+  const counts = GROUPS.slice(0, 4).map(([k]) => [k, by[k].length]).filter(([, n]) => n > 0);
+  const path = only && (live || []).find((s) => bayOf(s) === only);
+  const letter = { "needs-you": ["N", "needs"], "your-turn": ["T", "turn"], working: ["W", "working"], parked: ["P", "parked"] };
+  const [earlierAll, setEarlierAll] = useState(false);
+  const shownEarlier = earlierAll ? by.earlier : by.earlier.filter((s) => Date.now() - (Date.parse(s.updated || s.startedAt || 0) || 0) < 2 * 86400000).slice(0, 12);
+  const pages = index && (live || []).filter((s) => (only ? bayOf(s) === only : !homeless(s))).flatMap((s) => (s.shown || []).map((p) => ({ p, s })))
+    .sort((a, b) => (Date.parse(b.p.updated || b.p.shown) || 0) - (Date.parse(a.p.updated || a.p.shown) || 0));
+  return html`
+    <div class="bview ${index ? "withindex" : ""}">
+      <div class="bmain" id="bscroll">
+        <div class="bhead">
+          <div class="b1"><h1>${only || "Every bay"}</h1>${path && html`<span class="w">${tilde(baseDir(path.cwd))}</span>`}
+            <span class="r"><${BacklogLine} only=${only} /><button class="kb" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts="/">Search <kbd aria-hidden="true">/</kbd></button></span></div>
+          <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${k === "parked" ? "parked" : WORD[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}</div>
+        </div>
+        <div class="bcols" aria-hidden="true"><span></span><span>Session</span><span>Status, and what it last said or is doing</span><span>Context</span><span>Steps</span><span>Running, made</span><span>Since</span><span></span></div>
+        ${GROUPS.map(([k, title]) => {
+          const list = k === "earlier" ? shownEarlier : by[k];
+          if (!list.length) return null;
+          return html`<section class="bgrp ${k}">
+            <h2 class="grp"><b>${title}</b><span class="c">${k === "earlier" ? by.earlier.length : list.length}</span>${k === "earlier" && html`<span class="r">${earlierAll ? "all loaded" : "today and yesterday"}</span>`}</h2>
+            ${list.map((s) => html`<${BoardRow} key=${s.sessionId} s=${s} open=${open.has(s.sessionId)} toggle=${toggle} sel=${sel} cursor=${cursor} say=${say} />`)}
+            ${k === "earlier" && (!earlierAll && by.earlier.length > shownEarlier.length
+              ? html`<button class="kb bmore" onClick=${() => setEarlierAll(true)}>Show ${by.earlier.length - shownEarlier.length} older</button>`
+              : earlierAll && more && html`<button class="kb bmore" onClick=${more}>Load more</button>`)}
+          </section>`;
+        })}
+      </div>
+      ${index && html`<aside class="pindex" aria-label="Pages">
+        <div class="ph"><b>Pages</b><span>${pages.length ? `${plural(pages.length, "page")}, newest first` : "none yet"}</span></div>
+        ${pages.map(({ p, s }) => html`<button class="pirow" onClick=${() => (location.hash = pageLink(keyOf(s), p.name))}>
+          <span class="h"><b>${pageTitle(p)}</b><span class="ago">${ago({ updated: p.updated || p.shown })}</span></span>
+          ${p.note && html`<span class="n">${p.note}</span>`}
+          <span class="s">${s.title}</span>
+        </button>`)}
+      </aside>`}
+    </div>`;
+}
+
+function RailList({ live, hist, only, sel, cursor }) {
+  const by = bayLists(live, hist, only);
+  const active = ["needs-you", "your-turn", "working"].flatMap((k) => by[k]);
+  const rest = [...by.parked, ...by.earlier.slice(0, 8)];
+  return html`<div class="rail" id="rscroll">
+    ${active.map((s) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} />`)}
+    ${rest.length > 0 && html`<h2 class="grp"><b>Parked, earlier</b><span class="c">${by.parked.length + by.earlier.length}</span></h2>
+      ${rest.map((s) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} />`)}`}
+    ${!active.length && !rest.length && html`<p class="calm">Nothing here yet.</p>`}
+  </div>`;
+}
+
 
 
 const byStart = (a, b) => (Date.parse(a.startedAt || 0) || 0) - (Date.parse(b.startedAt || 0) || 0) || a.sessionId.localeCompare(b.sessionId);
@@ -1107,85 +1266,6 @@ function Login({ onDone }) {
   `;
 }
 
-function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "classic" }) {
-  const [q, setQ] = useState("");
-  const only = useBay();
-  const setOnly = (v) => BAY.set(typeof v === "function" ? v(BAY.only) : v);
-  PICK_PROJECT = (name) => setOnly((o) => (o === name ? null : name));
-  const desk = (runs || []).filter((s) => s.kind === "hub" && s.agent === GUESTS);
-  const tabs = useMemo(() => projectTabs(all || [], only === AGENTS ? null : only), [all, only]);
-  TABS = { only, tabs, set: setOnly };
-  const mine = (s) => (only === AGENTS ? !!s.agent : !only ? !guestWork(s) || s.state === "needs-you" : !homeless(s) && project(s.cwd).name === only);
-  const restingHub = (s) => s.kind === "hub" && s.state === "your-turn";
-  const live = only === AGENTS ? runs && runs.filter((s) => s.agent && !restingHub(s)) : all && all.filter(mine);
-  const [hist, setHist] = useState(null);
-  const [limit, setLimit] = useState(30);
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      api(`/api/history?limit=${mode === "lanes" ? limit + 30 : limit}&q=${encodeURIComponent(q)}`).then((list) => {
-        setHist(list || []);
-        onPast(list || []);
-      }, () => setHist([]));
-    }, q ? 200 : 0);
-    return () => clearTimeout(t);
-  }, [q, limit, mode === "lanes"]);
-
-  const boardRef = useRef();
-  const remeasure = useFlip(boardRef);
-  if (!live) return html`<div class="board"><div class="skeleton"><i></i><i></i><i></i></div></div>`;
-  const liveIDs = new Set((runs || live).map((s) => s.sessionId));
-  const pinned = pinnedOf(live);
-  const ql = q.trim().toLowerCase();
-  const stopped = live.filter((s) => s.state === "stopped" && !pinned.includes(s) && !away(s)
-    && (!ql || `${s.title} ${s.lastPrompt} ${s.cwd}`.toLowerCase().includes(ql)));
-  const lastAt = (s) => Date.parse(s.updated || s.startedAt || 0) || 0;
-  const past = (hist || []).filter((s) => !liveIDs.has(s.sessionId) && mine(s));
-  const earlier = [...stopped, ...past].sort((a, b) => lastAt(b) - lastAt(a));
-  const rest = live.filter((s) => !s.pinned && !away(s));
-  const parked = live.filter((s) => away(s));
-  const active = live.filter((s) => !away(s) && ["needs-you", "your-turn", "working"].includes(s.state));
-  const waiting = active.filter((s) => s.state !== "working").length;
-  const working = active.length - waiting;
-
-  const search = html`
-    <div class="search">
-      <input type="search" placeholder="Search titles, prompts and folders  /" value=${q} onInput=${(e) => setQ(e.target.value)} />
-    </div>`;
-  const earlierList = html`
-    ${dayGroups(earlier).map(([label, list]) => html`
-      <h3>${label}</h3>
-      <div class="rack rows">${list.map((s) => html`<${Strip} key=${s.sessionId} s=${s} sel=${sel} cursor=${cursor} size=${mode === "classic" ? "row" : "line"} />`)}</div>`)}
-    ${hist && hist.length >= limit && html`<button class="btn more" onClick=${() => setLimit(limit + 30)}>Show more</button>`}
-    ${hist && earlier.length === 0 && html`<p class="calm">${q ? "No earlier sessions match." : only ? `No earlier sessions in ${only} yet.` : "No earlier sessions."}</p>`}`;
-  const earlierBay = html`<section class="bsec earlier"><h2>Earlier</h2>${search}${earlierList}</section>`;
-  const classic = html`
-    ${live.length === 0
-      ? !(only === GUESTS && desk.length) && html`<p class="calm">${only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below."}</p>`
-      : !waiting && html`<p class="calm">${working ? `Nothing needs you. ${working} working.` : "All quiet."}</p>`}
-    <${BacklogLine} only=${only} />
-    ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
-    ${BAYS.filter(([st]) => st !== "stopped").map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
-    <${Bay} title="Parked" list=${parked} sel=${sel} cursor=${cursor} size="slim" dim />
-    ${earlierBay}`;
-
-  return html`
-    <div class="board ${mode === "classic" ? "" : "v2"}" ref=${boardRef} onScroll=${remeasure}>
-      ${only === GUESTS && html`<${Bay} title="Conversation" list=${desk} sel=${sel} cursor=${cursor} size="lrow" />`}
-      ${only === AGENTS ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />
-        ${[["assistant", "Assistant"], [GUESTS, "Guests"]].map(([a, title]) => html`<${Bay} title=${title} list=${(runs || []).filter((s) => restingHub(s) && s.agent === a)} sel=${sel} cursor=${cursor} size="lrow" />`)}${(() => {
-          const idle = (agents || []).filter((a) => !a.error && !(runs || []).some((x) => x.agent === a.name));
-          return idle.length > 0 && html`<p class="calm idleagents">Not running: ${idle.map((a) => html`<button class="link" onClick=${() => AGENT_SHEET(a.name)}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</button>`)}</p>`;
-        })()}`
-        : mode === "triage" ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />${earlierBay}`
-        : mode === "lanes" ? html`${search}${q ? earlierList : html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} size="lrow" />
-            <${Lanes} live=${live.filter((s) => !pinned.includes(s))} earlier=${past} only=${only} setOnly=${setOnly} sel=${sel} cursor=${cursor}
-            more=${hist && hist.length >= limit + 30 && (() => setLimit(limit + 30))} />`}`
-        : classic}
-    </div>
-  `;
-}
-
 const entered = new Map();
 const steady = (list) => {
   const phase = (st) => (st === "needs-you" || st === "your-turn" ? "wait" : st);
@@ -1197,151 +1277,6 @@ const steady = (list) => {
 };
 
 const byRecent = (a, b) => (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
-
-function Triage({ live, only, sel, cursor }) {
-  const wait = live.filter((s) => !away(s) && (s.state === "needs-you" || s.state === "your-turn"))
-    .sort((a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1));
-  const work = live.filter((s) => s.state === "working");
-  const pinned = pinnedOf(live);
-  const free = (list) => list.filter((s) => !pinned.includes(s));
-  const rest = free(live.filter((s) => !wait.includes(s) && !work.includes(s)));
-  const name = (s) => html`<b>${s.title || "Untitled"}</b>`;
-  const busy = work.length ? ` ${work.length} working.` : "";
-  const brief = wait.length > 1 ? html`${name(wait[0])} and ${wait.length - 1} more are waiting on you.${busy}`
-    : wait.length ? html`${name(wait[0])} is waiting on you.${busy}`
-    : work.length ? `Nothing needs you.${busy}`
-    : live.length ? "All quiet."
-    : only === AGENTS ? "No agent conversations." : only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below.";
-  return html`
-    <p class="brief">${brief}</p>
-    <${BacklogLine} only=${only} />
-    <${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} size="lrow" />
-    <${Bay} title="Your turn" list=${free(wait)} sel=${sel} cursor=${cursor} size="tcard" />
-    <${Bay} title="Working" list=${free(work)} sel=${sel} cursor=${cursor} size="work" />
-    <${Bay} title="Parked" list=${rest.filter((s) => away(s))} sel=${sel} cursor=${cursor} size="lrow" />
-    ${only === AGENTS && html`<${Bay} title="Stopped" list=${rest.filter((s) => !away(s))} sel=${sel} cursor=${cursor} size="line" />`}`;
-}
-
-function lanesOf(live, earlier) {
-  const by = new Map();
-  const add = (s, k) => {
-    const n = project(s.cwd).name;
-    if (!by.has(n)) by.set(n, { name: n, live: [], past: [] });
-    by.get(n)[k].push(s);
-  };
-  live.forEach((s) => add(s, "live"));
-  earlier.forEach((s) => add(s, "past"));
-  return [...by.values()].map((l) => ({ ...l,
-    rank: Math.min(9, ...l.live.filter((s) => !away(s)).map((s) => RANK[s.state] ?? 9)),
-    recent: Math.max(0, ...[...l.live, ...l.past].map((s) => Date.parse(s.updated || 0) || 0)),
-  })).sort((a, b) => a.rank - b.rank || b.recent - a.recent);
-}
-
-function Ribbon({ list }) {
-  const n = 48, now = Date.now(), span = 864e5, t0 = now - span, slots = Array(n).fill(0);
-  const at = (t) => Math.floor(((t - t0) / span) * n);
-  for (const s of list) {
-    const b = s.state === "working" ? now : Date.parse(s.updated || 0) || 0;
-    const a = Math.min(b, Date.parse(s.promptAt || 0) || b);
-    if (b < t0) continue;
-    for (let i = Math.max(0, at(a)); i <= Math.min(n - 1, at(b)); i++) slots[i]++;
-  }
-  const max = Math.max(1, ...slots);
-  return html`<span class="ribbon" title="Activity over the last 24 hours" aria-hidden="true">${slots.map((v) => html`<i class=${v ? "on" : ""} style=${`height: ${v ? 4 + (8 * v) / max : 2}px`}></i>`)}</span>`;
-}
-
-function Lanes({ live, earlier, only, setOnly, sel, cursor, more }) {
-  const [opened, setOpened] = useState({});
-  const lanes = lanesOf(live, earlier);
-  if (!lanes.length) return html`<p class="calm">${only ? `Nothing in ${only} yet.` : "No sessions yet."}</p>`;
-  const recent = Date.now() - 6 * 3600e3;
-  return lanes.map((l) => {
-    const all = [...l.live, ...l.past];
-    const warm = only === l.name || opened[l.name] || l.live.some((s) => !away(s) && s.state !== "stopped") || l.recent > recent;
-    if (!warm) return html`
-      <button class="lane cold" style=${`--ph: ${hueOf(l.name)}`} onClick=${() => setOpened({ ...opened, [l.name]: true })}>
-        <span class="nm">${l.name}</span><span class="sum">${all.length} · ${ago([...all].sort(byRecent)[0])}</span>
-      </button>`;
-    const count = (f) => l.live.filter((s) => !away(s) && f(s)).length;
-    const sum = [[count((s) => s.state === "needs-you" || s.state === "your-turn"), "your turn"], [count((s) => s.state === "working"), "working"]]
-      .filter(([k]) => k).map(([k, w]) => `${k} ${w}`).join(" · ") || `${all.length} session${all.length > 1 ? "s" : ""}`;
-    const past = only === l.name ? l.past : l.past.slice(0, l.live.length ? 2 : 3);
-    const hidden = l.past.length - past.length;
-    return html`
-      <section class="lane" style=${`--ph: ${hueOf(l.name)}`}>
-        <button class="lh" title=${only === l.name ? "Show every project" : `Show only ${l.name}`} onClick=${() => setOnly(only === l.name ? null : l.name)}>
-          <span class="nm">${l.name}</span><span class="sum">${sum}</span><${Ribbon} list=${all} />
-        </button>
-        ${[...l.live, ...past].map((s) => html`<${Strip} key=${s.sessionId} s=${s} sel=${sel} cursor=${cursor} size="lrow" />`)}
-        ${hidden > 0 && html`<button class="lmore" onClick=${() => setOnly(l.name)}>${hidden} earlier</button>`}
-        ${only === l.name && more && html`<button class="lmore" onClick=${more}>Show more</button>`}
-      </section>`;
-  });
-}
-
-function Bay({ title, list, sel, cursor, dim, size = "full" }) {
-  if (!list.length) return null;
-  return html`
-    <section class="bsec ${dim ? "parked" : ""}">
-      <h2>${title} <span class="n">${list.length}</span></h2>
-      <div class="rack r-${size}">${list.map((s) => html`<${Strip} key=${s.sessionId} s=${s} sel=${sel} cursor=${cursor} size=${size} />`)}</div>
-    </section>
-  `;
-}
-
-function dayGroups(list) {
-  const start = new Date(); start.setHours(0, 0, 0, 0);
-  const day = 86400000, t0 = start.getTime();
-  const label = (s) => {
-    const t = Date.parse(s.updated || s.startedAt || 0);
-    return t >= t0 ? "Today" : t >= t0 - day ? "Yesterday" : t >= t0 - 6 * day ? "This week" : "Older";
-  };
-  const out = [];
-  for (const s of list) {
-    const l = label(s);
-    if (out.at(-1)?.[0] !== l) out.push([l, []]);
-    out.at(-1)[1].push(s);
-  }
-  return out;
-}
-
-function useFlip(ref) {
-  const rects = useRef(new Map());
-  const states = useRef(new Map());
-  const measure = (root, each) => {
-    const next = new Map(), o = root.getBoundingClientRect();
-    for (const el of root.querySelectorAll("[data-sid]:not(.row)")) {
-      const r = el.getBoundingClientRect(), t = new DOMMatrixReadOnly(getComputedStyle(el).transform);
-      const at = { left: r.left - o.left - t.m41, top: r.top - o.top - t.m42 };
-      next.set(el.dataset.sid, at);
-      each?.(el, at, t);
-    }
-    rects.current = next;
-  };
-  const raf = useRef(0);
-  useLayoutEffect(() => {
-    const root = ref.current;
-    if (!root) return;
-    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const prevs = rects.current, moved = [];
-    measure(root, (el, at, t) => {
-      const sid = el.dataset.sid, prev = prevs.get(sid);
-      const st = el.dataset.state, was = states.current.get(sid);
-      if (was && was !== st && st !== "working") { el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
-      states.current.set(sid, st);
-      if (!prev || reduce) return;
-      const dx = prev.left - at.left, dy = prev.top - at.top;
-      if (Math.abs(dy) < 2 && Math.abs(dx) < 2) return;
-      el.style.transition = "none";
-      el.style.transform = `translate(${dx + t.m41}px, ${dy + t.m42}px)`;
-      moved.push(el);
-    });
-    if (!moved.length) return;
-    void root.offsetWidth;
-    for (const el of moved) { el.style.transition = "transform .38s cubic-bezier(.2,.7,.2,1)"; el.style.transform = ""; }
-  });
-  return () => { cancelAnimationFrame(raf.current); raf.current = requestAnimationFrame(() => ref.current && measure(ref.current)); };
-}
 
 let SEEN = null;
 function seenMap() {
@@ -1378,18 +1313,6 @@ const ICON = {
   more: html`<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="12.5" cy="8" r="1.3" fill="currentColor"/></svg>`,
 };
 
-function HoverActions({ s, menu }) {
-  const patch = (body) => (e) => { e.stopPropagation(); api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body }).catch(() => {}); };
-  const resume = (e) => { e.stopPropagation(); api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" }).then((r) => go(r.id), () => {}); };
-  return html`
-    <span class="acts" onPointerDown=${(e) => e.stopPropagation()}>
-      ${!s.attachable && s.kind !== "interactive" && html`<span role="button" title="Resume" onClick=${resume}>${ICON.play}</span>`}
-      <span role="button" class=${s.pinned ? "on" : ""} title=${s.pinned ? "Unpin" : "Pin to top"} onClick=${patch({ pinned: !s.pinned })}>${ICON.pin}</span>
-      <span role="button" class=${s.parked ? "on" : ""} title=${s.parked ? "Unpark" : "Park: out of the way, no notifications"} onClick=${patch({ parked: !s.parked })}>${ICON.park}</span>
-      <span role="button" title="More" onClick=${menu}>${ICON.more}</span>
-    </span>`;
-}
-
 const cmdName = (c) => {
   const seg = c.split(/&&|\|\||;|\|/).map((x) => x.trim()).find((x) => x && !/^(cd|export|set|[A-Z_]+=\S*)(\s|$)/.test(x)) || c;
   return seg.replace(/^((sudo|env|time|nohup|timeout\s+\S+)\s+)+/, "").split(/\s+/)[0].split("/").pop();
@@ -1411,25 +1334,7 @@ const headline = (s) => {
   return t ? t[0].toUpperCase() + t.slice(1) : "";
 };
 const replyable = (s) => s.attachable && s.state === "your-turn" && !s.asks?.length && s.summary?.replies?.length > 0;
-const elsewhere = (s) => MULTI && s.host && s.host !== HERE && html`<span class="host">${s.host}</span>`;
 const plural = (n, w) => `${n} ${w}${n === 1 ? "" : "s"}`;
-const Steps = ({ s }) => s.steps > 0 && html`<span class="steps">${plural(s.steps, "step")}${s.files > 0 && ` · ${plural(s.files, "file")}`}${s.failed > 0 && html` · <b>${s.failed} failed</b>`}</span>`;
-
-function Meta({ s, quiet }) {
-  return html`
-    <div class="l3">
-      <${SourceTag} s=${s} full />
-      ${s.branch && !["HEAD", "main", "master"].includes(s.branch) && html`<span class="br">${s.branch}</span>`}
-      ${MULTI && s.host && !(quiet && s.host === HERE) && html`<span class="host">${s.host}</span>`}
-      ${engineTag(s)}
-      ${s.kind === "interactive" && html`<span class="interm" title="Open in a terminal window: readable here, not attachable">terminal</span>`}
-      ${(s.servers || []).slice(0, 2).map((p) => html`<span class="srv" role="link" title=${`Open ${serverURL(s, p)}`} onClick=${(e) => { e.stopPropagation(); openOut(serverURL(s, p)); }}>:${p}</span>`)}
-      ${s.shown?.length > 0 && html`<span class="pg shownpg" role="link" title=${s.shown.map((p) => `${pageTitle(p)}  ${pageInfo(p)}`).join("\n")}
-        onClick=${(e) => { e.stopPropagation(); location.hash = pageLink(keyOf(s), s.shown[0].name); }}>${ICON.page}<span>${pageTitle(s.shown[0])}</span>${s.shown.length > 1 ? ` +${s.shown.length - 1}` : ""}</span>`}
-      ${s.tabs?.length > 0 && html`<span class="pg shownpg" role="link" title=${`Its browser tabs:\n${s.tabs.map((t) => t.title || t.url).join("\n")}`}
-        onClick=${(e) => { e.stopPropagation(); location.hash = pageLink(keyOf(s), "browser"); }}>${ICON.globe}<span>${s.tabs[0].title || "Browser"}</span>${s.tabs.length > 1 ? ` +${s.tabs.length - 1}` : ""}</span>`}
-    </div>`;
-}
 
 function CardReplies({ s }) {
   const [busy, setBusy] = useState(false);
@@ -1443,21 +1348,11 @@ function CardReplies({ s }) {
   </div>`;
 }
 
-function said(s, human) {
-  if (s.state === "working") return html`<div class="said doing" key=${s.activity}>${human ? doing(s) : oneLine(s.activity) || "Working…"}</div>`;
-  if (s.state === "needs-you" && s.activity) return html`<div class="said ask">Waiting on you: ${oneLine(s.activity)}</div>`;
-  if ((human || s.state === "your-turn" || s.state === "needs-you") && s.summary) return html`<div class="said reply">${human ? headline(s) : s.summary.status}</div>`;
-  if ((s.state === "your-turn" || s.state === "needs-you") && s.lastReply) return html`<div class="said reply">${oneLine(s.lastReply)}</div>`;
-  return s.lastPrompt ? html`<div class="said">${oneLine(s.lastPrompt)}</div>` : null;
-}
-
-function Strip({ s, sel, cursor, size = "full" }) {
-  const on = sel && sel.sessionId === s.sessionId;
+function useRowEvents(s, tap, swipes) {
   const press = useRef({ t: 0, fired: false, x: 0, y: 0 });
   const menu = (e) => { e?.preventDefault(); e?.stopPropagation(); QUICK(s, e?.currentTarget?.getBoundingClientRect()); };
   const hover = useRef(0);
   const swipe = useRef(null);
-  const swipes = ["tcard", "work", "line", "lrow"].includes(size) && s.state !== "past";
   const swipeAct = (dx) => dx > 0
     ? { label: s.parked ? "Unpark" : "Park", run: () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { parked: !s.parked } }) }
     : replyable(s) && { label: `Send “${s.summary.replies[0]}”`, run: () => api(`/api/sessions/${s.id}/send`, { method: "POST", body: { text: s.summary.replies[0], suggested: true } }) };
@@ -1498,64 +1393,12 @@ function Strip({ s, sel, cursor, size = "full" }) {
     if (act) act.run().catch(() => {});
   };
   const events = {
-    onClick: (e) => { if (press.current.fired) { press.current.fired = false; return e.preventDefault(); } go(keyOf(s)); },
+    onClick: (e) => { if (press.current.fired) { press.current.fired = false; return e.preventDefault(); } (tap || (() => go(keyOf(s))))(e); },
     onContextMenu: menu, onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: up,
     onPointerEnter: (e) => { if (e.pointerType === "mouse") hover.current = setTimeout(() => prewarm(s), 150); },
     onPointerLeave: () => clearTimeout(hover.current),
   };
-  const tip = [s.title, [WORD[s.state] || s.state, s.id || s.sessionId.slice(0, 8), model(s.model)].filter(Boolean).join(" · ")].join("\n");
-  const cls = `strip ${size} ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""}`;
-  if (["tcard", "work", "line", "lrow"].includes(size)) {
-    const c = `it ${size} ${s.state} ${away(s) ? "parked" : ""} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""}`;
-    const attrs = { class: c, style: `--ph: ${hueOf(project(s.cwd).name)}`, "data-sid": s.sessionId, "data-state": s.state, title: tip, "aria-current": on ? "true" : null, ...events };
-    const glyph = html`<i class="g ${away(s) && s.state !== "working" ? "parked" : s.state} ${unread(s) ? "unread" : ""}" aria-hidden="true"></i>`;
-    const acts = s.state !== "past" && html`<${HoverActions} s=${s} menu=${menu} />`;
-    const when = html`<span class="when" title=${new Date(s.updated || 0).toLocaleString()}>${s.state === "working" ? html`<${Elapsed} s=${s} />` : ago(s)}</span>`;
-    if (size === "tcard") return html`
-      <div ...${attrs} role="button" tabindex="0" onKeyDown=${(e) => e.key === "Enter" && e.target === e.currentTarget && go(keyOf(s))}>
-        ${acts}
-        <div class="c1">${glyph}<span class="title">${s.title || "Untitled"}</span>${when}</div>
-        <div class="hl">${headline(s)}</div>
-        ${s.summary?.gist?.length > 0 && html`<ul class="gist">${s.summary.gist.slice(0, 2).map((g) => html`<li>${g}</li>`)}</ul>`}
-        <${Meta} s=${s} quiet />
-        ${replyable(s) && html`<${CardReplies} s=${s} />`}
-      </div>`;
-    if (size === "work") return html`
-      <button ...${attrs}>
-        ${acts}
-        <span class="ring"><${Elapsed} s=${s} /></span>
-        <span class="title">${s.title || "Untitled"}</span>
-        <${Steps} s=${s} />
-        <span class="doing" key=${s.activity}>${doing(s)}</span>
-        <${Meta} s=${s} quiet />
-      </button>`;
-    return html`
-      <button ...${attrs}>
-        ${acts}
-        ${glyph}<span class="title">${s.title || "Untitled"}</span>
-        ${size === "line" && html`<${SourceTag} s=${s} full />`}${size === "line" && elsewhere(s)}${when}
-        ${size === "lrow" && said(s, true)}
-        ${size === "lrow" && s.state !== "past" && html`<${Meta} s=${s} quiet />`}
-      </button>`;
-  }
-  if (size === "row") return html`
-    <button class=${cls} data-sid=${s.sessionId} data-state=${s.state} title=${tip} aria-current=${on ? "true" : null} ...${events}>
-      <span class="title">${s.title || "Untitled"}</span>
-      <${ProjectTag} path=${s.cwd} />
-      <span class="when" title=${new Date(s.updated || 0).toLocaleString()}>${ago(s)}</span>
-    </button>`;
-  return html`
-    <button class=${cls} data-sid=${s.sessionId} data-state=${s.state} title=${tip} aria-current=${on ? "true" : null} ...${events}>
-      <${HoverActions} s=${s} menu=${menu} />
-      <div class="l1">
-        ${unread(s) && html`<i class="new" aria-label="New"></i>`}
-        <span class="title">${s.title || "Untitled"}</span>
-        <span class="when" title=${new Date(s.updated || 0).toLocaleString()}>${s.state === "working" ? html`<i class="pulse"></i><${Elapsed} s=${s} />` : ago(s)}</span>
-      </div>
-      ${said(s)}
-      <${Meta} s=${s} />
-    </button>
-  `;
+  return { events, menu };
 }
 
 function Pic({ src, alt = "", fallback }) {
@@ -1564,17 +1407,8 @@ function Pic({ src, alt = "", fallback }) {
   return !src || bad ? fallback : html`<img loading="lazy" src=${src} alt=${alt} onError=${() => setBad(true)} />`;
 }
 
-function Elapsed({ s }) {
-  useNow(1000);
-  const t = Date.parse(s.promptAt || s.updated || s.startedAt);
-  const d = Math.max(0, Math.floor((Date.now() - t) / 1000));
-  return d < 3600 ? `${Math.floor(d / 60)}:${String(d % 60).padStart(2, "0")}` : ago(s);
-}
-
 let QUICK = () => {};
 let AGENT_SHEET = () => {};
-let SET_LIST = () => {};
-let PICK_PROJECT = () => {};
 const CONTAINERS = new Set(["proj", "projects", "src", "code", "dev", "work", "repos", "git", "Developer"]);
 function project(path) {
   const parts = tilde(path || "").replace(/\/\.claude\/worktrees\/[^/]+/, "").split("/");
@@ -1615,8 +1449,8 @@ function projectTabs(live, keep) {
 
 function ProjectTag({ path, full }) {
   const p = project(path);
-  return html`<span class="projtag"><span class="proj" style=${`--ph: ${hueOf(p.name)}`} role="button" title=${`${tilde(path)}\nClick to show only ${p.name}`}
-    onClick=${(e) => { e.stopPropagation(); PICK_PROJECT(p.name); }}>${p.name}</span>${full && p.rest && html`<span class="rest">${p.rest}</span>`}</span>`;
+  return html`<span class="projtag"><span class="proj" style=${`--ph: ${hueOf(p.name)}`} role="button" title=${`${tilde(path)}\nClick to go to the ${p.name} bay`}
+    onClick=${(e) => { e.stopPropagation(); BAY.set(p.name); }}>${p.name}</span>${full && p.rest && html`<span class="rest">${p.rest}</span>`}</span>`;
 }
 
 function sessionActions(s, say, { rename, open, after } = {}) {
@@ -4657,7 +4491,6 @@ function SettingsPage({ me, onClose }) {
   const [look, setLook] = useState({ scheme: LOOK.scheme, theme: LOOK.theme });
   const [colors, setColors] = useState(null);
   const [prefs, setPrefs] = useState(txPrefs.get);
-  const [list, setList] = useState(() => stored(VIEW, {}).list || "triage");
   const [notif, setNotif] = useState(() => typeof Notification === "undefined" ? "none" : Notification.permission);
   useEffect(() => {
     const onLook = () => setLook({ scheme: LOOK.scheme, theme: LOOK.theme });
@@ -4694,15 +4527,6 @@ function SettingsPage({ me, onClose }) {
                 <${ThemePreview} colors=${colors?.[t || "atc"]} on=${on} />
                 <span class="meta"><b>${name}</b>${look.theme === t && html`<span class="cur">In use</span>`}<span class="d">${THEME_NOTES[t] || ""}</span></span>
               </button>`)}
-          </div>
-        </section>
-        <section id="board">
-          <h2>Session list</h2>
-          <div class="set">
-            <b>Style</b>
-            <p>${(LISTS.find(([k]) => k === list) || LISTS[0])[2]}.</p>
-            <div class="ctl"><${Seg} label="List style" value=${list} set=${(v) => { setList(v); SET_LIST(v); }}
-              options=${LISTS.map(([k, name]) => [k, name])} /></div>
           </div>
         </section>
         <section id="reading">
