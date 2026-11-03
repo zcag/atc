@@ -1,0 +1,62 @@
+:root[data-theme="nord"] {
+  --strip: light-dark(#eceff4, #2e3440);
+  --board: light-dark(#e5e9f0, #323846);
+  --sunk: light-dark(#d8dee9, #292e39);
+  --strip-hi: light-dark(#dde3ec, #3b4252);
+  --code: light-dark(#e5e9f0, #353b49);
+  --line: light-dark(#cbd3df, #434c5e);
+  --hair: light-dark(#d8dee9, #3b4252);
+  --line-strong: light-dark(#7b8699, #7a859b);
+  --skel: light-dark(#dde3ec, #3b4252);
+  --term-bg: light-dark(#eceff4, #2e3440);
+  --term-fg: light-dark(#2e3440, #d8dee9);
+  --term-dim: light-dark(#4c566a, #a3adbf);
+
+  --ink: light-dark(#2e3440, #eceff4);
+  --dim: light-dark(#3b4252, #d8dee9);
+  --faint: light-dark(#4c566a, #aeb7c7);
+
+  --needs: #ebcb8b;
+  --needs-ink: #2e3440;
+  --needs-text: light-dark(#6e541a, #ebcb8b);
+  --needs-wash: light-dark(rgb(235 203 139 / .3), rgb(235 203 139 / .1));
+  --work: light-dark(#3f5d82, #88c0d0);
+  --work-wash: light-dark(rgb(94 129 172 / .12), rgb(136 192 208 / .12));
+  --fail: light-dark(#8f434b, #e0a6ab);
+  --add: light-dark(#4e6a38, #a3be8c);
+  --add-wash: light-dark(rgb(163 190 140 / .22), rgb(163 190 140 / .14));
+  --add-word: light-dark(rgb(163 190 140 / .45), rgb(163 190 140 / .32));
+  --del: light-dark(#8f434b, #e0a6ab);
+  --del-wash: light-dark(rgb(191 97 106 / .12), rgb(191 97 106 / .16));
+  --del-word: light-dark(rgb(191 97 106 / .28), rgb(191 97 106 / .36));
+  --focus: light-dark(#5e81ac, #88c0d0);
+  --end: #a5525a;
+  --end-ink: #eceff4;
+  --toast-bg: light-dark(#2e3440, #e5e9f0);
+  --toast-ink: light-dark(#eceff4, #2e3440);
+  --toast-ink-2: light-dark(#d8dee9, #4c566a);
+
+  --series-1: light-dark(#5e81ac, #81a1c1);
+  --series-2: light-dark(#d08770, #d08770);
+  --series-3: light-dark(#8fbcbb, #8fbcbb);
+  --series-4: light-dark(#ebcb8b, #ebcb8b);
+  --series-5: light-dark(#b48ead, #b48ead);
+
+  --hl-key: light-dark(#81609a, #b48ead);
+  --hl-str: light-dark(#4e6a38, #a3be8c);
+  --hl-num: light-dark(#a05a3c, #d08770);
+  --hl-com: light-dark(#6b7589, #8a94a8);
+  --hl-fn: light-dark(#3f6f7c, #88c0d0);
+  --hl-tit: light-dark(#9c4a53, #bf616a);
+
+  --ansi-selectionBackground: light-dark(#d8dee9, #434c5e);
+  --ansi-black: light-dark(#3b4252, #3b4252);
+  --ansi-red: light-dark(#9c4a53, #bf616a);
+  --ansi-green: light-dark(#4e6a38, #a3be8c);
+  --ansi-yellow: light-dark(#6e541a, #ebcb8b);
+  --ansi-blue: light-dark(#4a6a92, #81a1c1);
+  --ansi-magenta: light-dark(#81609a, #b48ead);
+  --ansi-cyan: light-dark(#3f6f7c, #88c0d0);
+  --ansi-white: light-dark(#7b8699, #e5e9f0);
+  --ansi-brightWhite: light-dark(#2e3440, #eceff4);
+}

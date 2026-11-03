@@ -47,7 +47,7 @@ const cssColors = (scheme, names) => {
   probe.remove();
   return out;
 };
-const THEMES = { "": "atc", frappe: "Frappé and Dawn" };
+const THEMES = { "": "atc", frappe: "Frappé and Dawn", nord: "Nord" };
 const NATIVE_COLORS = ["board", "strip", "line", "ink", "dim", "faint", "needs", "turn", "work"];
 const hexColor = (css) => {
   const g = (hexColor.g ||= document.createElement("canvas").getContext("2d", { willReadFrequently: true }));
