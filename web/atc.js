@@ -13,12 +13,25 @@
     if (!inAtc || e.source !== parent || !m || m.atc !== 1) return;
     if (m.op === "scroll") return location.hash || scrollTo(0, m.y);
     if (m.op === "state") return changed.forEach((fn) => fn());
+    if (m.op === "look") return look(m);
     if (m.op === "changes") return document.documentElement.classList.toggle("atc-nochanges", !m.on);
     const w = waiting.get(m.id);
     if (!w) return;
     waiting.delete(m.id);
     m.error ? w.no(new Error(m.error)) : w.ok(m.value);
   });
+  const look = ({ scheme, theme }) => {
+    const r = document.documentElement;
+    if (!getComputedStyle(r).getPropertyValue("--ink")) return;
+    if (scheme === "light" || scheme === "dark") r.dataset.scheme = scheme; else delete r.dataset.scheme;
+    if (!/^[a-z]*$/.test(theme || "")) return;
+    if (theme && !document.querySelector(`link[data-atc-theme="${theme}"]`)) {
+      const l = Object.assign(document.createElement("link"), { rel: "stylesheet", href: `/themes/${theme}.css` });
+      l.dataset.atcTheme = theme;
+      document.head.append(l);
+    }
+    if (theme) r.dataset.theme = theme; else delete r.dataset.theme;
+  };
   const local = {
     get: () => { try { return JSON.parse(localStorage.getItem(KEY)); } catch { return null; } },
     set: (v) => {

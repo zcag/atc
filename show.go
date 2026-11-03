@@ -68,7 +68,7 @@ from atc.state is found once it appears, when the page loads /atc.js.
 To look like atc, link its kit: <link rel="stylesheet" href="/atc.css">. It sets
 atc's fonts and colors in light and dark (its tokens, from /tokens.css: --ink --dim
 --faint --line --board --strip, the tones, --fs-xs..--fs-4xl, --r-sm..--r-pill, --shadow-1),
-styles plain markup (h2, table, pre, details, lists), and is dense: 13px text, 6px table
+follows atc's theme and light/dark setting live when the page loads /atc.js, styles plain markup (h2, table, pre, details, lists), and is dense: 13px text, 6px table
 rows, rules instead of boxes, square marks, color only for state. Put everything in
 <main class="pg"> (.wide for 1280px instead of 980) and start with
 <header class="head"><h1>the finding</h1><p class="lede">it in a sentence</p>
