@@ -3456,6 +3456,14 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, say, alone
   useSeenTick();
   const p = list.find((x) => x.name === cur) || list[0];
   const [nonce, setNonce] = useState(0);
+  const tabs = useRef(null);
+  useEffect(() => {
+    const box = tabs.current, on = box?.querySelector(".ptab.on");
+    if (!on) return;
+    const l = on.offsetLeft - box.offsetLeft, r = l + on.offsetWidth;
+    if (l < box.scrollLeft) box.scrollLeft = l;
+    else if (r > box.scrollLeft + box.clientWidth) box.scrollLeft = r - box.clientWidth;
+  }, [p && pkey(p)]);
   const onSend = useMemo(() => p && ((t) => sendNote(s, p, t, say)), [p && pkey(p), p?.title, s.id, s.sessionId, s.attachable]);
   useEffect(() => {
     const f = () => p && document.visibilityState === "visible" && markPage(p);
@@ -3468,8 +3476,8 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, say, alone
   return html`
     <div class="ppane">
       <div class="pbar">
-        <div class="ptabs" role="tablist">
-          ${list.map((x) => html`<button role="tab" aria-selected=${x === p} ref=${x === p ? (el) => el?.scrollIntoView({ block: "nearest", inline: "nearest" }) : null} class="ptab ${x === p ? "on" : ""} ${x.gone ? "gone" : ""}" title=${`${pageTitle(x)}\n${pageInfo(x)}`} onClick=${() => pick(x.name)}>
+        <div class="ptabs" role="tablist" ref=${tabs}>
+          ${list.map((x) => html`<button role="tab" aria-selected=${x === p} class="ptab ${x === p ? "on" : ""} ${x.gone ? "gone" : ""}" title=${`${pageTitle(x)}\n${pageInfo(x)}`} onClick=${() => pick(x.name)}>
             ${x !== p && pageFresh(x) && html`<i class="dot"></i>`}<span>${pageTitle(x)}</span></button>`)}
         </div>
         <span class="pupd" title=${tilde(p.path)}>${p.gone ? "gone" : agoLong(p.updated || p.shown)}</span>
