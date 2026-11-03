@@ -68,19 +68,36 @@ from atc.state is found once it appears, when the page loads /atc.js.
 To look like atc, link its kit: <link rel="stylesheet" href="/atc.css">. It sets
 atc's fonts and colors in light and dark (its tokens, from /tokens.css: --ink --dim
 --faint --line --board --strip, the tones, --fs-xs..--fs-4xl, --r-sm..--r-pill, --shadow-1),
-styles plain markup, and is dense by default (13.5px text, tight rows), so a page reads
-like a dashboard. Classes:
-.page (the reading column, .wide for a dashboard); .head with h1, .lede, .meta;
-.sec (a section header, .n for its count); .card (.edge adds a colored left bar);
-.rows of .row with .main and .aside; .cols (columns on a wide screen, --cols);
-.stats of .stat (a one-line summary strip: <span class="stat">Day <b>28</b></span>);
-.meter with .fill and .tick (a thin progress bar with a pace mark); .tbl (a compact
-table); details.disclose (a collapsible block); .btn with .primary .quiet .danger
-.sm .icon .wide, .done (copied) and aria-busy; .pill, .tag, .dot; .chip (a link:
-<b>#123</b><span>repo</span>); .callout; .empty (.done when all is clear); .skel;
-.bar (actions stuck to the bottom); .edit on contenteditable. A tone class (t-needs
-t-hot t-turn t-work t-live t-stop) colors .edge, .dot, .pill, .stat, .meter and
-.callout.
+styles plain markup (h2, table, pre, details, lists), and is dense: 13px text, 6px table
+rows, rules instead of boxes, square marks, color only for state. Put everything in
+<main class="pg"> (.wide for 1280px instead of 980) and start with
+<header class="head"><h1>the finding</h1><p class="lede">it in a sentence</p>
+<p class="meta"><span>fact</span>...</p></header>. Then:
+section[id] > h2 (a rule and the name; <small> for a right note, .sub a line under it);
+.prose (prose in the reading face); .foot (where the numbers came from);
+.stats of divs with b (the number, small for its unit), span (what it counts), em;
+table with th.n/td.n (numbers, right, mono), td.m, td small, th[aria-sort], .dbar
+style="--v:40", tfoot, .tscroll for a wide one; dl.facts (key and value);
+.meter style="--v:61; --pace:43" with b, span, i (the bar) and small, .meters for several;
+.callout (one sentence that must not be missed); details > summary (small on the right);
+ul.rows > li with .main (b, small) and .aside; a.ref (a session, href="#/s/<id>"),
+.ref.pr (.draft .merged) .issue .commit .file, .chip (a plain label), .refs;
+.btn .primary, aria-busy, .done, :disabled, in .actions; pre (.c, mark),
+figure.code > figcaption + pre, pre.diff > .h ins del (i for changed words);
+ul.files > li style="--a:31; --d:6" with code ins del or .sz; figure > img + figcaption,
+.pair (.phone) for before and after; .chart svg (.grid .ax .lim .line .area .proj .pace
+.now .pt text.k) and .legend; .strip (an event strip, i style="--at:34", i.k, .axis);
+ul.checks > li (.done .now .no); ol.timeline > li > time + span; .empty; .skel > i;
+.changed[data-since]; .cols > aside (a side column), .grid2, .wide-only, .narrow-only.
+A state is a letter in a shape, then a word, then color: .st with .needs (N, amber, the
+only amber on a page: it waits on the user; once per page at most) .turn .work .live
+.stop .park .past, and the same tone on .ref, .rows li, .timeline li, .callout, and
+.needs on .stats div and .meter. Under 900px it is one column with 44px targets.
+The classes from before still work, drawn the same way: .page, .sec with .n, .card
+(.edge), .rows of .row, .cols with --cols, .stats of .stat (<span class="stat">Day
+<b>28</b></span>), .meter with .fill and .tick, .tbl, details.disclose, .btn .quiet
+.danger .sm .icon .wide, .pill, .tag, .dot, .chip with b and span, .empty (.done), .skel
+as an empty div, .bar, .edit, and the tones t-needs t-hot t-turn t-work t-live t-stop.
 
   atc show --list              this session's pages
   atc show --off <name>        take a page down
