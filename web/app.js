@@ -3983,7 +3983,7 @@ const backlogCounts = (items, only) => {
 
 function BacklogLine({ only }) {
   const counts = backlogCounts(useBacklog(), only);
-  return counts && html`<button class="blline" onClick=${() => (location.hash = BACKLOG)} title="Open the backlog"><span class="mi">${ICON.list}</span>Backlog${only ? ` in ${only}` : ""}: ${counts}</button>`;
+  return html`<button class="blline" onClick=${() => (location.hash = BACKLOG)} title="Open the backlog"><span class="mi">${ICON.list}</span>Backlog${counts ? `: ${counts}` : ""}</button>`;
 }
 
 const BK_FILTERS = [
