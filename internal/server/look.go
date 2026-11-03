@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -20,15 +18,9 @@ type Look struct {
 
 var themeName = regexp.MustCompile(`^[a-z0-9-]{0,40}$`)
 
-func (s *Server) lookPath() string { return filepath.Join(s.StateDir, "look.json") }
-
 func (s *Server) look() Look {
 	l := Look{Scheme: "auto"}
-	if s.StateDir != "" {
-		if b, err := os.ReadFile(s.lookPath()); err == nil {
-			json.Unmarshal(b, &l)
-		}
-	}
+	s.loadPref("look.json", &l)
 	return l
 }
 
@@ -41,15 +33,11 @@ func (s *Server) setLook(w http.ResponseWriter, r *http.Request) {
 	if l.Scheme != "light" && l.Scheme != "dark" {
 		l.Scheme = "auto"
 	}
-	if s.StateDir == "" {
-		http.Error(w, "no state dir", http.StatusInternalServerError)
-		return
-	}
-	b, _ := json.Marshal(l)
-	if err := os.WriteFile(s.lookPath(), b, 0o644); err != nil {
+	if err := s.savePref("look.json", l); err != nil {
 		fail(w, err)
 		return
 	}
+	b, _ := json.Marshal(l)
 	s.broadcast("look", b)
 	if s.Push != nil {
 		list, err := s.liveAll(r.Context(), false)

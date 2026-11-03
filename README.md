@@ -978,6 +978,27 @@ Android app every theme's colors, light and dark (`AtcApp.setLook`), and the app
 bars and home-screen widget from them, following the look that arrives with the widget feed
 (Android 12 and later; older versions keep the built-in colors).
 
+## Where you left off, on every device
+
+What you last looked at, what you were typing and how your bays are laid out live in atc, not in
+one browser, so the phone and the desk agree. Each is a small file in the config dir
+(`seen.json`, `drafts.json`, `bays.json`), and each change reaches open pages over `/api/events`.
+They stay on the atc the page talks to (desktop, `atc.example`), and are not passed to peers.
+
+- **Seen marks**, for "since you last looked": `GET /api/seen` returns `{session: time}`;
+  `PUT /api/seen` with `{sessionId, at}` records one, keeping the later of the two (no `at`, or one
+  in the future, means now). Marks older than 30 days are dropped. Event `seen`: `{sessionId, at}`.
+- **Drafts**: `GET /api/drafts` returns `{session: {text, at}}`; `PUT /api/drafts/<session>` with
+  `{text}` saves one, empty text deletes it, the last write wins. Event `drafts`:
+  `{sessionId, text, at}` (empty text when deleted). Drafts untouched for 30 days are dropped.
+- **Bays** (a bay is a project, as the session list groups them): `GET /api/bays` returns
+  `{order: [bay], memory: {bay: {sid, view, panes, at}}}`; `PUT /api/bays` with `{order}` saves
+  the order; `PATCH /api/bays/<bay>` with any of `{sid, view, panes}` merges into that bay's memory
+  (`panes` is whatever JSON the page keeps; `null` clears it). Event `bays`: the whole object.
+
+Every write may carry `from` (any id the page picks), which comes back in its event, so a page can
+tell its own echo from another device's change.
+
 ## Notes
 
 - Claude Code only starts in folders you have trusted. If atc reports a folder is not trusted,

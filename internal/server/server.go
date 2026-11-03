@@ -95,6 +95,7 @@ type Server struct {
 	stats     usage.Scanner
 	limits    usage.LimitsClient
 
+	prefMu sync.Mutex
 	mu     sync.Mutex
 	subs   map[chan []byte]bool
 	last   []byte
@@ -221,6 +222,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/call/voices", s.callVoices)
 	mux.HandleFunc("POST /api/call/voices", s.callVoices)
 	mux.HandleFunc("PUT /api/look", s.setLook)
+	mux.HandleFunc("GET /api/seen", s.getSeen)
+	mux.HandleFunc("PUT /api/seen", s.putSeen)
+	mux.HandleFunc("GET /api/drafts", s.getDrafts)
+	mux.HandleFunc("PUT /api/drafts/{sid}", s.putDraft)
+	mux.HandleFunc("GET /api/bays", s.getBays)
+	mux.HandleFunc("PUT /api/bays", s.putBays)
+	mux.HandleFunc("PATCH /api/bays/{bay}", s.patchBay)
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/voice/stt", s.stt)
