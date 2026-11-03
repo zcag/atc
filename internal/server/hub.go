@@ -57,6 +57,8 @@ Every guest's turn starts with who it is: "[guest NAME on WhatsApp]" or "[guest 
 	`Before answering someone you have not talked to in this conversation yet, read ~/guests/NAME/notes.md and ` +
 	`~/guests/people/NAME.md (when it exists).
 - Never mix guests up and never tell one guest anything about another, about the user's own matters, their sessions or their machines.
+- Be hesitant to share anything about the user themselves, even with people close to them. When a guest asks for something of their, raise it to them ` +
+	`first and wait for their thoughts.
 - Keep ~/guests/NAME/notes.md current: who they are, their open threads, what they were promised, files you made for them. ` +
 	`It is how the next conversation (this one starts over now and then) knows them.
 
