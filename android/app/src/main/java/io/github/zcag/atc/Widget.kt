@@ -8,13 +8,18 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.os.SystemClock
 import android.service.quicksettings.TileService
+import android.text.SpannableStringBuilder
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
+import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
 import android.view.View
 import android.widget.RemoteViews
-import androidx.core.widget.RemoteViewsCompat
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 
@@ -103,96 +108,202 @@ object Live {
         alarms.set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + if (young) 60_000 else 600_000, pi)
     }
 
+    private enum class Size { S22, S42, S44 }
+
+    private fun size(c: Context, widget: Int): Size {
+        val o = AppWidgetManager.getInstance(c).getAppWidgetOptions(widget)
+        val w = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH)
+        val h = o.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT)
+        return when {
+            w in 1..199 -> Size.S22
+            h in 1..299 -> Size.S42
+            else -> Size.S44
+        }
+    }
+
+    /** The widget per widget.html: 2x2 counts and the first ask, 4x2 the first ask answered in one tap, 4x4 two asks,
+     *  what is working, and the assistant with Talk. Painted from the palette the web hands over. */
     private fun views(c: Context, widget: Int) = RemoteViews(c.packageName, R.layout.widget).apply {
         val p = Prefs(c)
         val now = System.currentTimeMillis()
         val feed = Feed.parse(p.feed)
         val error = p.feedError
         val stale = error != null && now - (p.feedAt?.toLongOrNull() ?: 0) > STALE
-        val busy = fetching.get()
-        val open = Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        val home = activity(c, 1, open)
-        val talk = activity(c, 2, assist(c))
+        val home = PendingIntent.getActivity(c, 1, Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val board = activity(c, "/")
+        val talk = PendingIntent.getActivity(c, 2, assist(c), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val retry = PendingIntent.getBroadcast(c, 3, Intent(c, SessionsWidget::class.java).setAction(SessionsWidget.REFRESH),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        setOnClickPendingIntent(R.id.head, home)
-        setOnClickPendingIntent(R.id.mic, talk)
-        setOnClickPendingIntent(R.id.refresh, retry)
-        val size = AppWidgetManager.getInstance(c).getAppWidgetOptions(widget)
-        val compact = size.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT) in 1..120
-        val narrow = size.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH) in 1..279
-        setViewVisibility(R.id.refresh, if (busy || p.server == null) View.INVISIBLE else View.VISIBLE)
-        setViewVisibility(R.id.busy, if (busy) View.VISIBLE else View.GONE)
-        setViewVisibility(R.id.refresh_box, if (narrow && !busy) View.GONE else View.VISIBLE)
-        setViewVisibility(R.id.body, if (compact) View.GONE else View.VISIBLE)
+        val size = size(c, widget)
         val pal = Look.palette(c)
+        setOnClickPendingIntent(R.id.head, home)
+        setOnClickPendingIntent(R.id.more, board)
+        setOnClickPendingIntent(R.id.talk, talk)
         if (themed) {
-            tint(android.R.id.background, "setBackgroundTintList", pal.widgetBg)
-            tint(R.id.mic, "setBackgroundTintList", pal.work)
-            tint(R.id.mic, "setImageTintList", pal.onWork)
-            tint(R.id.refresh, "setImageTintList", pal.faint)
-            tint(R.id.busy, "setIndeterminateTintList", pal.faint)
-            listOf(R.id.name to pal.ink, R.id.summary to pal.dim, R.id.message_title to pal.ink, R.id.message_body to pal.dim)
-                .forEach { (id, color) -> setTextColor(id, color) }
+            tint(android.R.id.background, "setBackgroundTintList", pal.board)
+            listOf(R.id.big_rule, R.id.big_rule2, R.id.wk_rule, R.id.as_rule).forEach { tint(it, "setImageTintList", pal.line) }
+            listOf(R.id.h_work_bar, R.id.big_work_bar, R.id.wk_bar).forEach { tint(it, "setImageTintList", pal.work) }
+            tint(R.id.talk, "setBackgroundTintList", pal.ink)
+            listOf(R.id.name to pal.ink, R.id.h_work to pal.work, R.id.more to pal.dim, R.id.time to pal.faint, R.id.big_n to pal.ink,
+                R.id.big_lbl to pal.dim, R.id.big_turn to pal.dim, R.id.big_work to pal.dim, R.id.big_first_t to pal.ink, R.id.big_first_d to pal.faint,
+                R.id.clear to pal.dim, R.id.wk_text to pal.dim, R.id.said to pal.ink, R.id.talk to pal.board,
+                R.id.message_title to pal.ink, R.id.message_body to pal.dim).forEach { (id, color) -> setTextColor(id, color) }
+            block(R.id.h_needs, pal, needs = true)
+            block(R.id.h_turn, pal, needs = false)
+            block(R.id.big_sb, pal, needs = true)
+            block(R.id.big_turn_n, pal, needs = false)
         }
 
         val message = when {
             p.server == null -> "Open atc to connect" to "Enter your server's address in the app."
             feed == null && error == "HTTP 401" -> "Sign in to atc" to "Open the app and log in."
-            feed == null && error != null -> "Can't reach your server" to "Tap refresh to try again."
-            feed != null && feed.sessions.isEmpty() -> "No active sessions" to "Tap the mic to start one."
+            feed == null && error != null -> "Can't reach your server" to "Tap to try again."
+            feed == null -> c.getString(R.string.widget_loading) to ""
             else -> null
         }
-        setTextViewText(R.id.summary, when {
-            p.server == null -> "Not connected"
-            feed == null -> if (error != null && !busy) "Offline" else c.getString(R.string.widget_loading)
-            stale -> "Offline · updated ${elapsed(now - (p.feedAt?.toLongOrNull() ?: 0))} ago"
-            narrow -> feed.brief()
-            else -> feed.summary()
+        val asks = feed?.sessions.orEmpty().filter { it.state == Feed.NEEDS }
+            .filter { r -> r.ask?.let { Asked.get(it)?.status } != Asked.GONE }
+        val waiting = asks.count { r -> r.ask?.let { Asked.get(it)?.status } != Asked.SENT }
+        val turn = feed?.count(Feed.TURN) ?: 0
+        val working = feed?.sessions.orEmpty().filter { it.state == Feed.WORK }
+        val shown = when (size) { Size.S22 -> 0; Size.S42 -> 1; Size.S44 -> 2 }
+
+        count(R.id.h_needs, waiting.takeIf { it > 0 })
+        count(R.id.h_turn, turn.takeIf { it > 0 && size != Size.S22 })
+        setViewVisibility(R.id.h_work_bar, if (working.isNotEmpty() && size != Size.S22) View.VISIBLE else View.GONE)
+        count(R.id.h_work, working.size.takeIf { it > 0 && size != Size.S22 })
+        val more = asks.size - shown
+        count(R.id.more, more.takeIf { it > 0 && size != Size.S22 })
+        setTextViewText(R.id.more, "+$more more")
+        setTextViewText(R.id.time, when {
+            feed == null -> ""
+            stale -> "offline ${clock(p.feedAt?.toLongOrNull() ?: 0)}"
+            else -> clock(feed.at.takeIf { it > 0 } ?: (p.feedAt?.toLongOrNull() ?: now))
         })
-        setViewVisibility(R.id.message, if (message != null) View.VISIBLE else View.GONE)
-        setViewVisibility(R.id.list, if (message == null && feed != null) View.VISIBLE else View.GONE)
+
+        listOf(R.id.big, R.id.asks, R.id.clear, R.id.wk, R.id.gap, R.id.said_row, R.id.message).forEach { setViewVisibility(it, View.GONE) }
         if (message != null) {
+            setViewVisibility(R.id.message, View.VISIBLE)
             setTextViewText(R.id.message_title, message.first)
             setTextViewText(R.id.message_body, message.second)
-            setOnClickPendingIntent(R.id.message, when {
-                p.server == null || feed == null && error == "HTTP 401" -> home
-                feed == null -> retry
-                else -> talk
-            })
+            setOnClickPendingIntent(R.id.message, if (p.server == null || error == "HTTP 401") home else retry)
+            return@apply
         }
-        if (feed == null || message != null || compact) return@apply
+        feed!!
+        if (size == Size.S22) {
+            setViewVisibility(R.id.big, View.VISIBLE)
+            setViewVisibility(R.id.big_sb, if (waiting > 0) View.VISIBLE else View.GONE)
+            setTextViewText(R.id.big_n, "$waiting")
+            if (themed) setTextColor(R.id.big_n, if (waiting > 0) pal.ink else pal.faint)
+            setTextViewText(R.id.big_lbl, if (waiting == 1) "needs you" else "need you")
+            setTextViewText(R.id.big_turn_n, "$turn")
+            setTextViewText(R.id.big_work, "${working.size} working")
+            val first = asks.firstOrNull { r -> r.ask?.let { Asked.get(it)?.status } != Asked.SENT }
+            setViewVisibility(R.id.big_first, if (first != null) View.VISIBLE else View.GONE)
+            if (first != null) {
+                setTextViewText(R.id.big_first_t, first.title)
+                setTextViewText(R.id.big_first_d, listOf(first.bay, ago(now, first.since)).filter { it.isNotEmpty() }.joinToString(", "))
+                setOnClickPendingIntent(R.id.big_first, activity(c, "/#/s/${first.key}"))
+            }
+            setOnClickPendingIntent(R.id.big, home)
+            return@apply
+        }
 
-        setPendingIntentTemplate(R.id.list, PendingIntent.getActivity(c, 4, open, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
-        val items = RemoteViewsCompat.RemoteCollectionItems.Builder().setHasStableIds(true).setViewTypeCount(1)
-        feed.sessions.forEach { items.addItem(it.sid.hashCode().toLong(), row(c, it, now, feed.multiHost, live = !stale, pal)) }
-        RemoteViewsCompat.setRemoteAdapter(c, this, widget, R.id.list, items.build())
+        removeAllViews(R.id.asks)
+        if (asks.isEmpty()) setViewVisibility(R.id.clear, View.VISIBLE)
+        else {
+            setViewVisibility(R.id.asks, View.VISIBLE)
+            asks.take(shown).forEachIndexed { i, r -> addView(R.id.asks, ask(c, r, i > 0, now, pal)) }
+        }
+        setViewVisibility(R.id.gap, View.VISIBLE)
+        if (size != Size.S44) return@apply
+
+        if (working.isNotEmpty()) {
+            setViewVisibility(R.id.wk, View.VISIBLE)
+            setTextViewText(R.id.wk_text, SpannableStringBuilder().bold("${working.size} working", pal.ink, themed).append("  ")
+                .append(working.take(3).joinToString(", ") { it.title }))
+            setOnClickPendingIntent(R.id.wk, home)
+        }
+        setViewVisibility(R.id.said_row, View.VISIBLE)
+        val said = feed.said
+        val who = "assistant" + if (said != null && said.at > 0) "  ${ago(now, said.at)}" else ""
+        setTextViewText(R.id.said, SpannableStringBuilder()
+            .append(who, TypefaceSpan("monospace"), 0).also { b -> b.setSpan(RelativeSizeSpan(.85f), 0, who.length, 0); if (themed) b.setSpan(ForegroundColorSpan(pal.dim), 0, who.length, 0) }
+            .append("\n")
+            .append(said?.text ?: "Talk to it from here.", TypefaceSpan("serif"), 0))
+        setOnClickPendingIntent(R.id.said, activity(c, "/#/assist"))
     }
 
-    private fun row(c: Context, r: Feed.Row, now: Long, multiHost: Boolean, live: Boolean, pal: Palette) = RemoteViews(c.packageName, R.layout.widget_row).apply {
-        setTextViewText(R.id.title, r.title)
+    private fun ask(c: Context, r: Feed.Row, rule: Boolean, now: Long, pal: Palette) = RemoteViews(c.packageName, R.layout.widget_ask).apply {
+        val a = r.ask
+        setViewVisibility(R.id.ask_rule, if (rule) View.VISIBLE else View.GONE)
         if (themed) {
-            setImageViewResource(R.id.edge, R.drawable.widget_edge)
-            tint(R.id.edge, "setImageTintList", when (r.state) { Feed.NEEDS -> pal.needs; Feed.TURN -> pal.turn; else -> pal.work })
-            tint(R.id.card, "setBackgroundTintList", pal.rowLine)
-            tint(R.id.fill, "setBackgroundTintList", pal.strip)
-            listOf(R.id.title to pal.ink, R.id.clock to pal.dim, R.id.detail to pal.dim, R.id.host to pal.faint)
+            tint(R.id.ask_rule, "setImageTintList", pal.line)
+            tint(R.id.ask_edge, "setImageTintList", pal.needs)
+            block(R.id.ask_sb, pal, needs = true)
+            listOf(R.id.ask_title to pal.ink, R.id.ask_where to pal.faint, R.id.ask_q to pal.ink, R.id.ask_st to pal.dim)
                 .forEach { (id, color) -> setTextColor(id, color) }
-        } else setImageViewResource(R.id.edge, when (r.state) {
-            Feed.NEEDS -> R.drawable.widget_edge_needs
-            Feed.TURN -> R.drawable.widget_edge_turn
-            else -> R.drawable.widget_edge_work
+        }
+        setTextViewText(R.id.ask_title, r.title)
+        setTextViewText(R.id.ask_where, listOf(r.bay, ago(now, r.since)).filter { it.isNotEmpty() }.joinToString("  "))
+        setTextViewText(R.id.ask_q, when {
+            a == null -> r.summary.ifEmpty { "Needs you" }
+            a.tool == "Bash" -> SpannableStringBuilder("Run ").append(a.cmd, TypefaceSpan("monospace"), 0)
+            else -> a.says()
         })
-        val ticking = live && r.state == Feed.WORK && r.since > 0
-        setViewVisibility(R.id.clock, if (ticking) View.VISIBLE else View.GONE)
-        setViewVisibility(R.id.detail, if (ticking) View.GONE else View.VISIBLE)
-        if (ticking) setChronometer(R.id.clock, SystemClock.elapsedRealtime() - (now - r.since).coerceAtLeast(0), "${r.word} · %s", true)
-        else setTextViewText(R.id.detail, r.detail(now))
-        val host = r.host.takeIf { multiHost }
-        setViewVisibility(R.id.host, if (host != null) View.VISIBLE else View.GONE)
-        if (host != null) setTextViewText(R.id.host, " · $host")
-        setOnClickFillInIntent(R.id.card, Intent().putExtra(MainActivity.EXTRA_PATH, "/#/s/${r.key}"))
+        val open = activity(c, "/#/s/${r.key}")
+        setOnClickPendingIntent(R.id.ask, open)
+        val st = a?.let { Asked.get(it) }
+        val choices = a?.choices(Answer.MAX) ?: listOf(Choice("", "Open", "", open = true))
+        setViewVisibility(R.id.ask_opts, if (st == null) View.VISIBLE else View.GONE)
+        setViewVisibility(R.id.ask_st, if (st != null) View.VISIBLE else View.GONE)
+        if (st != null && a != null) {
+            setTextViewText(R.id.ask_st, when (st.status) {
+                Asked.SENDING -> SpannableStringBuilder("Sending: ").bold(st.what, pal.ink, themed)
+                Asked.FAILED -> SpannableStringBuilder("Not sent: ${st.what}. ${st.why} ").bold("Retry", pal.ink, themed)
+                else -> SpannableStringBuilder("Sent: ").bold(st.what, pal.ink, themed).append(". It carries on.")
+            })
+            if (st.status == Asked.FAILED) setOnClickPendingIntent(R.id.ask_st, Answer.pending(c, a, choices.indexOfFirst { it.label == st.what }, null))
+            return@apply
+        }
+        listOf(R.id.opt0, R.id.opt1, R.id.opt2).forEachIndexed { i, id ->
+            val ch = choices.getOrNull(i)
+            setViewVisibility(id, if (ch != null) View.VISIBLE else View.GONE)
+            if (ch == null) return@forEachIndexed
+            val first = i == 0
+            val label = SpannableStringBuilder()
+            if (ch.n.isNotEmpty()) label.append(ch.n, TypefaceSpan("monospace"), 0).also { it.setSpan(RelativeSizeSpan(.85f), 0, ch.n.length, 0) }.append(" ")
+            label.append(ch.label)
+            setTextViewText(id, label)
+            if (themed) {
+                tint(id, "setBackgroundTintList", if (first) pal.ink else pal.lineStrong)
+                setTextColor(id, if (first) pal.board else pal.ink)
+            }
+            setOnClickPendingIntent(id, if (ch.open || a == null) open else Answer.pending(c, a, i, null))
+        }
     }
+
+    private fun RemoteViews.block(id: Int, pal: Palette, needs: Boolean) {
+        tint(id, "setBackgroundTintList", if (needs) pal.needs else pal.ink)
+        setTextColor(id, if (needs) pal.onNeeds else pal.ink)
+    }
+
+    private fun RemoteViews.count(id: Int, n: Int?) {
+        setViewVisibility(id, if (n != null) View.VISIBLE else View.GONE)
+        if (n != null) setTextViewText(id, "$n")
+    }
+
+    private fun SpannableStringBuilder.bold(text: String, color: Int, themed: Boolean): SpannableStringBuilder {
+        val start = length
+        append(text)
+        setSpan(StyleSpan(Typeface.BOLD), start, length, 0)
+        if (themed) setSpan(ForegroundColorSpan(color), start, length, 0)
+        return this
+    }
+
+    private fun clock(ms: Long) = java.text.SimpleDateFormat("HH:mm", java.util.Locale.ROOT).format(java.util.Date(ms))
+
+    private fun ago(now: Long, since: Long) = if (since > 0) elapsed(now - since) else ""
 
     private val themed get() = Build.VERSION.SDK_INT >= 31
 
@@ -200,6 +311,5 @@ object Live {
         if (Build.VERSION.SDK_INT >= 31) setColorStateList(id, method, ColorStateList.valueOf(color))
     }
 
-    private fun activity(c: Context, code: Int, i: Intent) =
-        PendingIntent.getActivity(c, code, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    private fun activity(c: Context, path: String) = Push.opener(c, path)
 }

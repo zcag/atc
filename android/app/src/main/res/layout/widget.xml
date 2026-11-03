@@ -5,56 +5,275 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_bg"
     android:clipToOutline="true"
-    android:gravity="center_vertical"
-    android:orientation="vertical">
+    android:orientation="vertical"
+    android:padding="12dp">
 
     <include layout="@layout/widget_head" />
 
-    <FrameLayout
-        android:id="@+id/body"
+    <LinearLayout
+        android:id="@+id/big"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
-
-        <ListView
-            android:id="@+id/list"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:clipToPadding="false"
-            android:divider="@null"
-            android:dividerHeight="0dp"
-            android:listSelector="@android:color/transparent"
-            android:paddingHorizontal="10dp"
-            android:paddingBottom="7dp"
-            android:scrollbars="none" />
+        android:layout_marginTop="6dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:visibility="gone">
 
         <LinearLayout
-            android:id="@+id/message"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:paddingHorizontal="24dp"
-            android:paddingBottom="14dp"
-            android:visibility="gone">
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <TextView
-                android:id="@+id/message_title"
+                android:id="@+id/big_sb"
+                android:layout_width="30dp"
+                android:layout_height="30dp"
+                android:background="@drawable/w_fill"
+                android:fontFamily="monospace"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:text="N"
+                android:textSize="15sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/big_n"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-medium"
-                android:gravity="center"
+                android:layout_marginStart="10dp"
+                android:fontFamily="monospace"
+                android:includeFontPadding="false"
+                android:letterSpacing="-0.03"
                 android:textColor="@color/w_ink"
-                android:textSize="15sp" />
+                android:textSize="34sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/big_lbl"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="need you"
+            android:textColor="@color/w_dim"
+            android:textSize="14sp" />
+
+        <ImageView
+            android:id="@+id/big_rule"
+            style="@style/WidgetRule"
+            android:layout_marginTop="6dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
             <TextView
-                android:id="@+id/message_body"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:gravity="center"
-                android:textColor="@color/w_dim"
-                android:textSize="13sp" />
+                android:id="@+id/big_turn_n"
+                style="@style/WidgetBlock"
+                android:background="@drawable/w_box" />
+
+            <TextView
+                android:id="@+id/big_turn"
+                style="@style/WidgetSmall"
+                android:layout_marginStart="6dp"
+                android:text="your turn" />
         </LinearLayout>
-    </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/big_work_bar"
+                android:layout_width="2dp"
+                android:layout_height="11dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/w_fill" />
+
+            <TextView
+                android:id="@+id/big_work"
+                style="@style/WidgetSmall"
+                android:layout_marginStart="6dp" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <LinearLayout
+            android:id="@+id/big_first"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/big_rule2"
+                style="@style/WidgetRule" />
+
+            <TextView
+                android:id="@+id/big_first_t"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:textColor="@color/w_ink"
+                android:textSize="12sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/big_first_d"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:fontFamily="monospace"
+                android:singleLine="true"
+                android:textColor="@color/w_faint"
+                android:textSize="10sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/asks"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="vertical"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/clear"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:paddingVertical="24dp"
+        android:text="Nothing needs you."
+        android:textColor="@color/w_dim"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/wk"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/wk_rule"
+            style="@style/WidgetRule"
+            android:layout_marginTop="2dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:id="@+id/wk_bar"
+                android:layout_width="2dp"
+                android:layout_height="11dp"
+                android:layout_marginEnd="4dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/w_fill" />
+
+            <TextView
+                android:id="@+id/wk_text"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:singleLine="true"
+                android:textColor="@color/w_dim"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <FrameLayout
+        android:id="@+id/gap"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:visibility="gone" />
+
+    <LinearLayout
+        android:id="@+id/said_row"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <ImageView
+            android:id="@+id/as_rule"
+            style="@style/WidgetRule"
+            android:layout_marginTop="8dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/said"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:lineSpacingMultiplier="1.1"
+                android:maxLines="4"
+                android:textColor="@color/w_ink"
+                android:textSize="12sp" />
+
+            <TextView
+                android:id="@+id/talk"
+                android:layout_width="64dp"
+                android:layout_height="56dp"
+                android:layout_marginStart="10dp"
+                android:background="@drawable/w_talk"
+                android:gravity="center"
+                android:text="Talk"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/message"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/message_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="@color/w_ink"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/message_body"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:gravity="center"
+            android:textColor="@color/w_dim"
+            android:textSize="12sp" />
+    </LinearLayout>
 </LinearLayout>

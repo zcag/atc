@@ -61,4 +61,3 @@
   .setpage .pv .bar { height: 13px; }
   .setpage .pv .lab { display: none; }
 }
-@media (prefers-reduced-motion: reduce) { .pv .h { transition: none; } }

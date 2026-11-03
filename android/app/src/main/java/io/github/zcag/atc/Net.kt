@@ -27,14 +27,19 @@ object Net {
     fun download(c: Context, url: String, to: File) =
         call(c, url) { conn -> conn.inputStream.use { i -> to.outputStream().use { i.copyTo(it) } } }
 
-    fun post(c: Context, url: String, body: JSONObject): Int {
+    fun post(c: Context, url: String, body: JSONObject): Int = send(c, url, body).first
+
+    /** POSTs and returns the status with, when it failed, what the server said. */
+    fun send(c: Context, url: String, body: JSONObject): Pair<Int, String> {
         val conn = open(c, url)
         try {
             conn.requestMethod = "POST"
             conn.doOutput = true
             conn.setRequestProperty("Content-Type", "application/json")
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
-            return conn.responseCode
+            val code = conn.responseCode
+            val said = if (code in 200..299) "" else runCatching { conn.errorStream?.bufferedReader()?.readText() }.getOrNull().orEmpty()
+            return code to said.trim()
         } finally {
             conn.disconnect()
         }

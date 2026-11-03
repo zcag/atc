@@ -104,7 +104,7 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
 .peek .grp { display: flex; gap: var(--s2); align-items: baseline; margin: 0; padding: 8px var(--s3) 6px; font-size: var(--fs-small); font-weight: 400; color: var(--faint); border-bottom: 1px solid var(--hair); }
 .peek .grp b { color: var(--dim); font-weight: 620; }
 .pk { padding: var(--s2) var(--s3) var(--s3); border-bottom: 1px solid var(--hair); position: relative; }
-.pk.needs-you::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--needs); }
+.pk:is(.needs-you, .your-turn)::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--needs); }
 .pk .row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; column-gap: var(--s2); align-items: center; }
 .pk .ti { color: var(--ink); text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pk .ti:hover { text-decoration: underline; text-underline-offset: 3px; }

@@ -4,9 +4,9 @@
 
 const STYLES = {
   line(g, w, h, t, o) {
-    const y = h / 2, amp = h * .09 * o.level, n = 120;
+    const y = h / 2, amp = h * .09 * o.gain * o.level, n = 120;
     g.lineWidth = 1.5 * o.k;
-    g.strokeStyle = `rgba(255,255,255,${.35 + .5 * Math.min(1, o.level * 2)})`;
+    g.strokeStyle = `rgba(${o.rgb},${.35 + .5 * Math.min(1, o.level * 2)})`;
     g.beginPath();
     for (let i = 0; i <= n; i++) {
       const x = i / n, env = Math.sin(Math.PI * x) ** 2;
@@ -17,17 +17,17 @@ const STYLES = {
     if (o.think < .01) return;
     const p = (Math.sin(t * 1.6) * .5 + .5) * .8 + .1, a = (p - .12) * w, b = (p + .12) * w;
     const gr = g.createLinearGradient(a, 0, b, 0);
-    gr.addColorStop(0, "rgba(255,255,255,0)");
-    gr.addColorStop(.5, `rgba(255,255,255,${.9 * o.think})`);
-    gr.addColorStop(1, "rgba(255,255,255,0)");
+    gr.addColorStop(0, `rgba(${o.rgb},0)`);
+    gr.addColorStop(.5, `rgba(${o.rgb},${.9 * o.think})`);
+    gr.addColorStop(1, `rgba(${o.rgb},0)`);
     g.strokeStyle = gr;
     g.lineWidth = 2 * o.k;
     g.beginPath(); g.moveTo(a, y); g.lineTo(b, y); g.stroke();
   },
   bars(g, w, h, t, o) {
-    const n = 4, bw = 6 * o.k, gap = 10 * o.k, base = 8 * o.k, max = Math.min(h * .22, 90 * o.k);
+    const n = 4, bw = 6 * o.k, gap = 10 * o.k, base = 8 * o.k, max = Math.min(h * .22 * o.gain, 90 * o.k);
     const x0 = w / 2 - (n * bw + (n - 1) * gap) / 2;
-    g.fillStyle = `rgba(255,255,255,${.5 + .4 * Math.min(1, o.level * 2)})`;
+    g.fillStyle = `rgba(${o.rgb},${.5 + .4 * Math.min(1, o.level * 2)})`;
     for (let i = 0; i < n; i++) {
       const v = o.level * (.55 + .45 * Math.sin(t * (7 + i * 2.3) + i * 1.7)) + o.think * .25 * (Math.sin(t * 3 - i * .9) * .5 + .5);
       const bh = base + max * Math.max(0, v);
@@ -36,10 +36,12 @@ const STYLES = {
   },
 };
 
-/** Draws the minimal character described by `spec` into a canvas. now() gives {state, you, it}. Returns stop. */
+/** Draws the minimal character described by `spec` into a canvas. now() gives {state, you, it}. Returns stop.
+ *  opts.ink() gives a CSS color to draw in (white without it), opts.gain scales the movement for a small canvas. */
 export function minimal(canvas, spec, now, opts = {}) {
   const draw = STYLES[spec.style] || STYLES.line, g = canvas.getContext("2d");
-  const o = { level: 0, think: 0, phase: 0, k: 1 };
+  const o = { level: 0, think: 0, phase: 0, k: 1, gain: opts.gain || 1, rgb: "255,255,255" };
+  let inkAt = -1e9;
   const ease = (v, to, dt, tau) => v + (to - v) * (1 - Math.exp(-dt / tau));
   let raf, last = performance.now(), drew = false;
   const frame = (ms) => {
@@ -51,6 +53,7 @@ export function minimal(canvas, spec, now, opts = {}) {
     o.think = ease(o.think, +(state === "thinking" || state === "tool"), dt, .4);
     o.phase += dt * 6 * (state === "hearing" ? -1 : 1);
     o.k = Math.min(devicePixelRatio || 1, 2);
+    if (opts.ink && ms - inkAt > 1000) { inkAt = ms; o.rgb = rgbOf(opts.ink()); }
     const w = Math.round(canvas.clientWidth * o.k), h = Math.round(canvas.clientHeight * o.k);
     if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     g.clearRect(0, 0, w, h);
@@ -59,4 +62,12 @@ export function minimal(canvas, spec, now, opts = {}) {
   };
   raf = requestAnimationFrame(frame);
   return () => cancelAnimationFrame(raf);
+}
+
+const probe = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
+function rgbOf(color) {
+  probe.clearRect(0, 0, 1, 1);
+  probe.fillStyle = color;
+  probe.fillRect(0, 0, 1, 1);
+  return [...probe.getImageData(0, 0, 1, 1).data.slice(0, 3)].join(",");
 }

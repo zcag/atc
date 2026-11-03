@@ -35,33 +35,29 @@ class FeedTest {
         assertNull(Feed.parse("""{"type":"sessions","sessions":[{"title":"no sid"}]}"""))
     }
 
-    @Test fun summary() {
+    @Test fun counts() {
         val f = Feed.parse(json)!!
-        assertEquals("2 need you · 1 your turn · 1 working", f.summary())
+        assertEquals(2, f.count(Feed.NEEDS))
         assertEquals("2 need you", f.urgent())
-        assertEquals("2 need you · 2 more", f.brief())
-        val one = Feed.parse("""{"type":"sessions","sessions":[{"sid":"x","state":"needs-you"},{"sid":"y","state":"working"}]}""")!!
-        assertEquals("1 needs you · 1 working", one.summary())
-        val quiet = Feed.parse("""{"type":"sessions","sessions":[]}""")!!
-        assertEquals("All quiet", quiet.summary())
-        assertEquals("All quiet", quiet.brief())
-        assertEquals("1 working", Feed.parse("""{"type":"sessions","sessions":[{"sid":"y","state":"working"}]}""")!!.brief())
-        assertNull(quiet.urgent())
-    }
-
-    @Test fun hostsAndTargets() {
-        val f = Feed.parse(json)!!
-        assertTrue(f.multiHost)
-        assertFalse(Feed.parse("""{"type":"sessions","sessions":[{"sid":"x","state":"working","host":"a"},{"sid":"y","state":"working"}]}""")!!.multiHost)
+        assertEquals("1 needs you", Feed.parse("""{"type":"sessions","sessions":[{"sid":"x","state":"needs-you"}]}""")!!.urgent())
+        assertNull(Feed.parse("""{"type":"sessions","sessions":[]}""")!!.urgent())
         assertEquals(listOf("s-1" to "api", "s-3" to "web", "s-4" to "docs"), f.targets())
     }
 
-    @Test fun detail() {
-        val (a, b, c, d) = Feed.parse(json)!!.sessions
-        assertEquals("needs you · 3m", a.detail(at))
-        assertEquals("your turn · 10m", b.detail(at))
-        assertEquals("working", c.detail(at))
-        assertEquals("needs you · now", d.detail(at))
+    @Test fun asksBaysAndTheAssistant() {
+        val f = Feed.parse("""{"type":"sessions","at":"2026-10-23T10:00:00Z","assistant":{"text":"All shipped.","at":"2026-10-23T09:58:00Z"},"sessions":[
+            {"sid":"q","title":"dialogs","state":"needs-you","bay":"atc","summary":"Asks about Back",
+             "ask":{"sid":"q","id":"claude","key":"k1","text":"Back closes?","options":["Close the dialog","Go back"]}},
+            {"sid":"w","title":"tests","state":"working"}]}""")!!
+        val (q, w) = f.sessions
+        assertEquals("atc", q.bay)
+        assertEquals("Asks about Back", q.summary)
+        assertEquals(listOf("Close the dialog", "Go back"), q.ask!!.options)
+        assertNull(w.ask)
+        assertEquals("", w.bay)
+        assertEquals("All shipped.", f.said!!.text)
+        assertTrue(f.said!!.at > 0)
+        assertNull(Feed.parse("""{"type":"sessions","sessions":[]}""")!!.said)
     }
 
     @Test fun elapsedTimes() {
