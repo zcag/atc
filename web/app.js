@@ -88,12 +88,12 @@ const LOOK = {
   restyle() {
     for (const d of DOCK.values()) d.term.options.theme = termTheme();
   },
-  palettes() {
+  palettes(names = NATIVE_COLORS, fmt = hexColor) {
     const r = document.documentElement, keep = r.dataset.theme;
     const out = {};
     for (const t of Object.keys(THEMES)) {
       if (t) r.dataset.theme = t; else delete r.dataset.theme;
-      out[t || "atc"] = Object.fromEntries(["light", "dark"].map((sc) => [sc, Object.fromEntries(cssColors(sc, NATIVE_COLORS).map((c, i) => [NATIVE_COLORS[i], hexColor(c)]))]));
+      out[t || "atc"] = Object.fromEntries(["light", "dark"].map((sc) => [sc, Object.fromEntries(cssColors(sc, names).map((c, i) => [names[i], fmt(c)]))]));
     }
     if (keep) r.dataset.theme = keep; else delete r.dataset.theme;
     return out;
@@ -103,6 +103,7 @@ const LOOK = {
     if (this.scheme === "auto") delete r.dataset.scheme; else r.dataset.scheme = this.scheme;
     if (this.theme) r.dataset.theme = this.theme; else delete r.dataset.theme;
     try { localStorage.setItem("atc.look", JSON.stringify({ scheme: this.scheme, theme: this.theme })); } catch {}
+    dispatchEvent(new Event("atc-look"));
     for (const m of document.querySelectorAll('meta[name="theme-color"]'))
       m.content = cssColors(this.scheme !== "auto" ? this.scheme : m.media.includes("dark") ? "dark" : "light", ["board"])[0];
     if (window.AtcApp?.setLook) Promise.all(this.sheets).then(() =>
@@ -133,8 +134,9 @@ const engineTag = (s) => s.harness && s.kind !== "hub"
   : (s.engine || local(s.model)) && html`<span class="eng" title=${`Runs on ${s.engine || s.model}, not Claude`}>${s.engine || model(s.model)}</span>`;
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
-const USAGE = "#/usage", PAGES = "#/pages";
+const USAGE = "#/usage", PAGES = "#/pages", SETTINGS = "#/settings";
 const closePages = () => (history.length > 1 ? history.back() : location.replace("#/"));
+const closeSettings = closePages;
 let usageBack = false;
 const openUsage = () => { if (location.hash !== USAGE) { usageBack = true; location.hash = USAGE; } };
 const closeUsage = () => {
@@ -273,9 +275,10 @@ function App() {
   const [alone, setAlone] = useState(aloneRoute);
   const [pagesHome, setPagesHome] = useState(location.hash === PAGES);
   const [backlog, setBacklog] = useState(location.hash === BACKLOG);
+  const [settings, setSettings] = useState(location.hash === SETTINGS);
   const [calling, setCalling] = useState(location.hash === CALL);
   useEffect(() => {
-    const f = () => { setCalling(location.hash === CALL); setAssisting(location.hash === "#/assist"); setUsage(location.hash === USAGE); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesHome(location.hash === PAGES); setBacklog(location.hash === BACKLOG); };
+    const f = () => { setCalling(location.hash === CALL); setAssisting(location.hash === "#/assist"); setUsage(location.hash === USAGE); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesHome(location.hash === PAGES); setBacklog(location.hash === BACKLOG); setSettings(location.hash === SETTINGS); };
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
@@ -405,6 +408,8 @@ function App() {
         e.preventDefault(); location.hash === PAGES ? closePages() : (location.hash = PAGES);
       } else if (e.key === "b") {
         e.preventDefault(); location.hash === BACKLOG ? closeBacklog() : (location.hash = BACKLOG);
+      } else if (e.key === ",") {
+        e.preventDefault(); location.hash === SETTINGS ? closeSettings() : (location.hash = SETTINGS);
       } else if (e.key === "/") {
         e.preventDefault(); document.querySelector('.search input')?.focus();
       } else if (e.key === "?") {
@@ -455,6 +460,7 @@ function App() {
             { cls: "viewitem", title: "Jump to any session, run any action", run: () => setPalette(true), label: html`<span class="mi">${ICON.search}</span><span class="grow">Search and commands</span><kbd>${MAC ? "⌘" : "Ctrl+"}K</kbd>` },
             { cls: "viewitem", title: "Everything your sessions showed you", run: () => (location.hash = PAGES), label: html`<span class="mi">${ICON.page}</span><span class="grow">Pages</span><kbd>p</kbd>` },
             { cls: "viewitem", title: "Work you put aside per project, to start later", run: () => (location.hash = BACKLOG), label: html`<span class="mi">${ICON.list}</span><span class="grow">Backlog</span><kbd>b</kbd>` },
+            { cls: "viewitem", title: "Theme, light and dark, reading, notifications", run: () => (location.hash = SETTINGS), label: html`<span class="mi">${ICON.gear}</span><span class="grow">Settings</span><kbd>,</kbd>` },
             ...LISTS.map(([k, label, hint]) => ({ cls: `viewitem ${view.list === k ? "on" : ""}`, title: hint, run: () => setView({ ...view, list: k }), label: html`<span>${label}</span>${view.list === k && "✓"}` })),
             { cls: `viewitem ${view.rail ? "on" : ""}`, title: "While a session is open on a wide screen, the list folds into a strip of projects; hover or click it to bring the list back",
               run: () => setView({ ...view, rail: !view.rail }), label: html`<span>Fold into a rail while reading</span>${view.rail && "✓"}` },
@@ -476,6 +482,7 @@ function App() {
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${assisting && html`<${Assist} live=${reach} onOpen=${() => go(null)} />`}
     ${pagesHome && html`<${PagesHome} live=${all} say=${say} onClose=${closePages} />`}
+    ${settings && html`<${SettingsPage} me=${me} onClose=${closeSettings} />`}
     ${backlog && html`<${BacklogPage} live=${all} say=${say} onClose=${closeBacklog} onAdd=${setCreating} />`}
     ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} at=${alone.at} live=${all} say=${say} />`}
     ${calling ? html`<${CallView} />` : html`<${CallPill} />`}
@@ -484,7 +491,7 @@ function App() {
     ${agentSheet && html`<${AgentSheet} key=${agentSheet.name + agentSheet.view} name=${agentSheet.name} view=${agentSheet.view} live=${all} say=${say} onClose=${() => setAgentSheet(null)} reload=${loadAgents} />`}
     <${Dialogs} />
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
-    ${notifAsk && me && !updated && html`<div class="appbar" role="status">
+    ${notifAsk && me && !updated && !settings && html`<div class="appbar" role="status">
       <span>Get a desktop notification when a session finishes or needs you, while this tab is in the background?</span>
       <button class="btn primary" onClick=${() => notifDone(true)}>Turn on</button>
       <button class="btn" onClick=${() => notifDone(false)}>Not now</button>
@@ -514,6 +521,7 @@ function App() {
             <dt>/</dt><dd>Search earlier sessions</dd>
             <dt>p</dt><dd>Pages: everything your sessions showed you</dd>
             <dt>b</dt><dd>Backlog: work put aside per project, to start later</dd>
+            <dt>,</dt><dd>Settings: theme, light and dark, reading</dd>
             <dt>[ / ]</dt><dd>Previous or next project tab</dd>
             <dt>Ctrl + Z</dt><dd>In a terminal: detach. The session keeps running.</dd>
             <dt>1 / 2 / 3</dt><dd>In a transcript: outline, story or everything</dd>
@@ -1334,6 +1342,7 @@ const ICON = {
   split: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 2.5v11" stroke="currentColor" stroke-width="1.4"/></svg>`,
   expand: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M9.5 2.5h4v4M6.5 13.5h-4v-4M13.5 2.5L9 7M2.5 13.5L7 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   list: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 4h7.5M6 8h7.5M6 12h7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2.5 3.3l.8.8 1.4-1.6M2.5 7.3l.8.8 1.4-1.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="3.4" cy="12" r="1" fill="currentColor"/></svg>`,
+  gear: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M3.6 12.4L5 11M11 5l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   more: html`<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="12.5" cy="8" r="1.3" fill="currentColor"/></svg>`,
 };
 
@@ -4097,6 +4106,15 @@ const txStore = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(`atc.tx.${k}`)) ?? d; } catch { return d; } },
   set: (k, v) => { try { v === null ? localStorage.removeItem(`atc.tx.${k}`) : localStorage.setItem(`atc.tx.${k}`, JSON.stringify(v)); } catch {} },
 };
+const txPrefs = {
+  get: () => ({ face: "lit", size: 1, width: 1, ...txStore.get("prefs", {}) }),
+  set(p) {
+    const v = { ...txPrefs.get(), ...p };
+    txStore.set("prefs", v);
+    dispatchEvent(new CustomEvent("atc-txprefs", { detail: v }));
+  },
+};
+const TX_MEASURES = [600, 660, 740];
 
 function bodyOf(msgs) {
   const items = [];
@@ -4541,6 +4559,111 @@ function Prefs({ prefs, set }) {
   </div>`;
 }
 
+const THEME_NOTES = { "": "Instrument grey; the deepest dark", frappe: "Catppuccin Frappé, with Rosé Pine Dawn for light", nord: "Nord's blue-grey; a softer dark" };
+const PREVIEW_COLORS = ["strip", "sunk", "line", "ink", "dim", "faint", "needs", "work"];
+const TX_SAMPLE = "The resize race came from two viewers sending sizes at once. The server now keeps the size of the last visible one and asks Claude to redraw, so a phone joining no longer squeezes the desktop.";
+
+function ThemePreview({ colors, on }) {
+  return html`<span class="pv" aria-hidden="true">${["light", "dark"].map((sc) => {
+    const c = colors?.[sc] || {};
+    const style = PREVIEW_COLORS.map((n) => `--p-${n}: ${c[n] || "transparent"}`).join(";");
+    return html`<span class="h ${on(sc) ? "" : "off"}" style=${style}>
+      <span class="bar"><i class="n"></i><i class="t"></i><i class="w"></i></span>
+      <span class="row"><i class="b n"></i><i class="l"></i></span>
+      <span class="row"><i class="b t"></i><i class="l s"></i></span>
+      <span class="row"><i class="b w"></i><i class="l d"></i></span>
+      <span class="prose"><i></i><i></i><i class="s"></i></span>
+      <span class="lab">${sc === "light" ? "Light" : "Dark"}</span>
+    </span>`;
+  })}</span>`;
+}
+
+function Seg({ label, value, options, set }) {
+  return html`<span class="seg" role="group" aria-label=${label}>${options.map(([v, name, style]) =>
+    html`<button aria-pressed=${value === v} style=${style || ""} onClick=${() => set(v)}>${name}</button>`)}</span>`;
+}
+
+function SettingsPage({ me, onClose }) {
+  const [look, setLook] = useState({ scheme: LOOK.scheme, theme: LOOK.theme });
+  const [colors, setColors] = useState(null);
+  const [prefs, setPrefs] = useState(txPrefs.get);
+  const [notif, setNotif] = useState(() => typeof Notification === "undefined" ? "none" : Notification.permission);
+  useEffect(() => {
+    const onLook = () => setLook({ scheme: LOOK.scheme, theme: LOOK.theme });
+    const onPrefs = (e) => setPrefs(e.detail);
+    const onKey = (e) => e.key === "Escape" && !document.querySelector(".veil") && onClose();
+    addEventListener("atc-look", onLook);
+    addEventListener("atc-txprefs", onPrefs);
+    addEventListener("keydown", onKey);
+    Promise.all(LOOK.sheets).then(() => setColors(LOOK.palettes(PREVIEW_COLORS, (c) => c)));
+    return () => { removeEventListener("atc-look", onLook); removeEventListener("atc-txprefs", onPrefs); removeEventListener("keydown", onKey); };
+  }, []);
+  const on = (sc) => look.scheme === "auto" || look.scheme === sc;
+  const face = TX_FACES[prefs.face] || TX_FACES.lit;
+  const askNotif = () => Notification.requestPermission().then(setNotif);
+  const hosts = me?.hosts?.length > 1 ? me.hosts.join(" and ") : me?.host;
+  return html`
+    <div class="pghome settings" role="dialog" aria-label="Settings">
+      <header class="pghead">
+        <button class="icon" onClick=${onClose} aria-label="Back">←</button>
+        <div class="who"><h2>Settings</h2></div>
+      </header>
+      <div class="pgbody"><div class="setpage">
+        <section id="appearance">
+          <h2>Appearance <span class="n">one setting for every device</span></h2>
+          <div class="set">
+            <b>Light and dark</b>
+            <p>Auto follows each device's own setting, so the phone can be dark while the desk is light.</p>
+            <div class="ctl"><${Seg} label="Light and dark" value=${look.scheme} set=${(v) => LOOK.set("scheme", v)}
+              options=${[["auto", "Auto"], ["light", "Light"], ["dark", "Dark"]]} /></div>
+          </div>
+          <div class="themes" role="radiogroup" aria-label="Theme">
+            ${Object.entries(THEMES).map(([t, name]) => html`
+              <button class="thcard" role="radio" aria-checked=${look.theme === t} onClick=${() => LOOK.set("theme", t)}>
+                <${ThemePreview} colors=${colors?.[t || "atc"]} on=${on} />
+                <span class="meta"><b>${name}</b>${look.theme === t && html`<span class="cur">In use</span>`}<span class="d">${THEME_NOTES[t] || ""}</span></span>
+              </button>`)}
+          </div>
+        </section>
+        <section id="reading">
+          <h2>Reading <span class="n">transcripts, on this device</span></h2>
+          <div class="set">
+            <b>Typeface</b>
+            <p>What the agent says to you. Your own words and the interface stay in Recursive.</p>
+            <div class="ctl"><${Seg} label="Typeface" value=${prefs.face} set=${(v) => txPrefs.set({ face: v })}
+              options=${Object.entries(TX_FACES).map(([k, f]) => [k, f.name, `font-family:${f.css}`])} /></div>
+          </div>
+          <div class="set">
+            <b>Size</b>
+            <div class="ctl"><${Seg} label="Size" value=${prefs.size} set=${(v) => txPrefs.set({ size: v })}
+              options=${["Small", "Medium", "Large"].map((n, i) => [i, n])} /></div>
+          </div>
+          <div class="set">
+            <b>Line length</b>
+            <div class="ctl"><${Seg} label="Line length" value=${prefs.width} set=${(v) => txPrefs.set({ width: v })}
+              options=${["Narrow", "Normal", "Wide"].map((n, i) => [i, n])} /></div>
+          </div>
+          <p class="rsample" style=${`font-family:${face.css};font-size:${face.sizes[prefs.size]}px;line-height:${face.lh};max-width:${TX_MEASURES[prefs.width]}px`}>${TX_SAMPLE}</p>
+        </section>
+        ${!APP && notif !== "none" && html`
+          <section id="notifications">
+            <h2>Notifications <span class="n">this browser</span></h2>
+            <div class="set">
+              <b>Desktop notifications</b>
+              <p>${notif === "granted" ? "On: a session that needs you or finishes its turn shows a notification while this tab is in the background."
+                : notif === "denied" ? "Blocked in this browser's site settings; allow notifications for atc there to turn them on."
+                : "Off: turn on to hear about sessions while this tab is in the background."}</p>
+              <div class="ctl">${notif === "default" ? html`<button class="btn" onClick=${askNotif}>Turn on</button>` : html`<span class="fixed">${notif === "granted" ? "on" : "blocked"}</span>`}</div>
+            </div>
+          </section>`}
+        <section id="about">
+          <h2>About</h2>
+          <div class="set"><b>This atc</b><p>Build ${me?.web || "unknown"}${hosts ? `, sessions on ${hosts}` : ""}${APP_VERSION ? `; Android app ${APP_VERSION}` : ""}.</p></div>
+        </section>
+      </div></div>
+    </div>`;
+}
+
 function Results({ turns, s, bodies, need, go, close }) {
   const files = new Map(), commits = [], deploys = [], pushes = [];
   turns.forEach((t, i) => {
@@ -4854,7 +4977,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
   const [bodies, setBodies] = useState({});
   const [err, setErr] = useState(null);
   const [level, setLevelRaw] = useState(() => txStore.get("level", 2));
-  const [prefs, setPrefsRaw] = useState(() => ({ face: "lit", size: 1, width: 1, ...txStore.get("prefs", {}) }));
+  const [prefs, setPrefsRaw] = useState(txPrefs.get);
   const [pop, setPop] = useState(null);
   const [opened, setOpened] = useState(() => new Set());
   const [inView, setInView] = useState(() => new Set());
@@ -4932,10 +5055,14 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
     st.setProperty("--rf", f.css);
     st.setProperty("--rs", `${f.sizes[prefs.size]}px`);
     st.setProperty("--rl", f.lh);
-    st.setProperty("--measure", `${[600, 660, 740][prefs.width]}px`);
-    txStore.set("prefs", prefs);
+    st.setProperty("--measure", `${TX_MEASURES[prefs.width]}px`);
   }, [prefs]);
-  const setPrefs = (p) => setPrefsRaw((cur) => ({ ...cur, ...p }));
+  useEffect(() => {
+    const f = (e) => setPrefsRaw(e.detail);
+    addEventListener("atc-txprefs", f);
+    return () => removeEventListener("atc-txprefs", f);
+  }, []);
+  const setPrefs = txPrefs.set;
 
   const topTurn = () => {
     const el = box.current, top = el?.getBoundingClientRect().top || 0;
@@ -5490,6 +5617,7 @@ function Palette({ live, sel, say, home, actions, onClose }) {
   add("Actions", "New backlog item", { glyph: "+", kw: "later todo task add put", run: run(() => actions.create({ later: true })) });
   add("Actions", "All pages", { glyph: "▣", hint: "p", kw: "shown html reports gallery", run: run(() => (location.hash = PAGES)) });
   add("Actions", "Usage and limits", { glyph: "%", kw: "tokens cost week", run: run(actions.usage) });
+  add("Actions", "Settings", { glyph: "⚙", hint: ",", kw: "preferences options theme appearance reading notifications", run: run(() => (location.hash = SETTINGS)) });
   add("Actions", "Keyboard shortcuts", { glyph: "?", hint: "?", kw: "help keys", run: run(actions.help) });
   for (const [v, label] of [["auto", "Match the system"], ["light", "Light"], ["dark", "Dark"]])
     add("Appearance", label, { glyph: "◐", kw: "appearance scheme mode light dark night day", sub: LOOK.scheme === v ? "current" : "", run: run(() => LOOK.set("scheme", v)) });
