@@ -5777,7 +5777,8 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
   };
   const nextUnseen = () => {
     const sc = box.current, since = sc?.querySelector("#since"), q = sc?.querySelector("#pending-ask");
-    const top = sc?.getBoundingClientRect().top, ahead = (e) => e && e.getBoundingClientRect().top > top + 20;
+    const top = sc?.getBoundingClientRect().top, canScroll = sc && sc.scrollTop + sc.clientHeight < sc.scrollHeight - 2;
+    const ahead = (e) => e && canScroll && e.getBoundingClientRect().top > top + 20;
     if (ahead(since)) return scrollTo(since);
     if (q && document.activeElement !== q && !q.contains(document.activeElement)) { scrollTo(q); return q.focus({ preventScroll: true }); }
     markLooked({ ...s, updated: new Date().toISOString() });
