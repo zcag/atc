@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -145,6 +146,20 @@ func (s *Server) hidePage(w http.ResponseWriter, r *http.Request) {
 	}
 	s.refresh()
 	reply(w, map[string]string{"ok": "removed"})
+}
+
+func (s *Server) pageToPhone(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Session, Name, Title string }
+	if !decodeOr400(w, r, &req, "{session, name, title}", func() bool { return req.Session != "" && req.Name != "" }) {
+		return
+	}
+	if s.Push == nil || s.Push.Count() == 0 {
+		http.Error(w, "No phone gets atc's pushes yet: open atc in the phone app once.", http.StatusNotFound)
+		return
+	}
+	go s.Push.Send(push.Message{Title: cmp.Or(req.Title, req.Name), Body: "Open the page", Tag: req.Session + "/" + req.Name + "/phone",
+		URL: "/#/p/" + req.Session + "/" + url.PathEscape(req.Name)})
+	reply(w, map[string]string{"ok": "pushed"})
 }
 
 func (s *Server) pageState(w http.ResponseWriter, r *http.Request) {

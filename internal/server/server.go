@@ -204,6 +204,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/sessions/{sid}/pages/{name}/state", s.pageState)
 	mux.HandleFunc("POST /api/sessions/{sid}/pages/{name}/run", s.runAction)
 	mux.HandleFunc("GET /api/pages", s.allPages)
+	mux.HandleFunc("POST /api/pages/phone", s.pageToPhone)
 	mux.HandleFunc("POST /api/sessions/{sid}/notify", s.postNote)
 	mux.HandleFunc("GET /api/browser/{sid}/cdp", s.browserCDP)
 	mux.HandleFunc("GET /api/sessions/{sid}/tabs/{tab}/view", s.browserView)
