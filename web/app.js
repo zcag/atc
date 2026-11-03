@@ -447,7 +447,7 @@ function App() {
           next ? go(keyOf(next)) : say("Nothing needs you.");
         },
         "[": () => (k.route ? k.togglePane("rail") : k.pages && k.togglePane("pgindex")),
-        "\\": () => !k.route && k.list && k.togglePane("index"),
+        "]": () => !k.route && k.list && k.togglePane("index"),
         z: () => k.toast?.undo && k.undo(),
         ",": () => (location.hash === SETTINGS ? closeSettings() : (location.hash = SETTINGS)),
         "/": () => setPalette(true),
@@ -665,9 +665,9 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
         ${kb(view === "pages", "Pages", "g", () => (location.hash = pagesHash()))}
         ${SCREENS[view] && html`<button class="kb on" aria-current="page">${SCREENS[view]}</button>`}
       </div>
-      ${view === "board" && html`<div class="tgl">${kb(only === null, html`<span class="nm">All bays</span>`, "alt 0", () => BAY.set(only === null ? bays[0]?.name || null : null), "Every bay on one board")}${kb(panes.index, html`<span class="nm">Page index</span>`, "\\", () => togglePane("index"), "The bay's pages beside the board")}</div>`}
+      ${view === "board" && html`<div class="tgl">${kb(only === null, html`<span class="nm">All bays</span>`, "alt 0", () => BAY.set(only === null ? bays[0]?.name || null : null), "Every bay on one board")}${kb(panes.index, html`<span class="nm">Page index</span>`, "]", () => togglePane("index"), "The bay's pages beside the board")}</div>`}
       ${view === "pages" && html`<div class="tgl">${kb(panes.pgindex !== false, html`<span class="nm">Index</span>`, "[", () => togglePane("pgindex"), "Every page in the bay, newest first")}${kb(only === null, html`<span class="nm">All bays</span>`, "alt 0", () => { location.hash = pagesHash(only === null ? PAGES_FROM || bays[0]?.name || null : null); PAGES_FROM = only || PAGES_FROM; }, "Pages from every bay, grouped by bay")}</div>`}
-      ${view === "session" && html`<div class="tgl">${kb(panes.rail, html`<span class="nm">Sessions</span>`, "[", () => togglePane("rail"), "The bay's sessions beside the transcript")}${kb(panes.state, html`<span class="nm">State</span>`, "]", () => togglePane("state"), "What the session is doing, what it made, and its facts")}</div>`}
+      ${view === "session" && html`<div class="tgl">${kb(panes.rail, html`<span class="nm">Sessions</span>`, "[", () => togglePane("rail"), "The bay's sessions beside the transcript")}${kb(panes.state, html`<span class="nm">State</span>`, "\\", () => togglePane("state"), "What the session is doing, what it made, and its facts")}</div>`}
       <div class="meta">
         ${!up && html`<span class="host off" role="status">reconnecting</span>`}
         ${down.map((p) => html`<span class="host off" title=${p.error}>${p.name} off</span>`)}
@@ -774,7 +774,7 @@ const KEYMAP = [
   ["Views", [["s", "Session: the bay's last open one"], ["b", "Board"], ["g", "Pages"], [".", "Assistant"]]],
   ["Bays", [["1..9", "That bay, as you left it; again: its next session"], ["shift alt 1..9", "Peek at that bay: answer without going there"], ["0", "Every bay"], ["n", "Next session waiting on you, any bay"]]],
   ["Sessions", [["q w e .. p", "The 1st to 10th session in the list, at once"], ["j k", "Next, previous session (on the board: the selection)"], ["enter", "On the board: open the selected session"], ["alt j k", "Next, previous session, even from a terminal"]]],
-  ["Panes", [["[", "Sessions beside the transcript"], ["]", "State: now, running, made, the session's facts"], ["\\", "Its page beside the transcript (board: the page index)"]]],
+  ["Panes", [["[", "Sessions beside the transcript"], ["]", "Its page beside the transcript (board: the page index)"], ["\\", "State: now, running, made, the session's facts"]]],
   ["Session", [["enter", "Write to the session"], ["`", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
   ["Transcript", [["l", "Outline, story, everything (cycles)"], ["f", "Find in the session"]]],
   ["Pages", [["j k", "Next, previous page"], ["[", "The index"], ["alt 0", "This bay or every bay"], ["q w e .. p", "The 1st to 10th page in the index"], ["\\", "The page beside its session"], ["enter", "Note: its session, at the composer"], ["d", "What changed, on an updated page"]]],
@@ -1735,8 +1735,8 @@ function Session({ s, say, live, panes, togglePane }) {
       const t = e.target;
       if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable || document.querySelector(".veil, .pghome, .palone, .keys-ov")) return;
       if (e.key === "`" && hasTerm) { e.preventDefault(); choose(mode === "term" ? "chat" : "term"); }
-      else if (e.key === "]") { e.preventDefault(); openState(); }
-      else if (e.key === "\\" && shown.length) { e.preventDefault(); choose(mode === "page" ? paneFor(s) : "page"); }
+      else if (e.key === "\\") { e.preventDefault(); openState(); }
+      else if (e.key === "]" && shown.length) { e.preventDefault(); choose(mode === "page" ? paneFor(s) : "page"); }
       else if (e.key === "x") { e.preventDefault(); document.querySelector(".hd .more button")?.click(); }
     };
     addEventListener("keydown", k);
@@ -1789,7 +1789,7 @@ function Session({ s, say, live, panes, togglePane }) {
               ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "State and outputs", run: openState }, { label: "Usage", run: () => setShowUse(true) }]} /></div>
         </span>
       </div>
-      <div class="l2" role="button" tabindex="0" aria-label="State" aria-keyshortcuts="]" onClick=${openState} onKeyDown=${(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), openState())}>
+      <div class="l2" role="button" tabindex="0" aria-label="State" aria-keyshortcuts="\\" onClick=${openState} onKeyDown=${(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), openState())}>
         <span class="stat">${headline(s) || WORD[s.state] || s.state}</span>
         ${(engineTag(s) || s.model) && html`<span class="rd">${engineTag(s) || model(s.model)}</span>`}
         ${s.context > 0 && html`<span class="rd"><${CtxMeter} n=${s.context} />${Math.round(s.context / 1000)}k</span>`}
@@ -3712,7 +3712,7 @@ function PagesButton({ list, open, on }) {
   useSeenTick();
   const top = list[0], fresh = list.some(pageFresh);
   const face = html`<span class="t">${list.length === 1 ? pageTitle(top) : plural(list.length, "page")}</span>${fresh && html`<i class="pgdot" aria-label="new"></i>`} <kbd aria-hidden="true">p</kbd>`;
-  if (list.length === 1) return html`<button class="kb pgbtn ${on ? "on" : ""}" aria-pressed=${on} aria-keyshortcuts="p" title=${`${pageTitle(top)}\n${pageInfo(top)}`} onClick=${() => open(top.name)}>${face}</button>`;
+  if (list.length === 1) return html`<button class="kb pgbtn ${on ? "on" : ""}" aria-pressed=${on} aria-keyshortcuts="]" title=${`${pageTitle(top)}\n${pageInfo(top)}`} onClick=${() => open(top.name)}>${face}</button>`;
   return html`<${Menu} cls=${`kb pgbtn ${on ? "on" : ""}`} aria="Pages" width="min(320px, calc(100vw - 24px))" label=${face}
     items=${list.map((p) => ({ cls: "pgitem", title: tilde(p.path), run: () => open(p.name),
       label: html`<i class="pgdot ${pageFresh(p) ? "" : "off"}"></i><span class="tx"><b>${pageTitle(p)}</b><small>${pageInfo(p)}</small></span>` }))} />`;
