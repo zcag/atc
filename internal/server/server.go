@@ -223,6 +223,7 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.HandleFunc("GET /api/call/voices", s.callVoices)
 	mux.HandleFunc("POST /api/call/voices", s.callVoices)
+	mux.HandleFunc("GET /api/call/voices/sample", s.callVoiceSample)
 	mux.HandleFunc("PUT /api/look", s.setLook)
 	mux.HandleFunc("GET /api/seen", s.getSeen)
 	mux.HandleFunc("PUT /api/seen", s.putSeen)

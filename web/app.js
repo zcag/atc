@@ -1146,24 +1146,25 @@ function CallPanel({ hub, live, captions, full, onMin }) {
       <div class="fr"><${Persona} look=${look} state=${f.state} on=${st.phase === "active"} onTap=${Call.interrupt} /></div>
       <p class="st" aria-live="polite">${callWord(st, f)}</p>
     </div>
-    ${on && html`<div class="cnow">
+    ${opts && html`<${CallPicks} look=${look} onClose=${() => setOpts(false)} />`}
+    ${on && !opts && html`<div class="cnow">
       <div class="h">Doing now${mine.length > 0 && html`<span>${plural(mine.length, "session")} on this call</span>`}</div>
       <div class="d">${now}</div>
       ${mine.length > 0 && html`<ol class="plan">${mine.map((s, i) => html`<li class=${s.state === "working" ? "run" : ""}>
         <span>${i + 1}</span><a href=${`#/s/${keyOf(s)}`}>${s.title || "Untitled"}</a><em>${away(s) ? "parked" : WORD[s.state] || "earlier"}</em></li>`)}</ol>`}
     </div>`}
-    ${captions && on && html`<div class="caps" aria-live="polite">
+    ${captions && on && !opts && html`<div class="caps" aria-live="polite">
       ${(f.hearing || f.you) && html`<div class="cap you ${f.hearing ? "" : "old"}"><span class="w">you</span><p>${f.hearing || f.you}${f.hearing && html`<span class="caret"></span>`}</p></div>`}
       ${f.said && html`<div class="cap it"><span class="w">assistant</span><p>${f.said}${f.state === "speaking" && html`<span class="caret"></span>`}</p></div>`}
     </div>`}
     <div class="ctl">
       ${on ? html`
         <button class="btn ${st.muted ? "on" : ""}" aria-pressed=${st.muted} onClick=${Call.mute} aria-keyshortcuts="m">${st.muted ? "Unmute" : "Mute"} <kbd aria-hidden="true">m</kbd></button>
-        <button class="btn" onClick=${() => setOpts(true)} title="The character on the call, and the assistant's voice">Voice</button>
+        <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)} title="The character on the call, and the assistant's voice">Character</button>
         <button class="btn end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>`
-      : st.phase !== "ended" && CAN_CALL && html`<button class="btn prime" onClick=${callAssistant}>Call the assistant</button>`}
+      : st.phase !== "ended" && html`${CAN_CALL && html`<button class="btn prime" onClick=${callAssistant}>Call the assistant</button>`}
+        <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)}>Character</button>`}
     </div>
-    ${opts && html`<${CallOptions} look=${look} onClose=${() => setOpts(false)} />`}
   </aside>`;
 }
 
@@ -1432,7 +1433,7 @@ function usePersona() {
   const want = name ?? list.def;
   const shown = list.names.includes(want) ? want : "orb";
   const pick = (n) => { personaPick.set(n); setName(n); };
-  return { names: list.names, shown, pick, framed: !["orb", "minimal"].includes(list.kinds[shown] || shown) };
+  return { names: list.names, kinds: list.kinds, shown, pick, framed: !["orb", "minimal"].includes(list.kinds[shown] || shown) };
 }
 
 /** The call's persona slot. Holding it (or a right click) switches to the next character. */
@@ -1457,28 +1458,63 @@ function Persona({ look, state, on, onTap }) {
   </div>`;
 }
 
-/** The call's ⋯: the character, and the assistant's voice (Turkish, then English), which applies from its next reply. */
-function CallOptions({ look, onClose }) {
+const PERSONA_WORDS = { orb: "A glass sphere that swirls with the voices", line: "A hairline that ripples with the voices, quiet enough for a call in public", bars: "Four short bars, like a voice meter" };
+const KIND_WORDS = { rig: "A drawn portrait that looks, nods and talks", illustration: "A drawn portrait", footage: "A filmed portrait", minimal: "A quiet mark that only moves with the voices" };
+const VOICE_LANG = { tr: "Turkish", en: "English" };
+const voiceName = (v) => v.replace(/^en_/, "").replace(/_/g, " ");
+
+/** The character and the assistant's voice, inside the call panel: a character picked shows at once in the big frame
+ *  above, a voice can be heard first (delta renders a sample once and keeps it), and a pick applies from its next reply. */
+function CallPicks({ look, onClose }) {
   const [voices, setVoices] = useState(null);
   const [note, setNote] = useState("");
-  const load = () => fetch("/api/call/voices").then((r) => (r.ok ? r.json() : Promise.reject())).then(setVoices).catch(() => setNote("Voices not reachable"));
-  useEffect(() => { load(); }, []);
-  const choose = async (lang, voice) => {
-    setNote("Switching…");
-    const r = await fetch("/api/call/voices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ lang, voice }) }).catch(() => null);
-    setNote(r?.ok ? `${voice} from the next reply` : "Couldn't switch the voice");
-    if (r?.ok) load();
+  const [playing, setPlaying] = useState(null);
+  const audio = useRef(null);
+  useEffect(() => {
+    api("/api/call/voices").then(setVoices, () => setNote("The voices are not reachable."));
+    return () => audio.current?.pause();
+  }, []);
+  useKeyLayer((e) => e.key === "Escape" && !typingIn(e.target) && (onClose(), true));
+  const stop = () => { audio.current?.pause(); audio.current = null; setPlaying(null); };
+  const play = async (lang, v) => {
+    const k = `${lang}:${v}`;
+    if (playing === k) return stop();
+    stop();
+    setPlaying(k);
+    setNote("");
+    try {
+      const r = await fetch(`/api/call/voices/sample?${new URLSearchParams({ lang, voice: v, text: voices[lang].sample })}`);
+      if (!r.ok) throw new Error(r.status === 409 ? "delta is on a call, and this sample renders after it" : "the sample did not come");
+      const a = new Audio(URL.createObjectURL(await r.blob()));
+      audio.current = a;
+      a.onended = () => setPlaying((p) => (p === k ? null : p));
+      await a.play();
+    } catch (e) {
+      setPlaying((p) => (p === k ? null : p));
+      setNote(`Can't play ${voiceName(v)}: ${e.message}.`);
+    }
   };
-  const chips = (items, on, run) => html`<div class="callpicks">${items.map((n) => html`<button class="btn ${n === on ? "primary" : ""}" onClick=${() => run(n)}>${n}</button>`)}</div>`;
-  return html`<${Sheet} cls="callopts" title="Character and voice" onClose=${onClose}>
-    <p class="h">Character</p>
-    ${chips(look.names, look.shown, look.pick)}
-    ${[["tr", "Voice"], ["en", "English voice"]].map(([lang, title]) => voices?.[lang] && html`
-      <p class="h">${title}</p>
-      ${chips(voices[lang].voices, voices[lang].current, (v) => choose(lang, v))}`)}
-    ${!voices && !note && html`<p class="sub">Loading voices…</p>`}
-    ${note && html`<p class="sub">${note}</p>`}
-  <//>`;
+  const use = async (lang, v) => {
+    setNote(`Switching to ${voiceName(v)}`);
+    try { setVoices(await api("/api/call/voices", { method: "POST", body: { lang, voice: v } })); setNote(`${voiceName(v)} speaks from the assistant's next reply.`); }
+    catch (e) { setNote(`Couldn't switch the voice: ${e.message}`); }
+  };
+  const langs = Object.keys(voices || {}).sort((a, b) => (a === "tr" ? -1 : b === "tr" ? 1 : a.localeCompare(b)));
+  return html`<div class="picks" role="region" aria-label="Character and voice">
+    <div class="pkh"><b>Character and voice</b><button class="kb" onClick=${onClose} aria-keyshortcuts="Escape">Done <kbd aria-hidden="true">esc</kbd></button></div>
+    <h3 class="grp"><b>Character</b><span class="c">${look.names.length}</span></h3>
+    <div role="radiogroup" aria-label="Character">${look.names.map((n) => html`
+      <button class="pick ${n === look.shown ? "on" : ""}" role="radio" aria-checked=${n === look.shown} onClick=${() => look.pick(n)}>
+        <b>${n}</b><span>${PERSONA_WORDS[n] || KIND_WORDS[look.kinds[n]] || ""}</span></button>`)}</div>
+    ${langs.map((lang) => { const v = voices[lang]; return html`
+      <h3 class="grp"><b>${VOICE_LANG[lang] || lang} voice</b><span class="c">${v.voices.length}</span></h3>
+      ${v.voices.map((name) => { const on = name === v.current, k = `${lang}:${name}`; return html`
+        <div class="vpick ${on ? "on" : ""}"><span class="nm">${voiceName(name)}</span>
+          ${on ? html`<span class="use">in use</span>` : html`<button class="kb" onClick=${() => use(lang, name)}>Use</button>`}
+          <button class="kb" aria-pressed=${playing === k} onClick=${() => play(lang, name)}>${playing === k ? "Stop" : "Play"}</button></div>`; })}`; })}
+    ${!voices && !note && html`<p class="sub">Loading the voices</p>`}
+    ${note && html`<p class="sub" role="status">${note}</p>`}
+  </div>`;
 }
 
 function Drawn({ name, state, on, onTap }) {
