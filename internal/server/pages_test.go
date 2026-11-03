@@ -182,3 +182,13 @@ func TestAssistantOpensAnotherSessionsPage(t *testing.T) {
 		t.Fatalf("an existing page, with no phone to push to: %d", st)
 	}
 }
+
+func TestPageToPhone(t *testing.T) {
+	ts := newTestServer(t, nil, Voice{})
+	if res, _ := do(t, "POST", ts.URL+"/api/pages/phone", "tok", `{"session":"l1"}`); res.StatusCode != 400 {
+		t.Fatalf("without a name: %d", res.StatusCode)
+	}
+	if res, body := do(t, "POST", ts.URL+"/api/pages/phone", "tok", `{"session":"l1","name":"handover"}`); res.StatusCode != 404 || !strings.Contains(body, "phone") {
+		t.Fatalf("no phone registered: %d %s", res.StatusCode, body)
+	}
+}
