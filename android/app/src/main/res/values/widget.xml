@@ -6,22 +6,55 @@
     <color name="w_ink">#1d2533</color>
     <color name="w_dim">#5d6778</color>
     <color name="w_faint">#8a93a3</color>
-    <color name="w_press">#14000000</color>
-    <color name="needs">#d63b44</color>
-    <color name="turn">#b7791f</color>
+    <color name="needs">#efb13e</color>
+    <color name="turn">#1d2533</color>
     <color name="work">#2477d1</color>
-    <color name="on_work">#ffffff</color>
-    <dimen name="widget_radius">20dp</dimen>
-    <dimen name="widget_inner_radius">10dp</dimen>
-    <string name="widget_description">Your Claude sessions at a glance, and a mic to talk to Claude</string>
+    <dimen name="widget_radius">22dp</dimen>
+    <string name="widget_description">What needs you, answered from the home screen, and the assistant a tap away</string>
     <string name="tile_label">Talk to Claude</string>
-    <string name="refresh">Refresh</string>
     <string name="widget_loading">Loading</string>
-    <string name="preview_summary">1 needs you · 1 your turn · 1 working</string>
-    <string name="preview_1">Fix the login redirect</string>
-    <string name="preview_1d">needs you · 2m</string>
-    <string name="preview_2">Release notes draft</string>
-    <string name="preview_2d">your turn · 14m</string>
-    <string name="preview_3">Migrate the billing tests</string>
-    <string name="preview_3d">working · 03:41</string>
+    <string name="preview_title">Own dialogs instead of confirm()</string>
+    <string name="preview_ask">Esc on phone Back: close the dialog or go back a screen?</string>
+    <string name="preview_a">1 Close the dialog</string>
+    <string name="preview_b">2 Go back a screen</string>
+    <string name="preview_said">The release is out on desktop and laptop.</string>
+
+    <style name="WidgetBlock">
+        <item name="android:layout_width">16dp</item>
+        <item name="android:layout_height">16dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:textSize">10sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">@color/w_ink</item>
+    </style>
+
+    <style name="WidgetSmall">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">@color/w_dim</item>
+    </style>
+
+    <style name="WidgetRule">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">1dp</item>
+        <item name="android:scaleType">fitXY</item>
+        <item name="android:src">@drawable/w_fill</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+
+    <style name="WidgetChip">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:maxLines">2</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:paddingHorizontal">10dp</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:lineSpacingMultiplier">0.95</item>
+        <item name="android:textColor">@color/w_ink</item>
+    </style>
 </resources>

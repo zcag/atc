@@ -58,6 +58,9 @@ func (m *Manager) openCode(ctx context.Context) []Session {
 			s.State = Stopped
 		case len(l.Asks) > 0:
 			s.State, s.Activity, s.Asks = NeedsYou, l.Asks[0].Activity(), l.Asks
+			for i := range s.Asks {
+				s.Asks[i].Key = s.Asks[i].Fingerprint()
+			}
 		case l.Busy:
 			s.State = Working
 		default:

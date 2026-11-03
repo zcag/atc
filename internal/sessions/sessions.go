@@ -65,6 +65,7 @@ type Session struct {
 	Servers        []int            `json:"servers,omitempty"`
 	Shown          []pages.Page     `json:"shown,omitempty"`
 	Note           *Note            `json:"note,omitempty"`
+	Answered       *Answered        `json:"answered,omitempty"`
 	Tabs           []browser.Tab    `json:"tabs,omitempty"`
 	Pinned         bool             `json:"pinned,omitempty"`
 	Parked         bool             `json:"parked,omitempty"`
@@ -88,6 +89,17 @@ type Note struct {
 	Replies []string  `json:"replies,omitempty"`
 	Page    string    `json:"page,omitempty"`
 	At      time.Time `json:"at"`
+}
+
+// Answered is the last answer atc passed to one of the session's asks: Via is where it was
+// given (web, push, widget), Device the machine it was given on.
+type Answered struct {
+	Ask    string    `json:"ask"`
+	Key    string    `json:"key,omitempty"`
+	What   string    `json:"what"`
+	Via    string    `json:"via,omitempty"`
+	Device string    `json:"device,omitempty"`
+	At     time.Time `json:"at"`
 }
 
 type Manager struct {
@@ -406,8 +418,11 @@ func first(s ...string) string {
 	return ""
 }
 
-func claudeAsk(id string, b claude.Block, multi map[string]bool) opencode.Ask {
-	a := opencode.Ask{ID: "claude", SessionID: id}
+func ClaudeAsk(id string, b claude.Block) opencode.Ask { return claudeAsk(id, b, nil) }
+
+func claudeAsk(id string, b claude.Block, multi map[string]bool) (a opencode.Ask) {
+	a = opencode.Ask{ID: "claude", SessionID: id}
+	defer func() { a.Key = a.Fingerprint() }()
 	if b.Approve != "" {
 		tool, cmd, _ := strings.Cut(b.Approve, ": ")
 		a.Permission, a.Patterns = tool, []string{cmd}
