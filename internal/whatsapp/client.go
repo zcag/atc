@@ -163,17 +163,7 @@ func (c *Client) IsOwner(ctx context.Context, from, senderPhone string) bool {
 // Media sends a file as the kind WhatsApp shows best for it: image, video, a voice note
 // (ptt, already Ogg/Opus) or audio, and anything else as a document.
 func (c *Client) Media(ctx context.Context, data []byte, mime, filename, caption string, ptt bool) (string, error) {
-	kind := "document"
-	switch {
-	case ptt:
-		kind = "audio"
-	case strings.HasPrefix(mime, "image/") && mime != "image/svg+xml" && len(data) < 5<<20:
-		kind = "image"
-	case strings.HasPrefix(mime, "video/") && len(data) < 16<<20:
-		kind = "video"
-	case strings.HasPrefix(mime, "audio/"):
-		kind = "audio"
-	}
+	kind := mediaKind(mime, len(data), ptt)
 	body := map[string]any{"chatId": c.chatOf(ctx), "base64": base64.StdEncoding.EncodeToString(data), "mimetype": mime}
 	if kind == "document" {
 		body["filename"] = cmp.Or(filename, "file")
@@ -186,6 +176,23 @@ func (c *Client) Media(ctx context.Context, data []byte, mime, filename, caption
 	}
 	var s Sent
 	return s.MessageID, c.do(ctx, "POST", "/messages/send-"+kind, body, &s)
+}
+
+// mediaKind sends as image or video only the formats WhatsApp shows inline: other image/*
+// and video/* types (image/vnd.dwg is a CAD drawing) fail send-image, so they go as documents.
+func mediaKind(mime string, size int, ptt bool) string {
+	mime, _, _ = strings.Cut(mime, ";")
+	switch mime = strings.TrimSpace(mime); {
+	case ptt:
+		return "audio"
+	case slices.Contains([]string{"image/jpeg", "image/png", "image/webp", "image/gif"}, mime) && size < 5<<20:
+		return "image"
+	case slices.Contains([]string{"video/mp4", "video/3gpp"}, mime) && size < 16<<20:
+		return "video"
+	case strings.HasPrefix(mime, "audio/"):
+		return "audio"
+	}
+	return "document"
 }
 
 // Voice turns any audio into a WhatsApp voice note (Ogg/Opus).
