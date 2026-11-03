@@ -5882,8 +5882,8 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
     if (!el || !idx) return;
     if (!landed.current && ready) {
       landed.current = true;
-      const you = [...el.querySelectorAll("[data-you]")].pop();
-      hold.current = el.querySelector("#since") ? "#since" : you ? `#${CSS.escape(you.id)}` : null;
+      const latest = [...el.querySelectorAll("[data-you], [data-said]")].pop();
+      hold.current = el.querySelector("#since") ? "#since" : latest ? `#${CSS.escape(latest.id)}` : null;
       settle();
       document.fonts.ready.then(() => requestAnimationFrame(settle));
       if (atEnd.current) markLooked(s);
@@ -6062,7 +6062,7 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
       case "skel": return html`<div class="skel" aria-label="Loading"><i></i><i></i><i></i></div>`;
       case "say": case "steps":
         return html`${r.answer && html`<h2 class="sr">${s.agent ? `@${s.agent}` : "agent"}, ${txClock(r.at)}</h2>`}${r.steps && html`<${InlineSteps} steps=${r.steps} at=${clock(r.at)} open=${gOpen} toggle=${() => flip(gk)} /><${GroupBody} steps=${r.steps} s=${s} open=${gOpen} zoom=${setShot} live=${r.live && !r.text} />`}
-            ${r.text && html`<div data-stop=${r.answer ? "" : null}><${Prose} text=${r.text} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`;
+            ${r.text && html`<div id=${`said-${r.key}`} data-said data-stop=${r.answer ? "" : null}><${Prose} text=${r.text} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`;
       case "evt": return html`<p class="evt">${r.text}</p>`;
       case "note": return html`<${Lead} at=${clock(r.at, true)} text=${r.text} />`;
       case "answered": {
