@@ -462,7 +462,3 @@
   .tx .toc { left: var(--s2); right: var(--s2); width: auto; top: 96px; }
   .bgstrip .bg-head { min-height: 44px; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .tx-wrap .livebar::after { animation: none; left: 0; width: 100%; opacity: .5; }
-  .tx-wrap .lvl i { animation: none; height: 10px; }
-}

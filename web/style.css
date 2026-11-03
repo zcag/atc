@@ -393,7 +393,6 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
   .sumtext { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; font-size: var(--fs-lg); line-height: 1.35; }
 }
 @media (pointer: coarse) { .sumx { padding: var(--sp-5) var(--sp-6); } }
-@media (prefers-reduced-motion: reduce) { .sumsheet, .sumbar.pending .sumtext { animation: none; } }
 
 .viewitem { display: flex; justify-content: space-between; gap: var(--sp-5); text-align: left; font-weight: 400; }
 .viewitem.on { font-weight: 600; }
@@ -492,4 +491,3 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
   .dlg .dinput { font-size: var(--fs-3xl); padding: var(--sp-6) var(--sp-6); }
   .dlg .actions .btn { flex: 1; padding: var(--sp-6); font-size: var(--fs-3xl); }
 }
-@media (prefers-reduced-motion: reduce) { .veil.dlgveil, .sheet.dlg { animation: none; } }

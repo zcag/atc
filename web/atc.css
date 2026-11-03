@@ -387,11 +387,6 @@ figcaption b { color: var(--ink); }
 .toast.out { opacity: 0; transition: opacity var(--t-slow); }
 .gone { opacity: 0; transition: opacity var(--t-slow); }
 
-@media (prefers-reduced-motion: reduce) {
-  .btn[aria-busy=true]::after { animation: none; width: 100%; opacity: .5; }
-  summary::before, .toast.out, .gone { transition: none; }
-}
-
 /* ---------- phone: one column, 44px targets ---------- */
 @media (max-width: 899px) {
   :root { --btn-h: 44px; }

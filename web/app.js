@@ -4,6 +4,7 @@ import hljs from "./vendor/highlight.min.js";
 import { diffLines } from "./vendor/diff.mjs";
 import { Call } from "./call.js";
 import { persona } from "./persona.js";
+import { minimal } from "./minimal.js";
 
 const BAYS = [
   ["needs-you", "Needs you"],
@@ -1043,7 +1044,7 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
       <span class="now"><span>${s.state === "needs-you" ? doingLine(s) || "Waiting on you" : doing(s)}</span><span class="el">${s.promptAt ? txSpan(Date.now() - Date.parse(s.promptAt)) : ""}</span></span></a>`)}</div>`;
   const onCall = Call.live();
   const cmp = {
-    prompt: onCall ? html`<span class="apr call"><${CallMark} />${!docked && html`<${Bars} />`}</span>` : html`<span class="apr">assistant<span>></span></span>`,
+    prompt: onCall ? html`<span class="apr call"><${CallMark} />${!docked && html`<${Trace} />`}</span>` : html`<span class="apr">assistant<span>></span></span>`,
     hint: onCall ? "Type while you talk" : phone ? "Ask the assistant" : "Start, steer or ask about any session",
     doors: !onCall && html`<button class="kb vo" onClick=${() => setVoice(true)} title="Voice mode: talk with it and it answers aloud (hold .)">Voice</button>
       ${CAN_CALL && html`<button class="kb cl" onClick=${callAssistant} aria-keyshortcuts=".">Call <kbd aria-hidden="true">.</kbd></button>`}`,
@@ -1094,23 +1095,14 @@ const callWord = (st, f) => st.phase === "calling" ? "calling"
   : st.phase !== "active" ? (CAN_CALL ? "not on a call" : "calls need atc's call line and a microphone")
   : st.muted ? "muted" : ({ hearing: "hearing you", thinking: "thinking", tool: "working", speaking: "speaking, tap to stop it" })[f.state] || "listening";
 
-const BARS = 24;
-/** The call's two voices on a hairline: their above, the assistant's below, from the same meters the persona reads. */
-function Bars() {
+/** The call's level, drawn by the "line" character (minimal.js) small and in the page's ink: a hairline that ripples with the voices. */
+function Trace() {
   const ref = useRef(null);
   useEffect(() => {
-    const el = ref.current, hist = Array(BARS).fill([0, 0]);
-    el.innerHTML = "<i><b></b><s></s></i>".repeat(BARS);
-    const draw = () => [...el.children].forEach((c, i) => {
-      const [a, b] = hist[i];
-      c.firstChild.style.height = `${Math.round(Math.min(1, a) * 9)}px`;
-      c.lastChild.style.height = `${Math.round(Math.min(1, b) * 9)}px`;
-    });
-    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return draw();
-    const t = setInterval(() => { if (document.hidden) return; hist.push(Call.levels()); hist.shift(); draw(); }, 83);
-    return () => clearInterval(t);
+    const cv = ref.current;
+    return minimal(cv, { style: "line" }, () => { const [you, it] = Call.levels(); return { state: Call.face().state, you, it }; }, { gain: 4.5, ink: () => getComputedStyle(cv).color });
   }, []);
-  return html`<span class="cbars" ref=${ref} aria-hidden="true"></span>`;
+  return html`<canvas class="ctrace" ref=${ref} aria-hidden="true"></canvas>`;
 }
 
 function CallMark() {
@@ -1207,17 +1199,17 @@ function CallPill() {
   const phone = usePhone();
   if (!phone || !Call.live()) return null;
   return html`<div class="callpill" role="group" aria-label="Call">
-    <button class="back" onClick=${returnToCall} aria-label="Back to the call"><${CallMark} /><${Bars} /><span class="w">assistant</span></button>
+    <button class="back" onClick=${returnToCall} aria-label="Back to the call"><${CallMark} /><${Trace} /><span class="w">assistant</span></button>
     <button class="btn end" onClick=${Call.hangup}>End</button>
   </div>`;
 }
 
-/** Desktop: the console line while on a call. Bars only when the panel is minimized, since the persona moves otherwise. */
+/** Desktop: the console line while on a call. The line moves only when the panel is minimized, since the persona moves otherwise. */
 function CallLine({ docked }) {
   const f = Call.face();
   return html`<footer class="console callline" aria-label="Call">
     <button class="back" onClick=${returnToCall} aria-keyshortcuts="." title=${docked ? "The call" : "Back to the call"}>
-      <${CallMark} />${!docked && html`<${Bars} />`}<span class="w">assistant</span><span class="said">${f.said || callDoing(f)}</span></button>
+      <${CallMark} />${!docked && html`<${Trace} />`}<span class="w">assistant</span><span class="said">${f.said || callDoing(f)}</span></button>
     ${!docked && html`<button class="kb" onClick=${returnToCall} tabindex="-1">Return <kbd aria-hidden="true">.</kbd></button>`}
     <button class="kb end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>
   </footer>`;
@@ -5769,7 +5761,7 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
     const sc = box.current;
     if (!el || !sc) return;
     letGo();
-    sc.scrollTo({ top: el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 12, behavior: smooth && !matchMedia("(prefers-reduced-motion: reduce)").matches ? "smooth" : "instant" });
+    sc.scrollTo({ top: el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 12, behavior: smooth ? "smooth" : "instant" });
   };
   const step = (sel, d) => {
     const sc = box.current;
