@@ -203,6 +203,7 @@ let appSent = "";
 const FEED_STATES = ["needs-you", "your-turn", "working"];
 
 function App() {
+  useSync();
   const [me, setMe] = useState(undefined);
   const [runs, setLive] = useState(null);
   const live = useMemo(() => runs && runs.filter((x) => !hiddenRun(x)), [runs]);
@@ -343,7 +344,6 @@ function App() {
   useEffect(() => {
     if (!live) return;
     const x = route && live.find((v) => v.id === route || v.sessionId === route);
-    if (!seenMap() || x) markSeen(live, x?.sessionId);
     const b = bayOf(x);
     if (b && bayFor.current !== x.sessionId) { bayFor.current = x.sessionId; BAY.set(b); rememberBay(b, { sid: x.sessionId, view: "session" }); }
     if (!route) bayFor.current = null;
@@ -1566,21 +1566,13 @@ const steady = (list) => {
 
 const byRecent = (a, b) => (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
 
-let SEEN = null;
-function seenMap() {
-  if (SEEN) return SEEN;
-  try { SEEN = JSON.parse(localStorage.getItem("atc.seen") || "null"); } catch {}
-  return SEEN;
-}
-function markSeen(list, sid) {
-  const m = seenMap() || {};
-  const now = new Date().toISOString();
-  if (!seenMap()) for (const x of list) m[x.sessionId] = now;
-  if (sid) m[sid] = now;
-  SEEN = m;
-  try { localStorage.setItem("atc.seen", JSON.stringify(m)); } catch {}
-}
-const unread = (s) => (s.state === "your-turn" || s.state === "needs-you") && !away(s) && !!SEEN && Date.parse(s.updated || 0) > Date.parse(SEEN[s.sessionId] || 0);
+const LOCAL_SEEN = (() => { try { return JSON.parse(localStorage.getItem("atc.seen")) || {}; } catch { return {}; } })();
+const seenFloor = () => Math.min(Date.now(), ...Object.values(SYNC.seen || {}).map((t) => Date.parse(t) || Infinity));
+const unread = (s) => {
+  if ((s.state !== "your-turn" && s.state !== "needs-you") || away(s) || !SYNC.seen) return false;
+  const looked = Math.max(Date.parse(seenOf(s.sessionId) || 0) || 0, Date.parse(LOCAL_SEEN[s.sessionId] || 0) || 0);
+  return Date.parse(s.updated || 0) > (looked || seenFloor());
+};
 const oneLine = (t) => (t || "").replace(/\*\*|__|`+|^#+\s*|^>\s*/gm, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
 
 const ICON = {
@@ -1835,6 +1827,7 @@ function Session({ s, say, live, panes, togglePane }) {
   const leavePage = (m) => { setMode(m); keep(null); history.replaceState(null, "", base()); };
   useEffect(() => { if (kept || at) history.replaceState(null, "", `${base()}/p/${encodeURIComponent(pg)}`); }, []);
   const choose = (m) => { if (m === "page") return openPage(pg || shown[0]?.name); leavePage(m); try { localStorage.setItem(PANE, m); } catch {} };
+  useEffect(() => { if (mode !== "chat" && !sideBySide) markLooked(s); }, [mode, sideBySide, s.updated]);
   useEffect(() => {
     const f = () => { const n = routePage(); if (n) openPage(n); };
     addEventListener("hashchange", f);
