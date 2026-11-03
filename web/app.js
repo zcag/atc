@@ -1001,8 +1001,13 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
   }, []);
   if (!live) return html`<div class="board"><div class="skeleton"><i></i><i></i><i></i></div></div>`;
   const liveIDs = new Set((runs || live).map((s) => s.sessionId));
-  const earlier = (hist || []).filter((s) => !liveIDs.has(s.sessionId) && mine(s));
   const pinned = pinnedOf(live);
+  const ql = q.trim().toLowerCase();
+  const stopped = live.filter((s) => s.state === "stopped" && !pinned.includes(s) && !away(s)
+    && (!ql || `${s.title} ${s.lastPrompt} ${s.cwd}`.toLowerCase().includes(ql)));
+  const lastAt = (s) => Date.parse(s.updated || s.startedAt || 0) || 0;
+  const past = (hist || []).filter((s) => !liveIDs.has(s.sessionId) && mine(s));
+  const earlier = [...stopped, ...past].sort((a, b) => lastAt(b) - lastAt(a));
   const rest = live.filter((s) => !s.pinned && !away(s));
   const parked = live.filter((s) => away(s));
   const active = live.filter((s) => !away(s) && ["needs-you", "your-turn", "working"].includes(s.state));
@@ -1013,13 +1018,13 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
     <div class="search">
       <input type="search" placeholder="Search titles, prompts and folders  /" value=${q} onInput=${(e) => setQ(e.target.value)} />
     </div>`;
-  const past = html`
+  const earlierList = html`
     ${dayGroups(earlier).map(([label, list]) => html`
       <h3>${label}</h3>
-      <div class="rack rows">${list.map((s) => html`<${Strip} key=${s.sessionId} s=${s} sel=${sel} size="row" />`)}</div>`)}
+      <div class="rack rows">${list.map((s) => html`<${Strip} key=${s.sessionId} s=${s} sel=${sel} cursor=${cursor} size=${mode === "classic" ? "row" : "line"} />`)}</div>`)}
     ${hist && hist.length >= limit && html`<button class="btn more" onClick=${() => setLimit(limit + 30)}>Show more</button>`}
     ${hist && earlier.length === 0 && html`<p class="calm">${q ? "No earlier sessions match." : only ? `No earlier sessions in ${only} yet.` : "No earlier sessions."}</p>`}`;
-  const earlierBay = html`<section class="bay earlier"><h2>Earlier</h2>${search}${past}</section>`;
+  const earlierBay = html`<section class="bay earlier"><h2>Earlier</h2>${search}${earlierList}</section>`;
   const classic = html`
     ${live.length === 0
       ? !(only === GUESTS && desk.length) && html`<p class="calm">${only ? `Nothing running in ${only}.` : "Nothing is running. Start a session, or pick up an earlier one below."}</p>`
@@ -1028,7 +1033,6 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
     ${pinned.length > 0 && html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} />`}
     ${BAYS.filter(([st]) => st !== "stopped").map(([st, title]) => html`<${Bay} title=${title} list=${rest.filter((s) => s.state === st)} sel=${sel} cursor=${cursor} />`)}
     <${Bay} title="Parked" list=${parked} sel=${sel} cursor=${cursor} size="slim" dim />
-    <${Bay} title="Stopped" list=${rest.filter((s) => s.state === "stopped")} sel=${sel} cursor=${cursor} size="slim" />
     ${earlierBay}`;
 
   return html`
@@ -1057,8 +1061,8 @@ function Board({ live: all, runs, agents, say, sel, cursor, onPast, mode = "clas
           return idle.length > 0 && html`<p class="calm idleagents">Not running: ${idle.map((a) => html`<button class="link" onClick=${() => AGENT_SHEET(a.name)}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</button>`)}</p>`;
         })()}`
         : mode === "triage" ? html`<${Triage} live=${live} only=${only} sel=${sel} cursor=${cursor} />${earlierBay}`
-        : mode === "lanes" ? html`${search}${q ? past : html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} size="lrow" />
-            <${Lanes} live=${live.filter((s) => !pinned.includes(s))} earlier=${earlier} only=${only} setOnly=${setOnly} sel=${sel} cursor=${cursor}
+        : mode === "lanes" ? html`${search}${q ? earlierList : html`<${Bay} title="Pinned" list=${pinned} sel=${sel} cursor=${cursor} size="lrow" />
+            <${Lanes} live=${live.filter((s) => !pinned.includes(s))} earlier=${past} only=${only} setOnly=${setOnly} sel=${sel} cursor=${cursor}
             more=${hist && hist.length >= limit + 30 && (() => setLimit(limit + 30))} />`}`
         : classic}
     </div>
@@ -1098,7 +1102,7 @@ function Triage({ live, only, sel, cursor }) {
     <${Bay} title="Your turn" list=${free(wait)} sel=${sel} cursor=${cursor} size="tcard" />
     <${Bay} title="Working" list=${free(work)} sel=${sel} cursor=${cursor} size="work" />
     <${Bay} title="Parked" list=${rest.filter((s) => away(s))} sel=${sel} cursor=${cursor} size="lrow" />
-    <${Bay} title="Stopped" list=${rest.filter((s) => !away(s))} sel=${sel} cursor=${cursor} size="line" />`;
+    ${only === AGENTS && html`<${Bay} title="Stopped" list=${rest.filter((s) => !away(s))} sel=${sel} cursor=${cursor} size="line" />`}`;
 }
 
 function lanesOf(live, earlier) {
