@@ -51,6 +51,8 @@ const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 let PALETTE_OPEN = () => {};
 let SESSION_API = null;
 let TABS = { only: null, tabs: [], set: () => {} };
+let ASK = null, ASKED = 0;
+const ask = (d) => new Promise((done) => (ASK ? ASK({ ...d, id: ++ASKED, done }) : done(null)));
 const focusOnMount = (el) => { if (el && !el.dataset.focused) { el.dataset.focused = "1"; requestAnimationFrame(() => el.focus({ preventScroll: true })); } };
 const local = (m) => !!m && !m.startsWith("claude-") && m !== "<synthetic>";
 const model = (m) => (local(m) ? m.split("/").pop().split(":")[0] : (m || "").replace(/^claude-/, "").replace(/-\d.*$/, ""));
@@ -406,6 +408,7 @@ function App() {
     ${usage && html`<${UsagePage} limits=${limits} multi=${MULTI} onClose=${closeUsage} onOpen=${openFromUsage} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${agentSheet && html`<${AgentSheet} key=${agentSheet.name + agentSheet.view} name=${agentSheet.name} view=${agentSheet.view} live=${all} say=${say} onClose=${() => setAgentSheet(null)} reload=${loadAgents} />`}
+    <${Dialogs} />
     ${toast && html`<div class="toast" role="status">${toast}</div>`}
     ${notifAsk && me && !updated && html`<div class="appbar" role="status">
       <span>Get a desktop notification when a session finishes or needs you, while this tab is in the background?</span>
@@ -1513,7 +1516,8 @@ function sessionActions(s, say, { rename, open, after } = {}) {
   const patch = (body) => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body });
   const items = [];
   if (open) items.push({ label: "Open", run: () => go(keyOf(s)) });
-  items.push({ label: "Rename", run: rename || run(() => { const n = prompt("Rename session", s.title); return n === null ? null : patch({ name: n }); }) });
+  items.push({ label: "Rename", run: rename || (() => ask({ title: "Rename session", input: { value: s.title, placeholder: "Session name" }, ok: "Rename", busy: "Renaming…",
+    run: (name) => name !== s.title && patch({ name }) }).then(after)) });
   items.push({ label: s.pinned ? "Unpin" : "Pin to top", run: run(() => patch({ pinned: !s.pinned })) });
   items.push({ label: s.parked ? "Unpark" : "Park", run: run(() => patch({ parked: !s.parked })) });
   items.push({ label: "Send to backlog", title: "Stop it and take it off the list; its backlog item resumes the same conversation. A working session stops when its turn ends", run: () => putAside(s, say).then(() => after && after()) });
@@ -1522,8 +1526,9 @@ function sessionActions(s, say, { rename, open, after } = {}) {
   if (!s.attachable && s.kind !== "interactive")
     items.push({ label: "Resume", run: run(() => api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" }), (r) => go(r.id)) });
   if (s.id)
-    items.push({ label: "Delete", danger: true, run: run(() => confirm(`Delete "${s.title}"? Its conversation stays in history.`) ? api(`/api/sessions/${s.id}`, { method: "DELETE" }) : null,
-      (r) => r && [s.id, s.sessionId].some((k) => location.hash.startsWith(`#/s/${k}`)) && location.replace("#/")) });
+    items.push({ label: "Delete", danger: true, run: () => ask({ title: `Delete “${s.title || "Untitled"}”?`, body: "Its conversation stays in history, where you can resume it.",
+      ok: "Delete", busy: "Deleting…", danger: true, run: () => api(`/api/sessions/${s.id}`, { method: "DELETE" }) })
+      .then((r) => { r && [s.id, s.sessionId].some((k) => location.hash.startsWith(`#/s/${k}`)) && location.replace("#/"); after && after(); }) });
   return items;
 }
 
@@ -1670,7 +1675,8 @@ function Session({ s, say, live }) {
           ${s.reportsTo && (() => {
             const to = live?.find((x) => (x.root || x.sessionId) === s.reportsTo)?.title || "a session";
             return html`<span role="button" title=${`It was asked to report back to “${to}”, which its report resumes even if stopped. Click to cut that: a stopped “${to}” stays stopped.`}
-              onClick=${() => confirm(`Stop “${s.title}” from waking “${to}” with its report?`) && act(() => api(`/api/sessions/${s.root || s.sessionId}`, { method: "PATCH", body: { reportsTo: "" } }))}>reports to ${to}</span>`;
+              onClick=${() => ask({ title: `Stop reporting to “${to}”?`, body: `“${s.title}” will no longer wake “${to}” with its report. A stopped “${to}” stays stopped.`,
+                ok: "Stop reporting", danger: true, run: () => api(`/api/sessions/${s.root || s.sessionId}`, { method: "PATCH", body: { reportsTo: "" } }) })}>reports to ${to}</span>`;
           })()}
           ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first, except where a permission rule says to ask">no permission prompts</span>`}
         </div>
@@ -2171,7 +2177,6 @@ function Term({ s, say, voice, onVoiceOff }) {
   const api_ = useRef({});
   const picker = useRef();
   const [dropping, setDropping] = useState(false);
-  const [pasted, setPasted] = useState(null);
   const upload = useRef();
   upload.current = async (files) => {
     for (const f of files) {
@@ -2200,7 +2205,7 @@ function Term({ s, say, voice, onVoiceOff }) {
     d.ui = setSt;
     setSt({ ...d.state });
     d.hooks = {
-      paste: (files) => setPasted(files),
+      paste: (files) => askAttach(files).then((ok) => (ok ? upload.current(files) : api_.current.focus?.())),
       data: (data) => {
         if (ctrlRef.current && data.length === 1) {
           const c = data.toUpperCase().charCodeAt(0);
@@ -2249,7 +2254,6 @@ function Term({ s, say, voice, onVoiceOff }) {
             </div>
           </div>
         </div>`}
-      ${pasted && html`<${PasteConfirm} files=${pasted} onClose=${(ok) => { setPasted(null); ok ? upload.current(pasted) : api_.current.focus?.(); }} />`}
       ${voice && !cover && html`<${VoiceBar} s=${s} say=${say} type=${(t) => { api_.current.send?.(t); setTimeout(() => api_.current.send?.("\r"), 150); }} press=${(k) => api_.current.send?.(k)} onClose=${onVoiceOff} />`}
       <div class="keys ${keyboard ? "show" : ""}" onPointerDown=${(e) => e.preventDefault()}>
         ${KEYS.map(([label, seq]) => html`<button class=${label === "ctrl" && ctrl ? "on" : ""} onClick=${() => key(label, seq)}>${label}</button>`)}
@@ -2259,25 +2263,10 @@ function Term({ s, say, voice, onVoiceOff }) {
   `;
 }
 
-function PasteConfirm({ files, onClose }) {
-  const shown = useMemo(() => files.map((f) => ({ name: f.name || "pasted.png", type: f.type, size: f.size, url: URL.createObjectURL(f) })), [files]);
-  useEffect(() => () => shown.forEach((f) => URL.revokeObjectURL(f.url)), [shown]);
-  useEffect(() => {
-    const f = (e) => e.key === "Escape" && onClose(false);
-    addEventListener("keydown", f);
-    return () => removeEventListener("keydown", f);
-  }, []);
-  return html`
-    <div class="veil confirm" onPointerDown=${(e) => e.target === e.currentTarget && onClose(false)}>
-      <form class="sheet" onSubmit=${(e) => { e.preventDefault(); onClose(true); }}>
-        <h3>Attach ${files.length === 1 ? "this file" : `${files.length} files`} to the session?</h3>
-        <${FileList} files=${shown} />
-        <div class="actions">
-          <button type="button" class="btn" onClick=${() => onClose(false)}>Cancel</button>
-          <button class="btn primary" ref=${focusOnMount}>Attach</button>
-        </div>
-      </form>
-    </div>`;
+function askAttach(files) {
+  const shown = files.map((f) => ({ name: f.name || "pasted.png", type: f.type, size: f.size, url: URL.createObjectURL(f) }));
+  return ask({ title: `Attach ${files.length === 1 ? "this file" : `${files.length} files`} to the session?`, body: html`<${FileList} files=${shown} />`, ok: "Attach" })
+    .finally(() => shown.forEach((f) => URL.revokeObjectURL(f.url)));
 }
 
 function FileList({ files, remove }) {
@@ -2674,6 +2663,101 @@ function UsageFoot({ limits, onOpen }) {
       <span class="grow"></span>
       ${sess && Date.parse(sess.resetsAt) > Date.now() && html`<span class="r">resets in ${span((Date.parse(sess.resetsAt) - Date.now()) / 1000)}</span>`}
     </button>`;
+}
+
+function Dialogs() {
+  const [queue, setQueue] = useState([]);
+  useEffect(() => {
+    ASK = (d) => setQueue((q) => [...q, d]);
+    return () => { ASK = null; };
+  }, []);
+  const d = queue[0];
+  return d ? html`<${Dialog} key=${d.id} d=${d} onGone=${() => setQueue((q) => q.slice(1))} />` : null;
+}
+
+const FOCUSABLE = "button:not(:disabled), input:not(:disabled), textarea, select, a[href], [tabindex]:not([tabindex='-1'])";
+
+function Dialog({ d, onGone }) {
+  const { id, title, body, input, ok = "OK", busy: busyLabel, danger, run, done } = d;
+  const [val, setVal] = useState(input?.value ?? "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const box = useRef(), first = useRef(), ended = useRef(false), busyNow = useRef(false);
+  busyNow.current = busy;
+  const end = (r) => {
+    if (ended.current) return;
+    ended.current = true;
+    const finish = () => { removeEventListener("popstate", finish); clearTimeout(t); onGone(); done(r); };
+    let t;
+    if (history.state?.atcDialog === id) {
+      addEventListener("popstate", finish);
+      t = setTimeout(finish, 400);
+      history.back();
+    } else finish();
+  };
+  const cancel = () => !busyNow.current && end(null);
+  useEffect(() => {
+    const from = document.activeElement;
+    history.pushState({ ...history.state, atcDialog: id }, "");
+    const back = () => { if (!ended.current && history.state?.atcDialog !== id) busyNow.current ? history.pushState({ ...history.state, atcDialog: id }, "") : end(null); };
+    const key = (e) => {
+      if (e.key !== "Escape") return;
+      e.stopImmediatePropagation();
+      e.preventDefault();
+      cancel();
+    };
+    addEventListener("popstate", back);
+    addEventListener("keydown", key, true);
+    requestAnimationFrame(() => {
+      first.current?.focus({ preventScroll: true });
+      input && first.current?.select();
+    });
+    return () => {
+      removeEventListener("popstate", back);
+      removeEventListener("keydown", key, true);
+      if (from?.isConnected && !document.querySelector(".dlgveil")) from.focus?.({ preventScroll: true });
+    };
+  }, []);
+  const trap = (e) => {
+    if (e.key !== "Tab") return;
+    const els = [...box.current.querySelectorAll(FOCUSABLE)];
+    const i = els.indexOf(document.activeElement), n = els.length;
+    if (!n) return;
+    e.preventDefault();
+    els[(i + (e.shiftKey ? -1 : 1) + n) % n].focus();
+  };
+  const submit = async (e) => {
+    e.preventDefault();
+    if (busy) return;
+    const v = input ? val.trim() : true;
+    if (input && !v) return;
+    if (!run) return end(v);
+    setBusy(true);
+    setErr("");
+    try {
+      await run(v);
+      end(v);
+    } catch (x) {
+      setErr(x.message || String(x));
+      setBusy(false);
+    }
+  };
+  return html`
+    <div class="veil dlgveil" onPointerDown=${(e) => e.target === e.currentTarget && cancel()}>
+      <form class="sheet dlg" ref=${box} role="alertdialog" aria-modal="true" aria-labelledby=${`dlg${id}`} aria-describedby=${body ? `dlg${id}b` : undefined}
+        aria-busy=${busy} onSubmit=${submit} onKeyDown=${trap}>
+        <h3 id=${`dlg${id}`}>${title}</h3>
+        ${body && html`<div class="dbody" id=${`dlg${id}b`}>${body}</div>`}
+        ${input && html`<input class="dinput" ref=${first} value=${val} placeholder=${input.placeholder || ""} aria-label=${title} disabled=${busy}
+          autocomplete="off" enterkeyhint="done" onInput=${(e) => { setVal(e.target.value); setErr(""); }} />`}
+        ${err && html`<p class="err" role="alert">${err}</p>`}
+        <div class="actions">
+          <button type="button" class="btn" onClick=${cancel} disabled=${busy}>Cancel</button>
+          <button class="btn ${danger ? "danger solid" : "primary"}" ref=${input ? undefined : first} disabled=${busy || (input && !val.trim())}>
+            ${busy ? html`<span class="spin" aria-hidden="true"></span>${busyLabel || ok}` : ok}</button>
+        </div>
+      </form>
+    </div>`;
 }
 
 function Sheet({ cls, title, sub, onClose, children }) {
@@ -3221,6 +3305,8 @@ function usePages(s) {
   return b ? [...list, b] : list;
 }
 
+const askTakeDown = (p) => ask({ title: `Take down “${pageTitle(p)}”?`, body: "It leaves atc's pages. The file stays where it is.",
+  ok: "Take down", busy: "Taking down…", danger: true, run: () => api(`/api/sessions/${p.session}/pages/${encodeURIComponent(p.name)}${p.host ? `?host=${p.host}` : ""}`, { method: "DELETE" }) });
 async function takeDown(p, say) {
   try {
     await api(`/api/sessions/${p.session}/pages/${encodeURIComponent(p.name)}${p.host ? `?host=${p.host}` : ""}`, { method: "DELETE" });
@@ -3488,7 +3574,7 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, say, alone
           { label: "Open the file in a new tab", run: () => openOut(p.url) },
           { label: "Copy a link to this page", run: () => { copyText(`${location.origin}/${aloneLink(p.session, p.name)}`); say("Link copied."); } },
           { label: "All pages", run: () => (location.hash = "#/pages") },
-          { label: "Take down", danger: true, run: () => confirm(`Take down “${pageTitle(p)}”? The file stays where it is.`) && takeDown(p, say) },
+          { label: "Take down", danger: true, run: () => askTakeDown(p).then((ok) => ok && say(`Took down “${pageTitle(p)}”.`)) },
         ]} />`}
         ${onClose && html`<button class="icon" title="Close" aria-label="Close" onClick=${onClose}>✕</button>`}
       </div>
@@ -3572,7 +3658,7 @@ function PagesHome({ live, say, onClose }) {
       <div class="pgbody">
         ${list && !list.length && html`<div class="none"><p>No pages yet.</p><p class="sub">When an agent runs <code>atc show</code>, its page opens next to the conversation and lands here too.</p></div>`}
         <div class="cards">
-          ${shown.map((p) => html`<${PageCard} key=${pkey(p)} p=${p} onOpen=${() => open(p)} onDown=${() => confirm(`Take down “${pageTitle(p)}”? The file stays where it is.`) && down(p)}
+          ${shown.map((p) => html`<${PageCard} key=${pkey(p)} p=${p} onOpen=${() => open(p)} onDown=${() => askTakeDown(p).then((ok) => ok && (say(`Took down “${pageTitle(p)}”.`), load()))}
             sub=${html`${owner(p)?.title || p.of || "Earlier session"}${MULTI && p.host ? ` · ${p.host}` : ""}`} />`)}
         </div>
       </div>
@@ -3692,7 +3778,8 @@ function BacklogPage({ live, say, onClose, onAdd }) {
                 : html`<div class="blhead"><h3>${title}</h3><span class="count">${by[k].length}</span></div>`}
               ${(!FOLDED.has(k) || open[k]) && html`
                 ${by[k].map((it) => html`<${BacklogRow} key=${it.id} it=${it} stage=${k} run=${itemRun(it, live)} tag=${!only} patch=${patch} remove=${remove} start=${start} />`)}
-                ${k === "done" && html`<button class="btn clear" onClick=${() => confirm(`Delete ${plural(by.done.length, "finished item")}?`) && act(() => Promise.all(by.done.map((it) => call(it, "DELETE"))), "Cleared.")}>Clear done</button>`}`}
+                ${k === "done" && html`<button class="btn clear" onClick=${() => ask({ title: `Delete ${plural(by.done.length, "finished item")}?`, body: "They leave the backlog for good.", ok: "Delete", busy: "Deleting…", danger: true,
+                  run: () => Promise.all(by.done.map((it) => call(it, "DELETE"))) }).then((ok) => ok && (say("Cleared."), load()))}>Clear done</button>`}`}
             </section>`)}
         </div>
       </div>
@@ -3720,7 +3807,7 @@ function BacklogRow({ it, stage, run, tag, patch, remove, start }) {
     stage !== "done" && { label: "Done", run: () => patch(it, { status: "done" }) },
     { label: "Edit", run: () => begin("text") },
     !it.session && stage !== "done" && { label: it.worktree ? "Start in the folder itself" : "Start in a git worktree", run: () => patch(it, { worktree: !it.worktree }) },
-    { label: "Delete", danger: true, run: () => confirm("Delete this item?") && remove(it) },
+    { label: "Delete", danger: true, run: () => ask({ title: "Delete this item?", body: it.title || it.prompt, ok: "Delete", danger: true }).then((ok) => ok && remove(it)) },
   ].filter(Boolean);
   return html`
     <div class="blrow ${stage} ${edit ? "editing" : ""}">

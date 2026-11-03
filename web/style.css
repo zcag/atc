@@ -871,8 +871,6 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 .targets .t small { display: block; font: 400 12px var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 600px) {
   .share { padding: 0; place-items: stretch; }
-  .veil.confirm { place-items: end stretch; }
-  .veil.confirm .sheet { border-radius: 16px 16px 0 0; padding-bottom: max(18px, env(safe-area-inset-bottom)); }
 }
 
 .seg .count { margin-left: 5px; color: var(--dim); font: 500 11px var(--sans); opacity: .8; }
@@ -1591,3 +1589,31 @@ pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
 }
 .callpill i { width: 8px; height: 8px; border-radius: 50%; background: #fff; animation: callpulse 1.6s ease-in-out infinite; }
 @keyframes callpulse { 50% { opacity: .35; } }
+
+.veil.dlgveil { z-index: 40; animation: dlgfade .14s ease-out; }
+.sheet.dlg { width: min(440px, 100%); padding: 20px 20px 16px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); animation: dlgin .18s cubic-bezier(.2, .8, .3, 1); }
+.dlg h3 { margin: 0 0 6px; font-size: 16.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.dlg .dbody { margin: 0 0 18px; color: var(--dim); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; white-space: pre-line; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+.dlg .dbody:has(.files) { display: block; overflow: visible; white-space: normal; }
+.dlg h3:has(+ .dinput) { margin-bottom: 12px; }
+.dlg .dinput { display: block; width: 100%; margin: 0 0 16px; padding: 9px 11px; font-size: 15px; }
+.dlg .err { margin: -6px 0 14px; }
+.dlg .actions { margin-top: 2px; }
+.dlg .actions .btn { min-width: 84px; padding: 7px 14px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.btn.danger.solid { background: var(--needs); border-color: var(--needs); color: #fff; font-weight: 600; }
+.btn.danger.solid:hover { background: color-mix(in srgb, var(--needs) 88%, #000); }
+.btn.danger.solid:disabled { opacity: .7; }
+.btn:focus-visible { outline: 2px solid var(--work); outline-offset: 2px; }
+.dlg .spin { width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: tx-spin .7s linear infinite; }
+@keyframes dlgfade { from { opacity: 0; } }
+@keyframes dlgin { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+@keyframes dlgup { from { transform: translateY(100%); } }
+@media (max-width: 600px) {
+  .veil.dlgveil { place-items: end stretch; }
+  .sheet.dlg { width: 100%; max-height: 90dvh; border: 0; border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; padding: 22px 16px max(16px, env(safe-area-inset-bottom)); animation: dlgup .22s cubic-bezier(.2, .8, .3, 1); }
+  .dlg h3 { font-size: 17px; }
+  .dlg .dbody { font-size: 15px; }
+  .dlg .dinput { font-size: 16px; padding: 11px 12px; }
+  .dlg .actions .btn { flex: 1; padding: 12px; font-size: 16px; }
+}
+@media (prefers-reduced-motion: reduce) { .veil.dlgveil, .sheet.dlg { animation: none; } }
