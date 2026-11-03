@@ -4321,10 +4321,13 @@ const agentLabel = (a) => a.title || a.name.replace(/[-_]/g, " ").replace(/^./, 
 
 function PageAlone({ sid, name, at, live, say }) {
   const [got, setGot] = useState(null);
-  const s = live.find((x) => x.sessionId === sid);
+  const s = live.find((x) => x.sessionId === sid) || live.find((x) => x.sessionId.startsWith(sid));
+  useEffect(() => {
+    if (s && s.sessionId !== sid) history.replaceState(null, "", aloneLink(s.sessionId, name));
+  }, [s?.sessionId]);
   useEffect(() => {
     if (s) return;
-    const load = () => api(`/api/sessions/${sid}/pages`).then(setGot, (e) => setGot({ err: e.message }));
+    const load = () => api(`/api/sessions/${sid}/pages`).then((l) => setGot(l || []), (e) => setGot({ err: e.message }));
     load();
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
