@@ -6,9 +6,7 @@
     <color name="w_ink">#e6e9ef</color>
     <color name="w_dim">#9aa4b5</color>
     <color name="w_faint">#6b7689</color>
-    <color name="w_press">#1effffff</color>
-    <color name="needs">#f2545b</color>
-    <color name="turn">#f0b429</color>
+    <color name="needs">#eeb03f</color>
+    <color name="turn">#e6e9ef</color>
     <color name="work">#4aa3ff</color>
-    <color name="on_work">#0b1220</color>
 </resources>

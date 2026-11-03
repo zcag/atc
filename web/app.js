@@ -359,12 +359,23 @@ function App() {
   useEffect(() => {
     if (!live) return;
     if (APP?.setSessions) {
+      const feedAsk = (s) => {
+        const a = s.asks?.[0], q = a?.questions?.[0];
+        if (!a || (!a.permission && !q)) return undefined;
+        const base = { sid: s.sessionId, id: a.id, key: a.key, host: s.host || undefined };
+        if (a.permission) return { ...base, tool: a.permission, cmd: (a.patterns || []).join(" ") };
+        return { ...base, text: q.question, options: a.questions.length === 1 ? q.options.map((o) => o.label) : undefined };
+      };
       const rows = arrange(reach).filter((s) => !away(s) && FEED_STATES.includes(s.state)).slice(0, 12).map((s) => ({
         id: s.attachable ? s.id : undefined, sid: s.sessionId, title: s.title, state: s.state, host: s.host || undefined, pinned: s.pinned || undefined,
         since: (s.state === "working" && s.promptAt) || s.updated || undefined,
+        summary: (s.state !== "working" && s.summary?.status) || undefined, bay: bayOf(s) || undefined, ask: s.state === "needs-you" ? feedAsk(s) : undefined,
       }));
-      const key = JSON.stringify(rows.map(({ since, ...r }) => r));
-      if (key !== appSent) { appSent = key; APP.setSessions(JSON.stringify({ type: "sessions", at: new Date().toISOString(), sessions: rows })); }
+      const hub = (live || []).find((s) => s.kind === "hub");
+      const said = hub && oneLine(hub.lastReply || hub.summary?.status);
+      const assistant = said ? { text: said, at: hub.updated || undefined } : undefined;
+      const key = JSON.stringify([rows.map(({ since, ...r }) => r), said]);
+      if (key !== appSent) { appSent = key; APP.setSessions(JSON.stringify({ type: "sessions", at: new Date().toISOString(), sessions: rows, assistant })); }
     } else if (APP?.setTargets) {
       const targets = JSON.stringify(reach.filter((s) => s.attachable && !away(s)).slice(0, 8).map((s) => ({ id: s.sessionId, title: s.title })));
       if (targets !== appSent) APP.setTargets((appSent = targets));
@@ -5521,18 +5532,18 @@ function LiveRow({ s, step, since, steps }) {
 }
 
 function Since({ mark, rows, s, jump }) {
-  const after = rows, q = s.asks?.length > 0 && s.state === "needs-you";
+  const after = (rows || []).filter(Boolean), q = s.asks?.length > 0 && s.state === "needs-you";
   const replies = after.filter((r) => r.answer).length;
   const files = new Set(after.flatMap((r) => (r.steps || []).filter((x) => txKind(x) === "edit" && !x.out?.error).map((x) => x.input.file_path))).size;
   const pages = after.flatMap((r) => r.steps || []).filter((x) => x.badge?.kind === "show").length;
   const counts = [replies && (replies === 1 ? "a reply" : `${replies} replies`), files && plural(files, "file"), pages && (pages === 1 ? "a page" : `${pages} pages`), q && "1 question"].filter(Boolean).join(", ");
-  const sum = s.summary, sumAt = Date.parse(sum?.at || 0), last = Math.max(0, ...after.map((r) => Date.parse(r.at || 0) || 0));
+  const sum = s.summary, sumAt = sum?.at ? Date.parse(sum.at) || 0 : 0, last = Math.max(0, ...after.map((r) => Date.parse(r.at || 0) || 0));
   const now = s.state === "working" && s.activity ? `Now ${doing(s).replace(/^./, (c) => c.toLowerCase())}` : "";
   const gist = (sum?.status || "").replace(/^[A-Z][a-z]+:\s+/, "") || (now.length > 90 ? now.slice(0, 88).replace(/\s+\S*$/, "") + "..." : now);
   return html`<div class="snc" id="since" tabindex="-1"><h2 class="l">Since you last looked, ${txClock(mark)}</h2>
     ${(gist || counts) && html`<p class="cu">${gist && html`<b>${gist.replace(/^./, (c) => c.toUpperCase())}${/[.!?]$/.test(gist) ? "" : "."}</b> `}${counts && counts.replace(/^./, (c) => c.toUpperCase()) + "."}</p>`}
     ${sumAt > 0 && last > sumAt && html`<p class="sm">Summary from ${txClock(sum.at)}; what came after is not in it yet.</p>`}
-    ${q && html`<div class="acts"><button class="btn" onClick=${jump}>Jump to the question <kbd aria-hidden="true">u</kbd></button></div>`}</div>`;
+    ${q && html`<div class="acts"><button class="btn" onClick=${jump}>Jump to the question <kbd aria-hidden="true">N</kbd></button></div>`}</div>`;
 }
 
 function Queued({ p, edit, cancel, now, undo }) {
