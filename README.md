@@ -935,6 +935,30 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
 - `internal/server/callline.go` is atc's side, `android/.../Call.kt` the call itself and
   `CallScreen.kt` its screen, notification and service. delta-call's README has the line's contract.
 
+## Look and themes
+
+Every color, size, radius, shadow and timing in the web UI is a token in `web/tokens.css`;
+`style.css` (the app) and `atc.css` (the kit for `atc show` pages) only refer to them.
+
+- **Colors** carry both modes in one line, `--board: light-dark(#dde2ea, #151c27)`, so light and
+  dark never drift apart. A number that differs by mode reads `--dark` (0 or 1).
+- **Type** is a scale, `--fs-3xs` to `--fs-hero`, all multiplied by `--text-scale`. **Radii** are
+  `--r-xs` to `--r-pill`, **shadows** `--shadow-1/2/3`, `--shadow-pop/float/modal/sheet` and
+  `--lift`, **motion** `--t-fast/--t/--t-slow/--t-slower` with `--ease` and `--ease-pop`.
+- **Status** colors (`--needs --turn --work --live --stop --hot`) reach any element with a state
+  class: `.needs-you`, `.your-turn` and `.working` set `--st` (not inherited), and dots and edges
+  read `var(--st, var(--stop))`.
+- **Project hue**: an element with `--ph` (set from the project name) gets `--pc` (ink), `--pb`
+  (tint) and `--pcs` (soft), from the `--proj-*` recipe tokens.
+- **The terminal** palette is the `--ansi-*` tokens, read once per theme through the browser, in
+  the scheme Claude Code itself uses (`claudeTheme` in `/api/me`).
+
+Light, dark or the system's setting, and the theme, are picked in the command palette
+(Appearance), per device. A theme is a file in `web/themes/<name>.css` that overrides tokens under
+`:root[data-theme="<name>"]`, plus its name in `THEMES` in `app.js`; `frappe.css` (Catppuccin
+Frappé dark, Rosé Pine Dawn light) is the example. The Android app's native colors
+(`android/.../res/values*/`) are a separate copy.
+
 ## Notes
 
 - Claude Code only starts in folders you have trusted. If atc reports a folder is not trusted,

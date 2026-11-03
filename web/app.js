@@ -38,6 +38,41 @@ function ago(s) {
 }
 
 let HOME = "", CLAUDE_THEME = "dark";
+const cssColors = (scheme, names) => {
+  const probe = document.createElement("i");
+  probe.style.cssText = `position: absolute; visibility: hidden; color-scheme: ${scheme}`;
+  document.body.append(probe);
+  const cs = getComputedStyle(probe);
+  const out = names.map((n) => ((probe.style.color = `var(--${n})`), cs.color));
+  probe.remove();
+  return out;
+};
+const THEMES = { "": "atc", frappe: "Frappé and Dawn" };
+const LOOK = {
+  scheme: "auto",
+  theme: "",
+  load() {
+    try { this.scheme = localStorage.getItem("atc.scheme") || "auto"; this.theme = localStorage.getItem("atc.theme") || ""; } catch {}
+    if (!(this.theme in THEMES)) this.theme = "";
+    for (const t of Object.keys(THEMES)) if (t) document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: `themes/${t}.css`, onload: () => this.apply() }));
+    matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => this.apply());
+    this.apply();
+  },
+  set(k, v) {
+    this[k] = v;
+    try { v && v !== "auto" ? localStorage.setItem(`atc.${k}`, v) : localStorage.removeItem(`atc.${k}`); } catch {}
+    this.apply();
+    for (const d of DOCK.values()) d.term.options.theme = termTheme();
+  },
+  apply() {
+    const r = document.documentElement;
+    if (this.scheme === "auto") delete r.dataset.scheme; else r.dataset.scheme = this.scheme;
+    if (this.theme) r.dataset.theme = this.theme; else delete r.dataset.theme;
+    for (const m of document.querySelectorAll('meta[name="theme-color"]'))
+      m.content = cssColors(this.scheme !== "auto" ? this.scheme : m.media.includes("dark") ? "dark" : "light", ["board"])[0];
+  },
+};
+LOOK.load();
 const tilde = (p) => {
   if (!p) return "";
   if (HOME && (p === HOME || p.startsWith(HOME + "/"))) return "~" + p.slice(HOME.length);
@@ -794,7 +829,7 @@ function orb2D(canvas) {
   const css = (c, al = 1) => `rgba(${c.map((v) => Math.round(v * 255)).join(",")},${al})`;
   return (w, h, t, o) => {
     g.clearRect(0, 0, w, h);
-    if (o.full) { g.fillStyle = "#05070d"; g.fillRect(0, 0, w, h); }
+    if (o.full) { g.fillStyle = cssColors("dark", ["call-bg"])[0]; g.fillRect(0, 0, w, h); }
     const r = Math.min(w, h) * (.22 + .08 * Math.min(o.level, 1));
     let gr = g.createRadialGradient(w / 2, h / 2, r * .6, w / 2, h / 2, r * 1.6);
     gr.addColorStop(0, css(o.c[1], .45));
@@ -1658,7 +1693,7 @@ function Session({ s, say, live }) {
             : html`<span onDblClick=${() => setRenaming(true)}>${s.title || "Untitled"}</span>`}
         </div>
         <div class="meta">
-          <span class="word" style=${`--edge: var(--${{ "needs-you": "needs", "your-turn": "turn", working: "work" }[s.state] || "stop"})`}>${WORD[s.state] || s.state}</span>
+          <span class=${`word ${s.state}`}>${WORD[s.state] || s.state}</span>
           <${SourceTag} s=${s} full />
           ${s.branch && s.branch !== "HEAD" && html`<span class="wide">${s.branch}</span>`}
           ${engineTag(s) || (s.model && html`<span class="wide">${model(s.model)}</span>`)}
@@ -1906,17 +1941,16 @@ function Menu({ busy, items, render, label = "•••", cls = "icon", aria = "
   `;
 }
 
-const PALETTE = {
-  dark: {
-    background: "#1a222e", foreground: "#e6e9ef", cursor: "#e6e9ef", cursorAccent: "#1a222e", selectionBackground: "#3a4a63",
-    black: "#2c3748", red: "#f2545b", green: "#5cc98a", yellow: "#f0b429", blue: "#4aa3ff", magenta: "#c792ea", cyan: "#4fd1d9", white: "#c9d1dd",
-    brightBlack: "#6b7689", brightRed: "#ff7b80", brightGreen: "#7ee0a6", brightYellow: "#ffd166", brightBlue: "#7cbcff", brightMagenta: "#dcaaf5", brightCyan: "#7fe5ea", brightWhite: "#ffffff",
-  },
-  light: {
-    background: "#fbfaf5", foreground: "#1d2533", cursor: "#1d2533", cursorAccent: "#fbfaf5", selectionBackground: "#c7d7ee",
-    black: "#1d2533", red: "#c2333b", green: "#1f8a4c", yellow: "#a36a00", blue: "#1f63b5", magenta: "#8a3fb8", cyan: "#137c86", white: "#8a93a3",
-    brightBlack: "#5d6778", brightRed: "#d63b44", brightGreen: "#27a05b", brightYellow: "#b7791f", brightBlue: "#2477d1", brightMagenta: "#a052d1", brightCyan: "#1a929d", brightWhite: "#ffffff",
-  },
+const TERM_COLORS = ["background", "foreground", "cursor", "cursorAccent", "selectionBackground",
+  ...["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"].flatMap((c) => [c, `bright${c[0].toUpperCase()}${c.slice(1)}`])];
+const TERM_THEMES = {};
+const termTheme = () => {
+  const key = `${CLAUDE_THEME} ${LOOK.theme}`;
+  if (!TERM_THEMES[key]) {
+    const v = cssColors(CLAUDE_THEME, TERM_COLORS.map((c) => `ansi-${c}`));
+    TERM_THEMES[key] = Object.fromEntries(TERM_COLORS.map((c, i) => [c, v[i]]));
+  }
+  return TERM_THEMES[key];
 };
 
 const KEYS = [
@@ -2007,7 +2041,7 @@ function makeDock(id) {
     fontFamily: '"Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono", "Noto Sans Symbols 2", "Noto Sans Symbols", monospace',
     fontSize: touch ? 12.5 : 14,
     lineHeight: 1.1,
-    theme: PALETTE[CLAUDE_THEME],
+    theme: termTheme(),
     allowProposedApi: true,
     scrollback: 2000,
     macOptionIsMeta: true,
@@ -2233,7 +2267,7 @@ function Term({ s, say, voice, onVoiceOff }) {
     onDrop: (e) => { e.preventDefault(); setDropping(false); upload.current([...e.dataTransfer.files]); },
   };
   return html`
-    <div class="stage ${dropping ? "dropping" : ""}" style=${`--term-bg: ${PALETTE[CLAUDE_THEME].background}`} ...${drop}>
+    <div class="stage ${dropping ? "dropping" : ""}" style=${`--term-bg: ${termTheme().background}`} ...${drop}>
       <input type="file" multiple hidden ref=${picker} onChange=${(e) => { upload.current([...e.target.files]); e.target.value = ""; }} />
       <button class="attach" title="Attach a file (or paste or drop one)" aria-label="Attach a file" onClick=${() => picker.current.click()}>Attach</button>
       <div class="term" ref=${box}></div>
@@ -3943,8 +3977,9 @@ const APP_ICONS = {
   chat: '<path d="M4 5.5h16v10H10l-4.5 3.5v-3.5H4z"/>',
   doc: '<path d="M7 3h7l5 5v11.5A1.5 1.5 0 0 1 17.5 21h-10A1.5 1.5 0 0 1 6 19.5v-15A1.5 1.5 0 0 1 7.5 3z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
 };
-const APP_COLORS = { blue: "#3b82f6", amber: "#f59e0b", violet: "#8b5cf6", green: "#10b981", red: "#ef4444", teal: "#14b8a6", pink: "#ec4899", orange: "#f97316", slate: "#64748b" };
-const appColor = (a) => APP_COLORS[a.color] || (/^#[0-9a-f]{3,8}$/i.test(a.color || "") ? a.color : Object.values(APP_COLORS)[[...a.name].reduce((h, c) => h + c.charCodeAt(0), 0) % 9]);
+const APP_COLORS = ["blue", "amber", "violet", "green", "red", "teal", "pink", "orange", "slate"];
+const appColor = (a) => /^#[0-9a-f]{3,8}$/i.test(a.color || "") ? a.color
+  : `var(--app-${APP_COLORS.includes(a.color) ? a.color : APP_COLORS[[...a.name].reduce((h, c) => h + c.charCodeAt(0), 0) % APP_COLORS.length]})`;
 
 function AppTile({ a, size = 32, dot }) {
   const svg = APP_ICONS[a.icon];
@@ -5418,6 +5453,10 @@ function Palette({ live, sel, say, home, actions, onClose }) {
   add("Actions", "All pages", { glyph: "▣", hint: "p", kw: "shown html reports gallery", run: run(() => (location.hash = PAGES)) });
   add("Actions", "Usage and limits", { glyph: "%", kw: "tokens cost week", run: run(actions.usage) });
   add("Actions", "Keyboard shortcuts", { glyph: "?", hint: "?", kw: "help keys", run: run(actions.help) });
+  for (const [v, label] of [["auto", "Match the system"], ["light", "Light"], ["dark", "Dark"]])
+    add("Appearance", label, { glyph: "◐", kw: "appearance scheme mode light dark night day", sub: LOOK.scheme === v ? "current" : "", run: run(() => LOOK.set("scheme", v)) });
+  for (const [v, label] of Object.entries(THEMES))
+    add("Appearance", `Theme: ${label}`, { glyph: "◑", kw: "appearance theme colors look", sub: LOOK.theme === v ? "current" : "", run: run(() => LOOK.set("theme", v)) });
   if (q.length > 1) for (const d of dirs.slice(0, 60)) add("New session in", tilde(d.path), { glyph: "+", kw: "folder", run: run(() => actions.create({ dir: d.path })) });
 
   const ql = q.trim().toLowerCase();

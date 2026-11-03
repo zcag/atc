@@ -1,0 +1,51 @@
+:root[data-theme="frappe"] {
+  --board: light-dark(#f2e9e1, #292c3c);
+  --strip: light-dark(#faf4ed, #303446);
+  --strip-hi: light-dark(#fffaf3, #414559);
+  --sunk: light-dark(#dfdad9, #232634);
+  --line: light-dark(#cecacd, #51576d);
+  --term-bg: light-dark(#faf4ed, #303446);
+
+  --ink: light-dark(#575279, #c6d0f5);
+  --dim: light-dark(#797593, #a5adce);
+  --faint: light-dark(#9893a5, #838ba7);
+
+  --needs: light-dark(#b4637a, #e78284);
+  --hot: light-dark(#d7827e, #ef9f76);
+  --turn: light-dark(#ea9d34, #e5c890);
+  --work: light-dark(#286983, #8caaee);
+  --live: light-dark(#56949f, #a6d189);
+  --stop: light-dark(#9893a5, #737994);
+  --on-turn: #232634;
+
+  --s1: light-dark(#286983, #8caaee);
+  --s2: light-dark(#d7827e, #ef9f76);
+  --s3: light-dark(#56949f, #a6d189);
+  --s4: light-dark(#ea9d34, #e5c890);
+  --s5: light-dark(#907aa9, #f4b8e4);
+
+  --hl-key: light-dark(#907aa9, #ca9ee6);
+  --hl-str: light-dark(#286983, #a6d189);
+  --hl-num: light-dark(#ea9d34, #ef9f76);
+  --hl-com: light-dark(#9893a5, #838ba7);
+  --hl-fn: light-dark(#56949f, #8caaee);
+  --hl-tit: light-dark(#b4637a, #e78284);
+
+  --ansi-selectionBackground: light-dark(#dfdad9, #626880);
+  --ansi-black: light-dark(#f2e9e1, #51576d);
+  --ansi-red: light-dark(#b4637a, #e78284);
+  --ansi-green: light-dark(#286983, #a6d189);
+  --ansi-yellow: light-dark(#ea9d34, #e5c890);
+  --ansi-blue: light-dark(#56949f, #8caaee);
+  --ansi-magenta: light-dark(#907aa9, #f4b8e4);
+  --ansi-cyan: light-dark(#d7827e, #81c8be);
+  --ansi-white: light-dark(#575279, #b5bfe2);
+  --ansi-brightBlack: light-dark(#9893a5, #626880);
+  --ansi-brightRed: light-dark(#b4637a, #e78284);
+  --ansi-brightGreen: light-dark(#286983, #a6d189);
+  --ansi-brightYellow: light-dark(#ea9d34, #e5c890);
+  --ansi-brightBlue: light-dark(#56949f, #8caaee);
+  --ansi-brightMagenta: light-dark(#907aa9, #f4b8e4);
+  --ansi-brightCyan: light-dark(#d7827e, #81c8be);
+  --ansi-brightWhite: light-dark(#575279, #a5adce);
+}

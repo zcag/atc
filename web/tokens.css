@@ -1,0 +1,143 @@
+@font-face { font-family: "Plex Sans"; src: url(vendor/fonts/ibm-plex-sans-latin-400-normal.woff2) format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Plex Sans"; src: url(vendor/fonts/ibm-plex-sans-latin-500-normal.woff2) format("woff2"); font-weight: 500; font-display: swap; }
+@font-face { font-family: "Plex Sans"; src: url(vendor/fonts/ibm-plex-sans-latin-600-normal.woff2) format("woff2"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Plex Mono"; src: url(vendor/fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Plex Mono"; src: url(vendor/fonts/ibm-plex-mono-latin-600-normal.woff2) format("woff2"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Newsreader"; src: url(vendor/fonts/newsreader-latin-opsz-normal.woff2) format("woff2-variations"); font-weight: 200 800; font-style: normal; font-display: swap; }
+@font-face { font-family: "Newsreader"; src: url(vendor/fonts/newsreader-latin-opsz-italic.woff2) format("woff2-variations"); font-weight: 200 800; font-style: italic; font-display: swap; }
+@font-face { font-family: "Literata"; src: url(vendor/fonts/literata-latin-opsz-normal.woff2) format("woff2-variations"); font-weight: 200 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Literata"; src: url(vendor/fonts/literata-latin-opsz-italic.woff2) format("woff2-variations"); font-weight: 200 900; font-style: italic; font-display: swap; }
+
+@property --st { syntax: "*"; inherits: false; }
+
+:root {
+  color-scheme: light dark;
+  --dark: 0;
+
+  --board: light-dark(#dde2ea, #151c27);
+  --strip: light-dark(#fbfaf5, #1f2836);
+  --strip-hi: light-dark(#ffffff, #273243);
+  --sunk: light-dark(#cfd5df, #111720);
+  --line: light-dark(#c3cad6, #2c3748);
+  --hair: light-dark(color-mix(in srgb, var(--line) 60%, transparent), color-mix(in srgb, var(--line) 85%, transparent));
+  --term-bg: light-dark(#fbfaf5, #1a222e);
+
+  --ink: light-dark(#1d2533, #e6e9ef);
+  --dim: light-dark(#5d6778, #9aa4b5);
+  --faint: light-dark(#7f8899, #78839a);
+
+  --needs: light-dark(#d63b44, #f2545b);
+  --hot: light-dark(#d9622b, #f08a4b);
+  --turn: light-dark(#b7791f, #f0b429);
+  --work: light-dark(#2477d1, #4aa3ff);
+  --live: light-dark(#23845a, #3ccf8e);
+  --stop: light-dark(#7b8597, #6b7689);
+  --focus: var(--work);
+
+  --primary: light-dark(var(--ink), color-mix(in srgb, var(--work) 62%, var(--board)));
+  --on-primary: light-dark(var(--board), #ffffff);
+  --on-accent: #ffffff;
+  --on-turn: #1d2533;
+  --track: light-dark(color-mix(in srgb, var(--ink) 9%, var(--strip)), color-mix(in srgb, var(--ink) 11%, var(--strip)));
+  --today: color-mix(in srgb, var(--ink) 72%, transparent);
+
+  --s1: light-dark(#2a78d6, #3987e5);
+  --s2: light-dark(#eb6834, #d95926);
+  --s3: light-dark(#1baf7a, #199e70);
+  --s4: light-dark(#eda100, #c98500);
+  --s5: light-dark(#e87ba4, #d55181);
+
+  --app-blue: #3b82f6; --app-amber: #f59e0b; --app-violet: #8b5cf6; --app-green: #10b981; --app-red: #ef4444;
+  --app-teal: #14b8a6; --app-pink: #ec4899; --app-orange: #f97316; --app-slate: #64748b;
+
+  --proj-ink-l: 50% 34%; --proj-ink-d: 60% 72%;
+  --proj-tint-l: 45% 90%; --proj-tint-d: 30% 21%;
+  --proj-soft-l: 45% 50% / .13; --proj-soft-d: 45% 60% / .15;
+
+  --hl-key: light-dark(#7a3fb0, #c9a2f5);
+  --hl-str: light-dark(#2b7a4b, #8fd6a3);
+  --hl-num: light-dark(#b5761b, #f0b46e);
+  --hl-com: light-dark(#8a93a3, #6b7689);
+  --hl-fn: light-dark(#2f5fc4, #8fb0ff);
+  --hl-tit: light-dark(#b03a48, #f59aa3);
+
+  --ansi-background: var(--term-bg);
+  --ansi-foreground: var(--ink);
+  --ansi-cursor: var(--ink);
+  --ansi-cursorAccent: var(--term-bg);
+  --ansi-selectionBackground: light-dark(#c7d7ee, #3a4a63);
+  --ansi-black: light-dark(#1d2533, #2c3748);
+  --ansi-red: light-dark(#c2333b, #f2545b);
+  --ansi-green: light-dark(#1f8a4c, #5cc98a);
+  --ansi-yellow: light-dark(#a36a00, #f0b429);
+  --ansi-blue: light-dark(#1f63b5, #4aa3ff);
+  --ansi-magenta: light-dark(#8a3fb8, #c792ea);
+  --ansi-cyan: light-dark(#137c86, #4fd1d9);
+  --ansi-white: light-dark(#8a93a3, #c9d1dd);
+  --ansi-brightBlack: light-dark(#5d6778, #6b7689);
+  --ansi-brightRed: light-dark(#d63b44, #ff7b80);
+  --ansi-brightGreen: light-dark(#27a05b, #7ee0a6);
+  --ansi-brightYellow: light-dark(#b7791f, #ffd166);
+  --ansi-brightBlue: light-dark(#2477d1, #7cbcff);
+  --ansi-brightMagenta: light-dark(#a052d1, #dcaaf5);
+  --ansi-brightCyan: light-dark(#1a929d, #7fe5ea);
+  --ansi-brightWhite: #ffffff;
+
+  --call-bg: #05070d;
+  --call-go: #30a46c;
+  --call-end: #e5484d;
+  --frame-bg: #ffffff;
+  --scrim: rgb(10 14 20 / .45);
+  --scrim-strong: rgb(0 0 0 / .87);
+
+  --sans: "Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --serif: Newsreader, Georgia, serif;
+  --text-scale: 1;
+  --fs-3xs: calc(10px * var(--text-scale));
+  --fs-2xs: calc(11.5px * var(--text-scale));
+  --fs-xs: calc(12px * var(--text-scale));
+  --fs-sm: calc(12.5px * var(--text-scale));
+  --fs-md: calc(13px * var(--text-scale));
+  --fs-lg: calc(13.5px * var(--text-scale));
+  --fs-xl: calc(14px * var(--text-scale));
+  --fs-2xl: calc(15px * var(--text-scale));
+  --fs-3xl: calc(16px * var(--text-scale));
+  --fs-4xl: calc(17px * var(--text-scale));
+  --fs-5xl: calc(20px * var(--text-scale));
+  --fs-6xl: calc(26px * var(--text-scale));
+  --fs-7xl: calc(32px * var(--text-scale));
+  --fs-hero: calc(50px * var(--text-scale));
+
+  --r-xs: 3px;
+  --r-sm: 5px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+  --r-2xl: 22px;
+  --r-pill: 999px;
+
+  --shade: light-dark(#0f172a, #000000);
+  --shadow-1: 0 1px 2px color-mix(in srgb, var(--shade) 6%, transparent), 0 0 0 1px light-dark(color-mix(in srgb, var(--line) 55%, transparent), color-mix(in srgb, var(--line) 70%, transparent));
+  --shadow-2: 0 2px 8px color-mix(in srgb, var(--shade) 8%, transparent), 0 0 0 1px color-mix(in srgb, var(--line) 80%, transparent);
+  --shadow-3: 0 4px 16px color-mix(in srgb, var(--shade) 12%, transparent);
+  --shadow-pop: 0 1px 4px color-mix(in srgb, var(--shade) 12%, transparent);
+  --shadow-float: 0 8px 28px light-dark(rgb(0 0 0 / .18), rgb(0 0 0 / .4));
+  --shadow-modal: 0 24px 60px light-dark(rgb(10 14 20 / .35), rgb(0 0 0 / .6));
+  --shadow-sheet: 0 -8px 30px rgb(0 0 0 / .18);
+  --lift: 0 10px 30px -10px light-dark(rgb(15 23 42 / .35), rgb(0 0 0 / .8));
+
+  --t-fast: .12s;
+  --t: .15s;
+  --t-slow: .2s;
+  --t-slower: .35s;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --ease-pop: cubic-bezier(.3, 1.5, .5, 1);
+
+  --side: 400px;
+  --measure: 760px;
+  --wide: 1180px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-scheme="light"]) { --dark: 1; } }
+:root[data-scheme="light"] { color-scheme: light; }
+:root[data-scheme="dark"] { color-scheme: dark; --dark: 1; }

@@ -66,8 +66,10 @@ inside the page itself it is plain href="#towel". A section the page draws later
 from atc.state is found once it appears, when the page loads /atc.js.
 
 To look like atc, link its kit: <link rel="stylesheet" href="/atc.css">. It sets
-atc's fonts and colors in light and dark, styles plain markup, and is dense by
-default (13.5px text, tight rows), so a page reads like a dashboard. Classes:
+atc's fonts and colors in light and dark (its tokens, from /tokens.css: --ink --dim
+--faint --line --board --strip, the tones, --fs-xs..--fs-4xl, --r-sm..--r-pill, --shadow-1),
+styles plain markup, and is dense by default (13.5px text, tight rows), so a page reads
+like a dashboard. Classes:
 .page (the reading column, .wide for a dashboard); .head with h1, .lede, .meta;
 .sec (a section header, .n for its count); .card (.edge adds a colored left bar);
 .rows of .row with .main and .aside; .cols (columns on a wide screen, --cols);
