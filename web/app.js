@@ -2819,7 +2819,7 @@ function VoiceBar({ s, say, type, press, onClose, top }) {
     { label: bargeIn ? "Talking over a reply: on" : "Talking over a reply: off", run: toggleBarge },
   ].filter(Boolean);
   return html`
-    <div class="voicebar" role="region" aria-label="Voice"><div class="cols"><div class="mg"></div><div class="cx">
+    <div class="voicebar" role="region" aria-label="Voice"><div class="cols"><div class="cx">
       ${top}
       <div class="vstrip ${muted ? "muted" : phase}" role="group" aria-label="Voice mode">
         <span class="vs"><b>Voice</b><span class="w">${word}</span>${!muted && (phase === "listening" || phase === "hearing") && html`<span class="lvl" aria-hidden="true"><i></i><i></i><i></i><i></i></span>`}</span>
@@ -5344,7 +5344,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
     : note === "kept" ? html`<div class="cstrip" role="status"><b>Kept.</b><span class="h">Edit it, or ${touch ? "Send" : html`<kbd>enter</kbd> sends`}. Nothing was sent.</span></div>`
     : note === "none" ? html`<div class="cstrip" role="status"><b>Dictation discarded.</b><span class="h">The box is as it was.</span></div>` : null;
   return html`<div class="composer">
-    <div class="cols"><div class="mg"></div><div class="cx">${top}
+    <div class="cols"><div class="cx">${top}
       <div class="cmp ${hasText ? "has-text" : ""} ${dict.state === "rec" ? "listening" : ""} ${VOICE_OK ? "has-talk" : ""}">
         ${slashes && html`<div class="slash" role="listbox" aria-label="Slash commands">${slashes.length ? slashes.map(([c, d], j) => html`<button class="sl ${j === Math.min(slash, slashes.length - 1) ? "on" : ""}" role="option" aria-selected=${j === slash} onMouseDown=${(e) => e.preventDefault()} onClick=${() => pickSlash(c)}><span class="c">${c}</span><span class="d">${d}</span></button>`)
           : html`<div class="sl none">No command starts with ${draft}</div>`}<div class="slh"><span><kbd>up</kbd> <kbd>down</kbd> choose</span><span><kbd>tab</kbd> complete</span><span><kbd>esc</kbd> close</span></div></div>`}
@@ -5377,7 +5377,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
 
 function EndBar({ s, resume, busy }) {
   const at = txClock(s.updated);
-  return html`<div class="endbar"><div class="cols"><div class="mg"></div><div class="cx">
+  return html`<div class="endbar"><div class="cols"><div class="cx">
     <p><b>${s.state === "stopped" ? `Stopped${at ? ` ${at}` : ""}.` : "Not running."}</b> It keeps its transcript; Resume continues the conversation.</p>
     <span class="acts"><button class="btn prime" disabled=${busy} aria-keyshortcuts="r" onClick=${resume}>${busy ? "Resuming" : html`Resume <kbd aria-hidden="true">r</kbd>`}</button></span>
   </div></div></div>`;
@@ -5604,18 +5604,10 @@ const groupSpan = (steps) => {
 };
 const groupHead = (steps) => `${plural(steps.length, "step")}${groupSpan(steps) ? `, ${groupSpan(steps)}` : ""}`;
 
-function SideNote({ steps, s, open, toggle }) {
-  const list = steps.length <= 4 ? steps : [steps[0], null, steps[steps.length - 2], steps[steps.length - 1]];
-  return html`<button class="side" aria-expanded=${open} onClick=${toggle} title=${open ? "Fold the steps" : "Show every step"}>
-    <span class="sh2">${groupHead(steps)}</span>
-    <ol>${list.map((x) => {
-      if (!x) return html`<li class="more">${steps.length - 3} more</li>`;
-      const m = stepNote(x, s);
-      return html`<li class=${m.bad ? "bad" : ""}><span class="l1"><span class="v">${m.v}</span><code title=${m.c}>${m.c}</code></span>${m.n && html`<span class="nt">${m.n}</span>`}</li>`;
-    })}</ol>
-  </button>`;
-}
-const InlineSteps = ({ steps, open, toggle }) => html`<button class="inl-steps" aria-expanded=${open} onClick=${toggle}><span class="chev" aria-hidden="true"></span>${groupHead(steps)}<span class="v">${[...new Set(steps.map((x) => VERB[x.tool] || toolName(x.tool).toLowerCase()))].join(", ")}</span></button>`;
+const InlineSteps = ({ steps, open, toggle, at }) => {
+  const failed = steps.filter((x) => x.out?.error || x.badge?.ok === false).length;
+  return html`<button class="inl-steps" aria-expanded=${open} onClick=${toggle} title=${open ? "Fold the steps" : "Show every step"}><span class="chev" aria-hidden="true"></span><span class="h">${groupHead(steps)}</span>${failed > 0 && html`<b>${failed} failed</b>`}<span class="v">${[...new Set(steps.map((x) => VERB[x.tool] || toolName(x.tool).toLowerCase()))].join(", ")}</span>${at && html`<time>${at}</time>`}</button>`;
+};
 
 function Edits({ steps, s }) {
   const files = new Map();
@@ -5665,10 +5657,10 @@ function agentRows(b) {
 
 const unesc = (t) => t.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
 const cleanPrompt = (t) => unesc(t || "").replace(/\[Image #\d+\]\s*/g, "");
-function Lead({ text, images, files }) {
+function Lead({ text, images, files, at }) {
   const [all, setAll] = useState(false);
   const long = text.length > 600 || text.split("\n").length > 8;
-  return html`<div class="lead"><p class=${long && !all ? "clamp" : ""}>${text}</p>
+  return html`<div class="lead"><div class="lead-at">you ${at}</div><p class=${long && !all ? "clamp" : ""}>${text}</p>
     ${long && html`<button class="kb more" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}
     ${files > 0 && html`<span class="attl">${plural(files, "attachment")}</span>`}
     ${(images || []).length > 0 && html`<span class="imgs">${images.map((src) => html`<img src=${src} alt="Image you attached" />`)}</span>`}</div>`;
@@ -5683,8 +5675,8 @@ function LiveRow({ s, step, since, steps }) {
   useNow(1000);
   const at = step?.time || since, ms = at ? Date.now() - new Date(at) : 0, m = step && stepNote(step, s);
   const what = m ? `${m.v} ${m.c}` : s.activity ? doing(s) : "Thinking";
-  return html`<div class="work" id="tx-now" role="status"><span class="doing">${what}</span>
-    <span class="el">${[ms >= 1000 && txSpan(ms), steps > 0 && `step ${steps}`].filter(Boolean).join(", ") || "just started"}</span><span class="livebar" aria-hidden="true"></span></div>`;
+  return html`<div class="work" id="tx-now" role="status"><i class="pulse" aria-hidden="true"></i><span class="doing">${what}</span>
+    <span class="el">${[ms >= 1000 && txSpan(ms), steps > 0 && `step ${steps}`].filter(Boolean).join(", ")}</span></div>`;
 }
 
 function Since({ mark, rows, s, jump }) {
@@ -6043,11 +6035,11 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
 
   let shownClock = "", shownDay = txDay(new Date().toISOString());
   const clock = (at, force) => {
-    if (!at) return null;
+    if (!at) return "";
     const c = txClock(at), d = txDay(at), day = d !== shownDay;
-    if (!force && !day && c === shownClock) return null;
+    if (!force && !day && c === shownClock) return "";
     shownClock = c; shownDay = d;
-    return html`${day && html`<span class="day">${shortDay(at)}</span>`}<time>${c}</time>`;
+    return day ? `${shortDay(at)} ${c}` : c;
   };
   const cell = (r) => {
     const gk = `g${r.key}`, gOpen = level === 3 ? !expanded.has(gk) : expanded.has(gk);
@@ -6056,48 +6048,45 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
         const f = (r.t.files || []).filter((x) => !scratch(x.path)).sort((a, b) => b.add + b.del - a.add - a.del)[0];
         const work = [r.t.steps > 0 && plural(r.t.steps, "step"), f && `${relPath(f.path, s)} +${f.add}${f.del ? ` -${f.del}` : ""}`, (r.t.files || []).length > 1 && `${r.t.files.length - 1} more`].filter(Boolean).join(", ");
         const who = r.t.notice ? "" : "you";
-        return [html`${clock(r.at, true)}${who && html`<span class="who">you</span>`}`, html`${who && html`<h2 class="sr">you, ${txClock(r.at)}</h2>`}<button class="fold ${r.t.notice ? "ntc" : ""}" id=${`tx${r.i}`} data-stop data-you=${who ? "" : null} aria-expanded="false" title="Open this turn" onClick=${() => openTurn(r.i)}>
-          <span class="lead-at">${who} ${txClock(r.at)}</span><span class="fq">${r.t.partial ? "Continued from earlier" : plain(cleanPrompt(r.t.prompt)) || "Image"}</span>
-          <span class="g">${r.t.reply ? firstSentence(r.t.reply) : "No reply."} ${work && html`<b>${work}</b>`}</span></button>`, "foldm"];
+        return html`${who && html`<h2 class="sr">you, ${txClock(r.at)}</h2>`}<button class="fold ${r.t.notice ? "ntc" : ""}" id=${`tx${r.i}`} data-stop data-you=${who ? "" : null} aria-expanded="false" title="Open this turn" onClick=${() => openTurn(r.i)}>
+          <span class="fy"><span class="lead-at">${who} ${clock(r.at, true)}</span><span class="fq">${r.t.partial ? "Continued from earlier" : plain(cleanPrompt(r.t.prompt)) || "Image"}</span></span>
+          <span class="g">${r.t.reply ? firstSentence(r.t.reply) : "No reply."} ${work && html`<b>${work}</b>`}</span></button>`;
       }
       case "you": {
         const first = rows[0] === r;
-        return [html`${clock(r.at, true)}<span class="who">you</span>`, html`<div class="sec ${first ? "first" : ""}" id=${`tx${r.i}`} data-stop data-you><h2 class="sr">you, ${txClock(r.at)}</h2><div class="rule"></div>
-          <div class="lead-at">you ${txClock(r.at)}</div>
-          <${Lead} text=${cleanPrompt(r.b?.prompt ?? r.t.prompt).trim()} images=${r.b?.images} />
-</div>`, "sec"];
+        return html`<div class="sec ${first ? "first" : ""}" id=${`tx${r.i}`} data-stop data-you><h2 class="sr">you, ${txClock(r.at)}</h2>
+          <${Lead} at=${clock(r.at, true)} text=${cleanPrompt(r.b?.prompt ?? r.t.prompt).trim()} images=${r.b?.images} /></div>`;
       }
-      case "notice": return [clock(r.at), html`<p class="evt" id=${`tx${r.i}`}>${plain(cleanPrompt(r.t.prompt))}</p>`];
-      case "partial": return [clock(r.at), html`<p class="evt" id=${`tx${r.i}`}>This turn started before what is loaded here.</p>`];
-      case "skel": return [null, html`<div class="skel" aria-label="Loading"><i></i><i></i><i></i></div>`];
+      case "notice": return html`<p class="evt" id=${`tx${r.i}`}>${plain(cleanPrompt(r.t.prompt))}</p>`;
+      case "partial": return html`<p class="evt" id=${`tx${r.i}`}>This turn started before what is loaded here.</p>`;
+      case "skel": return html`<div class="skel" aria-label="Loading"><i></i><i></i><i></i></div>`;
       case "say": case "steps":
-        return [html`${clock(r.at)}${r.steps && html`<${SideNote} steps=${r.steps} s=${s} open=${gOpen} toggle=${() => flip(gk)} />`}`,
-          html`${r.answer && html`<h2 class="sr">${s.agent ? `@${s.agent}` : "agent"}, ${txClock(r.at)}</h2>`}${r.steps && html`<${InlineSteps} steps=${r.steps} open=${gOpen} toggle=${() => flip(gk)} /><${GroupBody} steps=${r.steps} s=${s} open=${gOpen} zoom=${setShot} live=${r.live && !r.text} />`}
-            ${r.text && html`<div data-stop=${r.answer ? "" : null}><${Prose} text=${r.text} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`];
-      case "evt": return [clock(r.at), html`<p class="evt">${r.text}</p>`];
-      case "note": return [html`${clock(r.at)}<span class="who">you</span>`, html`<p class="youl">${r.text}</p>`];
+        return html`${r.answer && html`<h2 class="sr">${s.agent ? `@${s.agent}` : "agent"}, ${txClock(r.at)}</h2>`}${r.steps && html`<${InlineSteps} steps=${r.steps} at=${clock(r.at)} open=${gOpen} toggle=${() => flip(gk)} /><${GroupBody} steps=${r.steps} s=${s} open=${gOpen} zoom=${setShot} live=${r.live && !r.text} />`}
+            ${r.text && html`<div data-stop=${r.answer ? "" : null}><${Prose} text=${r.text} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`;
+      case "evt": return html`<p class="evt">${r.text}</p>`;
+      case "note": return html`<${Lead} at=${clock(r.at, true)} text=${r.text} />`;
       case "answered": {
         const rec = r.rec;
-        return [clock(r.at), html`<${AnsweredLine} q=${rec.q} cmd=${rec.cmd} options=${rec.options || []} chosen=${rec.i ? [rec.i - 1] : []}
-          line=${html`${askHead(rec)}, ${txClock(rec.at)} <span class="from">(from this screen)</span>`} state=${rec.st !== "accepted" && html`<${AskState} rec=${rec} host=${s.host} retry=${() => answerAsk(s, { id: rec.id }, rec)} />`} />`];
+        return html`<${AnsweredLine} q=${rec.q} cmd=${rec.cmd} options=${rec.options || []} chosen=${rec.i ? [rec.i - 1] : []}
+          line=${html`${askHead(rec)}, ${txClock(rec.at)} <span class="from">(from this screen)</span>`} state=${rec.st !== "accepted" && html`<${AskState} rec=${rec} host=${s.host} retry=${() => answerAsk(s, { id: rec.id }, rec)} />`} />`;
       }
-      case "elsewhere": return [clock(r.at), html`<div class="ask line"><p class="adl"><span>You answered <b>${r.x.what}</b>, ${txClock(r.x.at)}${fromWhere(r.x)}</span></p></div>`];
-      case "since": return [html`<time>${txClock(r.at)}</time>`, html`<${Since} mark=${r.at} rows=${r.after} s=${s} jump=${nextUnseen} />`, "sncm"];
+      case "elsewhere": return html`<div class="ask line"><p class="adl"><span>You answered <b>${r.x.what}</b>, ${txClock(r.x.at)}${fromWhere(r.x)}</span></p></div>`;
+      case "since": return html`<${Since} mark=${r.at} rows=${r.after} s=${s} jump=${nextUnseen} />`;
       case "sent": {
         const first = rows[0] === r;
-        return [html`${clock(r.at, true)}<span class="who">you</span>`, html`<div class="sec ${first ? "first" : ""}" data-stop data-you id=${`tx-p${r.p.id}`}><div class="rule"></div><div class="lead-at">you ${txClock(r.at)}</div>
-          <${Lead} text=${unpathed(r.p.text)} files=${(r.p.text.match(UPLOADED) || []).length} />
-          <${SentState} p=${r.p} host=${s.host} retry=${() => deliver(r.p)} edit=${() => { setPending((ps) => ps.filter((x) => x.id !== r.p.id)); setDraft((d) => [unpathed(r.p.text), d].filter(Boolean).join("\n")); focusInput.current(); }} /></div>`, "sec"];
+        return html`<div class="sec ${first ? "first" : ""}" data-stop data-you id=${`tx-p${r.p.id}`}>
+          <${Lead} at=${clock(r.at, true)} text=${unpathed(r.p.text)} files=${(r.p.text.match(UPLOADED) || []).length} />
+          <${SentState} p=${r.p} host=${s.host} retry=${() => deliver(r.p)} edit=${() => { setPending((ps) => ps.filter((x) => x.id !== r.p.id)); setDraft((d) => [unpathed(r.p.text), d].filter(Boolean).join("\n")); focusInput.current(); }} /></div>`;
       }
-      case "stream": return [html`<time>now</time>`, html`${HUB_CHANNEL[r.st.channel] && html`<p class="evt">${HUB_CHANNEL[r.st.channel]}</p>`}<div class="prose live" dangerouslySetInnerHTML=${{ __html: md(r.st.text) + '<span class="caret"></span>' }}></div>`, "now"];
-      case "live": return [html`<time>now</time>`, html`<${LiveRow} s=${s} step=${running} since=${lastAt(lastBody) || last?.end} steps=${last?.steps || 0} />`, "now"];
-      case "ask": return [clock(r.at, true), html`<${Ask} s=${s} a=${r.a} keyRef=${askKey} onType=${() => focusInput.current()} />`];
-      case "queued": return [html`<time>queued</time>`, html`<${Queued} p=${r.p} now=${() => deliver(r.p)}
+      case "stream": return html`${HUB_CHANNEL[r.st.channel] && html`<p class="evt">${HUB_CHANNEL[r.st.channel]}</p>`}<div class="prose live" dangerouslySetInnerHTML=${{ __html: md(r.st.text) + '<span class="caret"></span>' }}></div>`;
+      case "live": return html`<${LiveRow} s=${s} step=${running} since=${lastAt(lastBody) || last?.end} steps=${last?.steps || 0} />`;
+      case "ask": return html`<${Ask} s=${s} a=${r.a} keyRef=${askKey} onType=${() => focusInput.current()} />`;
+      case "queued": return html`<${Queued} p=${r.p} now=${() => deliver(r.p)}
         edit=${() => { setPending((ps) => ps.filter((x) => x.id !== r.p.id)); setDraft((d) => [d, unpathed(r.p.text)].filter(Boolean).join("\n")); focusInput.current(); }}
         cancel=${() => { setPending((ps) => ps.map((x) => (x.id === r.p.id ? { ...x, state: "cancelled" } : x))); setTimeout(() => setPending((ps) => ps.filter((x) => !(x.id === r.p.id && x.state === "cancelled"))), 8000); }}
-        undo=${() => setPending((ps) => ps.map((x) => (x.id === r.p.id ? { ...x, state: "queued" } : x)))} />`];
+        undo=${() => setPending((ps) => ps.map((x) => (x.id === r.p.id ? { ...x, state: "queued" } : x)))} />`;
     }
-    return [null, null];
+    return null;
   };
 
   const dropIn = (e) => { if (live && e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); setDrop(true); } };
@@ -6108,10 +6097,10 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
       onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; setBelow(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight * 0.6); if (atEnd.current) { setFresh(0); if (landed.current) markLooked(s); } setSel(null); }}>
       <div class="read">
         <article class="flow">
-          ${err && html`<div class="mg"></div><p class="evt fail" role="alert"><b>Couldn't load the transcript.</b> ${err}</p>`}
-          ${idx === null && !err && html`<div class="mg"></div><div class="skel big" aria-label="Loading"><i></i><i></i><i></i><i></i></div>`}
-          ${idx && turns.length === 0 && !rows.length && html`<div class="mg"></div><p class="evt">No messages yet.${live ? " Write the first one below." : ""}</p>`}
-          ${rows.map((r) => { const [m, b, cls = ""] = cell(r); return [html`<div class="mg ${cls}" key=${`m${r.key}`}>${m}</div>`, html`<div class="tb" key=${r.key} data-k=${r.k}>${b}</div>`]; })}
+          ${err && html`<p class="evt fail" role="alert"><b>Couldn't load the transcript.</b> ${err}</p>`}
+          ${idx === null && !err && html`<div class="skel big" aria-label="Loading"><i></i><i></i><i></i><i></i></div>`}
+          ${idx && turns.length === 0 && !rows.length && html`<p class="evt">No messages yet.${live ? " Write the first one below." : ""}</p>`}
+          ${rows.map((r) => html`<div class="tb" key=${r.key} data-k=${r.k}>${cell(r)}</div>`)}
         </article>
         ${contents && html`<nav class="toc" aria-label="Contents"><div class="th">Contents <button class="kb" onClick=${() => setContents(false)}>Close <kbd aria-hidden="true">c</kbd></button></div><ol>${toc.map((x) => html`<li class=${x.folded ? "folded" : ""}>
           <a href=${`#${x.id}`} onClick=${(e) => { e.preventDefault(); const n = +x.id.slice(2); if (x.folded) go(n); else scrollTo(box.current.querySelector(`#${CSS.escape(x.id)}`)); }}><time>${x.at}</time>${x.text.length > 60 ? x.text.slice(0, 56).replace(/\s+\S*$/, "") + "..." : x.text}</a>

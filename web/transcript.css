@@ -1,11 +1,11 @@
-/* The transcript: a document read in its own column, the work as margin notes beside it */
+/* The transcript: a document read in its own column, your messages tinted, the work folded to one line */
 .tx-wrap {
-  --mw: var(--margin-w); --g: var(--s6); --pad: var(--s5); --tw: 0px;
+  --g: 0px; --pad: var(--s5); --tw: 0px;
   --rf: var(--read); --rs: var(--fs-read); --rl: var(--lh-read); --rw: var(--read-w);
   position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--strip); color: var(--ink);
   container: tx / inline-size;
 }
-.tx-wrap.with-toc { --tw: var(--toc-w); }
+.tx-wrap.with-toc { --tw: var(--toc-w); --g: var(--s6); }
 :where(.tx-wrap, .ask.rows) button { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; }
 .ask.rows { --rf: var(--read); --rs: var(--fs-read); --rl: var(--lh-read); }
 .tx-wrap ::selection { background: color-mix(in srgb, var(--focus) 24%, transparent); }
@@ -24,68 +24,44 @@
 .tx-wrap .btn.prime kbd { color: var(--strip); box-shadow: inset 0 0 0 1px var(--strip); }
 .tx-wrap .acts { display: flex; flex-wrap: wrap; gap: var(--s2); }
 
-/* geometry: margin, text, contents; by the width the transcript has, not the window */
-.tx .read { display: grid; grid-template-columns: minmax(0, calc(var(--mw) + var(--g) + var(--rw))) var(--tw); column-gap: var(--g); justify-content: center; padding: var(--s5) var(--pad) var(--s7); }
-.tx .flow { display: grid; grid-template-columns: var(--mw) minmax(0, 1fr); column-gap: var(--g); align-content: start; }
-.tx-wrap .cols { display: grid; grid-template-columns: var(--mw) minmax(0, var(--rw)) var(--tw); column-gap: var(--g); justify-content: center; }
-.tx-wrap .cx { min-width: 0; grid-column: 2; }
-@container tx (max-width: 939px) { .tx-wrap > *, .tx-wrap .txv > * { --mw: 132px; --g: 20px; --pad: var(--s3); } }
-@container tx (max-width: 765px) {
-  .tx-wrap > *, .tx-wrap .txv > * { --mw: 0px; --g: 0px; --pad: var(--s4); }
-  .tx-wrap .tx .flow > .mg, .tx-wrap .cols > .mg { display: none; }
-  .tx-wrap .tx .flow > .tb { grid-column: 1 / -1; }
-  .tx-wrap .tx .lead-at, .tx-wrap .tx .inl-steps { display: flex; }
-}
-
-/* the margin: time, you, the steps beside a reply, now */
-.tx .flow > .mg { color: var(--faint); font-size: var(--fs-small); line-height: 1.4; text-align: right; padding-top: 5px; min-width: 0; }
+/* geometry: text, contents; by the width the transcript has, not the window */
+.tx .read { display: grid; grid-template-columns: minmax(0, var(--rw)) var(--tw); column-gap: var(--g); justify-content: center; padding: var(--s5) var(--pad) var(--s7); }
+.tx .flow { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; }
 .tx .flow > .tb { min-width: 0; }
-.tx .mg time { display: block; font-family: var(--mono); }
-.tx .mg .day { display: block; color: var(--dim); }
-.tx .mg .who { display: block; color: var(--dim); }
-.tx .mg.sec { padding-top: calc(var(--s6) + var(--s5) + 5px); }
-.tx .flow > .mg.sec:first-child { padding-top: 5px; }
-.tx .mg.foldm { padding-top: 7px; }
-.tx .mg.now, .tx .mg.now time { color: var(--work); }
-.tx .mg.sncm { padding-top: calc(var(--s2) + 2px); color: var(--ink); font-weight: 600; }
-.tx .side { display: block; width: 100%; margin-top: var(--s3); text-align: right; color: var(--faint); border-radius: var(--r-sm); }
-.tx .side .sh2 { color: var(--dim); text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px; }
-.tx .side:hover .sh2 { color: var(--ink); text-decoration-color: var(--line-strong); }
-.tx .side[aria-expanded="true"] .sh2 { color: var(--ink); font-weight: 600; }
-.tx .side ol { list-style: none; margin: 0; padding: 0; }
-.tx .side li { margin-top: 6px; line-height: 1.35; }
-.tx .side li .l1 { display: flex; justify-content: flex-end; gap: 0.45em; min-width: 0; }
-.tx .side li .v { color: var(--faint); flex: none; }
-.tx .side li code { font-family: var(--mono); color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.tx .side li .nt { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tx .side li.bad .nt { color: var(--fail); }
-.tx .side li.more { color: var(--faint); }
-.tx .lead-at { display: none; align-items: center; gap: var(--s2); font-size: var(--fs-small); color: var(--faint); font-family: var(--mono); margin-bottom: 4px; }
-.tx .inl-steps { display: none; align-items: center; gap: var(--s2); min-height: 44px; margin: 0 0 var(--s2); font-size: var(--fs-small); color: var(--faint); width: 100%; }
+.tx-wrap .cols { display: grid; grid-template-columns: minmax(0, var(--rw)) var(--tw); column-gap: var(--g); justify-content: center; }
+.tx-wrap .cx { min-width: 0; }
+@container tx (max-width: 765px) { .tx-wrap > *, .tx-wrap .txv > * { --pad: var(--s4); } }
+
+/* the steps behind a reply, folded to a line */
+.tx .inl-steps { display: flex; align-items: center; gap: var(--s2); min-height: 28px; margin: 0 0 var(--s2); font-size: var(--fs-small); color: var(--faint); width: 100%; }
+.tx .inl-steps:hover { color: var(--dim); }
+.tx .inl-steps .h { flex: none; }
+.tx .inl-steps b { color: var(--fail); font-weight: 500; flex: none; }
 .tx .inl-steps .v { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tx .inl-steps time { margin-left: auto; padding-left: var(--s2); flex: none; font-family: var(--mono); }
 .tx-wrap .chev { flex: none; width: 6px; height: 6px; border-right: 1.5px solid var(--faint); border-bottom: 1.5px solid var(--faint); transform: rotate(-45deg); margin: 0 3px; }
 .tx-wrap [aria-expanded="true"] > .chev { transform: rotate(45deg); }
 
-/* your turns: section heads in your own voice */
-.tx .sec { padding-top: var(--s6); }
+/* your messages: a tinted block, so a scroll down the page shows who said what */
+.tx .sec { padding-top: var(--s5); }
 .tx .sec.first { padding-top: 0; }
-.tx .sec .rule { border-top: 1px solid var(--hair); margin-bottom: var(--s5); }
-.tx .sec.first .rule { display: none; }
-.tx .lead { margin-bottom: var(--s5); }
+.tx .lead-at { font-size: var(--fs-small); color: var(--dim); font-family: var(--mono); margin-bottom: 4px; }
+.tx .lead { margin-bottom: var(--s5); padding: var(--s3) var(--s4); background: var(--strip-hi); border-radius: var(--r-sm); }
 .tx .lead p { margin: 0; font-family: var(--sans); font-variation-settings: var(--v-you); font-size: var(--fs-title); line-height: 1.5; font-weight: 500; color: var(--ink); text-wrap: pretty; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tx .lead p.clamp { display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; }
 .tx .lead .more { margin-top: 4px; padding: 0; height: 24px; }
 .tx .lead .attl { display: block; margin-top: 6px; font-size: var(--fs-small); color: var(--faint); font-family: var(--mono); }
 .tx .lead .imgs { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
 .tx .lead img { max-height: 200px; max-width: 100%; box-shadow: 0 0 0 1px var(--line); }
-.tx .fold { display: block; width: 100%; padding: 6px 0 6px var(--s3); box-shadow: inset 2px 0 0 var(--line); margin-bottom: var(--s3); }
-.tx .fold:hover { background: var(--strip-hi); }
+.tx .fold { display: block; width: 100%; margin-bottom: var(--s3); border-radius: var(--r-sm); }
+.tx .fold .fy { display: block; padding: var(--s2) var(--s4); background: var(--strip-hi); border-radius: var(--r-sm); }
+.tx .fold:hover .fq { color: var(--ink); }
+.tx .fold .lead-at { display: block; margin-bottom: 2px; }
 .tx .fold .fq { display: block; font-variation-settings: var(--v-you); font-size: var(--fs-body); font-weight: 500; color: var(--dim); line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tx .fold .g { display: block; font-size: var(--fs-small); color: var(--faint); line-height: 1.45; margin-top: 2px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tx .fold .g { font-size: var(--fs-small); color: var(--faint); line-height: 1.45; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .tx .fold .g b { font-weight: 500; color: var(--dim); }
-.tx .fold .lead-at { margin-bottom: 2px; }
+.tx .fold.ntc .fy { padding: 0; background: none; }
 .tx .fold.ntc .fq { font-variation-settings: normal; font-weight: 400; font-family: var(--mono); font-size: var(--fs-small); }
-.tx .youl { margin: 0 0 var(--s5); padding: 4px 0 4px var(--s3); box-shadow: inset 2px 0 0 var(--line-strong); font-variation-settings: var(--v-you); font-size: var(--fs-body); line-height: 1.5; color: var(--ink); white-space: pre-wrap; }
 .tx .evt { margin: 0 0 var(--s5); padding: 6px 0 6px var(--s3); box-shadow: inset 2px 0 0 var(--line-strong); font-size: var(--fs-ui); line-height: 1.45; color: var(--dim); overflow-wrap: anywhere; }
 .tx .evt b { color: var(--ink); font-weight: 620; }
 .tx .evt.fail { box-shadow: inset 3px 0 0 var(--fail); padding: var(--s3) var(--s4); background: var(--board); color: var(--ink); }
@@ -152,7 +128,7 @@
 .tx-wrap .code .gap { display: flex; align-items: center; gap: var(--s3); padding: 3px 0 3px 12.5ch; color: var(--faint); font-family: var(--sans); font-size: var(--fs-small); background: var(--code); }
 .tx-wrap .code .gap::after { content: ""; flex: 1; border-top: 1px dashed var(--line-strong); margin-right: var(--s3); }
 
-/* every step, when a margin note is opened */
+/* every step, when the line is opened */
 .tx .steps { margin: 0 0 var(--s4); padding: 2px 0 2px var(--s3); box-shadow: inset 2px 0 0 var(--line); }
 .tx-wrap .step { margin: 2px 0; }
 .tx-wrap .step .line { display: flex; align-items: baseline; gap: var(--s2); width: 100%; min-height: 24px; padding: 2px 0; font-size: var(--fs-ui); color: var(--dim); min-width: 0; }
@@ -193,13 +169,13 @@
 .tx .pref .pt { display: block; font-weight: 620; font-size: var(--fs-body); margin: 4px 0 2px; }
 .tx .pref .pl { font-size: var(--fs-small); color: var(--dim); }
 
-/* the live step: the one moving thing */
-.tx .work { margin: 0 0 var(--s5); }
-.tx .work .doing { display: block; font-family: var(--mono); font-size: var(--fs-body); color: var(--work); overflow-wrap: anywhere; }
-.tx .work .el { display: block; font-size: var(--fs-small); color: var(--faint); margin: 4px 0 var(--s3); }
-.tx-wrap .livebar { display: block; height: 2px; background: var(--hair); position: relative; overflow: hidden; }
-.tx-wrap .livebar::after { content: ""; position: absolute; top: 0; bottom: 0; width: 24%; background: var(--work); animation: tx-drift 2.4s ease-in-out infinite alternate; }
-@keyframes tx-drift { from { left: 0; } to { left: 76%; } }
+/* the live step: one quiet line, a dot breathing beside it */
+.tx .work { display: flex; align-items: baseline; gap: var(--s2); min-width: 0; margin: 0 0 var(--s5); font-size: var(--fs-small); color: var(--dim); }
+.tx .work .pulse { flex: none; width: 6px; height: 6px; align-self: center; background: var(--work); animation: tx-pulse 2s ease-in-out infinite alternate; }
+.tx .work .doing { min-width: 0; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx .work .el { flex: none; color: var(--faint); }
+@keyframes tx-pulse { from { opacity: 0.25; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .tx .work .pulse { animation: none; } }
 
 /* since you last looked */
 .tx .snc { margin: 0 0 var(--s6); padding-top: var(--s2); border-top: 2px solid var(--ink); scroll-margin-top: var(--s4); outline: none; }
@@ -306,7 +282,7 @@
 .tx .toc ul .now a { color: var(--work); }
 .tx .toc ul .q a { color: var(--ink); }
 @container tx (max-width: 1099px) {
-  .tx-wrap.with-toc > *, .tx-wrap.with-toc .txv > * { --tw: 0px; }
+  .tx-wrap.with-toc > *, .tx-wrap.with-toc .txv > * { --tw: 0px; --g: 0px; }
   .tx .toc { position: fixed; top: 104px; right: var(--s4); width: 280px; max-height: 60vh; background: var(--board); box-shadow: var(--shadow-pop); padding: var(--s3); z-index: 8; }
 }
 
@@ -429,13 +405,14 @@
 
 /* phone: 17px reading, no keys, 44px targets, the composer above the tab bar */
 @media (max-width: 899px) {
+  .tx:focus-visible { box-shadow: none; }
   .ask.compact kbd { display: none; }
   .ask.compact .acts { flex-direction: column; }
   .ask.compact .btn, .ask.compact .atype { width: 100%; height: var(--hit); flex: none; font-size: var(--fs-ui); }
   .tx-wrap { --btn-h: 44px; }
   .tx-wrap .prose { font-size: calc(var(--rs) - 0.5px); }
   .tx-wrap kbd { display: none; }
-  .tx .prose pre, .tx .edits, .tx .pref, .tx .ask.rows, .tx .snc, .tx .queued, .tx .evt.fail { margin-left: calc(-1 * var(--s4)); margin-right: calc(-1 * var(--s4)); }
+  .tx .prose pre, .tx .edits, .tx .pref, .tx .ask.rows, .tx .snc, .tx .queued, .tx .evt.fail, .tx .lead, .tx .fold { margin-left: calc(-1 * var(--s4)); margin-right: calc(-1 * var(--s4)); }
   .tx .edits .eh, .tx .ef > li > button { padding-left: var(--s4); padding-right: var(--s4); }
   .tx .ef > li > button { min-height: 44px; }
   .tx .prose pre { box-shadow: none; }
@@ -452,7 +429,10 @@
   :is(.tx .ask, .ask.rows) .opt.ch .lb::after { content: "  your answer"; font-weight: 400; font-size: var(--fs-small); color: var(--dim); }
   :is(.tx .ask, .ask.rows) .who2 .kb { height: 44px; }
   :is(.tx .ask, .ask.rows) .opt.type input { height: 44px; }
-  .tx .adl, .tx .fold, .tx .side { min-height: 44px; }
+  .tx .adl, .tx .fold, .tx .inl-steps { min-height: 44px; }
+  .tx .lead, .tx .fold .fy { border-radius: 0; }
+  .tx .fold { width: calc(100% + 2 * var(--s4)); }
+  .tx .fold .g { padding: 0 var(--s4); }
   .tx .lead .more { height: 44px; }
   .tx-wrap .step .line { min-height: 44px; align-items: center; }
   .tx .queued .qh { flex-wrap: wrap; } .tx .queued .qh .acts { margin-left: 0; width: 100%; }
