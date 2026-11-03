@@ -35,6 +35,15 @@ func (s *Server) pageURLs(list []pages.Page) []pages.Page {
 	return list
 }
 
+func (s *Server) aloneLink(owner, ref string) string {
+	if !strings.HasPrefix(owner, agentRef) {
+		if t := pages.Slug(s.M.Briefs(map[string]bool{owner: true})[owner].Title); t != "" {
+			owner = t
+		}
+	}
+	return "/#/p/" + owner + "/" + ref
+}
+
 func (s *Server) sessionPages(w http.ResponseWriter, r *http.Request) {
 	reply(w, s.pageURLs(s.Pages.Of(s.owner(r.PathValue("sid")))))
 }
@@ -94,7 +103,7 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 	if req.Open {
 		s.pushOpen(p, pages.Link(p.Session, p.Ref()))
 	}
-	reply(w, map[string]any{"page": s.pageURLs([]pages.Page{p})[0], "created": created})
+	reply(w, map[string]any{"page": s.pageURLs([]pages.Page{p})[0], "created": created, "link": s.PublicURL + s.aloneLink(p.Session, p.Ref())})
 }
 
 func (s *Server) pushOpen(p pages.Page, link string) {
@@ -129,7 +138,7 @@ func (s *Server) openPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "atc on "+s.Host+" has no phone to push to", http.StatusServiceUnavailable)
 		return
 	}
-	link := "/#/p/" + owner + "/" + ref
+	link := s.aloneLink(owner, ref)
 	s.pushOpen(p, link)
 	reply(w, map[string]string{"ok": "opened", "link": link})
 }
@@ -158,7 +167,7 @@ func (s *Server) pageToPhone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	go s.Push.Send(push.Message{Title: cmp.Or(req.Title, req.Name), Body: "Open the page", Tag: req.Session + "/" + req.Name + "/phone",
-		URL: "/#/p/" + req.Session + "/" + url.PathEscape(req.Name)})
+		URL: s.aloneLink(s.owner(req.Session), url.PathEscape(req.Name))})
 	reply(w, map[string]string{"ok": "pushed"})
 }
 

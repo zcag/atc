@@ -26,9 +26,10 @@ func TestShowPage(t *testing.T) {
 	var shown struct {
 		Page    pages.Page
 		Created bool
+		Link    string
 	}
 	json.Unmarshal([]byte(body), &shown)
-	if !shown.Created || shown.Page.Name != "handover" || shown.Page.Title != "PR & notes" || shown.Page.Kind != "html" {
+	if !shown.Created || shown.Page.Name != "handover" || shown.Page.Title != "PR & notes" || shown.Page.Kind != "html" || shown.Link != "/#/p/l1/handover" {
 		t.Fatalf("shown %+v", shown)
 	}
 

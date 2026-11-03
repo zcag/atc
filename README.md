@@ -419,7 +419,9 @@ An agent shows you something to look at (a report, a handover, a diagram, a scre
   otherwise you get a note. You get a push when a session shows you a page, unless you are
   watching it.
 - **Full size.** ↗ opens the page on its own at `/#/p/<session>/<name>`, a link that works on any
-  of your devices for as long as the page is up. **Pages** (`p`, or the page button above the
+  of your devices for as long as the page is up. `<session>` is its title in link form
+  (`/#/p/assistant/weekly-report`), `@agent`, or its id (or the id's first 8 characters); when two
+  sessions share a title, the title link opens the one that showed that page last. **Pages** (`p`, or the page button above the
   list) shows every page from every session and machine, with previews, a filter and take-down.
 - **Talking back.** A page that loads `/atc.js` gets `window.atc`: `atc.state.get()` and
   `atc.state.set(obj)` keep the page's data on the server, across devices; `atc.send(text)` sends

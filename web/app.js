@@ -3375,6 +3375,9 @@ const pageSrc = (p) => p.url && `${p.url}?v=${pageAt(p)}`;
 const pageInfo = (p) => p.gone ? "file is gone" : `${KIND_LABEL[p.kind] || "Page"} · updated ${agoLong(p.updated || p.shown)}`;
 const pageLink = (sid, name) => `#/s/${sid}/p/${encodeURIComponent(name)}`;
 const aloneLink = (sid, name) => `#/p/${sid}/${encodeURIComponent(name)}`;
+const linkSlug = (t) => (t || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+const ownerRef = (p, s) => (p.session.startsWith("@") ? p.session : linkSlug(s?.title || p.of) || p.session);
+const idRef = (r) => r.startsWith("@") || /^[0-9a-f]{8}(-[0-9a-f-]*)?$/.test(r);
 const splitRef = (r) => { const i = (r || "").indexOf("#"); return i < 0 ? [r, null] : [r.slice(0, i), r.slice(i + 1)]; };
 const pageRef = (p) => (p.at ? `${p.name}#${p.at}` : p.name);
 let AT_SEQ = 0;
@@ -3679,7 +3682,7 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, say, alone
     return () => removeEventListener("visibilitychange", f);
   }, [p && pkey(p), p && pageAt(p)]);
   if (!p) return html`<div class="ppane"><div class="fbody"><p class="empty">No pages.</p></div></div>`;
-  const full = () => APP ? (location.hash = aloneLink(p.session, p.name)) : openOut(`/${aloneLink(p.session, p.name)}`);
+  const full = () => APP ? (location.hash = aloneLink(ownerRef(p, s), p.name)) : openOut(`/${aloneLink(ownerRef(p, s), p.name)}`);
   const bay = bayOf(s) || (s.cwd && project(s.cwd).name) || null;
   return html`
     <div class="ppane">
@@ -3697,7 +3700,7 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, say, alone
           { label: "Reload", run: () => setNonce((n) => n + 1) },
           !alone && { label: "Open full page", run: full },
           { label: "Open the file in a new tab", run: () => openOut(p.url) },
-          { label: "Copy link", run: () => copyPageLink(p, say) },
+          { label: "Copy link", run: () => copyPageLink(p, say, s) },
           !APP && { label: "On phone", run: () => pageToPhone(p, say) },
           { label: "Take down", danger: true, run: () => askTakeDown(p).then((ok) => ok && say(`Took down “${pageTitle(p)}”.`)) },
         ].filter(Boolean)} />`}
@@ -3755,7 +3758,7 @@ const clockAt = (t) => { const d = new Date(t); return d.toDateString() === new 
 const pageDay = (t) => { const n = new Date(); n.setHours(0, 0, 0, 0); return t >= +n ? "Today" : t >= n - 86400000 ? "Yesterday" : "Earlier"; };
 const focusComposer = (n = 0) => { const t = document.querySelector(".composer textarea"); t ? t.focus() : n < 30 && setTimeout(() => focusComposer(n + 1), 100); };
 const pageToPhone = (p, say) => api("/api/pages/phone", { method: "POST", body: { session: p.session, name: p.name, title: pageTitle(p) } }).then(() => say("Sent to your phone."), (e) => say(e.message));
-const copyPageLink = (p, say) => { copyText(`${location.origin}/${aloneLink(p.session, p.name)}`); say("Link copied."); };
+const copyPageLink = (p, say, s) => { copyText(`${location.origin}/${aloneLink(ownerRef(p, s), p.name)}`); say("Link copied."); };
 
 function usePageList(live, say) {
   const [list, setList] = useState(null);
@@ -3819,7 +3822,7 @@ function PagesView({ at, live, bays, say, index }) {
     beside: () => { if (!s) return say("Its session is not running."); AUTO_SPLIT = true; location.hash = pageLink(keyOf(s), p.name); },
     note: () => { if (!s) return say("Its session is not running."); AUTO_PANE = "chat"; go(keyOf(s)); focusComposer(); },
     phone: () => pageToPhone(p, say),
-    copy: () => copyPageLink(p, say),
+    copy: () => copyPageLink(p, say, s),
     down: () => askTakeDown(p).then((ok) => {
       if (!ok) return;
       say(`Took down “${pageTitle(p)}”.`);
@@ -4319,12 +4322,25 @@ function AppTile({ a, size = 32, dot }) {
 
 const agentLabel = (a) => a.title || a.name.replace(/[-_]/g, " ").replace(/^./, (c) => c.toUpperCase());
 
-function PageAlone({ sid, name, at, live, say }) {
-  const [got, setGot] = useState(null);
-  const s = live.find((x) => x.sessionId === sid) || live.find((x) => x.sessionId.startsWith(sid));
+function PageAlone({ sid: ref, name, at, live, say }) {
+  const [hit, setHit] = useState(null);
   useEffect(() => {
-    if (s && s.sessionId !== sid) history.replaceState(null, "", aloneLink(s.sessionId, name));
-  }, [s?.sessionId]);
+    if (idRef(ref)) return;
+    api("/api/pages").then((l) => {
+      const p = (l || []).filter((p) => p.name === name && linkSlug(p.of) === linkSlug(ref))
+        .sort((a, b) => !!a.gone - !!b.gone || new Date(b.shown) - new Date(a.shown))[0];
+      setHit(p ? p.session : ref);
+    }, () => setHit(ref));
+  }, [ref, name]);
+  const byId = idRef(ref) && (live.find((x) => x.sessionId === ref) || live.find((x) => x.sessionId.startsWith(ref)));
+  const sid = byId ? byId.sessionId : idRef(ref) ? ref : hit;
+  return sid ? html`<${PageOf} key=${sid} sid=${sid} via=${ref} name=${name} at=${at} live=${live} say=${say} />`
+    : html`<div class="palone"><div class="fbody"><p class="empty">Loading…</p></div></div>`;
+}
+
+function PageOf({ sid, via, name, at, live, say }) {
+  const [got, setGot] = useState(null);
+  const s = live.find((x) => x.sessionId === sid);
   useEffect(() => {
     if (s) return;
     const load = () => api(`/api/sessions/${sid}/pages`).then((l) => setGot(l || []), (e) => setGot({ err: e.message }));
@@ -4339,7 +4355,7 @@ function PageAlone({ sid, name, at, live, say }) {
     <div class="palone">
       ${got?.err ? html`<div class="fbody"><p class="empty">${got.err}</p></div>`
         : !s && !got ? html`<div class="fbody"><p class="empty">Loading…</p></div>`
-        : list.some((p) => p.name === name) ? html`<${PagePane} s=${owner} list=${list} cur=${name} at=${at} pick=${(n) => location.replace(aloneLink(sid, n))} say=${say} onClose=${back} alone />`
+        : list.some((p) => p.name === name) ? html`<${PagePane} s=${owner} list=${list} cur=${name} at=${at} pick=${(n) => location.replace(aloneLink(via, n))} say=${say} onClose=${back} alone />`
         : html`<div class="fbody"><div class="none"><p>This page was taken down.</p><button class="btn" onClick=${() => (location.hash = pagesHash())}>All pages</button></div></div>`}
     </div>`;
 }
