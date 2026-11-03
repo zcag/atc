@@ -207,6 +207,7 @@ function App() {
   const togglePane = (k) => setPanesRaw((p) => { const n = { ...p, [k]: !p[k] }; store("atc.panes", n); return n; });
   const only = useBay();
   const wide = useWide();
+  const [peek, setPeek] = useState(null);
   useNow(30000);
 
   useEffect(() => {
@@ -369,7 +370,7 @@ function App() {
 
   const ordered = arrange(live);
   const keys = useRef({});
-  keys.current = { ordered, route, cursor, creating, live, togglePane };
+  keys.current = { ordered, route, cursor, creating, live, togglePane, setPeek };
   useEffect(() => {
     const step = (from, d) => {
       const k = keys.current;
@@ -393,6 +394,7 @@ function App() {
       }
       if (e.altKey && !e.metaKey && !e.ctrlKey && /^Digit\d$/.test(e.code)) {
         const n = +e.code.slice(5), bays = baysOf(k.live, BAY.only);
+        if (e.shiftKey) { e.preventDefault(); if (bays[n - 1]) k.setPeek((v) => (v === bays[n - 1].name ? null : bays[n - 1].name)); return; }
         if (n === 0) { e.preventDefault(); BAY.set(null); return; }
         if (bays[n - 1]) { e.preventDefault(); goBay(bays[n - 1].name, k.live); }
         return;
@@ -466,7 +468,8 @@ function App() {
 
   return html`
     <div class="app">
-    <${BayBar} bays=${bays} only=${only} view=${screen} panes=${panes} togglePane=${togglePane} up=${up} down=${down} live=${live} />
+    <${BayBar} bays=${bays} only=${only} view=${screen} panes=${panes} togglePane=${togglePane} up=${up} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
+    ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} say=${say} onClose=${() => setPeek(null)} />`}
     ${!route ? html`<div class="shell boardv"><${BoardView} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} say=${say} index=${panes.index && wide} /></div>` : html`
     <div class="shell open ${!panes.rail ? "norail" : ""}">
       <aside class="side">
@@ -582,19 +585,23 @@ function goBay(name, live, session) {
 
 const bayWords = (b, i) => [`${b.name}, bay ${i + 1}`, [b.needs && `${b.needs} need you`, b.turn && `${b.turn} your turn`, b.work && `${b.work} working`].filter(Boolean).join(", ")].filter(Boolean).join(": ");
 
-function BayBar({ bays, only, view, panes, togglePane, up, down, live }) {
+function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onPeek }) {
   const now = new Date();
   const kb = (on, label, key, run, title) => html`<button class="kb ${on ? "on" : ""}" aria-pressed=${on} aria-keyshortcuts=${key} title=${title || ""} onClick=${run}>${label} <kbd aria-hidden="true">${key}</kbd></button>`;
   return html`
     <nav class="bays" aria-label="Bays">
       <div class="bays-scroll">
-        ${only === null && html`<button class="bay on" aria-current="true" title="Every bay (alt 0)"><span class="k">0</span><span class="n">All</span></button>`}
+        ${only === null && html`<span class="bay on"><button class="bn" aria-current="true" title="Every bay (alt 0)"><span class="k">0</span><span class="n">All</span></button></span>`}
         ${bays.map((b, i) => html`
-          <button class="bay ${only === b.name ? "on" : ""}" aria-current=${only === b.name ? "true" : null} aria-label=${bayWords(b, i)}
-            aria-keyshortcuts=${i < 9 ? `Alt+${i + 1}` : null} onClick=${() => goBay(b.name, live)}>
-            <span class="k" aria-hidden="true">${i + 1}</span><span class="n">${b.name}</span>
-            <span class="cts" aria-hidden="true">${b.needs > 0 && html`<i class="cn n">${b.needs}</i>`}${b.turn > 0 && html`<i class="cn t">${b.turn}</i>`}${b.work > 0 && html`<i class="cn w">${b.work}</i>`}</span>
-          </button>`)}
+          <span class="bay ${only === b.name ? "on" : ""} ${peek === b.name ? "peeking" : ""}" data-bay=${b.name}>
+            <button class="bn" aria-current=${only === b.name ? "true" : null} aria-label=${bayWords(b, i)}
+              aria-keyshortcuts=${i < 9 ? `Alt+${i + 1}` : null} onClick=${() => goBay(b.name, live)}
+              onContextMenu=${(e) => { e.preventDefault(); onPeek(b.name); }}>
+              <span class="k" aria-hidden="true">${i + 1}</span><span class="n">${b.name}</span></button>
+            ${(b.needs > 0 || b.turn > 0 || b.work > 0) && html`<button class="cts" aria-label=${`Peek at ${b.name}`} aria-expanded=${peek === b.name}
+              aria-keyshortcuts=${i < 9 ? `Shift+Alt+${i + 1}` : null} onClick=${() => onPeek(peek === b.name ? null : b.name)}>
+              ${b.needs > 0 && html`<i class="cn n">${b.needs}</i>`}${b.turn > 0 && html`<i class="cn t">${b.turn}</i>`}${b.work > 0 && html`<i class="cn w">${b.work}</i>`}</button>`}
+          </span>`)}
       </div>
       <span class="sp"></span>
       <div class="views">
@@ -610,6 +617,43 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live }) {
         <span class="clock">${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}</span>
       </div>
     </nav>`;
+}
+
+function BayPeek({ bay, live, say, onClose }) {
+  const phone = usePhone();
+  const box = useRef();
+  useEffect(() => {
+    const k = (e) => e.key === "Escape" && (e.stopPropagation(), onClose());
+    const out = (e) => !box.current?.contains(e.target) && !e.target.closest?.(".bays") && onClose();
+    addEventListener("keydown", k, true);
+    addEventListener("pointerdown", out);
+    return () => { removeEventListener("keydown", k, true); removeEventListener("pointerdown", out); };
+  }, []);
+  useLayoutEffect(() => {
+    const at = document.querySelector(`.bays .bay[data-bay="${CSS.escape(bay)}"]`)?.getBoundingClientRect(), el = box.current;
+    if (!phone && at && el) el.style.left = `${Math.max(8, Math.min(at.left, innerWidth - el.offsetWidth - 8))}px`;
+  });
+  const mine = (live || []).filter((s) => bayOf(s) === bay && !away(s));
+  const needs = mine.filter((s) => s.state === "needs-you"), turn = mine.filter((s) => s.state === "your-turn"), work = mine.filter((s) => s.state === "working");
+  const open = (s) => { onClose(); go(keyOf(s)); };
+  const row = (s) => html`<div class="pk ${s.state}" key=${s.sessionId}>
+    <div class="row"><${StateBlock} s=${s} /><a class="ti" href=${`#/s/${keyOf(s)}`} onClick=${(e) => { e.preventDefault(); open(s); }}>${s.title || "Untitled"}</a><span class="ago">${ago(s)}</span></div>
+    <p class="what">${s.state === "working" ? doing(s) : headline(s)}</p>
+    ${s.asks?.length > 0 && html`<div class="ask"><${AskBar} s=${s} say=${say} /></div>`}
+    ${replyable(s) && html`<div class="ask"><${CardReplies} s=${s} /></div>`}
+  </div>`;
+  const body = html`
+    ${needs.length > 0 && html`<h3 class="grp"><b>Needs you</b><span class="c">${needs.length}</span></h3>${needs.map(row)}`}
+    ${turn.length > 0 && html`<h3 class="grp"><b>Your turn</b><span class="c">${turn.length}</span></h3>${turn.map(row)}`}
+    ${work.length > 0 && html`<p class="pkf"><span>${plural(work.length, "session")} working</span></p>`}
+    ${!mine.length && html`<p class="pkf"><span>Nothing running in ${bay}.</span></p>`}
+    <div class="pkf"><button class="kb" onClick=${() => { onClose(); goBay(bay, live); }}>Go to ${bay}</button><button class="kb" onClick=${() => { onClose(); BAY.set(bay); rememberBay(bay, { view: "board" }); go(null); }}>Its board</button></div>`;
+  return phone
+    ? html`<${Sheet} cls="peeksheet" title=${bay} onClose=${onClose}><div class="peek" ref=${box}>${body}</div><//>`
+    : html`<div class="peek" ref=${box} role="dialog" aria-label=${`Peek at ${bay}`}>
+        <div class="pkh"><b>${bay}</b><span>${[needs.length && `${needs.length} need you`, turn.length && `${turn.length} your turn`].filter(Boolean).join(", ")}</span><span class="r"><button class="kb" onClick=${onClose}>Close <kbd aria-hidden="true">esc</kbd></button></span></div>
+        ${body}
+      </div>`;
 }
 
 const hubLine = (hub) => {
@@ -653,7 +697,7 @@ function TabBar({ view, assisting, onTalk }) {
 
 const KEYMAP = [
   ["Views", [["s", "Session: the bay's last open one"], ["b", "Board"], ["g", "Pages"], [".", "Assistant"]]],
-  ["Bays", [["alt 1..9", "That bay, as you left it"], ["alt 0", "Every bay"], ["n", "Next session that needs you, any bay"]]],
+  ["Bays", [["alt 1..9", "That bay, as you left it"], ["shift alt 1..9", "Peek at that bay: answer without going there"], ["alt 0", "Every bay"], ["n", "Next session that needs you, any bay"]]],
   ["Moving", [["j k", "Next, previous session in the list"], ["enter", "Open the highlighted session"], ["alt ↑ ↓", "Previous, next session, even from a terminal"]]],
   ["Panes", [["[", "Sessions beside the transcript"], ["]", "State: now, running, made, the session's facts"]]],
   ["Session", [["t", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
