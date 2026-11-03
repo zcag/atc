@@ -940,15 +940,26 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
 Every color, size, radius, shadow and timing in the web UI is a token in `web/tokens.css`;
 `style.css` (the app) and `atc.css` (the kit for `atc show` pages) only refer to them.
 
-- **Colors** carry both modes in one line, `--board: light-dark(#dde2ea, #151c27)`, so light and
-  dark never drift apart. A number that differs by mode reads `--dark` (0 or 1).
-- **Type** is a scale, `--fs-3xs` to `--fs-hero`, all multiplied by `--text-scale`. **Spacing**
-  (padding, margins, gaps) is `--sp-1` (2px) to `--sp-12` (32px), multiplied by `--density`. **Radii** are
-  `--r-xs` to `--r-pill`, **shadows** `--shadow-1/2/3`, `--shadow-pop/float/modal/sheet` and
-  `--lift`, **motion** `--t-fast/--t/--t-slow/--t-slower` with `--ease` and `--ease-pop`.
-- **Status** colors (`--needs --turn --work --live --stop --hot`) reach any element with a state
-  class: `.needs-you`, `.your-turn` and `.working` set `--st` (not inherited), and dots and edges
-  read `var(--st, var(--stop))`.
+- **Colors** carry both modes in one line, `--strip: light-dark(oklch(97.6% ...), oklch(16.5% ...))`,
+  so light and dark never drift apart. A number that differs by mode reads `--dark` (0 or 1).
+  Surfaces: `--strip` (reading: transcript, pages, sheets), `--board` (panes), `--sunk` (bars),
+  `--strip-hi` (hover, selected), `--code`; rules `--line`, `--hair`, `--line-strong` (control
+  borders, 3:1); text `--ink --dim --faint`, all AA.
+- **Color means state, and is spent once**: `--needs` (amber) is the only fill, for "needs you", with
+  `--needs-ink` (text on it), `--needs-text` (as text), `--needs-wash`, `--needs-edge`. Your turn is
+  `--turn` (= ink), working is `--work` (steel, always with a bar or motion), plus `--fail`,
+  `--add`/`--del` (with `-wash` and `-word`), `--live` (calls), `--stop`, `--focus`, `--end` (the end
+  call button). `--hot` is an alias of `--needs`. State classes `.needs-you`, `.your-turn` and
+  `.working` set `--st` (not inherited), and dots and edges read `var(--st, var(--stop))`.
+- **Type** is Recursive (`--sans`, its mono cut `--mono`, its casual cut through
+  `font-variation-settings: var(--v-you)` for your own words) and Literata (`--read`) for what an
+  agent says. Roles `--fs-micro` (11) `--fs-small` (12) `--fs-ui` (13) `--fs-body` (14) `--fs-title`
+  (16) `--fs-read` (17.5) `--fs-lead` (19) `--fs-h` (22) `--fs-display` (30), all multiplied by
+  `--text-scale`; the older `--fs-3xs` to `--fs-hero` remain for pages that use them.
+- **Spacing** is a 4px scale, `--s1` (4) to `--s7` (48), multiplied by `--density` (`--sp-1..12`
+  remain as aliases). **Radii** `--r-sm` (3) and `--r-md` (5) (the older names point at these),
+  **shadows** `--shadow-pop` and `--shadow-sheet`, **motion** `--t-fast/--t/--t-slow` with `--ease`.
+  Chart series are `--series-1..5`.
 - **Project hue**: an element with `--ph` (set from the project name) gets `--pc` (ink), `--pb`
   (tint) and `--pcs` (soft), from the `--proj-*` recipe tokens.
 - **The terminal** palette is the `--ansi-*` tokens, read once per theme through the browser, in
@@ -978,6 +989,6 @@ bars and home-screen widget from them, following the look that arrives with the 
 
 ## Third-party code
 
-IBM Plex, Newsreader and Literata fonts are under the SIL Open Font License
+Recursive and Literata fonts are under the SIL Open Font License
 (`web/vendor/fonts/OFL.txt`). xterm.js, Preact, htm and marked are MIT licensed, highlight.js and
 jsdiff BSD licensed.

@@ -2077,7 +2077,7 @@ function makeDock(id) {
   el.className = "termhost";
   shelf().append(el);
   const term = new Terminal({
-    fontFamily: '"Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono", "Noto Sans Symbols 2", "Noto Sans Symbols", monospace',
+    fontFamily: '"Recursive Mono", ui-monospace, "SF Mono", Menlo, Consolas, "Noto Sans Mono", "Noto Sans Symbols 2", "Noto Sans Symbols", monospace',
     fontSize: touch ? 12.5 : 14,
     lineHeight: 1.1,
     theme: termTheme(),
@@ -2995,7 +2995,7 @@ function UsagePage({ limits, multi, onClose, onOpen }) {
     return a;
   }, { cost: 0, total: 0, messages: 0, input: 0, cacheRead: 0, cacheWrite: 0, output: 0, costs: Object.fromEntries(KINDS.map(([k]) => [k, 0])), models: {} });
   const models = Object.keys(sum.models).filter((m) => sum.models[m] >= 0.005).sort(byModel);
-  const color = (m) => { const i = models.indexOf(m); return i >= 0 && i < SERIES ? `var(--s${i + 1})` : "var(--faint)"; };
+  const color = (m) => { const i = models.indexOf(m); return i >= 0 && i < SERIES ? `var(--series-${i + 1})` : "var(--faint)"; };
   const active = days.filter((d) => d.cost > 0).length;
   const today = days.at(-1);
   const restAvg = days.length > 1 ? (sum.cost - (today?.cost || 0)) / (days.length - 1) : 0;
@@ -4090,9 +4090,8 @@ const TX_LEVELS = [
   [3, "Everything", "All", "Every turn open with every step, command and diff"],
 ];
 const TX_FACES = {
-  news: { name: "Newsreader", css: "Newsreader, Georgia, serif", sizes: [17, 19, 21], lh: 1.6 },
   lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [15.5, 17, 19], lh: 1.66 },
-  sans: { name: "Plex Sans", css: "var(--sans)", sizes: [15, 16, 17.5], lh: 1.62 },
+  sans: { name: "Recursive", css: "var(--sans)", sizes: [15, 16, 17.5], lh: 1.62 },
 };
 const txStore = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(`atc.tx.${k}`)) ?? d; } catch { return d; } },
@@ -4855,7 +4854,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
   const [bodies, setBodies] = useState({});
   const [err, setErr] = useState(null);
   const [level, setLevelRaw] = useState(() => txStore.get("level", 2));
-  const [prefs, setPrefsRaw] = useState(() => ({ face: "news", size: 1, width: 1, ...txStore.get("prefs", {}) }));
+  const [prefs, setPrefsRaw] = useState(() => ({ face: "lit", size: 1, width: 1, ...txStore.get("prefs", {}) }));
   const [pop, setPop] = useState(null);
   const [opened, setOpened] = useState(() => new Set());
   const [inView, setInView] = useState(() => new Set());
@@ -4928,7 +4927,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
   }, [idx, pending]);
 
   useEffect(() => {
-    const f = TX_FACES[prefs.face] || TX_FACES.news, st = box.current?.parentElement?.style;
+    const f = TX_FACES[prefs.face] || TX_FACES.lit, st = box.current?.parentElement?.style;
     if (!st) return;
     st.setProperty("--rf", f.css);
     st.setProperty("--rs", `${f.sizes[prefs.size]}px`);
