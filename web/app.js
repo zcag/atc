@@ -86,6 +86,7 @@ const LOOK = {
     this.restyle();
     api("/api/look", { method: "PUT", body: { scheme: this.scheme, theme: this.theme } }).catch(() => {});
   },
+  message() { return { atc: 1, op: "look", scheme: this.scheme, theme: this.theme }; },
   restyle() {
     for (const d of DOCK.values()) d.term.options.theme = termTheme();
   },
@@ -105,6 +106,7 @@ const LOOK = {
     if (this.theme) r.dataset.theme = this.theme; else delete r.dataset.theme;
     try { localStorage.setItem("atc.look", JSON.stringify({ scheme: this.scheme, theme: this.theme })); } catch {}
     dispatchEvent(new Event("atc-look"));
+    for (const f of document.querySelectorAll("iframe")) f.contentWindow?.postMessage(this.message(), "*");
     for (const m of document.querySelectorAll('meta[name="theme-color"]'))
       m.content = cssColors(this.scheme !== "auto" ? this.scheme : m.media.includes("dark") ? "dark" : "light", ["board"])[0];
     if (window.AtcApp?.setLook) Promise.all(this.sheets).then(() =>
@@ -112,6 +114,7 @@ const LOOK = {
   },
 };
 LOOK.load();
+addEventListener("message", (e) => { if (e.data?.atc === 1 && e.data.op === "hello" && e.source) e.source.postMessage(LOOK.message(), "*"); });
 const tilde = (p) => {
   if (!p) return "";
   if (HOME && (p === HOME || p.startsWith(HOME + "/"))) return "~" + p.slice(HOME.length);
