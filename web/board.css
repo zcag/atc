@@ -124,3 +124,7 @@
 .bexp .chips button { height: var(--btn-h); padding: 0 var(--s3); border: 0; border-radius: var(--r-sm); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--strip); color: var(--ink); font-size: var(--fs-ui); font-weight: 400; font-variation-settings: var(--v-you); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bexp .chips button:hover { box-shadow: inset 0 0 0 1px var(--dim); }
 @media (max-width: 899px) { .bexp .chips button { height: var(--hit); } }
+
+.qk { display: inline-block; min-width: 14px; margin-left: 6px; padding: 0 3px; font-family: var(--mono); font-size: 10px; line-height: 14px; text-align: center; color: var(--faint); box-shadow: inset 0 0 0 1px var(--line); border-radius: 2px; }
+.brow.sel .qk, .brow:hover .qk { color: var(--dim); box-shadow: inset 0 0 0 1px var(--line-strong); }
+@media (max-width: 899px) { .qk { display: none; } }

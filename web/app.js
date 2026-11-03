@@ -390,8 +390,8 @@ function App() {
     const onKey = (e) => {
       const k = keys.current;
       if (k.creating) return;
-      if (e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-        const next = step(k.route, e.key === "ArrowUp" ? -1 : 1);
+      if (e.altKey && !e.ctrlKey && !e.metaKey && (e.code === "KeyJ" || e.code === "KeyK")) {
+        const next = step(k.route, e.code === "KeyK" ? -1 : 1);
         if (next) { e.preventDefault(); e.stopPropagation(); go(keyOf(next)); }
         return;
       }
@@ -401,7 +401,7 @@ function App() {
         return;
       }
       const typing = t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable;
-      const digit = /^Digit\d$/.test(e.code) && !e.metaKey && !e.ctrlKey && (e.altKey || (!e.shiftKey && !typing && !t.closest?.(".ask, [data-ask]") && !document.querySelector(".veil, .pghome, .palone, .keys-ov, .peek")));
+      const digit = /^Digit\d$/.test(e.code) && !e.metaKey && !e.ctrlKey && ((e.altKey && e.shiftKey) || (!e.altKey && !e.shiftKey && !typing && !t.closest?.(".ask, [data-ask]") && !document.querySelector(".veil, .pghome, .palone, .keys-ov, .peek")));
       if (digit) {
         const n = +e.code.slice(5), bays = baysOf(k.live, BAY.only);
         e.preventDefault();
@@ -425,6 +425,14 @@ function App() {
         if (e.key === "?") setHelp((h) => !h);
         return;
       }
+      const qi = QWERTY.indexOf(e.key);
+      if (qi >= 0 && !k.pages && !e.shiftKey) {
+        const rows = [...new Set([...document.querySelectorAll(".bview [data-sid], .rail [data-sid]")].map((el) => el.dataset.sid))];
+        const x = rows[qi] && (k.ordered.find((v) => v.sessionId === rows[qi]) || { sessionId: rows[qi] });
+        e.preventDefault(); e.stopPropagation();
+        if (x) go(keyOf(x));
+        return;
+      }
       const move = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[e.key];
       const act = {
         s: () => goBay(BAY.only, k.live, true),
@@ -440,7 +448,7 @@ function App() {
           next ? go(keyOf(next)) : say("Nothing needs you.");
         },
         "[": () => (k.route ? k.togglePane("rail") : k.pages && k.togglePane("pgindex")),
-        p: () => !k.route && !k.pages && k.togglePane("index"),
+        "\\": () => !k.route && !k.pages && k.togglePane("index"),
         ",": () => (location.hash === SETTINGS ? closeSettings() : (location.hash = SETTINGS)),
         "/": () => setPalette(true),
         "?": () => setHelp((h) => !h),
@@ -638,7 +646,7 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
         ${bays.map((b, i) => html`
           <span class="bay ${only === b.name ? "on" : ""} ${peek === b.name ? "peeking" : ""}" data-bay=${b.name}>
             <button class="bn" aria-current=${only === b.name ? "true" : null} aria-label=${bayWords(b, i)}
-              aria-keyshortcuts=${i < 9 ? `Alt+${i + 1}` : null} onClick=${() => goBay(b.name, live)}
+              aria-keyshortcuts=${i < 9 ? `${i + 1}` : null} onClick=${() => goBay(b.name, live)}
               onContextMenu=${(e) => { e.preventDefault(); onPeek(b.name); }}>
               <span class="k" aria-hidden="true">${i + 1}</span><span class="n">${b.name}</span></button>
             ${(b.needs > 0 || b.turn > 0 || b.work > 0) && html`<button class="cts" aria-label=${`Peek at ${b.name}`} aria-expanded=${peek === b.name}
@@ -653,7 +661,7 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
         ${kb(view === "board", "Board", "b", () => { rememberBay(only, { view: "board" }); go(null); })}
         ${kb(view === "pages", "Pages", "g", () => (location.hash = pagesHash()))}
       </div>
-      ${view === "board" && html`<div class="tgl">${kb(only === null, html`<span class="nm">All bays</span>`, "alt 0", () => BAY.set(only === null ? bays[0]?.name || null : null), "Every bay on one board")}${kb(panes.index, html`<span class="nm">Page index</span>`, "p", () => togglePane("index"), "The bay's pages beside the board")}</div>`}
+      ${view === "board" && html`<div class="tgl">${kb(only === null, html`<span class="nm">All bays</span>`, "alt 0", () => BAY.set(only === null ? bays[0]?.name || null : null), "Every bay on one board")}${kb(panes.index, html`<span class="nm">Page index</span>`, "\\", () => togglePane("index"), "The bay's pages beside the board")}</div>`}
       ${view === "pages" && html`<div class="tgl">${kb(panes.pgindex !== false, html`<span class="nm">Index</span>`, "[", () => togglePane("pgindex"), "Every page in the bay, newest first")}${kb(only === null, html`<span class="nm">All bays</span>`, "alt 0", () => { location.hash = pagesHash(only === null ? PAGES_FROM || bays[0]?.name || null : null); PAGES_FROM = only || PAGES_FROM; }, "Pages from every bay, grouped by bay")}</div>`}
       ${view === "session" && html`<div class="tgl">${kb(panes.rail, html`<span class="nm">Sessions</span>`, "[", () => togglePane("rail"), "The bay's sessions beside the transcript")}${kb(panes.state, html`<span class="nm">State</span>`, "]", () => togglePane("state"), "What the session is doing, what it made, and its facts")}</div>`}
       <div class="meta">
@@ -760,12 +768,12 @@ function TabBar({ view, assisting, onTalk }) {
 
 const KEYMAP = [
   ["Views", [["s", "Session: the bay's last open one"], ["b", "Board"], ["g", "Pages"], [".", "Assistant"]]],
-  ["Bays", [["1..9", "That bay, as you left it; again: its next session"], ["alt 1..9", "The same, even from a terminal"], ["shift alt 1..9", "Peek at that bay: answer without going there"], ["0", "Every bay"], ["n", "Next session that needs you, any bay"]]],
-  ["Moving", [["j k", "Next, previous session in the bay (on the board: the selection)"], ["enter", "Open the selected session"], ["alt ↑ ↓", "Previous, next session, even from a terminal"]]],
-  ["Panes", [["[", "Sessions beside the transcript"], ["]", "State: now, running, made, the session's facts"]]],
-  ["Session", [["t", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
-  ["Transcript", [["l", "Outline, story, everything (cycles)"], ["r", "Write to the session"], ["f", "Find in the session"]]],
-  ["Pages", [["j k", "Next, previous page"], ["[", "The index"], ["alt 0", "This bay or every bay"], ["o", "The page beside its session"], ["r", "Note: its session, at the composer"], ["d", "What changed, on an updated page"], ["p", "In a session: its pages beside the transcript"]]],
+  ["Bays", [["1..9", "That bay, as you left it; again: its next session"], ["shift alt 1..9", "Peek at that bay: answer without going there"], ["0", "Every bay"], ["n", "Next session that needs you, any bay"]]],
+  ["Sessions", [["q w e .. p", "The 1st to 10th session in the list, at once"], ["j k", "Next, previous session (on the board: the selection)"], ["enter", "On the board: open the selected session"], ["alt j k", "Next, previous session, even from a terminal"]]],
+  ["Panes", [["[", "Sessions beside the transcript"], ["]", "State: now, running, made, the session's facts"], ["\\", "Its page beside the transcript (board: the page index)"]]],
+  ["Session", [["enter", "Write to the session"], ["`", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
+  ["Transcript", [["l", "Outline, story, everything (cycles)"], ["f", "Find in the session"]]],
+  ["Pages", [["j k", "Next, previous page"], ["[", "The index"], ["alt 0", "This bay or every bay"], ["q w e .. p", "The 1st to 10th page in the index"], ["\\", "The page beside its session"], ["enter", "Note: its session, at the composer"], ["d", "What changed, on an updated page"]]],
   ["Anywhere", [["/", "Search and commands"], ["+", "New session"], [",", "Settings"], ["?", "These keys"], ["esc", "Close what is open"]]],
 ];
 
@@ -781,6 +789,7 @@ function KeysOverlay({ onClose }) {
 }
 
 const GROUPS = [["needs-you", "Needs you"], ["your-turn", "Your turn"], ["working", "Working"], ["parked", "Parked"], ["earlier", "Earlier"]];
+const QWERTY = "qwertyuiop";
 const groupOf = (s) => (away(s) ? "parked" : RANK[s.state] !== undefined ? s.state : "earlier");
 const byUrgency = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
 const doingLine = (s) => s.state === "working" ? doing(s) : s.state === "needs-you" && s.asks?.[0] ? oneLine(s.asks[0].questions?.[0]?.question || (s.asks[0].permission && `Wants to use ${s.asks[0].permission}`)) : "";
@@ -813,7 +822,7 @@ function bayLists(live, hist, only) {
   return by;
 }
 
-function BoardRow({ s, open, toggle, sel, cursor, rail, say }) {
+function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   const tap = rail ? null : () => toggle(s.sessionId);
   const { events } = useRowEvents(s, tap, !rail && s.state !== "past" && s.state !== "stopped");
   const on = sel?.sessionId === s.sessionId, run = runningOf(s), made = madeOf(s), g = groupOf(s);
@@ -827,7 +836,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say }) {
     <button class=${cls} data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
       <${StateBlock} s=${s} />
       <span class="c">${title}<span class="s ${s.state === "working" ? "mono" : ""}">${s.state === "working" ? doing(s) : status}</span></span>
-      <span class="e"><span class="ago">${ago(s)}</span>${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}</span>
+      <span class="e"><span class="ago">${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}</span>
     </button>`;
   return html`
     <div class="bwrap ${open ? "open" : ""} ${g}">
@@ -839,7 +848,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say }) {
         <span class="ctx">${s.context > 0 && html`<${CtxMeter} n=${s.context} /><span>${Math.round(s.context / 1000)}k</span>`}</span>
         <span class="stp">${s.steps > 0 && s.steps}${s.failed > 0 && html`<span class="f">${s.failed} failed</span>`}</span>
         <span class="mk">${run.length > 0 && html`<span class="run">${run.join(" ")}</span>`}${made.length > 0 && html`<span>${made.join(" ")}</span>`}</span>
-        <span class="since">${fresh && html`<i class="dot" aria-hidden="true"></i>`}${ago(s)}</span>
+        <span class="since">${fresh && html`<i class="dot" aria-hidden="true"></i>`}${ago(s)}${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span>
         <span class="chev" aria-hidden="true"></span>
       </div>
       ${open && html`<div class="bexp">
@@ -869,6 +878,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
     return () => removeEventListener("keydown", k);
   }, [cursor]);
   const by = bayLists(live, hist, only);
+  let qn = 0;
   const counts = GROUPS.slice(0, 4).map(([k]) => [k, by[k].length]).filter(([, n]) => n > 0);
   const path = only && (live || []).find((s) => bayOf(s) === only);
   const letter = { "needs-you": ["N", "needs"], "your-turn": ["T", "turn"], working: ["W", "working"], parked: ["P", "parked"] };
@@ -890,7 +900,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
           if (!list.length) return null;
           return html`<section class="bgrp ${k}">
             <h2 class="grp"><b>${title}</b><span class="c">${k === "earlier" ? by.earlier.length : list.length}</span>${k === "earlier" && html`<span class="r">${earlierAll ? "all loaded" : "today and yesterday"}</span>`}</h2>
-            ${list.map((s) => html`<${BoardRow} key=${s.sessionId} s=${s} open=${open.has(s.sessionId)} toggle=${toggle} sel=${sel} cursor=${cursor} say=${say} />`)}
+            ${list.map((s) => html`<${BoardRow} key=${s.sessionId} s=${s} open=${open.has(s.sessionId)} toggle=${toggle} sel=${sel} cursor=${cursor} say=${say} qk=${QWERTY[qn++]} />`)}
             ${k === "earlier" && (!earlierAll && by.earlier.length > shownEarlier.length
               ? html`<button class="kb bmore" onClick=${() => setEarlierAll(true)}>Show ${by.earlier.length - shownEarlier.length} older</button>`
               : earlierAll && more && html`<button class="kb bmore" onClick=${more}>Load more</button>`)}
@@ -913,9 +923,9 @@ function RailList({ live, hist, only, sel, cursor }) {
   const active = ["needs-you", "your-turn", "working"].flatMap((k) => by[k]);
   const rest = [...by.parked, ...by.earlier.slice(0, 8)];
   return html`<div class="rail" id="rscroll">
-    ${active.map((s) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} />`)}
+    ${active.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[i]} />`)}
     ${rest.length > 0 && html`<h2 class="grp"><b>Parked, earlier</b><span class="c">${by.parked.length + by.earlier.length}</span></h2>
-      ${rest.map((s) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} />`)}`}
+      ${rest.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[active.length + i]} />`)}`}
     ${!active.length && !rest.length && html`<p class="calm">Nothing here yet.</p>`}
   </div>`;
 }
@@ -1717,9 +1727,9 @@ function Session({ s, say, live, panes, togglePane }) {
     const k = (e) => {
       const t = e.target;
       if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable || document.querySelector(".veil, .pghome, .palone, .keys-ov")) return;
-      if (e.key === "t" && hasTerm) { e.preventDefault(); choose(mode === "term" ? "chat" : "term"); }
+      if (e.key === "`" && hasTerm) { e.preventDefault(); choose(mode === "term" ? "chat" : "term"); }
       else if (e.key === "]") { e.preventDefault(); openState(); }
-      else if (e.key === "p" && shown.length) { e.preventDefault(); choose(mode === "page" ? paneFor(s) : "page"); }
+      else if (e.key === "\\" && shown.length) { e.preventDefault(); choose(mode === "page" ? paneFor(s) : "page"); }
       else if (e.key === "x") { e.preventDefault(); document.querySelector(".hd .more button")?.click(); }
     };
     addEventListener("keydown", k);
@@ -1764,7 +1774,7 @@ function Session({ s, say, live, panes, togglePane }) {
           ${VOICE.stt && html`<button class="kb ${voice ? "on" : ""}" aria-pressed=${voice}
             onClick=${() => canAttach ? (voice || setMode("chat"), setVoice(!voice))
               : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
-          ${hasTerm && html`<button class="kb ${mode === "term" ? "on" : ""}" aria-pressed=${mode === "term"} aria-keyshortcuts="t" onClick=${() => choose(mode === "term" ? "chat" : "term")}>Terminal <kbd aria-hidden="true">t</kbd></button>`}
+          ${hasTerm && html`<button class="kb ${mode === "term" ? "on" : ""}" aria-pressed=${mode === "term"} aria-keyshortcuts="\`" onClick=${() => choose(mode === "term" ? "chat" : "term")}>Terminal <kbd aria-hidden="true">\`</kbd></button>`}
           <div class="more"><${Menu} cls="kb" busy=${busy} aria="Session menu" label=${html`More <kbd aria-hidden="true">x</kbd>`}
             items=${[
               ...(phoneNow && hasTerm ? [{ label: mode === "term" ? "Transcript" : "Terminal", run: () => choose(mode === "term" ? "chat" : "term") }] : []),
@@ -3828,8 +3838,9 @@ function PagesView({ at, live, bays, say, index }) {
       const step = { j: 1, k: -1 }[e.key];
       if (step) { const n = r.order[Math.max(0, Math.min(r.order.length - 1, r.order.indexOf(r.cur) + step))]; n && n !== r.cur && r.pick(n); }
       else if (!r.cur) return;
-      else if (e.key === "o") r.act.beside();
-      else if (e.key === "r") r.act.note();
+      else if (QWERTY.includes(e.key) && !e.shiftKey) { const n = r.order[QWERTY.indexOf(e.key)]; if (n) r.pick(n); }
+      else if (e.key === "\\") r.act.beside();
+      else if (e.key === "Enter" && !t.closest("button, a, [role=button]")) r.act.note();
       else if (e.key === "d" && r.op.st === "updated") r.act.changes();
       else if (e.key === "Escape" && r.phone) r.back();
       else return;
@@ -3870,10 +3881,10 @@ function PagesView({ at, live, bays, say, index }) {
         <span class="where">${(KIND_LABEL[p.kind] || "Page").toLowerCase()}  ${p.name}</span>
         <span class="r">
           ${upd && html`${kb("Changes", "d", act.changes, { on: op.changes, title: "Mark what changed since you saw it" })}<span class="div"></span>`}
-          ${kb("Beside its session", "o", act.beside, { title: s ? "The page beside its conversation" : "Its session is not running", cls: s ? "" : "off" })}
+          ${kb("Beside its session", "\\", act.beside, { title: s ? "The page beside its conversation" : "Its session is not running", cls: s ? "" : "off" })}
           ${!APP && kb("On phone", null, act.phone, { title: "Push this page to your phone" })}
           ${kb("Copy link", null, act.copy)}
-          ${kb("Note", "r", act.note, { title: s ? "Write to its session about this page" : "Its session is not running", cls: s ? "" : "off" })}
+          ${kb("Note", "enter", act.note, { title: s ? "Write to its session about this page" : "Its session is not running", cls: s ? "" : "off" })}
           <span class="div"></span>
           ${kb("Take down", null, act.down, { cls: "danger" })}
           <div class="more"><${Menu} cls="kb" aria="Page actions" label="Actions" items=${[
@@ -5327,7 +5338,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
       const t = e.target;
       if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
       if (e.key === "l") { e.preventDefault(); setLevel((level % 3) + 1); }
-      else if (e.key === "r" && live) { e.preventDefault(); focusInput.current(); }
+      else if (e.key === "Enter" && live && !t.closest?.("button, a, [role=button], .ask, [data-ask]")) { e.preventDefault(); focusInput.current(); }
       else if (e.key === "f") { e.preventDefault(); findQ.current = ""; setPop("find"); }
       else if (e.key === "Escape") { setPop(null); setShot(null); setSel(null); CSS.highlights?.delete("tx-find"); }
     };
