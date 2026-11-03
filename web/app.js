@@ -472,7 +472,7 @@ function App() {
       </aside>
       <main class="main">
         ${sel
-          ? html`<${Session} key=${sel.sessionId} s=${sel} say=${say} live=${all} />`
+          ? html`<${Session} key=${sel.sessionId} s=${sel} say=${say} live=${all} panes=${panes} togglePane=${togglePane} />`
           : html`<div class="blank">${starting || (route && !live) ? "Opening…" : route ? "This session is gone. Pick another from the list." : "Pick a session, or start a new one."}</div>`}
       </main>
     </div>
@@ -578,7 +578,7 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live }) {
         ${kb(view === "board", "Board", "b", () => { rememberBay(only, { view: "board" }); go(null); })}
         ${kb(view === "pages", "Pages", "g", () => (location.hash = PAGES))}
       </div>
-      ${view === "session" && html`<div class="tgl">${kb(panes.rail, html`<span class="nm">Sessions</span>`, "[", () => togglePane("rail"), "The bay's sessions beside the transcript")}</div>`}
+      ${view === "session" && html`<div class="tgl">${kb(panes.rail, html`<span class="nm">Sessions</span>`, "[", () => togglePane("rail"), "The bay's sessions beside the transcript")}${kb(panes.state, html`<span class="nm">State</span>`, "]", () => togglePane("state"), "What the session is doing, what it made, and its facts")}</div>`}
       <div class="meta">
         ${!up && html`<span class="host off" role="status">reconnecting</span>`}
         ${down.map((p) => html`<span class="host off" title=${p.error}>${p.name} off</span>`)}
@@ -630,7 +630,8 @@ const KEYMAP = [
   ["Views", [["s", "Session: the bay's last open one"], ["b", "Board"], ["g", "Pages"], [".", "Assistant"]]],
   ["Bays", [["alt 1..9", "That bay, as you left it"], ["alt 0", "Every bay"], ["n", "Next session that needs you, any bay"]]],
   ["Moving", [["j k", "Next, previous session in the list"], ["enter", "Open the highlighted session"], ["alt ↑ ↓", "Previous, next session, even from a terminal"]]],
-  ["Panes", [["[", "Sessions beside the transcript"]]],
+  ["Panes", [["[", "Sessions beside the transcript"], ["]", "State: now, running, made, the session's facts"]]],
+  ["Session", [["t", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
   ["Transcript", [["1 2 3", "Outline, story, everything"], ["r", "Write to the session"], ["f", "Find in the session"]]],
   ["Anywhere", [["/", "Search and commands"], ["+", "New session"], [",", "Settings"], ["?", "These keys"], ["esc", "Close what is open"]]],
 ];
@@ -1678,12 +1679,18 @@ const PANE = "atc.pane", SESSION_PAGE = "atc.sessionPage";
 function paneFor(s) {
   let p = null;
   try { p = localStorage.getItem(PANE); } catch {}
-  if (p === "chat" || p === "out") return p;
-  if (s.kind === "hub") return "chat";
-  return s.attachable || s.state === "stopped" ? "term" : "chat";
+  if (p === "out") return p;
+  return "chat";
 }
 
-function Session({ s, say, live }) {
+const STATE_LETTER = { "needs-you": ["N", "needs"], "your-turn": ["T", "turn"], working: ["W", "working"] };
+function StateBlock({ s }) {
+  const [l, c] = away(s) ? ["P", "parked"] : STATE_LETTER[s.state] || ["E", "earlier"];
+  return html`<span class="sb ${c}" role="img" aria-label=${away(s) ? "parked" : WORD[s.state] || "earlier"}>${l}</span>`;
+}
+const CtxMeter = ({ n, max = n > 200000 ? 1000000 : 200000 }) => html`<span class="meter" aria-hidden="true"><i style=${`width:${Math.min(100, Math.round((n / max) * 100))}%`}></i></span>`;
+
+function Session({ s, say, live, panes, togglePane }) {
   const canAttach = s.attachable;
   const hasTerm = s.kind !== "hub";
   const auto = useRef(AUTO_PANE);
@@ -1731,9 +1738,6 @@ function Session({ s, say, live }) {
   const voiceKey = `atc.voice.${s.sessionId}`;
   const [voice, setVoice] = useState(() => { const v = AUTO_VOICE && canAttach; if (v) AUTO_VOICE = false; return v || (canAttach && pref(voiceKey, "") === "on"); });
   useEffect(() => setPref(voiceKey, voice ? "on" : ""), [voice]);
-  useEffect(() => {
-    if (canAttach && !auto.current && !routePage() && paneFor(s) === "term" && !voice) setMode("term");
-  }, [canAttach]);
 
   const act = async (fn, done) => {
     setBusy(true);
@@ -1760,55 +1764,85 @@ function Session({ s, say, live }) {
   const use = useSessionUsage(s, showUse || s.state === "working" ? 15000 : 90000);
   const outCount = outs ? outs.servers.length + outs.files.filter((f) => f.kind !== "text").length + outs.links.length : 0;
 
+  const renameBox = html`<input class="rn" ref=${focusOnMount} value=${s.title} aria-label="Session title" onKeyDown=${(e) => {
+      if (e.key === "Enter") { patch({ name: e.target.value }); setRenaming(false); }
+      if (e.key === "Escape") setRenaming(false);
+    }} onBlur=${() => setRenaming(false)} />`;
+  const [stateSheet, setStateSheet] = useState(false);
+  const phoneNow = usePhone();
+  const openState = () => (phoneNow ? setStateSheet(true) : togglePane("state"));
+  const where = [MULTI && s.host, s.branch && s.branch !== "HEAD" && s.branch].filter(Boolean).join(" ");
+  const running = outs?.servers.length || 0;
+  useEffect(() => {
+    const k = (e) => {
+      const t = e.target;
+      if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable || document.querySelector(".veil, .pghome, .palone, .keys-ov")) return;
+      if (e.key === "t" && hasTerm) { e.preventDefault(); choose(mode === "term" ? "chat" : "term"); }
+      else if (e.key === "]") { e.preventDefault(); openState(); }
+      else if (e.key === "x") { e.preventDefault(); document.querySelector(".hd .more button")?.click(); }
+    };
+    addEventListener("keydown", k);
+    return () => removeEventListener("keydown", k);
+  });
+  const facts = [
+    ["Context", s.context > 0 && `${Math.round(s.context / 1000)}k`],
+    ["Cost", use?.total > 0 && html`<button class="link" onClick=${() => setShowUse(true)}>${usd(use.cost)}</button>`],
+    ["Steps", s.steps > 0 && `${s.steps}${s.failed > 0 ? `, ${s.failed} failed` : ""}`],
+    ["Model", engineTag(s) || (s.model && model(s.model))],
+    ["Permissions", s.permissionMode === "bypassPermissions" ? "no prompts" : s.permissionMode],
+    ["Host", s.host],
+    ["Branch", s.branch !== "HEAD" && s.branch],
+    ["Folder", s.cwd && tilde(s.cwd)],
+    ["Started", s.startedAt && agoLong(s.startedAt)],
+    ["Your last prompt", s.lastPrompt && oneLine(s.lastPrompt)],
+    ["Reports to", s.reportsTo && (live?.find((x) => (x.root || x.sessionId) === s.reportsTo)?.title || "a session")],
+    ["Pinned", s.pinned && "yes"],
+  ].filter(([, v]) => v);
+  const statePane = html`
+    <div class="statep-in">
+      <section><h3>Now</h3>
+        <p class="now">${headline(s) || WORD[s.state] || s.state}</p>
+        ${s.summary && html`<${SummaryParts} x=${s.summary} />`}
+        ${replyable(s) && html`<${Replies} list=${s.summary.replies} pick=${(text) => api(`/api/sessions/${s.id}/send`, { method: "POST", body: { text, suggested: true } }).catch((e) => say(e.message))} />`}
+        ${s.summary && html`<button class="kb" onClick=${() => api(`/api/sessions/${s.sessionId}/summary`, { method: "POST" }).then(() => say("Summarizing again…"), (e) => say(e.message))}>Summarize again</button>`}
+      </section>
+      <${Outputs} s=${s} data=${outs} pages=${shown} open=${openPage} />
+      <section><h3>Session</h3><dl class="kv">${facts.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl></section>
+    </div>`;
+
   return html`
-    <div class="head">
-      <button class="icon back" onClick=${() => go(null)} aria-label="Back to sessions">‹ Back</button>
-      <div class="who">
-        <div class="t">
-          ${renaming
-            ? html`<input ref=${focusOnMount} value=${s.title} onKeyDown=${(e) => {
-                if (e.key === "Enter") { patch({ name: e.target.value }); setRenaming(false); }
-                if (e.key === "Escape") setRenaming(false);
-              }} onBlur=${() => setRenaming(false)} />`
-            : html`<span onDblClick=${() => setRenaming(true)}>${s.title || "Untitled"}</span>`}
-        </div>
-        <div class="meta">
-          <span class=${`word ${s.state}`}>${WORD[s.state] || s.state}</span>
-          <${SourceTag} s=${s} full />
-          ${s.branch && s.branch !== "HEAD" && html`<span class="wide">${s.branch}</span>`}
-          ${engineTag(s) || (s.model && html`<span class="wide">${model(s.model)}</span>`)}
-          ${(s.context > 0 || use?.total > 0) && html`
-            <span class="wide usehover" tabindex="0" role="button" onClick=${() => setShowUse(true)} onKeyDown=${(e) => e.key === "Enter" && setShowUse(true)}>
-              ${s.context > 0 ? `${Math.round(s.context / 1000)}k context` : "usage"}
-              ${use?.total > 0 && html`<span class="usecard" role="tooltip">
-                ${shares(use).map((x, i) => i === 0 ? html`<b>${x.p != null ? `${approx(x.p)} of your weekly limit · ` : ""}${usd(x.cost)} this week</b>`
-                  : html`<span>${x.p != null ? `${approx(x.p)} of the 5-hour window · ` : ""}${usd(x.cost)} in it</span>`)}
-                <span>Whole session: ${usd(use.cost)} · ${tokens(use.total)} tokens</span>
-                <span class="hint">Click for details</span>
-              </span>`}
-            </span>`}
-          ${s.reportsTo && (() => {
-            const to = live?.find((x) => (x.root || x.sessionId) === s.reportsTo)?.title || "a session";
-            return html`<span role="button" title=${`It was asked to report back to “${to}”, which its report resumes even if stopped. Click to cut that: a stopped “${to}” stays stopped.`}
-              onClick=${() => ask({ title: `Stop reporting to “${to}”?`, body: `“${s.title}” will no longer wake “${to}” with its report. A stopped “${to}” stays stopped.`,
-                ok: "Stop reporting", danger: true, run: () => api(`/api/sessions/${s.root || s.sessionId}`, { method: "PATCH", body: { reportsTo: "" } }) })}>reports to ${to}</span>`;
-          })()}
-          ${s.permissionMode === "bypassPermissions" && html`<span class="wide" title="Claude runs tools in this session without asking first, except where a permission rule says to ask">no permission prompts</span>`}
-        </div>
+    <header class="hd">
+      <div class="l1">
+        <button class="kb back" onClick=${() => go(null)} aria-label="Back to the board">Back</button>
+        <${StateBlock} s=${s} />
+        ${renaming ? renameBox : html`<h1 onDblClick=${() => setRenaming(true)} title=${s.title}>${s.title || "Untitled"}</h1>`}
+        ${where && html`<span class="where">${where}</span>`}
+        <span class="r">
+          ${(mode === "chat" || sideBySide) && html`<div class="tx-slot" ref=${setSlot}></div>`}
+          ${shown.length > 0 && html`<${PagesButton} list=${shown} open=${openPage} on=${mode === "page"} />`}
+          ${VOICE.stt && html`<button class="kb ${voice ? "on" : ""}" aria-pressed=${voice}
+            onClick=${() => canAttach ? (voice || setMode("chat"), setVoice(!voice))
+              : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
+          ${hasTerm && html`<button class="kb ${mode === "term" ? "on" : ""}" aria-pressed=${mode === "term"} aria-keyshortcuts="t" onClick=${() => choose(mode === "term" ? "chat" : "term")}>Terminal <kbd aria-hidden="true">t</kbd></button>`}
+          <div class="more"><${Menu} cls="kb" busy=${busy} aria="Session menu" label=${html`More <kbd aria-hidden="true">x</kbd>`}
+            items=${[
+              ...(phoneNow && hasTerm ? [{ label: mode === "term" ? "Transcript" : "Terminal", run: () => choose(mode === "term" ? "chat" : "term") }] : []),
+              ...(phoneNow && VOICE.stt && canAttach ? [{ label: voice ? "Voice off" : "Voice", run: () => (voice || setMode("chat"), setVoice(!voice)) }] : []),
+              ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "State and outputs", run: openState }, { label: "Usage", run: () => setShowUse(true) }]} /></div>
+        </span>
       </div>
-      ${shown.length > 0 && html`<${PagesButton} list=${shown} open=${openPage} on=${mode === "page"} />`}
-      ${VOICE.stt && html`<button class="btn voice-btn ${voice ? "on" : ""} ${canAttach ? "" : "off"}" aria-pressed=${voice}
-        onClick=${() => canAttach ? (voice || setMode("chat"), setVoice(!voice))
-          : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
-      ${(mode === "chat" || sideBySide) && html`<div class="tx-slot" ref=${setSlot}></div>`}
-      <div class="seg" role="tablist">
-        ${hasTerm && html`<button class=${mode === "term" ? "on" : ""} onClick=${() => choose("term")}>Terminal</button>`}
-        <button class=${mode === "chat" ? "on" : ""} onClick=${() => choose("chat")}>Transcript</button>
-        ${shown.length > 0 && html`<${PagesTab} list=${shown} on=${mode === "page"} onClick=${() => choose("page")} />`}
-        <button class=${mode === "out" ? "on" : ""} onClick=${() => choose("out")}>Outputs${outCount > 0 && html`<span class="count">${outCount}</span>`}</button>
+      <div class="l2" role="button" tabindex="0" aria-label="State" aria-keyshortcuts="]" onClick=${openState} onKeyDown=${(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), openState())}>
+        <span class="stat">${headline(s) || WORD[s.state] || s.state}</span>
+        ${(engineTag(s) || s.model) && html`<span class="rd">${engineTag(s) || model(s.model)}</span>`}
+        ${s.context > 0 && html`<span class="rd"><${CtxMeter} n=${s.context} />${Math.round(s.context / 1000)}k</span>`}
+        ${use?.total > 0 && html`<span class="rd">${usd(use.cost)}</span>`}
+        ${s.steps > 0 && html`<span class="rd">${plural(s.steps, "step")}</span>`}
+        ${running > 0 && html`<span class="rd run">${running} running</span>`}
+        ${s.permissionMode === "bypassPermissions" && html`<span class="rd">no prompts</span>`}
       </div>
-      <${Menu} busy=${busy} items=${[...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "Usage", run: () => setShowUse(true) }]} />
-    </div>
+    </header>
+    <div class="sbody ${panes?.state && !phoneNow ? "withstate" : ""}">
+    <div class="smain">
     ${mode !== "chat" && !sideBySide && html`<${AskBar} s=${s} say=${say} />`}
     ${mode !== "chat" && !sideBySide && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
     ${mode === "page" && shown.length > 0
@@ -1824,6 +1858,10 @@ function Session({ s, say, live }) {
         ? html`<${Term} key=${s.id} s=${s} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} />`
         : html`<div class="stage"><div class="cover">${Unattachable(s, () => resume(), busy, setMode)}</div></div>`
       : mode === "out" ? html`<${Outputs} s=${s} data=${outs} pages=${shown} open=${openPage} />` : html`<${Transcript} s=${s} say=${say} slot=${slot} resume=${() => resume("chat")} busy=${busy} voice=${voice && canAttach} onVoiceOff=${() => setVoice(false)} />`}
+    </div>
+    ${panes?.state && !phoneNow && html`<aside class="statep" aria-label="State">${statePane}</aside>`}
+    </div>
+    ${stateSheet && html`<${Sheet} cls="statesheet" title="State" onClose=${() => setStateSheet(false)}>${statePane}<//>`}
     ${showUse && html`<${SessionUsage} s=${s} use=${use} onClose=${() => setShowUse(false)} />`}
   `;
 }
@@ -4386,7 +4424,7 @@ function Step({ st, s, zoom, pin }) {
     const d = diffStat(st), path = relPath(i.file_path || st.detail, s);
     return html`<div class=${cls}>
       <div class="line click" onClick=${toggle}><b>${st.tool === "Write" ? "Wrote" : st.n > 1 ? `Edited ×${st.n}` : "Edited"}</b><span class="arg">${path}</span><span class="end"><span class="plus">+${d.add}</span>${d.del > 0 && html` <span class="minus">−${d.del}</span>`}</span>${running}</div>
-      ${open && html`<div class="tbox"><div class="hd"><span class="p"><bdi>${path}</bdi></span><span class="n">${st.tool === "Write" ? `new, ${writeLines(st)} lines` : ""}</span></div>
+      ${open && html`<div class="tbox"><div class="tbhd"><span class="p"><bdi>${path}</bdi></span><span class="n">${st.tool === "Write" ? `new, ${writeLines(st)} lines` : ""}</span></div>
         ${st.tool === "Write" ? html`<pre class="tpre">${(i.content || "").split("\n").slice(0, 40).join("\n")}</pre>${writeLines(st) > 40 && html`<p class="more-lines">${writeLines(st) - 40} more lines</p>`}` : html`<${Diff} edits=${st.edits || txEdits(st)} path=${path} />`}</div>`}
     </div>`;
   }
@@ -4404,7 +4442,7 @@ function Step({ st, s, zoom, pin }) {
   }
   if (st.tool === "WebFetch") return html`<div class=${cls}>
     <div class="line click" onClick=${toggle}><b>Read</b><span class="arg">${hostOf(i.url || st.detail)}</span>${running}</div>
-    ${open && html`<div class="tbox">${i.prompt && html`<div class="hd"><span>${i.prompt}</span></div>`}<div class="prose small" dangerouslySetInnerHTML=${{ __html: md(st.out?.text) }}></div></div>`}
+    ${open && html`<div class="tbox">${i.prompt && html`<div class="tbhd"><span>${i.prompt}</span></div>`}<div class="prose small" dangerouslySetInnerHTML=${{ __html: md(st.out?.text) }}></div></div>`}
   </div>`;
   if (k === "agent") return html`<div class=${cls}>
     <div class="line click" onClick=${toggle}><b>Agent</b><span class="arg wrap sans">${i.description || st.detail}</span>${running}</div>
