@@ -52,3 +52,9 @@
   .hd .l1 .r > :not(.more):not(.tx-slot) { display: none; }
   .hd h1 { flex: 1 1 auto; min-width: 0; }
 }
+.hd .pgbtn { height: var(--btn-h); max-width: 260px; padding: 0 var(--s2); gap: 6px; border: 0; border-radius: var(--r-sm); background: none; box-shadow: none; color: var(--dim); font-size: var(--fs-small); font-weight: 400; }
+.hd .pgbtn:hover { background: var(--strip-hi); color: var(--ink); }
+.hd .pgbtn.on { background: var(--strip-hi); color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
+.hd .pgbtn .mi { display: none; }
+.hd .pgbtn .dot { width: 6px; height: 6px; background: var(--ink); }
+.hd .pgbtn em, .hd .pgbtn .caret { color: var(--faint); }

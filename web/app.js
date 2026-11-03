@@ -392,14 +392,25 @@ function App() {
         e.preventDefault(); e.stopPropagation(); setPalette((v) => !v);
         return;
       }
-      if (e.altKey && !e.metaKey && !e.ctrlKey && /^Digit\d$/.test(e.code)) {
+      const typing = t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable;
+      const digit = /^Digit\d$/.test(e.code) && !e.metaKey && !e.ctrlKey && (e.altKey || (!e.shiftKey && !typing && !t.closest?.(".ask, [data-ask]") && !document.querySelector(".veil, .pghome, .palone, .keys-ov, .peek")));
+      if (digit) {
         const n = +e.code.slice(5), bays = baysOf(k.live, BAY.only);
-        if (e.shiftKey) { e.preventDefault(); if (bays[n - 1]) k.setPeek((v) => (v === bays[n - 1].name ? null : bays[n - 1].name)); return; }
-        if (n === 0) { e.preventDefault(); BAY.set(null); return; }
-        if (bays[n - 1]) { e.preventDefault(); goBay(bays[n - 1].name, k.live); }
-        return;
+        e.preventDefault();
+        if (e.altKey && e.shiftKey) { if (bays[n - 1]) k.setPeek((v) => (v === bays[n - 1].name ? null : bays[n - 1].name)); return; }
+        if (n === 0) return BAY.set(null);
+        const b = bays[n - 1];
+        if (!b) return;
+        if (b.name === BAY.only && k.route) {
+          const list = bayLists(k.live, null, b.name), ring = ["needs-you", "your-turn", "working"].flatMap((g) => list[g]);
+          const i = ring.findIndex((x) => keyOf(x) === k.route || x.sessionId === k.route);
+          const next = ring[(i + 1) % ring.length];
+          if (next && ring.length > 1) go(keyOf(next));
+          return;
+        }
+        return goBay(b.name, k.live, true);
       }
-      if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || typing) return;
       if (document.querySelector(".veil, .pghome, .palone, .keys-ov")) {
         if (e.key === "Escape") setHelp(false);
         if (e.key === "?") setHelp((h) => !h);
@@ -425,7 +436,11 @@ function App() {
         "/": () => setPalette(true),
         "?": () => setHelp((h) => !h),
       }[e.key];
-      if (move) {
+      if (move && k.route && (e.key === "j" || e.key === "k")) {
+        const next = step(k.route, move);
+        e.preventDefault();
+        if (next && next.sessionId !== k.route && keyOf(next) !== k.route) go(keyOf(next));
+      } else if (move && !k.route) {
         const next = step(k.cursor || k.route, move);
         if (next) { e.preventDefault(); setCursor(next.sessionId); document.querySelector(`[data-sid="${next.sessionId}"]`)?.scrollIntoView({ block: "nearest" }); }
       } else if (e.key === "Enter" && k.cursor) {
@@ -479,6 +494,7 @@ function App() {
         <${UsageFoot} limits=${limits} onOpen=${openUsage} />
       </aside>
       <main class="main">
+        ${sel && !wide && html`<${SessionStrip} live=${live} sel=${sel} />`}
         ${sel
           ? html`<${Session} key=${sel.sessionId} s=${sel} say=${say} live=${all} panes=${panes} togglePane=${togglePane} />`
           : html`<div class="blank">${starting || !live ? "Opening…" : "This session is gone. Pick another from the list."}</div>`}
@@ -637,6 +653,23 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
     </nav>`;
 }
 
+function SessionStrip({ live, sel }) {
+  const bay = bayOf(sel);
+  const list = bayLists(live, null, bay);
+  const ring = ["needs-you", "your-turn", "working"].flatMap((g) => list[g]);
+  const items = ring.some((x) => x.sessionId === sel.sessionId) ? ring : [sel, ...ring];
+  const box = useRef();
+  useLayoutEffect(() => {
+    const el = box.current?.querySelector(".on");
+    if (el) box.current.scrollLeft = el.offsetLeft - 16;
+  }, [sel.sessionId]);
+  if (items.length < 2) return null;
+  return html`<nav class="sstrip" ref=${box} aria-label=${`Sessions in ${bay || "this bay"}`}>
+    ${items.map((x) => html`<button class=${x.sessionId === sel.sessionId ? "on" : ""} aria-current=${x.sessionId === sel.sessionId ? "true" : null} onClick=${() => go(keyOf(x))}>
+      <${StateBlock} s=${x} /><span>${x.title || "Untitled"}</span></button>`)}
+  </nav>`;
+}
+
 function BayPeek({ bay, live, say, onClose }) {
   const phone = usePhone();
   const box = useRef();
@@ -664,7 +697,7 @@ function BayPeek({ bay, live, say, onClose }) {
   const body = html`
     ${needs.length > 0 && html`<h3 class="grp"><b>Needs you</b><span class="c">${needs.length}</span></h3>${needs.map(row)}`}
     ${turn.length > 0 && html`<h3 class="grp"><b>Your turn</b><span class="c">${turn.length}</span></h3>${turn.map(row)}`}
-    ${work.length > 0 && html`<p class="pkf"><span>${plural(work.length, "session")} working</span></p>`}
+    ${work.length > 0 && html`<h3 class="grp"><b>Working</b><span class="c">${work.length}</span></h3>${work.map(row)}`}
     ${!mine.length && html`<p class="pkf"><span>Nothing running in ${bay}.</span></p>`}
     ${!every && html`<div class="pkf"><button class="kb" onClick=${() => { onClose(); goBay(bay, live); }}>Go to ${bay}</button><button class="kb" onClick=${() => { onClose(); BAY.set(bay); rememberBay(bay, { view: "board" }); go(null); }}>Its board</button></div>`}`;
   return phone
@@ -716,11 +749,11 @@ function TabBar({ view, assisting, onTalk }) {
 
 const KEYMAP = [
   ["Views", [["s", "Session: the bay's last open one"], ["b", "Board"], ["g", "Pages"], [".", "Assistant"]]],
-  ["Bays", [["alt 1..9", "That bay, as you left it"], ["shift alt 1..9", "Peek at that bay: answer without going there"], ["alt 0", "Every bay"], ["n", "Next session that needs you, any bay"]]],
-  ["Moving", [["j k", "Next, previous session in the list"], ["enter", "Open the highlighted session"], ["alt ↑ ↓", "Previous, next session, even from a terminal"]]],
+  ["Bays", [["1..9", "That bay, as you left it; again: its next session"], ["alt 1..9", "The same, even from a terminal"], ["shift alt 1..9", "Peek at that bay: answer without going there"], ["0", "Every bay"], ["n", "Next session that needs you, any bay"]]],
+  ["Moving", [["j k", "Next, previous session in the bay (on the board: the selection)"], ["enter", "Open the selected session"], ["alt ↑ ↓", "Previous, next session, even from a terminal"]]],
   ["Panes", [["[", "Sessions beside the transcript"], ["]", "State: now, running, made, the session's facts"]]],
   ["Session", [["t", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
-  ["Transcript", [["1 2 3", "Outline, story, everything"], ["r", "Write to the session"], ["f", "Find in the session"]]],
+  ["Transcript", [["l", "Outline, story, everything (cycles)"], ["r", "Write to the session"], ["f", "Find in the session"]]],
   ["Anywhere", [["/", "Search and commands"], ["+", "New session"], [",", "Settings"], ["?", "These keys"], ["esc", "Close what is open"]]],
 ];
 
@@ -5124,7 +5157,7 @@ function Transcript({ s, say, slot, resume, busy, voice, onVoiceOff }) {
     const onKey = (e) => {
       const t = e.target;
       if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
-      if (["1", "2", "3"].includes(e.key)) { e.preventDefault(); setLevel(+e.key); }
+      if (e.key === "l") { e.preventDefault(); setLevel((level % 3) + 1); }
       else if (e.key === "r" && live) { e.preventDefault(); focusInput.current(); }
       else if (e.key === "f") { e.preventDefault(); findQ.current = ""; setPop("find"); }
       else if (e.key === "Escape") { setPop(null); setShot(null); setSel(null); CSS.highlights?.delete("tx-find"); }
