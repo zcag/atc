@@ -568,7 +568,7 @@ function App() {
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${settings && html`<${SettingsPage} me=${me} onClose=${closeSettings} />`}
     ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} at=${alone.at} live=${all} say=${say} />`}
-    ${holding && html`<${Hold} hub=${hub} live=${live} />`}
+    ${holding && html`<${Hold} live=${live} me=${me} down=${down} limits=${limits} say=${say} />`}
     ${calling ? html`<${CallScreen} hub=${hub} live=${all} />` : html`<${CallDock} hub=${hub} live=${all} assisting=${assistView} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
     ${agentUse && html`<${AgentUsage} name=${agentUse} onClose=${() => setAgentUse(null)} />`}
@@ -1014,19 +1014,78 @@ const touchedBy = (hub, live, since) => {
   return me ? (live || []).filter((s) => s.reportsTo === me && s.kind !== "hub" && (Date.parse(s.updated || s.startedAt || 0) || 0) >= since).sort(byRecent) : [];
 };
 
-function LiveStrip({ s, onClick }) {
-  const now = s.state === "needs-you" ? doingLine(s) || "Waiting on you" : s.state === "working" ? doing(s) : headline(s);
-  return html`<a class="ls ${s.state}" href=${`#/s/${keyOf(s)}`} onClick=${onClick}><${StateBlock} s=${s} /><span class="ti">${s.title || "Untitled"}</span><span class="bayn">${bayOf(s) || ""}</span>
-    <span class="now"><span>${now}</span><span class="el">${s.state === "working" && s.promptAt ? txSpan(Date.now() - Date.parse(s.promptAt)) : ""}</span></span></a>`;
+function LiveStrip({ s }) {
+  const now = s.state === "needs-you" ? doingLine(s) || "Waiting on you" : doing(s);
+  return html`<a class="ls ${s.state}" href=${`#/s/${keyOf(s)}`}><${StateBlock} s=${s} /><span class="ti">${s.title || "Untitled"}</span><span class="bayn">${bayOf(s) || ""}</span>
+    <span class="now"><span>${now}</span><span class="el">${s.promptAt ? txSpan(Date.now() - Date.parse(s.promptAt)) : ""}</span></span></a>`;
 }
 
-/** What holding the phone's side key opens: a band per bay sized by how much is going on there, what the assistant last said, the most urgent sessions, the call and their sessions under the thumb. */
-function Hold({ hub, live }) {
+/** The line under the phone's sessions: a tick per session, then a ripple running into the call button. */
+function HoldLine({ wait, work, end }) {
+  const ref = useRef(null);
+  const ticks = useRef();
+  ticks.current = [wait, work];
+  useEffect(() => {
+    const cv = ref.current, g = cv.getContext("2d");
+    const [line, amber, blue] = cssColors("dark", ["faint", "needs", "work"]);
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let raf;
+    const frame = (ms) => {
+      const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1, w = Math.round(r.width * d), h = Math.round(r.height * d);
+      if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+      g.setTransform(d, 0, 0, d, 0, 0);
+      g.clearRect(0, 0, r.width, r.height);
+      const stop = r.width - end, mid = r.height / 2, t = ms / 1000;
+      g.strokeStyle = line;
+      g.lineWidth = 1.5;
+      g.beginPath();
+      for (let x = 0; x <= stop; x += 2) {
+        const u = x / stop, y = mid + u * u * (7 * Math.sin(u * 15 - t * 1.3) + 3 * Math.sin(u * 31 + t * 1.9));
+        x ? g.lineTo(x, y) : g.moveTo(x, y);
+      }
+      g.stroke();
+      const [a, b] = ticks.current, room = Math.floor((stop - 40) / 8);
+      for (let i = 0; i < Math.min(a + b, room); i++) {
+        g.fillStyle = i < a ? amber : blue;
+        g.fillRect(16 + i * 8, mid - (i < a ? 8 : 4), i < a ? 4 : 3, i < a ? 16 : 8);
+      }
+      if (!still) raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(raf);
+  }, [end]);
+  return html`<canvas ref=${ref} aria-hidden="true"></canvas>`;
+}
+
+function HoldRow({ s, say }) {
+  const a = s.asks?.[0];
+  const line = s.state === "working" ? doing(s) : headline(s);
+  const open = (e) => { e.preventDefault(); location.replace(`#/s/${keyOf(s)}`); };
+  return html`<div class="hr ${waiting(s) ? "wt" : ""} ${s.state}">
+    <a href=${`#/s/${keyOf(s)}`} onClick=${open}><${StateBlock} s=${s} /><b>${s.title || "Untitled"}</b><span class="by">${bayOf(s) || ""}</span>${!a && line && html`<span class="l">${line}</span>`}</a>
+    ${a && s.state === "needs-you" && html`<${Ask} s=${s} a=${a} say=${say} compact />`}
+  </div>`;
+}
+
+const holdEmpty = { wait: "Nothing is waiting on you.", work: "Nothing is running.", recent: "No sessions yet." };
+
+/** What holding the phone's side key opens: how the machines stand, the sessions in three tabs, questions answered in place, the call under the thumb. */
+function Hold({ live, me, down, limits, say }) {
   useCall();
   useNow(30000);
   useEffect(() => { if (Call.live()) location.replace(CALL); }, []);
+  const brief = useMachineBrief();
+  const open = (live || []).filter((s) => s.kind !== "hub");
+  const wait = open.filter(waiting).sort((a, b) => (b.state === "needs-you") - (a.state === "needs-you") || byRecent(a, b));
+  const work = open.filter((s) => s.state === "working" && !away(s)).sort(byRecent);
+  const recent = [...open].sort(byRecent).slice(0, 12);
+  const [picked, setTab] = useState(null);
+  const tab = picked || (wait.length || !work.length ? "wait" : "work");
+  const shown = { wait, work, recent }[tab];
   const call = () => CAN_CALL && callAssistant();
-  const sessions = () => { rememberBay(BAY.only, { view: "board" }); location.replace("#/"); };
+  const to = (hash) => location.replace(hash);
+  const sessions = () => { rememberBay(BAY.only, { view: "board" }); to("#/"); };
+  const fresh = () => { to("#/"); NEW_SESSION(); };
   useKeyLayer((e) => {
     if (typingIn(e.target)) return false;
     if (e.key === "Escape") return window.leaveHold(), true;
@@ -1034,38 +1093,38 @@ function Hold({ hub, live }) {
     if (e.key === "b") return sessions(), true;
     return false;
   });
-  const replacing = (e) => { e.preventDefault(); location.replace(e.currentTarget.getAttribute("href")); };
-  const open = (live || []).filter((s) => s.kind !== "hub" && !away(s));
-  const wait = open.filter(waiting).sort((a, b) => (b.state === "needs-you") - (a.state === "needs-you") || byRecent(a, b));
-  const work = open.filter((s) => s.state === "working").sort(byRecent);
-  const rows = [...wait, ...work];
-  const bands = [...new Set(rows.map(bayOf))].map((name) => {
-    const here = rows.filter((s) => bayOf(s) === name);
-    return { name, here, waits: here.filter(waiting).length };
-  }).sort((a, b) => b.waits - a.waits || b.here.length - a.here.length);
-  const toBay = (name) => { BAY.set(name); rememberBay(name, { view: "board" }); location.replace("#/"); };
-  const counts = [wait.length && html`<span class="wt">${wait.length} waiting</span>`, work.length && html`<span>${work.length} working</span>`].filter(Boolean);
+  const used = Math.round(Math.max(-1, ...(limits?.windows || []).filter((w) => SHORT[w.key]).map((w) => w.percent)));
+  const mem = brief?.machine?.memTotal ? Math.round((brief.machine.memUsed / brief.machine.memTotal) * 100) : -1;
+  const offline = down.map((p) => p.name);
+  const tile = (label, pct, hash) => html`<button class="htile" onClick=${() => to(hash)}><span>${label}</span><b>${pct < 0 ? "--" : `${pct}%`}</b><${Meter} p=${Math.max(pct, 0)} /></button>`;
+  const tabBtn = (id, label, n, cls) => html`<button class=${tab === id ? "on" : ""} aria-pressed=${tab === id} onClick=${() => setTab(id)}>${label}${n > 0 && html`<i class=${cls}>${n}</i>`}</button>`;
   return html`<div class="hold">
-    <div class="hboard">
-      ${bands.map((b) => html`<button class="hband ${b.waits ? "wt" : ""}" style=${`flex-grow: ${1 + b.waits * 2 + b.here.length - b.waits}`} onClick=${() => toBay(b.name)}
-        aria-label=${[b.name, b.waits && `${b.waits} waiting on you`, b.here.length - b.waits && `${b.here.length - b.waits} working`].filter(Boolean).join(", ")}>
-        <span class="nm"><b>${b.name}</b><span class="bl">${b.here.slice(0, 16).map((s) => html`<${StateBlock} key=${s.sessionId} s=${s} mini />`)}</span></span>
-        <span class="ct">${b.waits || b.here.length}</span>
-      </button>`)}
-      ${live && !rows.length && html`<p class="hclear">Nothing is waiting on you, and nothing is running.</p>`}
+    <div class="htiles">
+      ${(me.hosts || [me.host]).filter(Boolean).map((h) => { const off = offline.includes(h); return html`<div class="htile host"><span>${h}</span><b class=${off ? "off" : "up"}>${off ? "down" : "up"}</b></div>`; })}
+      ${tile("usage", used, USAGE)}
+      ${tile("mem", mem, RESOURCES)}
     </div>
-    <a class="hsaid ${hub?.state === "needs-you" ? "needs" : ""}" href=${ASSIST} onClick=${replacing}>
-      <span class="apr">assistant<span>></span></span><span class="t">${hubLine(hub)}</span>
-    </a>
-    <div class="hrows">
-      ${!live ? [1, 2].map(() => html`<div class="ls sk" aria-hidden="true"><i></i><i></i></div>`)
-        : rows.slice(0, 3).map((s) => html`<${LiveStrip} key=${s.sessionId} s=${s} onClick=${replacing} />`)}
+    <div class="htabs">
+      ${tabBtn("wait", "Waiting", wait.length, "a")}
+      ${tabBtn("work", "Working", work.length, "w")}
+      ${tabBtn("recent", "Recent", 0)}
     </div>
-    ${!CAN_CALL && html`<p class="nocall">Calls need atc's call line and a microphone.</p>`}
-    <div class="hdock ${CAN_CALL ? "" : "nocall"}">
-      <button class="sess" onClick=${sessions}><b>Sessions</b><span class="c">${live ? (counts.length ? counts : "None open") : "Loading"}</span></button>
-      ${CAN_CALL && html`<button class="dial" onClick=${call} aria-keyshortcuts=".">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.61 21 3 13.39 3 4c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>Call</button>`}
+    <div class="hlist">
+      ${!live ? [1, 2, 3].map(() => html`<div class="hr sk" aria-hidden="true"><i></i><i></i></div>`)
+        : shown.length ? shown.map((s) => html`<${HoldRow} key=${s.sessionId} s=${s} say=${say} />`)
+        : html`<p class="none">${holdEmpty[tab]}</p>`}
+    </div>
+    <div class="hband">
+      <div class="hbase">
+        <${HoldLine} wait=${wait.length} work=${work.length} end=${CAN_CALL ? 72 : 0} />
+        <button class="sess" onClick=${sessions}><b>Sessions</b><span class="c"><span class="a"><em>${wait.length}</em> waiting</span><span class="w"><em>${work.length}</em> working</span></span></button>
+        ${CAN_CALL ? html`<button class="dial" onClick=${call} aria-label="Call the assistant" aria-keyshortcuts=".">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.61 21 3 13.39 3 4c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg></button>`
+        : html`<p class="nocall">Calls need atc's call line and a microphone</p>`}
+      </div>
+      <div class="hkeys">
+        <button onClick=${() => to(ASSIST)}>Assistant</button><button onClick=${fresh}>New</button><button onClick=${() => to(pagesHash())}>Pages</button><button onClick=${() => to(BACKLOG)}>Backlog</button>
+      </div>
     </div>
   </div>`;
 }
@@ -3836,7 +3895,7 @@ function SessionUsage({ s, use, onClose, agent }) {
   return html`
     <${Sheet} cls="usage" title="Usage" sub=${s.title} onClose=${onClose}>
       ${!use ? html`<p class="note">Reading the transcript${agent ? "s" : ""}…</p>` : use.failed ? html`<p class="note">Couldn't read this ${what}'s usage.</p>` : html`
-        <div class="tiles">
+        <div class="htiles">
           ${sh.map((x) => html`<div>
             <span class="n">${x.p != null ? approx(x.p) : `${usd(x.cost)}`}</span>
             <span class="l">of this ${x.name}${x.p != null ? ` · ${usd(x.cost)}` : ""}</span>
