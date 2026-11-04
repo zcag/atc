@@ -3362,7 +3362,7 @@ function ResSection({ title, note, groups, colorOf, peaks, sort, opened, toggle,
   return html`
     <section class="sec rsec">
       <div class="sh"><h2>${title}</h2>${note && html`<span class="n">${note}</span>`}</div>
-      <div class="rrow rhead" aria-hidden="true"><span></span><span class="v">Memory</span><span class="v">CPU</span><span class="v wide">Disk</span><span class="v wide">Procs</span><span class="v wide">Peak</span></div>
+      <div class="rrow rhead" aria-hidden="true"><span></span><span class="v">Memory</span><span class="v">CPU</span><span class="v wide">Disk</span><span class="v wide">Procs</span><span class="v wide" title="Highest in this range. Kept only above 500 MB or 10% of a core.">Peak</span></div>
       ${[...groups].sort((a, b) => RES_SORT[sort][1](b) - RES_SORT[sort][1](a)).map((g) => html`<${ResGroup} key=${g.kind + g.key} g=${g} colorOf=${colorOf} peak=${peaks.get(`${g.kind}/${g.key}`)} open=${opened === g.kind + g.key} onToggle=${() => toggle(g.kind + g.key)} />`)}
       ${tail}
     </section>`;
@@ -3427,7 +3427,7 @@ function ResourcesPage({ hosts, home }) {
       <header class="hd">
         <div class="l1"><h1>Resources</h1><span class="where">${host}</span></div>
         <div class="l2 no-block"><span class="stat">${status}</span>
-          ${rep?.cost > 0 && html`<span class="rd"><span class="l">measuring takes</span>${Math.round(rep.cost * 1000)} ms every 10 s</span>`}</div>
+          ${rep?.cost > 0 && html`<span class="rd"><span class="l">measuring takes about</span>${Math.round(rep.cost * 1000)} ms every 10 s</span>`}</div>
       </header>
       <div class="scroll"><div class="ubody">
         <div class="sec rtools">

@@ -89,6 +89,7 @@ type procKey struct {
 type procPrev struct {
 	own, total  float64
 	read, write int64
+	hasIO       bool
 	group       string
 }
 
@@ -99,6 +100,8 @@ type Sampler struct {
 
 	mu      sync.Mutex
 	targets []Target
+	tracked bool
+	costAvg float64
 	report  Report
 	loads   map[string]Load
 	disk    diskScan
@@ -130,7 +133,7 @@ func New(dir, claudeDir string) *Sampler {
 
 func (s *Sampler) Track(targets []Target) {
 	s.mu.Lock()
-	s.targets = targets
+	s.targets, s.tracked = targets, true
 	s.mu.Unlock()
 }
 
@@ -200,7 +203,7 @@ func dedupe(in []string) []string {
 func (s *Sampler) tick(now time.Time) {
 	began := time.Now()
 	s.mu.Lock()
-	targets := s.targets
+	targets, tracked := s.targets, s.tracked
 	s.mu.Unlock()
 
 	if now.Sub(s.lastSlow) >= time.Minute {
@@ -258,7 +261,9 @@ func (s *Sampler) tick(now time.Time) {
 			}
 		}
 	}
-	s.roll(now, r.Machine, all)
+	if !first && tracked {
+		s.roll(now, r.Machine, all)
+	}
 	sort.Slice(all, func(i, j int) bool { return all[i].Mem > all[j].Mem })
 	for i := range all {
 		g := &all[i]
@@ -285,7 +290,8 @@ func (s *Sampler) tick(now time.Time) {
 		}
 	}
 	s.prevAt = now
-	r.Cost = time.Since(began).Seconds()
+	s.costAvg += (time.Since(began).Seconds() - s.costAvg) / 12
+	r.Cost = s.costAvg
 	s.mu.Lock()
 	s.report, s.loads, s.dirs = r, loads, dirs
 	s.mu.Unlock()
@@ -318,7 +324,11 @@ func (s *Sampler) aggregate(procs map[int]*proc, targets []Target, now time.Time
 		k := procKey{p.pid, p.start}
 		prev, seen := s.prev[k]
 		id := p.kind + "/" + p.owner
-		next[k] = procPrev{p.own, p.total, p.read, p.write, id}
+		total := p.total
+		if claudeInfra(p.args) {
+			total = p.own
+		}
+		next[k] = procPrev{p.own, total, p.read, p.write, p.hasIO, id}
 		fresh := !seen && !first && p.start > s.prevMax
 		g := groups[id]
 		if g == nil {
@@ -331,14 +341,14 @@ func (s *Sampler) aggregate(procs map[int]*proc, targets []Target, now time.Time
 		}
 		if dt > 0 && (seen || fresh) {
 			pr.CPU = max(p.own-prev.own, 0) / dt * 100
-			if p.hasIO {
+			if p.hasIO && (prev.hasIO || fresh) {
 				pr.Read = float64(max(p.read-prev.read, 0)) / dt
 				pr.Write = float64(max(p.write-prev.write, 0)) / dt
 			}
 		}
-		totals[id] += p.total
+		totals[id] += total
 		if !fresh && !seen {
-			base[id] += p.total
+			base[id] += total
 		} else if seen && prev.group != id {
 			base[id] += prev.total
 		}

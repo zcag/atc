@@ -73,6 +73,57 @@ func TestCPUSurvivesAChildBeingReaped(t *testing.T) {
 	}
 }
 
+func TestAttributionFlipIsNoDiskSpike(t *testing.T) {
+	s := New("", "")
+	now := time.Now()
+	outside := map[int]*proc{100: {pid: 100, start: 50, args: "claude", own: 1, total: 1}}
+	attribute(outside, nil)
+	s.aggregate(outside, nil, now, 0, true)
+
+	targets := []Target{{Key: "a", PID: 100}}
+	inside := map[int]*proc{100: {pid: 100, start: 50, args: "claude", own: 1, total: 1, read: 1 << 40, write: 1 << 40, hasIO: true}}
+	attribute(inside, targets)
+	g := s.aggregate(inside, targets, now, 10, false)[KindSession+"/a"]
+	if g.Read != 0 || g.Write != 0 {
+		t.Fatalf("a lifetime's disk counters read as a rate: %v %v", g.Read, g.Write)
+	}
+	again := map[int]*proc{100: {pid: 100, start: 50, args: "claude", own: 1, total: 1, read: 1<<40 + 1000, write: 1 << 40, hasIO: true}}
+	attribute(again, targets)
+	if g = s.aggregate(again, targets, now, 10, false)[KindSession+"/a"]; g.Read != 100 {
+		t.Fatalf("real rate lost: %v", g.Read)
+	}
+}
+
+func TestHostReapingASessionIsNoCPUSpike(t *testing.T) {
+	s := New("", "")
+	now := time.Now()
+	host := func(reaped float64) map[int]*proc {
+		return map[int]*proc{50: {pid: 50, ppid: 10, start: 5, args: "claude bg-pty-host --bg-pty-host x", own: 1, total: 1 + reaped}}
+	}
+	first := host(0)
+	attribute(first, nil)
+	s.aggregate(first, nil, now, 0, true)
+	after := host(36000)
+	attribute(after, nil)
+	if g := s.aggregate(after, nil, now, 10, false)[KindOutside+"/"+claudeGroup]; g.CPU != 0 {
+		t.Fatalf("a session's lifetime CPU landed on its host: %v", g.CPU)
+	}
+}
+
+func TestNoHistoryBeforeSessionsAreKnown(t *testing.T) {
+	s := New(t.TempDir(), "")
+	s.tick(time.Now())
+	s.tick(time.Now().Add(every))
+	if s.min.n != 0 {
+		t.Fatalf("rolled %d samples with no session list", s.min.n)
+	}
+	s.Track(nil)
+	s.tick(time.Now().Add(2 * every))
+	if s.min.n != 1 {
+		t.Fatalf("rolled %d samples once tracked", s.min.n)
+	}
+}
+
 func TestSessionEnv(t *testing.T) {
 	job, sess := sessionEnv([]byte("A=1\x00CLAUDE_JOB_DIR=/h/.claude/jobs/7de3376e\x00CLAUDE_CODE_SESSION_ID=7de3-x\x00"))
 	if job != "7de3376e" || sess != "7de3-x" {
