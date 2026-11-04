@@ -65,5 +65,5 @@ func (s *Server) resourcesHistory(w http.ResponseWriter, r *http.Request) {
 	if err != nil || hours <= 0 {
 		hours = 24
 	}
-	reply(w, s.Res.History(time.Duration(min(hours, 24*7))*time.Hour))
+	reply(w, s.Res.History(time.Duration(min(hours, 24*7))*time.Hour, r.URL.Query().Get("key")))
 }

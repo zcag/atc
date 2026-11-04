@@ -2,6 +2,7 @@ package resources
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -147,8 +148,9 @@ func prune(dir string, now time.Time) {
 	}
 }
 
-func readRows(dir string, since, until time.Time) []Row {
+func readRows(dir string, since, until time.Time, key string) []Row {
 	var rows []Row
+	mark := []byte(`"k":"` + key + `"`)
 	for d := since; !d.After(until.Add(24 * time.Hour)); d = d.Add(24 * time.Hour) {
 		f, err := os.Open(dayFile(dir, d))
 		if err != nil {
@@ -157,6 +159,9 @@ func readRows(dir string, since, until time.Time) []Row {
 		sc := bufio.NewScanner(f)
 		sc.Buffer(make([]byte, 1<<16), 1<<22)
 		for sc.Scan() {
+			if key != "" && !bytes.Contains(sc.Bytes(), mark) {
+				continue
+			}
 			var r Row
 			if json.Unmarshal(sc.Bytes(), &r) == nil && r.T >= since.Unix() && r.T <= until.Unix() {
 				rows = append(rows, r)

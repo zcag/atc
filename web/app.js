@@ -6,6 +6,7 @@ import { Call } from "./call.js";
 import { persona } from "./persona.js";
 import { minimal } from "./minimal.js";
 import { cube, niceMax } from "./usage-cube.js";
+import { partsOf } from "./res-parts.js";
 
 const BAYS = [
   ["needs-you", "Needs you"],
@@ -3364,26 +3365,86 @@ function ResGroup({ g, colorOf, open, onToggle, peak }) {
     </div>`;
 }
 
+function ResTile({ label, value, rows, of, say, peakAt }) {
+  const box = useRef();
+  const [at, setAt] = useState(null);
+  const pts = rows.map((r) => ({ t: r.t, v: of(r) }));
+  const now = Date.now() / 1000, t0 = Math.max(now - RES_PANE_HOURS * 3600, pts[0]?.t ?? 0);
+  const top = Math.max(1, ...pts.map((p) => p.v));
+  const x = (t) => ((t - t0) / (now - t0)) * 100;
+  const y = (v) => 24 - (v / top) * 22;
+  const parts = [[]];
+  pts.forEach((p, i) => { if (i && p.t - pts[i - 1].t > 300) parts.push([]); parts[parts.length - 1].push(p); });
+  const drawn = parts.filter((part) => part.length > 1);
+  const pick = (e) => {
+    const b = box.current.getBoundingClientRect(), t = t0 + ((e.clientX - b.left) / b.width) * (now - t0);
+    setAt(pts.reduce((best, p) => (Math.abs(p.t - t) < Math.abs(best.t - t) ? p : best), pts[0]));
+  };
+  const peak = pts.length ? pts.reduce((a, p) => (p.v > a.v ? p : a), pts[0]) : null;
+  const clock = (t) => resClock(t, 0);
+  return html`
+    <div class="rt">
+      <span class="l">${label}</span>
+      <b>${value}</b>
+      ${drawn.length > 0 && html`<div class="spark" ref=${box} role="img" aria-label=${`${label} over the last ${RES_PANE_HOURS} hours, highest ${say(peak.v)} at ${clock(peak.t)}`}
+        onPointerMove=${pick} onPointerDown=${pick} onPointerLeave=${() => setAt(null)}>
+        <svg viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true">
+          ${drawn.map((part) => html`
+            <path class="a" d=${`M${x(part[0].t)} 24L${part.map((p) => `${x(p.t).toFixed(2)} ${y(p.v).toFixed(2)}`).join("L")}L${x(part[part.length - 1].t)} 24Z`} />
+            <path class="n" d=${`M${part.map((p) => `${x(p.t).toFixed(2)} ${y(p.v).toFixed(2)}`).join("L")}`} />`)}
+        </svg>
+        ${at && html`<i style=${`left:${x(at.t)}%`}></i>`}
+      </div>`}
+      <span class="s">${at ? `${clock(at.t)}, ${say(at.v)}` : peak && drawn.length > 0 ? `peak ${say(peak.v)} at ${clock(peak.t)}` : ""}</span>
+    </div>`;
+}
+
+const RES_PANE_HOURS = 6;
+const RES_OWN_PARTS = new Set(["Claude", "Browser tool", "atc tools"]);
+
 function SessionResources({ s }) {
   const [rep, setRep] = useState(null);
+  const [raw, setRaw] = useState([]);
+  const [tree, setTree] = useState(false);
+  const key = keyOf(s);
+  const q = s.host ? `&host=${encodeURIComponent(s.host)}` : "";
   useEffect(() => {
-    const load = () => document.visibilityState === "visible" && api(`/api/resources${s.host ? `?host=${encodeURIComponent(s.host)}` : ""}`).then(setRep, () => {});
+    const load = () => document.visibilityState === "visible" && api(`/api/resources?${q.slice(1)}`).then(setRep, () => {});
     load();
     const t = setInterval(load, 10000);
     return () => clearInterval(t);
-  }, [s.host]);
+  }, [q]);
+  useEffect(() => {
+    const load = () => document.visibilityState === "visible" && api(`/api/resources/history?hours=${RES_PANE_HOURS}&key=${encodeURIComponent(key)}${q}`).then(setRaw, () => {});
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [key, q]);
+  const rows = useMemo(() => (raw || []).map((r) => ({ t: r.t, g: (r.g || [])[0] })).filter((r) => r.g), [raw]);
   if (!rep) return null;
-  const mine = (g) => g.key === keyOf(s) || (g.sessionId && g.sessionId === s.sessionId);
+  const mine = (g) => g.key === key || (g.sessionId && g.sessionId === s.sessionId);
   const g = (rep.sessions || []).find(mine) || (rep.left || []).find(mine);
   if (!g) return null;
-  const disk = (rep.disk || []).filter((d) => d.sessions?.includes(s.title));
+  const parts = partsOf(g.procs || []);
+  const disk = (rep.disk || []).filter((d) => d.sessions?.includes(s.title) && d.size >= 100 * 2 ** 20);
   return html`
-    <section class="sres"><h3>Resources</h3>
-      <p class="now">${gb(g.mem)}, ${Math.round(g.cpu)}% CPU, ${procCount(g.count)}${g.read + g.write >= 1024 ? `, ${ioShort(g.read, g.write)} disk` : ""}</p>
+    <section class="sres">
+      <div class="sresh"><h3>Resources</h3><a href=${RESOURCES}>All on ${s.host || "this machine"}</a></div>
       ${g.kind === "left" && html`<p class="rnote">This session ended and these kept running.</p>`}
-      <${ResTree} procs=${g.procs || []} />
-      ${disk.map((d) => html`<p class="rnote">${tilde(d.path)} holds ${gb(d.size)}</p>`)}
-      <a class="link" href=${RESOURCES}>Every session on ${s.host || "this machine"}</a>
+      <div class="rts">
+        <${ResTile} label="Memory" value=${gb(g.mem)} rows=${rows} of=${(r) => r.g.m} say=${gb} />
+        <${ResTile} label="CPU" value=${`${Math.round(g.cpu)}%`} rows=${rows} of=${(r) => r.g.c} say=${(c) => `${Math.round(c)}%`} />
+      </div>
+      <ul class="rparts">${parts.map((p) => html`
+        <li>
+          <div class="ln"><b>${p.name}</b>${p.cpu >= 1 && html`<span class="c">${Math.round(p.cpu)}%</span>`}<span class="m">${gb(p.mem)}</span></div>
+          <i class="bar"><i style=${`width:${g.mem ? Math.max(1, (p.mem / g.mem) * 100) : 0}%`}></i></i>
+          ${!RES_OWN_PARTS.has(p.name) && html`<div class="dt">${[p.port && `:${p.port}`, p.folder, p.procs.length > 1 && procCount(p.procs.length), p.age > 0 && `up ${span(p.age)}`].filter(Boolean).join(", ")}</div>`}
+        </li>`)}</ul>
+      ${g.read + g.write >= 1024 && html`<p class="rline"><span>Disk now</span><b>${ioShort(g.read, g.write)}</b></p>`}
+      ${disk.map((d) => html`<p class="rline" title=${d.path}><span>${d.path.split("/").pop()} on disk</span><b>${gb(d.size)}</b></p>`)}
+      <button class="kb rtgl" aria-expanded=${tree} onClick=${() => setTree((x) => !x)}>${tree ? "Hide processes" : `Show ${procCount(g.count)}`}</button>
+      ${tree && html`<${ResTree} procs=${g.procs || []} />`}
     </section>`;
 }
 

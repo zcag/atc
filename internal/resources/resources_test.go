@@ -124,6 +124,21 @@ func TestNoHistoryBeforeSessionsAreKnown(t *testing.T) {
 	}
 }
 
+func TestScrub(t *testing.T) {
+	for in, want := range map[string]string{
+		"npm exec x --cdp-header Authorization: Bearer a3f5c9 --flag": "npm exec x --cdp-header Authorization: Bearer *** --flag",
+		"curl --token abc123 http://x":                                "curl --token *** http://x",
+		"app --api-key=sk-123 run":                                    "app --api-key=*** run",
+		"mysql --password=hunter2 db":                                 "mysql --password=*** db",
+		"puma 6.4.3 (tcp://0.0.0.0:3020) [wt-42]":                   "puma 6.4.3 (tcp://0.0.0.0:3020) [wt-42]",
+		"rspec spec/token_spec.rb":                                    "rspec spec/token_spec.rb",
+	} {
+		if got := scrub(in); got != want {
+			t.Errorf("%q: got %q", in, got)
+		}
+	}
+}
+
 func TestSessionEnv(t *testing.T) {
 	job, sess := sessionEnv([]byte("A=1\x00CLAUDE_JOB_DIR=/h/.claude/jobs/7de3376e\x00CLAUDE_CODE_SESSION_ID=7de3-x\x00"))
 	if job != "7de3376e" || sess != "7de3-x" {
@@ -165,7 +180,10 @@ func TestHistoryRoundTripAndThin(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	rows := readRows(dir, base.Add(-time.Minute), time.Now())
+	if got := readRows(dir, base.Add(-time.Minute), time.Now(), "nobody"); len(got) != 0 {
+		t.Fatalf("key filter kept %d rows", len(got))
+	}
+	rows := readRows(dir, base.Add(-time.Minute), time.Now(), "a")
 	if len(rows) != 10 {
 		t.Fatalf("read %d rows", len(rows))
 	}

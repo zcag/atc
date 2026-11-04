@@ -6,7 +6,9 @@ import (
 	"context"
 	"log"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -335,7 +337,7 @@ func (s *Sampler) aggregate(procs map[int]*proc, targets []Target, now time.Time
 			g = s.newGroup(p, byKey)
 			groups[id] = g
 		}
-		pr := Process{PID: p.pid, PPID: p.ppid, Name: p.name(), Cmd: clip(p.args, 240), Mem: p.mem()}
+		pr := Process{PID: p.pid, PPID: p.ppid, Name: p.name(), Cmd: clip(scrub(p.args), 240), Mem: p.mem()}
 		if s.sc.boot > 0 && p.start > 0 {
 			pr.Age = max(now.Unix()-s.sc.boot-int64(float64(p.start)/clockTick), 0)
 		}
@@ -446,6 +448,13 @@ func (s *Sampler) outsideName(key string) (string, string) {
 	return strings.TrimSuffix(strings.TrimSuffix(key, ".service"), ".scope"), ""
 }
 
+var secretArg = regexp.MustCompile(`(?i)(bearer\s+|(?:token|secret|password|passwd|pwd|api[-_]?key|auth)[-_a-z]*[=:\s]\s*(?:bearer\s+)?)[^\s"']+`)
+
+// scrub hides what command lines often carry, since they end up on screen and in agents' transcripts.
+func scrub(args string) string {
+	return secretArg.ReplaceAllString(args, "${1}***")
+}
+
 func clip(s string, n int) string {
 	if len(s) > n {
 		return s[:n] + "…"
@@ -492,10 +501,17 @@ func (s *Sampler) Load(key string) *Load {
 	return nil
 }
 
-func (s *Sampler) History(d time.Duration) []Row {
+// History is the machine's rows, or with a key only that session's, which is far less to send.
+func (s *Sampler) History(d time.Duration, key string) []Row {
 	if s.Dir == "" {
 		return nil
 	}
 	now := time.Now()
-	return thin(readRows(s.Dir, now.Add(-d), now), maxPoints)
+	rows := readRows(s.Dir, now.Add(-d), now, key)
+	if key != "" {
+		for i := range rows {
+			rows[i].Groups = slices.DeleteFunc(rows[i].Groups, func(g RowGroup) bool { return g.Key != key })
+		}
+	}
+	return thin(rows, maxPoints)
 }
