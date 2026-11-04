@@ -19,7 +19,20 @@ import (
 //go:embed *.md lines.json
 var builtin embed.FS
 
-var Dir string
+var (
+	Dir string
+	// User and Assistant name the two in the built-in text ({{user}}, {{assistant}}, and capitalized at a sentence's
+	// start); a file in Dir is the user's own words and is left as written.
+	User, Assistant string
+)
+
+func named(s string) string {
+	user, assistant := strings.ReplaceAll(User, "%", ""), strings.ReplaceAll(Assistant, "%", "")
+	return strings.NewReplacer(
+		"{{user}}", cmp.Or(user, "the user"), "{{User}}", cmp.Or(user, "The user"),
+		"{{assistant}}", cmp.Or(assistant, "the assistant"), "{{Assistant}}", cmp.Or(assistant, "The assistant"),
+	).Replace(s)
+}
 
 func Text(name string) string {
 	if Dir != "" {
@@ -28,13 +41,13 @@ func Text(name string) string {
 		}
 	}
 	b, _ := builtin.ReadFile(name + ".md")
-	return strings.TrimSpace(string(b))
+	return named(strings.TrimSpace(string(b)))
 }
 
 func lines() map[string]string {
 	out := map[string]string{}
 	b, _ := builtin.ReadFile("lines.json")
-	json.Unmarshal(b, &out)
+	json.Unmarshal([]byte(named(string(b))), &out)
 	if Dir != "" {
 		if b, err := os.ReadFile(filepath.Join(Dir, "lines.json")); err == nil {
 			json.Unmarshal(b, &out)

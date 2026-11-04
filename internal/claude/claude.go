@@ -54,7 +54,7 @@ func (c CLI) run(ctx context.Context, dir string, args ...string) (string, error
 		return s, ErrUntrusted
 	}
 	if err != nil {
-		return s, fmt.Errorf("claude %s: %v: %s", args[0], err, s)
+		return s, fmt.Errorf("claude %s: %w: %s", args[0], err, s)
 	}
 	return s, nil
 }

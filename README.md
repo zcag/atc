@@ -22,9 +22,30 @@ resumed.
 
 ## Requirements
 
-- A Claude Code recent enough to have background sessions (`claude --bg --help` works), signed in
+- Claude Code 2.1.139 or newer, the first with background sessions and `claude agents`, signed in
   on the machine that runs atc.
 - Go 1.26 to build.
+
+## Check what is set up
+
+`atc doctor [-json]` lists what each feature needs and how it stands, with the fix beside anything not working and what it
+costs (a GPU, a paid key, plan tokens). Settings shows the same list, and the page opens on it when Claude Code is missing or
+signed out. The list is one registry in the code (`internal/caps`), and each check really probes: it runs `claude --version`
+and `claude agents --json`, and calls each service with a short timeout. Optional and never set up is quiet; something
+set up that stopped working warns. Doctor exits 1 only when something required is missing or something set up is broken.
+`atc version` prints the build.
+
+Settings can be kept in `settings.json` in the config folder (`~/.config/atc/`), which Settings' Save writes, with the file
+mode private because it can hold keys. The API never returns a secret in clear. A variable in the environment always wins
+over it, so an existing `env` file keeps working as it is:
+
+```json
+{"user": "Ada", "assistant": "Sam", "language": "en", "env": {"ATC_BROWSER": "http://127.0.0.1:9222"}}
+```
+
+`user` and `assistant` fill `{{user}}` and `{{assistant}}` in the built-in prompts (`{{User}}` and `{{Assistant}}` at a
+sentence's start), "the user" and "the assistant" without them; your own files in `~/.config/atc/modes` are never touched.
+`language` is the default for `ATC_STT_LANGUAGE`. atc reads all of it when it starts, and says when something waits for a restart.
 
 ## Install
 

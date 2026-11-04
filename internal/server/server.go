@@ -16,6 +16,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -27,6 +28,7 @@ import (
 	"github.com/zcag/atc/internal/attach"
 	"github.com/zcag/atc/internal/backlog"
 	"github.com/zcag/atc/internal/browser"
+	"github.com/zcag/atc/internal/caps"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/hub"
@@ -36,6 +38,7 @@ import (
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/resources"
 	"github.com/zcag/atc/internal/sessions"
+	"github.com/zcag/atc/internal/settings"
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/usage"
 	"github.com/zcag/atc/internal/whatsapp"
@@ -61,7 +64,12 @@ type Server struct {
 	// AgentsDir holds a folder per agent; every machine reads it and runs the ones naming it.
 	AgentsDir string
 	Engines   []Engine
-	Voice     Voice
+	// Settings is settings.json, and Version this build; capsRunner keeps the feature checks' results briefly.
+	Settings   *settings.Settings
+	Version    string
+	capsRunner caps.Runner
+	aloneAt    string
+	Voice      Voice
 
 	WhatsApp *whatsapp.Client
 	Hub      *hub.Client
@@ -238,6 +246,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/bays", s.getBays)
 	mux.HandleFunc("PUT /api/bays", s.putBays)
 	mux.HandleFunc("PATCH /api/bays/{bay}", s.patchBay)
+	mux.HandleFunc("GET /api/caps", s.capsList)
+	mux.HandleFunc("POST /api/caps/{id}/test", s.capsTest)
+	mux.HandleFunc("PUT /api/settings", s.putSettings)
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/push/register", s.pushRegister)
@@ -575,6 +586,10 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	list, err := s.liveAll(r.Context(), r.URL.Query().Get("local") != "")
+	if errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist) {
+		http.Error(w, "Claude Code is not installed on this machine: atc doctor says how to set it up", http.StatusServiceUnavailable)
+		return
+	}
 	if err != nil {
 		fail(w, err)
 		return

@@ -35,6 +35,7 @@ import (
 	"github.com/zcag/atc/internal/resources"
 	"github.com/zcag/atc/internal/server"
 	"github.com/zcag/atc/internal/sessions"
+	"github.com/zcag/atc/internal/settings"
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/summary"
 	"github.com/zcag/atc/internal/tools"
@@ -53,6 +54,8 @@ SERVER
       ($ATC_SUMMARY_MODEL), or an OpenAI-compatible model at $ATC_SUMMARY_URL;
       ATC_SUMMARY=off turns it off.
   atc token                      print this machine's server token
+  atc version                    this build
+  atc doctor [-json]             what each feature needs, how it stands and the fix; atc doctor -h
 
 CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc                            browse, start and attach in a terminal UI
@@ -125,8 +128,23 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
 unique piece of the title.
 `
 
+var conf *settings.Settings
+
+func loadSettings() {
+	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+		settings.EnvFile(filepath.Join(client.ConfigDir(), "env"))
+	}
+	var err error
+	if conf, err = settings.Apply(client.ConfigDir()); err != nil {
+		log.Printf("atc: %s: %v", conf.Path(), err)
+	}
+	f, _ := conf.Load()
+	modes.User, modes.Assistant = f.User, f.Assistant
+}
+
 func main() {
 	log.SetFlags(0)
+	loadSettings()
 	if len(os.Args) < 2 {
 		if !term.IsTerminal(int(os.Stdout.Fd())) {
 			fmt.Print(usage)
@@ -142,6 +160,10 @@ func main() {
 	switch cmd {
 	case "serve":
 		err = serve(args)
+	case "version", "--version":
+		fmt.Println("atc", versionString())
+	case "doctor":
+		err = doctor(args)
 	case "token":
 		var tok string
 		if tok, err = serverToken(); err == nil {
@@ -256,9 +278,11 @@ func serve(args []string) error {
 	index := history.New(filepath.Join(claude.ConfigDir(), "projects"))
 	index.Forks, index.Price = claude.Forks, server.Priced
 	srv := &server.Server{
-		Term: &attach.Hub{Bin: bin},
-		Web:  web.FS,
-		Host: strings.Split(host, ".")[0],
+		Term:     &attach.Hub{Bin: bin},
+		Web:      web.FS,
+		Host:     strings.Split(host, ".")[0],
+		Settings: conf,
+		Version:  versionString(),
 		M: &sessions.Manager{
 			CLI:     cli,
 			Index:   index,

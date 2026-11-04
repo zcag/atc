@@ -76,6 +76,13 @@ func SaveLogin(u, token string) error {
 	return os.WriteFile(loginPath(), b, 0o600)
 }
 
+// Caps asks the server for the feature list, briefly: `atc doctor` does the checks itself when no server answers.
+func (c *Client) Caps(out any) error {
+	short := *c
+	short.http = &http.Client{Timeout: 10 * time.Second}
+	return short.do("GET", "/api/caps", nil, out)
+}
+
 func (c *Client) do(method, path string, body, out any) error {
 	var rd io.Reader
 	if body != nil {
