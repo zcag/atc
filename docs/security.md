@@ -18,9 +18,12 @@ the same.
   lasts 10 minutes. The device claims it and gets a token of its own, kept hashed on the server, with
   its last seen time and Revoke. Revoking also ends that device's live streams and terminals. Claims
   are rate limited by address. A pairing can also carry the server's certificate fingerprint, so the
-  new device pins it and refuses anything else.
-- **Tailscale, opt-in:** with `ATC_TRUST_TAILNET=1`, requests from devices on your own tailnet need
-  no token. atc checks each with `tailscale whois`. Revoking a device in Settings does not stop that.
+  new device pins it and refuses anything else. A device token opens the same API as the server
+  token, with no scopes: the difference is that it can be revoked.
+- **Tailscale, opt-in:** with `ATC_TRUST_TAILNET=1`, requests from devices of your own Tailscale user
+  need no token. atc checks each with `tailscale whois`. That trusts the device, not a person: any
+  program or other user on it gets a full login. Revoking a device in Settings does not stop that;
+  removing it from your tailnet does. Requests a browser marks as cross-site are refused.
 - **Behind a proxy:** with `ATC_TRUSTED_PROXIES` (CIDR list) atc takes the client's address from the
   forwarded header of those proxies only. It matters for the tailnet check and the claim rate limit.
 - **`atc serve -no-auth`** turns the token off. Use it only behind something else that authenticates.
@@ -49,16 +52,58 @@ is logged. Declare only commands that are safe with any arguments: see [Pages](p
 ## Sessions and approval
 
 A message from another session is not your approval. atc tells every session that through its tools'
-instructions. Only the assistant can mark a message as your go-ahead (`approved`), and atc refuses
-that flag from any other session: see
-[Sessions driving sessions](sessions.md#sessions-talking-to-each-other). These are instructions to
-Claude rather than a sandbox: what a session can really do is set by Claude Code's permissions.
+instructions. atc's own tools and `atc send` set `approved` only for the assistant: see
+[Sessions driving sessions](sessions.md#sessions-talking-to-each-other). None of this is a sandbox:
+what a session can really do is set by Claude Code's permissions, and the next section says what
+follows from that.
+
+## What atc does not enforce
+
+The server checks none of what follows. The first two hold only while Claude follows its instructions
+and the sender uses atc's client; the rest are what a login means.
+
+- **The approval line is text.** "relays the user's own go-ahead" is the last line of a message, added
+  and refused in atc's client (`internal/client/self.go`), not by the server, and what acts on it is
+  the receiving Claude reading it. Any session with a shell can read your token (`~/.config/atc/token`)
+  and post a message that ends in that line. A session
+  talked into it by something it read can therefore approve work in another session.
+- **Guest isolation is the same kind of thing.** The guests' conversation is kept apart by its brief,
+  `--strict-mcp-config` (no MCP servers but atc's) and the name check in `atc wa`. It runs as your user,
+  so a shell that Claude Code's permissions allow it reaches your files and your atc login. A guest's
+  words are followed by an end marker, so they can't be a message's last line; that stops a guest from
+  writing the approval line, not from persuading Claude.
+- **A page's `atc.run` does not ask.** A page can run the actions its session declared, with any
+  arguments, as soon as it is open. Only `atc.send` asks you first. Pages show text nobody vetted, so
+  an action is as safe as the worst arguments it can be given.
+- **A device token equals the server token.** A paired phone can read every session, type into them
+  and pair more devices. A lost device stays that powerful until you revoke it.
+- **The hub has no login.** It listens on `127.0.0.1:8820` by default, and whatever reaches it speaks
+  to the assistant as you. It refuses web pages (a request with an `Origin` or `Sec-Fetch-Site` header,
+  or addressed to a dotted host name), so a browser on the machine can't reach it, but any program or
+  local user can. Pointing `ATC_HUB_ADDR` at anything but loopback hands that to the network.
+
+## The phone app
+
+The app gives the page native powers (start a call, read what was shared to it, the widget's feed,
+open and copy files with your login). They reach only frames of the server's own origin: every frame
+sees one object that does nothing without a per-WebView secret, and that secret is injected only into
+those frames, so sandboxed pages and other sites get nothing. A WebView too old to inject by origin
+gets no bridge at all and the page runs as it would in a browser: no native call, no share target, no
+widget feed. Whoever controls the server still controls the page, and so these powers.
+
+An update is installed only if `version.json` names a path on the server, and the file is this app
+(same package name) signed by the certificate of the installed app. The checksum only catches a damaged
+download, since it comes from the same server. A server can't push another app or another signer's
+build, though it can offer any newer build you signed.
 
 ## Secrets at rest
 
 `settings.json` and `env` hold whatever keys you put there, with private file modes; the API never
-returns a secret in clear. Secrets in command lines are hidden on the resources screens. Transcripts,
-summaries and pages stay on the machine that made them, and on any device that opens them.
+returns a secret in clear. Secrets in command lines are hidden on the resources screens, but other
+local users can still read a command line with `ps`, so atc keeps its own token out of the ones it
+starts: `atc browser mcp` gives Playwright a private file that is removed once Playwright has answered.
+The one left is yours to type: `atc login <url> <token>` shows the token in `ps` while it runs.
+Transcripts, summaries and pages stay on the machine that made them, and on any device that opens them.
 
 ## Reporting a problem
 

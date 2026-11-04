@@ -64,6 +64,7 @@ or `start` (`-approved` on `atc send`), and atc adds "relays the user's own go-a
 sender line, so the session merges, pushes or deploys without asking you again. atc writes that
 line itself and only when the sender is the hub session (`kind` "hub", which atc's server sets), and
 refuses `approved` from any other session; the instructions tell receivers that only the line at the
-very end counts, not the same words inside the message.
+very end counts, not the same words inside the message. This is atc's client and Claude's
+instructions, not a check on the server: see [what atc does not enforce](security.md#what-atc-does-not-enforce).
 
 Sessions open in a terminal can be read but not typed into. A session never sends to itself.

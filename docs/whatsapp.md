@@ -77,7 +77,8 @@ them as sessions in `~/guests/<name>`, which report back to it.
 What needs you it brings to the assistant with `report`; the assistant asks you on whatever channel
 you are on and passes your yes back with `send @guests` and `approved`. Only the assistant can mark a
 message as your go-ahead (atc refuses `approved` from any other session, the guests' conversation
-included), so nothing a guest says can approve anything. Its Claude loads only atc's MCP
+included), so nothing a guest says can approve anything as long as its Claude follows its brief: see
+[what atc does not enforce](security.md#what-atc-does-not-enforce). Its Claude loads only atc's MCP
 (`--strict-mcp-config`): no WhatsApp, mail or browser of yours. In atc it shows under `@agents`,
 sessions in `~/guests` group under one **guests** project and stay out of the full list unless one
 needs you, and none of it pushes to your phone. It needs the hub.
