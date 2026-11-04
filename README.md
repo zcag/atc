@@ -9,6 +9,11 @@ One install serves one user. atc runs on the machine where your sessions live, a
 
 atc is an independent project. It is not affiliated with or endorsed by Anthropic.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/board-dark.png">
+  <img src="docs/img/board-light.png" alt="The session board: sessions from three projects grouped by waiting on you, working and parked, with a status line, context used and age for each">
+</picture>
+
 ## What it does with Claude Code
 
 atc needs Claude Code installed and your own sign-in to it, on the machine atc runs on. It brings no
@@ -43,16 +48,35 @@ With Claude Code signed in, these work right after install:
 
 ## Screenshots
 
-Still to be added:
+These come from a demo with made-up sessions (`test/demo/run.sh`).
 
-- The session list on a desktop with needs-you, your-turn and working sessions.
-- The same list on a phone.
-- A session's transcript with its story and badges.
-- A session's terminal in the browser.
-- The usage page.
-- Settings on the feature list, with one row not set up.
-- A page shown beside a conversation.
-- The call screen.
+A transcript, with the diff of one edit open under the steps of a turn:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/transcript-dark.png">
+  <img src="docs/img/transcript-light.png" alt="A session's transcript: a word-level diff, tests passed, a build, a page and a commit, followed by the agent's reply">
+</picture>
+
+A page the agent made, beside the conversation:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/page-dark.png">
+  <img src="docs/img/page-light.png" alt="A report page with figures and a table, open next to the conversation that produced it">
+</picture>
+
+Settings lists what is set up, and says how to set up what is not:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/settings-dark.png">
+  <img src="docs/img/settings-light.png" alt="The Core feature list in Settings: three rows working, and the HTTPS address row not set up, open to show its fix and a field for the address">
+</picture>
+
+The board at phone width, which is also the Android app:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/phone-dark.png">
+  <img src="docs/img/phone-light.png" width="300" alt="The session board at phone width, with sessions waiting on you listed first">
+</picture>
 
 ## Install
 
