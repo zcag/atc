@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -214,10 +215,43 @@ func (s *Server) localAgent(ref string) bool {
 // owner is who a session's pages belong to: its agent, so every conversation it has shows the
 // same pages, or the session itself.
 func (s *Server) owner(sid string) string {
+	sid = s.fullID(sid)
 	if a := s.M.Store.Get(sid).Agent; a != "" {
 		return agentRef + a
 	}
 	return sid
+}
+
+var shortID = regexp.MustCompile(`^[0-9a-f]{8}(-[0-9a-f-]*)?$`)
+
+// fullID expands a short session id against everything atc still knows, not just what is live, so
+// a link keeps working after its session has ended. Ambiguous or unknown refs come back unchanged.
+func (s *Server) fullID(ref string) string {
+	if len(ref) >= 36 || !shortID.MatchString(ref) {
+		return ref
+	}
+	ids := map[string]bool{}
+	add := func(id string) {
+		if strings.HasPrefix(id, ref) {
+			ids[id] = true
+		}
+	}
+	for _, id := range s.Pages.Owners() {
+		add(id)
+	}
+	for _, id := range s.M.Store.Find(func(id string, _ store.Meta) bool { return strings.HasPrefix(id, ref) }) {
+		add(id)
+	}
+	for _, t := range s.M.Index.Scan() {
+		add(t.SessionID)
+	}
+	if len(ids) != 1 {
+		return ref
+	}
+	for id := range ids {
+		ref = id
+	}
+	return ref
 }
 
 func (s *Server) agentLock(name string) *sync.Mutex {

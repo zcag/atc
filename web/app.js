@@ -3657,6 +3657,7 @@ const pageInfo = (p) => p.gone ? "file is gone" : `${KIND_LABEL[p.kind] || "Page
 const pageLink = (sid, name) => `#/s/${sid}/p/${encodeURIComponent(name)}`;
 const aloneLink = (sid, name) => `#/p/${sid}/${encodeURIComponent(name)}`;
 const linkSlug = (t) => (t || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+const unstamped = (t) => linkSlug(t).replace(/-\d\d-\d\d-\d\d-\d\d$/, "");
 const ownerRef = (p, s) => (p.session.startsWith("@") ? p.session : linkSlug(s?.title || p.of) || p.session);
 const idRef = (r) => r.startsWith("@") || /^[0-9a-f]{8}(-[0-9a-f-]*)?$/.test(r);
 const splitRef = (r) => { const i = (r || "").indexOf("#"); return i < 0 ? [r, null] : [r.slice(0, i), r.slice(i + 1)]; };
@@ -4599,8 +4600,9 @@ function PageAlone({ sid: ref, name, at, live, say }) {
   useEffect(() => {
     if (idRef(ref)) return;
     api("/api/pages").then((l) => {
-      const p = (l || []).filter((p) => p.name === name && linkSlug(p.of) === linkSlug(ref))
-        .sort((a, b) => !!a.gone - !!b.gone || new Date(b.shown) - new Date(a.shown))[0];
+      const slug = linkSlug(ref), exact = (p) => linkSlug(p.of) === slug;
+      const p = (l || []).filter((p) => p.name === name && (exact(p) || unstamped(p.of) === slug))
+        .sort((a, b) => !!a.gone - !!b.gone || exact(b) - exact(a) || new Date(b.shown) - new Date(a.shown))[0];
       setHit(p ? p.session : ref);
     }, () => setHit(ref));
   }, [ref, name]);
@@ -4621,7 +4623,7 @@ function PageOf({ sid, via, name, at, live, say }) {
     return () => clearInterval(t);
   }, [sid, !!s]);
   const list = s ? [browserPage(s), ...(s.shown || [])].filter(Boolean) : Array.isArray(got) ? got : [];
-  const owner = s || { sessionId: sid, title: list[0]?.of || "", state: "past" };
+  const owner = s || { sessionId: list[0]?.session || sid, title: list[0]?.of || "", state: "past" };
   const back = () => (s ? (location.hash = pageLink(sid, name)) : (location.hash = pagesHash()));
   return html`
     <div class="palone">

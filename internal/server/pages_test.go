@@ -8,8 +8,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/sessions"
+	"github.com/zcag/atc/internal/store"
 )
 
 func TestShowPage(t *testing.T) {
@@ -191,5 +193,43 @@ func TestPageToPhone(t *testing.T) {
 	}
 	if res, body := do(t, "POST", ts.URL+"/api/pages/phone", "tok", `{"session":"l1","name":"handover"}`); res.StatusCode != 404 || !strings.Contains(body, "phone") {
 		t.Fatalf("no phone registered: %d %s", res.StatusCode, body)
+	}
+}
+
+func TestShortIDFindsEndedSession(t *testing.T) {
+	ts := newTestServer(t, nil, Voice{})
+	file := filepath.Join(t.TempDir(), "a.html")
+	os.WriteFile(file, []byte("a"), 0o644)
+	const full = "9a1a7724-b3a8-435f-91b9-9cd3be3fabb2"
+	for _, sid := range []string{full, "77770000-0000-4000-8000-000000000001", "77770000-0000-4000-8000-000000000002"} {
+		if res, body := do(t, "POST", ts.URL+"/api/sessions/"+sid+"/pages", "tok", `{"path":"`+file+`","name":"a"}`); res.StatusCode != 200 {
+			t.Fatalf("show: %d %s", res.StatusCode, body)
+		}
+	}
+
+	for _, ref := range []string{"9a1a7724", "9a1a7724-b3a8", full} {
+		var got []pages.Page
+		_, body := get(t, ts.URL+"/api/sessions/"+ref+"/pages", "tok")
+		json.Unmarshal([]byte(body), &got)
+		if len(got) != 1 || got[0].Session != full {
+			t.Fatalf("pages of %s: %s", ref, body)
+		}
+	}
+	if res, _ := do(t, "PUT", ts.URL+"/api/sessions/9a1a7724/pages/a/state", "tok", `{"n":1}`); res.StatusCode != 200 {
+		t.Fatalf("state through the short id: %d", res.StatusCode)
+	}
+	if _, body := get(t, ts.URL+"/api/sessions/"+full+"/pages/a/state", "tok"); body != `{"n":1}` {
+		t.Fatalf("state landed elsewhere: %s", body)
+	}
+	if _, body := get(t, ts.URL+"/api/sessions/77770000/pages", "tok"); strings.TrimSpace(body) != "null" {
+		t.Fatalf("an ambiguous short id picked one: %s", body)
+	}
+
+	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
+	st.Update(full, func(m *store.Meta) { m.Agent = "ops" })
+	s := &Server{M: &sessions.Manager{Index: history.New(t.TempDir()), Store: st}}
+	s.Pages, _ = pages.Open("")
+	if got := s.owner("9a1a7724"); got != "@ops" {
+		t.Fatalf("short id of an agent's conversation: %q", got)
 	}
 }

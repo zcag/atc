@@ -6,6 +6,7 @@ import (
 	"html"
 	"io"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -175,6 +176,12 @@ func (st *Store) Of(sid string) []Page {
 	list := append([]Page(nil), st.s.Pages[sid]...)
 	st.mu.Unlock()
 	return st.fill(list)
+}
+
+func (st *Store) Owners() []string {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	return slices.Collect(maps.Keys(st.s.Pages))
 }
 
 func (st *Store) Get(sid, name string) (Page, bool) {
