@@ -45,7 +45,57 @@
 
 .setpage .rsample { margin: var(--s4) 0 0; padding: var(--s4); border-radius: var(--r-md); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); text-wrap: pretty; box-sizing: content-box; }
 
+.setpage .capsum { margin: 0 0 var(--s4); padding: var(--s2) var(--s3); border-radius: var(--r-md); background: var(--needs-wash); box-shadow: inset 0 0 0 1px var(--needs); color: var(--ink); font-size: var(--fs-ui); }
+.setpage .capsum a, .setpage .capneeds a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.setpage .capmachines { margin-top: var(--s6); }
+.setpage .caprestart { margin-top: var(--s4); padding: var(--s3); border-radius: var(--r-md); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line); }
+.setpage .caprestart p { margin: 0 0 var(--s2); font-size: var(--fs-ui); color: var(--ink); }
+.setpage .capmsg { margin: var(--s2) 0; font-size: var(--fs-small); color: var(--dim); }
+.setpage .capmsg.bad { color: var(--fail); }
+.setpage .btn { height: var(--btn-h); padding: 0 var(--s3); display: inline-flex; align-items: center; border: 0; border-radius: var(--r-sm); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink); font-size: var(--fs-ui); font-weight: 500; white-space: nowrap; }
+.setpage .btn:hover:not(:disabled) { background: var(--strip-hi); }
+.setpage .btn.primary { background: var(--ink); color: var(--strip); box-shadow: none; font-weight: 600; }
+.setpage .btn:disabled { opacity: .5; }
+
+.setpage .caprow { padding: var(--s2) 0 var(--s3); border-bottom: 1px solid var(--hair); scroll-margin-top: var(--s4); }
+.setpage .caphd { display: flex; align-items: center; gap: var(--s2); width: 100%; min-height: var(--btn-h); padding: 0; border: 0; background: none; color: var(--ink); text-align: left; }
+.setpage .caphd b { flex: 1; min-width: 0; font-size: var(--fs-ui); font-weight: 600; }
+.setpage .caphd .st { flex: none; font-size: var(--fs-small); color: var(--faint); }
+.setpage .caprow .mark { flex: none; width: 9px; height: 9px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--faint); }
+.setpage .caprow.ok .mark { background: var(--add); box-shadow: none; }
+.setpage .caprow.bad .mark { border-radius: 1px; background: var(--fail); box-shadow: none; }
+.setpage .caprow.bad .caphd .st { color: var(--fail); }
+.setpage .capd { margin: 0; padding-left: calc(9px + var(--s2)); max-width: 68ch; font-size: var(--fs-small); line-height: var(--lh-ui); color: var(--dim); overflow-wrap: anywhere; }
+.setpage .capd .tag { font-family: var(--mono); font-size: var(--fs-micro); color: var(--faint); }
+.setpage .capbody { padding: var(--s2) 0 0 calc(9px + var(--s2)); display: flex; flex-direction: column; gap: var(--s2); font-size: var(--fs-small); line-height: var(--lh-ui); color: var(--dim); min-width: 0; }
+.setpage .capbody p { margin: 0; max-width: 68ch; overflow-wrap: anywhere; }
+.setpage .capbody a { color: var(--ink); }
+.setpage .capbody p code { font-family: var(--mono); font-size: var(--fs-micro); color: var(--ink); }
+.setpage .capneeds .unmet { color: var(--fail); }
+.setpage .capfix { display: flex; flex-direction: column; gap: var(--s1); }
+.setpage .capcmd { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
+.setpage .capcmd code { flex: 1; min-width: 0; padding: var(--s1) var(--s2); border-radius: var(--r-sm); background: var(--code); font-family: var(--mono); font-size: var(--fs-small); color: var(--ink); overflow-wrap: anywhere; }
+.setpage .capfields { display: flex; flex-direction: column; gap: var(--s2); max-width: 520px; }
+.setpage .capfield { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-small); color: var(--ink); }
+.setpage .capfield input { height: var(--btn-h); min-width: 0; width: 100%; box-sizing: border-box; padding: 0 var(--s2); border: 0; border-radius: var(--r-sm); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink); font-family: var(--mono); font-size: var(--fs-small); outline: none; }
+.setpage .capfield input:focus { box-shadow: inset 0 0 0 2px var(--focus); }
+.setpage .capfield input:disabled { background: var(--sunk); color: var(--faint); }
+.setpage .capfield small { font-family: var(--mono); font-size: var(--fs-micro); color: var(--faint); overflow-wrap: anywhere; }
+.setpage .ident .capfield small { font-family: inherit; font-size: var(--fs-small); }
+.setpage .linkish { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--dim); font-size: var(--fs-small); text-decoration: underline; }
+.setpage .capbtns { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.setpage .capagain { margin-top: var(--s6); }
+.setpage .capbtns.end { justify-content: flex-end; margin-top: var(--s4); }
+.setpage h1 { margin: 0 0 var(--s2); font-size: var(--fs-4xl); font-weight: 650; color: var(--ink); }
+.setpage .capintro { margin: 0 0 var(--s3); max-width: 62ch; font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--dim); }
+.setup .pgbody { overflow-y: auto; }
+
 @media (max-width: 899px) {
+  .setpage .btn { height: var(--hit); padding: 0 var(--s4); }
+  .setpage .caphd { min-height: var(--hit); }
+  .setpage .capfield input { height: var(--hit); font-size: 16px; }
+  .setpage .capcmd { flex-direction: column; align-items: stretch; }
+  .setpage .capcmd .btn { align-self: flex-start; }
   .setpage { padding: var(--s4) var(--s4) var(--s7); }
   .setpage .set { grid-template-columns: minmax(0, 1fr); }
   .setpage .set > .ctl { grid-column: 1; grid-row: auto; justify-self: start; margin-top: var(--s2); }

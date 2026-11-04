@@ -184,7 +184,6 @@ body.docked .app { margin-right: 380px; }
 .hold .dial { position: absolute; right: var(--s4); top: -40px; width: 112px; height: 112px; display: grid; place-items: center; border-radius: 50%; background: var(--call-go); color: var(--on-accent); box-shadow: 0 0 0 6px var(--call-bg), 0 10px 28px color-mix(in oklab, var(--shade) 45%, transparent); transition: transform var(--t-fast), filter var(--t-fast); }
 .hold .dial:active { transform: scale(.96); filter: brightness(.9); }
 .hold .dial svg { width: 48px; height: 48px; }
-.hbase .nocall { position: absolute; right: var(--s4); top: 0; bottom: 0; width: 42%; margin: 0; display: flex; align-items: center; font-size: var(--fs-small); color: var(--dim); }
 .hkeys { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--line); }
 .hold .hkeys button { min-height: 56px; text-align: center; font-weight: 650; border-right: 1px solid var(--line); }
 .hold .hkeys button:last-child { border-right: 0; }

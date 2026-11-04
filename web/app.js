@@ -7,6 +7,7 @@ import { persona } from "./persona.js";
 import { minimal } from "./minimal.js";
 import { cube, niceMax } from "./usage-cube.js";
 import { partsOf } from "./res-parts.js";
+import { useCaps, useSetup, CapsBanner, CapsSections, SetupScreen } from "./caps.js";
 
 const BAYS = [
   ["needs-you", "Needs you"],
@@ -138,6 +139,8 @@ const engineTag = (s) => s.harness && s.kind !== "hub"
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
 const USAGE = "#/usage", RESOURCES = "#/resources", PAGES = "#/pages", SETTINGS = "#/settings";
+const inSettings = () => /^#\/settings(#|$)/.test(location.hash);
+const CALLS_ROW = `${SETTINGS}#calls`;
 const closeSettings = () => (history.length > 1 ? history.back() : location.replace("#/"));
 const pagesHash = (bay = BAY.only, sid, name) => `#/g/${bay ? encodeURIComponent(bay) : "all"}${sid ? `/${encodeURIComponent(sid)}/${encodeURIComponent(name)}` : ""}`;
 const pagesRoute = () => {
@@ -194,9 +197,9 @@ const callAssistant = () => {
   Call.dial();
   if (isPhone() && location.hash !== CALL) location.hash = CALL;
 };
-const NO_CALL = "Calls need atc's call line and a microphone. Set ATC_DELTA_CALL; \"Calling the user\" in atc's README has the rest.";
+const callOrSetup = () => (CAN_CALL ? callAssistant() : (location.hash = CALLS_ROW));
 const callAbout = (s, say) => {
-  if (!CAN_CALL) return say(NO_CALL);
+  if (!CAN_CALL) return void (location.hash = CALLS_ROW);
   api("/api/call/about", { method: "POST", body: { id: s.sessionId, title: s.title } }).catch((e) => say(`Could not tell the assistant which session: ${e.message}`));
   Call.live() ? returnToCall() : callAssistant();
 };
@@ -317,11 +320,12 @@ function App() {
   const [alone, setAlone] = useState(aloneRoute);
   const readPages = () => { if (location.hash === PAGES) history.replaceState(null, "", pagesHash()); return pagesRoute(); };
   const [pagesAt, setPagesAt] = useState(readPages);
-  const [settings, setSettings] = useState(location.hash === SETTINGS);
+  const [settings, setSettings] = useState(inSettings);
+  const setup = useSetup(me, api);
   const [calling, setCalling] = useState(location.hash === CALL);
   const [holding, setHolding] = useState(location.hash === HOLD);
   useEffect(() => {
-    const f = (e) => { if (location.hash === HOLD && e.oldURL) HOLD_FROM = new URL(e.oldURL).hash || "#/"; setHolding(location.hash === HOLD); setAssisting(fromCall() || location.hash === ASSIST); setCalling(location.hash === CALL); setScr(screenOf()); setAgentName(agentRoute()); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesAt(readPages()); setSettings(location.hash === SETTINGS); };
+    const f = (e) => { if (location.hash === HOLD && e.oldURL) HOLD_FROM = new URL(e.oldURL).hash || "#/"; setHolding(location.hash === HOLD); setAssisting(fromCall() || location.hash === ASSIST); setCalling(location.hash === CALL); setScr(screenOf()); setAgentName(agentRoute()); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesAt(readPages()); setSettings(inSettings()); };
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
@@ -485,7 +489,7 @@ function App() {
         "[": () => (k.route ? k.togglePane("rail") : k.pages && k.togglePane("pgindex")),
         "]": () => !k.route && k.list && k.togglePane("index"),
         z: () => k.toast?.undo && k.undo(),
-        ",": () => (location.hash === SETTINGS ? closeSettings() : (location.hash = SETTINGS)),
+        ",": () => (inSettings() ? closeSettings() : (location.hash = SETTINGS)),
         "/": () => setPalette(true),
         "?": () => setHelp((h) => !h),
       }[e.key];
@@ -517,8 +521,9 @@ function App() {
   LOOK.adopt(me.look);
   MULTI = (me.hosts || []).length > 1;
   HERE = me.host || "";
-  CAN_CALL = !!APP?.call || (!APP && !!me.call && Call.supported());
+  CAN_CALL = !!me.call && (!!APP?.call || (!APP && Call.supported()));
   const down = (me.peers || []).filter((p) => p.error);
+  if (setup.machine) return html`<${SetupScreen} machine=${setup.machine} check=${setup.check} skip=${setup.skip} ui=${{ ...capsUI(say), home: me.host }} />`;
 
   const all = runs || [];
   const sel = route && (all.find((s) => s.id === route || s.sessionId === route) || past[route]);
@@ -568,7 +573,7 @@ function App() {
       actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: openAssistant, ask: openAssistant,
         pane: togglePane, next: () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true })) }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
-    ${settings && html`<${SettingsPage} me=${me} onClose=${closeSettings} />`}
+    ${settings && html`<${SettingsPage} me=${me} say=${say} onClose=${closeSettings} />`}
     ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} at=${alone.at} live=${all} say=${say} />`}
     ${holding && html`<${Hold} live=${live} me=${me} down=${down} limits=${limits} say=${say} />`}
     ${calling ? html`<${CallScreen} hub=${hub} live=${all} />` : html`<${CallDock} hub=${hub} live=${all} assisting=${assistView} />`}
@@ -797,7 +802,7 @@ function Console({ hub, agents, runs, onTalk, onKeys }) {
       <span class="last">${hubLine(hub)}</span>
       ${hub && html`<span class="ago">${ago(hub)}</span>`}
       <button class="type" onClick=${onTalk}>talk to the assistant</button>
-      ${CAN_CALL && html`<button class="kb" onClick=${callAssistant}>Call</button>`}
+      <button class="kb" onClick=${callOrSetup}>Call</button>
       <${ConsoleAgents} agents=${agents} runs=${runs} />
       <${ResourceChip} />
       <button class="kb" onClick=${onKeys} aria-keyshortcuts="?">Keys <kbd aria-hidden="true">?</kbd></button>
@@ -1083,7 +1088,7 @@ function Hold({ live, me, down, limits, say }) {
   const [picked, setTab] = useState(null);
   const tab = picked || (wait.length || !work.length ? "wait" : "work");
   const shown = { wait, work, recent }[tab];
-  const call = () => CAN_CALL && callAssistant();
+  const call = callOrSetup;
   const to = (hash) => location.replace(hash);
   const sessions = () => { rememberBay(BAY.only, { view: "board" }); to("#/"); };
   const fresh = () => { to("#/"); NEW_SESSION(); };
@@ -1117,11 +1122,10 @@ function Hold({ live, me, down, limits, say }) {
     </div>
     <div class="hband">
       <div class="hbase">
-        <${HoldLine} wait=${wait.length} work=${work.length} end=${CAN_CALL ? 72 : 0} />
+        <${HoldLine} wait=${wait.length} work=${work.length} end=${72} />
         <button class="sess" onClick=${sessions}><b>Sessions</b><span class="c"><span class="a"><em>${wait.length}</em> waiting</span><span class="w"><em>${work.length}</em> working</span></span></button>
-        ${CAN_CALL ? html`<button class="dial" onClick=${call} aria-label="Call the assistant" aria-keyshortcuts=".">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.61 21 3 13.39 3 4c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg></button>`
-        : html`<p class="nocall">Calls need atc's call line and a microphone</p>`}
+        <button class="dial" onClick=${call} aria-label="Call the assistant" aria-keyshortcuts=".">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.61 21 3 13.39 3 4c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg></button>
       </div>
       <div class="hkeys">
         <button onClick=${() => to(ASSIST)}>Assistant</button><button onClick=${fresh}>New</button><button onClick=${() => to(pagesHash())}>Pages</button><button onClick=${() => to(BACKLOG)}>Backlog</button>
@@ -1149,7 +1153,7 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
     if (e.key === "Escape") return !docked && (closeAssistant(), true);
     if (e.key === "[") return (docked ? setLeftCall((v) => !v) : togglePane("aleft")), true;
     if (e.key !== "." || Call.live()) return false;
-    if (!e.repeat) CAN_CALL ? callAssistant() : say(NO_CALL);
+    if (!e.repeat) callOrSetup();
     return true;
   });
 
@@ -1174,7 +1178,7 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
   const cmp = {
     prompt: onCall ? html`<span class="apr call"><${CallMark} />${!docked && html`<${Trace} />`}</span>` : html`<span class="apr">assistant<span>></span></span>`,
     hint: onCall ? "Type while you talk" : phone ? "Ask the assistant" : "Start, steer or ask about any session",
-    doors: !onCall && CAN_CALL && html`<button class="kb cl" onClick=${callAssistant} aria-keyshortcuts=".">Call <kbd aria-hidden="true">.</kbd></button>`,
+    doors: !onCall && html`<button class="kb cl" onClick=${callOrSetup} aria-keyshortcuts=".">Call <kbd aria-hidden="true">.</kbd></button>`,
     top: strips,
   };
   return html`<div class="shell assistv assist ${left && !phone ? "" : "noleft"}">
@@ -1183,7 +1187,7 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
       <header class="ahd">
         ${hub ? html`<${StateBlock} s=${hub} />` : html`<span class="sb earlier" aria-hidden="true">E</span>`}
         <h1>Assistant</h1>
-        <span class="r">${phone ? html`<button class="kb" onClick=${() => setSheet(true)}>Today</button>`
+        <span class="r">${!hub && html`<button class="kb" onClick=${callOrSetup}>Call</button>`} ${phone ? html`<button class="kb" onClick=${() => setSheet(true)}>Today</button>`
           : html`<button class="kb" onClick=${closeAssistant} aria-keyshortcuts="Escape">Close <kbd aria-hidden="true">esc</kbd></button>`}</span>
         <p class="stat">${hubLine(hub)}</p>
       </header>
@@ -1284,7 +1288,7 @@ function CallPanel({ hub, live, captions, full, onMin }) {
         <button class="btn ${st.muted ? "on" : ""}" aria-pressed=${st.muted} onClick=${Call.mute} aria-keyshortcuts="m">${st.muted ? "Unmute" : "Mute"} <kbd aria-hidden="true">m</kbd></button>
         <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)} title="The character on the call, and the assistant's voice">Character</button>
         <button class="btn end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>`
-      : st.phase !== "ended" && html`${CAN_CALL && html`<button class="btn prime" onClick=${callAssistant}>Call the assistant</button>`}
+      : st.phase !== "ended" && html`<button class="btn prime" onClick=${callOrSetup}>Call the assistant</button>
         <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)}>Character</button>`}
     </div>
   </aside>`;
@@ -5170,7 +5174,11 @@ function Seg({ label, value, options, set }) {
     html`<button aria-pressed=${value === v} style=${style || ""} onClick=${() => set(v)}>${name}</button>`)}</span>`;
 }
 
-function SettingsPage({ me, onClose }) {
+const capsUI = (say) => ({ api, say, copyText, hostQ, go, Seg });
+
+function SettingsPage({ me, say, onClose }) {
+  const [caps, loadCaps] = useCaps(api);
+  const ui = { ...capsUI(say), home: me?.host };
   const [look, setLook] = useState({ scheme: LOOK.scheme, theme: LOOK.theme });
   const [colors, setColors] = useState(null);
   const [prefs, setPrefs] = useState(txPrefs.get);
@@ -5196,6 +5204,7 @@ function SettingsPage({ me, onClose }) {
         <div class="who"><h2>Settings</h2></div>
       </header>
       <div class="pgbody"><div class="setpage">
+        <${CapsBanner} rep=${caps} />
         <section id="appearance">
           <h2>Appearance <span class="n">one setting for every device</span></h2>
           <div class="set">
@@ -5243,9 +5252,10 @@ function SettingsPage({ me, onClose }) {
               <div class="ctl">${notif === "default" ? html`<button class="btn" onClick=${askNotif}>Turn on</button>` : html`<span class="fixed">${notif === "granted" ? "on" : "blocked"}</span>`}</div>
             </div>
           </section>`}
+        <${CapsSections} rep=${caps} reload=${loadCaps} ui=${ui} noMic=${!APP && !!me?.call && !Call.supported()} />
         <section id="about">
           <h2>About</h2>
-          <div class="set"><b>This atc</b><p>Build ${me?.web || "unknown"}${hosts ? `, sessions on ${hosts}` : ""}${APP_VERSION ? `; Android app ${APP_VERSION}` : ""}.</p></div>
+          <div class="set"><b>This atc</b><p>${caps?.machines?.[0]?.version ? `Version ${caps.machines[0].version}, build ` : "Build "}${me?.web || "unknown"}${hosts ? `, sessions on ${hosts}` : ""}${APP_VERSION ? `; Android app ${APP_VERSION}` : ""}.</p></div>
         </section>
       </div></div>
     </div>`;
@@ -6676,7 +6686,7 @@ function Palette({ live, sel, say, home, hosts, actions, onClose }) {
   action("Board", "b", "every session of this bay", () => { rememberBay(BAY.only, { view: "board" }); go(null); });
   action("Pages", "g", "every page your sessions showed you", () => (location.hash = pagesHash()), "shown html reports gallery");
   action("Assistant", ".", "your conversation with it", actions.ask, "ask chat switchboard");
-  if (CAN_CALL) action("Call the assistant", "", "a voice call", callAssistant, "phone voice");
+  action("Call the assistant", "", "a voice call", callOrSetup, "phone voice");
   action("All bays", "0", "the board across every bay", () => { BAY.set(null); go(null); });
   action("Next session that needs you", "n", "any bay, in bay order", actions.next);
   action("Usage", "", "limits, pace, cost per bay and session", actions.usage, "tokens cost week limits");
