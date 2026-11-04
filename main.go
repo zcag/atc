@@ -32,6 +32,7 @@ import (
 	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/report"
+	"github.com/zcag/atc/internal/resources"
 	"github.com/zcag/atc/internal/server"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
@@ -112,6 +113,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc usage [-json] [session]    plan limits and tokens per day; with a session, its tokens,
                                  models, turns and working time, with an estimated API cost
   atc limits [-json] [-short]    plan limits, one line each; -short fits a status line
+  atc top [-json] [-host name] [session]  memory, CPU and disk per session and what is left behind;
+                                 with a session, its processes
   atc limits -tap                record the limits from Claude Code's status line input (stdin),
                                  so atc shows them without asking Anthropic
 
@@ -184,6 +187,8 @@ func main() {
 		err = showUsage(args)
 	case "limits":
 		err = showLimits(args)
+	case "top":
+		err = showTop(args)
 	case "backlog":
 		err = backlogCmd(args)
 	case "resume", "stop", "rm", "rename", "pin", "unpin", "park", "unpark":
@@ -270,6 +275,7 @@ func serve(args []string) error {
 		AppDir:    os.Getenv("ATC_APP_DIR"),
 		AgentsDir: cmp.Or(os.Getenv("ATC_AGENTS"), "~/notes/agents"),
 		StateDir:  client.ConfigDir(),
+		Res:       resources.New(filepath.Join(client.ConfigDir(), "resources"), claude.ConfigDir()),
 		AssistDir: os.Getenv("ATC_ASSIST_DIR"),
 
 		TrustTailnet:   tailscaleBin(os.Getenv("ATC_TRUST_TAILNET")),

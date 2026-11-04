@@ -34,6 +34,7 @@ import (
 	"github.com/zcag/atc/internal/outputs"
 	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/push"
+	"github.com/zcag/atc/internal/resources"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/usage"
@@ -45,6 +46,7 @@ type Server struct {
 	agentMu map[string]*sync.Mutex
 	wakes   map[string]time.Time
 	M       *sessions.Manager
+	Res     *resources.Sampler
 	Term    *attach.Hub
 	Web     fs.FS
 	Token   string
@@ -146,6 +148,7 @@ func (s *Server) Handler() http.Handler {
 		s.startHub()
 	}
 	go s.poll()
+	s.startResources()
 	s.watchOpenCode()
 	go s.schedule()
 	go s.watchAgents()
@@ -196,6 +199,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/usage/windows", s.usageWindows)
 	mux.HandleFunc("GET /api/usage/spend", s.usageSpend)
 	mux.HandleFunc("GET /api/usage/report", s.usageReport)
+	mux.HandleFunc("GET /api/resources", s.resourcesNow)
+	mux.HandleFunc("GET /api/resources/history", s.resourcesHistory)
 	mux.HandleFunc("GET /api/sessions/{sid}/o/{tok}/{path...}", s.outputFile)
 	mux.HandleFunc("GET /api/sessions/{sid}/pages", s.sessionPages)
 	mux.HandleFunc("POST /api/sessions/{sid}/pages", s.showPage)
@@ -588,6 +593,7 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 	list = s.hubMark(ctx, list)
 	for i := range list {
 		list[i].Host = s.Host
+		list[i].Load = s.Res.Load(cmp.Or(list[i].ID, list[i].SessionID))
 		if list[i].PID > 0 {
 			for _, l := range s.M.Ports.Of(list[i].PID) {
 				if !l.LocalOnly {
@@ -1086,6 +1092,7 @@ func (s *Server) poll() {
 }
 
 func (s *Server) watch(list []sessions.Session) {
+	s.trackResources(list)
 	if s.rv == nil {
 		return
 	}

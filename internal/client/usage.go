@@ -6,6 +6,7 @@ import (
 
 	"github.com/zcag/atc/internal/outputs"
 	"github.com/zcag/atc/internal/pages"
+	"github.com/zcag/atc/internal/resources"
 	"github.com/zcag/atc/internal/usage"
 )
 
@@ -49,4 +50,12 @@ func (c *Client) Limits() (l usage.Limits, err error) {
 func (c *Client) Days(n int) ([]usage.Day, error) {
 	var r struct{ Days []usage.Day }
 	return r.Days, c.do("GET", fmt.Sprintf("/api/usage/report?days=%d", n), nil, &r)
+}
+
+func (c *Client) Resources(host string) (r resources.Report, err error) {
+	path := "/api/resources"
+	if host != "" {
+		path += "?host=" + url.QueryEscape(host)
+	}
+	return r, c.do("GET", path, nil, &r)
 }

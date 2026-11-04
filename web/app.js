@@ -138,7 +138,7 @@ const engineTag = (s) => s.harness && s.kind !== "hub"
   : (s.engine || local(s.model)) && html`<span class="eng" title=${`Runs on ${s.engine || s.model}, not Claude`}>${s.engine || model(s.model)}</span>`;
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
-const USAGE = "#/usage", PAGES = "#/pages", SETTINGS = "#/settings";
+const USAGE = "#/usage", RESOURCES = "#/resources", PAGES = "#/pages", SETTINGS = "#/settings";
 const closeSettings = () => (history.length > 1 ? history.back() : location.replace("#/"));
 const pagesHash = (bay = BAY.only, sid, name) => `#/g/${bay ? encodeURIComponent(bay) : "all"}${sid ? `/${encodeURIComponent(sid)}/${encodeURIComponent(name)}` : ""}`;
 const pagesRoute = () => {
@@ -149,8 +149,9 @@ const pagesRoute = () => {
 };
 let PAGES_FROM = null;
 const openUsage = () => { if (location.hash !== USAGE) location.hash = USAGE; };
-const SCREENS = { usage: "Usage", backlog: "Backlog", agents: "Agents" };
-const screenOf = () => location.hash === USAGE ? "usage" : location.hash === BACKLOG ? "backlog" : agentRoute() !== null ? "agents" : null;
+const openResources = () => { if (location.hash !== RESOURCES) location.hash = RESOURCES; };
+const SCREENS = { usage: "Usage", resources: "Resources", backlog: "Backlog", agents: "Agents" };
+const screenOf = () => location.hash === USAGE ? "usage" : location.hash === RESOURCES ? "resources" : location.hash === BACKLOG ? "backlog" : agentRoute() !== null ? "agents" : null;
 const closeScreen = () => { if (screenOf()) { rememberBay(BAY.only, { view: "board" }); go(null); } };
 
 function useRoute() {
@@ -532,6 +533,7 @@ function App() {
     ${assistView ? html`<${AssistantView} hub=${hub} live=${all} loaded=${!!runs} agents=${agents} say=${say} panes=${panes} togglePane=${togglePane} />`
     : pagesAt && !route ? html`<div class="shell pagesv"><${PagesView} at=${pagesAt} live=${all} bays=${bays} say=${say} index=${panes.pgindex !== false} /></div>`
     : scr && !route ? html`<main class="shell scr">${scr === "usage" ? html`<${UsagePage} limits=${limits} live=${all} down=${down} onOpen=${openFromUsage} />`
+      : scr === "resources" ? html`<${ResourcesPage} hosts=${(me.hosts || [me.host]).filter((h) => h)} home=${me.host} />`
       : scr === "backlog" ? html`<${BacklogPage} live=${all} say=${say} onAdd=${setCreating} only=${only} />`
       : html`<${AgentsPage} name=${agentName} agents=${agents} live=${all} say=${say} reload=${loadAgents} />`}</main>`
     : !route ? html`<div class="shell boardv"><${BoardView} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} say=${say} index=${panes.index && wide} /></div>` : html`
@@ -789,6 +791,7 @@ function Console({ hub, agents, runs, onTalk, onKeys }) {
       <button class="type" onClick=${onTalk}>talk to the assistant</button>
       ${CAN_CALL && html`<button class="kb" onClick=${callAssistant}>Call</button>`}
       <${ConsoleAgents} agents=${agents} runs=${runs} />
+      <${ResourceChip} />
       <button class="kb" onClick=${onKeys} aria-keyshortcuts="?">Keys <kbd aria-hidden="true">?</kbd></button>
     </footer>`;
 }
@@ -885,7 +888,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
     <button class=${cls} data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
       <${StateBlock} s=${s} />
       <span class="c">${title}<span class="s">${status}</span>${s.state === "working" && html`<span class="s2 mono">${doing(s)}</span>`}</span>
-      <span class="e"><span class="ago">${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}</span>
+      <span class="e"><span class="ago">${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}<${LoadTag} s=${s} /></span>
     </button>`;
   return html`
     <div class="bwrap ${open ? "open" : ""} ${g}">
@@ -894,7 +897,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
         <${StateBlock} s=${s} />
         <span class="ses"><a class="t" href=${`#/s/${keyOf(s)}`} onClick=${(e) => e.stopPropagation()}>${s.title || "Untitled"}</a>${where && html`<span class="w">${where}</span>`}</span>
         <span class="st"><span class="l1">${status}</span>${second && html`<span class="l2 ${s.state === "working" ? "mono" : ""}">${second}</span>`}</span>
-        <span class="ctx">${s.context > 0 && html`<${CtxMeter} n=${s.context} /><span>${Math.round(s.context / 1000)}k</span>`}</span>
+        <span class="ctx">${s.context > 0 && html`<${CtxMeter} n=${s.context} /><span>${Math.round(s.context / 1000)}k</span>`}<${LoadTag} s=${s} /></span>
         <span class="stp">${s.steps > 0 && s.steps}${s.failed > 0 && html`<span class="f">${s.failed} failed</span>`}</span>
         <span class="mk">${run.length > 0 && html`<span class="run">${run.join(" ")}</span>`}${made.length > 0 && html`<span>${made.join(" ")}</span>`}</span>
         <span class="since">${fresh && html`<i class="dot" aria-hidden="true"></i>`}${ago(s)}${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span>
@@ -1945,6 +1948,7 @@ function Session({ s, say, live, panes, togglePane }) {
   });
   const facts = [
     ["Context", s.context > 0 && `${Math.round(s.context / 1000)}k`],
+    ["Load", s.load && html`<a href=${RESOURCES}>${shortLoad(s.load)}</a>`],
     ["Cost", use?.total > 0 && html`<button class="link" onClick=${() => setShowUse(true)}>${usd(use.cost)}</button>`],
     ["Steps", s.steps > 0 && `${s.steps}${s.failed > 0 ? `, ${s.failed} failed` : ""}`],
     ["Model", engineTag(s) || (s.model && model(s.model))],
@@ -3229,6 +3233,254 @@ function HoursMap({ days, hourly, range, filtered }) {
         <b>${atCost > 0 ? usd(atCost) : "nothing"}</b>
         <span class="scale">less ${[0.14, 0.3, 0.5, 0.7, 0.9].map((o) => html`<i style=${`opacity:${o}`}></i>`)} more, max ${usd(hmax)} an hour</span></div>`}
     </section>`;
+}
+
+const gb = (n) => n >= 2 ** 30 ? `${(n / 2 ** 30).toFixed(n >= 100 * 2 ** 30 ? 0 : 1)} GB` : n >= 2 ** 20 ? `${Math.round(n / 2 ** 20)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${Math.round(n || 0)} B`;
+const ioRate = (r, w) => (r + w) < 1024 ? "" : `${gb(r)}/s read, ${gb(w)}/s written`;
+const ioShort = (r, w) => (r + w) < 1024 ? "" : `${gb(r + w)}/s`;
+const shortLoad = (l) => [l.mem > 0 && `${(l.mem / 2 ** 30).toFixed(1)}G`, l.cpu > 0 && `${l.cpu}%`].filter(Boolean).join(" ");
+const hotLoad = (l) => l.mem >= 4 * 2 ** 30 || l.cpu >= 300;
+const LoadTag = ({ s }) => s.load ? html`<span class="load ${hotLoad(s.load) ? "hot" : ""}" title=${`This session and its processes: ${[s.load.mem > 0 && gb(s.load.mem), s.load.cpu > 0 && `${s.load.cpu}% of a core`].filter(Boolean).join(", ")}`}>${shortLoad(s.load)}</span>` : null;
+
+const RES_RANGES = [["1h", 1], ["6h", 6], ["24h", 24], ["7d", 168]];
+const RES_SERIES = 5;
+const resId = (g) => `${g.o}/${g.k}`;
+
+function resRows(raw) {
+  return (raw || []).map((r) => ({ ...r, by: new Map((r.g || []).map((g) => [resId(g), g])) }));
+}
+
+function resSeries(rows) {
+  const seen = new Map();
+  for (const r of rows) {
+    for (const g of r.g || []) {
+      const x = seen.get(resId(g)) || { id: resId(g), title: g.l || g.k, kind: g.o, peak: 0, cpu: 0 };
+      x.peak = Math.max(x.peak, g.m);
+      x.cpu += g.c / rows.length;
+      if (g.l) x.title = g.l;
+      seen.set(x.id, x);
+    }
+  }
+  const last = rows[rows.length - 1];
+  const score = (x) => x.peak / (last?.total || 1) + x.cpu / (100 * (last?.cores || 1));
+  const all = [...seen.values()].sort((a, b) => score(b) - score(a));
+  return { all: new Map(all.map((x) => [x.id, x])), top: all.slice(0, RES_SERIES).sort((a, b) => a.id.localeCompare(b.id)).map((x, i) => ({ ...x, color: `var(--series-${i + 1})` })) };
+}
+
+function ResChart({ name, rows, series, of, whole, max, say, tick, hours, t0, t1, at, onAt, onPin, pinned }) {
+  const box = useRef();
+  const W = 1000, H = 100;
+  const x = (t) => ((t - t0) / (t1 - t0)) * W;
+  const y = (v) => H - (Math.min(v, max) / max) * H;
+  const step = rows.length > 1 ? (rows[rows.length - 1].t - rows[0].t) / (rows.length - 1) : 60;
+  const parts = [[]];
+  rows.forEach((r, i) => {
+    if (i && r.t - rows[i - 1].t > Math.max(step * 3, 180)) parts.push([]);
+    parts[parts.length - 1].push(r);
+  });
+  const area = (part, lo, hi) => part.length < 2 ? "" : `M${part.map((r) => `${x(r.t).toFixed(1)} ${y(hi(r)).toFixed(2)}`).join("L")}L${[...part].reverse().map((r) => `${x(r.t).toFixed(1)} ${y(lo(r)).toFixed(2)}`).join("L")}Z`;
+  const under = (r, n) => { let v = 0; for (let i = 0; i < n; i++) v += of(r.by.get(series[i].id)); return v; };
+  const near = (e) => {
+    const b = box.current.getBoundingClientRect();
+    const t = t0 + ((e.clientX - b.left) / b.width) * (t1 - t0);
+    let best = -1, d = Infinity;
+    rows.forEach((r, i) => { const n = Math.abs(r.t - t); if (n < d) { d = n; best = i; } });
+    return best;
+  };
+  const cur = at != null ? rows[at] : null;
+  return html`
+    <div class="rchart">
+      <div class="rc-h"><b>${name}</b><span>${cur ? `${resClock(cur.t, hours)}  ${say(whole(cur))}` : ""}</span></div>
+      <div class="rc-p">
+        <div class="rc-ax"><span>${tick(max)}</span><span>${tick(max / 2)}</span><span></span></div>
+        <div class="rc-plot" ref=${box} role="img" aria-label=${`${name} over time, by session. The table below has the numbers.`}
+          onPointerMove=${(e) => matchMedia("(hover: hover)").matches && onAt(near(e))} onPointerLeave=${() => onAt(null)} onClick=${(e) => onPin(near(e))}>
+          <svg viewBox=${`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true">
+            ${parts.map((part) => html`
+              ${series.map((s, i) => html`<path d=${area(part, (r) => under(r, i), (r) => under(r, i + 1))} fill=${s.color} />`)}
+              <path class="rest" d=${area(part, (r) => under(r, series.length), (r) => Math.max(whole(r), under(r, series.length)))} />`)}
+          </svg>
+          ${cur && html`<i class="rc-x" style=${`left:${(x(cur.t) / W) * 100}%`}></i>`}
+          ${pinned != null && rows[pinned] && html`<i class="rc-x pin" style=${`left:${(x(rows[pinned].t) / W) * 100}%`}></i>`}
+        </div>
+      </div>
+    </div>`;
+}
+
+function resClock(t, hours) {
+  const d = new Date(t * 1000);
+  return d.toLocaleString("en-GB", hours > 24 ? { weekday: "short", hour: "2-digit", minute: "2-digit" } : { hour: "2-digit", minute: "2-digit" });
+}
+
+function ResTree({ procs }) {
+  const has = new Set(procs.map((p) => p.pid));
+  const kids = new Map();
+  for (const p of procs) {
+    const up = has.has(p.ppid) ? p.ppid : 0;
+    kids.set(up, [...(kids.get(up) || []), p]);
+  }
+  const out = [];
+  const walk = (pid, depth) => { for (const p of (kids.get(pid) || []).sort((a, b) => b.mem - a.mem)) { out.push([p, depth]); walk(p.pid, depth + 1); } };
+  walk(0, 0);
+  return html`<div class="rtree">${out.map(([p, depth]) => html`
+    <div class="rp" title=${p.cmd}>
+      <span class="n" style=${`padding-left:${Math.min(depth, 6) * 12}px`}>${p.name}<small>${p.pid}</small></span>
+      <span class="m">${gb(p.mem)}</span><span class="c">${Math.round(p.cpu)}%</span><span class="a">${p.age > 0 ? span(p.age) : ""}</span>
+      <span class="cmd">${p.cmd}</span>
+    </div>`)}</div>`;
+}
+
+function ResGroup({ g, colorOf, open, onToggle, peak }) {
+  const color = colorOf(`${g.kind}/${g.key}`);
+  const tops = g.top || [];
+  const link = g.kind === "session" ? `#/s/${g.key}` : g.sessionId ? `#/s/${g.sessionId}` : null;
+  const expandable = g.procs?.length > 0;
+  return html`
+    <div class="rg ${open ? "open" : ""}">
+      <div class="rrow" role=${expandable ? "button" : null} tabindex=${expandable ? 0 : null} aria-expanded=${expandable ? open : null}
+        onClick=${expandable ? onToggle : null} onKeyDown=${(e) => expandable && e.key === "Enter" && e.target === e.currentTarget && onToggle()}>
+        <span class="who">
+          <span class="t">${color && html`<i class="umsw" style=${`background:${color}`}></i>`}${link ? html`<a href=${link} onClick=${(e) => e.stopPropagation()}>${g.title}</a>` : html`<b>${g.title}</b>`}</span>
+          <span class="s">${g.detail ? tilde(g.detail) : tops.slice(0, 3).map((t) => `${t.n} ${gb(t.m)}`).join(", ")}</span>
+        </span>
+        <span class="v">${gb(g.mem)}</span>
+        <span class="v">${Math.round(g.cpu)}%</span>
+        <span class="v wide" title=${ioRate(g.read, g.write)}>${ioShort(g.read, g.write)}</span>
+        <span class="v wide">${g.count || ""}</span>
+        <span class="v wide peak">${peak ? gb(peak) : ""}</span>
+      </div>
+      ${open && expandable && html`
+        ${g.rssOnly && html`<p class="rnote">Each process here shows resident memory, which counts shared memory in every process, so they add up to more than the group's total.</p>`}
+        <${ResTree} procs=${g.procs} />`}
+    </div>`;
+}
+
+const RES_SORT = { mem: ["Memory", (g) => g.mem], cpu: ["CPU", (g) => g.cpu], io: ["Disk", (g) => g.read + g.write] };
+
+function ResSection({ title, note, groups, colorOf, peaks, sort, opened, toggle, warn, tail }) {
+  if (!groups.length) return null;
+  return html`
+    <section class="sec rsec ${warn ? "warn" : ""}">
+      <div class="sh"><h2>${warn && html`<span class="rflag" aria-hidden="true">!</span>`}${title}</h2>${note && html`<span class="n">${note}</span>`}</div>
+      <div class="rrow rhead" aria-hidden="true"><span></span><span class="v">Memory</span><span class="v">CPU</span><span class="v wide">Disk</span><span class="v wide">Procs</span><span class="v wide">Peak</span></div>
+      ${[...groups].sort((a, b) => RES_SORT[sort][1](b) - RES_SORT[sort][1](a)).map((g) => html`<${ResGroup} key=${g.kind + g.key} g=${g} colorOf=${colorOf} peak=${peaks.get(`${g.kind}/${g.key}`)} open=${opened === g.kind + g.key} onToggle=${() => toggle(g.kind + g.key)} />`)}
+      ${tail}
+    </section>`;
+}
+
+function ResourcesPage({ hosts, home }) {
+  const [v, setV] = useState(() => ({ range: "6h", sort: "mem", ...stored("atc.resources", {}) }));
+  const set = (p) => setV((x) => { const n = { ...x, ...p }; store("atc.resources", n); return n; });
+  const host = hosts.includes(v.host) ? v.host : home;
+  const hours = (RES_RANGES.find((r) => r[0] === v.range) || RES_RANGES[1])[1];
+  const [rep, setRep] = useState(null);
+  const [err, setErr] = useState(null);
+  const [raw, setRaw] = useState(null);
+  const [hover, setHover] = useState(null);
+  const [pin, setPin] = useState(null);
+  const [opened, setOpened] = useState(null);
+  const q = host === home ? "" : `host=${encodeURIComponent(host)}`;
+  useEffect(() => {
+    setRep(null); setErr(null);
+    const load = () => document.visibilityState === "visible" && api(`/api/resources${q && `?${q}`}`).then((r) => { setRep(r); setErr(null); }, (e) => setErr(e.message || "unreachable"));
+    load();
+    const t = setInterval(load, 10000);
+    return () => clearInterval(t);
+  }, [q]);
+  useEffect(() => {
+    setPin(null); setHover(null);
+    const load = () => document.visibilityState === "visible" && api(`/api/resources/history?hours=${hours}${q && `&${q}`}`).then(setRaw, () => {});
+    load();
+    const t = setInterval(load, 60000);
+    return () => clearInterval(t);
+  }, [q, hours]);
+  const rows = useMemo(() => resRows(raw), [raw]);
+  const { all, top } = useMemo(() => resSeries(rows), [rows]);
+  const colorOf = (id) => top.find((s) => s.id === id)?.color;
+  const peaks = useMemo(() => new Map([...all.values()].map((x) => [x.id, x.peak])), [all]);
+  const m = rep?.machine;
+  const now = rep ? Date.parse(rep.at) / 1000 : Date.now() / 1000;
+  const t0 = now - hours * 3600;
+  const moment = pin != null && rows[pin] ? rows[pin] : null;
+  const shown = hover ?? pin;
+  const cores = m?.cores || rows[rows.length - 1]?.cores || 1;
+  const total = m?.memTotal || rows[rows.length - 1]?.total || 1;
+  const past = moment && (moment.g || []).map((g) => ({ key: g.k, kind: g.o, title: g.l || g.k, cpu: g.c, mem: g.m, read: g.r || 0, write: g.w || 0, top: g.p }));
+  const named = (g) => ({ ...g, top: g.top || resTops(g.procs) });
+  const groupsOf = (kind) => (past ? past.filter((g) => g.kind === kind) : ((kind === "session" ? rep?.sessions : kind === "left" ? rep?.left : rep?.outside) || []).map(named));
+  const sessions = groupsOf("session"), left = groupsOf("left"), outside = groupsOf("outside");
+  const sum = (l) => l.reduce((a, g) => a + g.mem, 0);
+  const toggle = (id) => setOpened((x) => (x === id ? null : id));
+  const disk = m?.disks?.[0];
+  const pressure = m?.pressure > 0 ? `${m.pressure.toFixed(1)}%` : "0%";
+  const kpis = m ? [
+    { l: "Memory", big: true, v: `${gb(m.memUsed)} of ${gb(m.memTotal)}`, s: `sessions ${gb(sum(rep.sessions))}${rep.left.length ? `, left behind ${gb(sum(rep.left))}` : ""}, rest ${gb(Math.max(0, m.memUsed - sum(rep.sessions) - sum(rep.left)))}` },
+    { l: "CPU", v: `${Math.round(m.cpu / cores)}%`, s: `of ${m.cores} cores, load ${m.load.toFixed(1)}` },
+    { l: "Waiting on memory", v: pressure, s: "of the last minute" },
+    m.swapTotal > 0 && { l: "Swap", v: gb(m.swapUsed), s: `of ${gb(m.swapTotal)}` },
+    disk && { l: "Disk", v: `${gb(disk.size - disk.used)} free`, s: `of ${gb(disk.size)}${m.read + m.write >= 1024 ? `, ${gb(m.read + m.write)}/s now` : ""}` },
+  ].filter(Boolean) : [];
+  const status = err ? `${host} did not answer: ${err}` : !rep ? "Measuring…" : !rep.at || !Date.parse(rep.at) ? "Measuring…"
+    : rep.left.length ? `${gb(sum(rep.left))} still running after its session ended` : `${plural(rep.sessions.length, "session")} using ${gb(sum(rep.sessions))}`;
+  return html`
+    <section class="scrpane usage res" aria-label="Resources">
+      <header class="hd">
+        <div class="l1"><h1>Resources</h1><span class="where">${host}</span></div>
+        <div class="l2 no-block"><span class="stat">${status}</span>
+          ${rep?.cost > 0 && html`<span class="rd"><span class="l">measuring takes</span>${Math.round(rep.cost * 1000)} ms every 10 s</span>`}</div>
+      </header>
+      <div class="scroll"><div class="ubody">
+        <div class="sec rtools">
+          ${hosts.length > 1 && html`<span class="seg" role="group" aria-label="Machine">${hosts.map((h) => html`<button aria-pressed=${h === host} onClick=${() => { set({ host: h }); setOpened(null); }}>${h}</button>`)}</span>`}
+          <span class="seg" role="group" aria-label="Range">${RES_RANGES.map(([k]) => html`<button aria-pressed=${k === v.range} onClick=${() => set({ range: k })}>${k}</button>`)}</span>
+          <span class="seg" role="group" aria-label="Sort by">${Object.entries(RES_SORT).map(([k, [n]]) => html`<button aria-pressed=${k === v.sort} onClick=${() => set({ sort: k })}>${n}</button>`)}</span>
+        </div>
+        ${kpis.length > 0 && html`<div class="sec ukpis">${kpis.map((k) => html`<div class="ukpi ${k.big ? "big" : ""}"><span class="l">${k.l}</span><b>${k.v}</b><span class="s">${k.s}</span></div>`)}</div>`}
+        <section class="sec rcharts">
+          ${rows.length < 2 ? html`<p class="none">History starts now: a point a minute, kept for a week.</p>` : html`
+            <${ResChart} name="Memory" rows=${rows} series=${top} of=${(g) => g?.m || 0} whole=${(r) => r.mem} max=${total} say=${gb} tick=${(n) => `${Math.round(n / 2 ** 30)} GB`} hours=${hours} t0=${t0} t1=${now} at=${shown} onAt=${setHover} onPin=${(i) => setPin((p) => (p === i ? null : i))} pinned=${pin} />
+            <${ResChart} name="CPU" rows=${rows} series=${top} of=${(g) => g?.c || 0} whole=${(r) => r.cpu} max=${cores * 100} say=${(c) => `${(c / 100).toFixed(1)} cores`} tick=${(c) => `${Math.round(c / 100)} cores`} hours=${hours} t0=${t0} t1=${now} at=${shown} onAt=${setHover} onPin=${(i) => setPin((p) => (p === i ? null : i))} pinned=${pin} />
+            <div class="rc-t" aria-hidden="true"><span>${resClock(t0, hours)}</span><span>${resClock((t0 + now) / 2, hours)}</span><span>now</span></div>
+            <div class="ulegend rleg">${top.map((s) => html`<span><i class="umsw" style=${`background:${s.color}`}></i>${s.title}</span>`)}<span><i class="umsw rest"></i>everything else</span></div>`}
+        </section>
+        ${moment ? html`<p class="sec rat"><b>At ${resClock(moment.t, hours)}</b> Only what used over 500 MB or 10% of a core is kept per minute. <button class="btn" onClick=${() => setPin(null)}>Back to now</button></p>`
+          : rows.length > 1 && html`<p class="sec rat quiet">${touch ? "Tap" : "Click"} a chart to see who was using what at that moment.</p>`}
+        <${ResSection} warn title="Left behind" note="Their session ended, these kept running." groups=${left} colorOf=${colorOf} peaks=${peaks} sort=${v.sort} opened=${opened} toggle=${toggle} />
+        <${ResSection} title="Sessions" note="Each with every process it started. Memory is each process's own share, so shared pages are not counted twice." groups=${sessions} colorOf=${colorOf} peaks=${peaks} sort=${v.sort} opened=${opened} toggle=${toggle} />
+        <${ResSection} title="Outside sessions" note="Containers and services, by cgroup." groups=${outside} colorOf=${colorOf} peaks=${peaks} sort=${v.sort} opened=${opened} toggle=${toggle}
+          tail=${!moment && rep?.rest?.count > 0 && html`<p class="rnote">And ${plural(rep.rest.count, "more process")}: ${gb(rep.rest.mem)}, ${Math.round(rep.rest.cpu)}% CPU.</p>`} />
+        ${!moment && rep?.disk?.length > 0 && html`
+          <section class="sec rsec rdisk">
+            <div class="sh"><h2>On disk</h2><span class="n">Repos and worktrees sessions work in, plus Claude's own files. Added up every hour${rep.diskAt ? `, last ${agoLong(rep.diskAt)}` : ""}.</span></div>
+            ${rep.disk.filter((d) => d.size >= 2 ** 20).slice(0, 24).map((d) => html`
+              <div class="rd-row"><span class="who"><span class="t mono">${tilde(d.path)}</span><span class="s">${d.kind === "claude" ? "Claude Code" : d.sessions?.length ? d.sessions.join(", ") : `${d.kind}, no session in it`}</span></span><span class="v">${gb(d.size)}</span></div>`)}
+          </section>`}
+      </div></div>
+    </section>`;
+}
+
+function resTops(procs = []) {
+  const by = new Map();
+  for (const p of procs) by.set(p.name, (by.get(p.name) || 0) + p.mem);
+  return [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, m]) => ({ n, m }));
+}
+
+function useMachineBrief() {
+  const [b, setB] = useState(null);
+  useEffect(() => {
+    const load = () => document.visibilityState === "visible" && api("/api/resources?brief=1").then(setB, () => {});
+    load();
+    const t = setInterval(load, 30000);
+    return () => clearInterval(t);
+  }, []);
+  return b;
+}
+
+function ResourceChip() {
+  const b = useMachineBrief();
+  if (!b?.machine?.memTotal) return null;
+  const pct = Math.round((b.machine.memUsed / b.machine.memTotal) * 100);
+  return html`<button class="kb reschip" onClick=${openResources} title=${`Memory ${gb(b.machine.memUsed)} of ${gb(b.machine.memTotal)}, CPU ${Math.round(b.machine.cpu / b.machine.cores)}%`}>mem ${pct}%${b.left > 0 ? html`<span class="lb">${b.left} left behind</span>` : ""}</button>`;
 }
 
 function UsagePage({ limits, live, down, onOpen }) {
@@ -6567,6 +6819,7 @@ function Palette({ live, sel, say, home, hosts, actions, onClose }) {
   action("All bays", "0", "the board across every bay", () => { BAY.set(null); go(null); });
   action("Next session that needs you", "n", "any bay, in bay order", actions.next);
   action("Usage", "", "limits, pace, cost per bay and session", actions.usage, "tokens cost week limits");
+  action("Resources", "", "memory, CPU and disk per session, and what ended sessions left running", openResources, "ram cpu disk processes top memory load");
   action("Backlog", "", "future tasks of this bay", () => (location.hash = BACKLOG), "later todo tasks ideas");
   action("New backlog item", "", "put a task aside for later", () => actions.create({ later: true }), "later todo task add put");
   action("Agents", "", "standing agents and what they keep", () => (location.hash = AGENTS_ROUTE), "tracker standing");

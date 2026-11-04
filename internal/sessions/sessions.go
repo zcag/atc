@@ -18,6 +18,7 @@ import (
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/outputs"
 	"github.com/zcag/atc/internal/pages"
+	"github.com/zcag/atc/internal/resources"
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/summary"
 )
@@ -73,6 +74,7 @@ type Session struct {
 	Root           string           `json:"root,omitempty"`
 	ReportsTo      string           `json:"reportsTo,omitempty"`
 	Retired        bool             `json:"retired,omitempty"`
+	Load           *resources.Load  `json:"load,omitempty"`
 }
 
 var retiredHub = regexp.MustCompile(`^(assistant|whatsapp) (\d\d-\d\d \d\d:\d\d|\(continued as [0-9a-f]+\))$`)

@@ -129,6 +129,8 @@ atc state 2 inbox                                # a page's state as JSON; -set 
 atc usage                                        # plan limits and tokens per day
 atc usage 2                                      # one session's tokens, turns and estimated cost
 atc limits -short                                # session 4% · week 73% · resets 28m
+atc top                                          # memory, CPU, disk per session, and what ended sessions left running
+atc top shop                                     # one session's processes
 ```
 
 Commands that print something take `-json`. `atc limits -short` is one line, for a status line or
@@ -581,6 +583,30 @@ down: input, output and cache tokens, models, turns, tool calls, subagents (whic
 in their own transcripts), wall time and how long Claude was working. The cost is what the same
 tokens would cost at Claude API list prices, an estimate for comparison, since a subscription is
 not billed per token.
+
+## Resources
+
+**Resources** (command palette, or `mem` in the console line) shows what agents cost each machine;
+`atc top` prints the same. Every 10 seconds atc attributes every process to one of:
+
+- **a session**: the Claude process and everything below it, found through the process tree.
+- **left behind**: still running after its session ended. A process that lost its parent still
+  names its session in `CLAUDE_JOB_DIR`, `CLAUDE_CODE_SESSION_ID` or a job folder in its arguments,
+  and its children inherit that. Anything else in Claude's systemd scope that is not Claude counts
+  too, as "Session unknown".
+- **outside**: containers and services, one row per cgroup.
+
+Memory is PSS for sessions, so a page shared by ten processes counts a tenth in each; for outside
+rows it is the cgroup's own count minus reclaimable cache (what `docker stats` shows), since
+Postgres's RSS would add up to more than the machine has. CPU includes children that have already
+exited, through the kernel's `cutime`, so a test run that came and went between two samples still
+counts. Disk rates cover processes alive at the sample. On macOS there is no `/proc`: memory is RSS,
+and disk rates and orphan attribution by environment are missing.
+
+A point a minute goes to `~/.config/atc/resources/`, kept for a week, with the biggest processes of
+anything over 500 MB or 10% of a core. Clicking a chart shows that moment. Disk use of the repos and
+worktrees sessions work in is added up hourly at idle priority. A session's row carries its load only
+over 1 GB or a full core.
 
 ## One session that runs the others
 
