@@ -98,7 +98,7 @@ type Row struct {
 }
 
 // Timeout bounds one check, so the list never waits longer than this for anything.
-const Timeout = 4 * time.Second
+const Timeout = 8 * time.Second
 
 const ttl = 15 * time.Second
 
