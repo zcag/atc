@@ -91,7 +91,8 @@ those frames, so sandboxed pages and other sites get nothing. A WebView too old 
 gets no bridge at all and the page runs as it would in a browser: no native call, no share target, no
 widget feed. Whoever controls the server still controls the page, and so these powers. Only the main
 frame can open an outside app by navigating, and a file shared to the app sits at a random path that
-only `shared()` gives out.
+only `shared()` gives out. A page opened as the app's whole screen, rather than in a frame, can still
+send you to an outside app (a `tel:` link opens the dialer, say) without a tap.
 
 An update is installed only if `version.json` names a path on the server, and the file is this app
 (same package name) signed by the certificate of the installed app. The checksum only catches a damaged
