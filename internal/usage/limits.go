@@ -85,7 +85,7 @@ func (c *LimitsClient) Get(ctx context.Context) Limits {
 			json.Unmarshal(b, &c.last)
 		}
 	}
-	if now := time.Now(); now.After(c.until) {
+	if now := time.Now(); c.usesLogin() && now.After(c.until) {
 		l, wait, err := c.fetch(ctx)
 		c.last.Plan = cmp.Or(l.Plan, c.last.Plan)
 		if err == nil {
@@ -102,6 +102,12 @@ func (c *LimitsClient) Get(ctx context.Context) Limits {
 		}
 	}
 	return c.merged(time.Now())
+}
+
+// usesLogin is whether atc may read Claude Code's own sign-in to ask for the limits itself. Off by default: Claude Code
+// hands the limits to its status line (atc limits -tap), which needs no token.
+func (c *LimitsClient) usesLogin() bool {
+	return c.Creds != nil || os.Getenv("ATC_LIMITS_LOGIN") == "1"
 }
 
 func (c *LimitsClient) merged(now time.Time) Limits {
