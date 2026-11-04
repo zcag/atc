@@ -115,6 +115,7 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc wa [--file F]... [--render F.html]... [--voice TEXT] [--poll Q --option A...] [text...]
                                  send the user files, a rendered page, a voice note, a poll or text on
                                  WhatsApp, from the account atc answers them on; atc wa -h
+  atc app update                 download the latest Android app for phones to install from this server
   atc setup                      guided first run: who you are, limits, tools, reaching atc from other devices
   atc service install|uninstall|status
                                  run atc and the assistant's hub as services of your user
@@ -197,6 +198,8 @@ func main() {
 		err = attachTo(args)
 	case "send":
 		err = sendTo(args)
+	case "app":
+		err = appCmd(args)
 	case "setup":
 		err = setupCmd(args)
 	case "service":
@@ -320,7 +323,7 @@ func serve(args []string) error {
 		PublicURL:    strings.TrimRight(os.Getenv("ATC_PUBLIC_URL"), "/"),
 		LocalURL:     loopback(*addr),
 
-		AppDir:    os.Getenv("ATC_APP_DIR"),
+		AppDir:    cmp.Or(os.Getenv("ATC_APP_DIR"), defaultAppDir()),
 		AgentsDir: cmp.Or(os.Getenv("ATC_AGENTS"), filepath.Join(client.ConfigDir(), "agents.d")),
 		StateDir:  client.ConfigDir(),
 		Res:       resources.New(filepath.Join(client.ConfigDir(), "resources"), claude.ConfigDir()),

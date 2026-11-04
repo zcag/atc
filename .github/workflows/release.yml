@@ -26,6 +26,7 @@ jobs:
           done
           cp install.sh dist/
           (cd dist && sha256sum * > checksums.txt)
+      # The signed Android app is added by hand, with gh release upload: its key is not in CI.
       - run: gh release create "$GITHUB_REF_NAME" --generate-notes dist/*
         env:
           GH_TOKEN: ${{ github.token }}

@@ -110,7 +110,7 @@ func All() []Cap {
 			ID: "app", Title: "Android app", Group: Phone, Optional: true, Why: "The folder atc serves the app and its updates from.",
 			Fields: []Field{{Key: "ATC_APP_DIR", Label: "App folder", Hint: "~/.local/share/atc/app"}},
 			Check:  checkApp,
-			Fix:    Fix{Command: "make android && make android-publish", Text: "Build the app and publish it into that folder.", Guide: "android"},
+			Fix:    Fix{Command: "atc app update", Text: "Download the latest app, or build your own with make android and publish it into that folder.", Guide: "android"},
 			Cost:   "The Android SDK on the machine that builds it.",
 		},
 		{

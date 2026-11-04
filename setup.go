@@ -92,6 +92,14 @@ func setupCmd(args []string) error {
 	}
 
 	setupReach(a)
+	fmt.Println("\nThe Android app. atc offers it to your phone, and updates it from this machine.")
+	if a.confirm("  Download it now?") {
+		if name, err := fetchApp(appReleases, cmp.Or(os.Getenv("ATC_APP_DIR"), defaultAppDir())); err != nil {
+			fmt.Println("  That failed; to retry: atc app update (" + err.Error() + ")")
+		} else {
+			fmt.Println("  Version " + name + " is ready.")
+		}
+	}
 	fmt.Println("\nTo connect the phone app or another computer: atc pair prints a QR code and the text to paste.")
 	fmt.Println("\nEverything else (voice, phone, more machines) is in Settings, with what each needs, or run atc doctor.")
 	return nil

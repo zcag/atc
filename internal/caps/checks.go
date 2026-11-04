@@ -2,6 +2,7 @@ package caps
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -340,11 +341,11 @@ func expandHome(p string) string {
 
 func checkApp(_ context.Context, env Env) Result {
 	dir := env.Get("ATC_APP_DIR")
-	if dir == "" {
-		return Result{Missing, "Not set up: atc offers no app to install or update from."}
-	}
-	b, err := os.ReadFile(filepath.Join(expandHome(dir), "version.json"))
+	b, err := os.ReadFile(filepath.Join(expandHome(cmp.Or(dir, "~/.local/share/atc/app")), "version.json"))
 	if err != nil {
+		if dir == "" {
+			return Result{Missing, "Not set up: atc offers no app to install or update from."}
+		}
 		return Result{Broken, "Set, but no app has been published to that folder."}
 	}
 	var v struct {

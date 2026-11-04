@@ -6,7 +6,7 @@ plugins {
 val commits = providers.exec { commandLine("git", "rev-list", "--count", "HEAD") }
     .standardOutput.asText.get().trim().toInt()
 
-val secrets = file(providers.gradleProperty("atc.secrets").getOrElse("${System.getProperty("user.home")}/.secrets/atc-android"))
+val secrets = file(providers.gradleProperty("atc.secrets").getOrElse("${System.getProperty("user.home")}/.config/atc/android"))
 val password = secrets.resolve("keystore.env").takeIf { it.exists() }?.readLines()
     ?.firstOrNull { it.startsWith("KEY_PASSWORD=") }?.substringAfter("=")
 val appLinkHost = providers.gradleProperty("atc.appLinkHost").orNull
@@ -21,7 +21,7 @@ android {
         applicationId = "io.github.zcag.atc"
         minSdk = 29
         targetSdk = 35
-        versionCode = commits
+        versionCode = commits + rootProject.file("version-base").readText().trim().toInt()
         versionName = "0.$commits"
         ndk { abiFilters += "arm64-v8a" }
         buildConfigField("String", "APP_LINK_HOST", "\"${appLinkHost.orEmpty()}\"")
