@@ -1,8 +1,6 @@
 import { html, useState, useEffect, useCallback } from "./vendor/preact-htm.js";
 
-const README = "https://github.com/zcag/atc#";
 const slug = (g) => g.toLowerCase().replace(/\s+/g, "-");
-const guideName = (a) => { const s = a.replace(/-/g, " "); return s[0].toUpperCase() + s.slice(1); };
 const word = (r) => (r.status === "ok" ? "Working" : r.status === "broken" ? "Stopped working" : r.optional ? "Not set up" : "Needed");
 const tone = (r) => (r.status === "ok" ? "ok" : r.status === "broken" || r.warn ? "bad" : "off");
 
@@ -44,7 +42,7 @@ function Fix({ r, ui }) {
   return html`<div class="capfix">
     ${f.command && html`<${Command} text=${f.command} ui=${ui} />`}
     ${f.text && html`<p>${words(f.text)}</p>`}
-    ${f.guide && html`<p><a href=${README + f.guide} data-out>${guideName(f.guide)}, in atc's README</a></p>`}
+    ${f.guideUrl && html`<p><a href=${f.guideUrl} data-out>${f.guideName}, in atc's docs</a></p>`}
   </div>`;
 }
 

@@ -34,11 +34,15 @@ type Field struct {
 	Hub    bool   `json:"-"`
 }
 
-// Fix is how to get a feature working: a command to copy, plain words, and the README section with the rest.
+// Fix is how to get a feature working: a command to copy, plain words, and the docs page with the rest. GuideURL and
+// GuideName are filled in for clients.
 type Fix struct {
 	Command string `json:"command,omitempty"`
 	Text    string `json:"text,omitempty"`
-	Guide   string `json:"guide,omitempty"`
+	Guide   string `json:"-"`
+
+	GuideURL  string `json:"guideUrl,omitempty"`
+	GuideName string `json:"guideName,omitempty"`
 }
 
 // Cap is one row. Without a Check it stands exactly as well as what it Needs.
@@ -235,6 +239,9 @@ func rows(list []Cap, got map[string]Result, env Env) []Row {
 		r := got[c.ID]
 		row := Row{ID: c.ID, Title: c.Title, Group: c.Group, Why: c.Why, Optional: c.Optional, Status: r.Status, Detail: r.Detail,
 			Warn: r.Status == Broken || (r.Status == Missing && !c.Optional), Fix: c.Fix, Cost: c.Cost}
+		if g := c.Fix.Guide; g != "" {
+			row.Fix.GuideURL, row.Fix.GuideName = GuideURL(g), GuideName(g)
+		}
 		for _, id := range c.Needs {
 			row.Needs = append(row.Needs, Need{id, byID(id).Title, got[id].Status})
 		}
@@ -307,8 +314,8 @@ func setupPrompt(r Row) string {
 	if r.Fix.Command != "" {
 		fmt.Fprintf(&b, "Command: %s\n", r.Fix.Command)
 	}
-	if r.Fix.Guide != "" {
-		fmt.Fprintf(&b, "Guide: the \"%s\" section of atc's README, %s\n", GuideName(r.Fix.Guide), GuideURL(r.Fix.Guide))
+	if r.Fix.GuideURL != "" {
+		fmt.Fprintf(&b, "Guide: \"%s\" in atc's docs, %s\n", r.Fix.GuideName, r.Fix.GuideURL)
 	}
 	for _, f := range r.Fields {
 		fmt.Fprintf(&b, "Setting: %s (%s)\n", f.Key, f.Label)

@@ -141,8 +141,8 @@ func printRow(r caps.Row) {
 	if r.Fix.Text != "" {
 		fmt.Println(pad + r.Fix.Text)
 	}
-	if r.Fix.Guide != "" {
-		fmt.Println(pad + "see " + caps.GuideURL(r.Fix.Guide))
+	if r.Fix.GuideURL != "" {
+		fmt.Println(pad + "see " + r.Fix.GuideURL)
 	}
 	if r.Cost != "" {
 		fmt.Println(pad + "costs: " + r.Cost)
