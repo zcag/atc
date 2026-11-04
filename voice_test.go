@@ -1,11 +1,8 @@
 package main
 
 import (
-	"io/fs"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"testing"
 )
 
@@ -48,22 +45,4 @@ func TestWriteVoiceFilesIsIdempotent(t *testing.T) {
 	if changed, err := writeVoiceFiles(dir); err != nil || changed {
 		t.Fatal(changed, err)
 	}
-}
-
-// What a stranger installs must carry none of one person's setup; their values live in ~/.config/atc/voice.env.
-func TestVoiceHasNoPersonalDefaults(t *testing.T) {
-	personal := regexp.MustCompile(`100\.64\.0|15550100|555 01|DEVICE-SERIAL|/home/user|srv/call|voice_a|voice_b|the city`)
-	fs.WalkDir(voiceFiles, "voice", func(p string, d fs.DirEntry, err error) error {
-		if d.IsDir() && p == "voice/test" {
-			return fs.SkipDir
-		}
-		if d.IsDir() || strings.HasSuffix(p, ".dex") {
-			return nil
-		}
-		b, _ := voiceFiles.ReadFile(p)
-		if m := personal.Find(b); m != nil {
-			t.Errorf("%s has %q", p, m)
-		}
-		return nil
-	})
 }

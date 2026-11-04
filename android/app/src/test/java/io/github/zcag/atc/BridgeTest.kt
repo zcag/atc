@@ -53,7 +53,7 @@ class BridgeTest {
     }
 
     @Test fun origins() {
-        assertEquals(setOf("https://atc.example"), bridgeOrigins("https://atc.example"))
+        assertEquals(setOf("https://atc.home"), bridgeOrigins("https://atc.home"))
         assertEquals(setOf("https://atc.example"), bridgeOrigins("https://ATC.example/"))
         assertEquals(setOf("https://atc.example"), bridgeOrigins("https://atc.example:443/atc"))
         assertEquals(setOf("https://box:7272"), bridgeOrigins("https://box:7272"))

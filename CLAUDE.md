@@ -34,7 +34,8 @@ language belong in their own files in `~/.config/atc/modes/`, which replace the 
 key). `voice/lang/` holds a language's words for calls.
 
 `atc prompts` prints what the assistant is told with those files applied, and `make check` fails when that differs
-from a `prompts.golden` beside them: read the diff, then accept it with `atc prompts --update`.
+from a `prompts.golden` beside them: read the diff, then accept it with `atc prompts --update`. A `~/.config/atc/private-words`
+(`git grep -Ef` patterns) makes it fail too when anything of yours reaches the tree.
 
 ## Services
 
