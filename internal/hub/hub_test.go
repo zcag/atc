@@ -692,6 +692,7 @@ func TestResetHandsOver(t *testing.T) {
 	atc := r.dial("atc")
 	atc.send("message", "hi")
 	atc.until("done")
+	all.until("done")
 	old := r.h.Status().Session
 	if err := r.h.Reset("test"); err != nil {
 		t.Fatal(err)
