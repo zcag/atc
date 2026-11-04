@@ -33,16 +33,19 @@ interface Persona {
     fun drawn(go: () -> Unit) = false
 }
 
-/** The call screen's persona slot: the orb at once, then the chosen character once its files are on the phone.
+/** The call screen's persona slot: the kept choice and nothing else. The orb shows only when it is the choice or
+ *  when the character can't be had; a character already on the phone starts from there without asking the server,
+ *  and until its first frame the slot is the dark backdrop.
  *  Characters are folders on the server under /app/personas/<name>/ (persona.json with "kind" and "files", plus
  *  those files), listed in /app/personas/index.json ({"default": name, "personas": [{"name", "rev"}]}), and
  *  cached on the phone until their rev changes. The call screen's picker (or a long press, the next one) chooses,
  *  and the choice is kept. */
 class PersonaHost(c: Context) : FrameLayout(c), Persona {
     override val view get() = this
-    private var current: Persona = Orb(c)
+    private var current: Persona? = null
     private var face = Calls.Face()
     private val ui = Handler(Looper.getMainLooper())
+    private var latest = 0
 
     /** Every character the server lists, the orb first. */
     var names = listOf("orb")
@@ -53,13 +56,14 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         private set
 
     init {
-        addView(current.view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        val kept = Prefs(c).persona
+        if (kept == null || kept == "orb") enter(Orb(c)) else shown = kept
         setOnLongClickListener {
             pick(names[(names.indexOf(shown) + 1) % names.size])
             Toast.makeText(context, shown, Toast.LENGTH_SHORT).show()
             true
         }
-        load(Prefs(c).persona)
+        load(kept)
     }
 
     fun pick(name: String) {
@@ -69,47 +73,72 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
 
     override fun face(f: Calls.Face) {
         face = f
-        current.face(f)
+        current?.face(f)
     }
 
-    private fun load(chosen: String?) = thread {
-        val made = runCatching {
-            val server = Prefs(context).server ?: return@thread
-            val index = JSONObject(Net.get(context, "$server/app/personas/index.json"))
-            val list = index.optJSONArray("personas") ?: JSONArray()
-            names = listOf("orb") + List(list.length()) { list.getJSONObject(it).getString("name") }
-            val name = (chosen ?: index.optString("default", "orb")).takeIf { it in names } ?: "orb"
-            shown = name
-            if (name == "orb") return@runCatching null
-            val rev = List(list.length()) { list.getJSONObject(it) }.first { it.getString("name") == name }.optString("rev")
-            val dir = File(context.filesDir, "personas/$name")
-            val spec = File(dir, "persona.json")
-            if (File(dir, ".rev").takeIf { it.exists() }?.readText() != rev || !spec.exists()) {
-                dir.deleteRecursively()
-                dir.mkdirs()
-                Net.download(context, "$server/app/personas/$name/persona.json", spec)
-                val files = JSONObject(spec.readText()).optJSONArray("files") ?: JSONArray()
-                for (i in 0 until files.length()) {
-                    val file = File(dir, files.getString(i)).apply { parentFile?.mkdirs() }
-                    Net.download(context, "$server/app/personas/$name/${files.getString(i)}", file)
-                }
-                File(dir, ".rev").writeText(rev)
-            }
-            dir to JSONObject(spec.readText())
-        }.onFailure { Log.w("atc", "persona: ${it.message}") }.getOrNull()
-        ui.post { if (made == null || made.first.name == shown) show(made) }
+    private fun load(chosen: String?) {
+        val mine = ++latest
+        /* View.post holds the call until the view is attached: read from the phone, a character can be ready before that. */
+        fun present(made: Pair<File, JSONObject>?) = ui.post { post { if (mine == latest) show(made) } }
+        thread {
+            val ready = chosen?.let(::onPhone)
+            if (ready != null) present(ready)
+            val made = runCatching {
+                val server = Prefs(context).server ?: return@thread
+                val index = JSONObject(Net.get(context, "$server/app/personas/index.json"))
+                val list = index.optJSONArray("personas") ?: JSONArray()
+                names = listOf("orb") + List(list.length()) { list.getJSONObject(it).getString("name") }
+                val name = (chosen ?: index.optString("default", "orb")).takeIf { it in names } ?: "orb"
+                if (name == "orb") return@runCatching null
+                val rev = List(list.length()) { list.getJSONObject(it) }.first { it.getString("name") == name }.optString("rev")
+                val dir = File(context.filesDir, "personas/$name")
+                if (dir.resolve(".rev").takeIf { it.exists() }?.readText() != rev || onPhone(name) == null) fetch(server, name, rev, dir)
+                else if (ready != null) return@thread
+                onPhone(name)
+            }.onFailure {
+                Log.w("atc", "persona: ${it.message}")
+                if (ready != null) return@thread
+            }.getOrNull()
+            present(made)
+        }
+    }
+
+    private fun onPhone(name: String): Pair<File, JSONObject>? {
+        val dir = File(context.filesDir, "personas/$name")
+        if (!dir.resolve(".rev").exists()) return null
+        return runCatching { dir to JSONObject(dir.resolve("persona.json").readText()) }.getOrNull()
+    }
+
+    /** Into a folder of its own and swapped in whole: the character on screen may still be reading the old files. */
+    private fun fetch(server: String, name: String, rev: String, dir: File) {
+        val incoming = File(dir.parentFile, "$name.new").apply { deleteRecursively(); mkdirs() }
+        val spec = File(incoming, "persona.json")
+        Net.download(context, "$server/app/personas/$name/persona.json", spec)
+        val files = JSONObject(spec.readText()).optJSONArray("files") ?: JSONArray()
+        for (i in 0 until files.length()) {
+            val file = File(incoming, files.getString(i)).apply { parentFile?.mkdirs() }
+            Net.download(context, "$server/app/personas/$name/${files.getString(i)}", file)
+        }
+        File(incoming, ".rev").writeText(rev)
+        dir.deleteRecursively()
+        check(incoming.renameTo(dir)) { "can't move $name into place" }
     }
 
     private fun show(made: Pair<File, JSONObject>?) {
         if (!isAttachedToWindow) return
-        val next = runCatching {
+        shown = made?.first?.name ?: "orb"
+        if (made == null && current is Orb) return
+        enter(runCatching {
             when (made?.second?.optString("kind")) {
                 "head3d" -> Head3D(context, made.first, made.second)
                 "live2d" -> Live2D(context, made.first, made.second)
                 "illustration", "footage", "rig", "minimal" -> WebPersona(context, made.first, Prefs(context).server.orEmpty().trimEnd('/'))
                 else -> Orb(context)
             }
-        }.onFailure { Log.w("atc", "persona: ${it.message}") }.getOrElse { Orb(context) }
+        }.onFailure { Log.w("atc", "persona: ${it.message}") }.getOrElse { Orb(context) })
+    }
+
+    private fun enter(next: Persona) {
         current = next
         next.face(face)
         val fades = next.drawn {
@@ -117,6 +146,11 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         }
         if (fades) next.view.alpha = UNSEEN else removeAllViews()
         addView(next.view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        if (fades) postDelayed({ orbIfStuck(next) }, STUCK_MS)
+    }
+
+    private fun orbIfStuck(next: Persona) {
+        if (current === next && next.view.alpha == UNSEEN && childCount == 1 && isShown) addView(Orb(context), 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     }
 
     private fun keepOnly(v: View) {
@@ -127,6 +161,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         /** Faint enough not to show, yet still drawn: a view at alpha 0 is skipped, and a TextureView only gets its
          *  surface once it is drawn. */
         private const val UNSEEN = .01f
+        private const val STUCK_MS = 6000L
     }
 }
 

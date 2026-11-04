@@ -929,6 +929,8 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
 - **Characters** are folders under `$ATC_APP_DIR/personas/<name>/` on the server (`persona.json` with
   `kind` and `files`, plus the files), listed in `personas/index.json` (`{"default", "personas":
   [{"name", "rev"}]}`); the phone downloads one when picked and keeps it until its `rev` changes.
+  The kept one starts from the phone with no wait on the server, on the dark backdrop until its first
+  frame; the orb shows only when it is the choice, or when the character is missing or stuck for 6 s.
   A long press on the persona switches to the next. `Animator.kt` is the face's behaviour, live and
   procedural (breathing, irregular blinks, eye movements, sway, looking at them while listening and
   nodding in their pauses, looking away while thinking, the jaw on the assistant's voice, brows and a

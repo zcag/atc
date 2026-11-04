@@ -1544,6 +1544,7 @@ function orb2D(canvas) {
 }
 
 const PERSONAS = "/app/personas/";
+const PERSONAS_UNKNOWN = { names: ["orb"], kinds: {}, def: "orb" };
 const personaPick = {
   get: () => { try { return localStorage.getItem("atc.persona"); } catch { return null; } },
   set: (n) => { try { localStorage.setItem("atc.persona", n); } catch {} },
@@ -1557,13 +1558,22 @@ async function personaList() {
   return { names: ["orb", ...usable.map(([n]) => n)], kinds: Object.fromEntries(usable), def: index.default || "orb" };
 }
 
-/** Which character the call shows: the orb or one from /app/personas, the choice kept in this browser. */
+/** Which character the call shows: the orb or one from /app/personas, the choice kept in this browser. The list is kept
+ *  too, and the choice is trusted until the server has answered, so a screen never opens on the orb by mistake. */
 function usePersona() {
-  const [list, setList] = useState({ names: ["orb"], kinds: {}, def: "orb" });
+  const [list, setList] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("atc.personas")) ?? PERSONAS_UNKNOWN; } catch { return PERSONAS_UNKNOWN; }
+  });
+  const [answered, setAnswered] = useState(false);
   const [name, setName] = useState(personaPick.get);
-  useEffect(() => { personaList().then(setList).catch(() => {}); }, []);
+  useEffect(() => {
+    personaList().then((l) => {
+      setList(l);
+      try { localStorage.setItem("atc.personas", JSON.stringify(l)); } catch {}
+    }).catch(() => {}).finally(() => setAnswered(true));
+  }, []);
   const want = name ?? list.def;
-  const shown = list.names.includes(want) ? want : "orb";
+  const shown = !answered || list.names.includes(want) ? want : "orb";
   const pick = (n) => { personaPick.set(n); setName(n); };
   return { names: list.names, kinds: list.kinds, shown, pick, framed: !["orb", "minimal"].includes(list.kinds[shown] || shown) };
 }
