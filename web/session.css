@@ -19,6 +19,14 @@
 .hd .l2 { display: flex; align-items: center; gap: 0 var(--s4); min-height: 20px; margin-top: 2px; padding-left: 28px; min-width: 0; overflow: hidden; color: var(--dim); cursor: pointer; border-radius: var(--r-sm); }
 .hd .l2:hover .stat { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 .hd .l2:focus-visible { outline-offset: 2px; }
+.hd .l2.items { cursor: default; overflow: visible; }
+.hd .l2.items:hover .stat { text-decoration: none; }
+.hd .l2.items button { border: 0; padding: 0; background: none; cursor: pointer; line-height: inherit; text-align: left; border-radius: var(--r-sm); }
+.hd .l2.items button.stat { font: inherit; font-weight: 540; color: var(--ink); }
+.hd .l2.items button.rd { font-family: var(--mono); font-size: var(--fs-small); color: var(--dim); }
+.hd .l2.items button.rd.hotrd { color: var(--fail); font-weight: 650; }
+.hd .l2.items button:hover { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.hd .l2.items button:focus-visible { outline-offset: 2px; }
 .hd .stat { color: var(--ink); font-weight: 540; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 0 1 auto; min-width: 120px; }
 .hd .rd { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: var(--fs-small); color: var(--dim); white-space: nowrap; flex: none; }
 .hd .rd.run { color: var(--work); }
@@ -47,6 +55,7 @@
   .hd .where, .hd .rd { display: none; }
   .hd .l1 .r .kb { height: 44px; }
   .hd .l2 { padding-left: var(--s2); min-height: 28px; }
+  .hd .l2.items button.stat { flex: 1; min-height: 28px; }
 }
 @media (max-width: 899px) {
   .hd .l1 .r > :not(.more):not(.tx-slot) { display: none; }

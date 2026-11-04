@@ -1851,6 +1851,12 @@ function StateBlock({ s, mini }) {
 }
 const CtxMeter = ({ n, max = n > 200000 ? 1000000 : 200000 }) => html`<span class="meter" aria-hidden="true"><i style=${`width:${Math.min(100, Math.round((n / max) * 100))}%`}></i></span>`;
 
+function scrollWhenThere(sel, tries = 20) {
+  const el = document.querySelector(sel);
+  if (el) el.scrollIntoView({ block: "start", behavior: "smooth" });
+  else if (tries > 0) setTimeout(() => scrollWhenThere(sel, tries - 1), 100);
+}
+
 function Session({ s, say, live, panes, togglePane }) {
   const canAttach = s.attachable;
   const hasTerm = s.kind !== "hub";
@@ -1932,8 +1938,12 @@ function Session({ s, say, live, panes, togglePane }) {
   const [stateSheet, setStateSheet] = useState(false);
   const phoneNow = usePhone();
   const openState = () => (phoneNow ? setStateSheet(true) : togglePane("state"));
+  const showStateSection = (sel) => {
+    if (phoneNow) return setStateSheet(true);
+    if (!panes?.state) togglePane("state");
+    scrollWhenThere(`.statep ${sel}`);
+  };
   const where = [MULTI && s.host, s.branch && s.branch !== "HEAD" && s.branch].filter(Boolean).join(" ");
-  const running = outs?.servers.length || 0;
   useEffect(() => {
     const k = (e) => {
       const t = e.target;
@@ -1996,15 +2006,12 @@ function Session({ s, say, live, panes, togglePane }) {
               ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "State and outputs", run: openState }, { label: "Usage", run: () => setShowUse(true) }]} /></div>
         </span>
       </div>
-      <div class="l2" role="button" tabindex="0" aria-label="State" aria-keyshortcuts="\\" onClick=${openState} onKeyDown=${(e) => (e.key === "Enter" || e.key === " ") && (e.preventDefault(), openState())}>
-        <span class="stat">${headline(s) || WORD[s.state] || s.state}</span>
-        ${(engineTag(s) || s.model) && html`<span class="rd">${engineTag(s) || model(s.model)}</span>`}
-        ${s.context > 0 && html`<span class="rd"><${CtxMeter} n=${s.context} />${Math.round(s.context / 1000)}k</span>`}
-        ${use?.total > 0 && html`<span class="rd">${usd(use.cost)}</span>`}
-        ${s.steps > 0 && html`<span class="rd">${plural(s.steps, "step")}</span>`}
-        ${running > 0 && html`<span class="rd run">${running} running</span>`}
-        ${s.load && html`<span class="rd ${hotLoad(s.load) ? "hotrd" : ""}">${shortLoad(s.load)}</span>`}
-        ${s.permissionMode === "bypassPermissions" && html`<span class="rd">no prompts</span>`}
+      <div class="l2 items">
+        <button class="stat" aria-keyshortcuts="\\" title="State and outputs" onClick=${openState}>${headline(s) || WORD[s.state] || s.state}</button>
+        ${(engineTag(s) || s.model) && html`<button class="rd" title="Usage: tokens, cost and models" onClick=${() => setShowUse(true)}>${engineTag(s) || model(s.model)}</button>`}
+        ${s.context > 0 && html`<button class="rd" title="Context in use. Usage has the breakdown." onClick=${() => setShowUse(true)}><${CtxMeter} n=${s.context} />${Math.round(s.context / 1000)}k</button>`}
+        ${use?.total > 0 && html`<button class="rd" title="Estimated at API prices. Usage has the breakdown." onClick=${() => setShowUse(true)}>${usd(use.cost)}</button>`}
+        ${s.load && html`<button class="rd ${hotLoad(s.load) ? "hotrd" : ""}" title="This session's processes, in State" onClick=${() => showStateSection(".sres")}>${shortLoad(s.load)}</button>`}
       </div>
     </header>
     <div class="sbody ${panes?.state && !phoneNow ? "withstate" : ""}">

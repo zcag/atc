@@ -482,7 +482,6 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
 .brow .mk .load { color: inherit; }
 .brow .mk .load.hot { color: var(--fail); }
 .brow .ctx .load { display: none; }
-.hd .rd.hotrd { color: var(--fail); font-weight: 650; }
 .rbays { display: flex; flex-wrap: wrap; gap: var(--s2); margin-bottom: calc(-1 * var(--s3)); }
 .rbays button { height: var(--btn-h); padding: 0 var(--s3); display: inline-flex; align-items: center; gap: var(--s2); border: 0; border-radius: var(--r-sm); background: none; box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--dim); font-size: var(--fs-small); }
 .rbays button:hover { color: var(--ink); }
