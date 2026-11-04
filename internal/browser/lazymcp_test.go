@@ -3,9 +3,11 @@ package browser
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,6 +24,11 @@ func TestMain(m *testing.M) {
 func fakeServer(marker string) {
 	f, _ := os.OpenFile(marker, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	f.WriteString("started\n")
+	if i := slices.Index(os.Args, "--config"); i >= 0 {
+		st, _ := os.Stat(os.Args[i+1])
+		b, _ := os.ReadFile(os.Args[i+1])
+		fmt.Fprintf(f, "%s %o %s\n", os.Args[i+1], st.Mode().Perm(), b)
+	}
 	f.Close()
 	r := bufio.NewReader(os.Stdin)
 	for {
@@ -54,13 +61,15 @@ type session struct {
 	done chan error
 }
 
-func run(t *testing.T, cache, marker string) *session {
+func run(t *testing.T, cache, marker string) *session { return runConfig(t, cache, marker, nil) }
+
+func runConfig(t *testing.T, cache, marker string, config []byte) *session {
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
 	exe, _ := os.Executable()
 	s := &session{t: t, in: inW, out: bufio.NewReader(outR), done: make(chan error, 1)}
 	go func() {
-		s.done <- LazyMCP([]string{exe}, append(os.Environ(), "FAKE_MCP_MARKER="+marker), []string{"fake"}, cache, inR, outW)
+		s.done <- LazyMCP([]string{exe}, append(os.Environ(), "FAKE_MCP_MARKER="+marker), []string{"fake"}, config, cache, inR, outW)
 		outW.Close()
 	}()
 	return s
@@ -82,6 +91,24 @@ func (s *session) read() map[string]any {
 func starts(marker string) int {
 	b, _ := os.ReadFile(marker)
 	return strings.Count(string(b), "started")
+}
+
+func TestLazyMCPKeepsConfigOutOfArgv(t *testing.T) {
+	dir := t.TempDir()
+	cache, marker := filepath.Join(dir, "cache.json"), filepath.Join(dir, "marker")
+	s := runConfig(t, cache, marker, []byte("secret"))
+	s.send(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`)
+	s.read()
+	b, _ := os.ReadFile(marker)
+	fields := strings.Fields(strings.TrimPrefix(string(b), "started\n"))
+	if len(fields) != 3 || fields[1] != "600" || fields[2] != "secret" {
+		t.Fatalf("server saw %q", b)
+	}
+	if _, err := os.Stat(fields[0]); !os.IsNotExist(err) {
+		t.Fatalf("config still on disk after the server answered: %v", err)
+	}
+	s.in.Close()
+	<-s.done
 }
 
 func TestLazyMCPStartsOnFirstToolCall(t *testing.T) {

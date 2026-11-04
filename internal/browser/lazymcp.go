@@ -17,8 +17,10 @@ import (
 
 // LazyMCP fronts the MCP server argv on stdio and starts it on the first request it can't answer
 // itself: initialize and tools/list come from what the server said last time (cache, under key).
-func LazyMCP(argv, env, key []string, cache string, in io.Reader, out io.Writer) error {
-	l := &lazy{argv: argv, env: env, key: key, cache: cache, out: out, replies: map[string]chan json.RawMessage{}}
+// A non-nil config is what the server takes secrets from: it stays out of argv, where any local user
+// could read it, in a private file named by --config that lasts only until the server has answered.
+func LazyMCP(argv, env, key []string, config []byte, cache string, in io.Reader, out io.Writer) error {
+	l := &lazy{argv: argv, env: env, key: key, config: config, cache: cache, out: out, replies: map[string]chan json.RawMessage{}}
 	l.saved = l.load()
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP)
@@ -51,6 +53,7 @@ func LazyMCP(argv, env, key []string, cache string, in io.Reader, out io.Writer)
 
 type lazy struct {
 	argv, env, key []string
+	config         []byte
 	cache          string
 	saved          *saved
 	initReq        json.RawMessage
@@ -112,7 +115,16 @@ func (l *lazy) handle(line []byte) error {
 // start runs the server, introduces atc's client to it as the client introduced itself, then
 // hands it pending, the request that needed it.
 func (l *lazy) start(pending []byte) error {
-	cmd := exec.Command(l.argv[0], l.argv[1:]...)
+	argv := l.argv
+	if l.config != nil {
+		path, err := privateFile(l.config)
+		if err != nil {
+			return err
+		}
+		defer os.Remove(path)
+		argv = append(slices.Clip(argv), "--config", path)
+	}
+	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Env, cmd.Stderr = l.env, os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	stdin, err := cmd.StdinPipe()
@@ -154,6 +166,19 @@ func (l *lazy) start(pending []byte) error {
 	}
 	_, err = stdin.Write(pending)
 	return err
+}
+
+func privateFile(content []byte) (string, error) {
+	f, err := os.CreateTemp("", "atc-mcp-*.json")
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	if _, err := f.Write(content); err != nil {
+		os.Remove(f.Name())
+		return "", err
+	}
+	return f.Name(), nil
 }
 
 func (l *lazy) call(id, method string, params json.RawMessage) (json.RawMessage, error) {

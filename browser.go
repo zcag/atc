@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/zcag/atc/internal/browser"
@@ -39,13 +41,23 @@ func browserCmd(args []string) error {
 	}
 	c := client.Load()
 	ws := "ws" + strings.TrimPrefix(c.URL, "http") + "/api/browser/" + sid + "/cdp"
-	argv := []string{npx, "-y", playwrightMCP, "--cdp-endpoint", ws}
-	if c.Token != "" {
-		argv = append(argv, "--cdp-header", "Authorization: Bearer "+c.Token)
+	if slices.ContainsFunc(args[1:], func(a string) bool { return a == "--config" || strings.HasPrefix(a, "--config=") }) {
+		return fmt.Errorf("atc browser mcp passes Playwright its own --config, so it can't take yours")
 	}
-	argv = append(argv, args[1:]...)
+	config, err := cdpConfig(c.Token)
+	if err != nil {
+		return err
+	}
+	argv := append([]string{npx, "-y", playwrightMCP, "--cdp-endpoint", ws}, args[1:]...)
 	cache, _ := os.UserCacheDir()
 	key := append([]string{playwrightMCP}, args[1:]...)
-	return browser.LazyMCP(argv, append(os.Environ(), "npm_config_loglevel=error"), key,
+	return browser.LazyMCP(argv, append(os.Environ(), "npm_config_loglevel=error"), key, config,
 		filepath.Join(cache, "atc", "browser-mcp.json"), os.Stdin, os.Stdout)
+}
+
+func cdpConfig(token string) ([]byte, error) {
+	if token == "" {
+		return nil, nil
+	}
+	return json.Marshal(map[string]any{"browser": map[string]any{"cdpHeaders": map[string]string{"Authorization": "Bearer " + token}}})
 }
