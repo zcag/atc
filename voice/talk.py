@@ -45,6 +45,15 @@ def setting(name, lang, primary):
 LOADED = {}
 
 
+def session(path, threads):
+    """onnxruntime's default gives every core a thread, pins each to its core (past taskset) and spins them between runs:
+    Silero's two states every 32 ms held 3.00 cores busy that way and 0.03 on one thread (desktop, 2026-11-05)."""
+    o = onnxruntime.SessionOptions()
+    o.intra_op_num_threads, o.inter_op_num_threads = threads, 1
+    o.add_session_config_entry("session.intra_op.allow_spinning", "0")
+    return onnxruntime.InferenceSession(path, sess_options=o, providers=["CPUExecutionProvider"])
+
+
 def once(key, make):
     """A model loaded once per process: a Talk lives for one call, and loading them all again made every call's
     talker take 8-21 s to be ready, so a call back right after hanging up rang that long first."""
@@ -62,7 +71,7 @@ class Vad:
     runs with its state reset every few seconds of silence (reset_fresh), and its score counts only for a window loud
     enough to be them (fresh_peak): it can add a turn the long one missed, never drop one."""
     def __init__(self, fresh_peak=0.0):
-        self.s = once("vad", lambda: onnxruntime.InferenceSession(VAD_MODEL, providers=["CPUExecutionProvider"]))
+        self.s = once("vad", lambda: session(VAD_MODEL, 1))
         self.fresh_peak, self.buf = fresh_peak, np.zeros(0, np.float32)
         self.long, self.fresh = self.blank(), self.blank()
 
@@ -93,11 +102,11 @@ class Vad:
 
 
 class SmartTurn:
-    """pipecat-ai/smart-turn v3: does this audio sound like a finished turn? Looks at the last 8 s, ~12 ms on CPU."""
+    """pipecat-ai/smart-turn v3: does this audio sound like a finished turn? Looks at the last 8 s, ~100 ms on two threads."""
     def __init__(self):
         from transformers import WhisperFeatureExtractor
         self.fx = WhisperFeatureExtractor(chunk_length=8)
-        self.s = onnxruntime.InferenceSession(TURN_MODEL, providers=["CPUExecutionProvider"])
+        self.s = session(TURN_MODEL, 2)
 
     def __call__(self, pcm):
         a = np.frombuffer(pcm, np.int16).astype(np.float32)[-8 * RATE:] / 32768
