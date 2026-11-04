@@ -29,16 +29,16 @@ object Net {
 
     fun post(c: Context, url: String, body: JSONObject): Int = send(c, url, body).first
 
-    /** POSTs and returns the status with, when it failed, what the server said. */
-    fun send(c: Context, url: String, body: JSONObject): Pair<Int, String> {
-        val conn = open(c, url)
+    /** POSTs and returns the status with what the server said, trusting [anchor] when given. */
+    fun send(c: Context, url: String, body: JSONObject, anchor: X509Certificate? = null): Pair<Int, String> {
+        val conn = open(c, url, anchor)
         try {
             conn.requestMethod = "POST"
             conn.doOutput = true
             conn.setRequestProperty("Content-Type", "application/json")
             conn.outputStream.use { it.write(body.toString().toByteArray()) }
             val code = conn.responseCode
-            val said = if (code in 200..299) "" else runCatching { conn.errorStream?.bufferedReader()?.readText() }.getOrNull().orEmpty()
+            val said = runCatching { (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.readText() }.getOrNull().orEmpty()
             return code to said.trim()
         } finally {
             conn.disconnect()
@@ -69,26 +69,29 @@ object Net {
         }
     }
 
-    private fun open(c: Context, url: String) = (URL(url).openConnection() as HttpURLConnection).apply {
+    private fun open(c: Context, url: String, pinned: X509Certificate? = null) = (URL(url).openConnection() as HttpURLConnection).apply {
         connectTimeout = 10_000
         readTimeout = 30_000
-        val anchor = Pin.decode(Prefs(c).pinFor(URL(url).host))
+        val anchor = pinned ?: Pin.decode(Prefs(c).pinFor(URL(url).host))
         if (this is HttpsURLConnection && anchor != null) sslSocketFactory = trusting { Pin.validates(it, anchor) }
         cookie(url)?.let { setRequestProperty("Cookie", it) }
     }
 
-    fun caFor(server: String, chain: List<X509Certificate>): X509Certificate? = runCatching {
+    fun caFor(server: String, chain: List<X509Certificate>): X509Certificate? = casAt(server, chain).firstOrNull { Pin.validates(chain, it) }
+
+    /** The server's /app/ca.crt, from the connection that presents this chain. It proves nothing by itself: callers check it. */
+    fun casAt(server: String, chain: List<X509Certificate>): List<X509Certificate> = runCatching {
         val conn = URL("$server/app/ca.crt").openConnection() as HttpsURLConnection
         conn.connectTimeout = 10_000
         conn.readTimeout = 10_000
         conn.sslSocketFactory = trusting { it.firstOrNull()?.encoded?.contentEquals(chain[0].encoded) == true }
         try {
-            if (conn.responseCode != 200) return null
-            Pin.parseAll(conn.inputStream.readBytes()).firstOrNull { Pin.validates(chain, it) }
+            if (conn.responseCode != 200) return emptyList()
+            Pin.parseAll(conn.inputStream.readBytes())
         } finally {
             conn.disconnect()
         }
-    }.getOrNull()
+    }.getOrDefault(emptyList())
 
     private fun trusting(accept: (List<X509Certificate>) -> Boolean) = factory(trustManager(accept))
 

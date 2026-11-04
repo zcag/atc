@@ -131,7 +131,6 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         enter(runCatching {
             when (made?.second?.optString("kind")) {
                 "head3d" -> Head3D(context, made.first, made.second)
-                "live2d" -> Live2D(context, made.first, made.second)
                 "illustration", "footage", "rig", "minimal" -> WebPersona(context, made.first, Prefs(context).server.orEmpty().trimEnd('/'))
                 else -> Orb(context)
             }

@@ -9,6 +9,9 @@ val commits = providers.exec { commandLine("git", "rev-list", "--count", "HEAD")
 val secrets = file(providers.gradleProperty("atc.secrets").getOrElse("${System.getProperty("user.home")}/.secrets/atc-android"))
 val password = secrets.resolve("keystore.env").takeIf { it.exists() }?.readLines()
     ?.firstOrNull { it.startsWith("KEY_PASSWORD=") }?.substringAfter("=")
+val appLinkHost = providers.gradleProperty("atc.appLinkHost").orNull
+    ?: secrets.resolve("app.env").takeIf { it.exists() }?.readLines()
+        ?.firstOrNull { it.startsWith("APP_LINK_HOST=") }?.substringAfter("=")?.trim()?.ifEmpty { null }
 
 android {
     namespace = "io.github.zcag.atc"
@@ -21,6 +24,8 @@ android {
         versionCode = commits
         versionName = "0.$commits"
         ndk { abiFilters += "arm64-v8a" }
+        buildConfigField("String", "APP_LINK_HOST", "\"${appLinkHost.orEmpty()}\"")
+        if (appLinkHost != null) manifestPlaceholders["appLinkHost"] = appLinkHost
     }
 
     signingConfigs {
@@ -41,6 +46,8 @@ android {
         }
     }
 
+    if (appLinkHost != null) listOf("debug", "release").forEach { sourceSets[it].manifest.srcFile("src/appLink/AndroidManifest.xml") }
+
     buildFeatures.buildConfig = true
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -59,8 +66,7 @@ dependencies {
     implementation("com.google.android.filament:filament-android:1.75.1")
     implementation("com.google.android.filament:gltfio-android:1.75.1")
     implementation("com.google.android.filament:filament-utils-android:1.75.1")
-    implementation(project(":cubism"))
-    implementation(files("../live2d/Core/android/Live2DCubismCore.aar"))
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation("junit:junit:4.13.2")

@@ -24,5 +24,6 @@ class Bridge(private val a: MainActivity) {
     @JavascriptInterface fun call() = a.runOnUiThread {
         a.startActivity(android.content.Intent(a, CallActivity::class.java).setAction(CallActivity.DIAL))
     }
+    @JavascriptInterface fun checklist() = a.runOnUiThread { a.startActivity(android.content.Intent(a, ChecklistActivity::class.java)) }
     @JavascriptInterface fun checkUpdate() = a.runOnUiThread { a.updater.check(manual = true) }
 }

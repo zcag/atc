@@ -194,17 +194,31 @@ assistant one tap away, what waits on you, and your sessions beside it.
   `atc open @shopping/picks#towel`, instead of a notification. It opens through the phone's
   assistant role, so atc must be the digital assistant; anything else falls back to a notification.
   Other sessions can't use it.
-- **atc links:** the app handles `https://atc.example` links (the host is set in the manifest). Android
-  does not verify a private host, so turn it on once: Settings › Apps › atc › Set as default ›
-  Supported web addresses.
+- **Pairing:** on the setup screen tap Scan QR and scan the code from `atc pair` or Settings ›
+  Devices on a device already logged in, or open the `atc://pair?...` link. The phone gets its own
+  token, kept hashed on the server, and appears under Devices with its last seen time and Revoke.
+  The address field stays for a server you log in to with a token.
+- **Setting up the phone:** after the first server, a checklist shows the digital assistant role,
+  battery exemption, links, microphone, notifications and the push distributor, each with its state
+  and a button to its system screen. Back twice › Set up this phone, or Settings › Devices, reopens it.
+- **atc links:** `atc://open?path=/%23/s/<id>` opens a page on the server the phone uses, on any
+  build. To also handle your server's `https` links, build with its host: `atc.appLinkHost=atc.example`
+  in `~/.gradle/gradle.properties`, or `APP_LINK_HOST=atc.example` in `app.env` in the `atc.secrets`
+  folder (next to the signing key's `keystore.env`). Without one the app claims no `https` links.
+  Android does not verify a private host, so turn it on once: the checklist's Links row, or Settings ›
+  Apps › atc › Set as default › Supported web addresses.
 - **Install:** the server offers the app at `/app/` (set `ATC_APP_DIR` to the folder holding
   `atc.apk` and `version.json`, which `make android` produces). The app checks that folder and
   updates itself.
 - **Private certificates:** if your server uses a certificate from its own authority (Caddy's
-  `tls internal`, a home CA), the app asks once whether to trust it and then trusts that
-  authority, so renewals keep working. Put the authority's certificate in the app folder as
-  `ca.crt` (for Caddy: `pki/authorities/local/root.crt` in its data folder); without it the app
-  trusts the top certificate the server sends, which breaks when that one rotates.
+  `tls internal`, a home CA), a pairing carries its fingerprint, so the app trusts that authority
+  with no prompt and refuses, loudly and before sending the code, a server that presents anything
+  else. Entering the address by hand instead, the app asks once whether to trust it. Either way it
+  then trusts the authority, so renewals keep working. Put the authority's certificate in the app
+  folder as `ca.crt` (for Caddy: `pki/authorities/local/root.crt` in its data folder); without it
+  the app trusts the top certificate the server sends, which breaks when that one rotates. A
+  fingerprint needs `ATC_PUBLIC_URL`, or the page opened on the https address, so atc knows which
+  server to look at.
 - **Share to atc:** share a link, text, screenshot or file from any app and choose atc. It opens a
   screen to say what Claude should do with it, then starts a session in the project it most
   likely belongs to (named in the text, or picked by `ATC_SPEECH_LLM_URL`'s model from your
@@ -956,14 +970,6 @@ phone app ── wss://atc.example/api/call/line (atc's login) ── atc ──
   Rocketbox characters (MIT) with HeadBox's ARKit shapes, converted from FBX by FBX2glTF and
   gltf-transform to the 52 ARKit shapes and 1-2k textures. Ship them uncompressed: Filament can't
   normalize the skinning weights that quantizing (and so meshopt) writes, and the body disappears.
-  `kind: live2d`
-  (`Live2D.kt`) is an illustrated Live2D Cubism character (`model` its `.model3.json`, `frame` crops it
-  to head and shoulders, the body fades out at the bottom): the Animator's pose drives its face, head
-  and body parameters, the model's own physics its hair and clothes, its motions stay off. It fades in
-  over the previous persona once its first frame is drawn. The Cubism SDK for Java sits in
-  `android/live2d/` with its licences (Framework as source, patched to compile blend mode shaders on
-  first use; Core for arm64 only); Live2D's sample models `hiyori` and `natori` were installed under their
-  sample model terms and are retired (no longer listed).
 - **Android Auto** sees atc as a calling app (`CarCalls.kt`, category `CALLING`, Car App library):
   a Call button on the car screen, and Android Auto's own in-call view for every app call. A
   sideloaded app only shows up after Android Auto's developer settings allow unknown sources.

@@ -29,6 +29,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import com.google.zxing.integration.android.IntentIntegrator
 import android.widget.Button
 import android.widget.Chronometer
 import android.widget.EditText
@@ -51,6 +52,7 @@ class MainActivity : Activity() {
         const val EXTRA_PATH = "path"
         const val HOLD = "/#/hold"
         private const val REQ_FILE = 2
+        private const val COOKIE_AGE = 400 * 24 * 3600
     }
 
     private lateinit var prefs: Prefs
@@ -86,6 +88,7 @@ class MainActivity : Activity() {
         paint()
         bridge = Bridge(this)
         updater = Updater(this)
+        prefs.server?.let { restoreLogin(it) }
         route(intent)
         if (prefs.server != null) started()
         getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(network)
@@ -184,6 +187,7 @@ class MainActivity : Activity() {
     }
 
     private fun route(intent: Intent) {
+        intent.data?.takeIf { it.scheme == "atc" }?.let { return atcLink(it.toString()) }
         val assist = intent.getBooleanExtra(EXTRA_ASSIST, false) || intent.action == Intent.ACTION_ASSIST
         if (assist && Calls.state.value.live) return toCall()
         setShowWhenLocked(assist)
@@ -193,6 +197,101 @@ class MainActivity : Activity() {
             return
         }
         open(intent, assist)
+    }
+
+    private fun atcLink(link: String) {
+        setShowWhenLocked(false)
+        setTurnScreenOn(false)
+        val server = prefs.server
+        if (link.startsWith("atc://open")) {
+            if (server == null) return setup()
+            val path = Pairing.openPath(link) ?: return Toast.makeText(this, "That link does not name a page on atc", Toast.LENGTH_LONG).show()
+            return open(Intent().putExtra(EXTRA_PATH, path), false)
+        }
+        if (web == null) if (server != null) browse("$server/") else setup()
+        val p = Pairing.parse(link) ?: return Toast.makeText(this, "That is not an atc pairing link", Toast.LENGTH_LONG).show()
+        if (prefs.spentCode != p.code) confirmPair(p)
+    }
+
+    private fun confirmPair(p: Pairing) {
+        val old = prefs.server?.takeIf { Uri.parse(it).host != p.host }
+        AlertDialog.Builder(this)
+            .setTitle("Pair with ${p.host}?")
+            .setMessage("This phone will use the atc server at ${p.url}." + old?.let { " It replaces $it." }.orEmpty() + " Continue only if you started this pairing yourself.")
+            .setPositiveButton("Pair") { _, _ -> pair(p) }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun scanned(text: String?) {
+        if (text == null) return
+        val p = Pairing.parse(text) ?: return Toast.makeText(this, "That QR code is not an atc pairing", Toast.LENGTH_LONG).show()
+        if (prefs.server == null || Uri.parse(prefs.server).host == p.host) pair(p) else confirmPair(p)
+    }
+
+    private fun pair(p: Pairing) {
+        Toast.makeText(this, "Pairing with ${p.host}", Toast.LENGTH_SHORT).show()
+        Thread {
+            val r = runCatching { Pairer.claim(this, p, Build.MODEL) }
+            runOnUiThread { r.fold({ paired(p, it) }, { pairFailed(p, it) }) }
+        }.start()
+    }
+
+    private fun paired(p: Pairing, c: Claimed) {
+        prefs.spentCode = p.code
+        adopt(p.url, c.pin)
+        prefs.token = c.token
+        restoreLogin(p.url, replace = true) {
+            browse("${p.url}/")
+            firstRun()
+            started()
+        }
+    }
+
+    private fun pairFailed(p: Pairing, e: Throwable) {
+        AlertDialog.Builder(this).apply {
+            if (e is CertificateMismatch) {
+                setTitle("Certificate does not match")
+                setMessage("${e.host} presented a certificate that is not the one this pairing names, so atc did not connect and sent it nothing.\n\nExpected:\n${pretty(e.want)}\n\nPresented:\n${e.got?.let(::pretty) ?: "none"}")
+            } else {
+                setTitle("Could not pair")
+                setMessage("${p.host}: ${e.message ?: "no answer"}")
+            }
+            setPositiveButton("OK", null)
+        }.show()
+    }
+
+    private fun restoreLogin(server: String, replace: Boolean = false, then: () -> Unit = {}) {
+        val token = prefs.token
+        val cookies = CookieManager.getInstance()
+        val has = cookies.getCookie(server)?.split(";")?.any { it.trim().startsWith("atc=") } == true
+        if (token == null || (has && !replace)) return then()
+        cookies.setCookie(server, "atc=$token; Path=/; Max-Age=$COOKIE_AGE; HttpOnly; SameSite=Strict") {
+            cookies.flush()
+            then()
+        }
+    }
+
+    private fun adopt(url: String, pin: String?) {
+        val old = prefs.server
+        val endpoint = prefs.endpoint
+        if (old != null && old != url && endpoint != null) Push.unregister(this, old, endpoint)
+        if (old != url) prefs.token = null
+        prefs.server = url
+        prefs.pin = pin
+        prefs.registered = null
+        prefs.feed = null
+        prefs.feedError = null
+        Live.changed(this)
+        web?.destroy()
+        web = null
+    }
+
+    private fun firstRun() {
+        if (prefs.checklist != null) return
+        prefs.checklist = "1"
+        prefs.hinted = "1"
+        startActivity(Intent(this, ChecklistActivity::class.java))
     }
 
     private fun toCall() {
@@ -245,11 +344,11 @@ class MainActivity : Activity() {
     }
 
     private fun menu() = AlertDialog.Builder(this)
-        .setItems(arrayOf("Change server", "Check for updates", "Voice settings", "Close atc")) { _, i ->
+        .setItems(arrayOf("Change server", "Set up this phone", "Check for updates", "Close atc")) { _, i ->
             when (i) {
                 0 -> setup()
-                1 -> updater.check(manual = true)
-                2 -> runCatching { startActivity(Intent("com.android.settings.TTS_SETTINGS")) }
+                1 -> startActivity(Intent(this, ChecklistActivity::class.java))
+                2 -> updater.check(manual = true)
                 else -> finish()
             }
         }
@@ -269,16 +368,9 @@ class MainActivity : Activity() {
         go.setOnClickListener {
             val url = serverUrl(field.text.toString())
                 ?: return@setOnClickListener run { field.error = "Enter a URL starting with https:// or http://" }
-            val old = prefs.server
-            val endpoint = prefs.endpoint
-            if (old != null && old != url && endpoint != null) Push.unregister(this, old, endpoint)
-            prefs.server = url
-            prefs.pin = null
-            prefs.registered = null
-            prefs.feed = null
-            prefs.feedError = null
-            Live.changed(this)
+            adopt(url, null)
             browse(url)
+            firstRun()
             started()
         }
         field.setOnEditorActionListener { _, _, _ -> go.performClick() }
@@ -288,11 +380,20 @@ class MainActivity : Activity() {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(pad, pad, pad, pad)
             addView(TextView(this@MainActivity).apply { text = "atc server"; textSize = 22f })
-            addView(TextView(this@MainActivity).apply { text = "The address you open atc at in a browser." })
+            addView(TextView(this@MainActivity).apply { text = "Scan the code from atc pair, or Settings › Devices on a device already logged in." })
+            addView(Button(this@MainActivity).apply { text = "Scan QR"; setOnClickListener { scan() } })
+            addView(TextView(this@MainActivity).apply { text = "Or enter the address you open atc at in a browser."; setPadding(0, pad, 0, 0) })
             addView(field)
             addView(go)
         })
     }
+
+    private fun scan() = IntentIntegrator(this)
+        .setDesiredBarcodeFormats(IntentIntegrator.QR_CODE)
+        .setPrompt("Scan the atc pairing code")
+        .setBeepEnabled(false)
+        .setOrientationLocked(false)
+        .initiateScan()
 
     private fun browse(url: String) {
         val w = WebView(this)
@@ -508,6 +609,7 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        IntentIntegrator.parseActivityResult(requestCode, resultCode, data)?.let { return scanned(it.contents) }
         if (requestCode != REQ_FILE) return super.onActivityResult(requestCode, resultCode, data)
         val shot = photo?.takeIf { it.length() > 0 }?.let { FileProvider.getUriForFile(this, "$packageName.files", it) }
         val uris = if (resultCode != RESULT_OK) null
