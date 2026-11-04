@@ -134,3 +134,14 @@ func TestNoticeAfterTheTurnStartsAnother(t *testing.T) {
 		t.Fatalf("a notice after the turn ended should open its own turn: %+v", turns)
 	}
 }
+
+func TestCompactionSummaryIsNotTheUsersMessage(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "s.jsonl")
+	line := `{"type":"user","timestamp":"2026-10-01T10:00:00Z","message":{"content":"This session is being continued from a previous conversation that ran out of context. Summary follows."}}`
+	os.WriteFile(path, []byte(line+"\n"), 0o644)
+	turns, _, _ := New(dir).Turns(path)
+	if len(turns) != 1 || !turns[0].Notice || strings.Contains(turns[0].Prompt, "Summary follows") {
+		t.Fatalf("a compaction summary should read as a notice: %+v", turns)
+	}
+}

@@ -6497,7 +6497,7 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
           <${Lead} at=${clock(r.at, true)} text=${unpathed(r.p.text)} files=${(r.p.text.match(UPLOADED) || []).length} />
           <${SentState} p=${r.p} host=${s.host} retry=${() => deliver(r.p)} edit=${() => { setPending((ps) => ps.filter((x) => x.id !== r.p.id)); setDraft((d) => [unpathed(r.p.text), d].filter(Boolean).join("\n")); focusInput.current(); }} /></div>`;
       }
-      case "stream": return html`${HUB_CHANNEL[r.st.channel] && html`<p class="evt">${HUB_CHANNEL[r.st.channel]}</p>`}<div class="prose live" dangerouslySetInnerHTML=${{ __html: md(r.st.text) + '<span class="caret"></span>' }}></div>`;
+      case "stream": return html`${HUB_CHANNEL[r.st.channel] && html`<p class="evt">${HUB_CHANNEL[r.st.channel]}</p>`}<div class="prose live" dangerouslySetInnerHTML=${{ __html: quietCitations(md(r.st.text)) + '<span class="caret"></span>' }}></div>`;
       case "live": return html`<${LiveRow} s=${s} step=${running} since=${lastAt(lastBody) || last?.end} steps=${last?.steps || 0} />`;
       case "ask": return html`<${Ask} s=${s} a=${r.a} keyRef=${askKey} onType=${() => focusInput.current()} />`;
       case "queued": return html`<${Queued} p=${r.p} now=${() => deliver(r.p)}

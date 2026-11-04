@@ -427,7 +427,7 @@ func queued(text string, at time.Time) (Message, bool) {
 	switch {
 	case t == "":
 		return Message{}, false
-	case strings.HasPrefix(t, "<task-notification>"):
+	case isNotice(t):
 		return Message{Role: "event", Text: noticeText(t), Time: at}, true
 	case IsNoise(t):
 		return Message{}, false
@@ -435,7 +435,16 @@ func queued(text string, at time.Time) (Message, bool) {
 	return Message{Role: "note", Text: t, Time: at}, true
 }
 
+const compactPrefix = "This session is being continued from a previous conversation"
+
+func isNotice(t string) bool {
+	return strings.HasPrefix(t, "<task-notification>") || strings.HasPrefix(t, compactPrefix)
+}
+
 func noticeText(t string) string {
+	if strings.HasPrefix(t, compactPrefix) {
+		return "Continued from an earlier conversation that ran out of context"
+	}
 	if sm := notice.FindStringSubmatch(t); sm != nil {
 		return strings.TrimSpace(sm[1])
 	}
@@ -458,8 +467,8 @@ func convert(m rawMsg) []Message {
 	for _, b := range blocks {
 		switch {
 		case b.Type == "text" && strings.TrimSpace(b.Text) != "":
-			if m.Type == "user" && strings.HasPrefix(strings.TrimSpace(b.Text), "<task-notification>") {
-				out = append(out, Message{Role: "event", Text: noticeText(b.Text), Time: m.Timestamp})
+			if t := strings.TrimSpace(b.Text); m.Type == "user" && isNotice(t) {
+				out = append(out, Message{Role: "event", Text: noticeText(t), Time: m.Timestamp})
 				continue
 			}
 			if m.Type == "user" && IsNoise(b.Text) {
