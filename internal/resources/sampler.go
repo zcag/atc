@@ -6,6 +6,7 @@ import (
 	"context"
 	"log"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -208,6 +209,11 @@ func (s *Sampler) tick(now time.Time) {
 	r := Report{At: now, Machine: s.mach.sample(dt), Exact: s.sc.boot > 0}
 	r.Machine.Disks = s.free
 	groups := s.aggregate(procs, targets, now, dt, first)
+	if runtime.GOOS != "linux" {
+		for _, g := range groups {
+			r.Machine.CPU += g.CPU
+		}
+	}
 	dirs := map[string][]string{}
 	for _, p := range procs {
 		if p.kind == KindSession && p.cwd != "" {
