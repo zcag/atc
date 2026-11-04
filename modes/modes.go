@@ -47,7 +47,10 @@ func Text(name string) string {
 func lines() map[string]string {
 	out := map[string]string{}
 	b, _ := builtin.ReadFile("lines.json")
-	json.Unmarshal([]byte(named(string(b))), &out)
+	json.Unmarshal(b, &out)
+	for k, v := range out {
+		out[k] = named(v)
+	}
 	if Dir != "" {
 		if b, err := os.ReadFile(filepath.Join(Dir, "lines.json")); err == nil {
 			json.Unmarshal(b, &out)
