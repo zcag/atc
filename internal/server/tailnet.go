@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -152,8 +155,25 @@ func (s *Server) clientIP(r *http.Request) net.IP {
 	return ip
 }
 
+// namedForUs is whether a request's Host could be this server's own name. A browser sends the attacker's name when a
+// page rebinds it through DNS to this machine, and trust by address would otherwise let that page in.
+func (s *Server) namedForUs(r *http.Request) bool {
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	host = strings.ToLower(strings.Trim(host, "[]"))
+	if net.ParseIP(host) != nil || !strings.Contains(host, ".") || strings.HasSuffix(host, ".ts.net") {
+		return true
+	}
+	if u, err := url.Parse(s.PublicURL); err == nil && strings.EqualFold(u.Hostname(), host) {
+		return true
+	}
+	return slices.ContainsFunc(strings.Fields(os.Getenv("ATC_ALLOWED_HOSTS")), func(a string) bool { return strings.EqualFold(a, host) })
+}
+
 func (s *Server) fromMyTailnet(r *http.Request) bool {
-	if s.tailnet == nil {
+	if s.tailnet == nil || !s.namedForUs(r) {
 		return false
 	}
 	ip := s.clientIP(r)

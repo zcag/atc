@@ -20,6 +20,12 @@ import (
 
 var outputPath = regexp.MustCompile(`^/api/sessions/[^/]+/o/`)
 
+// isOutputLink says a request is for a signed output file, which carries its own proof instead of a login. It reads the
+// path as sent: decoded, /api/sessions/a%2Fo%2Fb/pages looks like one while the router sends it to the session a/o/b.
+func isOutputLink(r *http.Request) bool {
+	return (r.Method == http.MethodGet || r.Method == http.MethodHead) && outputPath.MatchString(r.URL.EscapedPath())
+}
+
 type server struct {
 	URL       string    `json:"url"`
 	Port      int       `json:"port"`

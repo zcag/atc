@@ -299,7 +299,7 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		if s.Token == "" || r.URL.Path == "/api/login" || r.URL.Path == pair.ClaimPath || r.URL.Path == "/healthz" || r.URL.Path == "/api/whatsapp/hook" || outputPath.MatchString(r.URL.Path) {
+		if s.Token == "" || r.URL.Path == "/api/login" || r.URL.Path == pair.ClaimPath || r.URL.Path == "/healthz" || r.URL.Path == "/api/whatsapp/hook" || isOutputLink(r) {
 			next.ServeHTTP(w, r)
 			return
 		}
