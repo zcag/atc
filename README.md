@@ -586,8 +586,9 @@ not billed per token.
 
 ## Resources
 
-**Resources** (command palette, or `mem` in the console line) shows what agents cost each machine;
-`atc top` prints the same. Every 10 seconds atc attributes every process to one of:
+**Resources** (command palette, or `mem` in the console line and on the phone's board) shows what
+agents cost each machine, with sessions totalled per bay; `atc top` prints the same. A session's
+State pane has its own processes and what its worktree holds. Every 10 seconds atc attributes every process to one of:
 
 - **a session**: the Claude process and everything below it, found through the process tree.
 - **outlived its session**: still running after its session ended, which can be deliberate (a dev

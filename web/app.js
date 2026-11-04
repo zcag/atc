@@ -533,7 +533,7 @@ function App() {
     ${assistView ? html`<${AssistantView} hub=${hub} live=${all} loaded=${!!runs} agents=${agents} say=${say} panes=${panes} togglePane=${togglePane} />`
     : pagesAt && !route ? html`<div class="shell pagesv"><${PagesView} at=${pagesAt} live=${all} bays=${bays} say=${say} index=${panes.pgindex !== false} /></div>`
     : scr && !route ? html`<main class="shell scr">${scr === "usage" ? html`<${UsagePage} limits=${limits} live=${all} down=${down} onOpen=${openFromUsage} />`
-      : scr === "resources" ? html`<${ResourcesPage} hosts=${(me.hosts || [me.host]).filter((h) => h)} home=${me.host} />`
+      : scr === "resources" ? html`<${ResourcesPage} hosts=${(me.hosts || [me.host]).filter((h) => h)} home=${me.host} live=${all} />`
       : scr === "backlog" ? html`<${BacklogPage} live=${all} say=${say} onAdd=${setCreating} only=${only} />`
       : html`<${AgentsPage} name=${agentName} agents=${agents} live=${all} say=${say} reload=${loadAgents} />`}</main>`
     : !route ? html`<div class="shell boardv"><${BoardView} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} say=${say} index=${panes.index && wide} /></div>` : html`
@@ -899,7 +899,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
         <span class="st"><span class="l1">${status}</span>${second && html`<span class="l2 ${s.state === "working" ? "mono" : ""}">${second}</span>`}</span>
         <span class="ctx">${s.context > 0 && html`<${CtxMeter} n=${s.context} /><span>${Math.round(s.context / 1000)}k</span>`}<${LoadTag} s=${s} /></span>
         <span class="stp">${s.steps > 0 && s.steps}${s.failed > 0 && html`<span class="f">${s.failed} failed</span>`}</span>
-        <span class="mk">${run.length > 0 && html`<span class="run">${run.join(" ")}</span>`}${made.length > 0 && html`<span>${made.join(" ")}</span>`}</span>
+        <span class="mk">${run.length > 0 && html`<span class="run">${run.join(" ")}</span>`}${made.length > 0 && html`<span>${made.join(" ")}</span>`}<${LoadTag} s=${s} /></span>
         <span class="since">${fresh && html`<i class="dot" aria-hidden="true"></i>`}${ago(s)}${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span>
         <span class="chev" aria-hidden="true"></span>
       </div>
@@ -945,7 +945,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
         <div class="bhead">
           <div class="b1"><h1>${only || "Every bay"}</h1>${path && html`<span class="w">${tilde(baseDir(path.cwd))}</span>`}
             <span class="r"><${BacklogLine} only=${only} /><button class="kb" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts="/">Search <kbd aria-hidden="true">/</kbd></button></span></div>
-          <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${{ waiting: "waiting on you", working: "working", parked: "parked" }[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}</div>
+          <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${{ waiting: "waiting on you", working: "working", parked: "parked" }[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}${innerWidth < 900 && html`<${ResourceChip} />`}</div>
         </div>
         <div class="bcols" aria-hidden="true"><span></span><span>Session</span><span>Status, and what it last said or is doing</span><span>Context</span><span>Steps</span><span>Running, made</span><span>Since</span><span></span></div>
         ${GROUPS.map(([k, title]) => {
@@ -1948,7 +1948,6 @@ function Session({ s, say, live, panes, togglePane }) {
   });
   const facts = [
     ["Context", s.context > 0 && `${Math.round(s.context / 1000)}k`],
-    ["Load", s.load && html`<a href=${RESOURCES}>${shortLoad(s.load)}</a>`],
     ["Cost", use?.total > 0 && html`<button class="link" onClick=${() => setShowUse(true)}>${usd(use.cost)}</button>`],
     ["Steps", s.steps > 0 && `${s.steps}${s.failed > 0 ? `, ${s.failed} failed` : ""}`],
     ["Model", engineTag(s) || (s.model && model(s.model))],
@@ -1970,6 +1969,7 @@ function Session({ s, say, live, panes, togglePane }) {
         ${s.summary && html`<button class="kb" onClick=${() => api(`/api/sessions/${s.sessionId}/summary`, { method: "POST" }).then(() => say("Summarizing again…"), (e) => say(e.message))}>Summarize again</button>`}
       </section>
       <${Outputs} s=${s} data=${outs} pages=${shown} open=${openPage} />
+      <${SessionResources} s=${s} />
       <section><h3>Session</h3><dl class="kv">${facts.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl></section>
     </div>`;
 
@@ -2003,6 +2003,7 @@ function Session({ s, say, live, panes, togglePane }) {
         ${use?.total > 0 && html`<span class="rd">${usd(use.cost)}</span>`}
         ${s.steps > 0 && html`<span class="rd">${plural(s.steps, "step")}</span>`}
         ${running > 0 && html`<span class="rd run">${running} running</span>`}
+        ${s.load && html`<span class="rd ${hotLoad(s.load) ? "hotrd" : ""}">${shortLoad(s.load)}</span>`}
         ${s.permissionMode === "bypassPermissions" && html`<span class="rd">no prompts</span>`}
       </div>
     </header>
@@ -3236,9 +3237,10 @@ function HoursMap({ days, hourly, range, filtered }) {
 }
 
 const gb = (n) => n >= 2 ** 30 ? `${(n / 2 ** 30).toFixed(n >= 100 * 2 ** 30 ? 0 : 1)} GB` : n >= 2 ** 20 ? `${Math.round(n / 2 ** 20)} MB` : n >= 1024 ? `${Math.round(n / 1024)} KB` : `${Math.round(n || 0)} B`;
+const procCount = (n) => `${n} ${n === 1 ? "process" : "processes"}`;
 const ioRate = (r, w) => (r + w) < 1024 ? "" : `${gb(r)}/s read, ${gb(w)}/s written`;
 const ioShort = (r, w) => (r + w) < 1024 ? "" : `${gb(r + w)}/s`;
-const shortLoad = (l) => [l.mem > 0 && `${(l.mem / 2 ** 30).toFixed(1)}G`, l.cpu > 0 && `${l.cpu}%`].filter(Boolean).join(" ");
+const shortLoad = (l) => [l.mem > 0 && gb(l.mem), l.cpu > 0 && `${l.cpu}% CPU`].filter(Boolean).join(", ");
 const hotLoad = (l) => l.mem >= 4 * 2 ** 30 || l.cpu >= 300;
 const LoadTag = ({ s }) => s.load ? html`<span class="load ${hotLoad(s.load) ? "hot" : ""}" title=${`This session and its processes: ${[s.load.mem > 0 && gb(s.load.mem), s.load.cpu > 0 && `${s.load.cpu}% of a core`].filter(Boolean).join(", ")}`}>${shortLoad(s.load)}</span>` : null;
 
@@ -3355,6 +3357,29 @@ function ResGroup({ g, colorOf, open, onToggle, peak }) {
     </div>`;
 }
 
+function SessionResources({ s }) {
+  const [rep, setRep] = useState(null);
+  useEffect(() => {
+    const load = () => document.visibilityState === "visible" && api(`/api/resources${s.host ? `?host=${encodeURIComponent(s.host)}` : ""}`).then(setRep, () => {});
+    load();
+    const t = setInterval(load, 10000);
+    return () => clearInterval(t);
+  }, [s.host]);
+  if (!rep) return null;
+  const mine = (g) => g.key === keyOf(s) || (g.sessionId && g.sessionId === s.sessionId);
+  const g = (rep.sessions || []).find(mine) || (rep.left || []).find(mine);
+  if (!g) return null;
+  const disk = (rep.disk || []).filter((d) => d.sessions?.includes(s.title));
+  return html`
+    <section class="sres"><h3>Resources</h3>
+      <p class="now">${gb(g.mem)}, ${Math.round(g.cpu)}% CPU, ${procCount(g.count)}${g.read + g.write >= 1024 ? `, ${ioShort(g.read, g.write)} disk` : ""}</p>
+      ${g.kind === "left" && html`<p class="rnote">This session ended and these kept running.</p>`}
+      <${ResTree} procs=${g.procs || []} />
+      ${disk.map((d) => html`<p class="rnote">${tilde(d.path)} holds ${gb(d.size)}</p>`)}
+      <a class="link" href=${RESOURCES}>Every session on ${s.host || "this machine"}</a>
+    </section>`;
+}
+
 const RES_SORT = { mem: ["Memory", (g) => g.mem], cpu: ["CPU", (g) => g.cpu], io: ["Disk", (g) => g.read + g.write] };
 
 function ResSection({ title, note, groups, colorOf, peaks, sort, opened, toggle, tail }) {
@@ -3368,7 +3393,7 @@ function ResSection({ title, note, groups, colorOf, peaks, sort, opened, toggle,
     </section>`;
 }
 
-function ResourcesPage({ hosts, home }) {
+function ResourcesPage({ hosts, home, live }) {
   const [v, setV] = useState(() => ({ range: "6h", sort: "mem", ...stored("atc.resources", {}) }));
   const set = (p) => setV((x) => { const n = { ...x, ...p }; store("atc.resources", n); return n; });
   const host = hosts.includes(v.host) ? v.host : home;
@@ -3408,7 +3433,12 @@ function ResourcesPage({ hosts, home }) {
   const past = moment && (moment.g || []).map((g) => ({ key: g.k, kind: g.o, title: g.l || g.k, cpu: g.c, mem: g.m, read: g.r || 0, write: g.w || 0, top: g.p }));
   const named = (g) => ({ ...g, top: g.top || resTops(g.procs) });
   const groupsOf = (kind) => (past ? past.filter((g) => g.kind === kind) : ((kind === "session" ? rep?.sessions : kind === "left" ? rep?.left : rep?.outside) || []).map(named));
-  const sessions = groupsOf("session"), left = groupsOf("left"), outside = groupsOf("outside");
+  const bayByKey = useMemo(() => { const m = new Map(); for (const x of live || []) { const n = bayOf(x) || "other"; if (x.id) m.set(x.id, n); m.set(x.sessionId, n); } return m; }, [live]);
+  const allSessions = groupsOf("session"), left = groupsOf("left"), outside = groupsOf("outside");
+  const bayNames = [...new Set(allSessions.map((g) => bayByKey.get(g.key) || "other"))];
+  const bayMem = (b) => allSessions.filter((g) => (bayByKey.get(g.key) || "other") === b).reduce((a, g) => a + g.mem, 0);
+  const bayPicked = bayNames.includes(v.bay) ? v.bay : null;
+  const sessions = bayPicked ? allSessions.filter((g) => (bayByKey.get(g.key) || "other") === bayPicked) : allSessions;
   const sum = (l) => l.reduce((a, g) => a + g.mem, 0);
   const toggle = (id) => setOpened((x) => (x === id ? null : id));
   const disk = m?.disks?.[0];
@@ -3421,7 +3451,7 @@ function ResourcesPage({ hosts, home }) {
     disk && { l: "Disk", v: `${gb(disk.size - disk.used)} free`, s: `of ${gb(disk.size)}${m.read + m.write >= 1024 ? `, ${gb(m.read + m.write)}/s now` : ""}` },
   ].filter(Boolean) : [];
   const status = err ? `${host} did not answer: ${err}` : !rep ? "Measuring…" : !rep.at || !Date.parse(rep.at) ? "Measuring…"
-    : `${plural(rep.sessions.length, "session")} using ${gb(sum(rep.sessions))}`;
+    : `${bayPicked ? `${bayPicked}: ` : ""}${plural(sessions.length, "session")} using ${gb(sum(sessions))}`;
   return html`
     <section class="scrpane usage res" aria-label="Resources">
       <header class="hd">
@@ -3446,9 +3476,13 @@ function ResourcesPage({ hosts, home }) {
         ${moment ? html`<p class="sec rat"><b>At ${resClock(moment.t, hours)}</b> ${moment.ram > 0 ? `${gb(moment.ram)} of files in RAM. ` : ""}Only what used over 500 MB or 10% of a core is kept per minute. <button class="btn" onClick=${() => setPin(null)}>Back to now</button></p>`
           : rows.length > 1 && html`<p class="sec rat quiet">${touch ? "Tap" : "Click"} a chart to see who was using what at that moment.</p>`}
         <${ResSection} title="Outlived their session" note="Their session ended, these kept running. Some are on purpose, like a dev stack other sessions use, so look before stopping one." groups=${left} colorOf=${colorOf} peaks=${peaks} sort=${v.sort} opened=${opened} toggle=${toggle} />
-        <${ResSection} title="Sessions" note="Each with every process it started. Memory is each process's own share, so shared pages are not counted twice." groups=${sessions} colorOf=${colorOf} peaks=${peaks} sort=${v.sort} opened=${opened} toggle=${toggle} />
+        ${bayNames.length > 1 && html`<div class="sec rbays" role="group" aria-label="Sessions of one bay">
+          <button aria-pressed=${!bayPicked} onClick=${() => set({ bay: null })}>All<span>${gb(sum(allSessions))}</span></button>
+          ${[...bayNames].sort((a, b) => bayMem(b) - bayMem(a)).map((b) => html`<button aria-pressed=${b === bayPicked} onClick=${() => set({ bay: b === bayPicked ? null : b })}>${b}<span>${gb(bayMem(b))}</span></button>`)}
+        </div>`}
+        <${ResSection} title=${bayPicked ? `Sessions in ${bayPicked}` : "Sessions"} note="Each with every process it started. Memory is each process's own share, so shared pages are not counted twice." groups=${sessions} colorOf=${colorOf} peaks=${peaks} sort=${v.sort} opened=${opened} toggle=${toggle} />
         <${ResSection} title="Outside sessions" note="Containers and services, by cgroup." groups=${outside} colorOf=${colorOf} peaks=${peaks} sort=${v.sort} opened=${opened} toggle=${toggle}
-          tail=${!moment && rep?.rest?.count > 0 && html`<p class="rnote">And ${plural(rep.rest.count, "more process")}: ${gb(rep.rest.mem)}, ${Math.round(rep.rest.cpu)}% CPU.</p>`} />
+          tail=${!moment && rep?.rest?.count > 0 && html`<p class="rnote">And ${procCount(rep.rest.count)} more: ${gb(rep.rest.mem)}, ${Math.round(rep.rest.cpu)}% CPU.</p>`} />
         ${!moment && rep?.ramDirs?.length > 0 && html`
           <section class="sec rsec rdisk">
             <div class="sh"><h2>Files in RAM</h2><span class="n">The biggest folders in /tmp. They count as memory until deleted, whoever made them.</span></div>
