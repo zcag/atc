@@ -1,0 +1,13 @@
+[Unit]
+Description=delta-tts: streaming TTS for calls (Higgs TTS 3 via delta-higgs for Turkish and English, pocket-tts-turkish as fallback), POST :8812/v1/audio/speech
+After=network-online.target
+
+[Service]
+Slice=calls.slice
+ExecStart=%h/srv/call-data/tts-venv/bin/python %h/srv/call/ttsd.py --engine pocket,higgs --port 8812
+Environment=HF_HOME=%h/srv/call-data/hf
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

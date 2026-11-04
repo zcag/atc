@@ -1,0 +1,14 @@
+[Unit]
+Description=delta-higgs: Higgs TTS 3 (Boson, research licence) on the GPU through audio.cpp (Vulkan), :8841
+After=network-online.target
+
+[Service]
+Slice=calls.slice
+WorkingDirectory=%h/srv/call-data/audiocpp/bin
+Environment=LD_LIBRARY_PATH=%h/srv/call-data/audiocpp/bin
+ExecStart=%h/srv/call-data/audiocpp/bin/audiocpp_server --config %h/srv/call-data/audiocpp/server.json
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

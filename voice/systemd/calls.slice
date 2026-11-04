@@ -1,0 +1,6 @@
+[Unit]
+Description=delta-call: the call units, first in line for the CPU when desktop is busy
+
+[Slice]
+CPUWeight=1000
+MemorySwapMax=0

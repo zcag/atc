@@ -1,0 +1,20 @@
+[Unit]
+Description=delta-talk: answers calls on delta's SIM and WhatsApp (the device line) and holds the conversation (speech in, atc hub, speech out)
+After=delta-call.service atc-hub.service delta-tts.service delta-higgs.service
+Wants=delta-call.service delta-tts.service
+
+[Service]
+Slice=calls.slice
+ExecStart=/usr/bin/uv run --script %h/srv/call/talk.py --loop --smart-turn --end-ms 1500 --stt stream --english --brain hub --line device --out %h/.local/state/delta-call/calls
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=TALK_TTS=http://127.0.0.1:8812/v1/audio/speech
+Environment=TALK_TTS_ENGINE=higgs
+Environment=TALK_TTS_VOICE=voice_a
+Environment=TALK_TTS_ENGINE_EN=higgs
+Environment=TALK_TTS_VOICE_EN=voice_b
+Environment=TALK_ANSWER=15550100
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

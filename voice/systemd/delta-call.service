@@ -1,0 +1,15 @@
+[Unit]
+Description=delta-call: phone calls on delta as a WebSocket (call state, answer, dial, audio both ways)
+After=network-online.target
+
+[Service]
+Slice=calls.slice
+ExecStart=/usr/bin/python3 /home/user/srv/call/call.py
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=DELTA_CALL_DIAL_ALLOW=15550100
+Environment=ANDROID_SERIAL=DEVICE-SERIAL
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target
