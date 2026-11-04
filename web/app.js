@@ -5085,7 +5085,8 @@ function Table({ text, tsv }) {
 }
 
 const TX_FACES = {
-  lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [16, 17.5, 19], lh: 1.52 },
+  text: { name: "System", css: "var(--text)", sizes: [15.5, 16.5, 18], lh: 1.5 },
+  lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [16, 17.5, 19], lh: 1.52, weight: 420 },
   sans: { name: "Recursive", css: "var(--sans)", sizes: [15, 16, 17.5], lh: 1.5 },
 };
 const txStore = {
@@ -5093,9 +5094,12 @@ const txStore = {
   set: (k, v) => { try { v === null ? localStorage.removeItem(`atc.tx.${k}`) : localStorage.setItem(`atc.tx.${k}`, JSON.stringify(v)); } catch {} },
 };
 const txPrefs = {
-  get: () => ({ face: "lit", size: 1, width: 1, ...txStore.get("prefs", {}) }),
+  get: () => {
+    const p = txStore.get("prefs", {});
+    return { size: 1, width: 1, ...p, face: !p.face || (p.face === "lit" && !p.chose) ? "text" : p.face };
+  },
   set(p) {
-    const v = { ...txPrefs.get(), ...p };
+    const v = { ...txPrefs.get(), ...p, chose: p.face ? true : txStore.get("prefs", {}).chose };
     txStore.set("prefs", v);
     dispatchEvent(new CustomEvent("atc-txprefs", { detail: v }));
   },
@@ -5421,7 +5425,7 @@ function SettingsPage({ me, onClose }) {
     return () => { removeEventListener("atc-look", onLook); removeEventListener("atc-txprefs", onPrefs); removeEventListener("keydown", onKey); };
   }, []);
   const on = (sc) => look.scheme === "auto" || look.scheme === sc;
-  const face = TX_FACES[prefs.face] || TX_FACES.lit;
+  const face = TX_FACES[prefs.face] || TX_FACES.text;
   const askNotif = () => Notification.requestPermission().then(setNotif);
   const hosts = me?.hosts?.length > 1 ? me.hosts.join(" and ") : me?.host;
   return html`
@@ -6239,11 +6243,12 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
   }, [idx, pending]);
 
   useEffect(() => {
-    const f = TX_FACES[prefs.face] || TX_FACES.lit, st = box.current?.parentElement?.style;
+    const f = TX_FACES[prefs.face] || TX_FACES.text, st = box.current?.parentElement?.style;
     if (!st) return;
     st.setProperty("--rf", f.css);
     st.setProperty("--rs", `${f.sizes[prefs.size]}px`);
     st.setProperty("--rl", f.lh);
+    st.setProperty("--rg", f.weight || 400);
     st.setProperty("--rw", `${TX_MEASURES[prefs.width]}px`);
   }, [prefs, idx !== null]);
   useEffect(() => {

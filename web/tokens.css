@@ -110,6 +110,7 @@
   --sans: "Recursive", ui-sans-serif, system-ui, sans-serif;
   --mono: "Recursive Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --read: Literata, Georgia, serif;
+  --text: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
   --serif: var(--read);
   --v-you: "CASL" 1;
   --lh-ui: 1.35;
@@ -122,6 +123,7 @@
   --fs-body: calc(14px * var(--text-scale));
   --fs-title: calc(16px * var(--text-scale));
   --fs-read: calc(17.5px * var(--text-scale));
+  --fs-text: calc(16.5px * var(--text-scale));
   --fs-read-phone: calc(17px * var(--text-scale));
   --fs-lead: calc(19px * var(--text-scale));
   --fs-h: calc(22px * var(--text-scale));
