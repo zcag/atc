@@ -1,7 +1,7 @@
 import { html, render, useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "./vendor/preact-htm.js";
 import { marked as Marked } from "./vendor/marked.esm.js";
 import hljs from "./vendor/highlight.min.js";
-import { diffLines } from "./vendor/diff.mjs";
+import { diffLines, diffWords } from "./vendor/diff.mjs";
 import { Call } from "./call.js";
 import { persona } from "./persona.js";
 import { minimal } from "./minimal.js";
