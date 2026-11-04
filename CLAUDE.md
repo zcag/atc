@@ -1,5 +1,7 @@
 # atc
 
+A `CLAUDE.local.md` next to this file, when there is one, holds how a particular machine deploys it.
+
 ## The web UI is also the phone app
 
 `android/` is a thin native shell around the same page (`web/`), so every web change ships to the
@@ -15,42 +17,32 @@ phone too. A web change is not done until it works there:
 - **Native pieces.** If the change needs something the WebView can't do, it belongs in `Bridge.kt`.
   If it changes what a session row carries, consider the home-screen widget feed (`APP.setSessions`,
   `Widget.kt`) and push (`internal/push`).
-- Kotlin changes need a new APK: `make android && make android-publish` on laptop or desktop (the app
-  updates itself from `https://atc.example/app/`). On desktop, `redroid up` starts a headless Android 12
-  device for testing (`adb -s 127.0.0.1:5555`, arm64 libs through translation, the real GPU);
-  `redroid install|start|shot|log`. desktop has no KVM, so no emulator. Web-only changes reach the app on `make install`: an open page notices the new build (`web` in `/api/me`) and reloads when you come back to it, or offers Reload.
+- Kotlin changes need a new APK: `make android`. Web-only changes reach the app when the server
+  updates: an open page notices the new build (`web` in `/api/me`) and reloads when you come back to
+  it, or offers Reload.
+
+## Dependencies stay visible
+
+`internal/caps/registry.go` is the one list of what each feature needs; Settings, `atc doctor` and first run all read it. A new
+feature or setting gets a row there, with a real check, the fix and what it costs. A feature whose dependency is missing stays
+discoverable: draw it and point at its row, don't hide it.
 
 ## The assistant's words
 
 `modes/` holds the built-in, generic text. Nothing personal goes in this repo: a user's name, numbers, tools or
 language belong in their own files in `~/.config/atc/modes/`, which replace the built-in ones (`lines.json` key by
-key). On desktop and laptop that folder links to the notes (`agents/assistant/modes/`), so **to change how the
-assistant actually talks to the user, edit the file there**, not `modes/`.
+key). `voice/lang/` holds a language's words for calls.
 
 `atc prompts` prints what the assistant is told with those files applied, and `make check` fails when that differs
-from `prompts.golden` beside them: read the diff, then accept it with `atc prompts --update`. A new built-in file with
-no override of their shows up in that diff, so write their version too if the generic one isn't what they want.
+from a `prompts.golden` beside them: read the diff, then accept it with `atc prompts --update`.
 
-## Shipping
+## Services
 
-Own it end to end: merge to master, push, `make install` on desktop (restarting is safe:
-`KillMode=process` keeps every session alive) **and** on laptop
-(`ssh laptop 'cd ~/proj/atc && git pull --ff-only && make install-mac'`). desktop forwards laptop's
-sessions to laptop's atc, so the two must never run different versions. `make install` ends by
-fast-forwarding desktop's main checkout (`~/proj/atc`) to `origin/master` (`make sync-main`): a push
-from a worktree doesn't move it, and a session started there would otherwise build stale code.
-It leaves the checkout alone when it's off master or has local changes. Settings live in
-`~/.config/atc/env` on each. Don't stop at a branch.
-
-The hub (`internal/hub`: calls, channels, the assistant's conversation) is a separate binary,
-`atc-hub.service`, which `make install` does not touch: a hub change also needs `make install-hub`
-on desktop. Restart it only while delta is idle (`curl -s desktop:8807/status` shows `"call": "idle"`),
-or it drops the call they are on.
-
-The call stack (`voice/`, its README) is the same again: `make install` does not touch it; `make install-voice` on desktop
-copies it to where `~/.config/atc/voice.env` says the units run, and `deploy.sh` restarts each unit only between calls. Before
-a change to it read dotfiles `voice/README.md`, "Working on it" first. Test on `talk.py --sim` with a private
-ttsd and hub, never against `:8807` or `:8820`.
+`make install` does atc only (`atc service install --only atc`, restarting is safe: `KillMode=process` keeps every session alive).
+The hub (`internal/hub`: calls, channels, the assistant's conversation) is a separate binary and service that needs
+`make install-hub`, and the call stack (`voice/`) `make install-voice`. Restart either only between calls (the call line's `/status`
+shows `"call": "idle"`), or it drops the call. Test the call stack with `talk.py --sim` and a private ttsd and hub, never against a
+live line.
 
 ## Terminal size and rendering problems
 
@@ -66,5 +58,5 @@ session's `ses_…` id is keyed by its last 8 characters).
   even when its socket is dead: show/hide, page visible/hidden, open/closed, every size it
   received, resizes it could not send. `viewer=#N` ties it to the server lines; `quiet=` is how long
   since the socket last heard anything.
-- A session on laptop is served by laptop's atc: its server lines are in laptop's log
-  (`ssh laptop grep "term <sid>" /tmp/atc.log`), the browser lines in desktop's.
+- A session on a peer is served by that machine's atc: its server lines are in that machine's log,
+  the browser lines in the one you opened.
