@@ -95,12 +95,12 @@ body.docked .app { margin-right: 380px; }
 .cap.it p { font-family: var(--read); }
 .cap.old p { color: var(--dim); }
 .cap .caret { display: inline-block; width: 7px; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--work); }
-.ctl { flex: none; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--s2); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); margin-top: auto; }
-.ctl .btn { height: 44px; justify-content: center; }
-.ctl .btn.prime { grid-column: span 2; }
-.ctl .btn kbd { font-family: var(--mono); font-size: var(--fs-micro); font-weight: 400; line-height: 14px; padding: 0 4px; margin-left: 6px; box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--dim); }
-.ctl .btn.on { background: var(--strip-hi); box-shadow: inset 0 0 0 1px var(--line-strong), inset 0 -2px 0 var(--ink); }
-.ctl .btn.end kbd { color: inherit; box-shadow: inset 0 0 0 1px currentColor; }
+.callp .ctl { flex: none; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--s2); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); margin-top: auto; }
+.callp .ctl .btn { height: 44px; justify-content: center; }
+.callp .ctl .btn.prime { grid-column: span 2; }
+.callp .ctl .btn kbd { font-family: var(--mono); font-size: var(--fs-micro); font-weight: 400; line-height: 14px; padding: 0 4px; margin-left: 6px; box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--dim); }
+.callp .ctl .btn.on { background: var(--strip-hi); box-shadow: inset 0 0 0 1px var(--line-strong), inset 0 -2px 0 var(--ink); }
+.callp .ctl .btn.end kbd { color: inherit; box-shadow: inset 0 0 0 1px currentColor; }
 
 /* character and voice, inside the panel: the big frame above is the preview */
 .callp:has(.picks) .cpers { flex-basis: 38%; }
@@ -213,7 +213,7 @@ body.docked .app { margin-right: 380px; }
   .callp.full .cph { padding: 0 var(--s1) 0 var(--s4); height: 44px; }
   .callp.full .cph .kb { height: 44px; }
   .callp.full .cpers { min-height: 240px; }
-  .ctl { gap: var(--s3); }
+  .callp .ctl { gap: var(--s3); }
   .callp .ctl .btn { height: 44px; }
   .picks .pick { min-height: 52px; }
   .vpick { min-height: 44px; }

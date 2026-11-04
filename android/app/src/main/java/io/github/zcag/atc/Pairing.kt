@@ -28,8 +28,11 @@ data class Pairing(val url: String, val code: String, val ca: String?) {
         /** The page an atc://open link names on the server this phone uses; "/" when it names none. */
         fun openPath(text: String): String? {
             val path = (query(text, "open") ?: return null)["path"] ?: return "/"
-            return path.takeIf { it.startsWith("/") && !it.startsWith("//") && !it.startsWith("/\\") }
+            return path.takeIf(::isLocalPath)
         }
+
+        /** A path on the server, so joining it to the server's address can't land on another host. */
+        fun isLocalPath(path: String) = path.startsWith("/") && !path.startsWith("//") && !path.startsWith("/\\")
 
         private fun plainAddress(url: String) = runCatching {
             val u = URI(url)

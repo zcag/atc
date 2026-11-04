@@ -1,10 +1,21 @@
 package io.github.zcag.atc
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class PairingTest {
+    @Test
+    fun onlyLocalPathsOpen() {
+        assertTrue(Pairing.isLocalPath(MainActivity.HOLD))
+        assertTrue(Pairing.isLocalPath("/#/p/@shopping/picks#towel"))
+        for (bad in listOf("@evil.com", ".evil.com/", "//evil.com", "/\\evil.com", "https://evil.com", "")) {
+            assertFalse(bad, Pairing.isLocalPath(bad))
+        }
+    }
+
     private val fp = "ab".repeat(32)
 
     @Test fun readsWhatTheServerWrites() {

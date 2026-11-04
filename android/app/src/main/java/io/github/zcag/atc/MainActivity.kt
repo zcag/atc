@@ -314,7 +314,7 @@ class MainActivity : Activity() {
 
     private fun open(intent: Intent, assist: Boolean) {
         val server = prefs.server ?: return setup()
-        val path = intent.getStringExtra(EXTRA_PATH)
+        val path = intent.getStringExtra(EXTRA_PATH)?.takeIf(Pairing::isLocalPath)
             ?: intent.data?.takeIf { it.host == serverHost() }?.let { u ->
                 u.encodedPath.orEmpty().ifEmpty { "/" } + u.encodedQuery?.let { "?$it" }.orEmpty() + u.encodedFragment?.let { "#$it" }.orEmpty()
             }

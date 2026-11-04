@@ -20,7 +20,3 @@
   .setpage .devact .btn { min-height: var(--hit); }
 }
 
-.setpage .set > .ctl { display: block; padding: 0; border-top: 0; }
-@media (min-width: 900px) {
-  .setpage .set > .ctl { margin-top: 0; }
-}

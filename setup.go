@@ -92,6 +92,7 @@ func setupCmd(args []string) error {
 	}
 
 	setupReach(a)
+	fmt.Println("\nTo connect the phone app or another computer: atc pair prints a QR code and the text to paste.")
 	fmt.Println("\nEverything else (voice, phone, more machines) is in Settings, with what each needs, or run atc doctor.")
 	return nil
 }
