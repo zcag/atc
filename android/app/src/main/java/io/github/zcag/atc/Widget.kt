@@ -89,7 +89,7 @@ object Live {
 
     fun assist(c: Context): Intent = Intent(c, MainActivity::class.java)
         .putExtra(MainActivity.EXTRA_ASSIST, true)
-        .putExtra(MainActivity.EXTRA_PATH, "/#/assist")
+        .putExtra(MainActivity.EXTRA_PATH, MainActivity.HOLD)
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
     fun render(c: Context) {

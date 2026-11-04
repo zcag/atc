@@ -165,7 +165,8 @@ whether it is back.
 
 `android/` holds a small Android app that shows your atc server's page and adds what a browser
 cannot: notifications, the device's own text-to-speech for voice, and being your phone's digital
-assistant, so holding the side key opens atc listening, even on the lock screen.
+assistant: holding the side key, even on the lock screen, opens a screen with the call to the
+assistant one tap away, what waits on you, and your sessions beside it.
 
 - **Opening a page on the phone:** the assistant can put a page straight on the phone's screen with
   `atc show <file> --open` (on a call, say), or any session's or agent's page at a section with
@@ -197,8 +198,9 @@ assistant, so holding the side key opens atc listening, even on the lock screen.
   button); tap one to open it. Its mic button and the **Talk to Claude** tile open the assistant,
   and the tile shows how many sessions need you.
 - **Assistant:** choose atc under Settings → Apps → Default apps → Digital assistant app. Holding
-  the side key then opens a session named `assistant` in `ATC_ASSIST_DIR` (default: your home
-  folder) with voice on, starting or resuming it as needed.
+  the side key then opens that screen; on a call, it opens the call. Its assistant line opens the
+  session named `assistant` in `ATC_ASSIST_DIR` (default: your home folder), starting or resuming
+  it as needed.
 
 ## Presets
 

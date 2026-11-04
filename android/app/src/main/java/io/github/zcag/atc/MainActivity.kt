@@ -52,6 +52,8 @@ class MainActivity : Activity() {
     companion object {
         const val EXTRA_ASSIST = "assist"
         const val EXTRA_PATH = "path"
+        const val HOLD = "/#/hold"
+        private const val STAGE = 0xff05070d.toInt()
         private const val REQ_MIC = 1
         private const val REQ_FILE = 2
     }
@@ -75,6 +77,7 @@ class MainActivity : Activity() {
     private val scope = MainScope()
     private var offline: View? = null
     private var veil: View? = null
+    private var stage = false
     private var failed: String? = null
     private val ui = Handler(Looper.getMainLooper())
     private val retry = Runnable { failed?.let { web?.loadUrl(it) } }
@@ -117,6 +120,11 @@ class MainActivity : Activity() {
         super.onPause()
         web?.onPause()
         CookieManager.getInstance().flush()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        js("window.leaveHold?.()")
     }
 
     override fun onDestroy() {
@@ -219,16 +227,17 @@ class MainActivity : Activity() {
             ?: intent.data?.takeIf { it.host == serverHost() }?.let { u ->
                 u.encodedPath.orEmpty().ifEmpty { "/" } + u.encodedQuery?.let { "?$it" }.orEmpty() + u.encodedFragment?.let { "#$it" }.orEmpty()
             }
-            ?: if (assist) "/#/assist" else null
+            ?: if (assist) HOLD else null
+        if (path == HOLD) setStage(true)
         val w = web
         if (w == null) return browse(server + (path ?: "/"))
         if (path == null) return
-        if (path.endsWith("#/assist")) veilUntil(w, ".assist")
+        if (path == HOLD) veilUntil(w, ".hold")
         w.loadUrl(server + path)
     }
 
     private fun veilUntil(w: WebView, selector: String) {
-        if (veil == null) veil = View(this).apply { setBackgroundColor(Look.palette(this@MainActivity).board); setOnClickListener {} }
+        if (veil == null) veil = View(this).apply { setBackgroundColor(STAGE); setOnClickListener {} }
             .also { root?.addView(it, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) }
         val giveUp = SystemClock.uptimeMillis() + 2500
         val lift = Runnable { veil?.let { root?.removeView(it) }; veil = null }
@@ -393,14 +402,20 @@ class MainActivity : Activity() {
         showCall(Calls.state.value)
     }
 
+    fun setStage(on: Boolean) {
+        stage = on
+        paint()
+    }
+
     fun paint() {
         val pal = Look.palette(this)
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(pal.board))
-        root?.setBackgroundColor(pal.board)
-        web?.setBackgroundColor(pal.board)
+        root?.setBackgroundColor(if (stage) STAGE else pal.board)
+        web?.setBackgroundColor(if (stage) STAGE else pal.board)
         val bars = WindowCompat.getInsetsController(window, window.decorView)
         bars.isAppearanceLightNavigationBars = !pal.dark
-        if (lightStatus != null) lightStatus = !pal.dark else bars.isAppearanceLightStatusBars = !pal.dark
+        val lightIcons = !pal.dark && !stage
+        if (lightStatus != null) lightStatus = lightIcons else bars.isAppearanceLightStatusBars = lightIcons
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
