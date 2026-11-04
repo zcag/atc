@@ -62,24 +62,6 @@ const condensePrompt = `You turn a coding assistant's reply into what it would s
 
 var voiceClient = &http.Client{Timeout: 90 * time.Second}
 
-func (s *Server) stt(w http.ResponseWriter, r *http.Request) {
-	if s.Voice.STT == "" {
-		http.Error(w, "speech-to-text is not configured", http.StatusNotImplemented)
-		return
-	}
-	audio, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 20<<20))
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	text, lang, err := s.transcribe(r.Context(), audio, "speech.wav")
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	reply(w, map[string]string{"text": text, "language": lang})
-}
-
 // transcribe turns speech into text. With ATC_STT_LANGUAGES set, Whisper detects the language
 // but only those count: a clip heard as anything else (short English as Icelandic, Turkish too)
 // is transcribed in each of them, and the first that writes letters plain English has none
@@ -140,65 +122,10 @@ func (s *Server) whisper(ctx context.Context, audio []byte, filename, lang strin
 	return strings.TrimSpace(out.Text), out.Language, err
 }
 
-func (s *Server) condense(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Text string }
-	json.NewDecoder(r.Body).Decode(&in)
-	if s.Voice.LLM == "" {
-		http.Error(w, "no speech model configured", http.StatusNotImplemented)
-		return
-	}
-	text, err := s.chat(r.Context(), condensePrompt, in.Text, 160)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	reply(w, map[string]string{"text": text})
-}
-
-const finishedPrompt = `You judge live speech-to-text from someone talking to an AI assistant. They paused. ` +
-	`Decide if what they said so far is a finished message they would send now, or if they stopped mid-thought and will keep talking. ` +
-	`Mid-thought: the sentence is cut off, ends on a connecting word (and, but, so, because, the, a, to, with, when, if, that, like, um), ` +
-	`or asks something only half-stated. Finished: a complete request, question, answer or reply, even a short one like yes, ok, stop, go ahead. ` +
-	`Reply with exactly one word: finished or continuing.`
-
-func (s *Server) finished(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Text string }
-	json.NewDecoder(r.Body).Decode(&in)
-	if s.Voice.LLM == "" {
-		http.Error(w, "no speech model configured", http.StatusNotImplemented)
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 1500*time.Millisecond)
-	defer cancel()
-	out, err := llm.Chat(ctx, s.Voice.LLM, s.Voice.LLMModel, finishedPrompt, in.Text, 4, false)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	reply(w, map[string]bool{"finished": !strings.Contains(strings.ToLower(out), "continu")})
-}
-
 func (s *Server) chat(ctx context.Context, system, user string, maxTokens int) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	return llm.Chat(ctx, s.Voice.LLM, s.Voice.LLMModel, system, user, maxTokens, false)
-}
-
-func (s *Server) tts(w http.ResponseWriter, r *http.Request) {
-	var in struct{ Text string }
-	json.NewDecoder(r.Body).Decode(&in)
-	if s.Voice.TTS == "" {
-		http.Error(w, "text-to-speech is not configured", http.StatusNotImplemented)
-		return
-	}
-	res, err := s.speak(r.Context(), in.Text, "")
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	defer res.Body.Close()
-	w.Header().Set("Content-Type", cmp.Or(res.Header.Get("Content-Type"), "audio/wav"))
-	io.Copy(w, res.Body)
 }
 
 // speak says text in lang, or in the language its letters give away when lang is empty, with

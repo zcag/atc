@@ -144,3 +144,32 @@ func TestSnapshotMarksOnDemandAgentsNotLive(t *testing.T) {
 		}
 	}
 }
+
+func TestFeedCallAboutIsOneShot(t *testing.T) {
+	f := newFeed()
+	now := time.Now()
+	f.callAbout("abc", "build", now)
+	if got := f.takeAbout(now.Add(time.Minute)); !strings.Contains(got, `"build" (abc)`) {
+		t.Fatalf("about: %q", got)
+	}
+	if got := f.takeAbout(now.Add(time.Minute)); got != "" {
+		t.Fatalf("second take: %q", got)
+	}
+	f.callAbout("abc", "build", now)
+	if got := f.takeAbout(now.Add(aboutKeep + time.Second)); got != "" {
+		t.Fatalf("a stale note was delivered: %q", got)
+	}
+}
+
+func TestFeedNewsCarriesCallAbout(t *testing.T) {
+	ts := newTestServer(t, nil, Voice{})
+	if res, _ := do(t, "POST", ts.URL+"/api/call/about", "tok", `{"id":"abc","title":"build"}`); res.StatusCode != 204 {
+		t.Fatalf("about: %d", res.StatusCode)
+	}
+	if _, body := get(t, ts.URL+"/api/feed?since=0", "tok"); !strings.Contains(body, "Call about this") {
+		t.Fatalf("feed without the note: %s", body)
+	}
+	if _, body := get(t, ts.URL+"/api/feed?since=0", "tok"); strings.Contains(body, "Call about this") {
+		t.Fatalf("note delivered twice: %s", body)
+	}
+}

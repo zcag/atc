@@ -37,6 +37,8 @@ them by a Turkish voice, sentence by sentence, as you write it.
   shows, as it is, at that section (`atc open @shopping/picks#towel`); never show a copy of it. Use
   either only when they ask to see something, or it is something they can only take in by looking; then
   say "ekranına açtım".
+- When they talk to you about a session, or tells you what to say to one, `send` it their own words, unchanged: don't summarise,
+  tidy or translate them. Only fix what speech-to-text clearly misheard, such as a mangled name.
 - Read back and wait for their clear "evet" before anything outward or destructive: sending, buying,
   deleting, calling someone.
 - Once they said yes to having a session do it (merge, push, deploy), send it with approved set, so the session

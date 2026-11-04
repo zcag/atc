@@ -123,25 +123,6 @@ body.docked .app { margin-right: 380px; }
 .vpick .kb[aria-pressed="true"] { color: var(--ink); background: var(--strip-hi); box-shadow: inset 0 0 0 1px var(--ink); }
 .picks .sub { margin: 0; padding: var(--s3) var(--s4); font-size: var(--fs-small); color: var(--dim); }
 
-/* voice mode: the composer becomes a caption strip, in the call's language */
-.voicebar { flex: none; padding: 6px var(--pad, var(--s5)) calc(6px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--sunk); }
-.voicebar .cx > .bgstrip, .voicebar .cx > .alive { margin: 0 0 var(--s2); }
-.vstrip { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; column-gap: var(--s3); row-gap: 2px; align-items: center; min-height: 64px; padding: 8px var(--s2) 8px var(--s3); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line-strong), inset 3px 0 0 var(--work); border-radius: var(--r-md); font-size: var(--fs-ui); }
-.vstrip.speaking { box-shadow: inset 0 0 0 1px var(--line-strong), inset 3px 0 0 var(--ink); }
-.vstrip.muted, .vstrip.error { box-shadow: inset 0 0 0 1px var(--line-strong), inset 3px 0 0 var(--line-strong); }
-.vstrip .vs { display: flex; align-items: center; gap: var(--s2); white-space: nowrap; grid-row: 1 / 3; align-self: start; padding-top: 4px; min-width: 120px; }
-.vstrip .vs b { display: inline-flex; align-items: center; gap: var(--s2); font-weight: 650; }
-.vstrip .vs b::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--end); }
-.vstrip.muted .vs b::before { background: none; box-shadow: inset 0 0 0 1.5px var(--faint); }
-.vstrip .vs .w { color: var(--dim); }
-.vstrip .vcap { grid-column: 2; min-width: 0; font-size: var(--fs-title); line-height: 1.45; font-variation-settings: var(--v-you); color: var(--ink); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.vstrip .vcap.said { font-family: var(--read); font-variation-settings: normal; font-size: var(--fs-body); }
-.vstrip .vcap .int { color: var(--faint); }
-.vstrip .hint { grid-column: 2; font-size: var(--fs-small); color: var(--faint); }
-.vstrip .vb { grid-column: 3; grid-row: 1 / 3; display: flex; gap: 2px; align-self: start; }
-.vstrip .lvl { display: inline-flex; align-items: center; gap: 2px; height: 14px; }
-.vstrip .lvl i { width: 3px; height: 6px; background: var(--work); animation: tx-lvl .9s ease-in-out infinite alternate; }
-.vstrip .lvl i:nth-child(2) { animation-delay: -.3s; } .vstrip .lvl i:nth-child(3) { animation-delay: -.6s; } .vstrip .lvl i:nth-child(4) { animation-delay: -.15s; }
 
 /* the side key's screen: status tiles, tabs, the list, then the dark call band with Call raised out of it */
 .hold { position: fixed; inset: 0; z-index: 25; display: flex; flex-direction: column; padding-top: env(safe-area-inset-top); background: var(--strip); color: var(--ink); font-size: var(--fs-ui); }
@@ -239,10 +220,4 @@ body.docked .app { margin-right: 380px; }
   .vpick { min-height: 44px; }
   .vpick .kb, .picks .pkh .kb { height: 44px; min-width: 56px; justify-content: center; }
 
-  .voicebar { padding: 6px var(--s3) calc(6px + env(safe-area-inset-bottom)); }
-  .vstrip { grid-template-columns: minmax(0, 1fr) auto; padding: 8px var(--s1) 10px var(--s3); }
-  .vstrip .vs { grid-row: 1; grid-column: 1; padding-top: 0; min-height: 44px; }
-  .vstrip .vb { grid-row: 1; grid-column: 2; align-self: center; flex-wrap: wrap; justify-content: flex-end; }
-  .vstrip .vb .kb { height: 44px; }
-  .vstrip .vcap, .vstrip .hint { grid-column: 1 / 3; }
 }

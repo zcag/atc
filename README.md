@@ -164,7 +164,7 @@ whether it is back.
 ## Android app and notifications
 
 `android/` holds a small Android app that shows your atc server's page and adds what a browser
-cannot: notifications, the device's own text-to-speech for voice, and being your phone's digital
+cannot: notifications, calls, and being your phone's digital
 assistant: holding the side key, even on the lock screen, opens a screen with the call to the
 assistant one tap away, what waits on you, and your sessions beside it.
 
@@ -388,7 +388,7 @@ terminal keeps its normal config.
 
 An opencode session is a full atc session: its strip, states and push, the terminal
 (`opencode attach`, shared and sized like any other), transcript, summary, outputs, usage (tokens,
-no cost), send, voice and the MCP tools. What maps differently:
+no cost), send and the MCP tools. What maps differently:
 
 - **State** comes from the server: busy is working; a pending question or permission is needs
   you, with the question as the activity line.
@@ -643,7 +643,7 @@ over 1 GB or a full core.
   session), `backlog` lists what is on it, `mark` marks an item done, blocked or ready (by default
   the one the session was started from).
 
-The voice assistant session has these tools from the start, so you can say "what is the deploy
+The assistant has these tools from the start, so you can say "what is the deploy
 session up to?" or "tell the docs session to also cover the CLI" without opening either. To give
 them to every session on a machine, add atc as an MCP server once:
 
@@ -684,26 +684,17 @@ very end counts, not the same words inside the message.
 
 Sessions open in a terminal can be read but not typed into. A session never sends to itself.
 
-## Voice
+## Speech services
 
-Open a session and press **Voice** to talk to it. It opens on the transcript, with the voice controls
-in place of the reply box (it also works over the terminal). atc listens through the browser, decides when
-you have finished speaking (a pause of about a second and a half), transcribes what you said and
-types it into the session. When the session finishes its turn, atc reads its final message back in
-full, leaving out what Claude wrote between tool calls; code and tables are mentioned rather than
-read out. Talking over it stops the reading. **Earlier** reads the final message of the turn before,
-**Short** a sentence or two of it. Saying "stop" sends Esc to Claude, and "yes" answers a
-permission prompt.
-
-Voice needs a speech-to-text service that speaks the OpenAI transcription API (a local Whisper
-server works), and optionally a chat model to shorten replies and a text-to-speech service for a
-voice other than the device's own:
+atc has no voice mode in a session: to talk, call the assistant (["Calls in the app"](#calls-in-the-app);
+**Call about this** in a session's menu or the palette tells it which session you mean). These services
+are for WhatsApp voice notes, in and out. They all speak the OpenAI API (a local Whisper server works):
 
 ```sh
 ATC_STT_URL=http://localhost:8000/v1/audio/transcriptions
 ATC_STT_LANGUAGE=en                                             # optional, else Whisper guesses per clip
 ATC_STT_LANGUAGES=en,tr                                         # optional: guess, but only among these
-ATC_SPEECH_LLM_URL=http://localhost:8001/v1/chat/completions   # optional
+ATC_SPEECH_LLM_URL=http://localhost:8001/v1/chat/completions   # optional: shortens a spoken reply
 ATC_SPEECH_LLM_MODEL=qwen
 ATC_TTS_URL=http://localhost:8002/v1/audio/speech                # optional
 ATC_TTS_MODEL=tts-1
@@ -723,11 +714,7 @@ the language but keeps only those it lists: a clip heard as anything else (short
 Turkish too, come back as Icelandic or Portuguese) is transcribed in each of them, and the first
 whose transcript uses letters plain English lacks (ç, ğ, ı) wins, else the first listed. Pinned to
 Turkish, English speech still comes out as English, which is what tells the two apart. It takes the place of
-`ATC_STT_LANGUAGE` when both are set, and WhatsApp voice notes go the same way.
-
-Without `ATC_TTS_URL`, replies are read by the device's built-in voice, which is instant. The
-microphone needs HTTPS. On a phone, keep the screen on: browsers stop the microphone when the
-screen locks.
+`ATC_STT_LANGUAGE` when both are set.
 
 ## WhatsApp
 
@@ -823,7 +810,7 @@ shows in the list as **assistant**, with no terminal: its transcript is the chat
 writes to it, the reply appears as it is written, and Esc or Stop interrupts it. A phone call is a
 third channel: delta's `talk.py` connects as `phone` (`ws://127.0.0.1:8820/ws?channel=phone`).
 
-**Channels.** Each message is tagged with where it came from: `atc`, `atc-voice` (the Voice button),
+**Channels.** Each message is tagged with where it came from: `atc`,
 `whatsapp`, `phone` and `agent` (another session's `send`). The guest channels, `guest` (someone else
 on WhatsApp, above) and `guest-call` (a guest calling delta's line: delta-talk answers the numbers in
 the guest list too and connects as this channel, so the reply is spoken to them under
@@ -893,6 +880,12 @@ or `busy` (a call is already on). A call they decline in the app is not retried 
 account instead, only when the user asks for a WhatsApp call.
 
 ### Calls in the app
+
+**Call about this**, in a session's More menu and the palette, starts a call (or returns to the live one) and
+tells the assistant which session you mean: `POST /api/call/about` keeps a one-time note that the feed puts in
+front of the assistant's next turn, dropped after five minutes if no turn comes. It hears you through
+`modes/phone.md` and passes your words on with `send`; it cannot answer a session's permission prompt, so those
+are still a tap.
 
 The app makes and takes calls like WhatsApp does: a self-managed Telecom call (Android 14's own
 transactional API, `Telecom.kt`; Android 14 or newer), so the phone's call log and recents list them

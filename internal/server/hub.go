@@ -25,7 +25,7 @@ const (
 	guestsName = "guests"
 )
 
-const hubPrompt = `Messages reach you from several channels: atc (typed on a screen), atc-voice (spoken in atc), whatsapp, phone ` +
+const hubPrompt = `Messages reach you from several channels: atc (typed on a screen), whatsapp, phone ` +
 	`(a live call, on delta's phone line or in the atc app) and agent (other sessions reporting back). When the channel changes, a "[talk-mode: ...]" line ` +
 	`brings how to talk there; follow it until the next one. Answer where the message came from; a reply to an agent message reaches no one. To reach the user elsewhere use ` +
 	"`atc wa` (WhatsApp) or `atc call --reason TEXT` (the atc app on their phone rings, or delta's phone line when the app can't, " +
@@ -204,10 +204,10 @@ func (s *Server) linkEvent(l *hubLink, e hub.Event) {
 		l.mu.Unlock()
 	case "turn":
 		l.mu.Lock()
-		l.onAtc = e.Channel == "atc" || e.Channel == "atc-voice"
+		l.onAtc = e.Channel == "atc"
 		l.mu.Unlock()
 	case "read", "joined":
-		if e.Channel == "atc" || e.Channel == "atc-voice" {
+		if e.Channel == "atc" {
 			l.mu.Lock()
 			l.onAtc = true
 			l.mu.Unlock()
@@ -347,7 +347,7 @@ func (s *Server) markLink(ctx context.Context, list []sessions.Session, l *hubLi
 	x.Asks, x.TurnDone = nil, false
 	if len(st.Owners) > 0 || len(st.Pending) > 0 {
 		x.State = sessions.Working
-		where := map[string]string{hub.Phone: "on a call", hub.GuestCall: "on a guest's call", waName: "on WhatsApp", "atc-voice": "by voice"}[cmp.Or(st.Route, append(st.Pending, "")[0])]
+		where := map[string]string{hub.Phone: "on a call", hub.GuestCall: "on a guest's call", waName: "on WhatsApp"}[cmp.Or(st.Route, append(st.Pending, "")[0])]
 		x.Activity = strings.Join(slices.DeleteFunc([]string{where, x.Activity}, func(p string) bool { return p == "" }), " · ")
 	} else {
 		x.State, x.Activity = sessions.YourTurn, ""

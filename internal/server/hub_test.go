@@ -149,7 +149,6 @@ func TestHubSessionIsListedAndTakesMessages(t *testing.T) {
 
 	for _, c := range []struct{ body, want string }{
 		{`{"text":"hi"}`, "atc: hi"},
-		{`{"text":"said","voice":true}`, "atc-voice: said"},
 		{`{"text":"report","from":"other-sid"}`, "agent: report"},
 	} {
 		if code, b := api(t, ts, "POST", "/api/sessions/hub-sid/send", c.body); code != 200 {

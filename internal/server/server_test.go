@@ -260,48 +260,24 @@ func TestReleaseHeldPush(t *testing.T) {
 	}
 }
 
-func TestVoice(t *testing.T) {
+func TestTranscribe(t *testing.T) {
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/stt":
-			f, _, err := r.FormFile("file")
-			if err != nil || r.FormValue("model") != "whisper-1" || r.FormValue("response_format") != "verbose_json" {
-				http.Error(w, "bad form", 400)
-				return
-			}
-			b, _ := io.ReadAll(f)
-			if string(b) != "RIFFfake" {
-				http.Error(w, "audio not passed through", 400)
-				return
-			}
-			fmt.Fprintf(w, `{"text":"  merhaba dünya ","language":%q}`, r.FormValue("language"))
-		case "/llm":
-			var in struct {
-				Messages []struct{ Role, Content string }
-			}
-			json.NewDecoder(r.Body).Decode(&in)
-			if len(in.Messages) != 2 || in.Messages[0].Role != "system" || in.Messages[1].Content != "long reply" {
-				http.Error(w, "bad request", 400)
-				return
-			}
-			w.Write([]byte(`{"choices":[{"message":{"content":" Short. "}}]}`))
+		f, _, err := r.FormFile("file")
+		if err != nil || r.FormValue("model") != "whisper-1" || r.FormValue("response_format") != "verbose_json" {
+			http.Error(w, "bad form", 400)
+			return
 		}
+		b, _ := io.ReadAll(f)
+		if string(b) != "RIFFfake" {
+			http.Error(w, "audio not passed through", 400)
+			return
+		}
+		fmt.Fprintf(w, `{"text":"  merhaba dünya ","language":%q}`, r.FormValue("language"))
 	}))
 	defer up.Close()
-
-	if res, _ := do(t, "POST", newTestServer(t, nil, Voice{}).URL+"/api/voice/stt", "tok", "RIFFfake"); res.StatusCode != http.StatusNotImplemented {
-		t.Fatalf("unconfigured stt: %d", res.StatusCode)
-	}
-	ts := newTestServer(t, nil, Voice{STT: up.URL + "/stt", STTModel: "whisper-1", STTLanguage: "en", LLM: up.URL + "/llm"})
-	if res, body := do(t, "POST", ts.URL+"/api/voice/stt", "tok", "RIFFfake"); res.StatusCode != 200 || !strings.Contains(body, `"text":"merhaba dünya"`) || !strings.Contains(body, `"language":"en"`) {
-		t.Fatalf("stt: %d %s", res.StatusCode, body)
-	}
-	if res, body := do(t, "POST", ts.URL+"/api/voice/condense", "tok", `{"text":"long reply"}`); res.StatusCode != 200 || !strings.Contains(body, `"text":"Short."`) {
-		t.Fatalf("condense: %d %s", res.StatusCode, body)
-	}
-	_, me := get(t, ts.URL+"/api/me", "tok")
-	if !strings.Contains(me, `"stt":true`) || !strings.Contains(me, `"tts":false`) {
-		t.Fatalf("me voice flags: %s", me)
+	s := &Server{Voice: Voice{STT: up.URL, STTModel: "whisper-1", STTLanguage: "en"}}
+	if text, lang, err := s.transcribe(context.Background(), []byte("RIFFfake"), "voice.ogg"); err != nil || text != "merhaba dünya" || lang != "en" {
+		t.Fatalf("transcribe: %q %q %v", text, lang, err)
 	}
 }
 
@@ -319,14 +295,11 @@ func TestVoiceLanguages(t *testing.T) {
 		fmt.Fprintf(w, `{"text":%q,"language":%q}`, cmp.Or(text, "Hvernig"), cmp.Or(lang, "is"))
 	}))
 	defer up.Close()
-	ts := newTestServer(t, nil, Voice{STT: up.URL, STTModel: "whisper-1", STTLanguage: "tr", STTLanguages: []string{"en", "tr"}})
-	for audio, want := range map[string]string{"turkish": `"language":"tr","text":"Merhaba, nasılsın?"`, "english": `"language":"en","text":"How are you?"`} {
-		if _, body := do(t, "POST", ts.URL+"/api/voice/stt", "tok", audio); !strings.Contains(body, want) {
-			t.Errorf("%s heard as Icelandic: %s, want %s", audio, body, want)
+	s := &Server{Voice: Voice{STT: up.URL, STTModel: "whisper-1", STTLanguage: "tr", STTLanguages: []string{"en", "tr"}}}
+	for audio, want := range map[string][2]string{"turkish": {"tr", "Merhaba, nasılsın?"}, "english": {"en", "How are you?"}} {
+		if text, lang, err := s.transcribe(context.Background(), []byte(audio), "voice.ogg"); err != nil || lang != want[0] || text != want[1] {
+			t.Errorf("%s heard as %q %q %v, want %v", audio, lang, text, err, want)
 		}
-	}
-	if _, body := do(t, "POST", ts.URL+"/api/voice/stt?lang=tr", "tok", "english"); !strings.Contains(body, `"language":"en"`) {
-		t.Fatalf("a language asked for overrides detection: %s", body)
 	}
 }
 

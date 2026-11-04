@@ -124,8 +124,6 @@ const tilde = (p) => {
   return m ? "~" + (m[2] || "") : p;
 };
 let MULTI = false, HERE = "";
-let VOICE = {};
-let VOICE_OK = false;
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 let PALETTE_OPEN = () => {}, NEW_SESSION = () => {};
 let SESSION_API = null;
@@ -176,7 +174,7 @@ function useNow(ms) {
 
 const APP = window.AtcApp || null;
 const APP_VERSION = +((navigator.userAgent.match(/AtcApp\/(\d+)/) || [])[1] || 0);
-let AUTO_VOICE = false, AUTO_PANE = null, AUTO_SPLIT = false;
+let AUTO_PANE = null, AUTO_SPLIT = false;
 const WEB = { at: null, fresh: false, shown: Date.now() };
 const CALL = "#/call";
 let CAN_CALL = false;
@@ -195,6 +193,12 @@ const callAssistant = () => {
   CALLDOCK.set(true);
   Call.dial();
   if (isPhone() && location.hash !== CALL) location.hash = CALL;
+};
+const NO_CALL = "Calls need atc's call line and a microphone. Set ATC_DELTA_CALL; \"Calling the user\" in atc's README has the rest.";
+const callAbout = (s, say) => {
+  if (!CAN_CALL) return say(NO_CALL);
+  api("/api/call/about", { method: "POST", body: { id: s.sessionId, title: s.title } }).catch((e) => say(`Could not tell the assistant which session: ${e.message}`));
+  Call.live() ? returnToCall() : callAssistant();
 };
 const KEYLAYERS = [];
 function useKeyLayer(fn, on = true) {
@@ -513,8 +517,6 @@ function App() {
   LOOK.adopt(me.look);
   MULTI = (me.hosts || []).length > 1;
   HERE = me.host || "";
-  VOICE = me.voice || {};
-  VOICE_OK = !!VOICE.stt;
   CAN_CALL = !!APP?.call || (!APP && !!me.call && Call.supported());
   const down = (me.peers || []).filter((p) => p.error);
 
@@ -820,11 +822,10 @@ const KEYMAP = [
   ["Panes", [["[", "Sessions beside the transcript"], ["]", "Its page beside the transcript (board: the page index)"], ["\\", "State: now, running, made, the session's facts"]]],
   ["Session", [["enter", "Write to the session (on a stopped one: Resume)"], ["`", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
   ["Reading", [["J K", "Next, previous turn: your prompts and its replies"], ["space", "A screen down; with shift, up"], ["home end", "Top, end of the transcript"], ["N", "Next thing you have not seen here: the divider, then the question"], ["c", "Contents: every turn and heading"], ["l", "Outline, story, everything, in turn"], ["f", "Find in the session"]]],
-  ["Assistant", [[".", "Tap: call it; hold: voice mode"], ["[", "Touched today and the agents"], ["esc", "Close the assistant"]]],
+  ["Assistant", [[".", "Call it"], ["[", "Touched today and the agents"], ["esc", "Close the assistant"]]],
   ["Call", [["m", "Mute, unmute"], ["E", "End the call (shift e)"], [".", "Back to the call, from anywhere"], ["esc", "Minimize the call to the console line"]]],
-  ["Voice", [["m", "Mute, unmute"], ["esc", "Leave voice mode"]]],
   ["Answer", [["1..9", "With the question focused (click it, tab into it, or N): that option"]]],
-  ["Composer", [["enter", "Send; while it works, queue"], ["esc", "Empty box while it works: stop it (asks first)"], ["space", "Hold in an empty box: dictate"], ["/", "At the start: slash commands"]]],
+  ["Composer", [["enter", "Send; while it works, queue"], ["esc", "Empty box while it works: stop it (asks first)"], ["/", "At the start: slash commands"]]],
   ["Pages", [["j k", "Next, previous page"], ["[", "The index"], ["0", "This bay or every bay"], ["q w e .. p", "The 1st to 10th page in the index"], ["\\", "The page beside its session"], ["enter", "Note: its session, at the composer"], ["d", "What changed, on an updated page"]]],
   ["Palette", [["↑ ↓", "Move (also ctrl j, ctrl k)"], ["enter", "Run it"], ["tab", "Preview it behind the palette"], ["1..9", "Alone: that bay"]]],
   ["Backlog", [["j k", "Next, previous task"], ["enter", "Start, take or open it"], ["d", "Done"], ["x", "Blocked, or unblock"], ["a", "The add box"]]],
@@ -1133,11 +1134,10 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
   const phone = usePhone();
   useCall();
   const docked = useCallDock() && Call.live() && !phone;
-  const [voice, setVoice] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [leftCall, setLeftCall] = useState(false);
   const left = docked ? leftCall : panes.aleft;
-  const asked = useRef(false), dot = useRef(null);
+  const asked = useRef(false);
   useNow(30000);
   useEffect(() => {
     if (!loaded || hub || asked.current) return;
@@ -1149,18 +1149,9 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
     if (e.key === "Escape") return !docked && (closeAssistant(), true);
     if (e.key === "[") return (docked ? setLeftCall((v) => !v) : togglePane("aleft")), true;
     if (e.key !== "." || Call.live()) return false;
-    if (!e.repeat && !dot.current) dot.current = setTimeout(() => { dot.current = "held"; if (hub) setVoice(true); }, 350);
+    if (!e.repeat) CAN_CALL ? callAssistant() : say(NO_CALL);
     return true;
   });
-  useEffect(() => {
-    const up = (e) => {
-      if (e.key !== "." || !dot.current) return;
-      if (dot.current !== "held") { clearTimeout(dot.current); CAN_CALL ? callAssistant() : say("Calls need atc's call line and a microphone."); }
-      dot.current = null;
-    };
-    addEventListener("keyup", up);
-    return () => removeEventListener("keyup", up);
-  }, []);
 
   const touched = touchedBy(hub, live, startOfDay());
   const shown = (agents || []).filter((a) => !a.error && a.name !== "assistant");
@@ -1183,8 +1174,7 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
   const cmp = {
     prompt: onCall ? html`<span class="apr call"><${CallMark} />${!docked && html`<${Trace} />`}</span>` : html`<span class="apr">assistant<span>></span></span>`,
     hint: onCall ? "Type while you talk" : phone ? "Ask the assistant" : "Start, steer or ask about any session",
-    doors: !onCall && html`<button class="kb vo" onClick=${() => setVoice(true)} title="Voice mode: talk with it and it answers aloud (hold .)">Voice</button>
-      ${CAN_CALL && html`<button class="kb cl" onClick=${callAssistant} aria-keyshortcuts=".">Call <kbd aria-hidden="true">.</kbd></button>`}`,
+    doors: !onCall && CAN_CALL && html`<button class="kb cl" onClick=${callAssistant} aria-keyshortcuts=".">Call <kbd aria-hidden="true">.</kbd></button>`,
     top: strips,
   };
   return html`<div class="shell assistv assist ${left && !phone ? "" : "noleft"}">
@@ -1197,7 +1187,7 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
           : html`<button class="kb" onClick=${closeAssistant} aria-keyshortcuts="Escape">Close <kbd aria-hidden="true">esc</kbd></button>`}</span>
         <p class="stat">${hubLine(hub)}</p>
       </header>
-      ${hub ? html`<${Transcript} key=${hub.sessionId} s=${hub} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} cmp=${cmp} />`
+      ${hub ? html`<${Transcript} key=${hub.sessionId} s=${hub} say=${say} cmp=${cmp} />`
         : html`<div class="blank">${loaded ? "Starting the assistant…" : "Opening…"}</div>`}
     </main>
     ${sheet && html`<${Sheet} cls="asheet" title="Today" onClose=${() => setSheet(false)}>${pane}<//>`}
@@ -2021,9 +2011,6 @@ function Session({ s, say, live, panes, togglePane }) {
   }, [shown.map((p) => p.name + p.shown).join()]);
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const voiceKey = `atc.voice.${s.sessionId}`;
-  const [voice, setVoice] = useState(() => { const v = AUTO_VOICE && canAttach; if (v) AUTO_VOICE = false; return v || (canAttach && pref(voiceKey, "") === "on"); });
-  useEffect(() => setPref(voiceKey, voice ? "on" : ""), [voice]);
 
   const act = async (fn, done) => {
     setBusy(true);
@@ -2044,7 +2031,7 @@ function Session({ s, say, live, panes, togglePane }) {
   const outs = useOutputs(s, mode === "out" ? 10000 : 60000);
   const [showUse, setShowUse] = useState(false);
   useEffect(() => {
-    SESSION_API = { s, canAttach, mode: choose, page: openPage, pages: shown, voice: () => canAttach && setVoice((v) => (v || setMode("chat"), !v)), usage: () => setShowUse(true), rename: () => setRenaming(true) };
+    SESSION_API = { s, canAttach, mode: choose, page: openPage, pages: shown, usage: () => setShowUse(true), rename: () => setRenaming(true) };
     return () => { SESSION_API = null; };
   });
   const use = useSessionUsage(s, showUse || s.state === "working" ? 15000 : 90000);
@@ -2113,14 +2100,11 @@ function Session({ s, say, live, panes, togglePane }) {
           ${shown.length > 0 && html`<${PagesButton} list=${shown} open=${openPage} on=${mode === "page"} />`}
           <button class="kb pin ${s.pinned ? "on" : ""}" aria-pressed=${!!s.pinned} aria-label=${s.pinned ? "Unpin" : "Pin"} title=${s.pinned ? "Pinned to the top of the bay; unpin" : "Pin to the top of the bay"}
             onClick=${() => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }).catch((e) => say(e.message))}>${ICON.pin}</button>
-          ${VOICE.stt && html`<button class="kb ${voice ? "on" : ""}" aria-pressed=${voice}
-            onClick=${() => canAttach ? (voice || setMode("chat"), setVoice(!voice))
-              : say(s.kind === "interactive" ? "Voice needs a session atc can type into. This one runs in a terminal window; start one from atc, or resume this one after it ends." : "Resume this session first, then turn on voice.")}>Voice</button>`}
           ${hasTerm && html`<button class="kb ${mode === "term" ? "on" : ""}" aria-pressed=${mode === "term"} aria-keyshortcuts="\`" onClick=${() => choose(mode === "term" ? "chat" : "term")}>Terminal <kbd aria-hidden="true">\`</kbd></button>`}
           <div class="more"><${Menu} cls="kb" busy=${busy} aria="Session menu" label=${html`More <kbd aria-hidden="true">x</kbd>`}
             items=${[
               ...(phoneNow && hasTerm ? [{ label: mode === "term" ? "Transcript" : "Terminal", run: () => choose(mode === "term" ? "chat" : "term") }] : []),
-              ...(phoneNow && VOICE.stt && canAttach ? [{ label: voice ? "Voice off" : "Voice", run: () => (voice || setMode("chat"), setVoice(!voice)) }] : []),
+              { label: "Call about this", run: () => callAbout(s, say) },
               ...(mode === "chat" || sideBySide ? [{ label: "Find in the transcript", run: () => TX_API?.find() }, { label: "Contents", run: () => TX_API?.contents() }, { label: "Outline, story or everything", run: () => TX_API?.level() }, { label: "Files, commits and deploys", run: () => TX_API?.results() }] : []),
               ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "State and outputs", run: openState }, { label: "Usage", run: () => setShowUse(true) }]} /></div>
         </span>
@@ -2142,14 +2126,14 @@ function Session({ s, say, live, panes, togglePane }) {
           const pane = html`<${PagePane} s=${s} list=${shown} cur=${pg} at=${at} pick=${openPage} split=${sideBySide} setSplit=${wideNow ? setSplit : null} say=${say}
             onClose=${() => leavePage(paneFor(s))} />`;
           return sideBySide
-            ? html`<${PageSplit}><${Transcript} s=${s} say=${say} resume=${() => resume("chat")} busy=${busy} voice=${voice && canAttach} onVoiceOff=${() => setVoice(false)} />${pane}<//>`
+            ? html`<${PageSplit}><${Transcript} s=${s} say=${say} resume=${() => resume("chat")} busy=${busy} />${pane}<//>`
             : pane;
         })()
     : mode === "term" && hasTerm
       ? canAttach
-        ? html`<${Term} key=${s.id} s=${s} say=${say} voice=${voice} onVoiceOff=${() => setVoice(false)} />`
+        ? html`<${Term} key=${s.id} s=${s} say=${say} />`
         : html`<div class="stage"><div class="cover">${Unattachable(s, () => resume(), busy, setMode)}</div></div>`
-      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} pages=${shown} open=${openPage} />` : html`<${Transcript} s=${s} say=${say} resume=${() => resume("chat")} busy=${busy} voice=${voice && canAttach} onVoiceOff=${() => setVoice(false)} />`}
+      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} pages=${shown} open=${openPage} />` : html`<${Transcript} s=${s} say=${say} resume=${() => resume("chat")} busy=${busy} />`}
     </div>
     ${panes?.state && !phoneNow && html`<aside class="statep" aria-label="State">${statePane}</aside>`}
     </div>
@@ -2565,7 +2549,7 @@ document.addEventListener("visibilitychange", () => {
   for (const d of DOCK.values()) if (d.box) d.page(!document.hidden);
 });
 
-function Term({ s, say, voice, onVoiceOff }) {
+function Term({ s, say }) {
   const keyboard = useKeyboard();
   const box = useRef();
   const api_ = useRef({});
@@ -2648,7 +2632,6 @@ function Term({ s, say, voice, onVoiceOff }) {
             </div>
           </div>
         </div>`}
-      ${voice && !cover && html`<${VoiceBar} s=${s} say=${say} type=${(t) => { api_.current.send?.(t); setTimeout(() => api_.current.send?.("\r"), 150); }} press=${(k) => api_.current.send?.(k)} onClose=${onVoiceOff} />`}
       <div class="keys ${keyboard ? "show" : ""}" onPointerDown=${(e) => e.preventDefault()}>
         ${KEYS.map(([label, seq]) => html`<button class=${label === "ctrl" && ctrl ? "on" : ""} onClick=${() => key(label, seq)}>${label}</button>`)}
         <button onClick=${() => picker.current.click()}>file</button>
@@ -2675,299 +2658,8 @@ function FileList({ files, remove }) {
     </div>`;
 }
 
-const loadScript = (src) =>
-  new Promise((ok, no) => {
-    if (document.querySelector(`script[src="${src}"]`)) return ok();
-    const el = Object.assign(document.createElement("script"), { src, onload: ok, onerror: () => no(new Error(`Could not load ${src}`)) });
-    document.head.appendChild(el);
-  });
-
-const speakable = (t) =>
-  (t || "")
-    .replace(/```[\s\S]*?```/g, " There's some code in the transcript. ")
-    .replace(/(^\|.*\|[ \t]*(\n|$))+/gm, " There's a table in the transcript. ")
-    .replace(/`([^`]+)`/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-    .replace(/https?:\/\/\S+/g, "a link")
-    .replace(/\*\*|__|[*#>|]/g, " ")
-    .replace(/^\s*[-•]\s+/gm, "")
-    .replace(/\s+/g, " ")
-    .trim();
-const sentences = (t) => (t.match(/[^.!?…]+[.!?…]+["')]?(\s|$)|[^.!?…]+$/g) || [t]).map((x) => x.trim()).filter(Boolean);
-const turkish = (t) => /[çğıöşüÇĞİÖŞÜ]/.test(t);
-const HOLD_MS = 3000;
-const PHANTOM = /^(thank you|thanks for watching|you|bye|altyazı.*|abone olmayı unutmayın.*|\.+)[.!]?$/i;
-const VOICE_WORD = { starting: "starting", listening: "listening", hearing: "hearing you", thinking: "writing it down", holding: "keep talking", speaking: "speaking", muted: "mic off", error: "not available" };
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
-const transcribe = (wav) => fetch("/api/voice/stt", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav });
-
-function finalReplies(msgs) {
-  const out = [];
-  for (const m of msgs) {
-    if (m.role === "user") out.push("");
-    else if (m.role === "assistant" && out.length && m.text.trim()) out[out.length - 1] = m.text;
-  }
-  return out.filter((t) => t.trim());
-}
-
-const VOICE_LEFT = new Map();
-
-function VoiceBar({ s, say, type, press, onClose, top }) {
-  const sid = s.sessionId, left = VOICE_LEFT.get(sid) || {}, muteKey = `atc.mute.${sid}`;
-  const who = s.kind === "hub" ? "the assistant" : s.harness || "Claude";
-  const [phase, setPhase] = useState("starting");
-  const [heard, setHeard] = useState(left.heard || "");
-  const [spoken, setSpoken] = useState(left.spoken || "");
-  const [muted, setMuted] = useState(() => pref(muteKey, "") === "on");
-  const [source, setSource] = useState(() => pref("atc.voicesrc", VOICE.tts ? "mine" : "device"));
-  const [bargeIn, setBargeIn] = useState(() => pref("atc.bargein", "off") === "on");
-  const st = useRef({ awaiting: !!left.awaiting, sentAt: left.sentAt || 0, permission: false, speaking: false, audio: null, vad: null, turns: [], at: -1 });
-  const live = useRef({});
-  live.current = { s, source, muted, bargeIn, heard, spoken };
-
-  const listen = (on) => { const v = st.current.vad; if (!v) return; on ? v.start() : v.pause(); };
-  const rest = () => {
-    if (!live.current.muted) listen(true);
-    setPhase(live.current.muted ? "muted" : st.current.awaiting ? "waiting" : "listening");
-  };
-  const stopSpeaking = () => {
-    st.current.speaking = false;
-    if (APP) APP.stopSpeaking();
-    else if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel();
-    st.current.audio?.pause();
-  };
-  const play = (url) => new Promise((done) => {
-    const a = new Audio(url);
-    st.current.audio = a;
-    a.onended = a.onpause = a.onerror = () => done();
-    a.play().catch(() => done());
-  });
-  const finished = () => { if (st.current.speaking) { st.current.speaking = false; rest(); } };
-  const speak = async (text) => {
-    if (!text) return;
-    stopSpeaking();
-    await new Promise((r) => setTimeout(r, 60));
-    setSpoken(text);
-    st.current.speaking = true;
-    if (!live.current.bargeIn) listen(false);
-    setPhase("speaking");
-    if (live.current.source === "mine" && VOICE.tts) {
-      let chain = Promise.resolve();
-      const clips = sentences(text).map((t) => (chain = chain.then(() =>
-        fetch("/api/voice/tts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: t }) })
-          .then((r) => (r.ok ? r.blob() : null)).catch(() => null))));
-      for (const clip of clips) {
-        const blob = await clip;
-        if (!st.current.speaking) break;
-        if (blob) await play(URL.createObjectURL(blob));
-      }
-      return finished();
-    }
-    const lang = turkish(text) ? "tr-TR" : "en-US";
-    if (APP) {
-      window.atcSpeechDone = finished;
-      APP.speak(text, lang);
-      return;
-    }
-    const parts = sentences(text);
-    const voices = speechSynthesis.getVoices().filter((v) => v.lang.replace("_", "-").startsWith(lang.slice(0, 2)));
-    const voice = voices.find((v) => /premium|enhanced|natural|siri/i.test(v.name)) || voices.find((v) => v.localService) || voices[0] || null;
-    parts.forEach((t, i) => {
-      const u = new SpeechSynthesisUtterance(t);
-      u.lang = lang;
-      u.voice = voice;
-      if (i === parts.length - 1) u.onend = finished;
-      u.onerror = (e) => { if (e.error !== "interrupted" && e.error !== "canceled") finished(); };
-      speechSynthesis.speak(u);
-    });
-  };
-
-  const condensed = (full) =>
-    api("/api/voice/condense", { method: "POST", body: { text: full } }).then((r) => speakable(r.text), () => speakable(full));
-  const loadTurns = async () => {
-    const p = await api(`/api/sessions/${live.current.s.sessionId}/transcript`).catch(() => ({ messages: [] }));
-    st.current.turns = finalReplies(p.messages || []);
-    return st.current.turns;
-  };
-  const readTurn = async (i, how) => {
-    const turns = st.current.turns.length ? st.current.turns : await loadTurns();
-    if (i < 0 || i >= turns.length) return speak(i < 0 ? "That was the first reply." : "Nothing newer.");
-    st.current.at = i;
-    speak(how === "short" ? await condensed(turns[i]) : speakable(turns[i]));
-  };
-  const current = () => (st.current.at >= 0 ? st.current.at : st.current.turns.length - 1);
-  const replay = () => (spoken ? speak(spoken) : readLatest());
-  const readLatest = async () => { await loadTurns(); readTurn(st.current.turns.length - 1); };
-  const earlier = () => readTurn((st.current.at >= 0 ? st.current.at : st.current.turns.length) - 1);
-  const full = () => readTurn(current());
-  const short = () => readTurn(current(), "short");
-
-  const answer = async (state) => {
-    const turns = await loadTurns();
-    st.current.at = turns.length - 1;
-    const body = turns.length ? speakable(turns[turns.length - 1]) : "";
-    st.current.permission = state === "needs-you";
-    const ask = state === "needs-you" ? `It needs you${live.current.s.activity ? `, to run ${live.current.s.activity}` : ""}. Say yes to allow it.` : "";
-    speak([body, ask].filter(Boolean).join(" ") || "Done.");
-  };
-
-  const heardSpeech = async (audio) => {
-    st.current.talking = false;
-    if (live.current.muted || (st.current.speaking && !live.current.bargeIn)) return;
-    setPhase("thinking");
-    let text = "";
-    try {
-      const res = await transcribe(vad.utils.encodeWAV(audio));
-      if (!res.ok) throw new Error((await res.text()).trim());
-      text = (await res.json()).text.trim();
-    } catch (e) {
-      say(`Could not transcribe: ${e.message}`);
-    }
-    const buf = st.current.buf;
-    if (!text || PHANTOM.test(text)) return buf ? hold(HOLD_MS) : rest();
-    if (buf) {
-      st.current.buf = `${buf.replace(/[.…]+$/, "")} ${/^[A-Z][a-z]/.test(text) ? text[0].toLowerCase() + text.slice(1) : text}`;
-      setHeard(st.current.buf);
-      return judge();
-    }
-    setHeard(text);
-    const bare = text.toLowerCase().replace(/[.!?,]/g, "").trim();
-    if (/^(stop|cancel|dur|durdur|iptal|bekle)$/.test(bare)) { press("\x1b"); st.current.awaiting = false; return rest(); }
-    if (/^(repeat|again|say (that|it) again|tekrar|tekrarla|bir daha)$/.test(bare)) return replay();
-    if (/^(read (it )?all|read the whole (thing|reply)|full|hepsini oku|tamamını oku|tamamı)$/.test(bare)) return full();
-    if (/^(previous|earlier|go back|önceki|öncekini oku|geri)$/.test(bare)) return earlier();
-    if (st.current.permission && /^(yes|yeah|yep|evet|tamam|olur|okay|ok)\b/.test(bare)) { st.current.permission = false; press("\r"); st.current.awaiting = true; st.current.sentAt = Date.now(); return rest(); }
-    st.current.buf = text;
-    judge();
-  };
-
-  const judge = async () => {
-    const text = st.current.buf;
-    const done = await api("/api/voice/finished", { method: "POST", body: { text } }).then((r) => r.finished, () => null);
-    if (st.current.buf !== text || st.current.talking) return;
-    done ? dispatch() : hold(/[.?!]["')]*$/.test(text) ? 1500 : HOLD_MS);
-  };
-  const hold = (ms) => {
-    clearTimeout(st.current.hold);
-    st.current.hold = setTimeout(dispatch, ms);
-    if (!live.current.muted) listen(true);
-    setPhase("holding");
-  };
-  const dispatch = () => {
-    clearTimeout(st.current.hold);
-    const text = st.current.buf;
-    st.current.buf = "";
-    if (!text) return rest();
-    type(text);
-    st.current.awaiting = true;
-    st.current.sentAt = Date.now();
-    setPhase("waiting");
-  };
-
-  useEffect(() => {
-    if (!st.current.awaiting || (s.state === "working" && !s.turnDone)) return;
-    if (Date.parse(s.promptAt || 0) < st.current.sentAt - 5000) return;
-    st.current.awaiting = false;
-    answer(s.state);
-  }, [s.state, s.turnDone, s.promptAt, s.updated]);
-
-  useEffect(() => {
-    let dead = false, lock = null;
-    if (!APP) speechSynthesis.getVoices();
-    (async () => {
-      try {
-        await loadScript("vendor/vad/ort.wasm.min.js");
-        await loadScript("vendor/vad/vad.bundle.min.js");
-        const v = await vad.MicVAD.new({
-          baseAssetPath: new URL("vendor/vad/", location.href).href,
-          onnxWASMBasePath: new URL("vendor/vad/", location.href).href,
-          ortConfig: (ort) => { ort.env.wasm.numThreads = 1; ort.env.logLevel = "error"; },
-          positiveSpeechThreshold: 0.6,
-          negativeSpeechThreshold: 0.4,
-          redemptionMs: 1200,
-          startOnLoad: false,
-          minSpeechMs: 300,
-          getStream: () => navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true } }),
-          onSpeechStart: () => {
-            if (live.current.muted) return;
-            if (st.current.speaking) { if (!live.current.bargeIn) return; stopSpeaking(); }
-            clearTimeout(st.current.hold);
-            st.current.talking = true;
-            setPhase("hearing");
-          },
-          onVADMisfire: () => {
-            st.current.talking = false; if (st.current.buf) hold(HOLD_MS); else if (!st.current.speaking) rest(); },
-          onSpeechEnd: heardSpeech,
-        });
-        if (dead) return v.destroy();
-        st.current.vad = v;
-        if (!st.current.speaking) rest();
-        if (APP) APP.keepScreenOn(true);
-        else lock = await navigator.wakeLock?.request("screen").catch(() => null);
-      } catch (e) {
-        setPhase("error");
-        say(e.name === "NotAllowedError" ? "Allow the microphone to use voice." : `Voice failed to start: ${e.message}`);
-      }
-    })();
-    return () => {
-      VOICE_LEFT.set(sid, { heard: live.current.heard, spoken: live.current.spoken, awaiting: st.current.awaiting, sentAt: st.current.sentAt });
-      dead = true; st.current.vad?.destroy(); stopSpeaking(); lock?.release?.(); APP?.keepScreenOn(false); };
-  }, []);
-
-  const toggleMute = () => {
-    const m = !live.current.muted;
-    setMuted(m);
-    setPref(muteKey, m ? "on" : "");
-    live.current.muted = m;
-    if (m && st.current.speaking) stopSpeaking();
-    listen(!m);
-    setPhase(m ? "muted" : st.current.awaiting ? "waiting" : "listening");
-  };
-  const stopIt = () => { stopSpeaking(); rest(); };
-  const pick = (v) => { setSource(v); setPref("atc.voicesrc", v); };
-  const toggleBarge = () => { setBargeIn(!bargeIn); setPref("atc.bargein", bargeIn ? "off" : "on"); };
-  useKeyLayer((e) => {
-    if (typingIn(e.target)) return false;
-    if (e.key === "m") return toggleMute(), true;
-    if (e.key === "Escape") return onClose(), true;
-    return false;
-  });
-
-  const word = muted ? "mic off" : phase === "waiting" ? `${who} is working` : VOICE_WORD[phase];
-  const hint = muted ? "" : phase === "speaking" ? (bargeIn ? "Talk to cut in; it stops at once." : "Stop it, or say something when it ends.")
-    : phase === "holding" ? "Keep talking, or send it now." : phase === "waiting" ? "It answers out loud when it is done."
-    : phase === "listening" || phase === "hearing" ? (touch ? "A pause sends it." : "A pause sends it. Esc leaves voice mode.") : "";
-  const cap = muted ? html`<span class="int">Muted. It hears nothing until you unmute.</span>`
-    : phase === "speaking" && spoken ? spoken
-    : heard ? html`${heard}${(phase === "holding" || phase === "hearing") && html` <span class="int">…</span>`}`
-    : html`<span class="int">${phase === "error" ? "Voice is not available here." : `Say what you want ${who} to do.`}</span>`;
-  const more = [
-    { label: "Read the last reply again", run: replay },
-    { label: "Read the reply before", run: earlier },
-    VOICE.condense && { label: "Read it short", run: short },
-    VOICE.tts && { label: source === "mine" ? "Use this device's voice" : "Use the server's voice", run: () => pick(source === "mine" ? "device" : "mine") },
-    { label: bargeIn ? "Talking over a reply: on" : "Talking over a reply: off", run: toggleBarge },
-  ].filter(Boolean);
-  return html`
-    <div class="voicebar" role="region" aria-label="Voice"><div class="cols"><div class="cx">
-      ${top}
-      <div class="vstrip ${muted ? "muted" : phase}" role="group" aria-label="Voice mode">
-        <span class="vs"><b>Voice</b><span class="w">${word}</span>${!muted && (phase === "listening" || phase === "hearing") && html`<span class="lvl" aria-hidden="true"><i></i><i></i><i></i><i></i></span>`}</span>
-        <div class="vcap ${phase === "speaking" && !muted ? "said" : ""}" aria-live="polite">${cap}</div>
-        ${hint && html`<div class="hint">${hint}</div>`}
-        <span class="vb">
-          ${phase === "speaking" && !muted && html`<button class="kb" onClick=${stopIt}>Stop it</button>`}
-          ${phase === "holding" && html`<button class="kb" onClick=${dispatch}>Send now</button>`}
-          ${phase === "waiting" && html`<button class="kb" onClick=${() => press("\x1b")} title=${`Send Esc to ${who} (or say stop)`}>Stop ${who}</button>`}
-          <button class="kb" onClick=${toggleMute} aria-pressed=${muted} aria-keyshortcuts="m">${muted ? "Unmute" : "Mute"} <kbd aria-hidden="true">m</kbd></button>
-          <${Menu} cls="kb" label="More" aria="More voice options" up width=${250} items=${more} />
-          <button class="kb" onClick=${onClose} aria-keyshortcuts="Escape">Leave <kbd aria-hidden="true">esc</kbd></button>
-        </span>
-      </div>
-    </div></div></div>
-  `;
-}
 
 const tokens = (n) => {
   n = n || 0;
@@ -5634,57 +5326,6 @@ function highlight(el, q) {
   ranges[0]?.startContainer.parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
-function wavFrom(buf) {
-  const ch = buf.getChannelData(0), rate = buf.sampleRate, out = new DataView(new ArrayBuffer(44 + ch.length * 2));
-  const w = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
-  w(0, "RIFF"); out.setUint32(4, 36 + ch.length * 2, true); w(8, "WAVE"); w(12, "fmt ");
-  out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true); out.setUint32(24, rate, true);
-  out.setUint32(28, rate * 2, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); w(36, "data"); out.setUint32(40, ch.length * 2, true);
-  ch.forEach((v, i) => out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, v)) * 0x7fff, true));
-  return new Blob([out], { type: "audio/wav" });
-}
-
-
-function useDictation(onText, say, onDiscard) {
-  const [state, setState] = useState("idle");
-  const rec = useRef(null), keep = useRef(true);
-  const start = async () => {
-    if (rec.current || state === "busy") return;
-    keep.current = true;
-    rec.current = "starting";
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const r = new MediaRecorder(stream), chunks = [];
-      r.ondataavailable = (e) => chunks.push(e.data);
-      r.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        rec.current = null;
-        if (!keep.current) { setState("idle"); onDiscard?.(); return; }
-        setState("busy");
-        try {
-          const ctx = new AudioContext();
-          const buf = await ctx.decodeAudioData(await new Blob(chunks).arrayBuffer());
-          ctx.close();
-          const res = await transcribe(wavFrom(buf));
-          if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
-          const text = (await res.json()).text?.trim();
-          if (text) onText(text); else onDiscard?.();
-        } catch (e) { say(`Couldn't write down what you said: ${e.message}`); }
-        setState("idle");
-      };
-      r.start();
-      rec.current = r;
-      setState("rec");
-      if (!keep.current) r.stop();
-    } catch (e) { rec.current = null; say(`The microphone isn't available: ${e.message}`); }
-  };
-  const stop = (k = true) => {
-    keep.current = k;
-    if (rec.current?.state === "recording") rec.current.stop();
-  };
-  return { state, start, stop, toggle: () => (state === "rec" ? stop() : state === "idle" && start()) };
-}
-
 function BgStrip({ s }) {
   const seen = useRef(new Map());
   const [open, setOpen] = useState(() => pref("atc.bgopen", "off") === "on");
@@ -5734,7 +5375,6 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const [slash, setSlash] = useState(0);
-  const [note, setNote] = useState(null);
   const [atts, setAttsRaw] = useState(() => attsOf(s.sessionId));
   const setAtts = (f) => setAttsRaw((as) => {
     const n = typeof f === "function" ? f(as) : f, kept = n.filter((a) => a.path).map(({ id, name, path, size }) => ({ id, name, path, size }));
@@ -5743,9 +5383,6 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   });
   const [big, setBig] = useState(null);
   const phone = usePhone();
-  const noteT = useRef(0);
-  const flash = (n) => { setNote(n); clearTimeout(noteT.current); noteT.current = setTimeout(() => setNote(null), 4000); };
-  const dict = useDictation((t) => { setDraft((d) => (d ? `${d.trimEnd()} ${t}` : t)); flash("kept"); }, say, () => flash("none"));
   focusRef.current = () => ta.current?.focus();
   useEffect(() => { if (!working) setConfirm(false); }, [working]);
   useLayoutEffect(() => { const el = ta.current; if (el) { el.style.height = ""; if (el.scrollHeight > el.clientHeight + 2) el.style.height = Math.min(el.scrollHeight, phone ? 132 : 220) + "px"; } }, [draft]);
@@ -5781,14 +5418,12 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   uploadRef.current = upload;
   const slashes = /^\/\S*$/.test(draft) ? SLASH.filter(([c]) => c.startsWith(draft)) : null;
   const pickSlash = (c) => { setDraft(c + " "); setSlash(0); requestAnimationFrame(() => { const el = ta.current; el?.focus(); el?.setSelectionRange(1e4, 1e4); }); };
-  const space = useRef(null);
   const onKey = (e) => {
     if (slashes?.length) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); return setSlash((i) => (Math.min(i, slashes.length - 1) + (e.key === "ArrowDown" ? 1 : slashes.length - 1)) % slashes.length); }
       if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) { e.preventDefault(); return pickSlash(slashes[Math.min(slash, slashes.length - 1)][0]); }
     }
     if (slashes && e.key === "Escape") { e.preventDefault(); e.stopPropagation(); return setDraft(""); }
-    if (dict.state === "rec" && e.key === "Escape") { e.preventDefault(); e.stopPropagation(); return dict.stop(false); }
     if (confirm) {
       if (e.key === "Enter") { e.preventDefault(); setConfirm(false); return interrupt(); }
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); return setConfirm(false); }
@@ -5796,24 +5431,6 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
     if (e.key === "Escape" && !draft && working) { e.preventDefault(); e.stopPropagation(); return setConfirm(true); }
     if (e.key === "Escape") { e.stopPropagation(); e.target.blur(); return; }
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing && !touch) { e.preventDefault(); return go(); }
-    if (e.key === " " && !draft && !touch && VOICE_OK) { e.preventDefault(); if (!e.repeat && !space.current) space.current = setTimeout(() => { space.current = "on"; dict.start(); }, 280); }
-  };
-  const onKeyUp = (e) => {
-    if (e.key !== " " || !space.current) return;
-    if (space.current === "on") dict.stop(true); else { clearTimeout(space.current); setDraft((d) => d + " "); }
-    space.current = null;
-  };
-  const press = useRef(0);
-  const talkDown = (e) => {
-    e.preventDefault();
-    if (dict.state === "rec") return dict.stop(true);
-    press.current = Date.now(); dict.start();
-  };
-  const talkUp = (e) => {
-    if (!press.current) return;
-    const held = Date.now() - press.current > 350, r = e.currentTarget.getBoundingClientRect(), off = e.type === "pointercancel" || e.clientY < r.top - 60;
-    press.current = 0;
-    if (off) dict.stop(false); else if (held) dict.stop(true);
   };
   const hasText = !!(draft.trim() || atts.length || quotes.length);
   const ready = hasText && !busy && !atts.some((a) => !a.path);
@@ -5821,14 +5438,10 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   const hint = hintFor && !asking && !working ? hintFor : asking ? (phone ? "Or type your answer" : "Or type your own answer; enter sends") : working ? (phone ? "Queue a reply" : "Queue a reply for when it stops; esc in an empty box stops it") : phone ? "Reply" : `Reply to ${short}; enter sends`;
   const chips = !hasText && !asking && replies?.length > 0 ? replies : [];
   const strip = confirm ? html`<div class="cstrip confirm" role="alert"><b>Stop the agent?</b><span class="h"><kbd>enter</kbd> stops it, <kbd>esc</kbd> keeps it going</span><span class="sp"></span>
-      <button class="btn" onClick=${() => { setConfirm(false); ta.current?.focus(); }}>Keep going</button><button class="btn prime" onClick=${() => { setConfirm(false); interrupt(); }}>Stop it</button></div>`
-    : dict.state === "rec" ? html`<div class="cstrip dict" role="status" aria-live="polite"><span class="lvl" aria-hidden="true"><i></i><i></i><i></i><i></i></span><b>Listening</b><span class="sp"></span><span class="h">${touch ? "release to keep, slide off to cancel" : html`release to keep, <kbd>esc</kbd> cancels`}</span></div>`
-    : dict.state === "busy" ? html`<div class="cstrip dict" role="status"><b class="slow">Writing down what you said</b></div>`
-    : note === "kept" ? html`<div class="cstrip" role="status"><b>Kept.</b><span class="h">Edit it, or ${touch ? "Send" : html`<kbd>enter</kbd> sends`}. Nothing was sent.</span></div>`
-    : note === "none" ? html`<div class="cstrip" role="status"><b>Dictation discarded.</b><span class="h">The box is as it was.</span></div>` : null;
+      <button class="btn" onClick=${() => { setConfirm(false); ta.current?.focus(); }}>Keep going</button><button class="btn prime" onClick=${() => { setConfirm(false); interrupt(); }}>Stop it</button></div>` : null;
   return html`<div class="composer">
     <div class="cols"><div class="cx">${top}
-      <div class="cmp ${hasText ? "has-text" : ""} ${dict.state === "rec" ? "listening" : ""} ${VOICE_OK ? "has-talk" : ""}">
+      <div class="cmp ${hasText ? "has-text" : ""}">
         ${slashes && html`<div class="slash" role="listbox" aria-label="Slash commands">${slashes.length ? slashes.map(([c, d], j) => html`<button class="sl ${j === Math.min(slash, slashes.length - 1) ? "on" : ""}" role="option" aria-selected=${j === slash} onMouseDown=${(e) => e.preventDefault()} onClick=${() => pickSlash(c)}><span class="c">${c}</span><span class="d">${d}</span></button>`)
           : html`<div class="sl none">No command starts with ${draft}</div>`}<div class="slh"><span><kbd>up</kbd> <kbd>down</kbd> choose</span><span><kbd>tab</kbd> complete</span><span><kbd>esc</kbd> close</span></div></div>`}
         ${strip}
@@ -5844,10 +5457,8 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
             <button class="kb att-b" title="Attach files (or paste, or drop them on the transcript)" onClick=${() => file.current?.click()}>Attach</button>
             <input type="file" multiple hidden ref=${file} onChange=${(e) => { upload([...e.target.files]); e.target.value = ""; }} />
             <textarea ref=${ta} rows="1" value=${draft} placeholder=${hint} aria-label=${`Reply to ${s.title || "the session"}`} enterkeyhint=${touch ? "enter" : "send"}
-              onInput=${(e) => { setDraft(e.target.value); setSlash(0); if (confirm) setConfirm(false); }} onKeyDown=${onKey} onKeyUp=${onKeyUp}
+              onInput=${(e) => { setDraft(e.target.value); setSlash(0); if (confirm) setConfirm(false); }} onKeyDown=${onKey}
               onPaste=${(e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); upload(fs); } }}></textarea>
-            ${VOICE_OK && html`<button class="kb mic ${dict.state === "rec" ? "on" : ""}" aria-pressed=${dict.state === "rec"} disabled=${dict.state === "busy"} title="Hold to dictate into the box; it never sends"
-              onPointerDown=${talkDown} onPointerUp=${talkUp} onPointerCancel=${talkUp} onContextMenu=${(e) => e.preventDefault()}>Talk</button>`}
             ${doors}
             <button class="btn prime send" disabled=${!ready} onClick=${go} title=${working ? "It is working: this waits and sends when it stops" : "Send (enter)"}>${working ? "Queue" : "Send"}</button>
           </div>
@@ -6206,7 +5817,7 @@ let TX_API = null;
 const shortDay = (ts) => new Date(ts).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
 const msOf = (at) => (at ? Date.parse(at) || 0 : 0);
 
-function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
+function Transcript({ s, say, resume, busy, cmp = {} }) {
   useSync();
   const sid = s.sessionId;
   const [idx, setIdx] = useState(null);
@@ -6320,7 +5931,7 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
   const deliver = async (p) => {
     setPending((ps) => [...ps.filter((x) => x.id !== p.id), { ...p, state: "sending", queued: working }]);
     try {
-      await api(`/api/sessions/${s.id || sid}/send`, { method: "POST", body: { text: p.text, suggested: p.suggested, voice: p.voice } });
+      await api(`/api/sessions/${s.id || sid}/send`, { method: "POST", body: { text: p.text, suggested: p.suggested } });
       setPending((ps) => ps.map((x) => (x.id === p.id ? { ...x, state: "sent", sent: Date.now() } : x)));
       setTimeout(loadIdx, 1500);
     } catch (e) {
@@ -6611,9 +6222,7 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
     </div>
     ${drop && html`<div class="droptarget" aria-hidden="true"><span>Drop to attach to <b>${s.title || "this session"}</b></span></div>`}
     ${!live && resume && s.kind !== "interactive" && html`<${EndBar} s=${s} resume=${resume} busy=${busy} />`}
-    ${live && voice && html`<${VoiceBar} s=${s} say=${say} type=${(t) => send(t, { voice: true })} onClose=${onVoiceOff} top=${html`${cmp.top}<${BgStrip} s=${s} />`}
-      press=${(k) => api(`/api/sessions/${s.id || sid}/keys`, { method: "POST", body: { keys: k } }).catch((e) => say(e.message))} />`}
-    ${live && !voice && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies}
+    ${live && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies}
       focusRef=${focusInput} uploadRef=${uploadRef} working=${working} asking=${!!asking && !asking.permission} interrupt=${interrupt}
       prompt=${cmp.prompt} doors=${cmp.doors} hintFor=${cmp.hint} top=${html`${cmp.top}<${BgStrip} s=${s} />`} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
@@ -6633,7 +6242,7 @@ function useWide(q = "(min-width: 900px)") {
 
 const lastAt = (body) => (body?.items || []).map((it) => it.out?.time || it.time).filter(Boolean).sort().pop();
 
-const HUB_CHANNEL = { phone: "On the call", whatsapp: "On WhatsApp", "atc-voice": "By voice", agent: "To a session", guest: "To a guest", "guest-call": "On a guest's call" };
+const HUB_CHANNEL = { phone: "On the call", whatsapp: "On WhatsApp", agent: "To a session", guest: "To a guest", "guest-call": "On a guest's call" };
 
 // useHubStream follows the assistant's reply as the hub streams it: what it writes after its
 // last tool call, since everything before that is already in the transcript.
@@ -7033,7 +6642,7 @@ function Palette({ live, sel, say, home, hosts, actions, onClose }) {
     act("Sessions pane", () => actions.pane("rail"), "rail list", "[");
     act("State pane", () => actions.pane("state"), "summary facts", "]");
     for (const p of cur.pages || []) act(`Page: ${pageTitle(p)}`, () => cur.page(p.name), `show ${p.name}`);
-    if (cur.canAttach && VOICE_OK) act("Voice", cur.voice, "talk speak mic");
+    act("Call about this", () => callAbout(s, say), "voice talk phone assistant");
     act("Session usage", cur.usage, "tokens cost limit");
     act("Rename", cur.rename, "title name");
     act(s.pinned ? "Unpin" : "Pin", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }));
@@ -7058,7 +6667,6 @@ function Palette({ live, sel, say, home, hosts, actions, onClose }) {
   action("Pages", "g", "every page your sessions showed you", () => (location.hash = pagesHash()), "shown html reports gallery");
   action("Assistant", ".", "your conversation with it", actions.ask, "ask chat switchboard");
   if (CAN_CALL) action("Call the assistant", "", "a voice call", callAssistant, "phone voice");
-  if (VOICE_OK) action("Talk to Claude", "", "voice, hands free", actions.talk, "voice assistant");
   action("All bays", "0", "the board across every bay", () => { BAY.set(null); go(null); });
   action("Next session that needs you", "n", "any bay, in bay order", actions.next);
   action("Usage", "", "limits, pace, cost per bay and session", actions.usage, "tokens cost week limits");

@@ -2,6 +2,7 @@ package server
 
 import (
 	"cmp"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"slices"
@@ -26,6 +27,8 @@ type feed struct {
 	// onDemand names the agents without a schedule: their last result is from whenever someone last
 	// woke them, so the snapshot says so instead of passing it off as how things stand.
 	onDemand func() map[string]bool
+	about    string
+	aboutAt  time.Time
 }
 
 type feedEvent struct {
@@ -315,10 +318,46 @@ func clipText(s string, n int) string {
 	return s
 }
 
+// aboutKeep is how long a "Call about this" waits for the assistant's next turn: long enough to
+// ring and say hello, short enough that a call that never connected can't colour a later message.
+const aboutKeep = 5 * time.Minute
+
+func (f *feed) callAbout(id, title string, now time.Time) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.about, f.aboutAt = fmt.Sprintf("[atc: they pressed \"Call about this\" on the session %q (%s). Unless they name another, that is the session they mean.]", title, id), now
+}
+
+func (f *feed) takeAbout(now time.Time) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	about := f.about
+	f.about = ""
+	if now.Sub(f.aboutAt) > aboutKeep {
+		return ""
+	}
+	return about
+}
+
+func (s *Server) callAbout(w http.ResponseWriter, r *http.Request) {
+	var in struct{ ID, Title string }
+	json.NewDecoder(r.Body).Decode(&in)
+	if in.ID == "" {
+		http.Error(w, "which session?", http.StatusBadRequest)
+		return
+	}
+	s.feed.callAbout(in.ID, cmp.Or(in.Title, "Untitled"), time.Now())
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // feedNews serves the feed to the hub: since=<seq from the last answer>, full=1 for the state as it is.
 func (s *Server) feedNews(w http.ResponseWriter, r *http.Request) {
 	since, _ := strconv.ParseInt(r.URL.Query().Get("since"), 10, 64)
-	text, seq := s.feed.news(since, r.URL.Query().Get("full") != "", time.Now())
+	now := time.Now()
+	text, seq := s.feed.news(since, r.URL.Query().Get("full") != "", now)
+	if about := s.feed.takeAbout(now); about != "" {
+		text = strings.TrimLeft(text+"\n"+about, "\n")
+	}
 	reply(w, map[string]any{"seq": seq, "text": text})
 }
 

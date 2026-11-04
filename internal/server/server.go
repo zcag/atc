@@ -226,6 +226,7 @@ func (s *Server) Handler() http.Handler {
 		s.nameViewer(r)
 		s.Term.Serve(w, r, r.PathValue("id"))
 	})
+	mux.HandleFunc("POST /api/call/about", s.callAbout)
 	mux.HandleFunc("GET /api/call/voices", s.callVoices)
 	mux.HandleFunc("POST /api/call/voices", s.callVoices)
 	mux.HandleFunc("GET /api/call/voices/sample", s.callVoiceSample)
@@ -239,10 +240,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/bays/{bay}", s.patchBay)
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
-	mux.HandleFunc("POST /api/voice/stt", s.stt)
-	mux.HandleFunc("POST /api/voice/condense", s.condense)
-	mux.HandleFunc("POST /api/voice/finished", s.finished)
-	mux.HandleFunc("POST /api/voice/tts", s.tts)
 	mux.HandleFunc("POST /api/push/register", s.pushRegister)
 	mux.HandleFunc("POST /api/push/unregister", s.pushUnregister)
 	mux.HandleFunc("GET /api/push/devices", func(w http.ResponseWriter, r *http.Request) { reply(w, s.Push.Devices()) })
@@ -332,7 +329,7 @@ func (s *Server) me() map[string]any {
 		hosts = append(hosts, p.Name)
 	}
 	return map[string]any{"host": s.Host, "home": home, "claudeTheme": theme, "hosts": hosts, "peers": s.fleet.statuses(), "callNumber": s.CallNumber,
-		"voice": map[string]bool{"stt": s.Voice.STT != "", "tts": s.Voice.TTS != "", "condense": s.Voice.LLM != ""}, "web": s.web, "call": s.CallLine != "", "look": s.look()}
+		"web": s.web, "call": s.CallLine != "", "look": s.look()}
 }
 
 func webVersion(web fs.FS) string {
@@ -758,7 +755,6 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Text      string
 		Suggested bool
-		Voice     bool
 		From      string
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Text) == "" {
@@ -775,11 +771,8 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 	}
 	if l := s.linkOf(id); l != nil {
 		channel := "atc"
-		switch {
-		case req.From != "":
+		if req.From != "" {
 			channel = hub.Agent
-		case req.Voice:
-			channel = "atc-voice"
 		}
 		s.done(w, id, s.linkSend(r.Context(), l, channel, req.Text))
 		return
@@ -1453,7 +1446,7 @@ func (s *Server) standingName(sid, fallback string) string {
 func standing(name string) ([]string, bool) {
 	switch name {
 	case hubName:
-		return standingArgs(modes.Text("atc-voice") + "\n\n" + switchboard), true
+		return standingArgs(modes.Text("atc") + "\n\n" + switchboard), true
 	case waName:
 		return append(standingArgs(modes.Text(waName)+"\n\n"+switchboard), "--disallowedTools", "AskUserQuestion,EnterPlanMode"), true
 	}
