@@ -141,9 +141,21 @@ func (s *Server) pairStart(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]any{"payload": text, "url": base, "svg": svg, "expires": expires})
 }
 
+// claimAddr keeps clients apart even when clientIP can't parse the address (an IPv6 zone).
+func (s *Server) claimAddr(r *http.Request) string {
+	if ip := s.clientIP(r); ip != nil {
+		return ip.String()
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
 func (s *Server) pairClaim(w http.ResponseWriter, r *http.Request) {
-	ip := s.clientIP(r)
-	if !s.claims.Allow(ip.String()) {
+	ip := s.claimAddr(r)
+	if !s.claims.Allow(ip) {
 		log.Printf("pair: too many claims from %s", ip)
 		w.Header().Set("Retry-After", "60")
 		http.Error(w, "too many attempts, try again in a minute", http.StatusTooManyRequests)

@@ -8,6 +8,7 @@ import { minimal } from "./minimal.js";
 import { cube, niceMax } from "./usage-cube.js";
 import { partsOf } from "./res-parts.js";
 import { useCaps, useSetup, CapsBanner, CapsSections, SetupScreen } from "./caps.js";
+import { DevicesSection } from "./devices.js";
 
 const BAYS = [
   ["needs-you", "Needs you"],
@@ -1717,7 +1718,7 @@ function Login({ onDone }) {
     <div class="login">
       <form onSubmit=${submit}>
         <span class="mark">atc</span>
-        <p>Paste the token for this server. Run <code>atc token</code> on it to print one.</p>
+        <p>Paste a token for this server: <code>atc token</code> on it prints one. A device already logged in can pair this one under Settings › Devices.</p>
         <label class="field"><span>Token</span><input type="password" autocomplete="current-password" value=${tok} onInput=${(e) => setTok(e.target.value)} ref=${focusOnMount} /></label>
         ${err && html`<p class="err">${err}</p>`}
         <div class="actions"><button class="btn primary" disabled=${!tok}>Log in</button></div>
@@ -5253,6 +5254,7 @@ function SettingsPage({ me, say, onClose }) {
             </div>
           </section>`}
         <${CapsSections} rep=${caps} reload=${loadCaps} ui=${ui} noMic=${!APP && !!me?.call && !Call.supported()} />
+        <${DevicesSection} api=${api} app=${APP} copy=${copyText} ago=${agoLong} openOut=${openOut} />
         <section id="about">
           <h2>About</h2>
           <div class="set"><b>This atc</b><p>${caps?.machines?.[0]?.version ? `Version ${caps.machines[0].version}, build ` : "Build "}${me?.web || "unknown"}${hosts ? `, sessions on ${hosts}` : ""}${APP_VERSION ? `; Android app ${APP_VERSION}` : ""}.</p></div>

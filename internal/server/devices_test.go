@@ -275,3 +275,16 @@ func TestSavePeerKeepsTheOthers(t *testing.T) {
 		t.Fatalf("%+v %v", ps, err)
 	}
 }
+
+func TestClaimAddrKeepsZonedClientsApart(t *testing.T) {
+	s := &Server{}
+	r := httptest.NewRequest("POST", pair.ClaimPath, nil)
+	r.RemoteAddr = "[fe80::1%eth0]:5000"
+	if got := s.claimAddr(r); got != "fe80::1%eth0" {
+		t.Fatal(got)
+	}
+	r.RemoteAddr = "192.0.2.1:5000"
+	if got := s.claimAddr(r); got != "192.0.2.1" {
+		t.Fatal(got)
+	}
+}

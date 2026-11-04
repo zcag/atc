@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/pair"
@@ -62,8 +61,8 @@ func pairCmd(args []string) error {
 	if qr, err := pair.Terminal(text); err == nil {
 		fmt.Print(qr)
 	}
-	fmt.Printf("\n%s\n\nValid %s, one use, for %s.\nScan it in the Android app, or on another machine:\n  atc login '%s'\n  atc peer add '%s'\n",
-		text, pair.CodeLife.Round(time.Minute), p.URL, text, text)
+	fmt.Printf("\n%s\n\nValid %d minutes, one use, for %s.\nScan it in the Android app, or on another machine:\n  atc login '%s'\n  atc peer add '%s'\n",
+		text, int(pair.CodeLife.Minutes()), p.URL, text, text)
 	return nil
 }
 
