@@ -11,7 +11,7 @@ OVAL = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379
 BROW = {"R": [70, 63, 105, 66, 107, 55, 65, 52, 53, 46], "L": [300, 293, 334, 296, 336, 285, 295, 282, 283, 276]}
 HEAD_CLASSES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15]
 HERE = os.path.dirname(os.path.abspath(__file__))
-RIG = os.path.expanduser("~/.local/share/persona2d/rig")
+RIG = os.path.join(os.environ.get("PERSONA_WORK", os.path.expanduser("~/.local/share/persona2d")), "rig")
 MODEL = os.path.join(RIG, "face_landmarker.task")
 ESR = os.path.join(RIG, "esr")
 

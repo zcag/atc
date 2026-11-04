@@ -76,13 +76,13 @@ type Server struct {
 
 	WhatsApp *whatsapp.Client
 	Hub      *hub.Client
-	// CallLine is delta-call, whose app line the phone app's calls go through; calls from
+	// CallLine is the call line service, whose app line the phone app's calls go through; calls from
 	// CallTestFrom go to CallTestLine.
 	CallLine, CallTestLine string
 	CallTestFrom           []string
 	// CallNumber is the assistant's own phone line, which the app logs its calls under.
 	CallNumber string
-	// CallVoices is delta-shell, which lists the voices calls can speak with and keeps the pick.
+	// CallVoices is the voice service, which lists the voices calls can speak with and keeps the pick.
 	CallVoices string
 	hub        *hubLink
 	guests     *hubLink

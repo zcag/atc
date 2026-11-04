@@ -1,5 +1,5 @@
-const { chromium } = require('/home/user/proj/ui-kit/node_modules/playwright-core');
-const exe = '/home/user/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome';
+const { chromium } = require('playwright-core');
+const exe = process.env.CHROME_BIN;
 const base = process.argv[2] || 'http://127.0.0.1:7299';
 const sid = process.argv[3];
 const OUT = __dirname + '/../../shots/build/';

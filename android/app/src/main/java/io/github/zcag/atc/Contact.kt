@@ -13,7 +13,7 @@ import java.io.ByteArrayOutputStream
 
 /** An "Assistant" contact on the phone for the assistant's number, so the call log and recents show a name and
  *  the app's icon instead of a bare number. Added once, only with the contacts permission, and only when no
- *  contact has that number yet (their own name for it wins). */
+ *  contact has that number yet (the user's own name for it wins). */
 object Contact {
     val permissions = arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)
 

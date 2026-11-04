@@ -47,7 +47,7 @@ dashboards all go here; don't publish them anywhere else.
   atc open <session|@agent>/<page>[#id]
                the assistant only: open a page another session or agent already shows on
                the phone's screen, as --open does, at the section with that id when given
-               (atc open @shopping/picks#towel). It is that page itself, with its own state,
+               (atc open @reports/summary#intro). It is that page itself, with its own state,
                so never show a copy of someone else's page. A page of your own is just
                <page>[#id]. Same rules as --open.
 
@@ -61,7 +61,7 @@ a hidden column or truncated field is not.
 Give every section of an HTML page an id (<section id="towel">), so it can be linked
 to: a page's address is name#id. --at uses it, atc notify --page picks#towel opens the
 page there, and a link from another page or a message is the Link atc show prints,
-/#/p/<session title or @agent>/<name>#<id> (/#/p/@shopping/picks#towel);
+/#/p/<session title or @agent>/<name>#<id> (/#/p/@reports/summary#intro);
 inside the page itself it is plain href="#towel". A section the page draws later
 from atc.state is found once it appears, when the page loads /atc.js.
 

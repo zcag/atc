@@ -10,7 +10,7 @@ class PairingTest {
     @Test
     fun onlyLocalPathsOpen() {
         assertTrue(Pairing.isLocalPath(MainActivity.HOLD))
-        assertTrue(Pairing.isLocalPath("/#/p/@shopping/picks#towel"))
+        assertTrue(Pairing.isLocalPath("/#/p/@reports/summary#intro"))
         for (bad in listOf("@evil.com", ".evil.com/", "//evil.com", "/\\evil.com", "https://evil.com", "")) {
             assertFalse(bad, Pairing.isLocalPath(bad))
         }

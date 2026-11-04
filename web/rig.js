@@ -164,9 +164,9 @@ export class Director {
 
 /** The behaviour: from the call's state and both voices to acting, every frame. Eyes lead, the head follows on a
  *  spring, the body trails; blinks, breaths and glances come at human intervals. Each state has its own business:
- *  listening is relaxed, hearing him leans in and nods, thinking puts a hand to the chin or looks up and away, a tool
- *  means reading or writing in a notebook, speaking looks at him with beats on stressed syllables and now and then
- *  an open-handed gesture at the start of a phrase. Warm smiles come when he finishes a thought and now and then
+ *  listening is relaxed, hearing the user leans in and nods, thinking puts a hand to the chin or looks up and away, a tool
+ *  means reading or writing in a notebook, speaking looks at the user with beats on stressed syllables and now and then
+ *  an open-handed gesture at the start of a phrase. Warm smiles come when the user finishes a thought and now and then
  *  while waiting. */
 export class Behaviour {
   constructor() {

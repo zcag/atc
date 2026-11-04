@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Where did delta's voice bunch up on a call: atc's relay log (what came from delta-call, how long each write toward
+"""Where did the assistant's voice bunch up on a call: atc's relay log (what came from the call line, how long each write toward
 the phone took) beside the app's arrival trace (when each frame reached the phone).
   where.py <relay.jsonl>... -- <app-trace.jsonl>
-Frames are matched in order; the phone's clock is aligned to desktop's by the smallest one-way delay, so `delay` is
+Frames are matched in order; the phone's clock is aligned to the server's by the smallest one-way delay, so `delay` is
 the extra time a frame took to reach the phone over the fastest frame of the call."""
 import json, sys
 sep = sys.argv.index("--")
@@ -31,12 +31,12 @@ def cmp(relay, app):
     cnt = lambda v, s: sum(x >= s for x in v)
     print(f"frames: relay {len(relay)}, app {len(app)}")
     for s in (60, 100, 250, 500):
-        print(f"gaps >= {s:3} ms: from delta-call into atc {cnt(rg, s):4} | arriving at the phone {cnt(ag, s):4} | atc writes blocked that long {cnt(ws, s)}")
+        print(f"gaps >= {s:3} ms: from the call line into atc {cnt(rg, s):4} | arriving at the phone {cnt(ag, s):4} | atc writes blocked that long {cnt(ws, s)}")
     print(f"max gap: into atc {max(rg)} ms, at the phone {max(ag)} ms, longest atc write {max(ws)} ms")
     n = min(len(relay), len(app))
     d = [app[i][0] - relay[i][0] for i in range(n)]
     late = sorted(x - min(d) for x in d)
-    print(f"extra delay desktop->phone (n={n}): p50 {late[n//2]} p90 {late[int(n*.9)]} p99 {late[int(n*.99)]} max {late[-1]} ms")
+    print(f"extra delay server->phone (n={n}): p50 {late[n//2]} p90 {late[int(n*.9)]} p99 {late[int(n*.99)]} max {late[-1]} ms")
 
 
 def gaps(ts):

@@ -39,9 +39,9 @@ class Spring(var x: Float = 0f, private val hz: Float) {
     }
 }
 
-/** The face's behaviour, procedural and live: what it does comes from the call (the state delta-talk reports,
- *  their voice's and the assistant's loudness on the phone), never from the assistant's words. It breathes, blinks
- *  at irregular intervals, makes small eye movements, sways a little; looks at them while listening and nods in
+/** The face's behaviour, procedural and live: what it does comes from the call (the state the talker reports,
+ *  the user's voice's and the assistant's loudness on the phone), never from the assistant's words. It breathes, blinks
+ *  at irregular intervals, makes small eye movements, sways a little; looks at the user while listening and nods in
  *  their pauses; looks away while thinking; moves its jaw with the assistant's voice and lifts its brows and nods
  *  on emphasis. Deterministic for a seed, so tests can pin it down. */
 class Animator(seed: Int = 1) {
@@ -164,7 +164,7 @@ class Animator(seed: Int = 1) {
         if (abs(gazeYaw - eyeYaw.x) > rad(8f) && blinkStart < 0 && rnd.nextFloat() < .5f) blinkAt = t
     }
 
-    /** A small nod when they stop after talking for a while, as a listener does. */
+    /** A small nod when the user stops after talking for a while, as a listener does. */
     private fun listen(dt: Float, you: Float, listening: Boolean) {
         if (you > .12f) {
             if (youSince < 0) youSince = t

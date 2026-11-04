@@ -1,11 +1,11 @@
-const { chromium } = require('/home/user/proj/ui-kit/node_modules/playwright-core');
+const { chromium } = require('playwright-core');
 const { fakeSessions, needsIn } = require('./fake.js');
-const exe = '/home/user/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome';
+const exe = process.env.CHROME_BIN;
 const base = process.argv[2] || 'http://127.0.0.1:7299';
 const OUT = __dirname + '/../../shots/build/';
 const ok = (c, m) => console.log(c ? 'ok  ' : 'FAIL', m);
 const stub = (p) => p.route(/\/api\/(?!events)/, (r) => r.request().method() === 'GET' ? r.continue() : r.fulfill({ status: 204 }));
-const fake = (list) => needsIn(list, 2, ['shop', 'dotfiles', 'notes', 'board', 'acme']);
+const fake = (list) => needsIn(list, 2, ['shop', 'site', 'notes', 'api', 'docs']);
 (async () => {
   const b = await chromium.launch({ executablePath: exe });
   for (const scheme of ['light', 'dark']) {

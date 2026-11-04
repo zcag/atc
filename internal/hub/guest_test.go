@@ -28,7 +28,7 @@ func TestGuestReachesNoOneAndKeepsHisChannel(t *testing.T) {
 	wa.until("done")
 	all.until("done")
 
-	r.h.Say(Guest, "[guest sam on WhatsApp]\nsite açılmıyor")
+	r.h.Say(Guest, "[guest pat on WhatsApp]\nthe site is down")
 	if es := all.until("done"); es[len(es)-1].Channel != Guest {
 		t.Fatalf("guest turn %v", es)
 	}
@@ -40,7 +40,7 @@ func TestGuestReachesNoOneAndKeepsHisChannel(t *testing.T) {
 	mu.Lock()
 	note := written[len(written)-1]
 	mu.Unlock()
-	if !strings.Contains(note, "[talk-mode: guest, for this message only]") || !strings.Contains(note, "MODE guest") || !strings.Contains(note, "they last wrote from whatsapp") {
+	if !strings.Contains(note, "[talk-mode: guest, for this message only]") || !strings.Contains(note, "MODE guest") || !strings.Contains(note, "the user last wrote from whatsapp") {
 		t.Fatalf("guest note %s", note)
 	}
 
@@ -87,7 +87,7 @@ func TestGuestCallIsSpokenAndHoldsHim(t *testing.T) {
 	var written []string
 	in := r.h.in
 	r.h.mu.Lock()
-	r.h.cfg.News = func(bool) string { return "[atc now] their sessions" }
+	r.h.cfg.News = func(bool) string { return "[atc now] the user's sessions" }
 	r.h.in = writerFunc(func(b []byte) (int, error) {
 		mu.Lock()
 		written = append(written, string(b))
@@ -99,7 +99,7 @@ func TestGuestCallIsSpokenAndHoldsHim(t *testing.T) {
 	wa.send("message", "hi")
 	wa.until("done")
 	call := r.dial(GuestCall)
-	call.send("message", "TOOL [guest sam on the phone] site")
+	call.send("message", "TOOL [guest pat on the phone] site")
 	first := call.until("tool")
 	wa.send("message", "hello")
 	if es := wa.until("held"); len(es) != 1 {
@@ -115,11 +115,11 @@ func TestGuestCallIsSpokenAndHoldsHim(t *testing.T) {
 	defer mu.Unlock()
 	var callMsg string
 	for _, w := range written {
-		if strings.Contains(w, "guest sam on the phone") {
+		if strings.Contains(w, "guest pat on the phone") {
 			callMsg = w
 		}
 	}
-	if strings.Contains(callMsg, "their sessions") || !strings.Contains(callMsg, "MODE guest-call") {
+	if strings.Contains(callMsg, "the user's sessions") || !strings.Contains(callMsg, "MODE guest-call") {
 		t.Fatalf("guest call message %s", callMsg)
 	}
 	if b, _ := os.ReadFile(r.h.homePath()); strings.TrimSpace(string(b)) != "whatsapp" {
@@ -144,7 +144,7 @@ func TestGuestsHaveTheirOwnConversation(t *testing.T) {
 
 	mine := r.dial("")
 	call := r.dial(GuestCall)
-	call.send("message", "[guest sam on the phone] alo")
+	call.send("message", "[guest pat on the phone] hello")
 	if es := call.until("done"); es[len(es)-1].Channel != GuestCall {
 		t.Fatalf("guest call %v", es)
 	}

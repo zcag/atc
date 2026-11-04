@@ -1,8 +1,8 @@
 // The one ask outside the transcript (compact form): the board row, the peek, terminal mode.
 // node asks.js [base]
-const { chromium } = require('/home/user/proj/ui-kit/node_modules/playwright-core');
+const { chromium } = require('playwright-core');
 const { fakeSessions, needsIn } = require('./fake.js');
-const exe = '/home/user/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome';
+const exe = process.env.CHROME_BIN;
 const base = process.argv[2] || 'http://127.0.0.1:7299';
 const OUT = __dirname + '/../../shots/build/';
 let fails = 0;
@@ -86,7 +86,7 @@ const PERM = [{ id: 'p1', permission: 'Bash', patterns: ['bundle exec rspec spec
       await ctx.close();
     }
     {
-      const { ctx, p, writes, errs } = await open(scheme, true, (l) => needsIn(l, 2, ['shop', 'dotfiles', 'notes']), () => { try { localStorage.setItem('atc.project', 'atc'); } catch {} });
+      const { ctx, p, writes, errs } = await open(scheme, true, (l) => needsIn(l, 2, ['shop', 'site', 'notes']), () => { try { localStorage.setItem('atc.project', 'atc'); } catch {} });
       await p.goto(base + '/');
       await p.waitForTimeout(3000);
       await p.tap('.offneeds');

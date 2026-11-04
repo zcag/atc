@@ -51,7 +51,7 @@ object Calls {
 
     enum class Cmd { Answer, Hangup, Mute, Speaker, Hold, Unhold, Resume, Interrupt }
 
-    /** What the assistant is doing, from delta-talk: listening, hearing (them), thinking, tool, speaking. */
+    /** What the assistant is doing, from the talker: listening, hearing (the user), thinking, tool, speaking. */
     data class Face(val state: String = "listening", val hearing: String = "", val you: String = "", val said: String = "", val tool: String = "")
 
     sealed interface Wire {
@@ -63,7 +63,7 @@ object Calls {
     val face = MutableStateFlow(Face())
     @Volatile var voice: Voice? = null
 
-    /** Their voice's and the assistant's loudness right now, 0 to 1, measured on the phone. */
+    /** The user's voice's and the assistant's loudness right now, 0 to 1, measured on the phone. */
     fun levels() = voice?.let { it.you to it.heard()[0] } ?: (0f to 0f)
 
     /** The assistant's voice as it is heard now: [loudness, below 700 Hz, above 3 kHz], each 0..1. */
@@ -132,7 +132,7 @@ object Calls {
         }
     }
 
-    /** What the phone's call log shows for these calls: the assistant's own phone line (delta's number, from atc's
+    /** What the phone's call log shows for these calls: the assistant's own phone line (its number, from atc's
      *  /api/me), so calling back from recents reaches the assistant over the SIM line; sip:assistant@atc without it. */
     private suspend fun address(app: Context, server: String): Uri {
         val number = withContext(Dispatchers.IO) {
@@ -334,12 +334,12 @@ class Line(private val c: Context, private val url: String, private val voice: V
     private fun cmd(name: String) = JSONObject().put("cmd", name).toString()
 }
 
-/** Call audio: their voice at 16 kHz (what delta-call's speech recognition takes) and the assistant's at 24 kHz (Higgs' own
+/** Call audio: the user's voice at 16 kHz (what the speech recognition takes) and the assistant's at 24 kHz (Higgs' own
  *  rate), mono s16le in 20 ms frames. Playback holds a few frames before it starts and after it runs dry, so network
  *  jitter does not cut words. Each time it runs dry mid-call it holds enough to cover the longest wait between frames of
  *  the last 30 s (at least two more, up to 1 s: on a phone's mobile data a frame came up to 0.37 s late on one call,
  *  and bursts reached 1.7 s), and gives one back after each 10 s that played clean. A burst is shed through silent frames,
- *  never speech (the old cap of hold + 200 ms dropped words). The counters go to delta-call every 10 s, into the call's log
+ *  never speech (the old cap of hold + 200 ms dropped words). The counters go to the call line every 10 s, into the call's log
  *  line, with each frame's arrival time (android/bench/where.py, replay.py). */
 class Voice {
     companion object {
@@ -444,14 +444,14 @@ class Voice {
 
     private fun silent(f: ByteArray) = f.all { it == 0.toByte() }
 
-    /** Drop what is queued: they cut delta off (a tap, or delta-talk heard them talk over it), so nothing already sent plays. */
+    /** Drop what is queued: the user cut the assistant off (a tap, or the talker heard them talk over it), so nothing already sent plays. */
     fun flush() = queue.clear()
 
     /** Frames to hold so the longest recent wait between frames does not run the speaker dry. */
     private fun spikeHold(now: Long) = if (now - spikeAt > SPIKE_MS) 0 else spike / 20 + 1
 
-    /** When each of delta's frames reached the phone since the last trace: the gap after the previous one in ms and
-     *  whether it was speech, so delta-call can line it up with what atc's relay sent and replay it in tests. */
+    /** When each of the assistant's frames reached the phone since the last trace: the gap after the previous one in ms and
+     *  whether it was speech, so the call line can line it up with what atc's relay sent and replay it in tests. */
     private fun trace(line: Line) {
         val gaps = org.json.JSONArray()
         val speech = StringBuilder()
@@ -572,7 +572,7 @@ class Voice {
         }
     }
 
-    /** A burst left more queued than the hold needs: shed silent frames (delta-talk sends digital zero between and around
+    /** A burst left more queued than the hold needs: shed silent frames (the talker sends digital zero between and around
      *  sentences) so the delay comes back down without cutting a word; speech goes only past MAX_QUEUE (3 s). */
     private fun trim() {
         val extra = queue.size - (hold + SLACK)

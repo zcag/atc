@@ -1,8 +1,8 @@
 // Step 3, the transcript: drives the real app (through the dev proxy) and checks it against the
 // approved behaviour. Every write to /api is stubbed, so nothing reaches a real session.
 // node transcript.js [base]
-const { chromium } = require('/home/user/proj/ui-kit/node_modules/playwright-core');
-const exe = '/home/user/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome';
+const { chromium } = require('playwright-core');
+const exe = process.env.CHROME_BIN;
 const base = process.argv[2] || 'http://127.0.0.1:7301';
 const OUT = __dirname + '/../../shots/build/';
 let fails = 0;
@@ -47,7 +47,7 @@ async function open(b, { w, scheme, sid, patch, seen, ask = {}, voice }) {
       await wait(ask.delay ?? 700);
       return ask.fail ? r.fulfill({ status: 502, body: 'laptop did not confirm the answer' }) : r.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     }
-    if (u.pathname.endsWith('/upload')) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ path: '/home/user/.cache/atc/uploads/trace-before.json' }) });
+    if (u.pathname.endsWith('/upload')) return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ path: '/home/you/.cache/atc/uploads/trace-before.json' }) });
     return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
   await p.goto(`${base}/#/s/${sid}`);
@@ -195,11 +195,11 @@ const css = (p, sel, prop) => p.$eval(sel, (e, k) => getComputedStyle(e)[k], pro
       // answered somewhere else: the push on the phone
       {
         const at = new Date().toISOString();
-        const { ctx, p, errs } = await open(b, { w, scheme, sid: quiet.sessionId, patch: { state: 'working', asks: [], updated: at, answered: { ask: 'perm-elsewhere', what: 'Allow once', via: 'push', device: 'phone', at } } });
+        const { ctx, p, errs } = await open(b, { w, scheme, sid: quiet.sessionId, patch: { state: 'working', asks: [], updated: at, answered: { ask: 'perm-elsewhere', what: 'Allow once', via: 'push', device: 'pixel', at } } });
         await p.$eval('.tx', (e) => e.scrollTo({ top: e.scrollHeight }));
         await p.waitForTimeout(300);
         const line = await p.textContent('.tx p.adl').catch(() => '');
-        ok(/You answered Allow once, \d\d:\d\d \(from the notification on phone\)/.test(line), `${tag}: an answer from the push says so: "${line}"`);
+        ok(/You answered Allow once, \d\d:\d\d \(from the notification on pixel\)/.test(line), `${tag}: an answer from the push says so: "${line}"`);
         await p.$eval('.tx p.adl', (e) => e.scrollIntoView({ block: 'center' })).catch(() => {});
         await shot(p, 'answered-push', w, scheme);
         ok(!errs.length, `${tag}: no page errors ${errs.join(' | ')}`);

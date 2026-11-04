@@ -17,10 +17,10 @@ import (
 	"github.com/coder/websocket"
 )
 
-// callLine is the phone app's end of a call: its socket passed through to delta-call's app line,
+// callLine is the phone app's end of a call: its socket passed through to the call line's app line,
 // which only answers on loopback, so atc's login is what guards it. The Android app's calls from
-// CallTestFrom (laptop, where the test emulator runs) go to CallTestLine instead, a delta-call of
-// their own, so a test never touches the line they call on; a browser there (their own, on laptop)
+// CallTestFrom (where a test emulator runs) go to CallTestLine instead, a call line of
+// their own, so a test never touches the real line; a browser at such an address
 // still gets the real line.
 func (s *Server) callLine(w http.ResponseWriter, r *http.Request) {
 	line := s.CallLine
@@ -33,7 +33,7 @@ func (s *Server) callLine(w http.ResponseWriter, r *http.Request) {
 	}
 	up, _, err := websocket.Dial(r.Context(), strings.Replace(line, "http", "ws", 1)+"/app", nil)
 	if err != nil {
-		http.Error(w, "delta-call: "+err.Error(), http.StatusBadGateway)
+		http.Error(w, "call line: "+err.Error(), http.StatusBadGateway)
 		return
 	}
 	defer up.CloseNow()
@@ -53,8 +53,8 @@ func (s *Server) callLine(w http.ResponseWriter, r *http.Request) {
 	log.Printf("call: app line closed (%v)", err)
 }
 
-// relayTrace keeps, for each of delta's audio frames passed to the phone, how long after the previous one it came
-// from delta-call and how long writing it toward the phone took, in StateDir/call-relay/<opened>.jsonl, flushed every
+// relayTrace keeps, for each of the assistant's audio frames passed to the phone, how long after the previous one it came
+// from the call line and how long writing it toward the phone took, in StateDir/call-relay/<opened>.jsonl, flushed every
 // 10 s like the app's own arrival trace: a gap there and none here puts a burst between atc and the phone.
 type relayTrace struct {
 	path         string

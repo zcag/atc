@@ -29,7 +29,7 @@ type Sign struct{ Started, Report, Approved bool }
 const relayedApproval = "relays the user's own go-ahead: what this message asks counts as their approval"
 
 // IsAssistant is whether this is the assistant's conversation; the hub's other one, the guests',
-// speaks for their guests and never for them.
+// speaks for the user's guests and never for the user.
 func IsAssistant(pool []sessions.Session) bool {
 	me, ok := Self(pool)
 	return ok && isAssistant(me)

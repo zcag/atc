@@ -441,7 +441,7 @@ func TestAgentReportReachesNoOne(t *testing.T) {
 	mu.Lock()
 	note := written[len(written)-1]
 	mu.Unlock()
-	if !strings.Contains(note, "not on a call; they last wrote from whatsapp") {
+	if !strings.Contains(note, "not on a call; the user last wrote from whatsapp") {
 		t.Fatalf("agent note %s", note)
 	}
 
@@ -536,7 +536,7 @@ func (l *line_) server(t *testing.T) *httptest.Server {
 func TestCallAnswered(t *testing.T) {
 	l := &line_{states: []lineState{{"idle", "idle"}, {"offhook", "dialing"}, {"offhook", "alerting"}, {"offhook", "active"}}}
 	r := newRig(t, CallConfig{URL: l.server(t).URL, Number: "+900", Poll: 10 * time.Millisecond})
-	out, err := r.h.Call(context.Background(), CallReq{Reason: "deploy bitti", From: "[from session \"x\"]"})
+	out, err := r.h.Call(context.Background(), CallReq{Reason: "deploy done", From: "[from session \"x\"]"})
 	if err != nil || out != Answered {
 		t.Fatalf("%s %v", out, err)
 	}
@@ -550,11 +550,11 @@ func TestCallAnswered(t *testing.T) {
 	r.h.in = writerFunc(func(b []byte) (int, error) { mu.Lock(); written += string(b); mu.Unlock(); return in.Write(b) })
 	r.h.mu.Unlock()
 	phone := r.dial("phone")
-	phone.send("message", "[kullanıcı telefonu açtı]")
+	phone.send("message", "[the user picked up]")
 	phone.until("done")
 	mu.Lock()
 	defer mu.Unlock()
-	if !strings.Contains(written, "[message]\\n[phone · "+time.Now().Format("15:04")+" · you called the user, they picked up · reason: deploy bitti]\\n[from session \\\"x\\\"]\\n[the user") {
+	if !strings.Contains(written, "[message]\\n[phone · "+time.Now().Format("15:04")+" · you called the user, they picked up · reason: deploy done]\\n[from session \\\"x\\\"]\\n[the user") {
 		t.Fatalf("phone message: %s", written)
 	}
 	if r.h.Status().Call != "" {
@@ -576,19 +576,19 @@ func TestCallOpeningWrittenWhileRinging(t *testing.T) {
 	r.h.in = writerFunc(func(b []byte) (int, error) { mu.Lock(); written += string(b); mu.Unlock(); return in.Write(b) })
 	r.h.mu.Unlock()
 	done := make(chan string)
-	go func() { out, _ := r.h.Call(context.Background(), CallReq{Reason: "deploy bitti"}); done <- out }()
+	go func() { out, _ := r.h.Call(context.Background(), CallReq{Reason: "deploy done"}); done <- out }()
 	for r.h.Status().Call != "dialing" {
 		time.Sleep(time.Millisecond)
 	}
 	phone := r.dial("phone")
-	phone.send("message", "[açılış]")
+	phone.send("message", "[opening]")
 	phone.until("done")
 	if out := <-done; out != Answered {
 		t.Fatal(out)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if !strings.Contains(written, "you called the user, it is ringing, this is the first thing they hear when they pick up · reason: deploy bitti]\\n[açılış]") {
+	if !strings.Contains(written, "you called the user, it is ringing, this is the first thing they hear when they pick up · reason: deploy done]\\n[opening]") {
 		t.Fatalf("phone message: %s", written)
 	}
 	if r.h.Status().Call != "" {

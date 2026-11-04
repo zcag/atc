@@ -1,4 +1,4 @@
-import sys, json, base64, urllib.request, pathlib
+import os, sys, json, base64, urllib.request, pathlib
 out = pathlib.Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
 subj = ("a warm, kind academic man in his mid fifties, completely bald head, short neat grey beard, round thin gold-rimmed glasses, "
         "wearing a soft brown knit cardigan over a light collared shirt, head and shoulders portrait, facing the viewer directly, "
@@ -17,6 +17,6 @@ for name, prompt, seed in jobs:
     p = out / f"{name}.png"
     if p.exists(): continue
     body = json.dumps({"model": "flux2-klein-4b", "prompt": prompt + " No text, no letters.", "size": "768x1344", "response_format": "b64_json", "seed": seed}).encode()
-    r = urllib.request.urlopen(urllib.request.Request("http://gpu.example:11437/v1/images/generations", body, {"Content-Type": "application/json"}), timeout=600)
+    r = urllib.request.urlopen(urllib.request.Request(os.environ["IMAGES_URL"], body, {"Content-Type": "application/json"}), timeout=600)
     p.write_bytes(base64.b64decode(json.load(r)["data"][0]["b64_json"]))
     print(name, flush=True)

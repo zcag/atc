@@ -10,7 +10,7 @@ import (
 func TestTilde(t *testing.T) {
 	for in, want := range map[string]string{
 		"/home/u":           "~",
-		"/home/u/proj/x":    "~/proj/x",
+		"/home/u/code/x":    "~/code/x",
 		"/Users/other/code": "~/code",
 		"/Users/other":      "~",
 		"/srv/app":          "/srv/app",

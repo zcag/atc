@@ -86,10 +86,10 @@ func TestBaysOrderAndMemory(t *testing.T) {
 	if res, _ := do(t, "PUT", ts.URL+"/api/bays", "tok", `{}`); res.StatusCode != 400 {
 		t.Fatalf("no order: %d", res.StatusCode)
 	}
-	do(t, "PUT", ts.URL+"/api/bays", "tok", `{"order":["atc","shop"]}`)
+	do(t, "PUT", ts.URL+"/api/bays", "tok", `{"order":["atc","notes"]}`)
 	do(t, "PATCH", ts.URL+"/api/bays/atc", "tok", `{"sid":"s1","panes":["transcript","page"]}`)
 	do(t, "PATCH", ts.URL+"/api/bays/atc", "tok", `{"view":"board"}`)
-	if ev := next(t, ch, "bays"); !strings.Contains(ev, `"order":["atc","shop"]`) {
+	if ev := next(t, ch, "bays"); !strings.Contains(ev, `"order":["atc","notes"]`) {
 		t.Errorf("order event: %s", ev)
 	}
 	next(t, ch, "bays")

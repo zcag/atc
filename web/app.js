@@ -1601,7 +1601,7 @@ const VOICE_LANG = { tr: "Turkish", en: "English" };
 const voiceName = (v) => v.replace(/^en_/, "").replace(/_/g, " ");
 
 /** The character and the assistant's voice, inside the call panel: a character picked shows at once in the big frame
- *  above, a voice can be heard first (delta renders a sample once and keeps it), and a pick applies from its next reply. */
+ *  above, a voice can be heard first (the voice service renders a sample once and keeps it), and a pick applies from its next reply. */
 function CallPicks({ look, onClose }) {
   const [voices, setVoices] = useState(null);
   const [note, setNote] = useState("");
@@ -1621,7 +1621,7 @@ function CallPicks({ look, onClose }) {
     setNote("");
     try {
       const r = await fetch(`/api/call/voices/sample?${new URLSearchParams({ lang, voice: v, text: voices[lang].sample })}`);
-      if (!r.ok) throw new Error(r.status === 409 ? "delta is on a call, and this sample renders after it" : "the sample did not come");
+      if (!r.ok) throw new Error(r.status === 409 ? "a call is on, and this sample renders after it" : "the sample did not come");
       const a = new Audio(URL.createObjectURL(await r.blob()));
       audio.current = a;
       a.onended = () => setPlaying((p) => (p === k ? null : p));

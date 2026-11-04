@@ -213,8 +213,8 @@ func said(x sessions.Session) string {
 	return strings.Join(append([]string{clipText(result(x), 160)}, x.Open()...), " | ")
 }
 
-// snapshot is the list as their Triage screen shows it, bay by bay: Your turn, Pinned, Working,
-// Parked. Stopped sessions are left out: they no longer wait on them.
+// snapshot is the list as the user's Triage screen shows it, bay by bay: Your turn, Pinned, Working,
+// Parked. Stopped sessions are left out: they no longer wait on the user.
 func (f *feed) snapshot(now time.Time) string {
 	var mine []sessions.Session
 	hosts := map[string]bool{}
@@ -270,7 +270,7 @@ func (f *feed) snapshot(now time.Time) string {
 		}
 		return head + ":\n- " + strings.Join(items, "\n- ")
 	}
-	parts := []string{list("Your turn (each waits on them)", turn)}
+	parts := []string{list("Your turn (each waits on the user)", turn)}
 	if len(pinned) > 0 {
 		parts = append(parts, list("Pinned", pinned))
 	}
@@ -278,7 +278,7 @@ func (f *feed) snapshot(now time.Time) string {
 		parts = append(parts, list("Working", working))
 	}
 	if len(parked) > 0 {
-		parts = append(parts, list("Parked (they set these aside)", parked))
+		parts = append(parts, list("Parked (the user set these aside)", parked))
 	}
 	var off []string
 	for h, d := range f.down {
@@ -325,7 +325,7 @@ const aboutKeep = 5 * time.Minute
 func (f *feed) callAbout(id, title string, now time.Time) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.about, f.aboutAt = fmt.Sprintf("[atc: they pressed \"Call about this\" on the session %q (%s). Unless they name another, that is the session they mean.]", title, id), now
+	f.about, f.aboutAt = fmt.Sprintf("[atc: the user pressed \"Call about this\" on the session %q (%s). Unless they name another, that is the session they mean.]", title, id), now
 }
 
 func (f *feed) takeAbout(now time.Time) string {

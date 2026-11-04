@@ -15,31 +15,31 @@ func TestIsOwner(t *testing.T) {
 	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.Contains(r.URL.Path, "/contacts/111@lid/phone"):
-			w.Write([]byte(`{"phone":"15550100"}`))
+			w.Write([]byte(`{"phone":"12025550100"}`))
 		case strings.Contains(r.URL.Path, "/contacts/222@lid/phone"):
-			w.Write([]byte(`{"phone":"905550000000"}`))
+			w.Write([]byte(`{"phone":"12025550150"}`))
 		default:
 			http.NotFound(w, r)
 		}
 	}))
 	defer gw.Close()
-	c := &Client{URL: gw.URL, Session: "s", Owner: "15550100", OwnerIDs: []string{"15550100", "11111111111111@lid"}, http: gw.Client()}
+	c := &Client{URL: gw.URL, Session: "s", Owner: "12025550100", OwnerIDs: []string{"12025550100", "10000000000011@lid"}, http: gw.Client()}
 	ctx := context.Background()
 	for from, want := range map[string]bool{
-		"15550100@c.us":   true,
-		"11111111111111@lid":  true,
-		"111@lid":             true,
-		"222@lid":             false,
-		"333@lid":             false,
-		"905550000000@c.us":   false,
-		"15550100@g.us":   false,
-		"15550100-1@g.us": false,
+		"12025550100@c.us":   true,
+		"10000000000011@lid": true,
+		"111@lid":            true,
+		"222@lid":            false,
+		"333@lid":            false,
+		"12025550150@c.us":   false,
+		"12025550100@g.us":   false,
+		"12025550100-1@g.us": false,
 	} {
 		if got := c.IsOwner(ctx, from, ""); got != want {
 			t.Errorf("IsOwner(%s) = %v, want %v", from, got, want)
 		}
 	}
-	if c.IsOwner(ctx, "444@lid", "905550000000") || !c.IsOwner(ctx, "444@lid", "15550100") {
+	if c.IsOwner(ctx, "444@lid", "12025550150") || !c.IsOwner(ctx, "444@lid", "+12025550100") {
 		t.Error("senderPhone is not what decides an @lid sender")
 	}
 }

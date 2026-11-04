@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { partsOf, prettyName } from "./res-parts.js";
 
-const shop = [
+const session = [
   { pid: 1353510, ppid: 1353397, name: "bundle", cmd: "puma: cluster worker 1: 1353397 [wt-42-feature]", mem: 800, cpu: 1, age: 100 },
   { pid: 1353508, ppid: 1353397, name: "bundle", cmd: "puma: cluster worker 0: 1353397 [wt-42-feature]", mem: 790, cpu: 0, age: 100 },
   { pid: 2133677, ppid: 2133631, name: "claude", cmd: "/home/u/.local/share/claude/versions/2.1.317 --resume x", mem: 355, cpu: 1, age: 900 },
@@ -16,7 +16,7 @@ const shop = [
 ];
 
 test("a real session reads by what it runs", () => {
-  const parts = partsOf(shop);
+  const parts = partsOf(session);
   assert.deepEqual(parts.map((p) => [p.name, p.mem, p.procs.length]), [
     ["puma", 1613, 4],
     ["Claude", 394, 2],
@@ -29,9 +29,9 @@ test("a real session reads by what it runs", () => {
 });
 
 test("every process lands in exactly one part", () => {
-  const n = partsOf(shop).reduce((a, p) => a + p.procs.length, 0);
-  assert.equal(n, shop.length);
-  assert.equal(partsOf(shop).reduce((a, p) => a + p.mem, 0), shop.reduce((a, p) => a + p.mem, 0));
+  const n = partsOf(session).reduce((a, p) => a + p.procs.length, 0);
+  assert.equal(n, session.length);
+  assert.equal(partsOf(session).reduce((a, p) => a + p.mem, 0), session.reduce((a, p) => a + p.mem, 0));
 });
 
 test("a parent past the process limit does not lose its child", () => {

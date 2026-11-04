@@ -1,6 +1,6 @@
 // A session's More menu is on top of everything under it, the State pane's file cards included, and those cards keep to their own width.
-const { chromium } = require('/home/user/proj/ui-kit/node_modules/playwright-core');
-const exe = '/home/user/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome';
+const { chromium } = require('playwright-core');
+const exe = process.env.CHROME_BIN;
 const base = process.argv[2] || 'http://127.0.0.1:7299';
 const ok = (c, m) => console.log(c ? 'ok  ' : 'FAIL', m);
 const COVERED = () => {

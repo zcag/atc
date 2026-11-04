@@ -293,7 +293,7 @@ func (h *Hub) say(ch, text string) (string, error) {
 		text = h.asideNote(ch) + text
 	}
 	if ch == Phone && h.unsaid {
-		text = "[hub: a report or a guest's message came in while you were on the call, see above; tell them in this reply what they need to hear of it]\n" + text
+		text = "[hub: a report or a guest's message came in while you were on the call, see above; tell the user in this reply what they need to hear of it]\n" + text
 		h.unsaid = false
 	}
 	if !aside(ch) && ch != reset {
@@ -336,7 +336,7 @@ func (h *Hub) asideNote(ch string) string {
 		h.unsaid = true
 	}
 	if h.home != "" {
-		where += "; they last wrote from " + h.home
+		where += "; the user last wrote from " + h.home
 	}
 	return note + "[now: " + where + "]\n[message]\n"
 }
@@ -406,7 +406,7 @@ func (h *Hub) write(v any) error {
 // Interrupt stops the running turn. A channel that is not forcing it (the phone's barge-in)
 // only cuts what is being said to it, and lets a running tool finish first so its result is kept.
 // Claude Code replays a message only about two seconds after taking it, when its answer starts;
-// a cut in that time (their turn reopened right after it was sent) stops the turn before it began.
+// a cut in that time (the user's turn reopened right after it was sent) stops the turn before it began.
 func (h *Hub) Interrupt(ch string, force bool) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()

@@ -1,7 +1,7 @@
 // The board's "new since you looked" marks come from /api/seen, so every device agrees.
 // node seen.js [base]
-const { chromium } = require('/home/user/proj/ui-kit/node_modules/playwright-core');
-const exe = '/home/user/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome';
+const { chromium } = require('playwright-core');
+const exe = process.env.CHROME_BIN;
 const base = process.argv[2] || 'http://127.0.0.1:7299';
 let fails = 0;
 const ok = (c, m) => { if (!c) fails++; console.log(c ? 'ok  ' : 'FAIL', m); };
@@ -12,7 +12,7 @@ const sid = (n) => `seen${n}000-0000-0000-0000-000000000000`;
   const real = await (await fetch(base + '/api/sessions')).json();
   const proto = (Array.isArray(real) ? real : real.sessions).find((s) => s.state === 'your-turn') || real[0];
   const turn = iso(-10 * 60000);
-  const mk = (n, title) => ({ ...JSON.parse(JSON.stringify(proto)), sessionId: sid(n), id: `seen${n}`, title, cwd: '/home/user/proj/seentest', state: 'your-turn', parked: false, pinned: false, asks: [], updated: turn });
+  const mk = (n, title) => ({ ...JSON.parse(JSON.stringify(proto)), sessionId: sid(n), id: `seen${n}`, title, cwd: '/home/you/code/seentest', state: 'your-turn', parked: false, pinned: false, asks: [], updated: turn });
   const list = [...(Array.isArray(real) ? real : real.sessions), mk(1, 'looked after its turn'), mk(2, 'looked before its turn'), mk(3, 'never looked at')];
   const seen = { [sid(1)]: iso(-5 * 60000), [sid(2)]: iso(-60 * 60000) };
   const b = await chromium.launch({ executablePath: exe });

@@ -81,8 +81,8 @@ section:target > h2 { box-shadow: 0 -2px 0 var(--ink); border-top-color: var(--i
 .foot { font-size: var(--fs-small); color: var(--faint); line-height: 1.5; max-width: var(--read-w); }
 
 /* ---------- tones: state as a letter in a shape first, color second ----------
-   needs (filled amber, N) is the only amber on a page: something waits on them. turn (open square, T) done,
-   their move. work (steel bar, W) in progress. live (filled green, L) up and running. stop (red outline, S)
+   needs (filled amber, N) is the only amber on a page: something waits on the user. turn (open square, T) done,
+   the user's move. work (steel bar, W) in progress. live (filled green, L) up and running. stop (red outline, S)
    stopped or failed. park (circle, P) and past (faint square, E). A tone draws its glyph on .st, .ref,
    .rows li, .timeline li, .callout. The older t-* classes set --tone and --tone-text for the classes below. */
 .needs { --g: "N"; } .turn { --g: "T"; } .work { --g: "W"; } .live { --g: "L"; } .stop { --g: "S"; } .park { --g: "P"; } .past { --g: "E"; }

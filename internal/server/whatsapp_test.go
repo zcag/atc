@@ -29,14 +29,14 @@ func TestWhatsAppHook(t *testing.T) {
 		calls = append(calls, r.Method+" "+r.URL.Path)
 		mu.Unlock()
 		if strings.HasSuffix(r.URL.Path, "/phone") {
-			w.Write([]byte(`{"phone":"905550000000"}`))
+			w.Write([]byte(`{"phone":"12025550150"}`))
 			return
 		}
 		w.Write([]byte(`[]`))
 	}))
 	defer gw.Close()
 	const secret = "0123456789abcdef0123"
-	for k, v := range map[string]string{"URL": gw.URL, "KEY": "k", "SESSION": "bot", "OWNER": "15550100", "SECRET": secret} {
+	for k, v := range map[string]string{"URL": gw.URL, "KEY": "k", "SESSION": "bot", "OWNER": "12025550100", "SECRET": secret} {
 		t.Setenv("ATC_WHATSAPP_"+k, v)
 	}
 	bin := fakeClaude(t)

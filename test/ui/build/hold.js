@@ -1,21 +1,21 @@
-const { chromium } = require('/home/user/proj/ui-kit/node_modules/playwright-core');
+const { chromium } = require('playwright-core');
 const fs = require('fs');
 const { fakeSessions } = require('./fake.js');
-const exe = '/home/user/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome';
+const exe = process.env.CHROME_BIN;
 const base = process.argv[2] || 'http://127.0.0.1:7299';
 const OUT = __dirname + '/../../shots/build/';
 const FAKE = fs.readFileSync(__dirname + '/fakecall.js', 'utf8');
 let fails = 0;
 const ok = (c, m) => { if (!c) fails++; console.log(c ? 'ok  ' : 'FAIL', m); };
 
-const row = (o) => ({ sessionId: `hold-${o.id}-0000-0000-0000-000000000000`, id: `hold${o.id}`, cwd: '/home/user/proj/atc', attachable: true, updated: new Date().toISOString(), ...o });
+const row = (o) => ({ sessionId: `hold-${o.id}-0000-0000-0000-000000000000`, id: `hold${o.id}`, cwd: '/home/you/code/atc', attachable: true, updated: new Date().toISOString(), ...o });
 const FEED = [
-  row({ id: 1, title: 'Invoice spec', cwd: '/home/user/proj/shop', state: 'needs-you', activity: 'Keep both?', asks: [{ id: 'a', questions: [{ question: 'Keep both date formats, or normalise to cents?', options: [{ label: 'Keep both', description: 'x' }, { label: 'Normalise', description: 'y' }] }] }] }),
+  row({ id: 1, title: 'Checkout totals spec', cwd: '/home/you/code/shop', state: 'needs-you', activity: 'Keep both?', asks: [{ id: 'a', questions: [{ question: 'Keep both date formats, or normalise to cents?', options: [{ label: 'Keep both', description: 'x' }, { label: 'Normalise', description: 'y' }] }] }] }),
   row({ id: 2, title: 'atc hold screen', state: 'your-turn', summary: { status: 'Shipped to master and installed on both machines' } }),
-  row({ id: 5, title: 'Review PR 8', cwd: '/home/user/proj/shop', state: 'your-turn', summary: { status: 'Request changes on the search filters PR' } }),
-  row({ id: 6, title: 'shop-api', cwd: '/home/user/proj/shop', state: 'your-turn', summary: { status: 'Ready for review, not pushed' } }),
-  row({ id: 3, title: 'Price parsing', cwd: '/home/user/proj/shop', state: 'working', activity: 'Running the spec', promptAt: new Date(Date.now() - 134000).toISOString() }),
-  row({ id: 4, title: 'tracker sweep', state: 'working', activity: 'Reading mail' }),
+  row({ id: 5, title: 'Review PR 108', cwd: '/home/you/code/shop', state: 'your-turn', summary: { status: 'Request changes on the search filters PR' } }),
+  row({ id: 6, title: 'orders-api', cwd: '/home/you/code/shop', state: 'your-turn', summary: { status: 'Ready for review, not pushed' } }),
+  row({ id: 3, title: 'Price parsing', cwd: '/home/you/code/shop', state: 'working', activity: 'Running the spec', promptAt: new Date(Date.now() - 134000).toISOString() }),
+  row({ id: 4, title: 'nightly sweep', state: 'working', activity: 'Reading mail' }),
 ];
 const posts = [];
 const prep = async (ctx) => {
@@ -44,7 +44,7 @@ const open = async (c, feed, at = '/#/hold') => { await prep(c); const p = await
     const dial = await box(p, '.hold .dial'), band = await box(p, '.hband');
     ok(dial.y < band.y && dial.r > 370 && dial.h >= 100, 'Call is big, on the right, raised out of the band');
     ok((await p.$$('.hold .hkeys button')).length === 4, 'four shortcuts under it');
-    ok((await p.$eval('.hold .hr b', (e) => e.textContent)) === 'Invoice spec', 'what needs them comes first');
+    ok((await p.$eval('.hold .hr b', (e) => e.textContent)) === 'Checkout totals spec', 'what needs the user comes first');
     ok((await p.$$('.hold .hr')).length === 4, 'Waiting lists every waiting session');
     ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll');
     const small = await p.$$eval('.hold a, .hold button', (l) => l.filter((e) => e.getBoundingClientRect().height < 44).length);

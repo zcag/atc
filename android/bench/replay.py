@@ -4,20 +4,20 @@
 # ///
 """Replay a call's recorded arrival trace into the app's playback, on redroid, and print what the app counted.
 
-The trace is what the app reported during a real call (delta-call keeps it in
-~/.local/state/delta-call/app-traces/<call>.jsonl): every one of delta's frames with the ms since the one before and
+The trace is what the app reported during a real call (the call line keeps it per call):
+every one of the assistant's frames with the ms since the one before and
 whether it was speech. This serves the app line protocol on :PORT (call -> active), sends speech frames as a tone and
 silent ones as zeros on that same schedule, then hangs up and prints the app's last stats, and how the frames reached
 it (its own trace of this run). The debug build's Replay activity is the client:
   replay.py trace.jsonl [--port 8818] [--seconds N] [--serial 127.0.0.1:5555]"""
-import argparse, asyncio, json, subprocess, time
+import argparse, asyncio, json, socket, subprocess, time
 import numpy as np
 from aiohttp import web
 
 p = argparse.ArgumentParser()
 p.add_argument("trace")
 p.add_argument("--port", type=int, default=8818)
-p.add_argument("--host", default="127.0.0.1")
+p.add_argument("--host", default=socket.gethostbyname(socket.gethostname()), help="an address of this machine the device can reach")
 p.add_argument("--seconds", type=float, default=0, help="replay only the first N seconds")
 p.add_argument("--serial", default="127.0.0.1:5555")
 a = p.parse_args()

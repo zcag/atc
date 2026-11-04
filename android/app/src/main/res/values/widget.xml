@@ -17,7 +17,7 @@
     <string name="preview_ask">Esc on phone Back: close the dialog or go back a screen?</string>
     <string name="preview_a">1 Close the dialog</string>
     <string name="preview_b">2 Go back a screen</string>
-    <string name="preview_said">The release is out on desktop and laptop.</string>
+    <string name="preview_said">The release is out on both machines.</string>
 
     <style name="WidgetBlock">
         <item name="android:layout_width">16dp</item>

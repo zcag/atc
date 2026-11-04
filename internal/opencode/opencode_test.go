@@ -18,7 +18,7 @@ const messages = `[
  {"info":{"id":"msg_2","role":"assistant","modelID":"qwen","providerID":"mlx","time":{"created":2000,"completed":4000},"tokens":{"input":900,"output":40,"cache":{"read":100,"write":0}}},
   "parts":[{"type":"step-start"},{"type":"text","text":"Writing it."},
    {"type":"tool","tool":"write","state":{"status":"completed","input":{"filePath":"/home/u/app/shot.png","content":"x"},"time":{"start":2500}}},
-   {"type":"tool","tool":"bash","state":{"status":"completed","input":{"command":"python -m http.server 8123","description":"Serve it"},"output":"see http://pages.example/page\n"}}]},
+   {"type":"tool","tool":"bash","state":{"status":"completed","input":{"command":"python -m http.server 8123","description":"Serve it"},"output":"see http://reports.example.com/page\n"}}]},
  {"info":{"id":"msg_3","role":"assistant","modelID":"qwen","providerID":"mlx","time":{"created":4000,"completed":4500},"tokens":{"input":1000,"output":10,"cache":{"read":0,"write":0}}},
   "parts":[{"type":"text","text":"Done: the login page works."}]}
 ]`

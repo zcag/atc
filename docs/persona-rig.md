@@ -1,6 +1,6 @@
 # Call persona: drawings in a rig ("kind": "rig")
 
-The fresh start after v1-v8 (see `persona-handover.md`). Rendered by our own small WebGL renderer (`web/rig.js`);
+Rendered by our own small WebGL renderer (`web/rig.js`);
 no Live2D, Spine or Rive (their rig files only come out of their GUI editors, or need a paid licence to ship).
 
 ## How it works
@@ -24,37 +24,37 @@ short dissolve (20-120 ms), instead of stretching one painting.
 - **Mood**: a grade (contrast, cool shadows, warm highlights, a key light on the face from the lamp side), the room
   darkened and softened for depth, a vignette, the lamp's glow with a slow flicker, dust drifting in its light.
 - **Acting** (`Behaviour` in `web/rig.js`): eyes lead, the head follows on springs, the body trails; blinks every
-  2-6 s, breathing, glances. Listening is relaxed; hearing him leans in, tilts, nods at his pauses; thinking puts a
+  2-6 s, breathing, glances. Listening is relaxed; hearing the user leans in, tilts, nods at their pauses; thinking puts a
   hand to the chin (or looks up and away) with knit brows; a tool means reading (eyes scanning the page) or writing;
   speaking keeps eye contact with glances away at phrase starts, nods and brow lifts on stressed syllables, and the
   mouth shape picked from the played voice's loudness and bands. `Director` turns that into drawings.
 
 ## Building a character
 
-Scripts in `tools/persona/rig/`, run with the venv in desktop `~/.local/share/persona2d/rig/.venv` (mediapipe,
-torch CPU, transformers, simple-lama-inpainting, triangle). Working files in `~/.local/share/persona2d/rig/`.
+Scripts in `tools/persona/rig/`, run with a venv holding mediapipe, torch (CPU is enough), transformers,
+simple-lama-inpainting and triangle. Working files go in `$PERSONA_WORK/rig/` (`PERSONA_WORK` defaults to
+`~/.local/share/persona2d`), including `face_landmarker.task` (MediaPipe's) and `esr/` (realesrgan-ncnn-vulkan).
 
-Each character has a work dir with its portrait as `base.png` (768x1344): the professor's is
-`~/.local/share/persona2d/rig/work`, the young woman's `~/.local/share/persona2d/her/work` (her portrait: `tools/persona/gen.py`
-with `her/jobs4.json`, seed 51; an original face, not a likeness of anyone).
+Each character has a work dir with its portrait as `base.png` (768x1344). `tools/persona/gen.py <out dir> [jobs.json]`
+makes portraits through an OpenAI-compatible image server at `$IMAGES_URL`. Use an original face, not a likeness of anyone.
 
 1. `prep.py <work>`: 2x upscale, figure matte, LaMa fills (room, body without the head), the head crop the drawings
    are rendered from (`crop.png`, `crop.json`) and the lamp position (`char.json`).
-2. `drawings.py list.json`, then on gpu in the LivePortrait checkout:
+2. `drawings.py list.json`, then on a GPU machine in a LivePortrait checkout:
    `render_lp.py <crop.png> <list.json> <out>` (`tools/persona/render_lp.py`, ~0.6 s a drawing); copy to `<draw>/lp/`.
-3. Pose edits: `tools/persona/edit.py` on gpu with `poses_edit.json` (FLUX.2 klein; `her/poses_edit.json`,
-   `*/gesture_edit.json` for the explaining hand), then `poses.py <work> <poses> <work> name=file=x0,y0,x1,y1;...`
+3. Pose edits: `tools/persona/edit.py` (mflux with FLUX.2 klein, on Apple silicon) with `rig/poses_edit.json`, then `poses.py <work> <poses> <work> name=file=x0,y0,x1,y1;...`
    (boxes around each piece at 1x) writes `<work>/pose_<name>.png`.
 4. `build.py <work> <draw> <out>`: per angle landmarks, face parse, head mesh, patches into one atlas per angle, poses,
    overlays, `rig.json` and `persona.json`.
-5. `publish.py <out> professor` (or `woman`): copies it to atc's personas folder and bumps its rev.
+5. `publish.py <out> <name>`: copies it to atc's personas folder and bumps its rev.
 
 ## Checking it
 
 - `node --test web/` (part of `make check`): pose maths, the dissolve, the director's choices (angle hysteresis,
   blink, gaze sign, mouth, reading), ten simulated minutes of behaviour, poses per state.
-- `rec.sh <out> <mp4>`: frame-exact render of the simulated call at phone size with its audio; with a timeline
-  argument it renders that instead (silent). The record page logs each frame's parameters and drawings
-  (`clip/frames/states`). `strip.py` grids consecutive frames' crops; `masks.py` shows every patch of an angle over
+- `rec.sh <out> <mp4> [timeline.json]`: frame-exact render of a simulated call at phone size. A timeline is
+  `{"plan": [[state, seconds], ...], "you": [...], "it": [...], "lo": [...], "hi": [...]}` (loudness at 50 Hz), default
+  `$PERSONA_WORK/clip/timeline.json`, with `mix.wav` beside it for audio. The record page logs each frame's parameters and drawings
+  (`rig/clip/frames/states`). `strip.py` grids consecutive frames' crops; `masks.py` shows every patch of an angle over
   its head drawing with its mask.
-- `live.py <out> <mp4>`: the app's own path in real time at phone DPR; prints frame pacing and every long frame.
+- `live.py <out> <mp4>`: the app's own path (the same default timeline) in real time at phone DPR; prints frame pacing and every long frame.

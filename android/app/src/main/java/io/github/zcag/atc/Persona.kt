@@ -166,7 +166,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
 
 /** The assistant as a living orb filling the call screen: a liquid blob, raymarched, with iridescent skin, light and
  *  glowing filaments swirling inside, a halo, drifting dust and an aurora behind it. It breathes and turns, its surface
- *  ripples gently with their voice while they talk and with its own while it speaks (slow sound rings spread out from it
+ *  ripples gently with the user's voice while they talk and with its own while it speaks (slow sound rings spread out from it
  *  then), sparks orbit it while it thinks, and each state has its own colours. Every change eases in over about a
  *  second, and every speed that varies is integrated here (spin, flow, wave) rather than multiplied into time in the
  *  shader, so a change of speed never makes it lurch. A shader on Android 13+, a soft disc before. The same

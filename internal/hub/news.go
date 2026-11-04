@@ -20,8 +20,8 @@ func (h *Hub) withNews(ch, text string) string {
 }
 
 // Notice is atc saying a session now needs the user. While a phone turn is running a tool, the change
-// joins that turn right away, so the assistant can weigh it into what they are about to hear; otherwise
-// the next message carries it, since a call only speaks answers to their own words.
+// joins that turn right away, so the assistant can weigh it into what the user is about to hear; otherwise
+// the next message carries it, since a call only speaks answers to the user's own words.
 func (h *Hub) Notice() (bool, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()

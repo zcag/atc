@@ -1,7 +1,7 @@
-const { chromium } = require('/home/user/proj/ui-kit/node_modules/playwright-core');
+const { chromium } = require('playwright-core');
 const [base = 'http://127.0.0.1:7299', bay = 'listings'] = process.argv.slice(2);
 (async () => {
-  const b = await chromium.launch({ executablePath: '/home/user/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome' });
+  const b = await chromium.launch({ executablePath: process.env.CHROME_BIN });
   for (const [w, h, dpr] of [[1400, 900, 1], [400, 860, 2]]) {
     const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: dpr, isMobile: w < 900 });
     await ctx.addInitScript((x) => { try { localStorage.setItem('atc.notifask', '1'); localStorage.setItem('atc.project', x); } catch {} }, bay);

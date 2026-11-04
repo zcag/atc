@@ -144,7 +144,7 @@ func All() []Cap {
 			Fields: []Field{{Key: "ATC_WHATSAPP_URL", Label: "Gateway address", Hint: "http://127.0.0.1:2785", URL: true},
 				{Key: "ATC_WHATSAPP_KEY", Label: "API key", Secret: true},
 				{Key: "ATC_WHATSAPP_SESSION", Label: "Session id"},
-				{Key: "ATC_WHATSAPP_OWNER", Label: "Your number", Hint: "905551234567", Hub: true},
+				{Key: "ATC_WHATSAPP_OWNER", Label: "Your number", Hint: "12025550100", Hub: true},
 				{Key: "ATC_WHATSAPP_SECRET", Label: "Webhook secret, 16 characters or more", Secret: true},
 				{Key: "ATC_WHATSAPP_HOOK", Label: "Webhook address atc is reached at", URL: true}},
 			Check: checkWhatsApp,

@@ -1,5 +1,5 @@
-const { chromium } = require('/home/user/proj/ui-kit/node_modules/playwright-core');
-const exe = '/home/user/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome';
+const { chromium } = require('playwright-core');
+const exe = process.env.CHROME_BIN;
 const OUT = __dirname + '/../../shots/build/';
 const [step, ...targets] = process.argv.slice(2);
 

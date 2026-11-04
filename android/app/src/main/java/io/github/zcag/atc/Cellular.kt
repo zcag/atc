@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.emptyFlow
 
-/** The phone's own (SIM) calls. A SIM call they take or places during an assistant call puts it on hold through Telecom,
+/** The phone's own (SIM) calls. A SIM call the user takes or places during an assistant call puts it on hold through Telecom,
  *  and nothing in Telecom gives it back when the SIM call ends: this says when the SIM line is idle again, so the
  *  assistant call can take itself off hold. Needs READ_PHONE_STATE; without it, the call screen's tap is the only way back. */
 object Cellular {

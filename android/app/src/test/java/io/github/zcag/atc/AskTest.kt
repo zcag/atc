@@ -39,7 +39,7 @@ class AskTest {
 
     @Test fun urlSaysWhereFromAndWhichAsk() {
         val a = ask("""{"sid":"s 1","id":"claude","key":"abc","host":"laptop","text":"?"}""")
-        assertEquals("https://atc.example/api/sessions/s+1/asks/claude?via=push&key=abc&host=laptop", a.url("https://atc.example", "push"))
+        assertEquals("https://atc.example.com/api/sessions/s+1/asks/claude?via=push&key=abc&host=laptop", a.url("https://atc.example.com", "push"))
         val again = Ask.parse(a.json())!!
         assertEquals(a.url("x", "widget"), again.url("x", "widget"))
     }

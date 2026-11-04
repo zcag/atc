@@ -38,8 +38,8 @@ type call struct {
 	notify       string
 }
 
-// envelope is what the session reads before the phone's first message: once they pick up, or while
-// it still rings, when delta-talk writes the opening ahead so it plays the moment they answer.
+// envelope is what the session reads before the phone's first message: once the user picks up, or while
+// it still rings, when the talker writes the opening ahead so it plays the moment they answer.
 func (c *call) envelope(now time.Time) string {
 	state := modes.Line("call.answered")
 	if !c.answered {
@@ -94,7 +94,7 @@ func (c CallConfig) post(ctx context.Context, path string, body any) error {
 	}
 	json.NewDecoder(resp.Body).Decode(&r)
 	if resp.StatusCode >= 300 || r.Error != "" || r.OK != nil && !*r.OK {
-		return fmt.Errorf("delta-call %s: %s %s", path, resp.Status, r.Error)
+		return fmt.Errorf("call line %s: %s %s", path, resp.Status, r.Error)
 	}
 	return nil
 }
@@ -118,7 +118,7 @@ type CallReq struct {
 	Via      string `json:"via,omitempty"`
 }
 
-// lines are the lines a call is tried on, in order: atc's phone app first, then delta's phone
+// lines are the lines a call is tried on, in order: atc's phone app first, then the assistant's phone
 // line. A call the app never reports ringing (the push did not reach the phone) falls back.
 func (r CallReq) lines() ([]string, error) {
 	via := r.Via
@@ -136,7 +136,7 @@ func (r CallReq) lines() ([]string, error) {
 
 const unreached = "unreached"
 
-// Call has them rung and waits for the outcome. Answered, the call's first message reaches the
+// Call has the user rung and waits for the outcome. Answered, the call's first message reaches the
 // session with the reason in front of it, so it speaks first and knows why. Not answered, a
 // Notify call puts that in front of the session on the channel it was busy with.
 func (h *Hub) Call(ctx context.Context, r CallReq) (string, error) {
@@ -175,7 +175,7 @@ func (h *Hub) Call(ctx context.Context, r CallReq) (string, error) {
 	}
 	if st, err := c.status(ctx); err != nil {
 		clear()
-		return "", fmt.Errorf("delta-call: %w", err)
+		return "", fmt.Errorf("call line: %w", err)
 	} else if st.Call != "idle" {
 		clear()
 		return Busy, nil
@@ -214,7 +214,7 @@ func (h *Hub) Call(ctx context.Context, r CallReq) (string, error) {
 	return NoAnswer, nil
 }
 
-// ring dials one line until they answer, it stops ringing or the deadline passes. On the app
+// ring dials one line until the user answers, it stops ringing or the deadline passes. On the app
 // line, with a line left to fall back to, a call the phone has not reported ringing within
 // AppAck is dropped as unreached.
 func (h *Hub) ring(ctx context.Context, pc *call, via string, deadline time.Time, fallback bool) (string, error) {

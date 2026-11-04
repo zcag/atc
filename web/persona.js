@@ -138,7 +138,7 @@ export class Mind {
       }
     }
 
-    // His voice: an onset after quiet raises attention, a pause after talking earns a nod and an "mm".
+    // The user's voice: an onset after quiet raises attention, a pause after talking earns a nod and an "mm".
     if (you > .1) {
       if (this.youSince < 0) { this.youSince = t; if (t - this.youQuiet > 1.2) { this.flash.hit(.35, .1, .6); this.wide.hit(.2, .1, .5); } }
       this.youQuiet = t;

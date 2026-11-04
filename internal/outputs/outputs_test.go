@@ -8,7 +8,7 @@ import (
 
 func TestToolResultsGiveNoLinks(t *testing.T) {
 	tr := filepath.Join(t.TempDir(), "t.jsonl")
-	os.WriteFile(tr, []byte(`{"type":"user","timestamp":"2026-10-01T10:02:00Z","message":{"content":[{"type":"tool_result","content":"fetched https://docs.example.com/x\n  http://pages.example/report"}]}}
+	os.WriteFile(tr, []byte(`{"type":"user","timestamp":"2026-10-01T10:02:00Z","message":{"content":[{"type":"tool_result","content":"fetched https://docs.example.com/x\n  http://reports.example.com/report"}]}}
 `), 0o644)
 	var s Scanner
 	if _, links, _ := s.Scan(tr, t.TempDir()); len(links) != 0 {
@@ -25,7 +25,7 @@ func TestScan(t *testing.T) {
 	lines := `{"type":"assistant","timestamp":"2026-10-01T10:00:00Z","message":{"content":[{"type":"tool_use","name":"Write","input":{"file_path":"` + home + `/report.md"}}]}}
 {"type":"assistant","timestamp":"2026-10-01T10:01:00Z","message":{"content":[{"type":"tool_use","name":"Edit","input":{"file_path":"` + home + `/app.go"}}]}}
 {"type":"user","timestamp":"2026-10-01T10:02:00Z","message":{"content":[{"type":"tool_result","content":"  VITE ready\n  Local: http://localhost:5173/\nsaved ~/shot.png"}]}}
-{"type":"assistant","timestamp":"2026-10-01T10:03:00Z","message":{"content":[{"type":"text","text":"Published it at http://pages.example/report. Also see ` + home + `/gone.png."}]}}
+{"type":"assistant","timestamp":"2026-10-01T10:03:00Z","message":{"content":[{"type":"text","text":"Published it at http://reports.example.com/report. Also see ` + home + `/gone.png."}]}}
 `
 	os.WriteFile(tr, []byte(lines), 0o644)
 	var s Scanner
@@ -43,7 +43,7 @@ func TestScan(t *testing.T) {
 			t.Errorf("%s: %q, want %q", k, got[k], v)
 		}
 	}
-	if len(links) != 1 || links[0].URL != "http://pages.example/report" {
+	if len(links) != 1 || links[0].URL != "http://reports.example.com/report" {
 		t.Errorf("links %v", links)
 	}
 	if _, ok := ports["5173"]; !ok || len(ports) != 1 {

@@ -246,21 +246,21 @@ func TestPayloadAddress(t *testing.T) {
 	}
 
 	s := &Server{Host: "desktop"}
-	for host, want := range map[string]string{"127.0.0.1:7272": "http://desktop:7272", "localhost:7272": "http://desktop:7272", "[::1]:7272": "http://desktop:7272", "atc.home:8080": "http://atc.home:8080", "atc.home": "http://atc.home"} {
+	for host, want := range map[string]string{"127.0.0.1:7272": "http://desktop:7272", "localhost:7272": "http://desktop:7272", "[::1]:7272": "http://desktop:7272", "atc.example.com:8080": "http://atc.example.com:8080", "atc.example.com": "http://atc.example.com"} {
 		r := httptest.NewRequest("POST", "http://"+host+"/api/pair", nil)
 		r.RemoteAddr = "203.0.113.9:1"
 		if got := s.pairURL(r); got != want {
 			t.Errorf("%s: %s", host, got)
 		}
 	}
-	r := httptest.NewRequest("POST", "http://atc.home/api/pair", nil)
+	r := httptest.NewRequest("POST", "http://atc.example.com/api/pair", nil)
 	r.RemoteAddr = "10.0.0.1:1"
 	r.Header.Set("X-Forwarded-Proto", "https")
-	if got := s.pairURL(r); got != "http://atc.home" {
+	if got := s.pairURL(r); got != "http://atc.example.com" {
 		t.Errorf("an untrusted client chose https: %s", got)
 	}
 	s.TrustedProxies = ParseProxies("10.0.0.0/8")
-	if got := s.pairURL(r); got != "https://atc.home" {
+	if got := s.pairURL(r); got != "https://atc.example.com" {
 		t.Errorf("behind a trusted proxy: %s", got)
 	}
 }

@@ -61,14 +61,14 @@ func TestFingerprintTellsAsksApart(t *testing.T) {
 
 func TestNeedsYouPushCarriesTheAsk(t *testing.T) {
 	home, _ := os.UserHomeDir()
-	list := []sessions.Session{{SessionID: "q", Title: "Q", State: sessions.NeedsYou, Cwd: home + "/proj/Acme",
+	list := []sessions.Session{{SessionID: "q", Title: "Q", State: sessions.NeedsYou, Cwd: home + "/proj/Storefront",
 		Asks: []opencode.Ask{{ID: "claude", Questions: []opencode.Question{question("Keep both date formats?", "Keep both", "Normalise to cents")}}}}}
 	got, _ := alerts(map[string]string{"q": sessions.Working}, list, func(sessions.Session) bool { return false })
-	if len(got) != 1 || got[0].Ask == nil || got[0].Body != "Keep both date formats?" || got[0].Bay != "Acme" || len(got[0].Ask.Options) != 2 {
+	if len(got) != 1 || got[0].Ask == nil || got[0].Body != "Keep both date formats?" || got[0].Bay != "Storefront" || len(got[0].Ask.Options) != 2 {
 		t.Fatalf("a question pushes with its options and its bay: %+v", got)
 	}
 	feed := widgetList(list)
-	if feed[0].Ask == nil || feed[0].Ask.Key == "" || feed[0].Bay != "Acme" {
+	if feed[0].Ask == nil || feed[0].Ask.Key == "" || feed[0].Bay != "Storefront" {
 		t.Errorf("the widget gets the same ask: %+v", feed[0])
 	}
 }
@@ -78,11 +78,11 @@ func TestBayOf(t *testing.T) {
 	for cwd, want := range map[string]string{
 		home + "/proj/atc":                         "atc",
 		home + "/proj/atc/.claude/worktrees/x/web": "atc",
-		"/Users/user/proj/shop":                    "shop",
-		home + "/notes":                       "Sync",
+		"/Users/someone/proj/shop":                 "shop",
+		home + "/notes/daily":                      "notes",
 		home:                                       "~",
 		"/srv/data":                                "data",
-		"/Users/someone/proj/Acme/app/models/thing": "Acme",
+		"/Users/someone/proj/Storefront/app/models/thing": "Storefront",
 	} {
 		if got := bayOf(sessions.Session{Cwd: cwd}); got != want {
 			t.Errorf("bayOf(%q) = %q, want %q", cwd, got, want)
@@ -109,11 +109,11 @@ func TestAnswerWhat(t *testing.T) {
 
 func TestAnswersAttach(t *testing.T) {
 	var a answers
-	a.mark("s1", sessions.Answered{Ask: "claude", What: "Deny", Via: "push", Device: "phone", At: time.Now()})
+	a.mark("s1", sessions.Answered{Ask: "claude", What: "Deny", Via: "push", Device: "pixel", At: time.Now()})
 	a.mark("old", sessions.Answered{What: "x", At: time.Now().Add(-2 * answeredFor)})
 	list := []sessions.Session{{SessionID: "s1"}, {SessionID: "s2"}, {SessionID: "old"}}
 	a.attach(list)
-	if x := list[0].Answered; x == nil || x.Via != "push" || x.Device != "phone" || x.What != "Deny" {
+	if x := list[0].Answered; x == nil || x.Via != "push" || x.Device != "pixel" || x.What != "Deny" {
 		t.Errorf("the answer rides on its session: %+v", x)
 	}
 	if list[1].Answered != nil || list[2].Answered != nil {

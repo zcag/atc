@@ -27,7 +27,7 @@ const (
 )
 
 // GuestsArgs are the flags for the guests' conversation: its own brief, only atc's tools (no WhatsApp,
-// mail or browser of their), and no approvals to pass on.
+// mail or browser of the user's), and no approvals to pass on.
 func GuestsArgs() []string {
 	return append(standingArgs(modes.Text("guests-desk")), "--strict-mcp-config", "--disallowedTools", "AskUserQuestion,EnterPlanMode")
 }
@@ -377,7 +377,7 @@ func (s *Server) hubStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// call has delta ring the user, with the hub's session on the line. The caller hears how it went
+// call has the call line ring the user, with the hub's session on the line. The caller hears how it went
 // with wait; otherwise a call nobody picked up is reported back to the session that asked.
 func (s *Server) call(w http.ResponseWriter, r *http.Request) {
 	if s.Hub == nil {

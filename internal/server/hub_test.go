@@ -200,13 +200,13 @@ func TestWhatsAppThroughTheHub(t *testing.T) {
 		w.Write([]byte(`{"id":"out1","messageId":"out1"}`))
 	}))
 	defer gw.Close()
-	for k, v := range map[string]string{"URL": gw.URL, "KEY": "k", "SESSION": "bot", "OWNER": "15550100", "SECRET": "0123456789abcdef0123"} {
+	for k, v := range map[string]string{"URL": gw.URL, "KEY": "k", "SESSION": "bot", "OWNER": "12025550100", "SECRET": "0123456789abcdef0123"} {
 		t.Setenv("ATC_WHATSAPP_"+k, v)
 	}
 	f := newFakeHub(t, "hub-sid")
 	s, _ := hubServer(t, f, whatsapp.FromEnv())
 	ctx := context.Background()
-	if err := s.waType(ctx, waMsg{"15550100@c.us", "in1"}, "hello", ""); err != nil {
+	if err := s.waType(ctx, waMsg{"12025550100@c.us", "in1"}, "hello", ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := f.sent(); len(got) != 1 || got[0] != "whatsapp: hello" {
