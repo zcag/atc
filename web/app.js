@@ -3933,10 +3933,10 @@ function FilePeek({ f, ext }) {
 }
 
 function Peek({ kind, text, tsv }) {
-  if (kind === "markdown") return html`<div class="peek md" dangerouslySetInnerHTML=${{ __html: md(text) }}></div>`;
-  if (kind !== "table") return html`<pre class="peek">${text}</pre>`;
+  if (kind === "markdown") return html`<div class="pvtext md" dangerouslySetInnerHTML=${{ __html: md(text) }}></div>`;
+  if (kind !== "table") return html`<pre class="pvtext">${text}</pre>`;
   const rows = parseRows(text, tsv ? "\t" : ",").slice(0, 12);
-  return html`<div class="peek"><table class="data">${rows.map((r, i) => html`<tr>${r.slice(0, 6).map((c) => (i ? html`<td>${c}</td>` : html`<th>${c}</th>`))}</tr>`)}</table></div>`;
+  return html`<div class="pvtext"><table class="data">${rows.map((r, i) => html`<tr>${r.slice(0, 6).map((c) => (i ? html`<td>${c}</td>` : html`<th>${c}</th>`))}</tr>`)}</table></div>`;
 }
 
 function Viewer({ list, at, setAt, onClose }) {
