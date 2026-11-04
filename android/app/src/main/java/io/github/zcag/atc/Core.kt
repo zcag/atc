@@ -13,9 +13,6 @@ fun pretty(hex: String) = hex.uppercase().chunked(2).joinToString(":")
 fun serverUrl(input: String): String? =
     input.trim().trimEnd('/').takeIf { Regex("^https?://[^/\\s?#]+(/\\S*)?$").matches(it) }
 
-fun sentences(text: String) =
-    text.split(Regex("(?<=[.!?…])\\s+|\\n+")).map { it.trim() }.filter { it.isNotEmpty() }
-
 class Release(val versionCode: Int, val versionName: String, val apk: String, val sha256: String) {
     fun newerThan(own: Int) = versionCode > own
 

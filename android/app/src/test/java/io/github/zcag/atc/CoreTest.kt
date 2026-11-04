@@ -68,7 +68,4 @@ class CoreTest {
         assertEquals(false, r.fresh(1100))
         assertNull(Ring.parse("""{"title":"x","body":"y"}"""))
     }
-
-    @Test fun splitsSentences() =
-        assertEquals(listOf("Done.", "Tests pass!", "Next?", "Line"), sentences("Done. Tests pass!  Next?\nLine"))
 }

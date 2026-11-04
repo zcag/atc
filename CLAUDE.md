@@ -10,7 +10,7 @@ phone too. A web change is not done until it works there:
   wide, light and dark, not just desktop.
 - **Inside the app.** `APP` (`window.AtcApp`) is set there, and some paths branch on it: links go
   through `openOut` → `AtcApp.openExternal` (other hosts open in the phone's browser, atc's own files
-  download into a viewer app), no browser notifications, TTS through the bridge. New links or opens go
+  download into a viewer app), no browser notifications, calls through the bridge. New links or opens go
   through `openOut`, never `window.open` or `<a target>`.
 - **Native pieces.** If the change needs something the WebView can't do, it belongs in `Bridge.kt`.
   If it changes what a session row carries, consider the home-screen widget feed (`APP.setSessions`,

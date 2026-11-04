@@ -1,13 +1,11 @@
 package io.github.zcag.atc
 
-import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
 import android.app.KeyguardManager
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.net.ConnectivityManager
 import android.net.Network
@@ -24,7 +22,6 @@ import android.view.Gravity
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.webkit.CookieManager
-import android.webkit.PermissionRequest
 import android.webkit.WebResourceError
 import android.webkit.SslErrorHandler
 import android.webkit.ValueCallback
@@ -53,7 +50,6 @@ class MainActivity : Activity() {
         const val EXTRA_ASSIST = "assist"
         const val EXTRA_PATH = "path"
         const val HOLD = "/#/hold"
-        private const val REQ_MIC = 1
         private const val REQ_FILE = 2
     }
 
@@ -63,7 +59,6 @@ class MainActivity : Activity() {
     private var web: WebView? = null
     private var files: ValueCallback<Array<Uri>>? = null
     private var photo: File? = null
-    private var mic: PermissionRequest? = null
     private val sslWaiting = mutableListOf<SslErrorHandler>()
     private var lastBack = 0L
     private var unlockThen: Intent? = null
@@ -129,7 +124,6 @@ class MainActivity : Activity() {
         runCatching { getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(network) }
         ui.removeCallbacks(retry)
         scope.cancel()
-        bridge.shutdown()
         web?.destroy()
         super.onDestroy()
     }
@@ -338,8 +332,6 @@ class MainActivity : Activity() {
             }
         }
         w.webChromeClient = object : WebChromeClient() {
-            override fun onPermissionRequest(request: PermissionRequest) = permission(request)
-
             override fun onShowFileChooser(view: WebView, callback: ValueCallback<Array<Uri>>, params: FileChooserParams) =
                 chooseFile(callback, params)
         }
@@ -497,23 +489,6 @@ class MainActivity : Activity() {
                 }
             }
         }.start()
-    }
-
-    private fun permission(request: PermissionRequest) {
-        if (request.origin.host != serverHost() || PermissionRequest.RESOURCE_AUDIO_CAPTURE !in request.resources) return request.deny()
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
-            return request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
-        mic?.deny()
-        mic = request
-        requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), REQ_MIC)
-    }
-
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        if (requestCode != REQ_MIC) return
-        val request = mic ?: return
-        mic = null
-        if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
-        else request.deny()
     }
 
     private fun chooseFile(callback: ValueCallback<Array<Uri>>, params: WebChromeClient.FileChooserParams): Boolean {
