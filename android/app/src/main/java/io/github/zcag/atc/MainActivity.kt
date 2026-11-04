@@ -429,7 +429,7 @@ class MainActivity : Activity() {
                 if (request.url.host == serverHost()) Shared.serve(request.url.path) else null
 
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                if (request.url.host == serverHost()) return false
+                if (!request.isForMainFrame || request.url.host == serverHost()) return false
                 runCatching { startActivity(Intent(Intent.ACTION_VIEW, request.url)) }
                 return true
             }
