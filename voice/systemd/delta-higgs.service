@@ -1,12 +1,12 @@
 [Unit]
-Description=delta-higgs: Higgs TTS 3 (Boson, research licence) on the GPU through audio.cpp (Vulkan), :8841
+Description=atc voice: Higgs TTS 3 (Boson, research licence) on the GPU through audio.cpp (Vulkan), :8841, set up by hand under HIGGS_DIR
 After=network-online.target
 
 [Service]
 Slice=calls.slice
-WorkingDirectory=%h/srv/call-data/audiocpp/bin
-Environment=LD_LIBRARY_PATH=%h/srv/call-data/audiocpp/bin
-ExecStart=%h/srv/call-data/audiocpp/bin/audiocpp_server --config %h/srv/call-data/audiocpp/server.json
+Environment=HIGGS_DIR=%h/.local/share/atc/voice/audiocpp
+EnvironmentFile=-%h/.config/atc/voice.env
+ExecStart=/bin/sh -c 'cd "$$HIGGS_DIR/bin" && LD_LIBRARY_PATH="$$HIGGS_DIR/bin" exec ./audiocpp_server --config "$$HIGGS_DIR/server.json"'
 Restart=always
 RestartSec=5
 

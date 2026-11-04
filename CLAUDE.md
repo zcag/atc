@@ -47,6 +47,11 @@ The hub (`internal/hub`: calls, channels, the assistant's conversation) is a sep
 on desktop. Restart it only while delta is idle (`curl -s desktop:8807/status` shows `"call": "idle"`),
 or it drops the call they are on.
 
+The call stack (`voice/`, its README) is the same again: `make install` does not touch it; `make install-voice` on desktop
+copies it to where `~/.config/atc/voice.env` says the units run, and `deploy.sh` restarts each unit only between calls. Before
+a change to it read dotfiles `voice/README.md`, "Working on it" first. Test on `talk.py --sim` with a private
+ttsd and hub, never against `:8807` or `:8820`.
+
 ## Terminal size and rendering problems
 
 Every attached screen is logged to the journal, server and browser side, keyed by the session's

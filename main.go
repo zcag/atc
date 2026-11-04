@@ -124,6 +124,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
                                  line; atc call -h
   atc hub [status|reset]         run the assistant's one conversation for atc, WhatsApp and
                                  phone calls (atc-hub.service); atc hub -h
+  atc voice [install|status|uninstall]
+                                 calls with the assistant on this machine; atc voice -h
   atc outputs [-json] <session>  what it produced: running servers, files (with a link to
                                  open each in a browser), links, code it touched
   atc usage [-json] [session]    plan limits and tokens per day; with a session, its tokens,
@@ -213,6 +215,8 @@ func main() {
 		err = callCmd(args)
 	case "hub":
 		err = hubCmd(args)
+	case "voice":
+		err = voiceCmd(args)
 	case "notify":
 		err = notify(args)
 	case "open":

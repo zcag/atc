@@ -1,5 +1,5 @@
 [Unit]
-Description=delta-call: the call units, first in line for the CPU when desktop is busy
+Description=atc voice: the call units, first in line for the CPU when the machine is busy
 
 [Slice]
 CPUWeight=1000

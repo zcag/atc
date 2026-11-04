@@ -9,6 +9,7 @@ check:
 	go test ./...
 	go run . prompts --check
 	if command -v node >/dev/null; then node --test web/; fi
+	if command -v python3 >/dev/null; then python3 voice/test/test_lang.py; fi
 
 install: check build
 	./atc service install --only atc
@@ -16,6 +17,12 @@ install: check build
 
 install-hub: check build
 	./atc service install --only hub
+
+# A single-user setup: voice/ goes where ~/.config/atc/voice.env says their units run, and deploy.sh restarts them between calls.
+install-voice:
+	@test -f ~/.config/atc/voice.env || { echo "~/.config/atc/voice.env is missing: without it the units run with no phone, no number and the default voice"; exit 1; }
+	@set -a; . ~/.config/atc/voice.env; set +a; d=$${ATC_VOICE_DIR:-$$HOME/.local/share/atc/voice}; mkdir -p "$$d"; \
+	  rsync -a --exclude test --exclude __pycache__ voice/ "$$d/" && bash "$$d/deploy.sh"
 
 sync-main:
 	@main=$$(cd "$$(git rev-parse --git-common-dir)/.." && pwd); git fetch -q origin; \
@@ -57,4 +64,4 @@ android-publish:
 	rsync -t android/dist/atc.apk $(APP_HOST):$(APP_DIR)/
 	rsync -t android/dist/version.json $(APP_HOST):$(APP_DIR)/
 
-.PHONY: build check install install-hub install-opencode install-mac android android-publish
+.PHONY: build check install install-hub install-voice install-opencode install-mac android android-publish

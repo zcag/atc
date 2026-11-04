@@ -1,11 +1,15 @@
-#!/usr/bin/env python3
-"""delta-call: phone calls on delta (555 0101) as a WebSocket, for whatever holds the conversation.
+#!/usr/bin/env -S uv run --script
+# /// script
+# dependencies = ["aiohttp"]
+# ///
+"""The call line as a WebSocket, for whatever holds the conversation: atc's phone app, and optionally a phone on USB.
 
 device/CallBridge runs on the phone as the adb shell user and does the telephony: call state
 with the caller's number, answer, hang up, dial, and call audio both ways through Android's
 call-assistant redirection (no root). This side keeps it running, and gives clients one
-WebSocket at ws://desktop:8807/call carrying JSON events and commands as text frames and the
+WebSocket at ws://127.0.0.1:8807/call carrying JSON events and commands as text frames and the
 call audio as binary frames (s16le, 16 kHz, mono). README.md is the contract.
+DELTA_CALL_BRIDGE=0 runs without a phone: the app line only.
 """
 import asyncio, hashlib, html, json, os, re, time
 from aiohttp import web
@@ -18,9 +22,11 @@ DIAL_ALLOW = [re.sub(r"\D", "", n)[-10:] for n in os.environ.get("DELTA_CALL_DIA
 APP_NUMBER = os.environ.get("DELTA_CALL_APP_NUMBER", "atc")
 APP_GRACE = float(os.environ.get("DELTA_CALL_APP_GRACE", "8"))
 BRIDGE = os.environ.get("DELTA_CALL_BRIDGE", "1") != "0"
-LOG = os.path.expanduser("~/.local/state/delta-call/calls.jsonl")
-TRACES = os.path.expanduser("~/.local/state/delta-call/app-traces")
-GUESTS = os.path.expanduser("~/.config/atc/guests")
+STATE = os.path.expanduser(os.environ.get("TALK_STATE") or "~/.local/state/atc/voice")
+LOG = f"{STATE}/calls.jsonl"
+TRACES = f"{STATE}/app-traces"
+CONFIG = os.environ.get("ATC_CONFIG_DIR") or (os.environ["XDG_CONFIG_HOME"] + "/atc" if os.environ.get("XDG_CONFIG_HOME") else "~/.config/atc")
+GUESTS = os.path.expanduser(f"{CONFIG}/guests")
 
 status = {"bridge": "starting", "call": "idle", "precise": "idle", "number": None, "audio": False}
 app_status = {"call": "idle", "precise": "idle", "number": None, "audio": False}

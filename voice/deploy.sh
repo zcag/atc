@@ -1,30 +1,25 @@
 #!/usr/bin/env bash
-# Runs ON desktop after rsync into ~/srv/call/: the phone is on desktop's USB.
+# Runs from the installed copy (atc voice install, or make install-voice): models and venv, then the units, each
+# restarted only between calls.
 set -euo pipefail
 cd "$(dirname "$0")"
-chmod +x call.py echo.py talk.py hub/cli.py device/build.sh
+set -a
+[ ! -f ~/.config/atc/voice.env ] || . ~/.config/atc/voice.env
+set +a
+chmod +x call.py talk.py fetch.py hub/cli.py device/build.sh
 
-data=~/srv/call-data
-if [ ! -x $data/tts-venv/bin/python ]; then
-  uv venv --python 3.12 $data/tts-venv
-  uv pip install --python $data/tts-venv/bin/python --extra-index-url https://download.pytorch.org/whl/cpu \
-    "torch==2.15.0+cpu" "pocket-tts-turkish==0.1.0" soxr aiohttp
-fi
-models=~/.cache/delta-talk
-mkdir -p $models ~/.local/state/delta-call/calls
-[ -s $models/silero_vad.onnx ] || curl -sfLo $models/silero_vad.onnx https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx
-[ -s $models/smart-turn-v3.2-cpu.onnx ] || curl -sfLo $models/smart-turn-v3.2-cpu.onnx https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx
-for m in sherpa-onnx-streaming-zipformer-en-2023-06-26; do
-  [ -d $models/$m ] || curl -sfL https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/$m.tar.bz2 | tar xj -C $models
-done
+uv run -q --script fetch.py
+uv run -q --script talk.py --help > /dev/null
+mkdir -p "${TALK_STATE:-$HOME/.local/state/atc/voice}/calls"
 
-units="delta-call delta-higgs delta-tts delta-talk delta-talk-app"
+port=${DELTA_CALL_PORT:-8807}
+units=${ATC_VOICE_UNITS:-delta-call delta-tts delta-talk-app}
 mkdir -p ~/.config/systemd/user
-cp calls.slice ~/.config/systemd/user/
-for u in $units; do cp $u.service ~/.config/systemd/user/; done
+cp systemd/calls.slice ~/.config/systemd/user/
+for u in $units; do cp systemd/$u.service ~/.config/systemd/user/; done
 systemctl --user daemon-reload
 idle() {
-  curl -sf --max-time 3 127.0.0.1:8807/status | python3 -c 'import json,sys; s=json.load(sys.stdin); sys.exit(not(s["call"] == "idle" and s.get("app") in (None, "connected")))'
+  curl -sf --max-time 3 127.0.0.1:$port/status | python3 -c 'import json,sys; s=json.load(sys.stdin); sys.exit(not(s["call"] == "idle" and s.get("app") in (None, "connected")))'
 }
 quiet=0
 while systemctl --user is-active -q delta-call.service && [ $quiet -lt 12 ]; do

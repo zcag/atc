@@ -1,11 +1,16 @@
 [Unit]
-Description=delta-tts: streaming TTS for calls (Higgs TTS 3 via delta-higgs for Turkish and English, pocket-tts-turkish as fallback), POST :8812/v1/audio/speech
+Description=atc voice: streaming TTS for calls, POST :8812/v1/audio/speech
 After=network-online.target
 
 [Service]
 Slice=calls.slice
-ExecStart=%h/srv/call-data/tts-venv/bin/python %h/srv/call/ttsd.py --engine pocket,higgs --port 8812
-Environment=HF_HOME=%h/srv/call-data/hf
+Environment=ATC_VOICE_DIR=%h/.local/share/atc/voice
+Environment=TTS_VENV=%h/.local/share/atc/voice/tts-venv
+Environment=TTS_HF_HOME=%h/.cache/atc/voice/hf
+Environment=TTS_ENGINES=pocket-en
+Environment=TTS_PORT=8812
+EnvironmentFile=-%h/.config/atc/voice.env
+ExecStart=/usr/bin/env HF_HOME=${TTS_HF_HOME} ${TTS_VENV}/bin/python ${ATC_VOICE_DIR}/ttsd.py --engine ${TTS_ENGINES} --port ${TTS_PORT} $TTS_ARGS
 Restart=always
 RestartSec=5
 

@@ -1,13 +1,15 @@
 [Unit]
-Description=delta-call: phone calls on delta as a WebSocket (call state, answer, dial, audio both ways)
+Description=atc voice: the call line as a WebSocket, :8807 (call state, answer, dial, audio both ways)
 After=network-online.target
 
 [Service]
 Slice=calls.slice
-ExecStart=/usr/bin/python3 /home/user/srv/call/call.py
-Environment=PATH=/usr/local/bin:/usr/bin:/bin
-Environment=DELTA_CALL_DIAL_ALLOW=15550100
-Environment=ANDROID_SERIAL=DEVICE-SERIAL
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=ATC_VOICE_DIR=%h/.local/share/atc/voice
+Environment=TALK_STATE=%h/.local/state/atc/voice
+Environment=DELTA_CALL_BRIDGE=0
+EnvironmentFile=-%h/.config/atc/voice.env
+ExecStart=/usr/bin/env uv run --script ${ATC_VOICE_DIR}/call.py
 Restart=always
 RestartSec=5
 
