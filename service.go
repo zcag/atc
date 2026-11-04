@@ -56,8 +56,14 @@ func serviceCmd(args []string) error {
 		return fmt.Errorf("--only takes atc or hub")
 	}
 	mac := runtime.GOOS == "darwin"
-	if !mac && runtime.GOOS != "linux" {
-		return fmt.Errorf("services on %s are not supported yet: run atc serve yourself", runtime.GOOS)
+	if !mac {
+		if _, err := exec.LookPath("systemctl"); err != nil || exec.Command("systemctl", "--user", "show-environment").Run() != nil {
+			fmt.Println("No systemd for your user here, so atc can't run as a service. Start it yourself with: atc serve")
+			if args[0] == "install" {
+				return installOnly(services(*only))
+			}
+			return nil
+		}
 	}
 	list := services(*only)
 	switch args[0] {
@@ -89,6 +95,26 @@ func serviceCmd(args []string) error {
 	return nil
 }
 
+func installOnly(list []service) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Join(home, ".local", "bin"), 0o755); err != nil {
+		return err
+	}
+	for _, s := range list {
+		if err := installBinary(exe, filepath.Join(home, ".local", "bin", s.bin)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func serviceState(s service, mac bool) string {
 	if mac {
 		if exec.Command("launchctl", "print", macDomain()+"/"+macName(s)).Run() != nil {
@@ -101,22 +127,8 @@ func serviceState(s service, mac bool) string {
 }
 
 func serviceInstall(list []service, mac, everything bool) error {
-	home, err := os.UserHomeDir()
-	if err != nil {
+	if err := installOnly(list); err != nil {
 		return err
-	}
-	exe, err := os.Executable()
-	if err != nil {
-		return err
-	}
-	bin := filepath.Join(home, ".local", "bin")
-	if err := os.MkdirAll(bin, 0o755); err != nil {
-		return err
-	}
-	for _, s := range list {
-		if err := installBinary(exe, filepath.Join(bin, s.bin)); err != nil {
-			return err
-		}
 	}
 	if everything {
 		if err := writeEnvDefaults(); err != nil {

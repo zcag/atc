@@ -51,7 +51,7 @@ func All() []Cap {
 		{
 			ID: "server", Title: "atc server", Group: Core, Why: "Serves this page, the sessions and everything else here.",
 			Check: checkServer,
-			Fix:   Fix{Command: "make install", Text: "Run it as a service (on macOS, make install-mac), or start it by hand with `atc serve`.", Guide: "install"},
+			Fix:   Fix{Command: "atc service install", Text: "Run it as a service, or start it by hand with `atc serve`.", Guide: "install"},
 		},
 		{
 			ID: "reach", Title: "HTTPS address", Group: Core, Optional: true, Why: "The address you reach atc at from other devices. Browsers only give a page the microphone over HTTPS.",
@@ -63,7 +63,7 @@ func All() []Cap {
 			ID: "hub", Title: "Assistant hub", Group: Assistant, Optional: true, Why: "Keeps the assistant one conversation across atc, WhatsApp and calls.",
 			Needs: []string{"claude", "signin"}, Fields: []Field{{Key: "ATC_HUB", Label: "Hub address", Hint: "http://127.0.0.1:8820", URL: true}},
 			Check: checkHub,
-			Fix:   Fix{Command: "make install-hub", Text: "Run the hub as a service on this machine, then enter its address here.", Guide: "one-assistant-on-every-channel"},
+			Fix:   Fix{Command: "atc service install --only hub", Text: "Run the hub as a service on this machine, then enter its address here.", Guide: "one-assistant-on-every-channel"},
 			Cost:  "Plan tokens for what you ask it.",
 		},
 		{
