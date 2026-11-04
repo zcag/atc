@@ -73,7 +73,7 @@
 .tx .skel.big { margin-top: var(--s5); }
 
 /* the agent's prose */
-.tx-wrap .prose { font-family: var(--rf); font-size: var(--rs); line-height: var(--rl); font-weight: var(--rg, 400); color: color-mix(in srgb, var(--ink) 94%, var(--strip)); max-width: var(--rw); overflow-wrap: break-word; font-optical-sizing: none; font-feature-settings: normal; font-variant-numeric: lining-nums; }
+.tx-wrap .prose { font-family: var(--rf); font-size: var(--rs); line-height: var(--rl); font-weight: var(--rg, 400); color: color-mix(in srgb, var(--ink) 94%, var(--strip)); max-width: var(--rw); overflow-wrap: break-word; font-optical-sizing: var(--ro, auto); font-feature-settings: normal; font-variant-numeric: lining-nums; }
 .tx-wrap .prose > :first-child { margin-top: 0; }
 .tx-wrap .prose p { margin: 0 0 0.9em; text-wrap: pretty; hanging-punctuation: first; }
 .tx-wrap .prose strong { font-weight: 600; color: var(--ink); }

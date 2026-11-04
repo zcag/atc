@@ -5145,7 +5145,7 @@ function Table({ text, tsv }) {
 
 const TX_FACES = {
   text: { name: "System", css: "var(--text)", sizes: [15.5, 16.5, 18], lh: 1.5 },
-  lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [16, 17.5, 19], lh: 1.52, weight: 420 },
+  lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [16, 17.5, 19], lh: 1.52, weight: 420, optical: "none" },
   sans: { name: "Recursive", css: "var(--sans)", sizes: [15, 16, 17.5], lh: 1.5 },
 };
 const txStore = {
@@ -6308,6 +6308,7 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
     st.setProperty("--rs", `${f.sizes[prefs.size]}px`);
     st.setProperty("--rl", f.lh);
     st.setProperty("--rg", f.weight || 400);
+    st.setProperty("--ro", f.optical || "auto");
     st.setProperty("--rw", `${TX_MEASURES[prefs.width]}px`);
   }, [prefs, idx !== null]);
   useEffect(() => {
