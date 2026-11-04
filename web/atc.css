@@ -1,6 +1,6 @@
 /* atc page kit, served as /atc.css: what agents write pages with. It imports atc's tokens, so a page that
    links only this file gets the fonts, the colors and light/dark (the OS, or data-scheme on <html>; /atc.js sets data-scheme and data-theme to atc's own look).
-   Components and markup to copy: docs/redesign/dir-d/kit.html. The classes of the kit before the redesign
+   Components: atc show -h lists the class names. The classes of the kit before the redesign
    (.page .card .row .stat .fill .tbl .pill .t-needs ...) are kept at the end, drawn the same way. */
 @import url(tokens.css);
 

@@ -1,3 +1,6 @@
 /atc
 /.claude/
 __pycache__/
+test/shots/
+test/ui/*/shots/
+.playwright-mcp/
