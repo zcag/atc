@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -163,8 +164,8 @@ func TestFeedCallAboutIsOneShot(t *testing.T) {
 
 func TestFeedNewsCarriesCallAbout(t *testing.T) {
 	ts := newTestServer(t, nil, Voice{})
-	if res, _ := do(t, "POST", ts.URL+"/api/call/about", "tok", `{"id":"abc","title":"build"}`); res.StatusCode != 204 {
-		t.Fatalf("about: %d", res.StatusCode)
+	if res, body := do(t, "POST", ts.URL+"/api/call/about", "tok", `{"id":"abc","title":"build"}`); res.StatusCode != 200 || !json.Valid([]byte(body)) {
+		t.Fatalf("about, the page parses every answer as JSON: %d %q", res.StatusCode, body)
 	}
 	if _, body := get(t, ts.URL+"/api/feed?since=0", "tok"); !strings.Contains(body, "Call about this") {
 		t.Fatalf("feed without the note: %s", body)

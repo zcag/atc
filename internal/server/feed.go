@@ -347,7 +347,7 @@ func (s *Server) callAbout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.feed.callAbout(in.ID, cmp.Or(in.Title, "Untitled"), time.Now())
-	w.WriteHeader(http.StatusNoContent)
+	reply(w, map[string]string{"id": in.ID})
 }
 
 // feedNews serves the feed to the hub: since=<seq from the last answer>, full=1 for the state as it is.
