@@ -10,11 +10,13 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/zcag/atc/internal/pair"
 	"github.com/zcag/atc/internal/sessions"
 )
 
@@ -22,6 +24,8 @@ type Peer struct {
 	Name  string `json:"name"`
 	URL   string `json:"url"`
 	Token string `json:"token"`
+	// CA is the certificate, as PEM, pinned when this peer was paired, for one no system trusts.
+	CA string `json:"ca,omitempty"`
 }
 
 type peerStatus struct {
@@ -41,6 +45,24 @@ func LoadPeers(path string) ([]Peer, error) {
 	return ps, json.Unmarshal(b, &ps)
 }
 
+// SavePeer adds a peer to the file, or replaces the one of that name.
+func SavePeer(path string, p Peer) error {
+	ps, err := LoadPeers(path)
+	if err != nil {
+		return err
+	}
+	ps = slices.DeleteFunc(ps, func(o Peer) bool { return o.Name == p.Name })
+	b, err := json.MarshalIndent(append(ps, p), "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, append(b, '\n'), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
 type fleet struct {
 	peers  []Peer
 	client *http.Client
@@ -57,6 +79,13 @@ func newFleet(peers []Peer) *fleet {
 	dial := &net.Dialer{Timeout: 2 * time.Second}
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.DialContext = dial.DialContext
+	var cas []string
+	for _, p := range peers {
+		cas = append(cas, p.CA)
+	}
+	if cfg := pair.TLS(cas...); cfg != nil {
+		tr.TLSClientConfig = cfg
+	}
 	return &fleet{peers: peers, client: &http.Client{Transport: tr}, owner: map[string]string{}, status: map[string]string{},
 		views: map[string]int{}, down: map[string]bool{}}
 }

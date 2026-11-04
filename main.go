@@ -30,6 +30,7 @@ import (
 	"github.com/zcag/atc/internal/llm"
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/pages"
+	"github.com/zcag/atc/internal/pair"
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/report"
 	"github.com/zcag/atc/internal/resources"
@@ -60,6 +61,14 @@ SERVER
 CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc                            browse, start and attach in a terminal UI
   atc login <url> <token>        save where the server is
+  atc login <pairing>            the same from the text atc pair prints: this machine gets
+                                 its own token, which Settings › Devices can revoke
+  atc pair [-url U] [-json]      a QR code and text that let one new device in (one use,
+                                 10 minutes); -url when the address it finds is not the one
+                                 the device will reach
+  atc peer add [-name N] <pairing>
+                                 from the other machine's atc pair: add it to peers.json so
+                                 this server shows its sessions (restart to take effect)
   atc ls [-json]                 live sessions, most urgent first
   atc attach <session>           take over this terminal; Ctrl+Z detaches
   atc history [-json] [query]    past conversations, newest first
@@ -171,10 +180,11 @@ func main() {
 			fmt.Println(tok)
 		}
 	case "login":
-		if len(args) != 2 {
-			log.Fatal("usage: atc login <url> <token>")
-		}
-		err = client.SaveLogin(args[0], args[1])
+		err = login(args)
+	case "pair":
+		err = pairCmd(args)
+	case "peer":
+		err = peerCmd(args)
 	case "ls", "list":
 		err = ls(args)
 	case "history":
@@ -337,6 +347,9 @@ func serve(args []string) error {
 		return err
 	}
 	if srv.Backlog, err = backlog.Open(filepath.Join(client.ConfigDir(), "backlog.json")); err != nil {
+		return err
+	}
+	if srv.Paired, err = pair.Open(filepath.Join(client.ConfigDir(), "paired.json")); err != nil {
 		return err
 	}
 	if u := os.Getenv("ATC_BROWSER"); u != "" {

@@ -19,6 +19,7 @@ import (
 	"github.com/zcag/atc/internal/backlog"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/pages"
+	"github.com/zcag/atc/internal/pair"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/summary"
 )
@@ -28,7 +29,9 @@ const DefaultAddr = "127.0.0.1:7272"
 type Client struct {
 	URL   string `json:"url"`
 	Token string `json:"token"`
+	CA    string `json:"ca,omitempty"`
 	http  *http.Client
+	tr    http.RoundTripper
 }
 
 func ConfigDir() string {
@@ -66,13 +69,14 @@ func Load() *Client {
 		}
 	}
 	c.URL = strings.TrimRight(c.URL, "/")
-	c.http = &http.Client{Timeout: 60 * time.Second}
+	c.tr = pair.Transport(c.CA)
+	c.http = &http.Client{Timeout: 60 * time.Second, Transport: c.tr}
 	return c
 }
 
-func SaveLogin(u, token string) error {
+func SaveLogin(u, token, ca string) error {
 	os.MkdirAll(ConfigDir(), 0o700)
-	b, _ := json.MarshalIndent(Client{URL: strings.TrimRight(u, "/"), Token: token}, "", "  ")
+	b, _ := json.MarshalIndent(Client{URL: strings.TrimRight(u, "/"), Token: token, CA: ca}, "", "  ")
 	return os.WriteFile(loginPath(), b, 0o600)
 }
 
@@ -81,6 +85,13 @@ func (c *Client) Caps(out any) error {
 	short := *c
 	short.http = &http.Client{Timeout: 10 * time.Second}
 	return short.do("GET", "/api/caps", nil, out)
+}
+
+// Pairing is a one-time code to let a new device in, as text. url overrides the address it carries.
+func (c *Client) Pairing(url string) (text string, err error) {
+	var out struct{ Payload string }
+	err = c.do("POST", "/api/pair", map[string]string{"url": url}, &out)
+	return out.Payload, err
 }
 
 func (c *Client) do(method, path string, body, out any) error {
@@ -357,7 +368,7 @@ func (c *Client) Events(ctx context.Context, fn func([]sessions.Session)) error 
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
-	res, err := http.DefaultClient.Do(req)
+	res, err := (&http.Client{Transport: c.tr}).Do(req)
 	if err != nil {
 		return fmt.Errorf("cannot reach atc at %s: %w", c.URL, err)
 	}
@@ -415,7 +426,7 @@ func (c *Client) Feed(since int64, full bool) (text string, seq int64, err error
 		return "", since, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Token)
-	res, err := (&http.Client{Timeout: 700 * time.Millisecond}).Do(req)
+	res, err := (&http.Client{Timeout: 700 * time.Millisecond, Transport: c.tr}).Do(req)
 	if err != nil {
 		return "", since, err
 	}

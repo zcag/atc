@@ -35,6 +35,7 @@ import (
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/outputs"
 	"github.com/zcag/atc/internal/pages"
+	"github.com/zcag/atc/internal/pair"
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/resources"
 	"github.com/zcag/atc/internal/sessions"
@@ -61,6 +62,8 @@ type Server struct {
 	Browser *browser.Browser
 	Peers   []Peer
 	Presets []Preset
+	Paired  *pair.Store
+	claims  *pair.Limiter
 	// AgentsDir holds a folder per agent; every machine reads it and runs the ones naming it.
 	AgentsDir string
 	Engines   []Engine
@@ -140,6 +143,10 @@ func (s *Server) Handler() http.Handler {
 	if s.Backlog == nil {
 		s.Backlog, _ = backlog.Open("")
 	}
+	if s.Paired == nil {
+		s.Paired, _ = pair.Open("")
+	}
+	s.claims = newClaimLimiter()
 	if s.StateDir != "" {
 		s.rv = &reviver{path: revivePath(s.StateDir)}
 		if lost := s.rv.afterReboot(); len(lost) > 0 && s.rv.begin() {
@@ -251,6 +258,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/settings", s.putSettings)
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
 	mux.HandleFunc("POST /api/login", s.login)
+	mux.HandleFunc("POST /api/pair", s.pairStart)
+	mux.HandleFunc("POST "+pair.ClaimPath, s.pairClaim)
+	mux.HandleFunc("GET /api/devices", s.devicesList)
+	mux.HandleFunc("DELETE /api/devices/{id}", s.deviceRevoke)
 	mux.HandleFunc("POST /api/push/register", s.pushRegister)
 	mux.HandleFunc("POST /api/push/unregister", s.pushUnregister)
 	mux.HandleFunc("GET /api/push/devices", func(w http.ResponseWriter, r *http.Request) { reply(w, s.Push.Devices()) })
@@ -288,7 +299,7 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		if s.Token == "" || r.URL.Path == "/api/login" || r.URL.Path == "/healthz" || r.URL.Path == "/api/whatsapp/hook" || outputPath.MatchString(r.URL.Path) {
+		if s.Token == "" || r.URL.Path == "/api/login" || r.URL.Path == pair.ClaimPath || r.URL.Path == "/healthz" || r.URL.Path == "/api/whatsapp/hook" || outputPath.MatchString(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -301,11 +312,16 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		tok := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if c, err := r.Cookie("atc"); err == nil && tok == "" {
-			tok = c.Value
+		tok := requestToken(r)
+		if s.isMaster(tok) {
+			next.ServeHTTP(w, r)
+			return
 		}
-		if !s.valid(tok) && !s.fromMyTailnet(r) {
+		if id, ok := s.Paired.Check(tok); ok {
+			s.asDevice(id, next, w, r)
+			return
+		}
+		if !s.fromMyTailnet(r) {
 			if s.tailnet != nil {
 				log.Printf("auth: refused %s (seen as %s)", r.URL.Path, s.clientIP(r))
 			}
@@ -316,8 +332,16 @@ func (s *Server) auth(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) valid(tok string) bool {
+func (s *Server) isMaster(tok string) bool {
 	return tok != "" && subtle.ConstantTimeCompare([]byte(tok), []byte(s.Token)) == 1
+}
+
+func (s *Server) valid(tok string) bool {
+	if s.isMaster(tok) {
+		return true
+	}
+	_, ok := s.Paired.Check(tok)
+	return ok
 }
 
 func (s *Server) setCookie(w http.ResponseWriter, tok string) {
@@ -648,7 +672,7 @@ func (s *Server) history(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) route(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(s.Peers) == 0 || !strings.HasPrefix(r.URL.Path, "/api/") {
+		if len(s.Peers) == 0 || !strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == pair.ClaimPath {
 			next.ServeHTTP(w, r)
 			return
 		}

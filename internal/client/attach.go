@@ -31,7 +31,7 @@ func (c *Client) dial(id string, out int) (*websocket.Conn, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	conn, _, err := websocket.Dial(ctx, fmt.Sprintf("%s/api/sessions/%s/attach?cols=%d&rows=%d", c.URL, id, cols, rows),
-		&websocket.DialOptions{HTTPHeader: http.Header{"Authorization": {"Bearer " + c.Token}}})
+		&websocket.DialOptions{HTTPClient: &http.Client{Transport: c.tr}, HTTPHeader: http.Header{"Authorization": {"Bearer " + c.Token}}})
 	if err != nil {
 		return nil, err
 	}

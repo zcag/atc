@@ -13,6 +13,7 @@ require (
 	github.com/muesli/cancelreader v0.2.2
 	github.com/sahilm/fuzzy v0.1.3
 	golang.org/x/term v0.47.0
+	rsc.io/qr v0.2.0
 )
 
 require (
