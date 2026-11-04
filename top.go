@@ -27,7 +27,7 @@ func showTop(args []string) error {
 		return topOne(r, who)
 	}
 	m := r.Machine
-	fmt.Printf("memory %s of %s, swap %s, cpu %.0f%% of %d cores, load %.1f\n\n", size(m.MemUsed), size(m.MemTotal), size(m.SwapUsed), m.CPU/float64(max(m.Cores, 1)), m.Cores, m.Load)
+	fmt.Printf("memory %s of %s (%s in /tmp and /dev/shm), swap %s, cpu %.0f%% of %d cores, load %.1f\n\n", size(m.MemUsed), size(m.MemTotal), size(m.RAMDisk), size(m.SwapUsed), m.CPU/float64(max(m.Cores, 1)), m.Cores, m.Load)
 	w := tabwriter.NewWriter(os.Stdout, 2, 2, 2, ' ', 0)
 	section := func(name string, groups []resources.Group) {
 		if len(groups) == 0 {
@@ -43,7 +43,7 @@ func showTop(args []string) error {
 		}
 		fmt.Fprintln(w, "\t\t\t\t\t")
 	}
-	section("LEFT BEHIND", r.Left)
+	section("OUTLIVED THEIR SESSION", r.Left)
 	section("SESSIONS", r.Sessions)
 	section("OUTSIDE SESSIONS", r.Outside)
 	return w.Flush()

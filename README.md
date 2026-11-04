@@ -129,7 +129,7 @@ atc state 2 inbox                                # a page's state as JSON; -set 
 atc usage                                        # plan limits and tokens per day
 atc usage 2                                      # one session's tokens, turns and estimated cost
 atc limits -short                                # session 4% · week 73% · resets 28m
-atc top                                          # memory, CPU, disk per session, and what ended sessions left running
+atc top                                          # memory, CPU, disk per session, and what outlived its session
 atc top shop                                     # one session's processes
 ```
 
@@ -590,7 +590,8 @@ not billed per token.
 `atc top` prints the same. Every 10 seconds atc attributes every process to one of:
 
 - **a session**: the Claude process and everything below it, found through the process tree.
-- **left behind**: still running after its session ended. A process that lost its parent still
+- **outlived its session**: still running after its session ended, which can be deliberate (a dev
+  stack other sessions use). A process that lost its parent still
   names its session in `CLAUDE_JOB_DIR`, `CLAUDE_CODE_SESSION_ID` or a job folder in its arguments,
   and its children inherit that. Anything else in Claude's systemd scope that is not Claude counts
   too, as "Session unknown".
@@ -602,6 +603,9 @@ Postgres's RSS would add up to more than the machine has. CPU includes children 
 exited, through the kernel's `cutime`, so a test run that came and went between two samples still
 counts. Disk rates cover processes alive at the sample. On macOS there is no `/proc`: memory is RSS,
 and disk rates and orphan attribution by environment are missing.
+
+Files in `/tmp` and `/dev/shm` are memory too when those are tmpfs, and no process owns them, so they
+get their own number and a list of the biggest folders in `/tmp`.
 
 A point a minute goes to `~/.config/atc/resources/`, kept for a week, with the biggest processes of
 anything over 500 MB or 10% of a core. Clicking a chart shows that moment. Disk use of the repos and

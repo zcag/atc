@@ -479,7 +479,6 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
 /* resources */
 .load { font-family: var(--mono); font-size: var(--fs-micro); color: var(--dim); white-space: nowrap; }
 .load.hot { color: var(--fail); font-weight: 650; }
-.reschip .lb { margin-left: var(--s2); color: var(--fail); font-weight: 650; }
 .res .rtools { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .res .rtools .seg:last-child { margin-left: auto; }
 .res .rcharts { display: flex; flex-direction: column; gap: var(--s3); }
@@ -514,7 +513,6 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
 .res .who .t a:hover { text-decoration: underline; }
 .res .who .t.mono { font-family: var(--mono); font-size: var(--fs-small); }
 .res .who .s { font-size: var(--fs-small); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rflag { display: inline-grid; place-items: center; width: 16px; height: 16px; margin-right: 6px; border-radius: 50%; background: var(--fail); color: var(--strip); font-size: 11px; font-weight: 750; vertical-align: 1px; }
 .rnote { margin: var(--s2) var(--s1); font-size: var(--fs-small); color: var(--faint); }
 .rtree { padding: var(--s1) 0 var(--s3); border-bottom: 1px solid var(--line); }
 .rp { display: grid; grid-template-columns: minmax(120px, 220px) 64px 44px 44px minmax(0, 1fr); column-gap: var(--s3); align-items: baseline; padding: 2px var(--s1); font-family: var(--mono); font-size: var(--fs-micro); color: var(--dim); }

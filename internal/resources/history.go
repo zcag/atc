@@ -40,6 +40,7 @@ type Row struct {
 	CPU    float64    `json:"cpu"`
 	Mem    int64      `json:"mem"`
 	Total  int64      `json:"total"`
+	RAM    int64      `json:"ram,omitempty"`
 	Cores  int        `json:"cores"`
 	Groups []RowGroup `json:"g"`
 }
@@ -54,6 +55,7 @@ func (m *minute) add(mach Machine, groups []Group) {
 	m.n++
 	m.row.CPU += mach.CPU
 	m.row.Mem = max(m.row.Mem, mach.MemUsed)
+	m.row.RAM = max(m.row.RAM, mach.RAMDisk)
 	m.row.Total, m.row.Cores = mach.MemTotal, mach.Cores
 	if m.groups == nil {
 		m.groups = map[string]*RowGroup{}
@@ -189,6 +191,7 @@ func fold(part []Row) Row {
 	for _, p := range part {
 		r.CPU += p.CPU / n
 		r.Mem = max(r.Mem, p.Mem)
+		r.RAM = max(r.RAM, p.RAM)
 		for _, g := range p.Groups {
 			id := g.Kind + "/" + g.Key
 			x := by[id]

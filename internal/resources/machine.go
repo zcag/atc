@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -25,6 +26,8 @@ type Machine struct {
 	SwapUsed  int64   `json:"swapUsed"`
 	Load      float64 `json:"load"`
 	Pressure  float64 `json:"pressure"`
+	Shared    int64   `json:"shared,omitempty"`
+	RAMDisk   int64   `json:"ramDisk,omitempty"`
 	Read      float64 `json:"read"`
 	Write     float64 `json:"write"`
 	Disks     []Disk  `json:"disks,omitempty"`
@@ -64,6 +67,7 @@ func (m *machineReader) sample(dt float64) Machine {
 		out.MemUsed = out.MemTotal - field(b, "MemAvailable:")*1024
 		out.SwapTotal = field(b, "SwapTotal:") * 1024
 		out.SwapUsed = out.SwapTotal - field(b, "SwapFree:")*1024
+		out.Shared = field(b, "Shmem:") * 1024
 	}
 	if b, err := os.ReadFile("/proc/loadavg"); err == nil {
 		if f := bytes.Fields(b); len(f) > 0 {
@@ -140,6 +144,36 @@ func diskFree() []Disk {
 	size, _ := strconv.ParseInt(f[1], 10, 64)
 	avail, _ := strconv.ParseInt(f[3], 10, 64)
 	return []Disk{{Path: filepath.Clean(f[len(f)-1]), Size: size * 1024, Used: (size - avail) * 1024}}
+}
+
+// ramDisks is what files hold in /tmp and /dev/shm when those are tmpfs. It is memory no process
+// owns, so it shows in no group's numbers.
+func ramDisks() int64 {
+	b, _ := exec.Command("df", "-k", "-t", "tmpfs", "--output=used", "/tmp", "/dev/shm").Output()
+	var kb int64
+	for _, line := range strings.Split(string(b), "\n") {
+		n, _ := strconv.ParseInt(strings.TrimSpace(line), 10, 64)
+		kb += n
+	}
+	return kb * 1024
+}
+
+// ramDirs lists the big folders directly under /tmp.
+func ramDirs() []DiskUse {
+	b, _ := exec.Command("nice", "-n", "19", "du", "-xk", "--max-depth=1", "/tmp").Output()
+	var out []DiskUse
+	for _, line := range strings.Split(string(b), "\n") {
+		f := strings.SplitN(line, "\t", 2)
+		if len(f) != 2 || f[1] == "/tmp" {
+			continue
+		}
+		kb, _ := strconv.ParseInt(f[0], 10, 64)
+		if kb*1024 >= ramDirWorth {
+			out = append(out, DiskUse{Path: f[1], Kind: "ram", Size: kb * 1024})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Size > out[j].Size })
+	return out[:min(12, len(out))]
 }
 
 func darwinMachine(out *Machine) {

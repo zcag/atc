@@ -113,7 +113,7 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc usage [-json] [session]    plan limits and tokens per day; with a session, its tokens,
                                  models, turns and working time, with an estimated API cost
   atc limits [-json] [-short]    plan limits, one line each; -short fits a status line
-  atc top [-json] [-host name] [session]  memory, CPU and disk per session and what is left behind;
+  atc top [-json] [-host name] [session]  memory, CPU and disk per session and what outlived its session;
                                  with a session, its processes
   atc limits -tap                record the limits from Claude Code's status line input (stdin),
                                  so atc shows them without asking Anthropic

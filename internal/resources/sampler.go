@@ -19,6 +19,8 @@ const (
 	maxProcesses = 40
 	maxOutside   = 24
 	leftWorth    = 16 << 20
+	ramDirWorth  = 50 << 20
+	ramDirEvery  = 5 * time.Minute
 )
 
 type Target struct {
@@ -62,6 +64,7 @@ type Report struct {
 	Rest     Group     `json:"rest"`
 	Disk     []DiskUse `json:"disk,omitempty"`
 	DiskAt   time.Time `json:"diskAt,omitzero"`
+	RAMDirs  []DiskUse `json:"ramDirs,omitempty"`
 	Exact    bool      `json:"exact"`
 	Cost     float64   `json:"cost"`
 }
@@ -111,6 +114,9 @@ type Sampler struct {
 	docker     map[string]container
 	dockerMiss bool
 	free       []Disk
+	ramDisk    int64
+	ramAt      time.Time
+	ramDirs    []DiskUse
 	lastSlow   time.Time
 	min        minute
 	minAt      time.Time
@@ -172,6 +178,13 @@ func (s *Sampler) watchDisk(ctx context.Context) {
 	}
 }
 
+func (s *Sampler) measureRAMDirs() {
+	dirs := ramDirs()
+	s.mu.Lock()
+	s.ramDirs = dirs
+	s.mu.Unlock()
+}
+
 func dedupe(in []string) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -193,6 +206,13 @@ func (s *Sampler) tick(now time.Time) {
 	if now.Sub(s.lastSlow) >= time.Minute {
 		s.lastSlow = now
 		s.free = diskFree()
+		if runtime.GOOS == "linux" {
+			s.ramDisk = ramDisks()
+			if now.Sub(s.ramAt) >= ramDirEvery {
+				s.ramAt = now
+				go s.measureRAMDirs()
+			}
+		}
 		if s.docker == nil || s.dockerMiss {
 			s.docker, s.dockerMiss = dockerNames(), false
 		}
@@ -207,7 +227,7 @@ func (s *Sampler) tick(now time.Time) {
 		}
 	}
 	r := Report{At: now, Machine: s.mach.sample(dt), Exact: s.sc.boot > 0}
-	r.Machine.Disks = s.free
+	r.Machine.Disks, r.Machine.RAMDisk = s.free, s.ramDisk
 	groups := s.aggregate(procs, targets, now, dt, first)
 	if runtime.GOOS != "linux" {
 		for _, g := range groups {
@@ -446,6 +466,7 @@ func (s *Sampler) Report() Report {
 	defer s.mu.Unlock()
 	r := s.report
 	r.Disk, r.DiskAt = claimDisk(s.disk.Uses, s.dirs), s.disk.At
+	r.RAMDirs = s.ramDirs
 	return r
 }
 

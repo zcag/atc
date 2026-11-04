@@ -3357,11 +3357,11 @@ function ResGroup({ g, colorOf, open, onToggle, peak }) {
 
 const RES_SORT = { mem: ["Memory", (g) => g.mem], cpu: ["CPU", (g) => g.cpu], io: ["Disk", (g) => g.read + g.write] };
 
-function ResSection({ title, note, groups, colorOf, peaks, sort, opened, toggle, warn, tail }) {
+function ResSection({ title, note, groups, colorOf, peaks, sort, opened, toggle, tail }) {
   if (!groups.length) return null;
   return html`
-    <section class="sec rsec ${warn ? "warn" : ""}">
-      <div class="sh"><h2>${warn && html`<span class="rflag" aria-hidden="true">!</span>`}${title}</h2>${note && html`<span class="n">${note}</span>`}</div>
+    <section class="sec rsec">
+      <div class="sh"><h2>${title}</h2>${note && html`<span class="n">${note}</span>`}</div>
       <div class="rrow rhead" aria-hidden="true"><span></span><span class="v">Memory</span><span class="v">CPU</span><span class="v wide">Disk</span><span class="v wide">Procs</span><span class="v wide">Peak</span></div>
       ${[...groups].sort((a, b) => RES_SORT[sort][1](b) - RES_SORT[sort][1](a)).map((g) => html`<${ResGroup} key=${g.kind + g.key} g=${g} colorOf=${colorOf} peak=${peaks.get(`${g.kind}/${g.key}`)} open=${opened === g.kind + g.key} onToggle=${() => toggle(g.kind + g.key)} />`)}
       ${tail}
@@ -3414,14 +3414,14 @@ function ResourcesPage({ hosts, home }) {
   const disk = m?.disks?.[0];
   const pressure = m?.pressure > 0 ? `${m.pressure.toFixed(1)}%` : "0%";
   const kpis = m ? [
-    { l: "Memory", big: true, v: `${gb(m.memUsed)} of ${gb(m.memTotal)}`, s: `sessions ${gb(sum(rep.sessions))}${rep.left.length ? `, left behind ${gb(sum(rep.left))}` : ""}, rest ${gb(Math.max(0, m.memUsed - sum(rep.sessions) - sum(rep.left)))}` },
+    { l: "Memory", big: true, v: `${gb(m.memUsed)} of ${gb(m.memTotal)}`, s: `sessions ${gb(sum(rep.sessions))}${rep.left.length ? `, outlived ${gb(sum(rep.left))}` : ""}, rest ${gb(Math.max(0, m.memUsed - sum(rep.sessions) - sum(rep.left)))}` },
     { l: "CPU", v: `${Math.round(m.cpu / cores)}%`, s: `of ${m.cores} cores, load ${m.load.toFixed(1)}` },
-    { l: "Waiting on memory", v: pressure, s: "of the last minute" },
-    m.swapTotal > 0 && { l: "Swap", v: gb(m.swapUsed), s: `of ${gb(m.swapTotal)}` },
+    { l: "Waiting on memory", v: pressure, s: `of the last minute${m.swapTotal > 0 ? `, swap ${gb(m.swapUsed)} of ${gb(m.swapTotal)}` : ""}` },
+    m.ramDisk > 0 && { l: "Files in RAM", v: gb(m.ramDisk), s: "/tmp and /dev/shm, owned by no process" },
     disk && { l: "Disk", v: `${gb(disk.size - disk.used)} free`, s: `of ${gb(disk.size)}${m.read + m.write >= 1024 ? `, ${gb(m.read + m.write)}/s now` : ""}` },
   ].filter(Boolean) : [];
   const status = err ? `${host} did not answer: ${err}` : !rep ? "Measuring…" : !rep.at || !Date.parse(rep.at) ? "Measuring…"
-    : rep.left.length ? `${gb(sum(rep.left))} still running after its session ended` : `${plural(rep.sessions.length, "session")} using ${gb(sum(rep.sessions))}`;
+    : `${plural(rep.sessions.length, "session")} using ${gb(sum(rep.sessions))}`;
   return html`
     <section class="scrpane usage res" aria-label="Resources">
       <header class="hd">
@@ -3443,12 +3443,17 @@ function ResourcesPage({ hosts, home }) {
             <div class="rc-t" aria-hidden="true"><span>${resClock(t0, hours)}</span><span>${resClock((t0 + now) / 2, hours)}</span><span>now</span></div>
             <div class="ulegend rleg">${top.map((s) => html`<span><i class="umsw" style=${`background:${s.color}`}></i>${s.title}</span>`)}<span><i class="umsw rest"></i>everything else</span></div>`}
         </section>
-        ${moment ? html`<p class="sec rat"><b>At ${resClock(moment.t, hours)}</b> Only what used over 500 MB or 10% of a core is kept per minute. <button class="btn" onClick=${() => setPin(null)}>Back to now</button></p>`
+        ${moment ? html`<p class="sec rat"><b>At ${resClock(moment.t, hours)}</b> ${moment.ram > 0 ? `${gb(moment.ram)} of files in RAM. ` : ""}Only what used over 500 MB or 10% of a core is kept per minute. <button class="btn" onClick=${() => setPin(null)}>Back to now</button></p>`
           : rows.length > 1 && html`<p class="sec rat quiet">${touch ? "Tap" : "Click"} a chart to see who was using what at that moment.</p>`}
-        <${ResSection} warn title="Left behind" note="Their session ended, these kept running." groups=${left} colorOf=${colorOf} peaks=${peaks} sort=${v.sort} opened=${opened} toggle=${toggle} />
+        <${ResSection} title="Outlived their session" note="Their session ended, these kept running. Some are on purpose, like a dev stack other sessions use, so look before stopping one." groups=${left} colorOf=${colorOf} peaks=${peaks} sort=${v.sort} opened=${opened} toggle=${toggle} />
         <${ResSection} title="Sessions" note="Each with every process it started. Memory is each process's own share, so shared pages are not counted twice." groups=${sessions} colorOf=${colorOf} peaks=${peaks} sort=${v.sort} opened=${opened} toggle=${toggle} />
         <${ResSection} title="Outside sessions" note="Containers and services, by cgroup." groups=${outside} colorOf=${colorOf} peaks=${peaks} sort=${v.sort} opened=${opened} toggle=${toggle}
           tail=${!moment && rep?.rest?.count > 0 && html`<p class="rnote">And ${plural(rep.rest.count, "more process")}: ${gb(rep.rest.mem)}, ${Math.round(rep.rest.cpu)}% CPU.</p>`} />
+        ${!moment && rep?.ramDirs?.length > 0 && html`
+          <section class="sec rsec rdisk">
+            <div class="sh"><h2>Files in RAM</h2><span class="n">The biggest folders in /tmp. They count as memory until deleted, whoever made them.</span></div>
+            ${rep.ramDirs.map((d) => html`<div class="rd-row"><span class="who"><span class="t mono">${d.path}</span></span><span class="v">${gb(d.size)}</span></div>`)}
+          </section>`}
         ${!moment && rep?.disk?.length > 0 && html`
           <section class="sec rsec rdisk">
             <div class="sh"><h2>On disk</h2><span class="n">Repos and worktrees sessions work in, plus Claude's own files. Added up every hour${rep.diskAt ? `, last ${agoLong(rep.diskAt)}` : ""}.</span></div>
@@ -3480,7 +3485,7 @@ function ResourceChip() {
   const b = useMachineBrief();
   if (!b?.machine?.memTotal) return null;
   const pct = Math.round((b.machine.memUsed / b.machine.memTotal) * 100);
-  return html`<button class="kb reschip" onClick=${openResources} title=${`Memory ${gb(b.machine.memUsed)} of ${gb(b.machine.memTotal)}, CPU ${Math.round(b.machine.cpu / b.machine.cores)}%`}>mem ${pct}%${b.left > 0 ? html`<span class="lb">${b.left} left behind</span>` : ""}</button>`;
+  return html`<button class="kb reschip" onClick=${openResources} title=${`Memory ${gb(b.machine.memUsed)} of ${gb(b.machine.memTotal)}, CPU ${Math.round(b.machine.cpu / b.machine.cores)}%`}>mem ${pct}%</button>`;
 }
 
 function UsagePage({ limits, live, down, onOpen }) {
@@ -6819,7 +6824,7 @@ function Palette({ live, sel, say, home, hosts, actions, onClose }) {
   action("All bays", "0", "the board across every bay", () => { BAY.set(null); go(null); });
   action("Next session that needs you", "n", "any bay, in bay order", actions.next);
   action("Usage", "", "limits, pace, cost per bay and session", actions.usage, "tokens cost week limits");
-  action("Resources", "", "memory, CPU and disk per session, and what ended sessions left running", openResources, "ram cpu disk processes top memory load");
+  action("Resources", "", "memory, CPU and disk per session, and what outlived its session", openResources, "ram cpu disk processes top memory load");
   action("Backlog", "", "future tasks of this bay", () => (location.hash = BACKLOG), "later todo tasks ideas");
   action("New backlog item", "", "put a task aside for later", () => actions.create({ later: true }), "later todo task add put");
   action("Agents", "", "standing agents and what they keep", () => (location.hash = AGENTS_ROUTE), "tracker standing");
