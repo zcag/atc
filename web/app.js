@@ -1020,7 +1020,7 @@ function LiveStrip({ s, onClick }) {
     <span class="now"><span>${now}</span><span class="el">${s.state === "working" && s.promptAt ? txSpan(Date.now() - Date.parse(s.promptAt)) : ""}</span></span></a>`;
 }
 
-/** What holding the phone's side key opens: what the assistant last said, what waits on them, the call and their sessions under the thumb. */
+/** What holding the phone's side key opens: a band per bay sized by how much is going on there, what the assistant last said, the most urgent sessions, the call and their sessions under the thumb. */
 function Hold({ hub, live }) {
   useCall();
   useNow(30000);
@@ -1039,15 +1039,27 @@ function Hold({ hub, live }) {
   const wait = open.filter(waiting).sort((a, b) => (b.state === "needs-you") - (a.state === "needs-you") || byRecent(a, b));
   const work = open.filter((s) => s.state === "working").sort(byRecent);
   const rows = [...wait, ...work];
+  const bands = [...new Set(rows.map(bayOf))].map((name) => {
+    const here = rows.filter((s) => bayOf(s) === name);
+    return { name, here, waits: here.filter(waiting).length };
+  }).sort((a, b) => b.waits - a.waits || b.here.length - a.here.length);
+  const toBay = (name) => { BAY.set(name); rememberBay(name, { view: "board" }); location.replace("#/"); };
   const counts = [wait.length && html`<span class="wt">${wait.length} waiting</span>`, work.length && html`<span>${work.length} working</span>`].filter(Boolean);
   return html`<div class="hold">
+    <div class="hboard">
+      ${bands.map((b) => html`<button class="hband ${b.waits ? "wt" : ""}" style=${`flex-grow: ${1 + b.waits * 2 + b.here.length - b.waits}`} onClick=${() => toBay(b.name)}
+        aria-label=${[b.name, b.waits && `${b.waits} waiting on you`, b.here.length - b.waits && `${b.here.length - b.waits} working`].filter(Boolean).join(", ")}>
+        <span class="nm"><b>${b.name}</b><span class="bl">${b.here.slice(0, 16).map((s) => html`<${StateBlock} key=${s.sessionId} s=${s} mini />`)}</span></span>
+        <span class="ct">${b.waits || b.here.length}</span>
+      </button>`)}
+      ${live && !rows.length && html`<p class="hclear">Nothing is waiting on you, and nothing is running.</p>`}
+    </div>
     <a class="hsaid ${hub?.state === "needs-you" ? "needs" : ""}" href=${ASSIST} onClick=${replacing}>
       <span class="apr">assistant<span>></span></span><span class="t">${hubLine(hub)}</span>
     </a>
     <div class="hrows">
       ${!live ? [1, 2].map(() => html`<div class="ls sk" aria-hidden="true"><i></i><i></i></div>`)
-        : rows.length ? rows.map((s) => html`<${LiveStrip} key=${s.sessionId} s=${s} onClick=${replacing} />`)
-        : html`<p class="none">Nothing waiting on you, nothing running.</p>`}
+        : rows.slice(0, 3).map((s) => html`<${LiveStrip} key=${s.sessionId} s=${s} onClick=${replacing} />`)}
     </div>
     ${!CAN_CALL && html`<p class="nocall">Calls need atc's call line and a microphone.</p>`}
     <div class="hdock ${CAN_CALL ? "" : "nocall"}">
