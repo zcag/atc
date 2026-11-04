@@ -24,7 +24,8 @@ const browserHelp = `atc browser: the shared browser, one session's tabs at a ti
         claude mcp add -s user browser -- atc browser mcp
 `
 
-const playwrightMCP = "@playwright/mcp@latest"
+// Bump by hand, after checking that its config still takes browser.cdpHeaders from --config: cdpConfig relies on it.
+const playwrightMCP = "@playwright/mcp@0.0.84"
 
 func browserCmd(args []string) error {
 	if len(args) == 0 || args[0] != "mcp" {
