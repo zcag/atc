@@ -89,7 +89,9 @@ open and copy files with your login). They reach only frames of the server's own
 sees one object that does nothing without a per-WebView secret, and that secret is injected only into
 those frames, so sandboxed pages and other sites get nothing. A WebView too old to inject by origin
 gets no bridge at all and the page runs as it would in a browser: no native call, no share target, no
-widget feed. Whoever controls the server still controls the page, and so these powers.
+widget feed. Whoever controls the server still controls the page, and so these powers. Only the main
+frame can open an outside app by navigating, and a file shared to the app sits at a random path that
+only `shared()` gives out.
 
 An update is installed only if `version.json` names a path on the server, and the file is this app
 (same package name) signed by the certificate of the installed app. The checksum only catches a damaged

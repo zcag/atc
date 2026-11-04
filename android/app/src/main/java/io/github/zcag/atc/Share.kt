@@ -37,6 +37,7 @@ object Shared {
     private const val PREFIX = "/__shared/"
     @Volatile private var payload: JSONObject? = null
     @Volatile private var files: List<Pair<File, String>> = emptyList()
+    @Volatile private var base: String? = null
 
     private fun dir(c: Context) = File(c.cacheDir, "shared")
 
@@ -49,6 +50,7 @@ object Shared {
             Intent.ACTION_SEND_MULTIPLE -> intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM).orEmpty()
             else -> listOfNotNull(intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM))
         }
+        val root = "$PREFIX${randomHex()}/"
         val kept = mutableListOf<Pair<File, String>>()
         val list = JSONArray()
         var skipped = 0
@@ -59,12 +61,13 @@ object Shared {
             val f = File(d, "$i")
             val copied = c.contentResolver.openInputStream(uri)?.use { input -> f.outputStream().use { input.copyTo(it) } } ?: return@forEachIndexed
             if (copied > MAX) return@forEachIndexed run { f.delete(); skipped++ }
-            list.put(JSONObject().put("name", name).put("type", type).put("size", copied).put("url", "$PREFIX${kept.size}"))
+            list.put(JSONObject().put("name", name).put("type", type).put("size", copied).put("url", "$root${kept.size}"))
             kept += f to type
         }
         var text = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString().orEmpty()
         if (skipped > 0) text = "$text\n($skipped file(s) over 64 MB were left out)".trim()
         files = kept
+        base = root
         payload = JSONObject()
             .put("text", text)
             .put("subject", intent.getStringExtra(Intent.EXTRA_SUBJECT).orEmpty())
@@ -90,12 +93,13 @@ object Shared {
     fun clear(c: Context) {
         payload = null
         files = emptyList()
+        base = null
         dir(c).deleteRecursively()
     }
 
     fun serve(path: String?): WebResourceResponse? {
-        val i = path?.removePrefix(PREFIX)?.takeIf { it != path }?.toIntOrNull() ?: return null
-        val (f, type) = files.getOrNull(i) ?: return WebResourceResponse("text/plain", null, 404, "Not Found", null, null)
+        if (path?.startsWith(PREFIX) != true) return null
+        val (f, type) = sharedIndex(path, base)?.let(files::getOrNull) ?: return WebResourceResponse("text/plain", null, 404, "Not Found", null, null)
         return WebResourceResponse(type, null, FileInputStream(f))
     }
 }

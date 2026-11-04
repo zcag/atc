@@ -6,7 +6,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URI
 import java.security.MessageDigest
-import java.security.SecureRandom
 
 class Bridge(private val a: MainActivity) {
     @JavascriptInterface fun version() = BuildConfig.VERSION_CODE
@@ -38,7 +37,7 @@ class Bridge(private val a: MainActivity) {
  * The one object native code puts in a WebView, and addJavascriptInterface puts it in every frame. It does nothing
  * without [secret], which only [startScript] holds and only frames of the server's origin run.
  */
-class Gate(private val target: Any, private val secret: String = newSecret()) {
+class Gate(private val target: Any, private val secret: String = randomHex()) {
     private val methods = target.javaClass.methods.filter { it.isAnnotationPresent(JavascriptInterface::class.java) }.associateBy { it.name }
 
     @JavascriptInterface fun invoke(secret: String, name: String, args: String): String? {
@@ -62,7 +61,6 @@ class Gate(private val target: Any, private val secret: String = newSecret()) {
 
     companion object {
         const val NAME = "AtcGate"
-        private fun newSecret() = ByteArray(32).also(SecureRandom()::nextBytes).joinToString("") { "%02x".format(it) }
     }
 }
 

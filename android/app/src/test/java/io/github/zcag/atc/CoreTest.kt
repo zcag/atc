@@ -38,6 +38,14 @@ class CoreTest {
         assertTrue(apkProblem("io.a", emptySet(), "io.a", emptySet())!!.contains("signed"))
     }
 
+    @Test fun sharedFilesNeedTheShareBase() {
+        assertEquals(1, sharedIndex("/__shared/abc/1", "/__shared/abc/"))
+        assertNull(sharedIndex("/__shared/1", "/__shared/abc/"))
+        assertNull(sharedIndex("/__shared/abd/1", "/__shared/abc/"))
+        assertNull(sharedIndex("/__shared/abc/x", "/__shared/abc/"))
+        assertNull(sharedIndex("/__shared/abc/1", null))
+    }
+
     @Test fun serverUrls() {
         assertEquals("https://atc.example", serverUrl(" https://atc.example/ "))
         assertEquals("http://box:7272/atc", serverUrl("http://box:7272/atc"))

@@ -4,9 +4,15 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.security.MessageDigest
+import java.security.SecureRandom
 
 fun sha256(bytes: ByteArray): String =
     MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+fun randomHex() = ByteArray(32).also(SecureRandom()::nextBytes).joinToString("") { "%02x".format(it) }
+
+/** Which shared file this path names, given the unguessable [base] of the current share. */
+fun sharedIndex(path: String, base: String?) = base?.let { path.removePrefix(it).takeIf { rest -> rest != path }?.toIntOrNull() }
 
 fun pretty(hex: String) = hex.uppercase().chunked(2).joinToString(":")
 
