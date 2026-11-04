@@ -276,7 +276,7 @@ func (s *Server) waGuest(d whatsapp.Message) {
 	}
 	log.Printf("whatsapp: guest %s wrote (%s)", name, d.Type)
 	for try := 1; ; try++ {
-		err := s.hubSend(ctx, hub.Guest, head+"]\n"+text)
+		err := s.hubSend(ctx, hub.Guest, head+"]\n"+strings.TrimRight(text, "\n")+"\n[end of what guest "+name+" wrote]")
 		if err == nil {
 			return
 		}

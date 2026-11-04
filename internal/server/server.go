@@ -395,6 +395,9 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 func (s *Server) static() http.Handler {
 	files := http.FileServerFS(s.Web)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
+			w.Header().Set("Content-Security-Policy", "script-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'")
+		}
 		if strings.HasPrefix(r.URL.Path, "/vendor/fonts/") {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}

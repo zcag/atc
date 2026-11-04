@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -117,12 +118,27 @@ func (s *Server) sign(sid, dir string, exp int64) string {
 }
 
 func (s *Server) fileURL(sid, path string, exp int64) string {
-	dir := filepath.Dir(path)
 	segs := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	for i, p := range segs {
 		segs[i] = url.PathEscape(p)
 	}
-	return "/api/sessions/" + url.PathEscape(sid) + "/o/" + s.sign(sid, dir, exp) + "/" + strings.Join(segs, "/")
+	return "/api/sessions/" + url.PathEscape(sid) + "/o/" + s.sign(sid, linkScope(path), exp) + "/" + strings.Join(segs, "/")
+}
+
+// linkScope is what a link opens without a login: the file's folder, so a page's relative images load, but only the
+// file itself when that folder holds the home directory, whose keys and tokens a link must never reach.
+func linkScope(path string) string {
+	dir := filepath.Dir(path)
+	home, _ := os.UserHomeDir()
+	if home == "" || home == dir || dir == "/" || strings.HasPrefix(home, dir+"/") {
+		return path
+	}
+	return dir
+}
+
+func hiddenBelow(scope, path string) bool {
+	rel, err := filepath.Rel(scope, path)
+	return err != nil || slices.ContainsFunc(strings.Split(rel, "/"), func(seg string) bool { return strings.HasPrefix(seg, ".") && seg != "." })
 }
 
 func (s *Server) outputFile(w http.ResponseWriter, r *http.Request) {
@@ -134,8 +150,12 @@ func (s *Server) outputFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "this link has expired; open the session's outputs again", http.StatusGone)
 		return
 	}
-	for dir := filepath.Dir(path); ; dir = filepath.Dir(dir) {
+	for dir := filepath.Clean(path); ; dir = filepath.Dir(dir) {
 		if hmac.Equal([]byte(s.sign(sid, dir, exp)), []byte(tok)) {
+			if hiddenBelow(dir, path) {
+				http.Error(w, "not found", http.StatusNotFound)
+				return
+			}
 			break
 		}
 		if dir == "/" {

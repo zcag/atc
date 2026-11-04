@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -15,6 +17,27 @@ import (
 // Handler serves the hub. With a guests hub (cfg.Guests), what guests say goes to that one, on the
 // same paths, and its own API is under /guests/.
 func (h *Hub) Handler() http.Handler {
+	return onlyPrograms(h.routes())
+}
+
+// onlyPrograms keeps web pages out: the hub has no login, and what reaches it is the user talking to a session that may
+// run anything, so a page in a browser on this machine must not be able to post to it or rebind a name to it.
+func onlyPrograms(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host := r.Host
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+		named := net.ParseIP(strings.Trim(host, "[]")) != nil || !strings.Contains(host, ".")
+		if r.Header.Get("Origin") != "" || r.Header.Get("Sec-Fetch-Site") != "" || !named {
+			http.Error(w, "the hub takes no requests from web pages", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (h *Hub) routes() http.Handler {
 	mux := http.NewServeMux()
 	if g := h.cfg.Guests; g != nil {
 		mux.Handle("/guests/", http.StripPrefix("/guests", g.Handler()))

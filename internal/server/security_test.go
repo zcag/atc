@@ -7,6 +7,48 @@ import (
 	"testing"
 )
 
+func TestLinkScopeNeverOpensHome(t *testing.T) {
+	t.Setenv("HOME", "/home/u")
+	for path, want := range map[string]string{
+		"/home/u/report.html":      "/home/u/report.html",
+		"/x.html":                  "/x.html",
+		"/home/x.html":             "/home/x.html",
+		"/home/u/proj/report.html": "/home/u/proj",
+		"/tmp/out/a.png":           "/tmp/out",
+	} {
+		if got := linkScope(path); got != want {
+			t.Errorf("%s: %s, want %s", path, got, want)
+		}
+	}
+	for path, want := range map[string]bool{
+		"/home/u/proj/a.png": false, "/home/u/proj/img/a.png": false, "/home/u/proj/.env": true, "/home/u/proj/.git/config": true,
+	} {
+		if got := hiddenBelow("/home/u/proj", path); got != want {
+			t.Errorf("%s: %v", path, got)
+		}
+	}
+	if hiddenBelow("/home/u/.local/page.html", "/home/u/.local/page.html") {
+		t.Error("a file shown by its exact link is not hidden")
+	}
+}
+
+func TestAddressDoesNotVouchForAnotherSite(t *testing.T) {
+	for _, c := range []struct {
+		fetch, origin string
+		want          bool
+	}{
+		{"", "", false}, {"same-origin", "", false}, {"none", "", false}, {"", "http://atc.test", false},
+		{"cross-site", "", true}, {"same-site", "", true}, {"", "https://evil.example", true}, {"", "null", true},
+	} {
+		r := httptest.NewRequest("GET", "http://atc.test/api/browser/x/cdp", nil)
+		r.Header.Set("Sec-Fetch-Site", c.fetch)
+		r.Header.Set("Origin", c.origin)
+		if got := fromAnotherSite(r); got != c.want {
+			t.Errorf("%+v: %v", c, got)
+		}
+	}
+}
+
 func TestEncodedSlashIsNotAnOutputLink(t *testing.T) {
 	ts := newTestServer(t, nil, Voice{})
 	for _, c := range []struct{ method, path string }{

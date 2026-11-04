@@ -172,8 +172,22 @@ func (s *Server) namedForUs(r *http.Request) bool {
 	return slices.ContainsFunc(strings.Fields(os.Getenv("ATC_ALLOWED_HOSTS")), func(a string) bool { return strings.EqualFold(a, host) })
 }
 
+// fromAnotherSite is a browser saying another site's page sent this. An address proves the device, not which page on it
+// is asking, and a cookie is SameSite=Strict for the same reason.
+func fromAnotherSite(r *http.Request) bool {
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "cross-site", "same-site":
+		return true
+	}
+	if o := r.Header.Get("Origin"); o != "" {
+		u, err := url.Parse(o)
+		return err != nil || u.Host != r.Host
+	}
+	return false
+}
+
 func (s *Server) fromMyTailnet(r *http.Request) bool {
-	if s.tailnet == nil || !s.namedForUs(r) {
+	if s.tailnet == nil || !s.namedForUs(r) || fromAnotherSite(r) {
 		return false
 	}
 	ip := s.clientIP(r)

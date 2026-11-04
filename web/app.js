@@ -3643,6 +3643,7 @@ const serverURL = (s, port) => `http://${s.host || location.hostname}:${port}/`;
 
 function openOut(url) {
   const abs = new URL(url, location.href).href;
+  if (!/^https?:/.test(abs)) return;
   if (APP?.openExternal) return APP.openExternal(abs);
   if (APP && new URL(abs).host !== location.host) return void (location.href = abs);
   window.open(abs, "_blank", "noopener");
@@ -3912,7 +3913,8 @@ function PageFrame({ p, at, onSend, say, changes }) {
       copy: (t) => { copyText(t); say(t.length < 60 ? `Copied “${t}”.` : "Copied."); },
       copyImage: (u) => (APP?.copyImage ? APP.copyImage(u) : copyImage(u).then(() => say("Image copied."))),
       open: (u) => { const h = atcRoute(u); h ? (location.hash = h) : openOut(u); },
-      send: (t) => onSend(t),
+      send: (t) => ask({ title: `Send this to the session, as you, from “${pageTitle(p)}”?`, body: t, ok: "Send", busy: "Sending…", run: () => onSend(t) })
+        .then((r) => { if (!r) throw new Error("not sent"); return r; }),
       key: (k) => { document.body.dispatchEvent(new KeyboardEvent("keydown", { ...k, bubbles: true, cancelable: true })); },
     };
     const f = (e) => {
