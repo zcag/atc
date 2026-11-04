@@ -1020,16 +1020,11 @@ function LiveStrip({ s, onClick }) {
     <span class="now"><span>${now}</span><span class="el">${s.state === "working" && s.promptAt ? txSpan(Date.now() - Date.parse(s.promptAt)) : ""}</span></span></a>`;
 }
 
-/** What holding the phone's side key opens: the call one tap away, what waits on them under it, their sessions beside it. */
+/** What holding the phone's side key opens: what the assistant last said, what waits on them, the call and their sessions under the thumb. */
 function Hold({ hub, live }) {
   useCall();
   useNow(30000);
-  const look = usePersona();
-  useEffect(() => {
-    if (Call.live()) location.replace(CALL);
-    APP?.setStage?.(true);
-    return () => APP?.setStage?.(false);
-  }, []);
+  useEffect(() => { if (Call.live()) location.replace(CALL); }, []);
   const call = () => CAN_CALL && callAssistant();
   const sessions = () => { rememberBay(BAY.only, { view: "board" }); location.replace("#/"); };
   useKeyLayer((e) => {
@@ -1043,14 +1038,9 @@ function Hold({ hub, live }) {
   const open = (live || []).filter((s) => s.kind !== "hub" && !away(s));
   const wait = open.filter(waiting).sort((a, b) => (b.state === "needs-you") - (a.state === "needs-you") || byRecent(a, b));
   const work = open.filter((s) => s.state === "working").sort(byRecent);
-  const rows = [...wait, ...work].slice(0, 3);
+  const rows = [...wait, ...work];
   const counts = [wait.length && html`<span class="wt">${wait.length} waiting</span>`, work.length && html`<span>${work.length} working</span>`].filter(Boolean);
   return html`<div class="hold">
-    <div class="cpers" onClick=${(e) => e.target === e.currentTarget && call()}>
-      ${look.ready && html`<div class="fr"><${Persona} look=${look} state="listening" on=${false} onTap=${call} aria="The assistant. Tap to call" /></div>`}
-      <h1>Assistant</h1>
-      <p class="st">${CAN_CALL ? "Tap to call" : "Calls need atc's call line and a microphone"}</p>
-    </div>
     <a class="hsaid ${hub?.state === "needs-you" ? "needs" : ""}" href=${ASSIST} onClick=${replacing}>
       <span class="apr">assistant<span>></span></span><span class="t">${hubLine(hub)}</span>
     </a>
@@ -1059,6 +1049,7 @@ function Hold({ hub, live }) {
         : rows.length ? rows.map((s) => html`<${LiveStrip} key=${s.sessionId} s=${s} onClick=${replacing} />`)
         : html`<p class="none">Nothing waiting on you, nothing running.</p>`}
     </div>
+    ${!CAN_CALL && html`<p class="nocall">Calls need atc's call line and a microphone.</p>`}
     <div class="hdock ${CAN_CALL ? "" : "nocall"}">
       <button class="sess" onClick=${sessions}><b>Sessions</b><span class="c">${live ? (counts.length ? counts : "None open") : "Loading"}</span></button>
       ${CAN_CALL && html`<button class="dial" onClick=${call} aria-keyshortcuts=".">
@@ -1499,16 +1490,15 @@ async function personaList() {
 function usePersona() {
   const [list, setList] = useState({ names: ["orb"], kinds: {}, def: "orb" });
   const [name, setName] = useState(personaPick.get);
-  const [ready, setReady] = useState(false);
-  useEffect(() => { personaList().then(setList).catch(() => {}).finally(() => setReady(true)); }, []);
+  useEffect(() => { personaList().then(setList).catch(() => {}); }, []);
   const want = name ?? list.def;
   const shown = list.names.includes(want) ? want : "orb";
   const pick = (n) => { personaPick.set(n); setName(n); };
-  return { ready, names: list.names, kinds: list.kinds, shown, pick, framed: !["orb", "minimal"].includes(list.kinds[shown] || shown) };
+  return { names: list.names, kinds: list.kinds, shown, pick, framed: !["orb", "minimal"].includes(list.kinds[shown] || shown) };
 }
 
 /** The call's persona slot. Holding it (or a right click) switches to the next character. */
-function Persona({ look, state, on, onTap, aria = "The assistant. Tap to stop it while it speaks" }) {
+function Persona({ look, state, on, onTap }) {
   const { names, shown, pick, framed } = look;
   const [label, setLabel] = useState(null);
   const hold = useRef(null);
@@ -1524,7 +1514,7 @@ function Persona({ look, state, on, onTap, aria = "The assistant. Tap to stop it
   const up = () => clearTimeout(hold.current);
   const tap = () => { if (!held.current) onTap(); };
   return html`<div class="orb persona ${framed ? "framed" : ""}" onPointerDown=${down} onPointerUp=${up} onPointerLeave=${up} onContextMenu=${next}>
-    ${shown === "orb" ? html`<${Orb} full state=${state} on=${on} onTap=${tap} aria=${aria} />` : html`<${Drawn} key=${shown} name=${shown} state=${state} on=${on} onTap=${tap} aria=${aria} />`}
+    ${shown === "orb" ? html`<${Orb} full state=${state} on=${on} onTap=${tap} />` : html`<${Drawn} key=${shown} name=${shown} state=${state} on=${on} onTap=${tap} />`}
     ${label && html`<span class="personaname">${label}</span>`}
   </div>`;
 }
@@ -1588,7 +1578,7 @@ function CallPicks({ look, onClose }) {
   </div>`;
 }
 
-function Drawn({ name, state, on, onTap, aria }) {
+function Drawn({ name, state, on, onTap }) {
   const ref = useRef(null);
   const now = useRef(state);
   now.current = state;
@@ -1599,10 +1589,10 @@ function Drawn({ name, state, on, onTap, aria }) {
       .catch((e) => console.warn("persona", name, e));
     return () => { gone = true; stop?.(); };
   }, [name]);
-  return html`<canvas ref=${ref} class="orb ${on ? "" : "idle"}" onClick=${onTap} aria-label=${aria}></canvas>`;
+  return html`<canvas ref=${ref} class="orb ${on ? "" : "idle"}" onClick=${onTap} aria-label="The assistant. Tap to stop it while it speaks"></canvas>`;
 }
 
-function Orb({ state, on, onTap, full, aria }) {
+function Orb({ state, on, onTap, full }) {
   const ref = useRef(null);
   const now = useRef(state);
   now.current = state;
@@ -1634,7 +1624,7 @@ function Orb({ state, on, onTap, full, aria }) {
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
   }, []);
-  return html`<canvas ref=${ref} class="orb ${full ? "full" : ""} ${on ? "" : "idle"}" onClick=${onTap} aria-label=${aria}></canvas>`;
+  return html`<canvas ref=${ref} class="orb ${full ? "full" : ""} ${on ? "" : "idle"}" onClick=${onTap} aria-label="The assistant. Tap to stop it while it speaks"></canvas>`;
 }
 
 function Login({ onDone }) {

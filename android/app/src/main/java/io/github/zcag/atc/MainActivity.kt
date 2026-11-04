@@ -53,7 +53,6 @@ class MainActivity : Activity() {
         const val EXTRA_ASSIST = "assist"
         const val EXTRA_PATH = "path"
         const val HOLD = "/#/hold"
-        private const val STAGE = 0xff05070d.toInt()
         private const val REQ_MIC = 1
         private const val REQ_FILE = 2
     }
@@ -77,7 +76,6 @@ class MainActivity : Activity() {
     private val scope = MainScope()
     private var offline: View? = null
     private var veil: View? = null
-    private var stage = false
     private var failed: String? = null
     private val ui = Handler(Looper.getMainLooper())
     private val retry = Runnable { failed?.let { web?.loadUrl(it) } }
@@ -228,7 +226,6 @@ class MainActivity : Activity() {
                 u.encodedPath.orEmpty().ifEmpty { "/" } + u.encodedQuery?.let { "?$it" }.orEmpty() + u.encodedFragment?.let { "#$it" }.orEmpty()
             }
             ?: if (assist) HOLD else null
-        if (path == HOLD) setStage(true)
         val w = web
         if (w == null) return browse(server + (path ?: "/"))
         if (path == null) return
@@ -237,7 +234,7 @@ class MainActivity : Activity() {
     }
 
     private fun veilUntil(w: WebView, selector: String) {
-        if (veil == null) veil = View(this).apply { setBackgroundColor(STAGE); setOnClickListener {} }
+        if (veil == null) veil = View(this).apply { setBackgroundColor(Look.palette(this@MainActivity).board); setOnClickListener {} }
             .also { root?.addView(it, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT) }
         val giveUp = SystemClock.uptimeMillis() + 2500
         val lift = Runnable { veil?.let { root?.removeView(it) }; veil = null }
@@ -402,20 +399,14 @@ class MainActivity : Activity() {
         showCall(Calls.state.value)
     }
 
-    fun setStage(on: Boolean) {
-        stage = on
-        paint()
-    }
-
     fun paint() {
         val pal = Look.palette(this)
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(pal.board))
-        root?.setBackgroundColor(if (stage) STAGE else pal.board)
-        web?.setBackgroundColor(if (stage) STAGE else pal.board)
+        root?.setBackgroundColor(pal.board)
+        web?.setBackgroundColor(pal.board)
         val bars = WindowCompat.getInsetsController(window, window.decorView)
         bars.isAppearanceLightNavigationBars = !pal.dark
-        val lightIcons = !pal.dark && !stage
-        if (lightStatus != null) lightStatus = lightIcons else bars.isAppearanceLightStatusBars = lightIcons
+        if (lightStatus != null) lightStatus = !pal.dark else bars.isAppearanceLightStatusBars = !pal.dark
     }
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
