@@ -106,6 +106,7 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc wa [--file F]... [--render F.html]... [--voice TEXT] [--poll Q --option A...] [text...]
                                  send the user files, a rendered page, a voice note, a poll or text on
                                  WhatsApp, from the account atc answers them on; atc wa -h
+  atc setup                      guided first run: who you are, limits, tools, reaching atc from other devices
   atc service install|uninstall|status
                                  run atc and the assistant's hub as services of your user
   atc prompts [--check|--update] every text the assistant is told, your own files applied
@@ -184,6 +185,8 @@ func main() {
 		err = attachTo(args)
 	case "send":
 		err = sendTo(args)
+	case "setup":
+		err = setupCmd(args)
 	case "service":
 		err = serviceCmd(args)
 	case "prompts":
