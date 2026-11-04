@@ -11,30 +11,11 @@ check:
 	if command -v node >/dev/null; then node --test web/; fi
 
 install: check build
-	install -m755 atc ~/.local/bin/atc
-	install -Dm644 deploy/atc.service ~/.config/systemd/user/atc.service
-	install -Dm644 deploy/claude.slice ~/.config/systemd/user/claude.slice
-	systemctl --user daemon-reload
-	systemctl --user enable --now atc
-	@$(MAKE) --no-print-directory call-idle
-	systemctl --user restart atc
+	./atc service install --only atc
 	$(MAKE) --no-print-directory sync-main
 
-# The phone app's calls run through atc (/api/call/line): a restart mid-call cuts the voice for over a second.
-# Wait for the call line's app line to be free, up to 30 min; no call line, no wait.
-call-idle:
-	@for i in $$(seq 360); do \
-	  curl -sf --max-time 3 127.0.0.1:8807/status | python3 -c 'import json,sys; sys.exit(json.load(sys.stdin).get("app") is not None)' && exit 0; \
-	  curl -sf --max-time 3 -o /dev/null 127.0.0.1:8807/status || exit 0; \
-	  echo "an app call is on, atc waits to restart"; sleep 5; \
-	done; echo "app call still on after 30 min, restarting anyway"
-
 install-hub: check build
-	install -m755 atc ~/.local/bin/atc-hub
-	install -Dm644 deploy/atc-hub.service ~/.config/systemd/user/atc-hub.service
-	systemctl --user daemon-reload
-	systemctl --user enable atc-hub
-	systemctl --user restart atc-hub
+	./atc service install --only hub
 
 sync-main:
 	@main=$$(cd "$$(git rev-parse --git-common-dir)/.." && pwd); git fetch -q origin; \
@@ -52,11 +33,7 @@ install-opencode:
 	systemctl --user restart opencode
 
 install-mac: check build
-	install -m755 atc ~/.local/bin/atc
-	install -m644 deploy/atc.plist ~/Library/LaunchAgents/io.github.zcag.atc.plist
-	launchctl bootout gui/$$(id -u)/io.github.zcag.atc 2>/dev/null || true
-	while launchctl print gui/$$(id -u)/io.github.zcag.atc >/dev/null 2>&1; do sleep 0.2; done
-	launchctl bootstrap gui/$$(id -u) ~/Library/LaunchAgents/io.github.zcag.atc.plist
+	./atc service install --only atc
 
 ifeq ($(shell uname),Darwin)
 JAVA_HOME ?= /opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
@@ -80,4 +57,4 @@ android-publish:
 	rsync -t android/dist/atc.apk $(APP_HOST):$(APP_DIR)/
 	rsync -t android/dist/version.json $(APP_HOST):$(APP_DIR)/
 
-.PHONY: call-idle build check install install-hub install-opencode install-mac android android-publish
+.PHONY: build check install install-hub install-opencode install-mac android android-publish

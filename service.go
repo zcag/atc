@@ -1,0 +1,322 @@
+package main
+
+import (
+	"bytes"
+	"embed"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/zcag/atc/internal/client"
+)
+
+//go:embed deploy/atc.service deploy/atc-hub.service deploy/claude.slice deploy/atc.plist
+var units embed.FS
+
+const serviceHelp = `Usage: atc service <install|uninstall|status> [--only atc|hub]
+
+  install     copy this binary to ~/.local/bin and run atc (and the assistant's hub) as services
+              of your user: systemd on Linux, launchd on macOS. Safe to run again to upgrade:
+              sessions keep running, and a restart waits for a call to end.
+  uninstall   stop and remove the services; your settings and sessions stay
+  status      whether each one runs
+
+  --only      one of them; by default both
+`
+
+const macLabel = "io.github.zcag.atc"
+
+type service struct{ name, bin, unit string }
+
+func services(only string) []service {
+	all := []service{{"atc", "atc", "atc"}, {"hub", "atc-hub", "atc-hub"}}
+	return slices.DeleteFunc(all, func(s service) bool { return only != "" && s.name != only })
+}
+
+func serviceCmd(args []string) error {
+	if len(args) == 0 {
+		fmt.Print(serviceHelp)
+		os.Exit(2)
+	}
+	fs := flag.NewFlagSet("service", flag.ExitOnError)
+	fs.Usage = func() { fmt.Print(serviceHelp) }
+	only := fs.String("only", "", "")
+	fs.Parse(args[1:])
+	if *only != "" && *only != "atc" && *only != "hub" {
+		return fmt.Errorf("--only takes atc or hub")
+	}
+	mac := runtime.GOOS == "darwin"
+	if !mac && runtime.GOOS != "linux" {
+		return fmt.Errorf("services on %s are not supported yet: run atc serve yourself", runtime.GOOS)
+	}
+	list := services(*only)
+	switch args[0] {
+	case "install":
+		return serviceInstall(list, mac, *only == "")
+	case "uninstall":
+		for _, s := range list {
+			if mac {
+				macUnload(s)
+				os.Remove(macPlist(s))
+			} else {
+				run("systemctl", "--user", "disable", "--now", s.unit)
+				os.Remove(systemdUnit(s.unit + ".service"))
+			}
+			fmt.Println("removed", s.name)
+		}
+		if !mac {
+			return run("systemctl", "--user", "daemon-reload")
+		}
+		return nil
+	case "status":
+		for _, s := range list {
+			fmt.Printf("%-4s %s\n", s.name, serviceState(s, mac))
+		}
+		return nil
+	}
+	fmt.Print(serviceHelp)
+	os.Exit(2)
+	return nil
+}
+
+func serviceState(s service, mac bool) string {
+	if mac {
+		if exec.Command("launchctl", "print", macDomain()+"/"+macName(s)).Run() != nil {
+			return "not running"
+		}
+		return "running"
+	}
+	out, _ := exec.Command("systemctl", "--user", "is-active", s.unit).Output()
+	return strings.TrimSpace(string(out))
+}
+
+func serviceInstall(list []service, mac, everything bool) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	bin := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		return err
+	}
+	for _, s := range list {
+		if err := installBinary(exe, filepath.Join(bin, s.bin)); err != nil {
+			return err
+		}
+	}
+	if everything {
+		if err := writeEnvDefaults(); err != nil {
+			return err
+		}
+	}
+	if !mac {
+		if err := installSystemdFiles(list); err != nil {
+			return err
+		}
+		if everything {
+			if user := os.Getenv("USER"); user != "" && exec.Command("loginctl", "enable-linger", user).Run() != nil {
+				fmt.Println("Could not keep services running after you log out: run  sudo loginctl enable-linger " + user)
+			}
+		}
+	}
+	waitForNoCall()
+	for _, s := range list {
+		if mac {
+			if err := macInstall(s); err != nil {
+				return err
+			}
+		} else if err := systemdStart(s); err != nil {
+			return err
+		}
+		fmt.Printf("%s: %s\n", s.name, serviceState(s, mac))
+	}
+	return nil
+}
+
+func installBinary(from, to string) error {
+	if same, _ := filepath.EvalSymlinks(from); same == to {
+		return nil
+	}
+	b, err := os.ReadFile(from)
+	if err != nil {
+		return err
+	}
+	tmp := to + ".new"
+	if err := os.WriteFile(tmp, b, 0o755); err != nil {
+		return err
+	}
+	return os.Rename(tmp, to)
+}
+
+func systemdUnit(name string) string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".config", "systemd", "user", name)
+}
+
+func installSystemdFiles(list []service) error {
+	names := []string{"claude.slice"}
+	for _, s := range list {
+		names = append(names, s.unit+".service")
+	}
+	if err := os.MkdirAll(filepath.Dir(systemdUnit("x")), 0o755); err != nil {
+		return err
+	}
+	for _, n := range names {
+		b, err := units.ReadFile("deploy/" + n)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(systemdUnit(n), b, 0o644); err != nil {
+			return err
+		}
+	}
+	return run("systemctl", "--user", "daemon-reload")
+}
+
+func systemdStart(s service) error {
+	if err := run("systemctl", "--user", "enable", s.unit); err != nil {
+		return err
+	}
+	return run("systemctl", "--user", "restart", s.unit)
+}
+
+func macName(s service) string {
+	if s.name == "atc" {
+		return macLabel
+	}
+	return macLabel + "." + s.name
+}
+
+func macDomain() string { return "gui/" + strconv.Itoa(os.Getuid()) }
+
+func macPlist(s service) string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, "Library", "LaunchAgents", macName(s)+".plist")
+}
+
+func macUnload(s service) {
+	target := macDomain() + "/" + macName(s)
+	exec.Command("launchctl", "bootout", target).Run()
+	for range 100 {
+		if exec.Command("launchctl", "print", target).Run() != nil {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+func macInstall(s service) error {
+	b, err := units.ReadFile("deploy/atc.plist")
+	if err != nil {
+		return err
+	}
+	if s.name != "atc" {
+		b = bytes.ReplaceAll(b, []byte("<string>"+macLabel+"</string>"), []byte("<string>"+macName(s)+"</string>"))
+		b = bytes.ReplaceAll(b, []byte(`"$HOME/.local/bin/atc" serve`), []byte(`"$HOME/.local/bin/`+s.bin+`" hub`))
+		b = bytes.ReplaceAll(b, []byte("/tmp/atc.log"), []byte("/tmp/"+s.bin+".log"))
+	}
+	if err := os.MkdirAll(filepath.Dir(macPlist(s)), 0o755); err != nil {
+		return err
+	}
+	if err := os.WriteFile(macPlist(s), b, 0o644); err != nil {
+		return err
+	}
+	macUnload(s)
+	return run("launchctl", "bootstrap", macDomain(), macPlist(s))
+}
+
+// writeEnvDefaults points atc at the hub it just installed, and at a claude the services' fixed PATH would miss. Lines
+// already in the file stay as they are.
+func writeEnvDefaults() error {
+	path := filepath.Join(client.ConfigDir(), "env")
+	b, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	var add []string
+	has := func(key string) bool {
+		return slices.ContainsFunc(strings.Split(string(b), "\n"), func(l string) bool { return strings.HasPrefix(l, key+"=") })
+	}
+	if !has("ATC_HUB") {
+		add = append(add, "ATC_HUB=http://127.0.0.1:8820")
+	}
+	if c, err := exec.LookPath("claude"); err == nil && !has("ATC_CLAUDE_BIN") && !servicePathHas(filepath.Dir(c)) {
+		add = append(add, "ATC_CLAUDE_BIN="+c)
+	}
+	if len(add) == 0 {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	if len(b) > 0 && !bytes.HasSuffix(b, []byte("\n")) {
+		b = append(b, '\n')
+	}
+	return os.WriteFile(path, append(b, strings.Join(add, "\n")+"\n"...), 0o600)
+}
+
+func servicePathHas(dir string) bool {
+	home, _ := os.UserHomeDir()
+	return slices.Contains([]string{filepath.Join(home, ".local/bin"), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"}, dir)
+}
+
+// waitForNoCall holds a restart while a call is on the call line, since restarting atc or the hub cuts it. Up to 30
+// minutes; with no call line there is nothing to wait for.
+func waitForNoCall() {
+	url := os.Getenv("ATC_DELTA_CALL")
+	if url == "" {
+		url = envFileValue("ATC_DELTA_CALL")
+	}
+	if url == "" {
+		return
+	}
+	c := &http.Client{Timeout: 3 * time.Second}
+	for range 360 {
+		res, err := c.Get(strings.TrimRight(url, "/") + "/status")
+		if err != nil {
+			return
+		}
+		body, _ := io.ReadAll(res.Body)
+		res.Body.Close()
+		var st struct {
+			Call string `json:"call"`
+			App  any    `json:"app"`
+		}
+		if json.Unmarshal(body, &st) != nil || ((st.Call == "idle" || st.Call == "") && (st.App == nil || st.App == "connected")) {
+			return
+		}
+		fmt.Println("a call is on, waiting to restart")
+		time.Sleep(5 * time.Second)
+	}
+	fmt.Println("the call is still on after 30 minutes, restarting anyway")
+}
+
+func envFileValue(key string) string {
+	b, _ := os.ReadFile(filepath.Join(client.ConfigDir(), "env"))
+	for _, l := range strings.Split(string(b), "\n") {
+		if v, ok := strings.CutPrefix(l, key+"="); ok {
+			return strings.Trim(v, `"'`)
+		}
+	}
+	return ""
+}
+
+func run(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	return cmd.Run()
+}

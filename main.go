@@ -103,6 +103,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc wa [--file F]... [--render F.html]... [--voice TEXT] [--poll Q --option A...] [text...]
                                  send the user files, a rendered page, a voice note, a poll or text on
                                  WhatsApp, from the account atc answers them on; atc wa -h
+  atc service install|uninstall|status
+                                 run atc and the assistant's hub as services of your user
   atc prompts [--check|--update] every text the assistant is told, your own files applied
   atc call [--reason TEXT] [--wait] [--timeout 45s] [--whatsapp]
                                  ring the user's phone, with the assistant on the
@@ -160,6 +162,8 @@ func main() {
 		err = attachTo(args)
 	case "send":
 		err = sendTo(args)
+	case "service":
+		err = serviceCmd(args)
 	case "prompts":
 		err = promptsCmd(args)
 	case "mcp":
@@ -240,7 +244,7 @@ func serve(args []string) error {
 		return err
 	}
 	cli := claude.CLI{Bin: bin, Args: strings.Fields(os.Getenv("ATC_CLAUDE_ARGS"))}
-	if _, err := exec.LookPath("systemd-run"); err == nil {
+	if _, err := exec.LookPath("systemd-run"); err == nil && os.Getenv("ATC_CONTAIN") == "1" {
 		cli.Slice = "claude.slice"
 		cli.Launch = []string{"systemd-run", "--user", "--scope", "--collect", "--quiet", "--slice=" + cli.Slice}
 	}
