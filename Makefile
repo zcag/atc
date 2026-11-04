@@ -1,3 +1,5 @@
+-include $(HOME)/.config/atc/local.mk
+
 build:
 	go build -o atc .
 
@@ -5,6 +7,7 @@ check:
 	gofmt -l . | (! grep .)
 	go vet ./...
 	go test ./...
+	go run . prompts --check
 	if command -v node >/dev/null; then node --test web/; fi
 
 install: check build
@@ -17,8 +20,8 @@ install: check build
 	systemctl --user restart atc
 	$(MAKE) --no-print-directory sync-main
 
-# The phone app's calls run through atc (/api/call/line): a restart mid-call cuts delta's voice for over a second
-# . Wait for delta-call's app line to be free, up to 30 min; no delta-call, no wait.
+# The phone app's calls run through atc (/api/call/line): a restart mid-call cuts the voice for over a second.
+# Wait for the call line's app line to be free, up to 30 min; no call line, no wait.
 call-idle:
 	@for i in $$(seq 360); do \
 	  curl -sf --max-time 3 127.0.0.1:8807/status | python3 -c 'import json,sys; sys.exit(json.load(sys.stdin).get("app") is not None)' && exit 0; \
@@ -40,7 +43,7 @@ sync-main:
 	else git -C $$main merge -q --ff-only origin/master && echo "sync-main: $$main at $$(git -C $$main rev-parse --short HEAD)"; fi
 
 install-opencode:
-	install -Dm644 deploy/opencode/agent/atc.md ~/.config/atc/opencode/agent/atc.md
+	test -e ~/.config/atc/opencode/agent/atc.md || install -Dm644 deploy/opencode/agent/atc.md ~/.config/atc/opencode/agent/atc.md
 	install -m644 deploy/opencode/opencode.json ~/.config/atc/opencode/opencode.json
 	test -e ~/.config/atc/opencode/config.json || ln -s ~/.config/opencode/config.json ~/.config/atc/opencode/config.json
 	install -Dm644 deploy/opencode.service ~/.config/systemd/user/opencode.service
@@ -62,7 +65,6 @@ else
 JAVA_HOME ?= $(HOME)/.local/opt/jdk17
 ANDROID_HOME ?= $(HOME)/Android/sdk
 endif
-APP_HOST ?= desktop
 APP_DIR ?= .local/share/atc/app
 
 android:
@@ -73,6 +75,7 @@ android:
 	printf '{"versionCode":%s,"versionName":"0.%s","apk":"/app/atc.apk","sha256":"%s"}\n' $$n $$n $$sum > android/dist/version.json
 
 android-publish:
+	@test -n "$(APP_HOST)" || { echo "set APP_HOST: the machine atc serves the app from"; exit 1; }
 	ssh $(APP_HOST) mkdir -p $(APP_DIR)
 	rsync -t android/dist/atc.apk $(APP_HOST):$(APP_DIR)/
 	rsync -t android/dist/version.json $(APP_HOST):$(APP_DIR)/

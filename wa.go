@@ -33,7 +33,7 @@ already; use this for what a reply can't carry:
   text...          a text message, Markdown converted to WhatsApp's own markup
                    (reads stdin when nothing else is given)
 
-The files must be on the machine atc runs on (desktop).
+The files must be on the machine atc runs on.
 `
 
 func wa(args []string) error {

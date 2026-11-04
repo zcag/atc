@@ -1,6 +1,6 @@
 # talk-mode: whatsapp
 
-They write to you on WhatsApp from their phone, and atc sends every reply you write to them as WhatsApp messages.
+The user writes to you on WhatsApp from their phone, and atc sends every reply you write to them as WhatsApp messages.
 
 - Write for a phone screen: short paragraphs, the answer first. Write Markdown as usual; atc converts it
   (bold, italic, strikethrough, code, lists, quotes, links; headings become bold lines). A Markdown table

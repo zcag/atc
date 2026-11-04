@@ -103,8 +103,9 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc wa [--file F]... [--render F.html]... [--voice TEXT] [--poll Q --option A...] [text...]
                                  send the user files, a rendered page, a voice note, a poll or text on
                                  WhatsApp, from the account atc answers them on; atc wa -h
+  atc prompts [--check|--update] every text the assistant is told, your own files applied
   atc call [--reason TEXT] [--wait] [--timeout 45s] [--whatsapp]
-                                 have delta ring the user's phone, with the assistant on the
+                                 ring the user's phone, with the assistant on the
                                  line; atc call -h
   atc hub [status|reset]         run the assistant's one conversation for atc, WhatsApp and
                                  phone calls (atc-hub.service); atc hub -h
@@ -159,6 +160,8 @@ func main() {
 		err = attachTo(args)
 	case "send":
 		err = sendTo(args)
+	case "prompts":
+		err = promptsCmd(args)
 	case "mcp":
 		err = tools.Run(context.Background(), client.Load())
 	case "show":
@@ -263,17 +266,17 @@ func serve(args []string) error {
 
 		WhatsApp: waClient(),
 		Hub:      hubClient(),
-		CallLine: callLine(),
+		CallLine: os.Getenv("ATC_DELTA_CALL"),
 
 		CallTestLine: os.Getenv("ATC_CALL_TEST_LINE"),
 		CallNumber:   os.Getenv("ATC_CALL_LINE_NUMBER"),
-		CallVoices:   cmp.Or(os.Getenv("ATC_CALL_VOICES"), "http://127.0.0.1:8806"),
+		CallVoices:   os.Getenv("ATC_CALL_VOICES"),
 		CallTestFrom: strings.FieldsFunc(os.Getenv("ATC_CALL_TEST_FROM"), func(r rune) bool { return r == ',' || r == ' ' }),
 		PublicURL:    strings.TrimRight(os.Getenv("ATC_PUBLIC_URL"), "/"),
 		LocalURL:     loopback(*addr),
 
 		AppDir:    os.Getenv("ATC_APP_DIR"),
-		AgentsDir: cmp.Or(os.Getenv("ATC_AGENTS"), "~/notes/agents"),
+		AgentsDir: cmp.Or(os.Getenv("ATC_AGENTS"), filepath.Join(client.ConfigDir(), "agents.d")),
 		StateDir:  client.ConfigDir(),
 		Res:       resources.New(filepath.Join(client.ConfigDir(), "resources"), claude.ConfigDir()),
 		AssistDir: os.Getenv("ATC_ASSIST_DIR"),
@@ -322,13 +325,6 @@ func serve(args []string) error {
 		log.Printf("run `atc token` for the login token")
 	}
 	return http.ListenAndServe(*addr, srv.Handler())
-}
-
-func callLine() string {
-	if os.Getenv("ATC_HUB") == "" {
-		return os.Getenv("ATC_DELTA_CALL")
-	}
-	return cmp.Or(os.Getenv("ATC_DELTA_CALL"), "http://127.0.0.1:8807")
 }
 
 func hubClient() *hub.Client {

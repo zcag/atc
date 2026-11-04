@@ -13,12 +13,12 @@ import (
 const guestHelp = `atc guest: the people besides the user who may write to atc's WhatsApp.
 
   atc guest                    list them
-  atc guest add NAME NUMBER    let NAME write in (NUMBER in full, 905321234567)
+  atc guest add NAME NUMBER    let NAME write in (NUMBER in full, with country code)
   atc guest rm NAME            stop listening to NAME
 
 A guest's message reaches the assistant on its guest channel, which answers with
 atc wa --to NAME. Add someone only when the user asks for it in their own words.
-The list lives on the machine atc's WhatsApp runs on (desktop), in ~/.config/atc/guests.
+The list lives on the machine atc's WhatsApp runs on, in ~/.config/atc/guests.
 `
 
 func waClient() *whatsapp.Client {

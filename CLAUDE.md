@@ -20,6 +20,17 @@ phone too. A web change is not done until it works there:
   device for testing (`adb -s 127.0.0.1:5555`, arm64 libs through translation, the real GPU);
   `redroid install|start|shot|log`. desktop has no KVM, so no emulator. Web-only changes reach the app on `make install`: an open page notices the new build (`web` in `/api/me`) and reloads when you come back to it, or offers Reload.
 
+## The assistant's words
+
+`modes/` holds the built-in, generic text. Nothing personal goes in this repo: a user's name, numbers, tools or
+language belong in their own files in `~/.config/atc/modes/`, which replace the built-in ones (`lines.json` key by
+key). On desktop and laptop that folder links to the notes (`agents/assistant/modes/`), so **to change how the
+assistant actually talks to the user, edit the file there**, not `modes/`.
+
+`atc prompts` prints what the assistant is told with those files applied, and `make check` fails when that differs
+from `prompts.golden` beside them: read the diff, then accept it with `atc prompts --update`. A new built-in file with
+no override of their shows up in that diff, so write their version too if the generic one isn't what they want.
+
 ## Shipping
 
 Own it end to end: merge to master, push, `make install` on desktop (restarting is safe:

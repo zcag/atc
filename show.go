@@ -61,7 +61,7 @@ a hidden column or truncated field is not.
 Give every section of an HTML page an id (<section id="towel">), so it can be linked
 to: a page's address is name#id. --at uses it, atc notify --page picks#towel opens the
 page there, and a link from another page or a message is the Link atc show prints,
-/#/p/<session title or @agent>/<name>#<id> (https://atc.example/#/p/@shopping/picks#towel);
+/#/p/<session title or @agent>/<name>#<id> (/#/p/@shopping/picks#towel);
 inside the page itself it is plain href="#towel". A section the page draws later
 from atc.state is found once it appears, when the page loads /atc.js.
 

@@ -1,0 +1,10 @@
+{
+  "call.you_called": "[phone · %s · you called the user, %s",
+  "call.answered": "they picked up",
+  "call.ringing": "it is ringing, this is the first thing they hear when they pick up",
+  "call.no_answer": "[phone · %s · you called the user, no answer",
+  "call.not_picked_up": "[phone · %s · the user did not pick up (%s)",
+  "call.reason": " · reason: ",
+  "hub.handover": "[hub: this conversation is closing and a new one starts] So the new one can carry on, write a handover note: work in progress and who has it, promises made, open questions, preferences the user stated in this conversation, the last topic. Short and plain, nothing else.",
+  "hub.new_session": "[hub: new conversation; the previous one (%s) left this handover note]\n\n%s"
+}

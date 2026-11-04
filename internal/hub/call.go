@@ -10,9 +10,11 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/zcag/atc/modes"
 )
 
-// CallConfig is delta-call (the phone line the hub's session talks on) and the one number it dials.
+// CallConfig is the call line the hub's session talks on and the one number it dials.
 type CallConfig struct {
 	URL     string
 	Number  string
@@ -39,13 +41,13 @@ type call struct {
 // envelope is what the session reads before the phone's first message: once they pick up, or while
 // it still rings, when delta-talk writes the opening ahead so it plays the moment they answer.
 func (c *call) envelope(now time.Time) string {
-	state := "açtı"
+	state := modes.Line("call.answered")
 	if !c.answered {
-		state = "telefon çalıyor, açınca ilk bunu duyacak"
+		state = modes.Line("call.ringing")
 	}
-	s := fmt.Sprintf("[telefon · %s · kullanıcıyı sen aradın, %s", now.Format("15:04"), state)
+	s := fmt.Sprintf(modes.Line("call.you_called"), now.Format("15:04"), state)
 	if c.reason != "" {
-		s += " · sebep: " + c.reason
+		s += modes.Line("call.reason") + c.reason
 	}
 	s += "]"
 	if c.from != "" {
@@ -203,9 +205,9 @@ func (h *Hub) Call(ctx context.Context, r CallReq) (string, error) {
 	clear()
 	log.Printf("hub: call not answered")
 	if pc.notify != "" {
-		text := fmt.Sprintf("[telefon · %s · kullanıcıyı aradın, açmadı", h.cfg.Now().Format("15:04"))
+		text := fmt.Sprintf(modes.Line("call.no_answer"), h.cfg.Now().Format("15:04"))
 		if pc.reason != "" {
-			text += " · sebep: " + pc.reason
+			text += modes.Line("call.reason") + pc.reason
 		}
 		h.Say(pc.notify, text+"]")
 	}

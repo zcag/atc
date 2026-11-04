@@ -45,7 +45,7 @@ func (g *Guests) Add(name, num string) error {
 		return fmt.Errorf("a guest's name is lowercase letters, digits, - or _: %q", name)
 	}
 	if !guestNum.MatchString(num) {
-		return fmt.Errorf("a number is the full international number, digits only (905321234567): %q", num)
+		return fmt.Errorf("a number is the full international number, digits only, with country code: %q", num)
 	}
 	return g.edit(func(m map[string]string) error {
 		for n, x := range m {

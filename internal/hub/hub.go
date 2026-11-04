@@ -31,6 +31,8 @@ import (
 
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/startover"
+
+	"github.com/zcag/atc/modes"
 )
 
 const (
@@ -39,7 +41,7 @@ const (
 	// Guest is someone other than the user writing in (a WhatsApp guest); like an agent's report,
 	// the reply reaches no one.
 	Guest = "guest"
-	// GuestCall is a guest calling delta's line: spoken like the phone, but not the user.
+	// GuestCall is a guest calling the assistant's line: spoken like the phone, but not the user.
 	GuestCall = "guest-call"
 	reset     = "reset"
 )
@@ -253,7 +255,7 @@ func newID() string {
 
 // Left is a channel's connection going away. A phone connection lives exactly as long as a call, so the next
 // call's first message must carry the phone mode again even though the last message was also the phone's
-// (the previous call's "görüşme bitti").
+// (the previous call's end note).
 func (h *Hub) Left(channel string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -328,9 +330,9 @@ func (h *Hub) asideNote(ch string) string {
 	if h.cfg.GuestDesk {
 		return note + "[message]\n"
 	}
-	where := "the user is not on a call"
+	where := "The user is not on a call"
 	if h.onCall() {
-		where = "the user is on a call with you right now"
+		where = "The user is on a call with you right now"
 		h.unsaid = true
 	}
 	if h.home != "" {
@@ -339,7 +341,7 @@ func (h *Hub) asideNote(ch string) string {
 	return note + "[now: " + where + "]\n[message]\n"
 }
 
-// onCall is whether the user is on a call: delta's talk.py holds its phone channel (it connects
+// onCall is whether the user is on a call: the talker holds its phone channel (it connects
 // before a call rings and keeps it between calls, and a guest's call is guest-call instead) and
 // the line says a call is on.
 func (h *Hub) onCall() bool {
@@ -712,9 +714,7 @@ func (h *Hub) Reset(why string) error {
 func (h *Hub) reset(why string) error {
 	log.Printf("hub: reset (%s), context %d", why, h.context)
 	h.handover = &strings.Builder{}
-	_, err := h.say(reset, "[hub: bu oturum kapanıp yenisi başlayacak] Yeni oturumun bu konuşmayı sürdürebilmesi için bir devir "+
-		"notu yaz: süren işler ve kimde oldukları, verilmiş sözler, bekleyen sorular, kullanıcının bu konuşmada "+
-		"söylediği tercihler, son konuşulan konu. Kısa ve düz yaz, başka bir şey yapma.")
+	_, err := h.say(reset, modes.Line("hub.handover"))
 	if err != nil {
 		h.handover = nil
 	}
@@ -728,7 +728,7 @@ func (h *Hub) freshStart() {
 	dir := filepath.Join(h.cfg.State, "handovers")
 	os.MkdirAll(dir, 0o755)
 	os.WriteFile(filepath.Join(dir, h.cfg.Now().Format("20060102-150405")+"-"+old[:min(8, len(old))]+".md"), []byte(note+"\n"), 0o644)
-	h.seed = fmt.Sprintf("[hub: yeni oturum; önceki oturum (%s) şu devir notunu bıraktı]\n\n%s", old, note)
+	h.seed = fmt.Sprintf(modes.Line("hub.new_session"), old, note)
 	h.saveSID("")
 	h.last, h.context = "", 0
 	h.emit(Event{Type: "reset", Text: old})

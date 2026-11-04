@@ -21,7 +21,7 @@ import (
 )
 
 const instructions = `atc is how the user runs Claude Code sessions on their machines: these tools list, start, read and message them. ` +
-	`Use them whenever the user asks to start, open, spin up or hand work to a session or agent ("start a session on laptop in ~/proj/x", ` +
+	`Use them whenever the user asks to start, open, spin up or hand work to a session or agent ("start a session on the laptop in ~/code/app", ` +
 	`"have another agent look at this"), or talks about another session, project or task by name, even without naming atc. ` +
 	`"status" says in one line each what waits on the user, what is running and what just finished, "sessions" shows the same in full, "read" before you summarize or answer about a session, ` +
 	`"start" for new work in a folder on a machine, "send" to pass something on, "wait" for its answer, "outputs" for what it produced ` +

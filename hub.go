@@ -35,9 +35,9 @@ the guest and guest-call channels go there, and its API is under /guests/.
   -cap-quiet 10m -cap 150000  quiet this long and past this many: start over
 Starting over has the session write a handover note that opens the next one.
 
-Calls go through delta-call at $ATC_DELTA_CALL (http://127.0.0.1:8807) and only ever to
+Calls go through the call line at $ATC_DELTA_CALL and only ever to
 $ATC_CALL_NUMBER (default: the first number in $ATC_WHATSAPP_OWNER).
-Mode files (how to talk on each channel) override from ~/.config/atc/modes/<channel>.md.
+Its words (prompts, how to talk on each channel) override from ~/.config/atc/modes/; atc prompts prints them.
 `
 
 func hubCmd(args []string) error {
@@ -91,7 +91,7 @@ func hubCmd(args []string) error {
 	cargs := append([]string{"--model", *model, "--effort", *effort}, server.HubArgs()...)
 	cargs = append(cargs, strings.Fields(os.Getenv("ATC_HUB_CLAUDE_ARGS"))...)
 	policy := startover.Policy{Quiet: *quiet, Small: *small, CapQuiet: *capQuiet, Cap: *cap}
-	line := cmp.Or(os.Getenv("ATC_DELTA_CALL"), "http://127.0.0.1:8807")
+	line := os.Getenv("ATC_DELTA_CALL")
 	gdir := filepath.Join(home, "guests")
 	os.MkdirAll(gdir, 0o755)
 	gargs := append([]string{"--model", *model, "--effort", *effort}, server.GuestsArgs()...)
@@ -153,7 +153,7 @@ const callHelp = `atc call: ring the user, with the assistant on the line.
   atc call [--reason TEXT] [--wait] [--timeout 45s] [--app | --phone | --whatsapp]
 
 It rings the atc app on their phone (a call over atc, like a WhatsApp call); when the app
-does not ring within a few seconds (no data, phone off), delta (the agents' phone line)
+does not ring within a few seconds (no data, phone off), the phone line, when there is one,
 calls their own number instead, never another. When they pick up, the assistant (atc's hub
 session) speaks first and knows the reason; from another session, it also knows who asked
 and passes their answer back to you with send.
@@ -162,12 +162,12 @@ and passes their answer back to you with send.
   --wait          wait for the outcome and print it: answered, no-answer or busy
   --timeout D     how long it rings (default 45s)
   --app           only the atc app, no fallback to the phone line
-  --phone         only delta's phone line
-  --whatsapp      a WhatsApp voice call from delta's bot account instead;
+  --phone         only the phone line
+  --whatsapp      a WhatsApp voice call from the assistant's account instead;
                   only when the user asks for a WhatsApp call
 
 Without --wait it returns at once; a call nobody picks up comes back to your session as
-a "[telefon ... açmadı]" message.
+a message saying so.
 `
 
 func callCmd(args []string) error {

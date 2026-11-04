@@ -78,7 +78,7 @@ func fakeClaude() {
 			continue
 		}
 		replay(text)
-		if strings.Contains(text, "[hub: bu oturum") {
+		if strings.Contains(text, "[hub: this conversation is closing") {
 			textBlock("HANDOVER NOTE")
 		} else if strings.Contains(text, "TOOL") {
 			textBlock("looking")
@@ -554,7 +554,7 @@ func TestCallAnswered(t *testing.T) {
 	phone.until("done")
 	mu.Lock()
 	defer mu.Unlock()
-	if !strings.Contains(written, "[message]\\n[telefon · "+time.Now().Format("15:04")+" · kullanıcıyı sen aradın, açtı · sebep: deploy bitti]\\n[from session \\\"x\\\"]\\n[the user") {
+	if !strings.Contains(written, "[message]\\n[phone · "+time.Now().Format("15:04")+" · you called the user, they picked up · reason: deploy bitti]\\n[from session \\\"x\\\"]\\n[the user") {
 		t.Fatalf("phone message: %s", written)
 	}
 	if r.h.Status().Call != "" {
@@ -588,7 +588,7 @@ func TestCallOpeningWrittenWhileRinging(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if !strings.Contains(written, "kullanıcıyı sen aradın, telefon çalıyor, açınca ilk bunu duyacak · sebep: deploy bitti]\\n[açılış]") {
+	if !strings.Contains(written, "you called the user, it is ringing, this is the first thing they hear when they pick up · reason: deploy bitti]\\n[açılış]") {
 		t.Fatalf("phone message: %s", written)
 	}
 	if r.h.Status().Call != "" {
@@ -606,7 +606,7 @@ func TestCallNotAnsweredTellsTheChannel(t *testing.T) {
 	if err != nil || out != NoAnswer {
 		t.Fatalf("%s %v", out, err)
 	}
-	if got := said(wa.until("done")); !strings.Contains(got, "açmadı · sebep: soru]") {
+	if got := said(wa.until("done")); !strings.Contains(got, "no answer · reason: soru]") {
 		t.Fatalf("whatsapp got %q", got)
 	}
 }
