@@ -80,18 +80,18 @@ func All() []Cap {
 			ID: "calls", Title: "Calls with the assistant", Group: Calls, Optional: true, Why: "Talk to the assistant by voice, from this page or the phone app.",
 			Needs: []string{"hub", "call-line", "talker", "voices"},
 			Fix:   Fix{Text: "Set up what it still needs, in the rows below.", Guide: "calls"},
-			Cost:  "A GPU for speech, or a CPU with slower replies, and plan tokens for the assistant.",
+			Cost:  "2 CPU cores or more, about 2 GB of disk, and plan tokens for the assistant; a GPU gives a better voice.",
 		},
 		{
 			ID: "call-line", Title: "Call line", Group: Calls, Optional: true, Why: "The service that carries a call's audio between your device and the talker.",
 			Fields: []Field{{Key: "ATC_CALL_LINE", Label: "Call line address", Hint: "http://127.0.0.1:8807", URL: true, Hub: true}},
 			Check:  checkCallLine,
-			Fix:    Fix{Text: "Run the call line service, then enter its address here.", Guide: "calls"},
+			Fix:    Fix{Command: "atc voice install", Text: "Sets up the whole call stack on this machine, or run the call line yourself and enter its address here.", Guide: "calls"},
 		},
 		{
 			ID: "talker", Title: "Talker", Group: Calls, Optional: true, Why: "Holds the call: hears you, knows when you are done, and speaks the assistant's words.",
 			Needs: []string{"call-line"}, Check: checkTalker,
-			Fix:  Fix{Text: "Run a talker (talk.py) and connect it to the call line.", Guide: "calls"},
+			Fix:  Fix{Command: "atc voice install", Text: "Installs the talker with the call line.", Guide: "calls"},
 			Cost: "A GPU, or a CPU with slower replies, for speech in and out.",
 		},
 		{

@@ -89,8 +89,8 @@ Each layer needs the one before it. Only the first is needed to use atc.
 2. **Assistant.** One text conversation with tools to see and drive your other sessions, reachable
    from every screen. See [The assistant](docs/assistant.md). On by default, through a small second
    service.
-3. **Calls.** Talk to the assistant by voice, from the browser or the app. An add-on with its own
-   services and a real cost: a GPU, or a CPU with slower replies. See [Calls](docs/calls.md).
+3. **Calls.** Talk to the assistant by voice, from the browser or the app. An add-on: `atc voice install`
+   adds its services, about 2 GB on disk, and runs on 2 CPU cores. See [Calls](docs/calls.md).
 4. **Outside lines.** WhatsApp, a SIM line and guests. Advanced, needs accounts and numbers of its
    own, and comes with no promises. See [WhatsApp](docs/whatsapp.md).
 

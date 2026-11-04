@@ -228,12 +228,12 @@ func voiceInstall(args []string) error {
 	}
 	line := "http://127.0.0.1:" + voicePort(env)
 	atcEnv := filepath.Join(client.ConfigDir(), "env")
-	if readEnvFile(atcEnv)["ATC_DELTA_CALL"] == "" {
-		if _, err := setEnvFile(atcEnv, map[string]string{"ATC_DELTA_CALL": line}); err != nil {
+	if readEnvFile(atcEnv)["ATC_CALL_LINE"] == "" {
+		if _, err := setEnvFile(atcEnv, map[string]string{"ATC_CALL_LINE": line}); err != nil {
 			return err
 		}
 		exec.Command("systemctl", "--user", "try-restart", "atc", "atc-hub").Run()
-		fmt.Println("Set ATC_DELTA_CALL in", atcEnv)
+		fmt.Println("Set ATC_CALL_LINE in", atcEnv)
 	}
 	fmt.Println("Installed. Call the assistant from the atc app. atc voice status shows how it stands.")
 	return nil
@@ -329,9 +329,9 @@ func voiceUninstall(args []string) error {
 		os.Remove(d)
 	}
 	atcEnv := filepath.Join(client.ConfigDir(), "env")
-	if readEnvFile(atcEnv)["ATC_DELTA_CALL"] == "http://127.0.0.1:"+voicePort(env) {
+	if readEnvFile(atcEnv)["ATC_CALL_LINE"] == "http://127.0.0.1:"+voicePort(env) {
 		if b, err := os.ReadFile(atcEnv); err == nil {
-			kept := slices.DeleteFunc(strings.Split(string(b), "\n"), func(l string) bool { return strings.HasPrefix(l, "ATC_DELTA_CALL=") })
+			kept := slices.DeleteFunc(strings.Split(string(b), "\n"), func(l string) bool { return strings.HasPrefix(l, "ATC_CALL_LINE=") })
 			os.WriteFile(atcEnv, []byte(strings.Join(kept, "\n")), 0o644)
 		}
 	}

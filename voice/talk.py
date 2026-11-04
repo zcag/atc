@@ -47,7 +47,7 @@ LOADED = {}
 
 def session(path, threads):
     """onnxruntime's default gives every core a thread, pins each to its core (past taskset) and spins them between runs:
-    Silero's two states every 32 ms held 3.00 cores busy that way and 0.03 on one thread (desktop, 2026-11-05)."""
+    Silero's two states every 32 ms held 3.00 cores busy that way and 0.03 on one thread (a 6-core desktop CPU, measured)."""
     o = onnxruntime.SessionOptions()
     o.intra_op_num_threads, o.inter_op_num_threads = threads, 1
     o.add_session_config_entry("session.intra_op.allow_spinning", "0")

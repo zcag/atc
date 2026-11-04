@@ -1,5 +1,9 @@
 # Calls
 
+Calls are an add-on: `atc voice install [--lang en] [--also tr] [--engine pocket-en]` sets up the call stack (`voice/`, its README lists the settings) on this machine: Linux with systemd for now, CPU only by default, about 2 GB on disk. `atc voice status` and `atc voice uninstall [--purge]` do what they say. No phone is needed: the atc app and the browser call it over atc.
+
+On CPU a call works on 2 cores (first audio about 2.5 to 3.2 s after you stop, most of it Claude's first token; the voice breaks up on 1 core). Streaming speech recognition is the weakest part: it reads some words wrong, which the assistant then has to guess at.
+
 atc has no voice mode in a session: to talk, call the assistant. **Call about this** in a session's
 menu or the palette tells it which session you mean.
 

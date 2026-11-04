@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds callbridge.dex. Needs only a JDK plus android.jar (platform 35) and d8.jar (build-tools 35),
-# copied from laptop's SDK into ~/.local/share/android-sdk-min on desktop. The stub is compile-only.
+# copied from an Android SDK into ~/.local/share/android-sdk-min. The stub is compile-only.
 set -euo pipefail
 cd "$(dirname "$0")"
 SDK=${ANDROID_SDK_MIN:-$HOME/.local/share/android-sdk-min}

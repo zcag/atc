@@ -15,7 +15,7 @@ def load(*path):
 
 
 SNAP = json.loads(load("test", "tr_snapshot.json"))
-NAMES = {"assistant": "delta", "user": "the user"}
+NAMES = {"assistant": "Max", "user": "Ada"}
 RENAMED = {"AYLAR": "MONTHS", "GUNLER": "DAYS"}
 SPLIT = "ACKS_en", "STT_en"
 
@@ -44,10 +44,10 @@ class Tr(unittest.TestCase):
 
     def test_lines_as_spoken(self):
         p = Pack("tr", **NAMES)
-        self.assertEqual(p.GREETING, "Alo, merhaba, ben delta.")
-        self.assertEqual(p.OUTBOUND, "[kullanıcıyı arıyorsun, telefon çalıyor. Açıp «Alo» deyince ilk bu cevabını duyacak: kısaca selam ver, ben delta de ve neden aradığını söyle.]")
+        self.assertEqual(p.GREETING, "Alo, merhaba, ben Max.")
+        self.assertEqual(p.OUTBOUND, "[Ada'ı arıyorsun, telefon çalıyor. Açıp «Alo» deyince ilk bu cevabını duyacak: kısaca selam ver, ben Max de ve neden aradığını söyle.]")
         self.assertEqual(fill(p.OUTBOUND_GUEST, guest="sam", reason="x"),
-                         "[sam'yı kullanıcının isteğiyle sen arıyorsun, telefon çalıyor; sebep: x. Açıp «Alo» deyince ilk bu cevabını duyacak: selam ver, delta olduğunu ve neden aradığını kısaca söyle.]")
+                         "[sam'yı Ada'ın isteğiyle sen arıyorsun, telefon çalıyor; sebep: x. Açıp «Alo» deyince ilk bu cevabını duyacak: selam ver, Max olduğunu ve neden aradığını kısaca söyle.]")
         self.assertEqual(fill(p.CUT_OFF, heard="a", text="b"), "(sözünü kestim; cevabından sadece şunu duydum: «a») b")
 
     def test_kapat_and_hangup_both_end_the_call(self):
