@@ -4,6 +4,8 @@ import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import android.content.pm.PackageInfo
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
@@ -46,16 +48,36 @@ class Updater(private val a: MainActivity) {
         .show()
 
     private fun download(server: String, r: Release) {
+        val path = r.localApk ?: return refuse("The server names an update outside itself (${r.apk}).")
         toast("Downloading update")
         thread {
             val apk = File(a.cacheDir, "update/atc.apk")
             val result = runCatching {
                 apk.parentFile!!.mkdirs()
-                Net.download(a, if (r.apk.startsWith("http")) r.apk else server + r.apk, apk)
+                Net.download(a, server + path, apk)
                 if (sha256(apk.readBytes()) != r.sha256) error("The download is damaged (checksum mismatch).")
+                problem(apk)
             }
-            a.runOnUiThread { result.fold({ install(apk) }, { fallback(it.message) }) }
+            a.runOnUiThread {
+                result.fold({ if (it == null) install(apk) else { apk.delete(); refuse(it) } }, { fallback(it.message) })
+            }
         }
+    }
+
+    private fun problem(apk: File): String? {
+        val pm = a.packageManager
+        val got = pm.getPackageArchiveInfo(apk.path, PackageManager.GET_SIGNING_CERTIFICATES)
+        return apkProblem(a.packageName, signers(pm.getPackageInfo(a.packageName, PackageManager.GET_SIGNING_CERTIFICATES)), got?.packageName, signers(got))
+    }
+
+    private fun signers(p: PackageInfo?) = p?.signingInfo?.apkContentsSigners.orEmpty().map { sha256(it.toByteArray()) }.toSet()
+
+    private fun refuse(why: String) {
+        AlertDialog.Builder(a)
+            .setTitle("Update refused")
+            .setMessage("$why\n\natc did not install it. The server may be misconfigured or compromised: check it before updating.")
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun install(apk: File) {

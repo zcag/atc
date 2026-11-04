@@ -20,6 +20,24 @@ class CoreTest {
         assertEquals("BA:78:16", pretty("ba7816"))
     }
 
+    @Test fun updateApkStaysOnTheServer() {
+        fun release(apk: String) = Release(2, "2", apk, "00")
+        assertEquals("/app/atc.apk", release("/app/atc.apk").localApk)
+        for (bad in listOf("https://evil.example/x.apk", "http://evil.example/x.apk", "//evil.example/x.apk", "/\\\\evil.example/x.apk", "x.apk", "@evil.example/x.apk", ""))
+            assertNull(bad, release(bad).localApk)
+    }
+
+    @Test fun updateMustBeThisAppFromThisSigner() {
+        val mine = setOf("aa")
+        assertNull(apkProblem("io.a", mine, "io.a", mine))
+        assertTrue(apkProblem("io.a", mine, "io.b", mine)!!.contains("different app"))
+        assertTrue(apkProblem("io.a", mine, null, emptySet())!!.contains("unreadable"))
+        assertTrue(apkProblem("io.a", mine, "io.a", setOf("bb"))!!.contains("signed"))
+        assertTrue(apkProblem("io.a", mine, "io.a", setOf("aa", "bb"))!!.contains("signed"))
+        assertTrue(apkProblem("io.a", mine, "io.a", emptySet())!!.contains("signed"))
+        assertTrue(apkProblem("io.a", emptySet(), "io.a", emptySet())!!.contains("signed"))
+    }
+
     @Test fun serverUrls() {
         assertEquals("https://atc.example", serverUrl(" https://atc.example/ "))
         assertEquals("http://box:7272/atc", serverUrl("http://box:7272/atc"))

@@ -15,6 +15,7 @@ fun serverUrl(input: String): String? =
 
 class Release(val versionCode: Int, val versionName: String, val apk: String, val sha256: String) {
     fun newerThan(own: Int) = versionCode > own
+    val localApk get() = apk.takeIf(Pairing::isLocalPath)
 
     companion object {
         fun parse(json: String) = JSONObject(json).run {
@@ -22,6 +23,13 @@ class Release(val versionCode: Int, val versionName: String, val apk: String, va
             Release(code, optString("versionName", "$code"), optString("apk", "/app/atc.apk"), getString("sha256").lowercase())
         }
     }
+}
+
+/** Why an update must not be offered for install, or null when it is this app from the same signer. */
+fun apkProblem(ownPackage: String, ownSigners: Set<String>, apkPackage: String?, apkSigners: Set<String>) = when {
+    apkPackage != ownPackage -> "It is a different app (${apkPackage ?: "unreadable"}), not $ownPackage."
+    apkSigners.isEmpty() || apkSigners != ownSigners -> "It is not signed by the key this app was installed with."
+    else -> null
 }
 
 class Ring(val reason: String, val at: Long) {
