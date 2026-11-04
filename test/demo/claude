@@ -1,0 +1,12 @@
+#!/bin/sh
+case "$1" in
+--version) echo "2.1.150 (Claude Code)" ;;
+agents) cat "$HOME/.claude/demo-agents.json" ;;
+auth) echo '{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"max"}' ;;
+-p) echo '{"is_error":false,"result":"{\"status\":\"Finished.\"}"}' ;;
+--bg) echo "backgrounded · abcd1234 · demo" ;;
+attach)
+	printf 'Claude Code (demo): this session is fake and has no terminal.\r\n'
+	cat >/dev/null
+	;;
+esac
