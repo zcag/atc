@@ -5104,7 +5104,7 @@ const txPrefs = {
     dispatchEvent(new CustomEvent("atc-txprefs", { detail: v }));
   },
 };
-const TX_MEASURES = [600, 650, 740];
+const TX_MEASURES = [560, 620, 680];
 
 function bodyOf(msgs) {
   const items = [];
@@ -6321,6 +6321,7 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
       const latest = [...el.querySelectorAll("[data-you], [data-said]")].pop();
       hold.current = el.querySelector("#since") ? "#since" : latest ? `#${CSS.escape(latest.id)}` : null;
       settle();
+      if (el.scrollHeight <= el.clientHeight) atEnd.current = true;
       document.fonts.ready.then(() => requestAnimationFrame(settle));
       if (atEnd.current) markLooked(s);
       if (!touch && document.activeElement === document.body) el.focus({ preventScroll: true });

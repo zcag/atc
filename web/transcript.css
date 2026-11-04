@@ -59,8 +59,8 @@
 .tx .fold:hover .fq { color: var(--ink); }
 .tx .fold .lead-at { display: block; margin-bottom: 2px; }
 .tx .fold .fq { display: block; font-variation-settings: var(--v-you); font-size: var(--fs-body); font-weight: 500; color: var(--dim); line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tx .fold .g { font-size: var(--fs-small); color: var(--faint); line-height: 1.45; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.tx .fold .g b { font-weight: 500; color: var(--dim); }
+.tx .fold .g { font-size: var(--fs-small); color: var(--dim); line-height: 1.45; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tx .fold .g b { font-weight: 400; color: var(--faint); }
 .tx .fold.ntc .fy { padding: 0; background: none; }
 .tx .fold.ntc .fq { font-variation-settings: normal; font-weight: 400; font-family: var(--mono); font-size: var(--fs-small); }
 .tx .evt { margin: 0 0 var(--s5); padding: 6px 0 6px var(--s3); box-shadow: inset 2px 0 0 var(--line-strong); font-size: var(--fs-ui); line-height: 1.45; color: var(--dim); overflow-wrap: anywhere; }
@@ -107,7 +107,7 @@
 .tx-wrap .prose.small { font-size: var(--fs-body); line-height: 1.55; }
 
 /* what it says on the way is quieter than what it answers */
-.tx [data-said]:not([data-stop]) .prose { font-family: var(--text); font-size: var(--fs-body); line-height: 1.5; color: var(--dim); }
+.tx [data-said]:not([data-stop]) .prose { font-family: var(--text); font-size: var(--fs-2xl); line-height: 1.5; color: color-mix(in srgb, var(--ink) 82%, var(--strip)); max-width: 40em; }
 .tx [data-said]:not([data-stop]) .prose strong { color: inherit; }
 .tx [data-said]:not([data-stop]) .prose > :last-child { margin-bottom: var(--s2); }
 .tx [data-said][data-stop] { margin-top: var(--s3); }
