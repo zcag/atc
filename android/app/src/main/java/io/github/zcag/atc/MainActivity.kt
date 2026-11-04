@@ -41,6 +41,8 @@ import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -408,7 +410,7 @@ class MainActivity : Activity() {
             setAcceptCookie(true)
             setAcceptThirdPartyCookies(w, true)
         }
-        w.addJavascriptInterface(bridge, "AtcApp")
+        openBridge(w)
         w.webViewClient = object : WebViewClient() {
             override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) = sslError(handler, error)
 
@@ -438,6 +440,16 @@ class MainActivity : Activity() {
         }
         show(w)
         w.loadUrl(url)
+    }
+
+    private fun openBridge(w: WebView) {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT))
+            return run { android.util.Log.w("atc", "this WebView cannot limit the bridge to atc's own frames, so the page gets none") }
+        val origins = bridgeOrigins(prefs.server ?: return)
+        val gate = Gate(bridge)
+        runCatching { WebViewCompat.addDocumentStartJavaScript(w, gate.startScript(origins), origins) }
+            .onSuccess { w.addJavascriptInterface(gate, Gate.NAME) }
+            .onFailure { android.util.Log.w("atc", "no bridge for $origins", it) }
     }
 
     private fun unreachable(url: String, why: String) {

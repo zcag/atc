@@ -62,6 +62,7 @@ dependencies {
     implementation("org.unifiedpush.android:connector:3.3.5")
     implementation("androidx.core:core:1.15.0")
     implementation("androidx.core:core-remoteviews:1.1.0")
+    implementation("androidx.webkit:webkit:1.12.1")
     implementation("androidx.car.app:app:1.7.0")
     implementation("com.google.android.filament:filament-android:1.75.1")
     implementation("com.google.android.filament:gltfio-android:1.75.1")
