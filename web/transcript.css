@@ -35,9 +35,9 @@
 /* the steps behind a reply, folded to a line */
 .tx .inl-steps { display: flex; align-items: center; gap: var(--s2); min-height: 28px; margin: 0 0 var(--s2); font-size: var(--fs-small); color: var(--faint); width: 100%; }
 .tx .inl-steps:hover { color: var(--dim); }
-.tx .inl-steps .h { flex: none; }
+.tx .inl-steps .h { flex: none; font-family: var(--mono); }
 .tx .inl-steps b { color: var(--fail); font-weight: 500; flex: none; }
-.tx .inl-steps .v { font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tx .inl-steps .v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .tx .inl-steps time { margin-left: auto; padding-left: var(--s2); flex: none; font-family: var(--mono); }
 .tx-wrap .chev { flex: none; width: 6px; height: 6px; border-right: 1.5px solid var(--faint); border-bottom: 1.5px solid var(--faint); transform: rotate(-45deg); margin: 0 3px; }
 .tx-wrap [aria-expanded="true"] > .chev { transform: rotate(45deg); }
@@ -72,24 +72,30 @@
 .tx .skel.big { margin-top: var(--s5); }
 
 /* the agent's prose */
-.tx-wrap .prose { font-family: var(--rf); font-size: var(--rs); line-height: var(--rl); color: var(--ink); max-width: var(--rw); overflow-wrap: break-word; font-optical-sizing: auto; }
+.tx-wrap .prose { font-family: var(--rf); font-size: var(--rs); line-height: var(--rl); color: color-mix(in srgb, var(--ink) 88%, var(--strip)); max-width: var(--rw); overflow-wrap: break-word; font-optical-sizing: auto; }
 .tx-wrap .prose > :first-child { margin-top: 0; }
-.tx-wrap .prose p { margin: 0 0 0.95em; text-wrap: pretty; hanging-punctuation: first; }
-.tx-wrap .prose strong { font-weight: 620; }
+.tx-wrap .prose p { margin: 0 0 0.9em; text-wrap: pretty; hanging-punctuation: first; }
+.tx-wrap .prose strong { font-weight: 600; color: var(--ink); }
 .tx-wrap .prose a { color: var(--ink); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 .tx-wrap .prose a:hover { text-decoration-color: var(--ink); }
-.tx-wrap .prose code { font-family: var(--mono); font-size: 0.8em; background: var(--code); padding: 0.1em 0.3em; border-radius: 2px; }
+.tx-wrap .prose code { font-family: var(--mono); font-size: 0.82em; }
+.tx-wrap .prose .cite { font-size: 0.82em; color: var(--faint); }
+.tx-wrap .prose .cite code { font-size: 1em; }
 .tx-wrap .prose code.nowrap { white-space: nowrap; }
 .tx-wrap .prose pre { position: relative; font-family: var(--mono); font-size: var(--fs-ui); line-height: 1.6; background: var(--code); padding: var(--s3) var(--s4); margin: 0 0 1.1em; white-space: pre-wrap; overflow-wrap: anywhere; box-shadow: inset 2px 0 0 var(--line); }
-.tx-wrap .prose pre code { background: none; padding: 0; font-size: inherit; }
-.tx-wrap .prose :is(h1, h2, h3, h4) { font-family: var(--sans); font-size: var(--fs-title); font-weight: 680; line-height: 1.3; margin: 1.6em 0 0.5em; scroll-margin-top: var(--s4); }
+.tx-wrap .prose pre code { font-size: inherit; }
+.tx-wrap .prose :is(h1, h2, h3, h4) { font-family: var(--sans); font-size: 1em; font-weight: 650; line-height: 1.3; color: var(--ink); margin: 1.5em 0 0.45em; scroll-margin-top: var(--s4); }
+.tx-wrap .prose :is(h1, h2) { font-size: 1.2em; margin-top: 1.7em; padding-top: 0.7em; border-top: 1px solid var(--line); }
+.tx-wrap .prose > :is(h1, h2):first-child { padding-top: 0; border-top: 0; }
 .tx-wrap .prose ol { list-style: none; margin: 0 0 1em; padding: 0; counter-reset: n; }
-.tx-wrap .prose ol > li { counter-increment: n; position: relative; padding-left: 1.6em; margin-bottom: 0.45em; }
+.tx-wrap .prose ol > li { counter-increment: n; position: relative; padding-left: 1.6em; margin-bottom: 0.55em; }
 .tx-wrap .prose ol > li::before { content: counter(n) "."; position: absolute; left: 0; color: var(--dim); font-variant-numeric: tabular-nums; }
 .tx-wrap .prose ul { margin: 0 0 1em; padding-left: 1.2em; }
-.tx-wrap .prose ul > li { margin-bottom: 0.45em; }
+.tx-wrap .prose ul > li { margin-bottom: 0.55em; }
+.tx-wrap .prose ul ul { list-style-type: disc; }
 .tx-wrap .prose ul > li::marker { color: var(--faint); }
-.tx-wrap .prose li > :is(p, ul, ol) { margin: 0.3em 0; }
+.tx-wrap .prose li > :is(p, ul, ol) { margin: 0.35em 0; }
+.tx-wrap .prose li li { margin-bottom: 0.35em; }
 .tx-wrap .prose blockquote { margin: 0 0 1em; padding-left: 1em; box-shadow: inset 2px 0 0 var(--line); color: var(--dim); }
 .tx-wrap .prose hr { border: 0; border-top: 1px solid var(--hair); margin: 1.6em 0; }
 .tx-wrap .prose .tbl { overflow-x: auto; margin: 0.4em 0 1.2em; }
@@ -98,13 +104,19 @@
 .tx-wrap .prose td { padding: 7px var(--s3) 7px 0; border-bottom: 1px solid var(--hair); vertical-align: top; }
 .tx-wrap .prose td code { background: none; padding: 0; font-size: var(--fs-small); }
 .tx-wrap .prose.small { font-size: var(--fs-body); line-height: 1.55; }
+
+/* what it says on the way is quieter than what it answers */
+.tx [data-said]:not([data-stop]) .prose { font-family: var(--sans); font-size: var(--fs-body); line-height: 1.5; color: var(--dim); }
+.tx [data-said]:not([data-stop]) .prose strong { color: inherit; }
+.tx [data-said]:not([data-stop]) .prose > :last-child { margin-bottom: var(--s2); }
+.tx [data-said][data-stop] { margin-top: var(--s3); }
 .tx-wrap .prose.live > :last-child { display: inline; }
 .tx-wrap .caret { display: inline-block; width: 0.5em; height: 1.05em; background: var(--work); vertical-align: -0.15em; margin-left: 2px; }
 
 /* edits and diffs: old and new gutters, deletions before additions */
 .tx-wrap .plus { color: var(--add); font-family: var(--mono); }
 .tx-wrap .minus { color: var(--del); font-family: var(--mono); }
-.tx .edits { margin-bottom: var(--s5); box-shadow: inset 0 1px 0 var(--faint), inset 0 -1px 0 var(--line); }
+.tx .edits { margin-bottom: var(--s4); box-shadow: inset 0 1px 0 var(--line), inset 0 -1px 0 var(--line); }
 .tx .edits .eh { display: flex; align-items: baseline; gap: var(--s3); padding: var(--s2) 0; font-size: var(--fs-ui); }
 .tx .edits .eh b { font-weight: 650; }
 .tx .ef { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--hair); }

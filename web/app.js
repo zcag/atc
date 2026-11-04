@@ -5073,8 +5073,8 @@ function Table({ text, tsv }) {
 }
 
 const TX_FACES = {
-  lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [16, 17.5, 19], lh: 1.62 },
-  sans: { name: "Recursive", css: "var(--sans)", sizes: [15, 16, 17.5], lh: 1.62 },
+  lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [16, 17.5, 19], lh: 1.52 },
+  sans: { name: "Recursive", css: "var(--sans)", sizes: [15, 16, 17.5], lh: 1.5 },
 };
 const txStore = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(`atc.tx.${k}`)) ?? d; } catch { return d; } },
@@ -6010,11 +6010,19 @@ const groupSpan = (steps) => {
   const a = Date.parse(steps[0]?.time || 0), b = Math.max(...steps.map((x) => Date.parse(x.out?.time || x.time || 0)));
   return a && b - a >= 1000 ? txSpan(b - a) : "";
 };
-const groupHead = (steps) => `${plural(steps.length, "step")}${groupSpan(steps) ? `, ${groupSpan(steps)}` : ""}`;
+const stepsGist = (steps, s) => {
+  if (steps.length === 1) { const m = stepNote(steps[0], s); return steps[0].tool === "Bash" && !steps[0].badge ? m.n && m.n !== "failed" ? m.n : `ran ${m.c}` : `${m.v} ${m.c}`; }
+  const count = (kind) => steps.filter((x) => txKind(x) === kind), files = (l) => new Set(l.map((x) => x.input.file_path || x.detail)).size;
+  const reads = steps.filter((x) => x.tool === "Read"), finds = steps.filter((x) => x.tool === "Grep" || x.tool === "Glob"), edits = count("edit");
+  const named = steps.filter((x) => !["run", "look", "edit", "web", "agent", "ask"].includes(txKind(x)));
+  const others = [...new Set(named.map((x) => (x.badge ? x.badge.kind : VERB[x.tool] || toolName(x.tool).toLowerCase())))];
+  return [reads.length && `read ${plural(files(reads), "file")}`, finds.length && `searched ${finds.length}`, count("run").length && `ran ${plural(count("run").length, "command")}`,
+    edits.length && `edited ${plural(files(edits), "file")}`, count("web").length && `${count("web").length} web`, count("agent").length && plural(count("agent").length, "agent"), ...others].filter(Boolean).join(", ");
+};
 
-const InlineSteps = ({ steps, open, toggle, at }) => {
+const InlineSteps = ({ steps, s, open, toggle, at }) => {
   const failed = steps.filter((x) => x.out?.error || x.badge?.ok === false).length;
-  return html`<button class="inl-steps" aria-expanded=${open} onClick=${toggle} title=${open ? "Fold the steps" : "Show every step"}><span class="chev" aria-hidden="true"></span><span class="h">${groupHead(steps)}</span>${failed > 0 && html`<b>${failed} failed</b>`}<span class="v">${[...new Set(steps.map((x) => VERB[x.tool] || toolName(x.tool).toLowerCase()))].join(", ")}</span>${at && html`<time>${at}</time>`}</button>`;
+  return html`<button class="inl-steps" aria-expanded=${open} onClick=${toggle} title=${open ? "Fold the steps" : "Show every step"}><span class="chev" aria-hidden="true"></span><span class="v">${stepsGist(steps, s)}</span>${failed > 0 && html`<b>${failed} failed</b>`}<span class="h">${groupSpan(steps)}</span>${at && html`<time>${at}</time>`}</button>`;
 };
 
 function Edits({ steps, s }) {
@@ -6038,7 +6046,7 @@ function Edits({ steps, s }) {
 
 function GroupBody({ steps, s, open, zoom, live }) {
   if (open) return html`<div class="steps">${steps.map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} pin=${live && x === steps[steps.length - 1]} />`)}</div>`;
-  const edits = steps.filter((x) => txKind(x) === "edit" && !x.out?.error);
+  const edits = steps.filter((x) => txKind(x) === "edit" && !x.out?.error && !scratch(x.input.file_path || x.detail));
   return html`${edits.length > 0 && html`<${Edits} steps=${edits} s=${s} />`}
     ${steps.filter((x) => txKind(x) === "ask" || (x.tool === "Bash" && x.badge?.kind === "show")).map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} />`)}`;
 }
@@ -6074,8 +6082,11 @@ function Lead({ text, images, files, at }) {
     ${(images || []).length > 0 && html`<span class="imgs">${images.map((src) => html`<img src=${src} alt="Image you attached" />`)}</span>`}</div>`;
 }
 
+const PATH_CODE = '<code class="path[^"]*">[^<]+</code>';
+const CITATION = new RegExp(`\\(${PATH_CODE}(?:,\\s*${PATH_CODE})*\\)`, "g");
+const quietCitations = (h) => h.replace(CITATION, '<span class="cite">$&</span>');
 function Prose({ text, id }) {
-  const h = useMemo(() => { let j = 0; return md(text).replace(/<h([1-4])>/g, (_, n) => `<h${n} id="${id}h${j++}">`); }, [text]);
+  const h = useMemo(() => { let j = 0; return quietCitations(md(text)).replace(/<h([1-4])>/g, (_, n) => `<h${n} id="${id}h${j++}">`); }, [text]);
   return html`<div class="prose" dangerouslySetInnerHTML=${{ __html: h }}></div>`;
 }
 
@@ -6469,7 +6480,7 @@ function Transcript({ s, say, resume, busy, voice, onVoiceOff, cmp = {} }) {
       case "partial": return html`<p class="evt" id=${`tx${r.i}`}>This turn started before what is loaded here.</p>`;
       case "skel": return html`<div class="skel" aria-label="Loading"><i></i><i></i><i></i></div>`;
       case "say": case "steps":
-        return html`${r.answer && html`<h2 class="sr">${s.agent ? `@${s.agent}` : "agent"}, ${txClock(r.at)}</h2>`}${r.steps && html`<${InlineSteps} steps=${r.steps} at=${clock(r.at)} open=${gOpen} toggle=${() => flip(gk)} /><${GroupBody} steps=${r.steps} s=${s} open=${gOpen} zoom=${setShot} live=${r.live && !r.text} />`}
+        return html`${r.answer && html`<h2 class="sr">${s.agent ? `@${s.agent}` : "agent"}, ${txClock(r.at)}</h2>`}${r.steps && html`<${InlineSteps} steps=${r.steps} s=${s} at=${clock(r.at)} open=${gOpen} toggle=${() => flip(gk)} /><${GroupBody} steps=${r.steps} s=${s} open=${gOpen} zoom=${setShot} live=${r.live && !r.text} />`}
             ${r.text && html`<div id=${`said-${r.key}`} data-said data-stop=${r.answer ? "" : null}><${Prose} text=${r.text} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`;
       case "evt": return html`<p class="evt">${r.text}</p>`;
       case "note": return html`<${Lead} at=${clock(r.at, true)} text=${r.text} />`;
@@ -6566,7 +6577,7 @@ function useHubStream(s, landed) {
 
 
 const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
-const TX_FILE = /^(~?[\w.\-]+\/)*[\w.\-]+\.(go|js|mjs|ts|tsx|py|md|json|kt|css|html|sh|yml|yaml|toml|rb|sql|txt|service|plist)(:\d+(-\d+)?)?$/;
+const TX_FILE = /^(~?[\w.\-]+\/)*[\w.\-]+\.(go|js|mjs|ts|tsx|py|md|json|kt|css|html|xml|sh|yml|yaml|toml|rb|sql|txt|service|plist)(:\d+(-\d+)?)?$/;
 const safeURL = (u) => /^(https?:|mailto:|\/|#|\.)/i.test(u || "") ? u : null;
 const mdRender = new Marked.Renderer();
 mdRender.code = (code, lang) => {

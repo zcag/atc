@@ -113,7 +113,7 @@
   --serif: var(--read);
   --v-you: "CASL" 1;
   --lh-ui: 1.35;
-  --lh-read: 1.62;
+  --lh-read: 1.52;
 
   --text-scale: 1;
   --fs-micro: calc(11px * var(--text-scale));
