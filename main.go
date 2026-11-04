@@ -307,7 +307,7 @@ func serve(args []string) error {
 
 		WhatsApp: waClient(),
 		Hub:      hubClient(),
-		CallLine: os.Getenv("ATC_DELTA_CALL"),
+		CallLine: os.Getenv("ATC_CALL_LINE"),
 
 		CallTestLine: os.Getenv("ATC_CALL_TEST_LINE"),
 		CallNumber:   os.Getenv("ATC_CALL_LINE_NUMBER"),

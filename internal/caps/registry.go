@@ -74,7 +74,7 @@ func All() []Cap {
 		},
 		{
 			ID: "call-line", Title: "Call line", Group: Calls, Optional: true, Why: "The service that carries a call's audio between your device and the talker.",
-			Fields: []Field{{Key: "ATC_DELTA_CALL", Label: "Call line address", Hint: "http://127.0.0.1:8807", URL: true, Hub: true}},
+			Fields: []Field{{Key: "ATC_CALL_LINE", Label: "Call line address", Hint: "http://127.0.0.1:8807", URL: true, Hub: true}},
 			Check:  checkCallLine,
 			Fix:    Fix{Text: "Run the call line service, then enter its address here.", Guide: "calling-the-user"},
 		},

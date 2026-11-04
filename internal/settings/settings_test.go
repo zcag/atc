@@ -108,3 +108,36 @@ func TestEnvFile(t *testing.T) {
 		t.Fatalf("%q %q %q", os.Getenv("ATC_C_A"), os.Getenv("ATC_C_B"), os.Getenv("ATC_C_SET"))
 	}
 }
+
+func TestOldCallLineNameStillWorks(t *testing.T) {
+	for name, tc := range map[string]struct {
+		env, file map[string]string
+		want      string
+	}{
+		"old in the environment":   {map[string]string{"ATC_DELTA_CALL": "http://old"}, nil, "http://old"},
+		"old in the file":          {nil, map[string]string{"ATC_DELTA_CALL": "http://old"}, "http://old"},
+		"new wins in the env":      {map[string]string{"ATC_DELTA_CALL": "http://old", "ATC_CALL_LINE": "http://new"}, nil, "http://new"},
+		"new in the file":          {nil, map[string]string{"ATC_CALL_LINE": "http://new", "ATC_DELTA_CALL": "http://old"}, "http://new"},
+		"the environment outranks": {map[string]string{"ATC_DELTA_CALL": "http://old"}, map[string]string{"ATC_CALL_LINE": "http://new"}, "http://old"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, k := range []string{"ATC_DELTA_CALL", "ATC_CALL_LINE"} {
+				t.Setenv(k, "")
+				os.Unsetenv(k)
+			}
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+			dir := t.TempDir()
+			if err := (&Settings{Dir: dir}).Save(File{Env: tc.file}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Apply(dir); err != nil {
+				t.Fatal(err)
+			}
+			if got := os.Getenv("ATC_CALL_LINE"); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

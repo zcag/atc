@@ -35,7 +35,7 @@ the guest and guest-call channels go there, and its API is under /guests/.
   -cap-quiet 10m -cap 150000  quiet this long and past this many: start over
 Starting over has the session write a handover note that opens the next one.
 
-Calls go through the call line at $ATC_DELTA_CALL and only ever to
+Calls go through the call line at $ATC_CALL_LINE and only ever to
 $ATC_CALL_NUMBER (default: the first number in $ATC_WHATSAPP_OWNER).
 Its words (prompts, how to talk on each channel) override from ~/.config/atc/modes/; atc prompts prints them.
 `
@@ -91,7 +91,7 @@ func hubCmd(args []string) error {
 	cargs := append([]string{"--model", *model, "--effort", *effort}, server.HubArgs()...)
 	cargs = append(cargs, strings.Fields(os.Getenv("ATC_HUB_CLAUDE_ARGS"))...)
 	policy := startover.Policy{Quiet: *quiet, Small: *small, CapQuiet: *capQuiet, Cap: *cap}
-	line := os.Getenv("ATC_DELTA_CALL")
+	line := os.Getenv("ATC_CALL_LINE")
 	gdir := filepath.Join(home, "guests")
 	os.MkdirAll(gdir, 0o755)
 	gargs := append([]string{"--model", *model, "--effort", *effort}, server.GuestsArgs()...)

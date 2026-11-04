@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -289,10 +290,7 @@ func servicePathHas(dir string) bool {
 // waitForNoCall holds a restart while a call is on the call line, since restarting atc or the hub cuts it. Up to 30
 // minutes; with no call line there is nothing to wait for.
 func waitForNoCall() {
-	url := os.Getenv("ATC_DELTA_CALL")
-	if url == "" {
-		url = envFileValue("ATC_DELTA_CALL")
-	}
+	url := cmp.Or(os.Getenv("ATC_CALL_LINE"), envFileValue("ATC_CALL_LINE"), envFileValue("ATC_DELTA_CALL"))
 	if url == "" {
 		return
 	}

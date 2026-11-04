@@ -107,7 +107,7 @@ func (c CallConfig) onCall(ctx context.Context) bool {
 	return err == nil && st.Call != "idle"
 }
 
-var ErrNoPhone = errors.New("no phone line configured (ATC_DELTA_CALL)")
+var ErrNoPhone = errors.New("no phone line configured (ATC_CALL_LINE)")
 
 type CallReq struct {
 	Reason   string `json:"reason"`

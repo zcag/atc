@@ -56,9 +56,22 @@ func (s *Settings) Save(f File) error {
 	return os.Rename(tmp, s.Path())
 }
 
+// renamed maps a setting's old name to the one atc reads now, so an existing env file keeps working.
+var renamed = map[string]string{"ATC_DELTA_CALL": "ATC_CALL_LINE"}
+
+func applyRenamed() {
+	for old, now := range renamed {
+		v, isOld := os.LookupEnv(old)
+		if _, isNow := os.LookupEnv(now); isOld && !isNow {
+			os.Setenv(now, v)
+		}
+	}
+}
+
 // Apply puts settings.json's values into the environment for the variables that are not set there. It reports a file
 // it could not read; the rest of atc then runs as if there were none.
 func Apply(dir string) (*Settings, error) {
+	applyRenamed()
 	s := &Settings{Dir: dir, boot: File{Env: map[string]string{}}}
 	f, err := s.Load()
 	if err != nil {
@@ -71,6 +84,7 @@ func Apply(dir string) (*Settings, error) {
 			s.boot.Env[k] = v
 		}
 	}
+	applyRenamed()
 	if _, inEnv := os.LookupEnv(LanguageKey); f.Language != "" && !inEnv {
 		os.Setenv(LanguageKey, f.Language)
 	}

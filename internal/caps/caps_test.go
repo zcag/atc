@@ -151,7 +151,7 @@ func TestCallsNeedsItsParts(t *testing.T) {
 		t.Fatalf("needs %+v", r.Needs)
 	}
 
-	all := map[string]string{"ATC_HUB": ts.URL, "ATC_DELTA_CALL": ts.URL, "ATC_CALL_VOICES": ts.URL}
+	all := map[string]string{"ATC_HUB": ts.URL, "ATC_CALL_LINE": ts.URL, "ATC_CALL_VOICES": ts.URL}
 	if r = rowOf(t, new(Runner).Rows(ctx, envOf("true", all), calls), "calls"); r.Status != OK {
 		t.Fatalf("calls with everything: %s %q %+v", r.Status, r.Detail, r.Needs)
 	}

@@ -255,7 +255,7 @@ func callLine(ctx context.Context, u string) (callStatus, error) {
 }
 
 func checkCallLine(ctx context.Context, env Env) Result {
-	u := env.Get("ATC_DELTA_CALL")
+	u := env.Get("ATC_CALL_LINE")
 	if u == "" {
 		return Result{Missing, "Not set up: nothing can carry a call."}
 	}
@@ -266,7 +266,7 @@ func checkCallLine(ctx context.Context, env Env) Result {
 }
 
 func checkTalker(ctx context.Context, env Env) Result {
-	u := env.Get("ATC_DELTA_CALL")
+	u := env.Get("ATC_CALL_LINE")
 	if u == "" {
 		return Result{Missing, "Waits for the call line."}
 	}

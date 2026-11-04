@@ -28,7 +28,7 @@ func (s *Server) callLine(w http.ResponseWriter, r *http.Request) {
 		line = s.CallTestLine
 	}
 	if line == "" {
-		http.Error(w, "atc on "+s.Host+" has no call line (ATC_DELTA_CALL)", http.StatusNotFound)
+		http.Error(w, "atc on "+s.Host+" has no call line (ATC_CALL_LINE)", http.StatusNotFound)
 		return
 	}
 	up, _, err := websocket.Dial(r.Context(), strings.Replace(line, "http", "ws", 1)+"/app", nil)
