@@ -2,116 +2,44 @@
 # /// script
 # dependencies = ["aiohttp", "numpy", "onnxruntime", "transformers", "sherpa-onnx", "huggingface_hub", "soxr"]
 # ///
-"""Conversation client for delta-call: answers the phone and talks, as a test bench for how human it feels.
+"""The call's conversation: answers the line (call.py) and talks, with atc's hub as the brain.
 
   talk.py                      wait for a call, answer, converse
   talk.py --dial +90541...     call that number (must be in DELTA_CALL_DIAL_ALLOW)
   talk.py --sim caller.wav     no phone: play a WAV as the caller, to test the pipeline offline
 
-Pipeline: Silero VAD on the downlink, utterance to Whisper (gpu), streamed LLM reply cut into
-sentences, each sentence to TTS and paced into the uplink. The caller can cut in: speech while
-delta talks stops the uplink and keeps only what was actually said in the history.
-Every call leaves <out>/talk-<time>/: call.wav (left caller, right delta), turns.jsonl with timings.
+Pipeline: Silero VAD on the downlink, streaming speech to text, the hub's reply cut into sentences, each
+sentence to TTS (ttsd.py) and paced into the uplink. The caller can cut in: speech while the voice talks
+stops the uplink and keeps only what was actually said in the history.
+Every word in a language is in lang/<code>.json; --lang picks the first language, --also the others a call can switch to.
+Every call leaves <out>/talk-<time>/: call.wav (left caller, right voice), turns.jsonl with timings.
 """
 import argparse, asyncio, concurrent.futures, difflib, hashlib, io, json, os, random, re, time, wave
 import aiohttp
 import soxr, numpy as np, onnxruntime
+from langpack import Pack, fill
 
 RATE, FRAME = 16000, 640
 APP_RATE = 24000
-STT_URL = os.environ.get("TALK_STT", "http://gpu.example:11440/v1/audio/transcriptions")
+STT_URL = os.environ.get("TALK_STT", "")
 STT_MODEL = os.environ.get("TALK_STT_MODEL", "whisper-large-v3-turbo")
-LLM_URL = os.environ.get("TALK_LLM", "http://gpu.example:11434/v1/chat/completions")
-LLM_MODEL = os.environ.get("TALK_LLM_MODEL", "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ")
-TTS_URL = os.environ.get("TALK_TTS", "http://127.0.0.1:11450/v1/audio/speech")
-TTS_MODEL = os.environ.get("TALK_TTS_MODEL", "speaches-ai/piper-tr_TR-fahrettin-medium")
-TTS_VOICE = os.environ.get("TALK_TTS_VOICE", "fahrettin")
-VAD_MODEL = os.path.expanduser("~/.cache/delta-talk/silero_vad.onnx")
-TURN_MODEL = os.path.expanduser("~/.cache/delta-talk/smart-turn-v3.2-cpu.onnx")
-EN_STT = os.path.expanduser("~/.cache/delta-talk/sherpa-onnx-streaming-zipformer-en-2023-06-26")
-TTS_VOICE_EN = os.environ.get("TALK_TTS_VOICE_EN", "voice_b")
-TTS_ENGINE = os.environ.get("TALK_TTS_ENGINE", "pocket")
-TTS_PREFIX = os.environ.get("TALK_TTS_PREFIX", "")
-TTS_ENGINE_EN = os.environ.get("TALK_TTS_ENGINE_EN", "higgs")
-VOICES = os.path.expanduser("~/.local/state/delta-call/voice.json")
-PHRASES = os.path.expanduser("~/.cache/delta-talk/phrases")
-GUESTS = os.path.expanduser("~/.config/atc/guests")
-HIGGS_VOICES = os.path.expanduser("~/srv/call-data/audiocpp/voices")
+TTS_URL = os.environ.get("TALK_TTS", "http://127.0.0.1:8812/v1/audio/speech")
+MODELS = os.path.expanduser(os.environ.get("TALK_MODELS") or "~/.cache/atc/voice")
+STATE = os.path.expanduser(os.environ.get("TALK_STATE") or "~/.local/state/atc/voice")
+VAD_MODEL = f"{MODELS}/silero_vad.onnx"
+TURN_MODEL = f"{MODELS}/smart-turn-v3.2-cpu.onnx"
+VOICES = f"{STATE}/voice.json"
+PHRASES = f"{MODELS}/phrases"
+CONFIG = os.environ.get("ATC_CONFIG_DIR") or (os.environ["XDG_CONFIG_HOME"] + "/atc" if os.environ.get("XDG_CONFIG_HOME") else "~/.config/atc")
+GUESTS = os.path.expanduser(f"{CONFIG}/guests")
+HIGGS_VOICES = os.path.expanduser(os.environ.get("HIGGS_VOICES") or "~/.local/share/atc/voice/audiocpp/voices")
 CPU = concurrent.futures.ThreadPoolExecutor(1)
-LANG_TAG = re.compile(r"\[LANG:(en|tr)\]\s*")
-UNFINISHED = re.compile(r"\b(şey|ve|ama|fakat|yani|için|ile|veya|ya da|mesela|hani|ee+|ı+|şöyle|çünkü|ki|da|de|and|but|so|because|um+|uh+|like|the|to|of|with|or)\W*$", re.I)
-HALLUCINATIONS = re.compile(r"altyaz|abone ol|izlediğiniz için|^\W*$", re.I)
-WHISPER_JUNK = re.compile(r"altyaz|abone ol|izlediğiniz için|teşekkür|thank|gracias|grazie|danke|dank|merci|obrigad|^\W*$", re.I)
-UNCLEAR = "(kısa bir şey söyledi ama anlaşılmadı)"
-
-SYSTEM = """Sen delta'sın: kullanıcının kendi bilgisayarlarında çalışan yapay zekâ asistanı. Şu an onunla telefonda konuşuyorsun.
-Sesini bir telefon taşıyor; konuşmayı yazıya çevirme ve sesin desktop adlı sunucuda, düşünen model (Qwen) gpu adlı makinede çalışıyor.
-Şimdilik yapabildiklerin: hava durumuna bakmak, tarihi ve saati söylemek, istenince telefonu kapatmak. Takvim, mesaj, arama gibi başka işleri henüz yapamıyorsun; sorulursa bunu dürüstçe ve kısaca söyle.
-
-Nasıl konuşursun:
-- Bir arkadaşla telefonda konuşur gibi: sen diye hitap et, samimi, sıcak, doğal. "Tamam", "hı hı", "tabii", "aa", "bak şimdi" gibi gündelik sözler kullanabilirsin.
-- Kısa: çoğu cevap tek cümle, en fazla iki kısa cümle. Resmî ya da makine gibi kalıplar kullanma ("durumdayım", "bu sorguyu", "yardımcı olabilirim" gibi).
-- Yazı dili yok: liste, madde, emoji, parantez, kısaltma, yüzde işareti kullanma. Sayıları yazıyla yaz.
-- Araçtan gelen bilgiyi olduğu gibi okuma, sadece sorulanı söyle. Araç adlarını sesli söyleme.
-
-Dikkat:
-- Karşındakinin sözleri otomatik yazıya çevriliyor ve bazen yanlış çıkıyor ("sanık" aslında "sağanak", "Ankarada" aslında "Ankara'da" olabilir). Anlamı tahmin et; gerçekten anlamadıysan kısaca tekrar iste.
-- "(sözünü keserek)" ile başlayan mesaj, seni o anda böldüğünü söyler: önceki cevabının sadece söylenen kısmını duydu. Yarım kalanı tekrarlama, yeni söylenene cevap ver.
-- Mesajların başındaki köşeli parantez içindeki tarih ve saat gerçektir, sorulursa onu söyle.
-- Asla bilgi uydurma. Hava sorulduğunda, daha önce baktıysan bile, her seferinde aracı çağır.
-- Telefonu kapatman istenirse kısaca vedalaş ve kapatma aracını çağır."""
-GREETING = "Alo, merhaba, ben delta."
-LINE_OK = "Buradayım, sesin geliyor."
-LINE_CHECK = set("alo allo aloo ses sesim sesimi geliyor gelmiyor mu mı musun musunuz misin mısın duyuyor duyuyormusun duymuyor "
-                 "duyabiliyor beni orada orda burada hey hello".split())
-LINE_CORE = set("alo allo aloo ses sesim sesimi duyuyor duyuyormusun duymuyor duyabiliyor orada orda hello".split())
-OUTBOUND = "[kullanıcıyı arıyorsun, telefon çalıyor. Açıp «Alo» deyince ilk bu cevabını duyacak: kısaca selam ver, ben delta de ve neden aradığını söyle.]"
-OUTBOUND_GUEST = ("[{guest}'yı kullanıcının isteğiyle sen arıyorsun, telefon çalıyor; sebep: {reason}. Açıp «Alo» deyince ilk bu cevabını "
-                  "duyacak: selam ver, delta olduğunu ve neden aradığını kısaca söyle.]")
-AYLAR = "Ocak Şubat Mart Nisan Mayıs Haziran Temmuz Ağustos Eylül Ekim Kasım Aralık".split()
-GUNLER = "Pazartesi Salı Çarşamba Perşembe Cuma Cumartesi Pazar".split()
-ACKS = {"tr": ["Şöyle.", "Dur bakayım.", "Hmm, bakayım.", "Şey, bakayım.", "Bakayım.", "Hmm, şöyle.", "Hmm, şimdi."],
-        "en": ["Hmm, let me see.", "Let me see.", "So, let me see.", "Well, let me see.", "Okay, let me check.", "Hmm, so.", "Hmm, okay."]}
-BACKCHANNEL = set("hı hıhı hm hmm evet tamam aynen he hee anladım peki ok okey doğru tabii yani şey e ee a aa "
-                  "yeah yes yep uh huh mhm mm okay right sure got it i see".split())
-STOP = re.compile(r"\b(dur|bekle|hayır|sus|bir dakika|bi dakika|yok|stop|kes|wait|hold on|no|stop it)\b", re.I)
-FILLERS = ["Bakıyorum, bir saniye.", "Hemen bakıyorum.", "Bir saniye, bakayım."]
-HOLD = ["Bakıyorum hâlâ.", "Biraz sürecek galiba.", "Hmm, biraz sürecek."]
-HOME = ("the city", 0.0, 0.0)
-TOOLS = [{"type": "function", "function": {
-    "name": "hava_durumu", "description": "Bir yerin şu anki havası ve önümüzdeki günlerin tahmini. Yer verilmezse the city.",
-    "parameters": {"type": "object", "properties": {"yer": {"type": "string", "description": "şehir ya da ilçe"}}}}},
-    {"type": "function", "function": {"name": "telefonu_kapat", "description": "Vedalaştıktan sonra görüşmeyi bitirir.",
-                                      "parameters": {"type": "object", "properties": {}}}}]
-WMO = {0: "açık", 1: "çoğunlukla açık", 2: "parçalı bulutlu", 3: "kapalı", 45: "sisli", 48: "sisli", 51: "çiseleyen yağmur",
-       53: "çiseleyen yağmur", 55: "çiseleyen yağmur", 61: "hafif yağmurlu", 63: "yağmurlu", 65: "kuvvetli yağmurlu",
-       71: "hafif karlı", 73: "karlı", 75: "yoğun karlı", 80: "sağanak", 81: "sağanak", 82: "şiddetli sağanak",
-       95: "gök gürültülü fırtına", 96: "dolu ile fırtına", 99: "dolu ile fırtına"}
+LANG_TAG = re.compile(r"\[LANG:([a-z]{2,3})\]\s*")
 
 
-async def run_tool(http, name, arguments):
-    try:
-        args = json.loads(arguments or "{}")
-        if name != "hava_durumu":
-            return f"bilinmeyen araç: {name}"
-        place, lat, lon = HOME
-        if args.get("yer"):
-            async with http.get("https://geocoding-api.open-meteo.com/v1/search",
-                                params={"name": args["yer"], "count": 1, "language": "tr", "countryCode": "TR"}) as r:
-                hit = ((await r.json()).get("results") or [None])[0]
-            if hit:
-                place, lat, lon = hit["name"], hit["latitude"], hit["longitude"]
-        async with http.get("https://api.open-meteo.com/v1/forecast", params={
-                "latitude": lat, "longitude": lon, "timezone": "auto", "forecast_days": 3,
-                "current": "temperature_2m,weather_code,wind_speed_10m",
-                "daily": "temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code"}) as r:
-            w = await r.json()
-        c, d = w["current"], w["daily"]
-        days = [f"{t}: {WMO.get(code, code)}, en düşük {lo:.0f}, en yüksek {hi:.0f} derece, yağış ihtimali yüzde {p}"
-                for t, code, lo, hi, p in zip(["bugün", "yarın", "öbür gün"], d["weather_code"], d["temperature_2m_min"], d["temperature_2m_max"], d["precipitation_probability_max"])]
-        return f"{place}, şu an: {WMO.get(c['weather_code'], c['weather_code'])}, {c['temperature_2m']:.0f} derece, rüzgar {c['wind_speed_10m']:.0f} km/s. " + "; ".join(days)
-    except Exception as e:
-        return f"hata: {e!r}"
+def setting(name, lang, primary):
+    """TALK_TTS_VOICE_EN for that language, TALK_TTS_VOICE for the first one; none = what ttsd picks."""
+    return os.environ.get(f"{name}_{lang.upper()}") or (os.environ.get(name) if lang == primary else None) or None
 
 
 LOADED = {}
@@ -180,23 +108,25 @@ class SmartTurn:
 
 class StreamSTT:
     """Streaming transcription on CPU, fed every frame of the caller's turn, so the text is ready the moment the
-    turn ends: mihuai/turkish-stt-66m-v2 for Turkish and, with --english, a streaming English Zipformer beside it
-    (the call's language, which Claude switches with [LANG:en] / [LANG:tr], picks which one Claude gets)."""
-    def __init__(self, gain_db, english):
-        import sherpa_onnx
-        from huggingface_hub import hf_hub_download
-        get = lambda f: hf_hub_download("mihuai/turkish-stt-66m-v2", f)
-        self.recs = {"tr": sherpa_onnx.OnlineRecognizer.from_transducer(
-            tokens=get("tokens.txt"), encoder=get("encoder.int8.onnx"), decoder=get("decoder.int8.onnx"),
-            joiner=get("joiner.int8.onnx"), num_threads=2, sample_rate=RATE, feature_dim=80,
-            decoding_method="modified_beam_search")}
-        if english:
-            en, part = EN_STT, "epoch-99-avg-1-chunk-16-left-128.int8.onnx"
-            self.recs["en"] = sherpa_onnx.OnlineRecognizer.from_transducer(
-                tokens=f"{en}/tokens.txt", encoder=f"{en}/encoder-{part}", decoder=f"{en}/decoder-{part}",
-                joiner=f"{en}/joiner-{part}", num_threads=2, sample_rate=RATE, feature_dim=80,
-                decoding_method="modified_beam_search")
+    turn ends: one model per language of the call, each pack's STT (the call's language, which Claude switches with
+    [LANG:xx], picks which one Claude gets)."""
+    def __init__(self, gain_db, packs):
+        self.recs = {code: self.recognizer(p.STT) for code, p in packs.items()}
+        self.first = next(iter(packs))
         self.gain, self.s, self.heard = 10 ** (gain_db / 20), {}, {}
+
+    @staticmethod
+    def recognizer(stt):
+        import sherpa_onnx
+        if "hf" in stt:
+            from huggingface_hub import hf_hub_download
+            get = lambda f: hf_hub_download(stt["hf"], f)
+        else:
+            get = lambda f: f"{MODELS}/{stt['dir']}/{f}"
+        return sherpa_onnx.OnlineRecognizer.from_transducer(
+            tokens=get(stt["tokens"]), encoder=get(stt["encoder"]), decoder=get(stt["decoder"]),
+            joiner=get(stt["joiner"]), num_threads=2, sample_rate=RATE, feature_dim=80,
+            decoding_method="modified_beam_search")
 
     def start(self, pcm=b""):
         self.s, self.heard = {lang: rec.create_stream() for lang, rec in self.recs.items()}, {}
@@ -211,9 +141,9 @@ class StreamSTT:
                     self.recs[lang].decode_stream(s)
                 self.heard[lang] = self.recs[lang].get_result(s).strip()
 
-    def partial(self, lang="tr"):
+    def partial(self, lang):
         """What the last feed heard: feed runs on Talk's worker thread, and reading a stream while it decodes is not safe."""
-        return self.heard.get(lang, self.heard.get("tr", ""))
+        return self.heard.get(lang, self.heard.get(self.first, ""))
 
     def text(self):
         """Text so far in every language. The decoders run ~0.3 s behind the audio, so flush them with silence
@@ -235,92 +165,6 @@ def normalize(pcm):
     a = np.frombuffer(pcm, np.int16).astype(np.float32)
     peak = np.abs(a).max() or 1
     return (a * min(30, 0.7 * 32767 / peak)).clip(-32768, 32767).astype(np.int16).tobytes()
-
-
-VOICE_RULES = """You are on a live phone call right now: the user is calling you on delta's number (555 0101) and
-everything you write is spoken to them by a Turkish text-to-speech voice, sentence by sentence, as you write it.
-- Speak Turkish (English only if they do). Short, natural spoken sentences, like a friend on the phone: usually one or two.
-- No markdown, lists, code, URLs, emoji or parentheses; numbers, dates and times written as words. Never read out paths or ids.
-- Before any tool use, say one short sentence of what you are about to do ("Bakıyorum, bir saniye."), then do it.
-- Anything long (a table, a list, a document, code) goes to an atc page or a message; on the call say only the gist and where it is.
-- Read back and wait for their clear "evet" before anything outward or destructive (sending, buying, deleting, calling someone).
-- Their words reach you through speech recognition and can be wrong ("sanık" may be "sağanak"); guess the meaning, ask only if unsure.
-- A message starting with "(sözünü kestim" means they interrupted you: they heard only the part it quotes.
-- A message starting with "(önceki mesajım yarımdı" replaces your previous turn's question: answer the full version.
-- When they want to end the call, say a short goodbye and end your reply with [KAPAT].
-- When they ask to switch language, or clearly speaks the other language, start your reply with [LANG:en] or [LANG:tr];
-  their words then reach you through that language's transcriber and the voice changes. In English mode you also see what
-  the Turkish transcriber heard, so a switch back to Turkish is recognizable even when the English transcript is garbled."""
-
-PROGRESS = [(r"mail|gmail", "Maillerine bakıyorum."), (r"openwa|whatsapp", "WhatsApp'a bakıyorum."),
-            (r"web|search|fetch|browser|chrome", "İnternete bakıyorum."), (r"calendar|takvim", "Takvimine bakıyorum."),
-            (r"atc", None), (r"Agent|Task", "Bunu bir ajana veriyorum."), (r".", "Bakıyorum.")]
-
-
-class ClaudeBrain:
-    """One Claude Code process for the whole call, fed turns over stream-json and read token by token."""
-    def __init__(self, args):
-        self.a, self.p, self.events, self.busy = args, None, asyncio.Queue(), False
-
-    async def start(self):
-        if self.p and self.p.returncode is None:
-            return
-        cmd = ["claude", "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-               "--include-partial-messages", "--model", self.a.claude_model, "--append-system-prompt", VOICE_RULES]
-        if self.a.effort:
-            cmd += ["--effort", self.a.effort]
-        self.p = await asyncio.create_subprocess_exec(*cmd, cwd=os.path.expanduser("~"), stdin=asyncio.subprocess.PIPE,
-                                                      stdout=asyncio.subprocess.PIPE, limit=1 << 24)
-        asyncio.create_task(self.read())
-
-    async def read(self):
-        async for line in self.p.stdout:
-            try:
-                self.events.put_nowait(json.loads(line))
-            except ValueError:
-                pass
-
-    def write(self, obj):
-        self.p.stdin.write((json.dumps(obj, ensure_ascii=False) + "\n").encode())
-
-    async def turn(self, text):
-        """Yields ("text", delta) and ("tool", name) until Claude's turn ends."""
-        while self.busy:  # what is left of an interrupted turn
-            if (await self.events.get()).get("type") == "result":
-                self.busy = False
-        self.busy = True
-        self.write({"type": "user", "message": {"role": "user", "content": text}})
-        while True:
-            e = await self.events.get()
-            if e.get("type") == "result":
-                self.busy = False
-                return
-            ev = e.get("event", {}) if e.get("type") == "stream_event" else {}
-            if ev.get("type") == "content_block_delta" and ev["delta"].get("type") == "text_delta":
-                yield "text", ev["delta"]["text"]
-            elif ev.get("type") == "content_block_start" and ev["content_block"].get("type") == "tool_use":
-                yield "tool", ev["content_block"].get("name", "")
-            elif ev.get("type") == "content_block_start" and ev["content_block"].get("type") == "text":
-                yield "text", " "
-
-    def interrupt(self):
-        if self.busy and self.p and self.p.returncode is None:
-            self.write({"type": "control_request", "request_id": f"int{time.time()}", "request": {"subtype": "interrupt"}})
-
-    async def finish(self, note):
-        """Call over: let a running turn finish its work with a note to report the result itself, then close."""
-        if self.p and self.p.returncode is None:
-            if self.busy:
-                self.write({"type": "user", "message": {"role": "user", "content": note}})
-                while True:
-                    e = await self.events.get()
-                    if e.get("type") == "result" and self.events.empty():
-                        break
-            self.p.stdin.close()
-            try:
-                await asyncio.wait_for(self.p.wait(), 5)
-            except asyncio.TimeoutError:
-                self.p.kill()
 
 
 class HubBrain:
@@ -394,23 +238,23 @@ class HubBrain:
     async def finish(self, note):
         if self.ws and not self.ws.closed:
             if note:
-                await self.ws.send_str(json.dumps({"type": "note", "text": "[görüşme bitti] " + note}))
+                await self.ws.send_str(json.dumps({"type": "note", "text": note}))
             await self.ws.close()
 
 
 class Talk:
     def __init__(self, args, http, send_audio, send_cmd):
         self.a, self.http, self.send_audio, self.send_cmd = args, http, send_audio, send_cmd
-        self.hangup = False
-        self.brain = {"claude": lambda: ClaudeBrain(args), "hub": lambda: HubBrain(args, http)}.get(args.brain, lambda: None)()
+        self.brain = HubBrain(args, http)
+        self.packs, self.pack = args.packs, args.packs[args.lang]
         self.heard, self.unfinished = None, None
         self.vad, self.cache = Vad(args.vad_fresh_peak), {}
         self.turn = once("turn", SmartTurn) if args.smart_turn else None
-        self.stt = once(("stt", args.gain_db, args.english), lambda: StreamSTT(args.gain_db, args.english)) if args.stt == "stream" else None
+        self.stt = once(("stt", args.gain_db), lambda: StreamSTT(args.gain_db, args.packs)) if args.stt == "stream" else None
         if self.stt:
             self.stt.s, self.stt.heard = {}, {}
-        self.lang, self.voices = "tr", voices()
-        self.history = [{"role": "system", "content": SYSTEM}]
+        self.lang, self.voices = args.lang, voices(args)
+        self.history = []
         self.outbox: asyncio.Queue = asyncio.Queue()
         self.speaking, self.spoken = [], []   # [text, frames left, made, leftover(, "canned")] queued for the uplink / texts fully sent this reply
         self.reply: asyncio.Task | None = None
@@ -459,8 +303,8 @@ class Talk:
         if not self.app or not self.stt:
             return False
         heard = self.stt.partial(self.lang)
-        words = [w for w in re.findall(r"\w+", heard.lower()) if w not in BACKCHANNEL and not self.echoed(w, self.echoing)]
-        return not STOP.search(heard) and len(words) < 2 if self.echoing else not words
+        words = [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.BACKCHANNEL and not self.echoed(w, self.echoing)]
+        return not self.pack.STOP.search(heard) and len(words) < 2 if self.echoing else not words
 
     def check_echo(self):
         """Whether their mic plays delta back: its loudness following delta's over the last 10 s at some delay up to
@@ -488,15 +332,16 @@ class Talk:
         backchannels."""
         sent = re.findall(r"\w+", re.sub(r"\(.*?\)", "", self.unfinished or "").lower())
         like = lambda w: any(w == s or difflib.SequenceMatcher(None, w, s).ratio() >= .75 for s in sent)
-        return [w for w in re.findall(r"\w+", heard.lower()) if w not in LINE_CHECK and w not in BACKCHANNEL and not like(w)]
+        return [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.LINE_CHECK and w not in self.pack.BACKCHANNEL and not like(w)]
 
     def line_check(self, text):
         """A turn that only tests the line («Alo?», «Ses geliyor mu?», «Duyuyor musun?») is answered at once with
         LINE_OK instead of 2-4 s of Claude, which a caller who hears nothing fills with more of the same; Claude is
         told with their next turn. Twice a call at most: past that the line itself is the trouble, and Claude may say so."""
         words = set(re.findall(r"\w+", re.sub(r"\(.*?\)", "", text).lower()))
-        return (self.lang == "tr" and LINE_OK in self.cache and self.line_checks < 2 and not self.unfinished
-                and not self.cut and not self.opening and bool(words & LINE_CORE) and words <= LINE_CHECK)
+        p = self.pack
+        return (self.lang == p.code and p.LINE_OK in self.cache and self.line_checks < 2 and not self.unfinished
+                and not self.cut and not self.opening and bool(words & p.LINE_CORE) and words <= p.LINE_CHECK)
 
     def echo(self, text):
         words = re.findall(r"\w+", text.lower())
@@ -580,10 +425,8 @@ class Talk:
         if rate == self.rate and text in self.cache:
             yield self.cache[text]
             return
-        lang = lang or self.lang
-        en, got = lang == "en", False
-        body = {"model": TTS_MODEL, "voice": voice or self.voices[lang], "input": text if en else TTS_PREFIX + text,
-                "engine": TTS_ENGINE_EN if en else TTS_ENGINE, "response_format": "pcm", "sample_rate": rate}
+        lang, got = lang or self.lang, False
+        body = {"voice": voice or self.voices[lang], "input": text, "engine": self.engine(lang), "response_format": "pcm", "sample_rate": rate}
         for attempt in range(2):
             try:
                 async with self.http.post(TTS_URL, json=body) as r:
@@ -595,6 +438,9 @@ class Talk:
                 if got or attempt:
                     raise
                 self.log(event="tts-retry", error=repr(e))
+
+    def engine(self, lang):
+        return setting("TALK_TTS_ENGINE", lang, self.a.lang)
 
     def queue(self, item, pcm=b"", last=False):
         """Frames for the uplink. item = [text, frames queued and not yet sent, synthesis finished, leftover bytes]."""
@@ -723,7 +569,7 @@ class Talk:
                     if self.opening or self.holding:
                         self.discard = True
                     elif self.reply and not self.reply.done() and not self.live:
-                        if self.brain and self.unfinished:
+                        if self.unfinished:
                             self.reopening = True
                         else:
                             self.reply.cancel()
@@ -761,8 +607,8 @@ class Talk:
                 await self.off(self.stt.feed, pcm)
         if self.paused and self.in_speech:
             heard = self.stt.partial(self.lang) if self.stt else ""
-            words = [w for w in re.findall(r"\w+", heard.lower()) if w not in BACKCHANNEL and not self.echoed(w)]
-            if STOP.search(heard) or len(words) >= self.a.barge_words or time.time() - self.paused_at > self.a.barge_max:
+            words = [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.BACKCHANNEL and not self.echoed(w)]
+            if self.pack.STOP.search(heard) or len(words) >= self.a.barge_words or time.time() - self.paused_at > self.a.barge_max:
                 self.paused = False
                 self.log(event="interrupted", heard=heard)
                 self.interrupt()
@@ -792,7 +638,7 @@ class Talk:
             text = await self.off(self.stt.text) if self.stt else None
             if self.turn:
                 prob = await self.off(self.turn, bytes(self.utt))
-                held = bool(UNFINISHED.search((text or {}).get(self.lang, "") if isinstance(text, dict) else text or ""))
+                held = bool(self.pack.UNFINISHED.search((text or {}).get(self.lang, "") if isinstance(text, dict) else text or ""))
                 done = prob > self.a.turn_threshold and not held
                 self.log(event="smart-turn", p=round(prob, 3), held=held)
             self.commit.clear()
@@ -806,7 +652,7 @@ class Talk:
             self.in_speech = False
         self.preroll = (self.preroll + pcm)[-int(self.a.preroll * RATE) * 2:]
 
-    async def whisper(self, utt, lang="tr", prompt="", timeout=None):
+    async def whisper(self, utt, lang, prompt="", timeout=None):
         form = aiohttp.FormData()
         form.add_field("file", wav_bytes(normalize(utt)), filename="u.wav", content_type="audio/wav")
         form.add_field("model", STT_MODEL), form.add_field("language", lang)
@@ -826,156 +672,68 @@ class Talk:
             return text
         last = next((m["content"] for m in reversed(self.history) if m["role"] == "assistant" and m["content"]), "")
         question = re.split(r"(?<=[.!?…])\s+", last.strip())[-1][-200:]
-        try:
-            second = await self.whisper(utt, self.lang, question, timeout=2.5)
-        except Exception as e:
-            self.log(event="second", error=repr(e))
-            second = ""
-        heard = second
-        if WHISPER_JUNK.search(second) or len(re.findall(r"\w+", second)) > max(2, voiced_ms // 150):
+        second = ""
+        if STT_URL:
+            try:
+                second = await self.whisper(utt, self.lang, question, timeout=2.5)
+            except Exception as e:
+                self.log(event="second", error=repr(e))
+        heard, p = second, self.pack
+        if p.WHISPER_JUNK.search(second) or len(re.findall(r"\w+", second)) > max(2, voiced_ms // 150):
             second = ""
         self.log(event="second", stream=text, whisper=heard, used=bool(second), voiced_ms=voiced_ms)
         norm = lambda t: re.sub(r"\W+", " ", t.lower()).strip()
         if not second or norm(second) == norm(text):
-            return text or (UNCLEAR if voiced_ms >= self.a.unclear_ms else "")
-        if not text:
-            return f"{second} (sadece ikinci okuma duydu, ilki boş kaldı)"
-        return f"{text} (aynı sesi ikinci okuma «{second}» diye duydu)"
+            return text or (p.UNCLEAR if voiced_ms >= self.a.unclear_ms else "")
+        return fill(p.SECOND_TOO if text else p.SECOND_ONLY, text=text, second=second)
 
     async def respond(self, utt, ended, text=None, voiced_ms=0):
-        if (picked := voices()) != self.voices:
+        if (picked := voices(self.a)) != self.voices:
             self.voices, self.cache = picked, {}
             self.log(event="voice", voices=picked)
             asyncio.create_task(self.render(self.phrases()))
         timing = {"speech_end": round(ended - self.t0, 3), "utt_s": round(len(utt) / 2 / RATE, 2)}
         mark = lambda k: timing.__setitem__(k, round(time.time() - ended, 3))
         if text is None:
-            text = await self.whisper(utt)
+            text = await self.whisper(utt, self.lang)
+        p = self.pack
         if isinstance(text, dict):
-            heard_tr, text = text.get("tr", ""), text.get(self.lang, "")
-            if self.lang == "en" and heard_tr:
-                text += f" (Turkish transcriber heard: «{heard_tr}»)"
+            heard_first, text = text.get(p.code, ""), text.get(self.lang, "")
+            if self.lang != p.code and heard_first:
+                text += fill(p.ALSO_HEARD, heard=heard_first)
             if self.a.second_ms and utt:
-                text = await self.second_reading(utt, "" if HALLUCINATIONS.search(text) else text, voiced_ms)
+                text = await self.second_reading(utt, "" if p.HALLUCINATIONS.search(text) else text, voiced_ms)
         mark("stt")
-        if HALLUCINATIONS.search(text):
+        if p.HALLUCINATIONS.search(text):
             self.log(event="dropped", text=text, **timing)
             return
         if self.echo(text):
             self.log(event="dropped", text=text, why="delta's own voice coming back", **timing)
             return
-        if self.brain:
-            return await self.respond_claude(text, timing, mark)
-        now = time.localtime()
-        clock = f"Şu an {now.tm_mday} {AYLAR[now.tm_mon - 1]} {now.tm_year} {GUNLER[now.tm_wday]}, saat {now.tm_hour}:{now.tm_min:02d}."
-        sent = {"role": "user", "content": f"[{clock}] " + ("(sözünü keserek) " if self.cut else "") + text}
-        messages = self.history + [sent]
-        reply, buf, first = "", "", True
-
-        async def speak(sentence):
-            nonlocal first
-            chunks = self.tts(sentence)
-            head = await anext(chunks, b"")
-            if first:
-                mark("first_audio")
-            await self.commit.wait()
-            if first:
-                mark("committed")
-                self.cut = False
-                self.log(event="user", text=text, **timing)
-                self.history += [dict(sent), {"role": "assistant", "content": ""}]
-                self.spoken, self.live, self.utt, first = [], True, bytearray(), False
-            self.history[-1]["content"] = reply
-            item = [sentence, 0, False, b""]
-            self.speaking.append(item)
-            self.queue(item, head)
-            async for chunk in chunks:
-                self.queue(item, chunk)
-            self.queue(item, last=True)
-
-        inline = ""
-        for _ in range(3):
-            calls = {}
-            body = {"model": LLM_MODEL, "messages": messages, "stream": True, "max_tokens": 200, "temperature": 0.7, "tools": TOOLS}
-            async with self.http.post(LLM_URL, json=body) as r:
-                async for line in r.content:
-                    line = line.decode().strip()
-                    if not line.startswith("data:") or "[DONE]" in line:
-                        continue
-                    d = (json.loads(line[5:])["choices"] or [{}])[0].get("delta", {})
-                    for c in d.get("tool_calls") or []:
-                        call = calls.setdefault(c.get("index", 0), {"id": c.get("id"), "name": "", "arguments": ""})
-                        call["name"] += c.get("function", {}).get("name") or ""
-                        call["arguments"] += c.get("function", {}).get("arguments") or ""
-                    delta = d.get("content") or ""
-                    if (delta or calls) and "llm_first" not in timing:
-                        mark("llm_first")
-                    if inline or "<" in delta:
-                        inline += delta
-                        if "<function" not in inline and len(inline) > 12:
-                            delta, inline = inline, ""
-                        else:
-                            continue
-                    buf += delta
-                    reply += delta
-                    while cut := self.piece_end(buf, first):
-                        sentence, buf = buf[:cut].strip(), buf[cut:]
-                        await speak(sentence)
-            for i, (name, args) in enumerate(re.findall(r"<function=(\w+)>(.*?)(?:</function>|$)", inline, re.S)):
-                params = dict(re.findall(r"<parameter=(\w+)>\s*(.*?)\s*</parameter>", args, re.S))
-                calls[100 + i] = {"id": f"inline{i}", "name": name, "arguments": json.dumps(params, ensure_ascii=False)}
-            inline = ""
-            if not calls:
-                break
-            if buf.strip():
-                await speak(buf.strip())
-                buf = ""
-            if not reply.strip() and any(c["name"] != "telefonu_kapat" for c in calls.values()):
-                filler = random.choice(FILLERS)
-                reply += filler + " "
-                await speak(filler)
-            said = {"role": "assistant", "content": reply.strip(), "tool_calls": [
-                {"id": c["id"], "type": "function", "function": {"name": c["name"], "arguments": c["arguments"]}} for c in calls.values()]}
-            results = []
-            for c in calls.values():
-                if c["name"] == "telefonu_kapat":
-                    self.hangup, result = True, "Görüşme sen konuşmayı bitirince kapanacak."
-                else:
-                    result = await run_tool(self.http, c["name"], c["arguments"])
-                self.log(event="tool", name=c["name"], arguments=c["arguments"], result=result)
-                results.append({"role": "tool", "tool_call_id": c["id"], "content": result + "\n(Sadece sorulanı, tek kısa cümleyle söyle.)"})
-            messages = messages + [said, *results]
-        if buf.strip():
-            await speak(buf.strip())
-        self.log(event="delta", text=reply, **timing)
-        if self.hangup:
-            while self.speaking:
-                await asyncio.sleep(0.1)
-            await asyncio.sleep(0.5)
-            self.log(event="hangup")
-            await self.send_cmd({"cmd": "hangup"})
+        return await self.respond_claude(text, timing, mark)
 
     async def respond_claude(self, text, timing, mark):
         """Claude talks: its text streams into TTS sentence by sentence. Nothing is sent before the turn is
         committed (a message to Claude can't be taken back); a tool call gets a spoken progress line."""
         await self.commit.wait()
         mark("committed")
+        p = self.pack
         if self.line_check(text):
             self.line_checks += 1
             self.checked.append(text)
             self.canned_at = time.monotonic()
-            self.say(LINE_OK, self.cache[LINE_OK])
+            self.say(p.LINE_OK, self.cache[p.LINE_OK])
             self.log(event="line-check", text=text, **timing)
-            self.history += [{"role": "user", "content": text}, {"role": "assistant", "content": LINE_OK}]
+            self.history += [{"role": "user", "content": text}, {"role": "assistant", "content": p.LINE_OK}]
             return
         if self.unfinished:
-            sent = f"(önceki mesajım yarımdı, tamamı şu) {text}"
+            sent = fill(p.HALF_SENT, text=text)
         elif self.cut and self.heard is not None:
-            sent = f"(sözünü kestim; cevabından sadece şunu duydum: «{self.heard}») {text}"
+            sent = fill(p.CUT_OFF, heard=self.heard, text=text)
         else:
             sent = text
         if self.checked:
-            sent = f"(hattı denedi: «{' / '.join(self.checked)}»; sen hemen «{LINE_OK}» dedin) {sent}"
+            sent = fill(p.LINE_TESTED, tried=" / ".join(self.checked), line_ok=p.LINE_OK, text=sent)
             self.checked = []
         self.cut, self.heard, self.unfinished = False, None, text
         self.log(event="user", text=sent, **timing)
@@ -983,6 +741,7 @@ class Talk:
         self.history += [{"role": "user", "content": sent}, {"role": "assistant", "content": ""}]
         self.spoken = []
         reply, buf, first = "", "", True
+        spoken = lambda t: p.END.sub("", t).strip()
         self.tools_open = 0
         wants_ack = self.a.ack_ms and not self.opening and not self.holding \
             and len(re.findall(r"\w+", re.sub(r"\s*\(.*", "", text))) > 2
@@ -1016,9 +775,9 @@ class Talk:
                     self.show(tool=value)
                     self.tools_open += 1
                     if buf.strip():
-                        await speak(buf.replace("[KAPAT]", "").strip())
+                        await speak(spoken(buf))
                         buf = ""
-                    elif first and (line := next(p for r, p in PROGRESS if re.search(r, value, re.I))) and not self.canned_lately():
+                    elif first and (line := next(t for r, t in p.PROGRESS if re.search(r, value, re.I))) and not self.canned_lately():
                         self.canned_at = time.monotonic()
                         await speak(line)
                     continue
@@ -1031,14 +790,14 @@ class Talk:
                 self.history[-1]["content"] = reply
                 if tag := LANG_TAG.search(buf):
                     buf = buf.replace(tag.group(), "")
-                    if tag.group(1) != self.lang:
+                    if tag.group(1) != self.lang and tag.group(1) in self.packs:
                         self.lang = tag.group(1)
                         self.log(event="language", lang=self.lang)
                 while cut := self.piece_end(buf, first):
                     sentence, buf = buf[:cut].strip(), buf[cut:]
-                    await speak(sentence.replace("[KAPAT]", "").strip())
-            if buf.replace("[KAPAT]", "").strip():
-                await speak(buf.replace("[KAPAT]", "").strip())
+                    await speak(spoken(sentence))
+            if spoken(buf):
+                await speak(spoken(buf))
         except asyncio.CancelledError:
             ack.cancel(), hold.cancel()
             self.brain.interrupt()
@@ -1046,8 +805,7 @@ class Talk:
         ack.cancel(), hold.cancel()
         self.unfinished = None
         self.log(event="delta", text=reply, **timing)
-        if "[KAPAT]" in reply:
-            self.hangup = True
+        if p.END.search(reply):
             while self.speaking:
                 await asyncio.sleep(0.1)
             await asyncio.sleep(0.5)
@@ -1064,7 +822,7 @@ class Talk:
             now = time.monotonic()
             if self.tools_open and not self.speaking and not self.in_speech and now - self.last_voice >= self.a.progress_ms / 1000 \
                     and now - last >= self.a.progress_every_ms / 1000:
-                line = random.choice([h for h in HOLD if h != getattr(self, "last_hold", None)])
+                line = random.choice([h for h in self.pack.HOLD if h != getattr(self, "last_hold", None)])
                 self.last_hold, said, last, self.canned_at = line, said + 1, now, now
                 self.say(line, self.cache.get(line) or b"".join([c async for c in self.tts(line)]))
                 self.log(event="hold", text=line)
@@ -1077,7 +835,7 @@ class Talk:
         phrase ("Dur bakayım."), never the same one twice running and never within canned_gap_ms of another canned line
         (respond_claude decides when to try at all). They picked these over silence and a bare "Hmm" on real turns."""
         await asyncio.sleep(self.a.ack_ms / 1000)
-        ready = [a for a in ACKS[self.lang] if a in self.cache and a != self.last_ack]
+        ready = [a for a in self.packs[self.lang].ACKS if a in self.cache and a != self.last_ack]
         if not self.speaking and not self.in_speech and ready and silent() and not self.canned_lately():
             self.last_ack, self.canned_at = random.choice(ready), time.monotonic()
             self.say("", self.cache[self.last_ack])
@@ -1096,22 +854,17 @@ class Talk:
         print(f"saved {self.dir}/", flush=True)
 
     async def warm(self):
-        if self.brain and not isinstance(self.brain, HubBrain):
-            await self.brain.start()
         await self.prerender()
         asyncio.create_task(self.render(self.phrases(), rate=APP_RATE))
-        if not self.brain:
-            async with self.http.post(LLM_URL, json={"model": LLM_MODEL, "messages": self.history, "max_tokens": 1}) as r:
-                await r.read()
 
-    @staticmethod
-    def phrases(first=True, rest=True):
-        lines = [(t, "tr") for t in [GREETING, LINE_OK, *FILLERS, *HOLD, *[p for _, p in PROGRESS if p]]] if first else []
-        return lines + ([(t, "tr") for t in ACKS["tr"]] + [(t, "en") for t in ACKS["en"]] if rest else [])
+    def phrases(self, first=True, rest=True):
+        p = self.pack
+        lines = [(t, p.code) for t in [p.GREETING, p.LINE_OK, *p.FILLERS, *p.HOLD, *[t for _, t in p.PROGRESS if t]]] if first else []
+        return lines + ([(t, code) for code, pack in self.packs.items() for t in pack.ACKS] if rest else [])
 
     async def prerender(self):
         await self.render(self.phrases(rest=False))
-        self.greeting = self.cache.get(GREETING, b"")
+        self.greeting = self.cache.get(self.pack.GREETING, b"")
         asyncio.create_task(self.render(self.phrases(first=False)))
 
     async def render(self, lines, rate=None):
@@ -1128,9 +881,9 @@ class Talk:
                 return
             if not ahead and t in self.cache:
                 continue
-            voice, engine = voices[lang], TTS_ENGINE_EN if lang == "en" else TTS_ENGINE
+            voice, engine = voices[lang], self.engine(lang)
             made = [os.stat(f).st_mtime_ns for f in (f"{HIGGS_VOICES}/{voice}.wav", f"{HIGGS_VOICES}/prompt_text") if os.path.exists(f)]
-            key = hashlib.sha1(f"{voice}|{made}|{engine}|{'' if lang == 'en' else TTS_PREFIX}{t}{'' if rate == RATE else f'|{rate}'}".encode()).hexdigest()[:20]
+            key = hashlib.sha1(f"{voice}|{made}|{engine}|{t}{'' if rate == RATE else f'|{rate}'}".encode()).hexdigest()[:20]
             path = os.path.join(PHRASES, key + ".pcm")
             if os.path.exists(path):
                 pcm = open(path, "rb").read()
@@ -1145,7 +898,7 @@ class Talk:
                 self.cache[t] = pcm
 
     def open(self):
-        if (picked := voices()) != self.voices:
+        if (picked := voices(self.a)) != self.voices:
             self.voices, self.cache, self.greeting = picked, {}, b""
         self.t0 = t = time.time()
         name = lambda t: os.path.join(self.a.out, f"talk-{time.strftime('%Y%m%d-%H%M%S', time.localtime(t))}")
@@ -1165,7 +918,8 @@ class Talk:
         self.open()
         self.log(event="outbound", **({"guest": self.guest} if self.guest else {}))
         self.opening = self.holding = True
-        opening = OUTBOUND_GUEST.format(guest=self.guest, reason=reason or "belirtilmedi") if self.guest else OUTBOUND
+        p = self.pack
+        opening = fill(p.OUTBOUND_GUEST, guest=self.guest, reason=reason or p.NO_REASON) if self.guest else p.OUTBOUND
         self.reply = asyncio.create_task(self.respond(b"", time.time(), opening))
         self.reply.add_done_callback(lambda _: setattr(self, "opening", False))
 
@@ -1173,15 +927,15 @@ class Talk:
         if not self.t0:
             self.open()
         self.log(event="answered", **({"guest": self.guest} if self.guest else {}))
-        if isinstance(self.brain, HubBrain):
-            asyncio.create_task(self.brain.start())
+        asyncio.create_task(self.brain.start())
         self.speaking_task = asyncio.create_task(self.speaker())
         if self.holding:
             asyncio.create_task(self.release())
             return
+        hello = self.pack.GREETING
         if not self.greeting:
-            self.greeting = self.cache[GREETING] = b"".join([c async for c in self.tts(GREETING)])
-        self.history.append({"role": "assistant", "content": GREETING})
+            self.greeting = self.cache[hello] = b"".join([c async for c in self.tts(hello)])
+        self.history.append({"role": "assistant", "content": hello})
         asyncio.create_task(self.greet())
 
     async def greet(self):
@@ -1193,7 +947,7 @@ class Talk:
         while not self.app and not self.line_up and time.monotonic() - start < self.a.greet_wait_ms / 1000:
             await asyncio.sleep(0.02)
         self.log(event="greeting", waited_ms=round((time.monotonic() - start) * 1000), line_up=self.line_up)
-        self.say(GREETING, self.greeting)
+        self.say(self.pack.GREETING, self.greeting)
 
     async def release(self):
         """Let the prepared opening play once they have had their «Alo»: when they stop talking, or after
@@ -1209,20 +963,20 @@ class Talk:
             await asyncio.sleep(0.02)
 
 
-ANSWER = [re.sub(r"\D", "", n)[-10:] for n in os.environ.get("TALK_ANSWER", "15550100").split(",") if n.strip()]
+ANSWER = [re.sub(r"\D", "", n)[-10:] for n in os.environ.get("TALK_ANSWER", "").split(",") if n.strip()]
 
 
-def voices():
-    """The voice per language: what phone.example last picked (voice.json), else the service's environment."""
+def voices(args):
+    """The voice per language: the last pick (voice.json), else the service's environment."""
     try:
         picked = json.load(open(VOICES))
     except (OSError, ValueError):
         picked = {}
-    return {"tr": picked.get("tr") or TTS_VOICE, "en": picked.get("en") or TTS_VOICE_EN}
+    return {code: picked.get(code) or setting("TALK_TTS_VOICE", code, args.lang) for code in args.packs}
 
 
 def allowed(number):
-    """the user's own number."""
+    """The user's own number (TALK_ANSWER; empty: only the app line is their)."""
     return bool(number) and re.sub(r"\D", "", number)[-10:] in ANSWER
 
 
@@ -1246,10 +1000,12 @@ async def be_guest(talk, name):
 
 
 def call_over(talk):
-    if talk.guest:
-        return (f"({talk.guest} ile görüşme kapandı. kullanıcının bilmesi ya da karar vermesi gereken bir şey çıktıysa "
-                f"report ile asistana bildir; ona söz verdiğin bir şey varsa onu da takip et.)")
-    return "(Görüşme kapandı. Yarım kalan bir iş varsa bitir, sonucunu `atc notify` ile kısaca bildir.)"
+    p = talk.pack
+    return fill(p.CALL_OVER_GUEST, guest=talk.guest) if talk.guest else p.CALL_OVER
+
+
+async def tell_brain_over(talk, note):
+    await talk.brain.finish(talk.pack.CALL_ENDED + note if note else None)
 
 
 def line_of(event):
@@ -1315,7 +1071,7 @@ async def phone(args):
             print(json.dumps(event, ensure_ascii=False), flush=True)
             if event.get("event") == "dialing" and not own and not talk.t0:
                 own = line_of(event)
-                if event.get("guest") and args.brain == "hub":
+                if event.get("guest"):
                     reason = event.get("reason", "")
                     await be_guest(talk, event["guest"])
             if event.get("event") in ("state", "hello") and event.get("call") == "ringing" and not args.dial and not own:
@@ -1326,16 +1082,16 @@ async def phone(args):
                         await ws.send_str(json.dumps({"cmd": "hangup"}))
                     continue
                 guest = None if event.get("via") == "app" or allowed(number) else guest_of(number)
-                if guest and args.brain == "hub":
+                if guest:
                     await be_guest(talk, guest)
-                if event.get("via") == "app" or allowed(number) or (guest and args.brain == "hub"):
+                if event.get("via") == "app" or allowed(number) or guest:
                     own = line_of(event)
                     await ws.send_str(json.dumps({"cmd": "answer"}))
                 else:
                     print(json.dumps({"event": "not-answered", "number": event.get("number") or caller}), flush=True)
             if event.get("call") == "ringing":
                 ringing = True
-            if event.get("call") == "offhook" and not ringing and not active and not talk.t0 and talk.brain:
+            if event.get("call") == "offhook" and not ringing and not active and not talk.t0:
                 own = own or line_of(event)
                 talk.dialing(reason)
             if event.get("precise") == "active" and event.get("audio") and not active:
@@ -1348,9 +1104,7 @@ async def phone(args):
         if not active and talk.reply and not talk.reply.done():
             talk.reply.cancel()
         talk.save()
-        if talk.brain:
-            await talk.brain.finish(call_over(talk) if active else
-                                    "(Açmadı: telefon çaldı ama açmadı, hazırladığın açılış duyulmadı.)" if talk.t0 else None)
+        await tell_brain_over(talk, call_over(talk) if active else talk.pack.NOT_PICKED_UP if talk.t0 else None)
 
 
 async def sim(args):
@@ -1369,9 +1123,8 @@ async def sim(args):
             await talk.on_audio(pcm[i:i + FRAME].ljust(FRAME, b"\0"))
             await asyncio.sleep(max(0, start + (n + 1) * 0.02 - time.monotonic()))
         talk.save()
-        if talk.brain:
-            talk.brain.interrupt()
-            await talk.brain.finish("(Görüşme kapandı, bu bir testti; bir şey yapma.)")
+        talk.brain.interrupt()
+        await tell_brain_over(talk, talk.pack.SIM_OVER)
 
 
 if __name__ == "__main__":
@@ -1391,17 +1144,18 @@ if __name__ == "__main__":
     p.add_argument("--vad-reset-ms", type=int, default=3000, help="ms of silence after which the fresh VAD state is reset")
     p.add_argument("--spec-ms", type=int, default=250, help="ms of silence that starts a speculative reply")
     p.add_argument("--end-ms", type=int, default=600, help="ms of silence that ends the caller's turn (backstop with --smart-turn)")
-    p.add_argument("--brain", choices=["local", "claude", "hub"], default="local")
-    p.add_argument("--hub", default="http://127.0.0.1:8820", help="brain hub: the shared session's hub")
-    p.add_argument("--claude-model", default="opus")
-    p.add_argument("--effort", default="low")
-    p.add_argument("--ack-ms", type=int, default=2500, help="claude brain: ms after their turn with nothing from Claude before a thinking phrase (0 = never)")
-    p.add_argument("--english", action="store_true", help="load the English transcriber, so Claude can switch the call with [LANG:en] (needs --stt stream)")
+    p.add_argument("--brain", choices=["hub"], default="hub")
+    p.add_argument("--hub", default="http://127.0.0.1:8820", help="atc's hub, the assistant's conversation")
+    p.add_argument("--lang", default=os.environ.get("TALK_LANG") or "en", help="the call's first language: its pack in lang/, its transcriber, what it says first")
+    p.add_argument("--also", action="append", default=(os.environ.get("TALK_ALSO") or "").split(), help="another language the call can switch to with [LANG:xx] (needs --stt stream); repeatable")
+    p.add_argument("--assistant", default=os.environ.get("TALK_ASSISTANT"), help="what the assistant calls itself (default: the pack's neutral name)")
+    p.add_argument("--user", default=os.environ.get("TALK_USER"), help="what the assistant calls the user (default: the pack's neutral name)")
+    p.add_argument("--ack-ms", type=int, default=2500, help="ms after their turn with nothing from Claude before a thinking phrase (0 = never)")
     p.add_argument("--reopen-ms", type=int, default=700, help="ms of speech that take back a turn already sent to Claude")
     p.add_argument("--barge-words", type=int, default=3, help="words (not hı hı, evet...) that make an overlap a real interruption")
     p.add_argument("--barge-max", type=float, default=2.0, help="s of paused overlap after which it counts as an interruption anyway")
-    p.add_argument("--stt", choices=["whisper", "stream"], default="whisper")
-    p.add_argument("--second-ms", type=int, default=600, help="stream STT: a turn with at most this much speech, or one word, is read again by Whisper (0 = never)")
+    p.add_argument("--stt", choices=["whisper", "stream"], default="stream", help="whisper needs TALK_STT")
+    p.add_argument("--second-ms", type=int, default=600, help="stream STT: a turn with at most this much speech, or one word, is read again by Whisper at TALK_STT, when it is set (0 = never)")
     p.add_argument("--unclear-ms", type=int, default=200, help="speech no transcriber could read still reaches Claude as unclear from this much on")
     p.add_argument("--preroll", type=float, default=0.8, help="s of audio before speech onset that goes into the turn")
     p.add_argument("--gain-db", type=float, default=6, help="stream STT: 0-8 dB read a real call best, 18+ distorts")
@@ -1422,6 +1176,9 @@ if __name__ == "__main__":
     p.add_argument("--hold-ms", type=int, default=1500, help="call out: ms after they pick up before the opening plays if they say nothing")
     p.add_argument("--hold-max-ms", type=int, default=3000, help="call out: the opening plays by then even if they keep talking")
     a = p.parse_args()
+    if a.stt == "whisper" and not STT_URL:
+        p.error("--stt whisper needs TALK_STT")
+    a.packs = {code: Pack(code, a.assistant, a.user) for code in dict.fromkeys([a.lang, *a.also])}
     while True:
         try:
             asyncio.run(sim(a) if a.sim else phone(a))

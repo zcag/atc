@@ -1,0 +1,196 @@
+{
+ "UNFINISHED": "\\b(şey|ve|ama|fakat|yani|için|ile|veya|ya da|mesela|hani|ee+|ı+|şöyle|çünkü|ki|da|de|and|but|so|because|um+|uh+|like|the|to|of|with|or)\\W*$",
+ "HALLUCINATIONS": "altyaz|abone ol|izlediğiniz için|^\\W*$",
+ "WHISPER_JUNK": "altyaz|abone ol|izlediğiniz için|teşekkür|thank|gracias|grazie|danke|dank|merci|obrigad|^\\W*$",
+ "UNCLEAR": "(kısa bir şey söyledi ama anlaşılmadı)",
+ "GREETING": "Alo, merhaba, ben delta.",
+ "LINE_OK": "Buradayım, sesin geliyor.",
+ "LINE_CHECK": [
+  "allo",
+  "alo",
+  "aloo",
+  "beni",
+  "burada",
+  "duyabiliyor",
+  "duymuyor",
+  "duyuyor",
+  "duyuyormusun",
+  "geliyor",
+  "gelmiyor",
+  "hello",
+  "hey",
+  "misin",
+  "mu",
+  "musun",
+  "musunuz",
+  "mı",
+  "mısın",
+  "orada",
+  "orda",
+  "ses",
+  "sesim",
+  "sesimi"
+ ],
+ "LINE_CORE": [
+  "allo",
+  "alo",
+  "aloo",
+  "duyabiliyor",
+  "duymuyor",
+  "duyuyor",
+  "duyuyormusun",
+  "hello",
+  "orada",
+  "orda",
+  "ses",
+  "sesim",
+  "sesimi"
+ ],
+ "OUTBOUND": "[kullanıcıyı arıyorsun, telefon çalıyor. Açıp «Alo» deyince ilk bu cevabını duyacak: kısaca selam ver, ben delta de ve neden aradığını söyle.]",
+ "OUTBOUND_GUEST": "[{guest}'yı kullanıcının isteğiyle sen arıyorsun, telefon çalıyor; sebep: {reason}. Açıp «Alo» deyince ilk bu cevabını duyacak: selam ver, delta olduğunu ve neden aradığını kısaca söyle.]",
+ "AYLAR": [
+  "Ocak",
+  "Şubat",
+  "Mart",
+  "Nisan",
+  "Mayıs",
+  "Haziran",
+  "Temmuz",
+  "Ağustos",
+  "Eylül",
+  "Ekim",
+  "Kasım",
+  "Aralık"
+ ],
+ "GUNLER": [
+  "Pazartesi",
+  "Salı",
+  "Çarşamba",
+  "Perşembe",
+  "Cuma",
+  "Cumartesi",
+  "Pazar"
+ ],
+ "ACKS": [
+  "Şöyle.",
+  "Dur bakayım.",
+  "Hmm, bakayım.",
+  "Şey, bakayım.",
+  "Bakayım.",
+  "Hmm, şöyle.",
+  "Hmm, şimdi."
+ ],
+ "BACKCHANNEL": [
+  "a",
+  "aa",
+  "anladım",
+  "aynen",
+  "doğru",
+  "e",
+  "ee",
+  "evet",
+  "got",
+  "he",
+  "hee",
+  "hm",
+  "hmm",
+  "huh",
+  "hı",
+  "hıhı",
+  "i",
+  "it",
+  "mhm",
+  "mm",
+  "ok",
+  "okay",
+  "okey",
+  "peki",
+  "right",
+  "see",
+  "sure",
+  "tabii",
+  "tamam",
+  "uh",
+  "yani",
+  "yeah",
+  "yep",
+  "yes",
+  "şey"
+ ],
+ "STOP": "\\b(dur|bekle|hayır|sus|bir dakika|bi dakika|yok|stop|kes|wait|hold on|no|stop it)\\b",
+ "FILLERS": [
+  "Bakıyorum, bir saniye.",
+  "Hemen bakıyorum.",
+  "Bir saniye, bakayım."
+ ],
+ "HOLD": [
+  "Bakıyorum hâlâ.",
+  "Biraz sürecek galiba.",
+  "Hmm, biraz sürecek."
+ ],
+ "PROGRESS": [
+  [
+   "mail|gmail",
+   "Maillerine bakıyorum."
+  ],
+  [
+   "openwa|whatsapp",
+   "WhatsApp'a bakıyorum."
+  ],
+  [
+   "web|search|fetch|browser|chrome",
+   "İnternete bakıyorum."
+  ],
+  [
+   "calendar|takvim",
+   "Takvimine bakıyorum."
+  ],
+  [
+   "atc",
+   null
+  ],
+  [
+   "Agent|Task",
+   "Bunu bir ajana veriyorum."
+  ],
+  [
+   ".",
+   "Bakıyorum."
+  ]
+ ],
+ "CUT_OFF": "(sözünü kestim; cevabından sadece şunu duydum: «{heard}») {text}",
+ "HALF_SENT": "(önceki mesajım yarımdı, tamamı şu) {text}",
+ "LINE_TESTED": "(hattı denedi: «{tried}»; sen hemen «{line_ok}» dedin) {text}",
+ "SECOND_ONLY": "{second} (sadece ikinci okuma duydu, ilki boş kaldı)",
+ "SECOND_TOO": "{text} (aynı sesi ikinci okuma «{second}» diye duydu)",
+ "ALSO_HEARD": " (Turkish transcriber heard: «{heard}»)",
+ "NO_REASON": "belirtilmedi",
+ "CALL_ENDED": "[görüşme bitti] ",
+ "CALL_OVER": "(Görüşme kapandı. Yarım kalan bir iş varsa bitir, sonucunu `atc notify` ile kısaca bildir.)",
+ "CALL_OVER_GUEST": "({guest} ile görüşme kapandı. kullanıcının bilmesi ya da karar vermesi gereken bir şey çıktıysa report ile asistana bildir; ona söz verdiğin bir şey varsa onu da takip et.)",
+ "NOT_PICKED_UP": "(Açmadı: telefon çaldı ama açmadı, hazırladığın açılış duyulmadı.)",
+ "SIM_OVER": "(Görüşme kapandı, bu bir testti; bir şey yapma.)",
+ "STT": {
+  "hf": "mihuai/turkish-stt-66m-v2",
+  "tokens": "tokens.txt",
+  "encoder": "encoder.int8.onnx",
+  "decoder": "decoder.int8.onnx",
+  "joiner": "joiner.int8.onnx"
+ },
+ "STT_en": {
+  "dir": "sherpa-onnx-streaming-zipformer-en-2023-06-26",
+  "tokens": "tokens.txt",
+  "encoder": "encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+  "decoder": "decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+  "joiner": "joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx"
+ },
+ "ACKS_en": [
+  "Hmm, let me see.",
+  "Let me see.",
+  "So, let me see.",
+  "Well, let me see.",
+  "Okay, let me check.",
+  "Hmm, so.",
+  "Hmm, okay."
+ ]
+}
