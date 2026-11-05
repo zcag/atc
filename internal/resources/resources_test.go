@@ -130,7 +130,7 @@ func TestScrub(t *testing.T) {
 		"curl --token abc123 http://x":                                "curl --token *** http://x",
 		"app --api-key=sk-123 run":                                    "app --api-key=*** run",
 		"mysql --password=hunter2 db":                                 "mysql --password=*** db",
-		"puma 6.4.3 (tcp://0.0.0.0:3020) [wt-42]":                   "puma 6.4.3 (tcp://0.0.0.0:3020) [wt-42]",
+		"puma 6.4.3 (tcp://0.0.0.0:3020) [wt-42]":                     "puma 6.4.3 (tcp://0.0.0.0:3020) [wt-42]",
 		"rspec spec/token_spec.rb":                                    "rspec spec/token_spec.rb",
 	} {
 		if got := scrub(in); got != want {
