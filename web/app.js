@@ -4699,14 +4699,15 @@ function AgentsPage({ name, agents, live, past, remember, say, reload, panes, to
         <div class="ph"><b>Agents</b><span>${list.length}</span></div>
         <div class="scroll" role="listbox" aria-label="Agents">
           ${!agents && html`<p class="none">Loading…</p>`}
-          ${agents && !list.length && html`<p class="none">No standing agents. An agent is a folder with a brief under ~/.config/atc/agents.</p>`}
+          ${agents && !list.length && html`<p class="none">No standing agents. An agent is a folder with a brief under ~/.config/atc/agents.d.</p>`}
           ${list.map((a) => { const x = agentRun(live, a.name), keeps = agentKeeps(a); return html`
             <a class="ar ${a === cur ? "sel" : ""}" role="option" aria-selected=${a === cur} href=${`${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`}
               onClick=${(e) => { e.preventDefault(); if (a.name === "assistant") return openAssistant(); const to = `${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`; wide ? location.replace(to) : (location.hash = to); }}>
               <${AgentMark} a=${a} /><b>${a.name === "assistant" ? "Assistant" : `@${a.name}`}${x?.parked && html`<span class="pz">parked</span>`}</b>
               <span class="ago">${a.last ? ago({ updated: a.last }) : ""}</span>
               <span class="k ${keeps ? "" : "none"}">${a.error ? "Can't start: see why" : keeps || "Keeps nothing"}</span>
-              <span class="l">${oneLine(x?.summary?.status || x?.lastReply) || `wakes ${agentWakes(a)}`}</span></a>`; })}
+              ${oneLine(x?.summary?.status || x?.lastReply) && html`<span class="l">${oneLine(x?.summary?.status || x?.lastReply)}</span>`}
+              <span class="l wk">wakes ${a.every ? `every ${a.every}` : agentWakes(a)}${a.next ? `, next ${soon(a.next)}` : ""}</span></a>`; })}
         </div>
       </aside>
       ${run ? html`<section class="agv"><${Session} key=${run.sessionId} s=${run} say=${say} live=${live} panes=${panes} togglePane=${togglePane} back=${() => (location.hash = AGENTS_ROUTE)} /></section>`

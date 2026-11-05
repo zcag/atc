@@ -53,10 +53,24 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
       await to(p, "#/pages", 2600);
       return [[p, "pages"]];
     },
+    // The team: the list on its own, each agent's page in its own window.
     async agents(mode) {
-      const p = await open(mode);
-      await to(p, "#/agents/reviewer", 2600);
-      return [[p, "agents"]];
+      const out = [];
+      const l = await open(mode, { w: 620, h: 800, phone: true, dpr: 2 });
+      await to(l, "#/agents", 2600);
+      out.push([l, "team-list"]);
+      for (const [name, pg] of [["shopping", "picks"], ["ops", "alerts"], ["email", "inbox"], ["tracker", "items"], ["invoice", "invoice"], ["standup", "today"], ["reviewer", "queue"]]) {
+        const p = await open(mode, { w: 620, h: 800, phone: true, dpr: 2 });
+        await to(p, `#/p/@${name}/${pg}`, 2400);
+        out.push([p, `team-${name}`]);
+      }
+      return out;
+    },
+    // Everything at once, for the hero's back window.
+    async fleet(mode) {
+      const p = await open(mode, { w: 1900, h: 1240 });
+      await to(p, "#/", 2400);
+      return [[p, "fleet"]];
     },
     async usage(mode) {
       const p = await open(mode, { h: 1040 });

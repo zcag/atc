@@ -18,7 +18,7 @@ LOG = HOME / ".claude/demo-brain.log"
 DIALOGUE = [
     (.8, [], "", "Hey, sorry to call. Checkout errors jumped to eight percent right after the last deploy, and the coupon change looks like the cause. Do you want me to roll it back, or look at it first?", []),
     (3.4, ["mcp__atc__read"], "", "That and a copy fix. The errors all come from the coupon code.", ["ios"]),
-    (1.2, ["mcp__atc__send", "mcp__atc__start"], "", "Rolling back now, and I've started a session on the cause. The iOS build on the laptop just finished too, so that's one less thing.", ["errors", "cause"]),
+    (1.2, ["mcp__atc__send", "mcp__atc__start"], "", "Rolling back now, and I've started a session on the cause. The iOS build on the laptop just finished too, so that's one less thing.", ["ops", "cause"]),
     (1.0, ["Bash"], "", "About forty, in eleven minutes. I put the chart on your screen.", []),
     (.8, [], "", "I will. Talk soon. [HANGUP]", []),
 ]
@@ -58,6 +58,7 @@ def change(what):
         state = json.loads((home / ".claude/demo-agents.json").read_text())
         if "agent" in move:
             state.append(move["agent"])
+            os.rename(move["path"] + ".pending", move["path"])
         for a in state:
             if a["sessionId"] == move["sid"]:
                 a["state"], a["status"] = ("idle", "idle") if what == "ios" else ("working", "busy")

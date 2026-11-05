@@ -1,0 +1,18 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alerts</title><link rel="stylesheet" href="/atc.css"></head>
+<body><main class="pg">
+<header class="head"><h1>Four alerts today: three fixed, one rang you</h1>
+<p class="lede">The disk on db-2 was the only one worth a look afterwards. Its backup rotation had stopped.</p>
+<p class="meta"><span>checks every 2 m</span><span>last woke 11 m ago</span></p></header>
+<div class="stats"><div><b>3</b><span>fixed on my own</span></div><div class="needs"><b>1</b><span>rang you</span></div><div><b>6<small>m</small></b><span>median to fixed</span></div></div>
+<section id="today"><h2>Today</h2>
+<ol class="timeline">
+<li><time>14:43</time><span><b>Checkout errors at 8.2%.</b> Coupon change in deploy 214. Rang you; rolling back on your word.</span></li>
+<li><time>11:20</time><span><b>db-2 disk at 96%.</b> Backup rotation stopped on Sunday. Removed 41 GB of expired backups, restarted the timer, disk at 58%, and the next run passed.</span></li>
+<li><time>09:12</time><span><b>queue-worker crash loop.</b> Out of memory after a bad batch. Restarted it and requeued 3 jobs. Depth back to 0.</span></li>
+<li><time>03:47</time><span><b>TLS cert expiring on status page.</b> Renewal job had failed on DNS. Re-ran it, valid for 89 days.</span></li>
+</ol></section>
+<section id="next"><h2>Worth doing <small>on the backlog</small></h2>
+<ul class="checks"><li class="now">Alert on the backup timer itself, not only the disk</li><li class="now">Memory limit for queue-worker</li></ul></section>
+</main></body></html>

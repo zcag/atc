@@ -5,7 +5,7 @@ assistant you can call on the phone. All of it on your own machines, from a brow
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/hero-dark.webp">
-  <img src="docs/img/hero-light.webp" alt="atc on a desktop: an agent's session on the checkout errors, with the page it made beside it, a chart of errors jumping to 8% at the last deploy and what is failing. In front, a phone taking an incoming call from Assistant, Checkout errors jumped to 8% after the last deploy, with Decline and Answer buttons.">
+  <img src="docs/img/hero-light.webp" alt="atc on a desktop with a lot going on: the board with sixteen sessions waiting and thirteen working across three machines, and in front of it @ops's session on the checkout errors with the page it made, a chart of errors jumping to 8% at the last deploy. In front of those, a phone taking an incoming call from Assistant, Checkout errors jumped to 8% after the last deploy, with Decline and Answer buttons.">
 </picture>
 
 ```sh
@@ -38,7 +38,7 @@ We run agents like these every day. Each is a folder: a page of instructions and
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/agents-dark.webp">
-  <img src="docs/img/agents-light.webp" alt="The Agents screen: a list of standing agents with what each keeps, and the reviewer open: its conversation, and beside it the page it keeps, three open pull requests, one needing a change.">
+  <img src="docs/img/agents-light.webp" alt="Eight windows, one team. The Agents list: @email, @invoice, @ops, @reviewer, @shopping, @standup and @tracker, each with what it is keeping track of, its last result, and when it wakes next. Then each agent's own page: @shopping's options with prices and stock and Pick buttons; @ops's alerts today, three fixed and one that rang you; @email's inbox sorted with buttons to act on; @tracker's 23 open items, the 4 that cost you something first; @invoice's invoice ready for your go; @standup's draft from yesterday; and @reviewer's pull requests.">
 </picture>
 
 Between wake-ups they stay out of your way. Ask one something any time with `atc send @shopping "the towel, in grey"`, point a
@@ -89,7 +89,7 @@ Start one in any folder on any machine, and open any of them from a browser, a t
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/board-dark.webp">
-  <img src="docs/img/board-light.webp" alt="The board: sessions from two machines and five projects, grouped into pinned, waiting on you, working and parked, each with a status line, context used, steps, what it made and its age.">
+  <img src="docs/img/board-light.webp" alt="The board: sessions from three machines and eleven projects, grouped into pinned, waiting on you, working and parked, each with a status line, context used, steps, what it made and its age.">
 </picture>
 
 The Android app pushes when a session needs you, and you can approve or answer from the notification. Holding the side key opens

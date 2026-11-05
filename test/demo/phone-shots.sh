@@ -22,7 +22,7 @@ for m in re.finditer(r'text=\"([^\"]*)\"[^>]*?bounds=\"\[(\d+),(\d+)\]\[(\d+),(\
         break" "$1"
 }
 ring() {
-	curl -s -m 200 -X POST "http://127.0.0.1:$((port + 1))/call" -d "{\"reason\":\"$reason\",\"via\":\"app\",\"from\":\"[from session \\\"Checkout errors after the deploy\\\" (@errors on devbox) · report back when done]\"}" >/dev/null &
+	curl -s -m 200 -X POST "http://127.0.0.1:$((port + 1))/call" -d "{\"reason\":\"$reason\",\"via\":\"app\",\"from\":\"[from session \\\"Checkout errors after the deploy\\\" (@ops on devbox) · report back when done]\"}" >/dev/null &
 	sleep .6
 	echo "am broadcast -f 32 -n $pkg/.Fake --es push '{\"ring\":{\"reason\":\"$reason\",\"at\":$(date +%s)}}'" >/tmp/atc-ring-cmd.sh
 	"${adb[@]}" push /tmp/atc-ring-cmd.sh /data/local/tmp/ring.sh >/dev/null
@@ -84,7 +84,7 @@ shoot)
 	open "s/$(id "Cart totals")"
 	sleep 3
 	shot phone-reply
-	open "p/@errors/checkout-errors"
+	open "p/@ops/checkout-errors"
 	sleep 3.5
 	shot phone-page
 	"${adb[@]}" shell am start -W -n org.fossify.phone/.activities.SplashActivity.Green >/dev/null

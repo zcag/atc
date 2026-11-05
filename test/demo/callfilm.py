@@ -104,7 +104,7 @@ async def direct():
     t0 = time.time()
     await asyncio.sleep(2.5)
     async with aiohttp.ClientSession() as http:
-        ask = asyncio.ensure_future(http.post(HUB + "/call", json={"reason": reason, "via": "app", "from": '[from session "Checkout errors after the deploy" (@errors on devbox) · report back when done]'}, timeout=aiohttp.ClientTimeout(total=200)))
+        ask = asyncio.ensure_future(http.post(HUB + "/call", json={"reason": reason, "via": "app", "from": '[from session "Checkout errors after the deploy" (@ops on devbox) · report back when done]'}, timeout=aiohttp.ClientTimeout(total=200)))
         await asyncio.sleep(.6)
         note(ring=True)
         cmd = "am broadcast -f 32 -n %s/.Fake --es push '%s'" % (PKG, json.dumps({"ring": {"reason": reason, "at": int(time.time())}}))
@@ -131,7 +131,7 @@ async def direct():
         await until(saying("on your screen"), 30)
         await asyncio.sleep(1.6)
         note(open_page=True)
-        cmd = "am broadcast -f 32 -n %s/.Fake --es push '%s'" % (PKG, json.dumps({"title": "assistant", "body": "Showing you the chart", "tag": "chart", "url": "/#/p/@errors/checkout-errors", "open": True}))
+        cmd = "am broadcast -f 32 -n %s/.Fake --es push '%s'" % (PKG, json.dumps({"title": "assistant", "body": "Showing you the chart", "tag": "chart", "url": "/#/p/@ops/checkout-errors", "open": True}))
         open("/tmp/atc-ring-cmd.sh", "w").write(cmd + "\n")
         adb("push", "/tmp/atc-ring-cmd.sh", "/data/local/tmp/ring.sh")
         adb("shell", "sh", "/data/local/tmp/ring.sh")

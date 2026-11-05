@@ -313,6 +313,7 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
 .ar.sel::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--ink); }
 .ar .am { grid-row: 1 / 4; margin-top: 1px; }
 .ar b { font-family: var(--mono); font-weight: 620; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ar .l.wk { color: var(--faint); font-family: var(--mono); font-size: var(--fs-micro); }
 .ar .ago { padding-top: 2px; font-family: var(--mono); font-size: var(--fs-micro); color: var(--faint); }
 .ar .k { grid-column: 2 / 4; font-size: var(--fs-small); font-weight: 540; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ar .k.none { padding: 0; color: var(--faint); font-weight: 400; }

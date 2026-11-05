@@ -3,6 +3,7 @@ import json
 import math
 import os
 import random
+import shutil
 import subprocess
 import sys
 import uuid
@@ -331,8 +332,8 @@ def scheduler():
     s.live("working", "busy", pinned=True)
 
 
-def error_watch():
-    """The alert that raises the call: the error rate reaches the assistant only because this agent watches it and posts it."""
+def ops_alert():
+    """The alert that raises the call: the error rate reaches anyone only because @ops is told, and it decides to ring."""
     s = Session("Checkout errors after the deploy", SHOP, ago=720)
     s.user('[message from grafana] {"alertname": "CheckoutErrorRate", "state": "alerting", "value": "8.2%", "for": "5m"}')
     s.bash("./recent-deploys.sh --last 1", "deploy 214, 11 minutes ago\na81f3c2 Coupon codes: percent discounts\n5d07e19 Checkout: fix a typo in the shipping copy")
@@ -343,40 +344,113 @@ def error_watch():
     s.say("Checkout errors are at 8.2%, up from 0.3%, since deploy 214 eleven minutes ago. 92% of them are `TypeError: discount of undefined` in `applyCoupon`, from the coupon change. 41 orders failed so far. This can't wait for a notification, so I've had you rung.")
     s.done(95000)
     s.summary("Checkout errors at 8.2% since deploy 214; the coupon change looks like the cause.", ["41 orders failed in eleven minutes."], ["Roll it back"])
-    s.live("idle", agent="errors", reports=HUB)
-    (CLAUDE / "demo-move-errors").write_text(json.dumps({"sid": s.sid, "path": str(s.path)}))
-    page("@errors", "checkout-errors", "Checkout errors", "Since deploy 214", ago=620, of=SHOP)
-    page_state["@errors/checkout-errors"] = {"headline": "Checkout errors at 8.2% since deploy 214", "badge": "8.2%"}
+    s.live("idle", agent="ops", reports=HUB)
+    (CLAUDE / "demo-move-ops").write_text(json.dumps({"sid": s.sid, "path": str(s.path)}))
+    page("@ops", "checkout-errors", "Checkout errors", "Since deploy 214", ago=620, of=SHOP)
+    page_state["@ops/checkout-errors"] = {"headline": "Checkout errors at 8.2%: rang you, rolling back", "badge": "8.2%"}
     # What the assistant starts when you ask: not in the list until then.
     c = Session("Why the coupon change broke checkout", SHOP, "fix/coupon-discount", ago=30)
     c.user("Find out why applyCoupon throws since deploy 214, and propose a fix. Report back.")
     c.grep("applyCoupon", "src/checkout/coupon.ts:12:export function applyCoupon(cart: Cart, code: string) {")
     c.call("Read", {"file_path": f"{SHOP}/src/checkout/coupon.ts"}, 5)
     c.write()
+    c.path.rename(str(c.path) + ".pending")
     meta[c.sid] = {"reportsTo": HUB}
     agent = {"id": c.id, "sessionId": c.sid, "pid": subprocess.Popen(["sleep", "86400"], start_new_session=True).pid, "cwd": SHOP, "kind": "background",
              "name": "", "state": "working", "status": "busy", "startedAt": int(NOW.timestamp() * 1000)}
     (CLAUDE / "demo-move-cause").write_text(json.dumps({"sid": c.sid, "path": str(c.path), "agent": agent}))
 
 
-def reviewer():
-    s = Session("Review open pull requests", SHOP, ago=2000)
-    s.user("Review what opened since last time.")
-    s.bash("gh pr list --state open --json number,title", '[{"number":214,"title":"Search: debounce the query"},{"number":217,"title":"Account: export my data"}]')
-    s.say("Two look fine. #217 writes the export to a public bucket path, I left a comment asking for a signed link.")
-    s.done(95000)
-    s.summary("Two look fine; #217 needs a signed link for the export.")
-    s.live("idle", agent="reviewer", parked=True)
+TEAM = [
+    ("shopping", "Check the list: research what's new, recheck price and stock on what's waiting.",
+     [("Bash", {"command": "browser: 9 stores for 'bath towels grey'"}, "Listings read."), ("Bash", {"command": "atc show picks.html"}, "Showing Picks.")],
+     "Three things to pick. The linen towels dropped 18% overnight and only 4 are left, so I'd take those today.",
+     "Linen towels down 18%, 4 left; two more to pick.", 1600, "picks", "Picks", "Options to pick from",
+     {"headline": "3 to pick; towels down 18%, 4 left", "badge": 3}),
+    ("email", "Read my mail: fold what's new into the inbox page.",
+     [("Bash", {"command": "mail fetch --unread"}, "47 unread in 2 inboxes"), ("Bash", {"command": "atc show inbox.html"}, "Showing Inbox.")],
+     "47 read: 3 need you, 11 can go. 1 hosting renewal, by Friday. 2 boiler visit. 3 tax adviser's two receipts.",
+     "3 need you; the hosting renewal is due Friday.", 700, "inbox", "Inbox", "Sorted, with actions",
+     {"headline": "3 need you, 11 can go", "badge": 3}),
+    ("reviewer", "These pull requests have no review yet. Read them.",
+     [("Bash", {"command": "gh pr diff 221"}, "2 files changed"), ("Bash", {"command": "gh pr diff 217"}, "5 files changed")],
+     "#217 writes the export to a public bucket path, that needs a signed link. #221 and #214 look fine.",
+     "Needs a signed link on #217; two look fine.", 2000, "queue", "Review queue", "What is open and what I think",
+     {"headline": "#217 needs a signed link; 2 fine", "badge": 3}),
+    ("standup", "Draft today's standup.",
+     [("Bash", {"command": "gh search commits --author @me --committer-date yesterday"}, "17 commits"), ("Bash", {"command": "atc show today.html"}, "Showing Standup.")],
+     "Today's draft is on the page: four things shipped, one stuck on review.",
+     "Draft is ready: 4 shipped, 1 blocked.", 2500, "today", "Standup", "Drafted from yesterday",
+     {"headline": "Draft ready: 4 shipped, 1 blocked"}),
+    ("invoice", "Prepare this period's invoice.",
+     [("Bash", {"command": "./next-number.sh"}, "2026-23"), ("Bash", {"command": "atc show invoice.html"}, "Showing Invoice.")],
+     "Invoice 2026-23 is ready, 9,600 for the two weeks. It matches the last one apart from the dates. Say go and I'll send it.",
+     "Invoice 2026-23 ready: waits on your go.", 3000, "invoice", "Invoice", "Ready for your go",
+     {"headline": "2026-23 ready, 9,600: waits on your go", "badge": "go"}),
+    ("tracker", "Sweep the sources and update the list.",
+     [("Bash", {"command": "mail search --since 3h"}, "12 threads"), ("Bash", {"command": "gh search prs --involves @me --state open"}, "6 open")],
+     "23 open, 4 cost you something this week. The hosting renewal is the closest.",
+     "23 open; 4 cost you something this week.", 2800, "items", "Everything open", "Costs first",
+     {"headline": "23 open, 4 cost you something", "badge": 4, "counts": {"open": 23, "costs": 4}}),
+]
 
 
-def ci():
-    s = Session("CI failures on main", CLI, ago=5400)
-    s.user("Check the last failed run on main.")
-    s.bash("gh run list --branch main --status failure --limit 1", "Flaky: TestImportLargeFile timed out on the macOS runner")
-    s.say("One flaky timeout on the macOS runner, passed on retry. Nothing to do.")
-    s.done(40000)
-    s.summary("One flaky timeout, passed on retry.")
-    s.live("idle", agent="ci-watch", parked=True)
+def team():
+    """The agents from examples/agents, each after its last wake-up, with its own page."""
+    for name, prompt, steps, said, status, ago, pg, title, note, state in TEAM:
+        s = Session({"shopping": "Morning look at the list", "email": "Read my mail", "reviewer": "Review open pull requests", "standup": "Today's standup",
+                     "invoice": "Invoice 2026-23", "tracker": "Sweep: what's open"}[name], ASSIST, ago=ago)
+        s.user(prompt)
+        for t, args, out in steps:
+            s.tool(t, args, out)
+        s.say(said)
+        s.done(85000)
+        s.summary(status)
+        s.live("idle", agent=name, parked=name not in ("invoice", "standup"))
+        page("@" + name, pg, title, note, ago - 60, ATC / "agents.d" / name)
+        page_state[f"@{name}/{pg}"] = state
+    page("@ops", "alerts", "Alerts", "What fired, what I did", 660, ATC / "agents.d/ops")
+
+
+INFRA, MOBILE, SITE = "/home/you/code/infra", "/home/you/code/mobile", "/home/you/code/site"
+
+
+def busy(title, cwd, branch, doing, ago=300, model=OPUS, prompt=None):
+    s = Session(title, cwd, branch, model, ago=ago)
+    s.user(prompt or title + ".")
+    s.read("README.md", "# " + title)
+    s.bash("git status --short", " M " + cwd.split("/")[-1] + ".conf")
+    s.call("Bash", {"command": "true", "description": doing}, 10)
+    s.live("working", "busy")
+
+
+def asking(title, cwd, branch, cmd, ago=240):
+    s = Session(title, cwd, branch, ago=ago)
+    s.user(title + ".")
+    s.read("README.md", "# " + title)
+    s.call("Bash", {"command": cmd, "description": title})
+    s.live("blocked", job={"tempo": "blocked", "needs": "approve Bash: " + cmd})
+
+
+def finished(title, cwd, branch, status, said=None, ago=1800, replies=()):
+    s = Session(title, cwd, branch, ago=ago)
+    s.user(title + ".")
+    s.bash("git log --oneline -3", "4e1c9ab " + title)
+    s.say(said or status)
+    s.done(190000)
+    s.summary(status, replies=replies)
+    s.live("idle")
+
+
+def more_sessions():
+    busy("Postgres 17 upgrade rehearsal", INFRA, "pg17", "Restore last night's dump into the rehearsal cluster", 900)
+    busy("Terraform for the new region", INFRA, "region-eu2", "terraform plan -out=eu2.plan", 420)
+    asking("Rotate staging secrets", INFRA, "main", "./rotate.sh staging --apply")
+    finished("Trim the Docker images", INFRA, "slim-images", "Images are 61% smaller; the API one went from 1.2 GB to 470 MB.", replies=["Open a PR"])
+    busy("Dark mode on the marketing site", SITE, "dark", "Screenshot every page in both themes", 200, SONNET)
+    finished("Pricing page copy", SITE, "pricing-copy", "Three variants on a preview link; I'd ship B.", ago=3600, replies=["Ship B"])
+    busy("Push notification deep links", MOBILE, "fix/deep-links", "Run the Android instrumented tests", 640)
+    asking("Bump the React Native version", MOBILE, "rn-81", "npx react-native upgrade 0.81")
 
 
 def agent_folder(name, **cfg):
@@ -475,26 +549,21 @@ def main_box():
     local_model()
     scheduler()
     (CLAUDE).mkdir(parents=True, exist_ok=True)
-    error_watch()
-    reviewer()
-    ci()
+    ops_alert()
+    team()
+    more_sessions()
     past_sessions()
     resource_history()
     backlog()
-    for key, name, title, note, ago, state in (
-            ("reviewer", "queue", "Review queue", "What is open and what I think", 1800, {"headline": "#217 needs a signed link; 2 fine", "badge": 3}),
-            ("ci-watch", "health", "CI health", "Last 14 days on main", 3000, {"headline": "Main is green, one flaky test", "badge": "green"}),
-            ("standup", "today", "Today", "Written at 09:00", 5000, {"headline": "4 merged yesterday, 2 wait on you", "badge": 2})):
-        page("@" + key, name, title, note, ago, ATC / "agents.d" / key)
-        page_state[f"@{key}/{name}"] = state
-    agent_folder("errors", title="Error watch", icon="pulse", color="red", dir=SHOP, prompt="An alert fired. Look into it, and if it can't wait, have the user rung with atc call.", brief="Alerts post here. Find what changed and how bad it is. If it hurts customers now, ring the user; anything else is a notification.")
-    agent_folder("reviewer", title="Reviewer", icon="pr", color="violet", dir=SHOP, every="30m", check="gh pr list --search review:none --json number", prompt="Review what opened since last time.", brief="Review new pull requests and comment on what you find.")
-    agent_folder("ci-watch", title="CI watch", icon="pulse", color="amber", dir=CLI, every="5m", check="./failed-runs.sh", prompt="A run on main failed. Say what it means.", brief="Look at failed CI runs on main and say what they mean.")
-    agent_folder("standup", title="Standup", icon="calendar", color="teal", every="1d", **{"from": "2026-01-05T09:00"}, prompt="Write today's page.", brief="Each morning, write what merged, what is stuck and what waits on the user.")
-    agent_folder("deps", title="Dependencies", icon="target", color="green", dir=SHOP, every="1w", prompt="Check for updates worth taking.", brief="Open a session for any dependency update worth taking.")
+    for name in ("ops", "shopping", "email", "reviewer", "standup", "invoice", "tracker"):
+        d = ATC / "agents.d" / name
+        shutil.copytree(HOME / ".demo-agents" / name, d, dirs_exist_ok=True)
+        cfg = json.loads((d / "agent.json").read_text())
+        cfg["host"] = "devbox"
+        (d / "agent.json").write_text(json.dumps(cfg))
     (ATC / "presets.json").write_text(json.dumps([{"name": "reviewer", "dir": SHOP, "brief": "REVIEWER.md"}, {"name": "docs writer", "dir": DOCS, "worktree": True}]))
     (ATC / "engines.json").write_text(json.dumps([{"name": "qwen", "model": "qwen3-coder-30b", "url": "http://127.0.0.1:1"}]))
-    (ATC / "peers.json").write_text(json.dumps([{"name": "laptop", "url": os.environ["DEMO_PEER"], "token": "demo"}]))
+    (ATC / "peers.json").write_text(json.dumps([{"name": "laptop", "url": os.environ["DEMO_PEER"], "token": "demo"}, {"name": "gpu", "url": os.environ["DEMO_PEER2"], "token": "demo"}]))
     subprocess.run(["/home/you/.local/bin/atc", "limits", "-tap"], check=True, input=json.dumps({"rate_limits": {
         "five_hour": {"used_percentage": 38, "resets_at": (NOW + timedelta(hours=2, minutes=12)).timestamp()},
         "seven_day": {"used_percentage": 61, "resets_at": (NOW + timedelta(days=3)).timestamp()}}}).encode())
@@ -508,7 +577,6 @@ def main_laptop():
     s.edit("Shop/Checkout/CartView.swift", "total.cents", "total.minorUnits")
     s.call("Bash", {"command": "xcodebuild -scheme Shop -sdk iphonesimulator test", "description": "Build and run the iOS tests"}, 8)
     s.live("working", "busy")
-    CLAUDE.mkdir(parents=True, exist_ok=True)
     (CLAUDE / "demo-move-ios").write_text(json.dumps({"sid": s.sid, "path": str(s.path)}))
     s = Session("Android release notes", "/home/laptop/code/shop-android", ago=4000, model=SONNET)
     s.user("Write the Play Store notes for 3.2 from the merged PRs.")
@@ -516,9 +584,19 @@ def main_laptop():
     s.done(61000)
     s.summary("Play Store notes for 3.2 are written.", replies=["Commit it"])
     s.live("idle")
+    busy("Offline mode for the order list", "/home/laptop/code/shop-android", "offline", "Run the sync tests on the emulator", 560)
+    finished("TestFlight build 214", "/home/laptop/code/shop-ios", "main", "Build 214 is on TestFlight; two testers invited.", ago=5200)
 
 
-(main_laptop if sys.argv[1:] == ["laptop"] else main_box)()
+def main_gpu():
+    (CLAUDE / "demo-tick.json").parent.mkdir(parents=True, exist_ok=True)
+    busy("Retrain the search ranking model", "/home/gpu/code/ranking", "v7", "python train.py --epochs 12 (epoch 7 of 12)", 2400)
+    busy("Re-embed the catalog", "/home/gpu/code/search", "embed-v3", "python embed.py --all (61% of 218,000 products)", 1500, "qwen3-coder-30b")
+    finished("Benchmark the new reranker", "/home/gpu/code/ranking", "bench", "NDCG up 4.2%, latency unchanged. Numbers on the page.", ago=2600, replies=["Ship it"])
+    asking("Free the old checkpoints", "/home/gpu/code/ranking", "main", "rm -rf checkpoints/v3 checkpoints/v4")
+
+
+{"laptop": main_laptop, "gpu": main_gpu}.get(sys.argv[1] if sys.argv[1:] else "", main_box)()
 (CLAUDE / "jobs").mkdir(parents=True, exist_ok=True)
 (CLAUDE / "demo-tick.json").write_text(json.dumps(ticking))
 (CLAUDE / "demo-agents.json").write_text(json.dumps(agents))
