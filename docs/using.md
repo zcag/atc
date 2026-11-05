@@ -23,7 +23,9 @@
     the typeface, size and line length.
   - **Zen** (`z`, or More on the phone) leaves only the words: your prompts and its replies, without
     the steps, the panes or the box. It keeps your place in the text. `z`, `esc`, the back button or
-    Leave zen ends it, and Enter ends it and goes to the box.
+    Leave zen ends it, and Enter ends it and goes to the box. **Aa** (`a`) sets the size (also `-` and
+    `=`), typeface, line length, line spacing and colours: the theme, or warm Paper, Sepia, Dusk or
+    Night, which apply only in zen. They are kept per device.
   - **Find** (`f`) searches the whole session (prompts, replies, commands, file names) and filters
     to the turns with failures, commits, changed files, deploys or questions.
   - **What this session produced** lists the files it changed (open one for all its edits as one

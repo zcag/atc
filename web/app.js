@@ -850,7 +850,7 @@ const KEYMAP = [
   ["Sessions", [["q w e .. p", "The 1st to 10th session in the list, at once"], ["j k", "Next, previous session (on the board: the selection)"], ["enter", "On the board: open the selected session"], ["alt j k", "Next, previous session, even from a terminal"]]],
   ["Panes", [["[", "Sessions beside the transcript"], ["]", "Its page beside the transcript (board: the page index)"], ["\\", "State: now, running, made, the session's facts"]]],
   ["Session", [["enter", "Write to the session (on a stopped one: Resume)"], ["`", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
-  ["Reading", [["J K", "Next, previous turn: your prompts and its replies"], ["space", "A screen down; with shift, up"], ["home end", "Top, end of the transcript"], ["N", "Next thing you have not seen here: the divider, then the question"], ["c", "Contents: every turn and heading"], ["l", "Outline, story, everything, in turn"], ["f", "Find in the session"], ["z", "Zen: only the words, nothing around them; z or esc to leave"]]],
+  ["Reading", [["J K", "Next, previous turn: your prompts and its replies"], ["space", "A screen down; with shift, up"], ["home end", "Top, end of the transcript"], ["N", "Next thing you have not seen here: the divider, then the question"], ["c", "Contents: every turn and heading"], ["l", "Outline, story, everything, in turn"], ["f", "Find in the session"], ["z", "Zen: only the words, nothing around them; z or esc to leave"], ["a", "In zen: size, typeface, spacing, colours"], ["- =", "In zen: smaller, larger"]]],
   ["Assistant", [[".", "Call it"], ["[", "Touched today and the agents"], ["esc", "Close the assistant"]]],
   ["Call", [["m", "Mute, unmute"], ["E", "End the call (shift e)"], [".", "Back to the call, from anywhere"], ["esc", "Minimize the call to the console line"]]],
   ["Answer", [["1..9", "With the question focused (click it, tab into it, or N): that option"]]],
@@ -5098,9 +5098,9 @@ function Table({ text, tsv }) {
 }
 
 const TX_FACES = {
-  text: { name: "System", css: "var(--text)", sizes: [15.5, 16.5, 18], lh: 1.5 },
-  lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [16, 17.5, 19], lh: 1.52, weight: 420, optical: "none" },
-  sans: { name: "Recursive", css: "var(--sans)", sizes: [15, 16, 17.5], lh: 1.5 },
+  text: { name: "System", css: "var(--text)", sizes: [15.5, 16.5, 18, 20, 22.5], lh: 1.5 },
+  lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [16, 17.5, 19, 21, 23.5], lh: 1.52, weight: 420, optical: "none" },
+  sans: { name: "Recursive", css: "var(--sans)", sizes: [15, 16, 17.5, 19.5, 22], lh: 1.5 },
 };
 const txStore = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(`atc.tx.${k}`)) ?? d; } catch { return d; } },
@@ -5109,7 +5109,7 @@ const txStore = {
 const txPrefs = {
   get: () => {
     const p = txStore.get("prefs", {});
-    return { size: 1, width: 1, ...p, face: !p.face || (p.face === "lit" && !p.chose) ? "text" : p.face };
+    return { size: 1, width: 1, space: 1, paper: "", ...p, face: !p.face || (p.face === "lit" && !p.chose) ? "text" : p.face };
   },
   set(p) {
     const v = { ...txPrefs.get(), ...p, chose: p.face ? true : txStore.get("prefs", {}).chose };
@@ -5118,6 +5118,8 @@ const txPrefs = {
   },
 };
 const TX_MEASURES = [560, 620, 680];
+const TX_SPACINGS = [1, 1.08, 1.2];
+const TX_PAPERS = [["", "Theme"], ["paper", "Paper"], ["sepia", "Sepia"], ["dusk", "Dusk"], ["night", "Night"]];
 
 function bodyOf(msgs) {
   const items = [];
@@ -5527,7 +5529,7 @@ function SettingsPage({ me, say, onClose }) {
           <div class="set">
             <b>Size</b>
             <div class="ctl"><${Seg} label="Size" value=${prefs.size} set=${(v) => txPrefs.set({ size: v })}
-              options=${["Small", "Medium", "Large"].map((n, i) => [i, n])} /></div>
+              options=${["Small", "Medium", "Large", "Larger", "Largest"].map((n, i) => [i, n])} /></div>
           </div>
           <div class="set">
             <b>Line length</b>
@@ -6166,7 +6168,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   const setDraft = (v) => setDraftRaw((d) => { const n = typeof v === "function" ? v(d) : v; if (n !== d) draftPut(sid, n); return n; });
   const [quotes, setQuotes] = useState([]);
   const box = useRef(), landed = useRef(false), atEnd = useRef(false), hold = useRef(null), loading = useRef(new Set());
-  const zenFrom = useRef(null), reflowed = useRef(false), composerFocus = useRef(() => {});
+  const placeFrom = useRef(null), reflowed = useRef(false), composerFocus = useRef(() => {});
   const focusInput = useRef(() => {}), uploadRef = useRef(null), findQ = useRef(""), askKey = useRef(null), mark = useRef(undefined);
   const live = s.attachable || s.harness === "opencode";
   const working = s.state === "working" && !s.turnDone;
@@ -6177,13 +6179,23 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   const stream = useHubStream(s, () => loadIdx());
   const setContents = (v) => { setContentsRaw(v); txStore.set("contents", v); };
   const [zen, setZenRaw] = useState(false);
-  const setZen = (on) => {
+  const notePlace = () => {
     const sc = box.current, top = sc?.getBoundingClientRect().top;
-    const el = sc && [...sc.querySelectorAll(".prose > *, .lead, .fold")].find((e) => e.getBoundingClientRect().bottom > top);
-    if (el) { const r = el.getBoundingClientRect(); zenFrom.current = { el, into: (top - r.top) / r.height }; }
-    if (atEnd.current) zenFrom.current = null;
+    const el = sc && !atEnd.current && [...sc.querySelectorAll(".prose > *, .lead, .fold")].find((e) => e.getBoundingClientRect().bottom > top);
+    const r = el && el.getBoundingClientRect();
+    placeFrom.current = el ? { el, into: (top - r.top) / r.height } : null;
     reflowed.current = true;
     hold.current = null;
+  };
+  const restorePlace = () => {
+    const from = placeFrom.current, sc = box.current;
+    placeFrom.current = null;
+    if (from?.el.isConnected && sc) { const r = from.el.getBoundingClientRect(); sc.scrollTop += r.top - sc.getBoundingClientRect().top + from.into * r.height; }
+    requestAnimationFrame(() => requestAnimationFrame(() => { reflowed.current = false; }));
+  };
+  const setZen = (on) => {
+    notePlace();
+    if (!on) setPop((x) => (x === "look" ? null : x));
     setZenRaw(on);
     if (on) history.pushState({ ...history.state, atcZen: true }, "");
     else if (history.state?.atcZen) history.back();
@@ -6195,11 +6207,13 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   };
   useLayoutEffect(() => {
     document.body.classList.toggle("zen", zen);
-    const from = zenFrom.current, sc = box.current;
-    zenFrom.current = null;
-    if (from?.el.isConnected && sc) { const r = from.el.getBoundingClientRect(); sc.scrollTop += r.top - sc.getBoundingClientRect().top + from.into * r.height; }
+    restorePlace();
     return () => document.body.classList.remove("zen");
   }, [zen]);
+  useLayoutEffect(() => {
+    if (zen && prefs.paper) document.body.dataset.paper = prefs.paper;
+    return () => { delete document.body.dataset.paper; };
+  }, [zen, prefs.paper]);
   useEffect(() => {
     if (!zen) return;
     const back = () => !history.state?.atcZen && setZen(false);
@@ -6207,7 +6221,10 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     return () => removeEventListener("popstate", back);
   }, [zen]);
   useKeyLayer((e) => {
-    if (typingIn(e.target) || !(e.key === "z" || (e.key === "Escape" && !pop && !shot && !sel))) return false;
+    if (typingIn(e.target)) return false;
+    if (e.key === "a") return setPop(pop === "look" ? null : "look"), true;
+    if (e.key === "-" || e.key === "=" || e.key === "+") return txPrefs.set({ size: Math.max(0, Math.min(4, prefs.size + (e.key === "-" ? -1 : 1))) }), true;
+    if (e.key !== "z" && (e.key !== "Escape" || pop || shot || sel)) return false;
     setZen(false);
     return true;
   }, zen);
@@ -6276,7 +6293,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     if (pending.some(gone)) setPending((ps) => ps.filter((p) => !gone(p)));
   }, [idx, pending, waiting]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const f = TX_FACES[prefs.face] || TX_FACES.text, st = box.current?.parentElement?.style;
     if (!st) return;
     st.setProperty("--rf", f.css);
@@ -6285,9 +6302,11 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     st.setProperty("--rg", f.weight || 400);
     st.setProperty("--ro", f.optical || "auto");
     st.setProperty("--rw", `${TX_MEASURES[prefs.width]}px`);
+    st.setProperty("--rz", TX_SPACINGS[prefs.space]);
+    restorePlace();
   }, [prefs, idx !== null]);
   useEffect(() => {
-    const f = (e) => setPrefsRaw(e.detail);
+    const f = (e) => { notePlace(); setPrefsRaw(e.detail); };
     addEventListener("atc-txprefs", f);
     return () => removeEventListener("atc-txprefs", f);
   }, []);
@@ -6372,7 +6391,6 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     const ro = new ResizeObserver(() => {
       if (landed.current && (hold.current !== null || atEnd.current)) settle();
       else if (landed.current && el.scrollHeight > h + 40 && !reflowed.current) setFresh((n) => n + 1);
-      reflowed.current = false;
       h = el.scrollHeight;
     });
     ro.observe(inner);
@@ -6381,7 +6399,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
 
   useEffect(() => {
     if (!pop) return;
-    const off = (e) => !e.target.closest(".pop") && setPop(null);
+    const off = (e) => !e.target.closest(".pop, .zenaa") && setPop(null);
     document.addEventListener("pointerdown", off);
     return () => document.removeEventListener("pointerdown", off);
   }, [pop]);
@@ -6568,7 +6586,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   return html`<div class="tx-wrap ${contents ? "with-toc" : ""}" onDragEnter=${dropIn} onDragOver=${dropIn}
     onDragLeave=${(e) => !e.currentTarget.contains(e.relatedTarget) && setDrop(false)}
     onDrop=${(e) => { if (!drop) return; e.preventDefault(); setDrop(false); uploadRef.current?.([...e.dataTransfer.files]); }}>
-    ${zen && html`<div class="zenbar"><span class="t">${s.title || "Untitled"}</span><button class="kb" onClick=${() => setZen(false)}>Leave zen <kbd aria-hidden="true">z</kbd></button></div>`}
+    ${zen && html`<div class="zenbar"><span class="t">${s.title || "Untitled"}</span><button class="kb zenaa" aria-expanded=${pop === "look"} aria-keyshortcuts="a" title="How the text looks" onClick=${() => setPop(pop === "look" ? null : "look")}>Aa <kbd aria-hidden="true">a</kbd></button><button class="kb" onClick=${() => setZen(false)}>Leave zen <kbd aria-hidden="true">z</kbd></button></div>`}
     <div class="txv"><div class="tx" ref=${box} tabindex="0" aria-label=${`Transcript of ${s.title || "this session"}`} onWheel=${letGo} onTouchStart=${letGo} onPointerDown=${letGo}
       onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; setBelow(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight * 0.6); if (atEnd.current) { setFresh(0); if (landed.current) markLooked(s); } setSel(null); }}>
       <div class="read">
@@ -6585,6 +6603,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       ${sel && html`<${SelBar} sel=${{ ...sel, y: sel.y + (box.current?.scrollTop || 0) }} live=${live} act=${selAct} />`}
     </div>
     ${pop === "find" && html`<${Find} turns=${turns} s=${s} go=${go} close=${() => { setPop(null); box.current?.focus({ preventScroll: true }); }} init=${findQ.current} key=${findQ.current} />`}
+    ${pop === "look" && html`<${ZenLook} prefs=${prefs} />`}
     ${pop === "results" && html`<${Results} turns=${turns} s=${s} bodies=${bodies} need=${need} go=${go} close=${() => setPop(null)} />`}
     ${below && fresh > 0 && html`<button class="btn to-end" onClick=${() => { letGo(); atEnd.current = true; setFresh(0); box.current?.scrollTo({ top: box.current.scrollHeight }); }}>${working ? "New activity below" : "New reply below"}</button>`}
     </div>
@@ -6594,6 +6613,19 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       focusRef=${composerFocus} uploadRef=${uploadRef} working=${working} asking=${!!asking && !asking.permission} interrupt=${interrupt}
       prompt=${cmp.prompt} doors=${cmp.doors} hintFor=${cmp.hint} top=${html`${cmp.top}<${BgStrip} s=${s} />`} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
+  </div>`;
+}
+
+function ZenLook({ prefs }) {
+  const row = (name, label, cls, options, key) => html`<div class="row ${cls}"><b>${name}</b><span class="seg ${key === "size" ? "sizes" : ""}" role="group" aria-label=${label}>${options.map(([v, text, style]) =>
+    html`<button aria-pressed=${prefs[key] === v} aria-label=${typeof v === "number" && key === "size" ? `Size ${v + 1} of 5` : null} style=${style || ""} onClick=${() => txPrefs.set({ [key]: v })}>${text}</button>`)}</span></div>`;
+  return html`<div class="pop zenlook" role="group" aria-label="How the text looks">
+    ${row("Size", "Size", "", [0, 1, 2, 3, 4].map((i) => [i, "A"]), "size")}
+    ${row("Typeface", "Typeface", "", Object.entries(TX_FACES).map(([k, f]) => [k, f.name, `font-family:${f.css}`]), "face")}
+    ${row("Line length", "Line length", "wide", ["Narrow", "Normal", "Wide"].map((n, i) => [i, n]), "width")}
+    ${row("Line spacing", "Line spacing", "", ["Tight", "Normal", "Loose"].map((n, i) => [i, n]), "space")}
+    <div class="row"><b>Colours</b><span class="papers" role="group" aria-label="Colours">${TX_PAPERS.map(([v, name]) =>
+      html`<button data-paper=${v || null} aria-pressed=${prefs.paper === v} onClick=${() => txPrefs.set({ paper: v })}>${name}</button>`)}</span></div>
   </div>`;
 }
 

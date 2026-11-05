@@ -1,0 +1,110 @@
+/* zen: the words and nothing around them */
+body.zen :is(.app > .bays, .app > .console, .app > .tabbar, .side, .sstrip, .hd, .ahd, .aleft, .statep, .pggrip, .pgsplit > :not(.pgchat), .composer, .endbar) { display: none; }
+body.zen .app, body.zen .app.assisting, body.zen .app:has(> .callpill) { grid-template-rows: minmax(0, 1fr) auto; padding-top: env(safe-area-inset-top); }
+body.zen :is(.shell.open, .shell.assistv, .sbody, .pgsplit) { grid-template-columns: minmax(0, 1fr); }
+body.zen .pgchat { border-right: 0; }
+body.zen .tx { scrollbar-width: thin; }
+body.zen .tx:focus-visible { box-shadow: none; }
+body.zen .tx .read { padding-top: var(--s7); padding-bottom: 30vh; }
+
+/* the bar and its popover */
+.zenbar { flex: none; display: flex; align-items: center; gap: var(--s1); padding: var(--s1) var(--s2) var(--s1) var(--pad); font-size: var(--fs-small); color: var(--faint); }
+.zenbar .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.zenbar .kb { flex: none; }
+.zenbar .kb[aria-expanded="true"] { color: var(--ink); background: var(--strip-hi); }
+@container tx (min-width: 1100px) { .zenbar { position: absolute; inset: 0 0 auto; z-index: 7; pointer-events: none; } .zenbar .kb { pointer-events: auto; } .tx-wrap .pop.zenlook { top: 40px; } }
+.tx-wrap .pop.zenlook { top: var(--s1); width: min(380px, calc(100% - 24px)); max-height: calc(100% - 52px); padding: var(--s4); display: grid; gap: var(--s4); }
+.zenlook .row { display: grid; gap: 6px; min-width: 0; }
+.zenlook .row > b { font-weight: 500; font-size: var(--fs-small); color: var(--dim); }
+.zenlook .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.tx-wrap .zenlook .seg button { height: 32px; padding: 0 var(--s1); text-align: center; border-radius: var(--r-md); font-size: var(--fs-ui); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tx-wrap .zenlook .seg button:hover { color: var(--ink); }
+.tx-wrap .zenlook .seg button[aria-pressed="true"] { background: var(--ink); color: var(--strip); }
+.tx-wrap .zenlook .sizes button:nth-child(1) { font-size: 12px; }
+.tx-wrap .zenlook .sizes button:nth-child(2) { font-size: 14px; }
+.tx-wrap .zenlook .sizes button:nth-child(3) { font-size: 16px; }
+.tx-wrap .zenlook .sizes button:nth-child(4) { font-size: 19px; }
+.tx-wrap .zenlook .sizes button:nth-child(5) { font-size: 22px; }
+.zenlook .papers { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--s1); }
+.tx-wrap .zenlook .papers button { height: 44px; text-align: center; border-radius: var(--r-md); background: var(--strip); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); font-size: var(--fs-small); overflow: hidden; }
+.tx-wrap .zenlook .papers button[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--focus); font-weight: 620; }
+@container tx (max-width: 620px) { .zenlook .row.wide { display: none; } }
+
+/* colours, for reading only: they replace the theme while zen is on */
+[data-paper="paper"] {
+  color-scheme: light;
+  --strip: oklch(97.2% 0.012 85); --board: oklch(95.4% 0.014 85); --sunk: oklch(92.5% 0.016 85); --strip-hi: oklch(92% 0.016 85); --code: oklch(94.2% 0.016 85);
+  --line: oklch(85% 0.018 85); --hair: oklch(90% 0.016 85); --line-strong: oklch(58% 0.02 85); --skel: oklch(90.5% 0.016 85);
+  --ink: oklch(25% 0.02 70); --dim: oklch(39% 0.02 70); --faint: oklch(48% 0.02 70);
+}
+[data-paper="sepia"] {
+  color-scheme: light;
+  --strip: oklch(92.5% 0.032 82); --board: oklch(90.5% 0.034 82); --sunk: oklch(88% 0.036 82); --strip-hi: oklch(87.5% 0.036 82); --code: oklch(89.2% 0.036 82);
+  --line: oklch(80% 0.034 82); --hair: oklch(85.5% 0.034 82); --line-strong: oklch(54% 0.035 75); --skel: oklch(86% 0.034 82);
+  --ink: oklch(27% 0.03 65); --dim: oklch(37% 0.03 65); --faint: oklch(44% 0.03 65);
+}
+[data-paper="dusk"] {
+  color-scheme: dark;
+  --strip: oklch(24.5% 0.012 70); --board: oklch(27% 0.012 70); --sunk: oklch(21.5% 0.012 70); --strip-hi: oklch(31% 0.012 70); --code: oklch(28.5% 0.012 70);
+  --line: oklch(36% 0.012 70); --hair: oklch(31% 0.012 70); --line-strong: oklch(56% 0.012 70); --skel: oklch(31% 0.012 70);
+  --ink: oklch(87% 0.022 82); --dim: oklch(76% 0.02 82); --faint: oklch(68% 0.016 82);
+}
+[data-paper="night"] {
+  color-scheme: dark;
+  --strip: oklch(10% 0.004 70); --board: oklch(14% 0.005 70); --sunk: oklch(8% 0.004 70); --strip-hi: oklch(19% 0.006 70); --code: oklch(15.5% 0.006 70);
+  --line: oklch(25% 0.007 70); --hair: oklch(19% 0.006 70); --line-strong: oklch(48% 0.008 70); --skel: oklch(19% 0.006 70);
+  --ink: oklch(80% 0.022 80); --dim: oklch(69% 0.018 80); --faint: oklch(60% 0.014 80);
+}
+body.zen[data-paper] { background: var(--strip); color: var(--ink); }
+
+/* the page: prompts open a section, replies read as text, and everything scales with the text size */
+body.zen .tx .lead-at, body.zen .tx .fold .g b, body.zen .tx .snc :is(.cu, .sm, .acts), body.zen .tx .work :is(.doing, .el) { display: none; }
+body.zen .tx .work { align-items: center; min-height: 1lh; }
+body.zen .tx .snc { margin-bottom: var(--s6); padding-top: var(--s2); border-top: 1px solid var(--line-strong); }
+body.zen .tx .snc .l { font-weight: 400; color: var(--faint); }
+
+body.zen .tx .sec { padding-top: 2.4em; font-size: var(--rs); }
+body.zen .tx .sec.first { padding-top: 0; }
+body.zen .tx .lead { margin: 0 0 1.5em; padding: 0.9em 0 0; background: none; border-radius: 0; border-top: 1px solid var(--line); }
+body.zen .tx .sec.first .lead { padding-top: 0; border-top: 0; }
+body.zen .tx .lead p { font-size: 0.9em; line-height: 1.5; font-weight: 400; color: var(--dim); }
+body.zen .tx .fold { margin: 0 0 var(--s4); }
+body.zen .tx .fold .fy { padding: var(--s3) 0 0; background: none; border-radius: 0; border-top: 1px solid var(--hair); }
+body.zen .tx .fold .lead-at { display: none; }
+body.zen .tx .fold .g { padding: 0; }
+
+body.zen .tx-wrap .prose { line-height: calc(var(--rl) * var(--rz, 1)); font-kerning: normal; font-variant-ligatures: common-ligatures; }
+body.zen .tx-wrap .prose p { margin-bottom: 1em; }
+body.zen .tx-wrap .prose :is(h1, h2, h3, h4) { font-family: var(--rf); line-height: 1.25; text-wrap: balance; color: var(--ink); }
+body.zen .tx-wrap .prose :is(h1, h2) { font-size: 1.45em; font-weight: 640; letter-spacing: -0.012em; margin: 1.7em 0 0.55em; padding-top: 0; border-top: 0; }
+body.zen .tx-wrap .prose h3 { font-size: 1.16em; font-weight: 640; margin: 1.7em 0 0.45em; }
+body.zen .tx-wrap .prose h4 { font-size: 1em; font-weight: 640; color: var(--dim); margin: 1.5em 0 0.35em; }
+body.zen .tx-wrap .prose > :is(h1, h2, h3, h4):first-child { margin-top: 0; }
+body.zen .tx-wrap .prose a { text-decoration-thickness: 1px; text-underline-offset: 0.2em; }
+body.zen .tx-wrap .prose :not(pre) > code { font-size: 0.86em; padding: 0.1em 0.32em; border-radius: var(--r-sm); background: color-mix(in srgb, var(--ink) 7%, var(--strip)); box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+body.zen .tx-wrap .prose .cite { font-size: 0.78em; color: var(--faint); }
+body.zen .tx-wrap .prose .cite code { padding: 0; background: none; }
+body.zen .tx-wrap .prose pre { font-size: 0.8em; line-height: 1.62; margin: 1.3em calc(-1 * var(--s4)) 1.5em; padding: var(--s3) var(--s4); box-shadow: none; border-radius: var(--r-md); }
+body.zen .tx-wrap .prose ul { padding-left: 1.25em; }
+body.zen .tx-wrap .prose :is(ul, ol) { margin-bottom: 1.1em; }
+body.zen .tx-wrap .prose :is(ul, ol) > li { margin-bottom: 0.4em; }
+body.zen .tx-wrap .prose blockquote { margin: 1.2em 0; padding-left: 1.1em; box-shadow: inset 2px 0 0 var(--line-strong); }
+body.zen .tx-wrap .prose hr { width: 3em; margin: 2.4em auto; border-top: 1px solid var(--line-strong); }
+body.zen .tx-wrap .prose .tbl { margin: 1.2em 0 1.5em; }
+body.zen .tx-wrap .prose table { font-family: var(--rf); font-size: 0.88em; line-height: 1.45; }
+body.zen .tx-wrap .prose th { font-size: 0.86em; font-weight: 600; color: var(--dim); border-bottom-color: var(--line-strong); padding: 0.45em 1em 0.45em 0; }
+body.zen .tx-wrap .prose td { padding: 0.6em 1em 0.6em 0; }
+body.zen .tx-wrap .prose td code { font-size: 0.9em; padding: 0.1em 0.3em; }
+body.zen .tx [data-said]:not([data-stop]) .prose { font-family: var(--rf); font-size: 0.94em; font-size: calc(var(--rs) * 0.94); line-height: calc(var(--rl) * var(--rz, 1)); font-weight: var(--rg, 400); max-width: var(--rw); color: var(--dim); }
+body.zen .tx [data-said]:not([data-stop]) .prose > :last-child { margin-bottom: 0.9em; }
+body.zen .tx [data-said][data-stop] { margin-top: var(--s4); }
+
+@media (max-width: 899px) {
+  body.zen .tx .lead, body.zen .tx .fold { margin-left: 0; margin-right: 0; }
+  body.zen .tx .fold { width: 100%; }
+  body.zen .tx .fold .g { padding: 0; }
+  body.zen .tx .prose pre { border-radius: 0; }
+  body.zen .tx .prose pre .copy { opacity: 0.55; }
+  .tx-wrap .pop.zenlook { left: var(--s2); right: var(--s2); width: auto; max-height: calc(100% - 12px); }
+  .tx-wrap .zenlook .seg button { height: 44px; }
+}

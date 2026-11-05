@@ -408,26 +408,6 @@
 .bgstrip li.done .bg-l { color: var(--faint); text-decoration: line-through; }
 .bgstrip .bg-t { font-family: var(--mono); color: var(--faint); }
 
-/* zen: the words and nothing around them */
-body.zen :is(.app > .bays, .app > .console, .app > .tabbar, .side, .sstrip, .hd, .ahd, .aleft, .statep, .pggrip, .pgsplit > :not(.pgchat), .composer, .endbar) { display: none; }
-body.zen .app, body.zen .app.assisting, body.zen .app:has(> .callpill) { grid-template-rows: minmax(0, 1fr) auto; padding-top: env(safe-area-inset-top); }
-body.zen :is(.shell.open, .shell.assistv, .sbody, .pgsplit) { grid-template-columns: minmax(0, 1fr); }
-body.zen .pgchat { border-right: 0; }
-.zenbar { flex: none; display: flex; align-items: center; justify-content: space-between; gap: var(--s3); padding: var(--s1) var(--s2) var(--s1) var(--pad); font-size: var(--fs-small); color: var(--faint); }
-.zenbar .t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-@container tx (min-width: 1100px) { .zenbar { position: absolute; inset: 0 0 auto; z-index: 7; pointer-events: none; } .zenbar .kb { pointer-events: auto; } }
-body.zen .tx .read { padding-top: var(--s7); padding-bottom: 30vh; }
-body.zen .tx { scrollbar-width: thin; }
-body.zen .tx:focus-visible { box-shadow: none; }
-body.zen .tx .lead-at, body.zen .tx .fold .g b, body.zen .tx .snc :is(.cu, .sm, .acts), body.zen .tx .work :is(.doing, .el) { display: none; }
-body.zen .tx .work { align-items: center; min-height: 1lh; }
-body.zen .tx .snc { margin-bottom: var(--s5); }
-body.zen .tx .snc .l { font-weight: 400; color: var(--faint); }
-body.zen .tx .snc { border-top-width: 1px; border-top-color: var(--line-strong); }
-body.zen .tx .lead p { font-size: var(--fs-body); font-weight: 400; }
-body.zen .tx [data-said]:not([data-stop]) .prose { font-family: var(--rf); font-size: var(--rs); line-height: var(--rl); font-weight: var(--rg, 400); max-width: var(--rw); }
-body.zen .tx [data-said]:not([data-stop]) .prose > :last-child { margin-bottom: 0.9em; }
-
 /* phone: 17px reading, no keys, 44px targets, the composer above the tab bar */
 @media (max-width: 899px) {
   .tx:focus-visible { box-shadow: none; }
