@@ -510,7 +510,7 @@ function App() {
         },
         "[": () => (k.route ? k.togglePane("rail") : k.pages && k.togglePane("pgindex")),
         "]": () => !k.route && k.list && k.togglePane("index"),
-        z: () => k.toast?.undo && k.undo(),
+        z: () => (k.toast?.undo ? k.undo() : !document.querySelector(".pghome, .palone, .sheet") && TX_API?.zen()),
         ",": () => (inSettings() ? closeSettings() : (location.hash = SETTINGS)),
         "/": () => setPalette(true),
         "?": () => setHelp((h) => !h),
@@ -850,7 +850,7 @@ const KEYMAP = [
   ["Sessions", [["q w e .. p", "The 1st to 10th session in the list, at once"], ["j k", "Next, previous session (on the board: the selection)"], ["enter", "On the board: open the selected session"], ["alt j k", "Next, previous session, even from a terminal"]]],
   ["Panes", [["[", "Sessions beside the transcript"], ["]", "Its page beside the transcript (board: the page index)"], ["\\", "State: now, running, made, the session's facts"]]],
   ["Session", [["enter", "Write to the session (on a stopped one: Resume)"], ["`", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
-  ["Reading", [["J K", "Next, previous turn: your prompts and its replies"], ["space", "A screen down; with shift, up"], ["home end", "Top, end of the transcript"], ["N", "Next thing you have not seen here: the divider, then the question"], ["c", "Contents: every turn and heading"], ["l", "Outline, story, everything, in turn"], ["f", "Find in the session"]]],
+  ["Reading", [["J K", "Next, previous turn: your prompts and its replies"], ["space", "A screen down; with shift, up"], ["home end", "Top, end of the transcript"], ["N", "Next thing you have not seen here: the divider, then the question"], ["c", "Contents: every turn and heading"], ["l", "Outline, story, everything, in turn"], ["f", "Find in the session"], ["z", "Zen: only the words, nothing around them; z or esc to leave"]]],
   ["Assistant", [[".", "Call it"], ["[", "Touched today and the agents"], ["esc", "Close the assistant"]]],
   ["Call", [["m", "Mute, unmute"], ["E", "End the call (shift e)"], [".", "Back to the call, from anywhere"], ["esc", "Minimize the call to the console line"]]],
   ["Answer", [["1..9", "With the question focused (click it, tab into it, or N): that option"]]],
@@ -1225,7 +1225,7 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
       <header class="ahd">
         ${hub ? html`<${StateBlock} s=${hub} />` : html`<span class="sb earlier" aria-hidden="true">E</span>`}
         <h1>Assistant</h1>
-        <span class="r">${!hub && html`<button class="kb" onClick=${callOrSetup}>Call</button>`} ${phone ? html`<button class="kb" onClick=${() => setSheet(true)}>Today</button>`
+        <span class="r">${!hub && html`<button class="kb" onClick=${callOrSetup}>Call</button>`} ${hub && html`<button class="kb" aria-keyshortcuts="z" title="Only the words, nothing around them" onClick=${() => TX_API?.zen()}>Zen <kbd aria-hidden="true">z</kbd></button>`} ${phone ? html`<button class="kb" onClick=${() => setSheet(true)}>Today</button>`
           : html`<button class="kb" onClick=${closeAssistant} aria-keyshortcuts="Escape">Close <kbd aria-hidden="true">esc</kbd></button>`}</span>
         <p class="stat">${hubLine(hub)}</p>
       </header>
@@ -2130,7 +2130,7 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
     if (p && mode === "page" && pg === p.name && p.at) return setAt(atOf(pageRef(p)));
     if (!p || (mode === "page" && (pg === p.name || sideBySide))) return;
     const idle = Date.now() - LAST_KEY > 8000 && !document.activeElement?.closest?.("textarea, input, .xterm");
-    if (idle && wideNow && split && mode !== "page" && p.kind !== "browser") openPage(pageRef(p));
+    if (idle && wideNow && split && mode !== "page" && p.kind !== "browser" && !document.body.classList.contains("zen")) openPage(pageRef(p));
     else say(p.kind === "browser" ? "It opened a browser tab. It's on the page button up top." : `Showing you “${pageTitle(p)}”. It's on the page button up top.`);
   }, [shown.map((p) => p.name + p.shown).join()]);
   const [busy, setBusy] = useState(false);
@@ -2225,11 +2225,12 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
           <button class="kb pin ${s.pinned ? "on" : ""}" aria-pressed=${!!s.pinned} aria-label=${s.pinned ? "Unpin" : "Pin"} title=${s.pinned ? "Pinned to the top of the bay; unpin" : "Pin to the top of the bay"}
             onClick=${() => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }).catch((e) => say(e.message))}>${ICON.pin}</button>
           ${hasTerm && html`<button class="kb ${mode === "term" ? "on" : ""}" aria-pressed=${mode === "term"} aria-keyshortcuts="\`" onClick=${() => choose(mode === "term" ? "chat" : "term")}>Terminal <kbd aria-hidden="true">\`</kbd></button>`}
+          ${!phoneNow && (mode === "chat" || sideBySide) && html`<button class="kb" aria-keyshortcuts="z" title="Only the words, nothing around them" onClick=${() => TX_API?.zen()}>Zen <kbd aria-hidden="true">z</kbd></button>`}
           <div class="more"><${Menu} cls="kb" busy=${busy} aria="Session menu" label=${html`More <kbd aria-hidden="true">x</kbd>`}
             items=${[
               ...(phoneNow && hasTerm ? [{ label: mode === "term" ? "Transcript" : "Terminal", run: () => choose(mode === "term" ? "chat" : "term") }] : []),
               callSession(s, say),
-              ...(mode === "chat" || sideBySide ? [{ label: "Find in the transcript", run: () => TX_API?.find() }, { label: "Contents", run: () => TX_API?.contents() }, { label: "Outline, story or everything", run: () => TX_API?.level() }, { label: "Files, commits and deploys", run: () => TX_API?.results() }] : []),
+              ...(mode === "chat" || sideBySide ? [{ label: "Zen", run: () => TX_API?.zen() }, { label: "Find in the transcript", run: () => TX_API?.find() }, { label: "Contents", run: () => TX_API?.contents() }, { label: "Outline, story or everything", run: () => TX_API?.level() }, { label: "Files, commits and deploys", run: () => TX_API?.results() }] : []),
               ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "State and outputs", run: openState }, { label: "Usage", run: () => setShowUse(true) }, ...(s.agent ? [{ label: "Agent details", run: () => openAgent(s.agent, "details") }] : [])]} /></div>
         </span>
       </div>
@@ -6165,6 +6166,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   const setDraft = (v) => setDraftRaw((d) => { const n = typeof v === "function" ? v(d) : v; if (n !== d) draftPut(sid, n); return n; });
   const [quotes, setQuotes] = useState([]);
   const box = useRef(), landed = useRef(false), atEnd = useRef(false), hold = useRef(null), loading = useRef(new Set());
+  const zenFrom = useRef(null), reflowed = useRef(false), composerFocus = useRef(() => {});
   const focusInput = useRef(() => {}), uploadRef = useRef(null), findQ = useRef(""), askKey = useRef(null), mark = useRef(undefined);
   const live = s.attachable || s.harness === "opencode";
   const working = s.state === "working" && !s.turnDone;
@@ -6174,6 +6176,41 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   const waiting = s.state === "working" || s.state === "needs-you" ? serverWaiting : [];
   const stream = useHubStream(s, () => loadIdx());
   const setContents = (v) => { setContentsRaw(v); txStore.set("contents", v); };
+  const [zen, setZenRaw] = useState(false);
+  const setZen = (on) => {
+    const sc = box.current, top = sc?.getBoundingClientRect().top;
+    const el = sc && [...sc.querySelectorAll(".prose > *, .lead, .fold")].find((e) => e.getBoundingClientRect().bottom > top);
+    if (el) { const r = el.getBoundingClientRect(); zenFrom.current = { el, into: (top - r.top) / r.height }; }
+    if (atEnd.current) zenFrom.current = null;
+    reflowed.current = true;
+    hold.current = null;
+    setZenRaw(on);
+    if (on) history.pushState({ ...history.state, atcZen: true }, "");
+    else if (history.state?.atcZen) history.back();
+  };
+  focusInput.current = () => {
+    if (!zen) return composerFocus.current();
+    setZen(false);
+    requestAnimationFrame(() => composerFocus.current());
+  };
+  useLayoutEffect(() => {
+    document.body.classList.toggle("zen", zen);
+    const from = zenFrom.current, sc = box.current;
+    zenFrom.current = null;
+    if (from?.el.isConnected && sc) { const r = from.el.getBoundingClientRect(); sc.scrollTop += r.top - sc.getBoundingClientRect().top + from.into * r.height; }
+    return () => document.body.classList.remove("zen");
+  }, [zen]);
+  useEffect(() => {
+    if (!zen) return;
+    const back = () => !history.state?.atcZen && setZen(false);
+    addEventListener("popstate", back);
+    return () => removeEventListener("popstate", back);
+  }, [zen]);
+  useKeyLayer((e) => {
+    if (typingIn(e.target) || !(e.key === "z" || (e.key === "Escape" && !pop && !shot && !sel))) return false;
+    setZen(false);
+    return true;
+  }, zen);
 
   const loadIdx = async () => {
     try {
@@ -6334,7 +6371,8 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     let h = 0;
     const ro = new ResizeObserver(() => {
       if (landed.current && (hold.current !== null || atEnd.current)) settle();
-      else if (landed.current && el.scrollHeight > h + 40) setFresh((n) => n + 1);
+      else if (landed.current && el.scrollHeight > h + 40 && !reflowed.current) setFresh((n) => n + 1);
+      reflowed.current = false;
       h = el.scrollHeight;
     });
     ro.observe(inner);
@@ -6382,7 +6420,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     });
     jump();
   };
-  TX_API = { level: () => setLevel((level % 3) + 1), find: () => { findQ.current = ""; setPop("find"); }, results: () => setPop("results"), contents: () => setContents(!contents) };
+  TX_API = { level: () => setLevel((level % 3) + 1), find: () => { findQ.current = ""; setPop("find"); }, results: () => setPop("results"), contents: () => setContents(!contents), zen: () => setZen(!zen) };
   useEffect(() => () => { TX_API = null; }, []);
 
   useEffect(() => {
@@ -6396,7 +6434,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       else if (k === "c") { e.preventDefault(); setContents(!contents); }
       else if (k === "l") { e.preventDefault(); setLevel((level % 3) + 1); }
       else if (k === "Enter" && live && !t.closest?.("button, a, [role=button], .ask, [data-ask]")) { e.preventDefault(); focusInput.current(); }
-      else if (k === "Enter" && !live && resume && s.kind !== "interactive" && !t.closest?.("button, a, [role=button]")) { e.preventDefault(); resume(); }
+      else if (k === "Enter" && !zen && !live && resume && s.kind !== "interactive" && !t.closest?.("button, a, [role=button]")) { e.preventDefault(); resume(); }
       else if (k === "f") { e.preventDefault(); findQ.current = ""; setPop("find"); }
       else if (k === "Escape") { setPop(null); setShot(null); setSel(null); CSS.highlights?.delete("tx-find"); }
     };
@@ -6411,7 +6449,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     addEventListener("keydown", onKey);
     document.addEventListener("selectionchange", onSel);
     return () => { removeEventListener("keydown", onKey); document.removeEventListener("selectionchange", onSel); };
-  }, [live, contents, s, level]);
+  }, [live, contents, s, level, zen]);
 
   const quote = (text) => { setQuotes((q) => [...q, text]); requestAnimationFrame(() => focusInput.current()); };
   const selAct = (what, lead) => {
@@ -6493,13 +6531,13 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
         return html`<div class="sec ${first ? "first" : ""}" id=${`tx${r.i}`} data-stop data-you><h2 class="sr">you, ${txClock(r.at)}</h2>
           <${Lead} at=${clock(r.at, true)} text=${cleanPrompt(r.b?.prompt ?? r.t.prompt).trim()} images=${r.b?.images} /></div>`;
       }
-      case "notice": return html`<p class="evt" id=${`tx${r.i}`}>${plain(cleanPrompt(r.t.prompt))}</p>`;
+      case "notice": return !zen && html`<p class="evt" id=${`tx${r.i}`}>${plain(cleanPrompt(r.t.prompt))}</p>`;
       case "partial": return html`<p class="evt" id=${`tx${r.i}`}>This turn started before what is loaded here.</p>`;
       case "skel": return html`<div class="skel" aria-label="Loading"><i></i><i></i><i></i></div>`;
       case "say": case "steps":
-        return html`${r.answer && html`<h2 class="sr">${s.agent ? `@${s.agent}` : "agent"}, ${txClock(r.at)}</h2>`}${r.steps && html`<${InlineSteps} steps=${r.steps} s=${s} at=${clock(r.at)} open=${gOpen} toggle=${() => flip(gk)} /><${GroupBody} steps=${r.steps} s=${s} open=${gOpen} zoom=${setShot} live=${r.live && !r.text} />`}
+        return html`${r.answer && html`<h2 class="sr">${s.agent ? `@${s.agent}` : "agent"}, ${txClock(r.at)}</h2>`}${r.steps && html`${!zen && html`<${InlineSteps} steps=${r.steps} s=${s} at=${clock(r.at)} open=${gOpen} toggle=${() => flip(gk)} />`}<${GroupBody} steps=${zen ? r.steps.filter((x) => txKind(x) === "ask") : r.steps} s=${s} open=${gOpen && !zen} zoom=${setShot} live=${r.live && !r.text} />`}
             ${r.text && html`<div id=${`said-${r.key}`} data-said data-stop=${r.answer ? "" : null}><${Prose} text=${r.text} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`;
-      case "evt": return html`<p class="evt">${r.text}</p>`;
+      case "evt": return !zen && html`<p class="evt">${r.text}</p>`;
       case "note": return html`<${Lead} at=${clock(r.at, true)} text=${r.text} />`;
       case "answered": {
         const rec = r.rec;
@@ -6530,6 +6568,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   return html`<div class="tx-wrap ${contents ? "with-toc" : ""}" onDragEnter=${dropIn} onDragOver=${dropIn}
     onDragLeave=${(e) => !e.currentTarget.contains(e.relatedTarget) && setDrop(false)}
     onDrop=${(e) => { if (!drop) return; e.preventDefault(); setDrop(false); uploadRef.current?.([...e.dataTransfer.files]); }}>
+    ${zen && html`<div class="zenbar"><span class="t">${s.title || "Untitled"}</span><button class="kb" onClick=${() => setZen(false)}>Leave zen <kbd aria-hidden="true">z</kbd></button></div>`}
     <div class="txv"><div class="tx" ref=${box} tabindex="0" aria-label=${`Transcript of ${s.title || "this session"}`} onWheel=${letGo} onTouchStart=${letGo} onPointerDown=${letGo}
       onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; setBelow(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight * 0.6); if (atEnd.current) { setFresh(0); if (landed.current) markLooked(s); } setSel(null); }}>
       <div class="read">
@@ -6552,7 +6591,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     ${drop && html`<div class="droptarget" aria-hidden="true"><span>Drop to attach to <b>${s.title || "this session"}</b></span></div>`}
     ${!live && resume && s.kind !== "interactive" && html`<${EndBar} s=${s} resume=${resume} busy=${busy} />`}
     ${live && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies}
-      focusRef=${focusInput} uploadRef=${uploadRef} working=${working} asking=${!!asking && !asking.permission} interrupt=${interrupt}
+      focusRef=${composerFocus} uploadRef=${uploadRef} working=${working} asking=${!!asking && !asking.permission} interrupt=${interrupt}
       prompt=${cmp.prompt} doors=${cmp.doors} hintFor=${cmp.hint} top=${html`${cmp.top}<${BgStrip} s=${s} />`} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
   </div>`;
@@ -6989,6 +7028,7 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
     if (cur.canAttach) act("Terminal", () => cur.mode("term"), "shell attach", "t");
     act("Transcript", () => cur.mode("chat"), "read conversation");
     act("Outputs", () => cur.mode("out"), "files servers links");
+    if (TX_API) act("Zen", () => TX_API?.zen(), "read focus text", "z");
     act("Sessions pane", () => actions.pane("rail"), "rail list", "[");
     act("State pane", () => actions.pane("state"), "summary facts", "]");
     for (const p of cur.pages || []) act(`Page: ${pageTitle(p)}`, () => cur.page(p.name), `show ${p.name}`);

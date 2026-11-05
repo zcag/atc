@@ -19,13 +19,16 @@
   own thread), and the questions it asked you with the answer you picked; reading and searching
   steps fold into one "Looked at" line. While a session works, its latest steps stay open with a
   timer on the running one.
-  - **Outline**, **Story** and **Everything** (`1` `2` `3`) choose how much to show; **Aa** sets
+  - **Outline**, **Story** and **Everything** (`l`) choose how much to show; Settings, Reading sets
     the typeface, size and line length.
+  - **Zen** (`z`, or More on the phone) leaves only the words: your prompts and its replies, without
+    the steps, the panes or the box. It keeps your place in the text. `z`, `esc`, the back button or
+    Leave zen ends it, and Enter ends it and goes to the box.
   - **Find** (`f`) searches the whole session (prompts, replies, commands, file names) and filters
     to the turns with failures, commits, changed files, deploys or questions.
   - **What this session produced** lists the files it changed (open one for all its edits as one
     diff), its commits, pushes, deploys, the pages it showed you and running servers.
-  - The box at the bottom (`r`) writes to the session: Enter sends, Shift+Enter is a new line, and
+  - The box at the bottom (Enter) writes to the session: Enter sends, Shift+Enter is a new line, and
     a draft is kept per session. Attach files with the clip, by pasting or by dropping them. A
     message shows in the transcript the moment you send it, and stays there with "Try again" if it
     could not be sent. Above the box, the summary's suggested replies send with one tap.
