@@ -73,16 +73,20 @@ logged in. `atc token` prints the token again.
 
 ## Reach it from other devices
 
-atc listens on `127.0.0.1` unless you set `ATC_ADDR`. To reach it from other devices, put it behind
-something that gives it HTTPS, or set `ATC_ADDR=:7272` on a network you trust. Every request needs a
-login either way; read [Security](security.md) first, since a login is a shell on this machine.
+**Keep atc on a private network: your local network or a tailnet, never the public internet.** A login
+is a shell on this machine ([Security](security.md)), and the token is the only thing between that shell and anyone who can reach the
+address.
 
-- **Tailscale:** `tailscale serve --bg 7272` serves atc over HTTPS to your own devices. `atc setup`
-  offers this when Tailscale is installed.
-- **A reverse proxy with a certificate:** Caddy or similar, then set `ATC_PUBLIC_URL` to the address
-  it answers at.
+atc listens on `127.0.0.1` unless you set `ATC_ADDR`. To reach it from your other devices:
 
-A browser only gives a page the microphone over HTTPS, so calls from a browser need one of these.
+- **Tailscale (easiest):** `tailscale serve --bg 7272` serves atc over HTTPS to your own devices. `atc setup`
+  offers this when Tailscale is installed. Don't use `tailscale funnel`, which publishes it to the internet.
+- **A reverse proxy on your own network:** Caddy or similar with a certificate, reachable only from inside, then set
+  `ATC_PUBLIC_URL` to the address it answers at. Don't forward a router port to it.
+- **Plain HTTP at home:** `ATC_ADDR=:7272` on a network you trust. Check your firewall first, since this listens on every
+  interface, and on a machine with a public address that includes the internet.
+
+A browser only gives a page the microphone over HTTPS, so calls from a browser need one of the first two.
 
 To log in a new device without typing the token, use `atc pair` (see
 [Android app](android.md#pairing) and [Using atc](using.md#from-a-terminal)).

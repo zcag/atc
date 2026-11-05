@@ -28,6 +28,9 @@ curl -fsSL https://github.com/zcag/atc/releases/latest/download/install.sh | sh
 
 Linux or macOS, with Claude Code signed in. One install serves one user. [More on installing](#install).
 
+**Keep atc off the public internet.** A login to atc is a shell on your machine. Out of the box it only listens on that machine; to
+reach it from your phone or other computers, use Tailscale or your local network. [Reach it from other devices](docs/install.md#reach-it-from-other-devices)
+
 atc is an independent project. It is not affiliated with or endorsed by Anthropic.
 
 ## Control of every session

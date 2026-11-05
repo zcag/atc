@@ -9,6 +9,10 @@ atc's address and tokens like an SSH key.
 atc is built for one user per install. There are no accounts or roles: every login sees and can do
 the same.
 
+**Don't serve atc on the public internet.** Run it on `127.0.0.1`, your local network or a tailnet. atc has not been
+hardened or audited for exposure to strangers: pairing claims, the login and the webhook would all face the whole internet, with
+a shell behind them. [Reach it from other devices](install.md#reach-it-from-other-devices) lists the private ways in.
+
 ## How requests get in
 
 - **The server token** is generated on first start and kept in `~/.config/atc/token`. `atc token`
@@ -33,8 +37,8 @@ the same.
 - Cross-site requests that change something are refused: a non-GET `/api/` request whose `Origin`
   host differs from the request's host gets a 403.
 
-atc serves plain HTTP on `127.0.0.1` by default. Don't expose it on an untrusted network without
-HTTPS in front, or the token travels in clear. See
+atc serves plain HTTP on `127.0.0.1` by default. On a network you don't fully trust, put HTTPS in
+front, or the token travels in clear. See
 [Reach it from other devices](install.md#reach-it-from-other-devices).
 
 ## What is not behind the token

@@ -148,6 +148,7 @@ func setupReach(a asker) {
 	tok, _ := os.ReadFile(client.ServerTokenPath())
 	fmt.Printf("\nOn this computer atc is at http://127.0.0.1:%s/?token=%s\n", port, strings.TrimSpace(string(tok)))
 	fmt.Println("\nOther devices. A phone or another computer needs HTTPS for its microphone and the app.")
+	fmt.Println("  Keep atc on a private network, never the public internet: a login is a shell on this machine.")
 	if _, err := exec.LookPath("tailscale"); err == nil {
 		if a.confirm("  Tailscale is here. Serve atc over HTTPS to your own devices?") {
 			if err := run("tailscale", "serve", "--bg", port); err != nil {
@@ -157,5 +158,5 @@ func setupReach(a asker) {
 		return
 	}
 	fmt.Println("  Easiest is Tailscale (https://tailscale.com): install it, then  tailscale serve --bg " + port)
-	fmt.Println("  Or put atc behind your own reverse proxy with HTTPS. Every request needs the login token either way.")
+	fmt.Println("  Or put atc behind a reverse proxy with HTTPS on your own network. Every request needs the login token either way.")
 }

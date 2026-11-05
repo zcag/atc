@@ -68,7 +68,7 @@ func All() []Cap {
 			ID: "reach", Title: "HTTPS address", Group: Core, Optional: true, Why: "The address you reach atc at from other devices. Browsers only give a page the microphone over HTTPS.",
 			Fields: []Field{{Key: "ATC_PUBLIC_URL", Label: "Address", Hint: "https://atc.example.com", URL: true}},
 			Check:  checkReach,
-			Fix:    Fix{Text: "Put atc behind a reverse proxy with a certificate (Caddy, Tailscale Serve), and enter the address it answers at.", Guide: "install#reach-it-from-other-devices"},
+			Fix:    Fix{Text: "Put atc behind HTTPS on your private network (Tailscale Serve, or Caddy with a certificate), never on the public internet, and enter the address it answers at.", Guide: "install#reach-it-from-other-devices"},
 		},
 		{
 			ID: "hub", Title: "Assistant hub", Group: Assistant, Optional: true, Why: "Keeps the assistant one conversation across atc, WhatsApp and calls.",
