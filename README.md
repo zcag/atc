@@ -45,23 +45,23 @@ screenshot from any app into a session. Holding the side key opens what's waitin
 
 Android app. On other devices, atc works in the browser. [Android app](docs/android.md)
 
-## Your phone rings: the release needs your okay
+## Your phone rings: checkout just broke
 
-You're out, and a session needs a decision. So it calls you, and you talk it through.
+Most things can wait for a notification. This one can't, so it calls.
 
-> **Assistant:** Hey. The release needs your okay before it pushes version 0.9, and CI is green. Should I tell it to...
+> **Assistant:** Hey, sorry to call. Checkout errors jumped to 8% right after the last deploy, and the coupon change looks like the cause. Do you want me to...
 >
-> **You:** Wait, is the coupon session done?
+> **You:** Wait, was that the only thing in the deploy?
 >
-> **Assistant:** Not yet, it's stuck on a question for you: should a percent coupon apply before or after shipping?
+> **Assistant:** That and a copy fix. The errors all come from the coupon code.
 >
-> **You:** Goods only, before shipping. And yes, push the release.
+> **You:** Okay, roll it back, and have someone find out why.
 >
-> **Assistant:** Telling them both. The iOS build on the laptop just finished too, so that's one less thing.
+> **Assistant:** Rolling back now, and I've started a session on the cause. The iOS build on the laptop just finished too, so that's one less thing.
 >
-> **You:** How bad was that checkout slowdown?
+> **You:** How many orders did we lose?
 >
-> **Assistant:** A date library was costing almost two seconds on phones. I put the chart on your screen.
+> **Assistant:** About forty, in eleven minutes. I put the chart on your screen.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/call-ring-dark.webp">
