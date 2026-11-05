@@ -11,6 +11,8 @@ its room into room.json, without needing its sources. Run with numpy, opencv and
 - --edge N: the outer N art px of the head and body take their colour from just inside, then lose a little alpha: the cut
   edge carries the portrait's dark room, which shows as an outline on a bright background. On the head, dark paint reached
   from outside the cut is removed first (room caught between hair tips).
+- --scale K shrinks the whole figure about the bottom middle, and --zoom sets how far the view crops in: a portrait whose head
+  fills more of the frame than the others'. verify.py measures the result.
 - --serious blends the small closed mouth with the resting one when there is no neutral drawing and the full one pouts.
 - --manner sets how the character acts: match it to the voice, in a real call.
 Coordinates are in the portrait's pixels (rig.json "size")."""
@@ -28,6 +30,8 @@ ap.add_argument("--move", action="append", default=[])
 ap.add_argument("--knit", type=float, default=1.5)
 ap.add_argument("--serious", type=float)
 ap.add_argument("--edge", type=int, default=0)
+ap.add_argument("--scale", type=float, default=1)
+ap.add_argument("--zoom", type=float)
 ap.add_argument("--manner", type=json.loads, help="how he carries himself, Behaviour's manner in web/rig.js, as JSON")
 a = ap.parse_args()
 assert not json.load(open(a.src / "rig.json")).get("polished"), "already polished: start from a fresh build"
@@ -154,6 +158,29 @@ for mv in a.move:
 
 for name, img in tex.items():
     Image.fromarray(img.clip(0, 255).astype(np.uint8), "RGBA").save(a.out / name, quality=92, method=6)
+
+# ---- the figure's size in the frame
+W_, H_ = R["size"]
+below = 40 if a.scale != 1 else 0
+fit_x = lambda x: W_ / 2 + a.scale * (x - W_ / 2)
+fit_y = lambda y: H_ + below + a.scale * (y - H_)
+if a.scale != 1:
+    for p in R["parts"]:
+        if p["name"] in ("plate", "vignette", "glow"):
+            continue
+        p["v"] = [round(fit_y(v) if i % 2 else fit_x(v), 2) for i, v in enumerate(p["v"])]
+        x, y, w, h = p["box"]
+        p["box"] = [round(fit_x(x), 2), round(fit_y(y), 2), round(w * a.scale, 2), round(h * a.scale, 2)]
+    for b in R["bones"].values():
+        if b["o"] != [0, 0]:
+            b["o"] = [round(fit_x(b["o"][0]), 4), round(fit_y(b["o"][1]), 4)]
+        for m in b["p"].values():
+            m[0] *= a.scale
+            m[1] *= a.scale
+    fx, fy = R["view"]["focus"]
+    R["view"]["focus"] = [round(fit_x(fx * W_) / W_, 4), round(fit_y(fy * H_) / H_, 4)]
+if a.zoom:
+    R["view"]["zoom"] = a.zoom
 
 # ---- the room
 if not R.get("room"):

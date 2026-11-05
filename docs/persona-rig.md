@@ -93,7 +93,7 @@ the prompt, model and seed to `source.json` in the character's folder.
    (boxes around each piece at 1x) writes `<work>/pose_<name>.png`.
 4. `build.py <work> <draw> <out>`: per angle landmarks, face parse, head mesh, patches into one atlas per angle, poses,
    overlays, `rig.json` and `persona.json`.
-5. `polish.py <out> <final> [--erase poly] [--move pose=dx,dy] [--serious k] [--edge n] [--manner json]`: repairs on the built drawings (stray body
+5. `polish.py <out> <final> [--erase poly] [--move pose=dx,dy] [--serious k] [--edge n] [--scale k] [--zoom z] [--manner json]`: repairs on the built drawings (stray body
    pieces, stronger knit brows, blink drawings that leave the glasses alone, a pose nudged into place) and moves the room
    to `room.json`. It takes a fresh build only, since it exaggerates the knit each time.
 6. `flows.py <final>`: draws each pair of neighbouring angles through `web/rig.js`, bent to the same pose, and measures

@@ -168,6 +168,11 @@ band[:round((mouth[1] / Ha - cy_) / sy_ * SIZE[1] + SIZE[1] / 2)] = False
 seen_ = lambda i: i[..., :3] * i[..., 3:] / 255
 jump = float(np.abs(seen_(shot("talk")) - seen_(rest)).mean(2)[band].mean())
 check("jaw line doesn't jump while talking", jump < 18, f"{jump:.1f} levels just outside the lower outline")
+al = rest[..., 3:] / 255
+from common import MODEL, landmarks
+lm = landmarks((rest[..., :3] * al + 120 * (1 - al))[..., ::-1], MODEL)
+face = float(np.linalg.norm(lm[454, :2] - lm[234, :2])) / SIZE[0]
+check("face the same size as the others'", .42 < face < .54, f"{face:.2f} of a phone's width; the first two are .48 and .49")
 check("character alone is transparent", rest[0, 0, 3] == 0 and rest[5, SIZE[0] - 5, 3] == 0, "corners of a room-less frame")
 lap = lambda i: cv2.Laplacian(cv2.cvtColor(i[..., :3].astype(np.uint8), cv2.COLOR_BGR2GRAY), cv2.CV_32F)
 ratios = {}
