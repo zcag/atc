@@ -176,7 +176,18 @@ test("a character's manner moves more and gestures more, stays in range, and lea
     }
     return { turn, gesture };
   };
-  const plain = run(), lively = run({ head: 1.5, glance: 1.5, brow: 1.5, nod: 1.2, tilt: 1.5, gesture: 2.2, smile: .08, sheepish: .5 });
+  const random = Math.random;
+  let seed = 1;
+  Math.random = () => {
+    seed = (seed * 48271) % 2147483647;
+    return seed / 2147483647;
+  };
+  const runs = (manner) => {
+    const all = Array.from({ length: 6 }, () => run(manner));
+    return { turn: all.reduce((n, r) => n + r.turn, 0), gesture: all.reduce((n, r) => n + r.gesture, 0) };
+  };
+  const plain = runs(), lively = runs({ head: 1.5, glance: 1.5, brow: 1.5, nod: 1.2, tilt: 1.5, gesture: 2.2, smile: .08, sheepish: .5 });
+  Math.random = random;
   assert.ok(lively.turn > plain.turn * 1.2, `turn ${lively.turn} against ${plain.turn}`);
   assert.ok(lively.gesture > plain.gesture, `gestures ${lively.gesture} against ${plain.gesture}`);
   assert.deepEqual(new Behaviour().m, new Behaviour({}).m);
