@@ -12,6 +12,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -199,10 +200,14 @@ func (s *Store) Revoke(id string) (bool, error) {
 	return false, nil
 }
 
-// Watch calls stop if the device is revoked, until the returned func is called.
+// Watch calls stop if the device is revoked, until the returned func is called; at once if it already was.
 func (s *Store) Watch(id string, stop func()) (done func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if !slices.ContainsFunc(s.devices, func(r record) bool { return r.ID == id }) {
+		stop()
+		return func() {}
+	}
 	if s.watches[id] == nil {
 		s.watches[id] = map[*func()]bool{}
 	}

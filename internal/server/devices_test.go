@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -286,5 +288,23 @@ func TestClaimAddrKeepsZonedClientsApart(t *testing.T) {
 	r.RemoteAddr = "192.0.2.1:5000"
 	if got := s.claimAddr(r); got != "192.0.2.1" {
 		t.Fatal(got)
+	}
+}
+
+type hijackable struct {
+	http.ResponseWriter
+	conn net.Conn
+}
+
+func (h hijackable) Hijack() (net.Conn, *bufio.ReadWriter, error) { return h.conn, nil, nil }
+
+func TestRevokeWhileATerminalIsBeingTakenOver(t *testing.T) {
+	ours, theirs := net.Pipe()
+	defer theirs.Close()
+	w := &liveWriter{ResponseWriter: hijackable{httptest.NewRecorder(), ours}}
+	w.cut()
+	w.Hijack()
+	if _, err := ours.Write([]byte("x")); !errors.Is(err, io.ErrClosedPipe) {
+		t.Fatalf("the connection stayed open: %v", err)
 	}
 }

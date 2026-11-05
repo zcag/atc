@@ -314,3 +314,12 @@ func TestSignsAcceptsAuthorityAndLeaf(t *testing.T) {
 		t.Fatal("a private authority counted as the system's")
 	}
 }
+
+func TestWatchAfterRevokeStopsAtOnce(t *testing.T) {
+	s, _ := Open("")
+	stopped := false
+	s.Watch("gone", func() { stopped = true })()
+	if !stopped {
+		t.Fatal("a request that passed the check just before the revoke keeps running")
+	}
+}

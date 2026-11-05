@@ -39,6 +39,7 @@ type liveWriter struct {
 	http.ResponseWriter
 	mu   sync.Mutex
 	conn net.Conn
+	gone bool
 }
 
 func (w *liveWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
@@ -48,14 +49,18 @@ func (w *liveWriter) Flush() { http.NewResponseController(w.ResponseWriter).Flus
 func (w *liveWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	c, rw, err := http.NewResponseController(w.ResponseWriter).Hijack()
 	w.mu.Lock()
+	defer w.mu.Unlock()
 	w.conn = c
-	w.mu.Unlock()
+	if w.gone && c != nil {
+		c.Close()
+	}
 	return c, rw, err
 }
 
 func (w *liveWriter) cut() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.gone = true
 	if w.conn != nil {
 		w.conn.Close()
 	}
