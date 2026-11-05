@@ -45,9 +45,9 @@ type Agent struct {
 	Reset  *resetSpec `json:"reset,omitempty"`
 	Share  *share     `json:"share,omitempty"`
 	// Talk lets the user talk to it directly on a call; Person is who it sounds and looks like there.
-	Talk   bool       `json:"talk,omitempty"`
-	Person string     `json:"person,omitempty"`
-	Err    string     `json:"error,omitempty"`
+	Talk   bool   `json:"talk,omitempty"`
+	Person string `json:"person,omitempty"`
+	Err    string `json:"error,omitempty"`
 }
 
 // share names the page whose state the agent keeps for other sessions to read, and what it holds.
