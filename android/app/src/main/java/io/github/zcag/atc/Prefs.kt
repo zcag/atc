@@ -23,6 +23,7 @@ class Prefs(c: Context) {
     var persona by string()
     var persons by string()
     var callLang by string()
+    var callView by string()
     var callNumber by string()
     var askedContacts by string()
     var askedCallLog by string()

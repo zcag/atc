@@ -40,7 +40,6 @@ const STYLES = {
  *  opts.ink() gives a CSS color to draw in (white without it), opts.gain scales the movement for a small canvas. */
 export function minimal(canvas, spec, now, opts = {}) {
   const draw = STYLES[spec.style] || STYLES.line, g = canvas.getContext("2d");
-  if (opts.background) canvas.style.background = `linear-gradient(#0006, #0006), center / cover no-repeat url("${opts.background}")`;
   const o = { level: 0, think: 0, phase: 0, k: 1, gain: opts.gain || 1, rgb: "255,255,255" };
   let inkAt = -1e9;
   const ease = (v, to, dt, tau) => v + (to - v) * (1 - Math.exp(-dt / tau));

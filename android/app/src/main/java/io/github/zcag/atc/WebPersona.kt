@@ -18,7 +18,7 @@ import java.io.File
  *  server's pinned certificate applies. The page reads both voices' loudness from the bridge on every frame and
  *  gets the call's state when it changes. */
 @SuppressLint("SetJavaScriptEnabled", "ViewConstructor")
-class WebPersona(c: Context, private val dir: File, private val server: String, background: String = "") : WebView(c), Persona {
+class WebPersona(c: Context, private val dir: File, private val server: String, background: String = "", private val mark: String? = null) : WebView(c), Persona {
     override val view get() = this
     private var go: (() -> Unit)? = null
     private var ready = false
@@ -35,6 +35,7 @@ class WebPersona(c: Context, private val dir: File, private val server: String, 
                 return runCatching {
                     require(".." !in path)
                     val data = when {
+                        mark != null && path == "/p/persona.json" -> JSONObject().put("kind", "minimal").put("style", mark).toString().toByteArray()
                         path.startsWith("/p/") -> File(dir, path.removePrefix("/p/")).readBytes()
                         path.startsWith(ROOMS) -> PersonaHost.room(context, server, path.removePrefix(ROOMS)).readBytes()
                         else -> Net.bytes(context, server + path)

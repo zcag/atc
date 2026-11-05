@@ -112,16 +112,17 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   With nobody picked for a language, the character kept on that device shows, and the voice service's voice speaks. A
   person holds nothing about how the assistant behaves, and nothing in it is tied to the assistant, so an agent can name one too.
 - **Backgrounds** are images in `$ATC_APP_DIR/personas/_rooms/`, best at a character's 768x1344. One replaces a `rig`
-  character's room, darkened and softened like its own, without the lamp's glow and dust; it goes behind a `minimal` one
-  under a dark wash. The orb and the other kinds draw their own surroundings.
+  character's room, darkened and softened like its own, without the lamp's glow and dust. The orb and the other kinds draw their own surroundings.
+- **View** is how a device shows the call, kept on that device: **Character** (whoever is on the line, as above), or
+  **Line** or **Bars**, built-in marks that only move with the voices, for a call in public. It leaves the person alone:
+  the voice and name stay, and going back to Character shows whoever is on the line by then. On the call screen it is
+  the switch on the frame in a browser and in the menu in the app; holding the frame goes to the next view.
 - **Characters** are folders under `$ATC_APP_DIR/personas/<name>/` on the server (`persona.json` with
   `kind` and `files`, plus the files), listed in `personas/index.json` (`{"default", "personas":
   [{"name", "rev"}]}`); the phone downloads one when picked and keeps it until its `rev` changes.
   atc ships none besides the orb. The kept one starts from the phone with no wait on the server, on the
   dark backdrop until its first frame; the orb shows only when it is the choice, or when the character
-  is missing or stuck for 6 s. A long press on the persona switches to the language's next person, or with no persons to
-  the next character. Kinds: `minimal` (a
-  shader line or bars, `web/minimal.js`), `rig` (drawings swapped like cel animation, `web/rig.js`,
+  is missing or stuck for 6 s. Kinds: `rig` (drawings swapped like cel animation, `web/rig.js`,
   built as in [the rig's notes](persona-rig.md)), `illustration` and `footage` (`web/persona.js`, in the
   app through a WebView), and `head3d` (`Head3D.kt`, a glTF head with ARKit morph targets drawn by
   Filament and driven by `Animator.kt`: `nodes` names its head and eye bones, `axes` which local axis of

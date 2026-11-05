@@ -334,8 +334,8 @@ class CallActivity : Activity() {
     private fun menu(anchor: View) = PopupMenu(this, anchor).apply {
         menu.add("Sessions (the call keeps going)").setOnMenuItemClickListener { toSessions(); true }
         menu.add("Talk to…").setOnMenuItemClickListener { pickLine(); true }
-        if (persona.choices().isEmpty()) menu.add("Character…").setOnMenuItemClickListener { pickPersona(); true }
-        else menu.add("Person…").setOnMenuItemClickListener { pickPerson(); true }
+        menu.add("View…").setOnMenuItemClickListener { pickView(); true }
+        if (persona.choices().isNotEmpty()) menu.add("Person…").setOnMenuItemClickListener { pickPerson(); true }
         menu.add("Edit persons…").setOnMenuItemClickListener {
             startActivity(Intent(this@CallActivity, MainActivity::class.java).putExtra(MainActivity.EXTRA_PATH, "/#/settings#persons")
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
@@ -370,12 +370,13 @@ class CallActivity : Activity() {
         }
     }
 
-    private fun pickPersona() {
-        val names = persona.names
+    /** How this phone shows the call; the person on the line stays who they are. */
+    private fun pickView() {
+        val views = PersonaHost.VIEWS
         AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-            .setTitle("Character")
-            .setSingleChoiceItems(names.toTypedArray(), names.indexOf(persona.shown)) { d, i ->
-                persona.pick(names[i])
+            .setTitle("View")
+            .setSingleChoiceItems(views.map { v -> v.replaceFirstChar { it.uppercase() } }.toTypedArray(), views.indexOf(persona.mode)) { d, i ->
+                persona.pickMode(views[i])
                 d.dismiss()
             }
             .show()

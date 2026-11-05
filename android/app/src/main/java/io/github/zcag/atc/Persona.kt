@@ -33,7 +33,8 @@ interface Persona {
     fun drawn(go: () -> Unit) = false
 }
 
-/** The call screen's persona slot. It draws the person the assistant is in the language the call is in (GET
+/** The call screen's persona slot. It draws the view picked on this phone: line or bars, built in and the same for anyone,
+ *  or the character of whoever is on the line. That is the person the assistant is in the language the call is in (GET
  *  /api/call/persons; before a call says, the language the last one opened in), with their background, so a change of
  *  language swaps it; with nobody picked for the language, the character kept on this phone. The orb shows only when it
  *  is the choice or when the character can't be had; a character already on the phone starts from there without asking
@@ -56,12 +57,8 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
     var onPerson: (String?) -> Unit = {}
         set(f) { field = f; f(person?.optString("name")) }
 
-    /** Every character the server lists, the orb first. */
-    var names = listOf("orb")
-        private set
-
-    /** The one on screen (or loading): the kept choice, else the server's default. */
-    var shown = "orb"
+    /** The view on this phone, "character" or one of [MARKS]. */
+    var mode = Prefs(c).callView ?: CHARACTER
         private set
 
     private val speaking get() = lang.ifEmpty { Prefs(context).callLang.orEmpty() }
@@ -82,20 +79,17 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
     init {
         val (character, background) = wanted()
         look = character to background
-        if (character.isEmpty() || character == "orb") enter(Orb(c)) else shown = character
+        if (mode != CHARACTER) post { showMode() }
+        else {
+            if (character.isEmpty() || character == "orb") enter(Orb(c))
+            load(character.ifEmpty { null }, background)
+        }
         setOnLongClickListener {
-            val all = everyone.filter { it.optJSONObject("voices")?.optString(speaking).orEmpty().isNotEmpty() }
-            if (all.size > 1) {
-                val next = all[(all.indexOfFirst { it === person } + 1) % all.size]
-                choose(speaking, next.optString("id"))
-                Toast.makeText(context, next.optString("name"), Toast.LENGTH_SHORT).show()
-            } else if (all.isEmpty()) {
-                pick(names[(names.indexOf(shown) + 1) % names.size])
-                Toast.makeText(context, shown, Toast.LENGTH_SHORT).show()
-            }
+            val next = VIEWS[(VIEWS.indexOf(mode) + 1) % VIEWS.size]
+            pickMode(next)
+            Toast.makeText(context, next.replaceFirstChar { it.uppercase() }, Toast.LENGTH_SHORT).show()
             true
         }
-        load(character.ifEmpty { null }, background)
         thread {
             val server = Prefs(context).server?.trimEnd('/') ?: return@thread
             runCatching { Net.get(context, "$server/api/call/persons").let { adopt(it); ahead(server, it) } }.onFailure { Log.w("atc", "persons: ${it.message}") }
@@ -103,14 +97,14 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
     }
 
     /** What to draw: a person's character and background, or the kept character with the room it came with. */
-    private fun wanted() = person?.let { it.optString("character") to it.optString("background") } ?: (Prefs(context).persona.orEmpty() to "")
+    private fun wanted() = person?.let { it.optString("character") to it.optString("background") } ?: (Prefs(context).persona.orEmpty().takeIf { it !in MARKS }.orEmpty() to "")
 
     private fun refresh() {
         onPerson(person?.optString("name"))
         val now = wanted()
         if (now == look) return
         look = now
-        load(now.first.ifEmpty { null }, now.second)
+        if (mode == CHARACTER) load(now.first.ifEmpty { null }, now.second)
     }
 
     private fun adopt(said: String) {
@@ -140,10 +134,16 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         }
     }
 
-    fun pick(name: String) {
-        Prefs(context).persona = name
-        look = name to ""
-        load(name, "")
+    fun pickMode(m: String) {
+        Prefs(context).callView = m
+        mode = m
+        showMode()
+    }
+
+    private fun showMode() {
+        if (mode == CHARACTER) return load(look.first.ifEmpty { null }, look.second)
+        latest++
+        enter(runCatching { WebPersona(context, context.filesDir, Prefs(context).server.orEmpty().trimEnd('/'), mark = mode) as Persona }.getOrElse { Orb(context) })
     }
 
     override fun face(f: Calls.Face) {
@@ -168,7 +168,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
                 val server = Prefs(context).server ?: return@thread
                 val index = JSONObject(Net.get(context, "$server/app/personas/index.json"))
                 val list = index.optJSONArray("personas") ?: JSONArray()
-                names = listOf("orb") + List(list.length()) { list.getJSONObject(it).getString("name") }
+                val names = listOf("orb") + List(list.length()) { list.getJSONObject(it).getString("name") }
                 val name = (chosen ?: index.optString("default", "orb")).takeIf { it in names } ?: "orb"
                 if (name == "orb") return@runCatching null
                 val rev = List(list.length()) { list.getJSONObject(it) }.first { it.getString("name") == name }.optString("rev")
@@ -214,12 +214,11 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
 
     private fun show(made: Pair<File, JSONObject>?, background: String) {
         if (!isAttachedToWindow) return
-        shown = made?.first?.name ?: "orb"
         if (made == null && current is Orb) return
         enter(runCatching {
             when (made?.second?.optString("kind")) {
                 "head3d" -> Head3D(context, made.first, made.second)
-                "illustration", "footage", "rig", "minimal" -> WebPersona(context, made.first, Prefs(context).server.orEmpty().trimEnd('/'), background)
+                "illustration", "footage", "rig" -> WebPersona(context, made.first, Prefs(context).server.orEmpty().trimEnd('/'), background)
                 else -> Orb(context)
             }
         }.onFailure { Log.w("atc", "persona: ${it.message}") }.getOrElse { Orb(context) })
@@ -249,6 +248,9 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
          *  surface once it is drawn. */
         private const val UNSEEN = .01f
         private const val STUCK_MS = 6000L
+        const val CHARACTER = "character"
+        val MARKS = listOf("line", "bars")
+        val VIEWS = listOf(CHARACTER) + MARKS
         private val FETCHING = Any()
 
         /** A background from /app/personas/_rooms, kept on the phone once it has been there. */

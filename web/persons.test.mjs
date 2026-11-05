@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { personOf, speakers, nextPerson, personLangs } from "./persons.js";
+import { personOf, speakers, nextView, personLangs } from "./persons.js";
 
 const doc = {
   persons: [
@@ -23,12 +23,10 @@ test("only someone with a voice in the language can be picked for it", () => {
   assert.deepEqual(speakers(doc, "tr").map((p) => p.id), ["a", "b", "c"]);
 });
 
-test("next goes round the speakers, and nowhere when there is nobody else", () => {
-  assert.equal(nextPerson(doc, "tr").id, "b");
-  assert.equal(nextPerson({ ...doc, langs: { tr: "c" } }, "tr").id, "a");
-  assert.equal(nextPerson(doc, "en"), null);
-  assert.equal(nextPerson(doc, "de"), null);
-  assert.equal(nextPerson({ persons: doc.persons, langs: {} }, "en").id, "b");
+test("the view goes round, and an unknown one starts over", () => {
+  assert.equal(nextView("character"), "line");
+  assert.equal(nextView("bars"), "character");
+  assert.equal(nextView("gone"), "character");
 });
 
 test("languages come from voices and persons, Turkish first", () => {

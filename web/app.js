@@ -7,7 +7,7 @@ import { persona } from "./persona.js";
 import { minimal } from "./minimal.js";
 import { cube, niceMax } from "./usage-cube.js";
 import { partsOf } from "./res-parts.js";
-import { personOf, speakers, nextPerson, personLangs } from "./persons.js";
+import { personOf, speakers, VIEWS, nextView, personLangs } from "./persons.js";
 import { useCaps, useSetup, CapsBanner, CapsSections, SetupScreen } from "./caps.js";
 import { DevicesSection } from "./devices.js";
 
@@ -1308,6 +1308,7 @@ function CallPanel({ hub, live, captions, full, onMin }) {
     </div>
     <div class="cpers">
       <div class="fr"><${Persona} look=${look} state=${f.state} on=${st.phase === "active"} onTap=${Call.interrupt} /></div>
+      <div class="cview"><${Seg} label="View" value=${look.view} set=${look.setView} options=${VIEWS} /></div>
       <p class="st" aria-live="polite">${callWord(st, f)}</p>
     </div>
     ${opts && html`<${CallPicks} look=${look} onClose=${() => setOpts(false)} />`}
@@ -1587,7 +1588,7 @@ async function personaList() {
   const index = await (await fetch(PERSONAS + "index.json")).json();
   const all = index.personas || [];
   const kinds = await Promise.all(all.map(({ name }) => fetch(`${PERSONAS}${name}/persona.json`).then((r) => r.json()).then((p) => p.kind).catch(() => null)));
-  const usable = all.map((p, i) => [p.name, kinds[i]]).filter(([, k]) => ["illustration", "footage", "rig", "minimal"].includes(k));
+  const usable = all.map((p, i) => [p.name, kinds[i]]).filter(([, k]) => ["illustration", "footage", "rig"].includes(k));
   return { names: ["orb", ...usable.map(([n]) => n)], kinds: Object.fromEntries(usable), def: index.default || "orb" };
 }
 
@@ -1603,6 +1604,8 @@ function usePersona(lang, own) {
   const [answered, setAnswered] = useState(false);
   const [name, setName] = useState(personaPick.get);
   const [preview, setPreview] = useState(null);
+  const [view, setViewNow] = useState(() => { try { return localStorage.getItem("atc.callView") || "character"; } catch { return "character"; } });
+  const setView = (v) => { try { localStorage.setItem("atc.callView", v); } catch {} setViewNow(v); };
   const keep = (d) => {
     setDoc(d);
     try { localStorage.setItem("atc.persons", JSON.stringify(d)); } catch {}
@@ -1618,48 +1621,41 @@ function usePersona(lang, own) {
   const speaking = lang || (() => { try { return localStorage.getItem("atc.callLang"); } catch { return null; } })() || "";
   const person = doc.persons.find((p) => p.id === own) || personOf(doc, speaking);
   const look = preview || person;
-  const want = look?.character ?? name ?? list.def;
+  const want = look?.character ?? (VIEWS.some(([v]) => v === name) ? null : name) ?? list.def;
   const shown = !answered || list.names.includes(want) ? want : "orb";
   const choose = (l, id) => api("/api/call/persons/pick", { method: "POST", body: { lang: l, id } }).then(keep);
-  /** The next person this language can have, or with nobody to go to the next character. Says who it landed on. */
-  const next = () => {
-    const p = nextPerson(doc, speaking);
-    if (p) { choose(speaking, p.id).catch(() => {}); return p.name; }
-    const n = list.names[(list.names.indexOf(shown) + 1) % list.names.length];
-    personaPick.set(n);
-    setName(n);
-    return n;
-  };
-  return { names: list.names, kinds: list.kinds, shown, background: look?.background || "", doc, keep, person, lang: speaking, choose, next, preview: setPreview,
-    framed: !["orb", "minimal"].includes(list.kinds[shown] || shown) };
+  return { names: list.names, kinds: list.kinds, shown, background: look?.background || "", doc, keep, person, lang: speaking, choose, preview: setPreview,
+    view, setView, mark: !preview && view !== "character" ? view : null, framed: shown !== "orb" && (preview || view === "character") };
 }
 
-/** The call's persona slot. Holding it (or a right click) switches to the next character. */
+/** The call's persona slot. Holding it (or a right click) switches to the next view. */
 function Persona({ look, state, on, onTap }) {
-  const { shown, background, framed } = look;
+  const { shown, background, framed, mark } = look;
   const [label, setLabel] = useState(null);
   const hold = useRef(null);
   const held = useRef(false);
   const next = (e) => {
     e?.preventDefault();
-    setLabel(look.next());
+    const v = nextView(look.view);
+    look.setView(v);
+    setLabel(VIEWS.find(([k]) => k === v)[1]);
     setTimeout(() => setLabel(null), 1200);
   };
   const down = () => { held.current = false; hold.current = setTimeout(() => { held.current = true; next(); }, 600); };
   const up = () => clearTimeout(hold.current);
   const tap = () => { if (!held.current) onTap(); };
   return html`<div class="orb persona ${framed ? "framed" : ""}" onPointerDown=${down} onPointerUp=${up} onPointerLeave=${up} onContextMenu=${next}>
-    ${shown === "orb" ? html`<${Orb} full state=${state} on=${on} onTap=${tap} />` : html`<${Drawn} key=${`${shown}|${background}`} name=${shown} background=${background} state=${state} on=${on} onTap=${tap} />`}
+    ${mark ? html`<${Mark} key=${mark} style=${mark} state=${state} on=${on} onTap=${tap} />` : shown === "orb" ? html`<${Orb} full state=${state} on=${on} onTap=${tap} />` : html`<${Drawn} key=${`${shown}|${background}`} name=${shown} background=${background} state=${state} on=${on} onTap=${tap} />`}
     ${label && html`<span class="personaname">${label}</span>`}
   </div>`;
 }
 
-const PERSONA_WORDS = { orb: "A glass sphere that swirls with the voices", line: "A hairline that ripples with the voices, quiet enough for a call in public", bars: "Four short bars, like a voice meter" };
-const KIND_WORDS = { rig: "A drawn portrait that looks, nods and talks", illustration: "A drawn portrait", footage: "A filmed portrait", minimal: "A quiet mark that only moves with the voices" };
+const PERSONA_WORDS = { orb: "A glass sphere that swirls with the voices" };
+const KIND_WORDS = { rig: "A drawn portrait that looks, nods and talks", illustration: "A drawn portrait", footage: "A filmed portrait" };
 const VOICE_LANG = { tr: "Turkish", en: "English" };
 const voiceName = (v) => v.replace(/^en_/, "").replace(/_/g, " ");
 const roomName = (f) => f.replace(/\.[^.]+$/, "").replace(/[_-]/g, " ");
-const takesRoom = (look, c) => ["rig", "minimal"].includes(look.kinds[c]);
+const takesRoom = (look, c) => look.kinds[c] === "rig";
 
 /** Hears a voice before it is picked: the voice service renders a sample once and keeps it. */
 function useSample(voices, setNote) {
@@ -1778,6 +1774,15 @@ function PersonsSection() {
     <h2>Persons</h2>
     <div class="picks"><${Persons} look=${look} /></div>
   </section>`;
+}
+
+/** The line or bars view: only a mark that moves with the voices, for a call in public. */
+function Mark({ style, state, on, onTap }) {
+  const ref = useRef(null);
+  const now = useRef(state);
+  now.current = state;
+  useEffect(() => minimal(ref.current, { style }, () => { const [you, it] = Call.levels(); return { state: now.current, you, it }; }), [style]);
+  return html`<canvas ref=${ref} class="orb ${on ? "" : "idle"}" onClick=${onTap} aria-label="The assistant. Tap to stop it while it speaks"></canvas>`;
 }
 
 function Drawn({ name, background, state, on, onTap }) {

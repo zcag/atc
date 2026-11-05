@@ -14,7 +14,7 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
   for (const { id } of (await (await fetch(base + '/api/call/persons')).json()).persons) await fetch(`${base}/api/call/persons/${id}`, { method: 'DELETE' });
   await post('/api/call/persons', { name: 'Elif', character: 'woman', background: 'night.jpg', voices: { tr: 'voice_f' } });
   await post('/api/call/persons', { name: 'Hoca', character: 'professor', voices: { tr: 'voice_m', en: 'en_merchant' } });
-  await post('/api/call/persons', { name: 'Sessiz', character: 'line', background: 'evening.jpg', voices: { tr: 'voice_m', en: 'voice_en' } });
+  await post('/api/call/persons', { name: 'Sessiz', character: 'professor', background: 'evening.jpg', voices: { tr: 'voice_m', en: 'voice_en' } });
   await post('/api/call/persons/pick', { lang: 'tr', id: 'elif' });
   await post('/api/call/persons/pick', { lang: 'en', id: 'hoca' });
 
@@ -57,6 +57,32 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
     ok(await p.locator('.cph .w').innerText() === 'Other, Hoca', 'an agent without one: who the assistant is in this language');
     await p.evaluate(() => window.__call.set({}, { line: 'assistant', title: '', person: '' }));
 
+    asked.length = 0;
+    const view = (name) => p.locator('.cview').getByRole('button', { name, exact: true });
+    await view('Line').click();
+    await p.waitForTimeout(800);
+    ok(await view('Line').getAttribute('aria-pressed') === 'true', 'the view switch is on the frame');
+    ok(await p.locator('.cph .w').innerText() === 'assistant, Hoca', 'the person stays who they are in the line view');
+    await shot('line');
+    await p.evaluate(() => window.__call.set({}, { lang: 'tr' }));
+    await p.waitForTimeout(800);
+    ok(!seen('rig.json'), 'a language change in the line view loads no character');
+    await view('Bars').click();
+    await p.waitForTimeout(500);
+    await shot('bars');
+    ok(await p.locator('.cview [aria-pressed="true"]').innerText() === 'Bars', 'bars');
+    await view('Character').click();
+    await p.waitForTimeout(3000);
+    ok(seen('/personas/woman/rig.json') && await drawn(), 'back to Character: the person of the language spoken now');
+    await p.evaluate(() => window.__call.set({}, { lang: 'en' }));
+    await view('Line').click();
+    await p.reload();
+    await p.waitForSelector('.callp');
+    ok(await p.locator('.cview [aria-pressed="true"]').innerText() === 'Line', 'the view is kept on this device');
+    await p.evaluate(() => window.__call.set({ phase: 'active', since: Date.now() }, { state: 'listening', lang: 'en' }));
+    await view('Character').click();
+    await p.waitForTimeout(500);
+
     await p.getByRole('button', { name: 'Person', exact: true }).click();
     await p.waitForSelector('.picks .vpick');
     await shot('panel');
@@ -71,6 +97,7 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
     await p.getByRole('button', { name: 'Edit' }).first().click();
     await p.waitForSelector('.pform');
     await shot('edit');
+    ok(!(await p.locator('.pform select').first().innerText()).match(/line|bars/), 'line and bars are not characters a person can have');
     const box = await p.locator('.pform').boundingBox();
     ok(box.width <= width, 'the form fits the phone');
     ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll');
