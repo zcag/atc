@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -118,10 +119,7 @@ func installOnly(list []service) error {
 
 func serviceState(s service, mac bool) string {
 	if mac {
-		if exec.Command("launchctl", "print", macDomain()+"/"+macName(s)).Run() != nil {
-			return "not running"
-		}
-		return "running"
+		return macState(s)
 	}
 	out, _ := exec.Command("systemctl", "--user", "is-active", s.unit).Output()
 	return strings.TrimSpace(string(out))
@@ -236,20 +234,42 @@ func macUnload(s service) {
 	}
 }
 
+// macState is launchd's word for it: a job that keeps crashing is loaded but not "running".
+func macState(s service) string {
+	out, err := exec.Command("launchctl", "print", macDomain()+"/"+macName(s)).Output()
+	if err != nil {
+		return "not running"
+	}
+	if m := regexp.MustCompile(`(?m)^\s*state = (.+)$`).FindSubmatch(out); m != nil && string(m[1]) != "running" {
+		return string(m[1])
+	}
+	return "running"
+}
+
 func macInstall(s service) error {
 	b, err := units.ReadFile("deploy/atc.plist")
 	if err != nil {
 		return err
 	}
 	if s.name != "atc" {
-		b = bytes.ReplaceAll(b, []byte("<string>"+macLabel+"</string>"), []byte("<string>"+macName(s)+"</string>"))
+		b = macRelabel(b, s)
 		b = bytes.ReplaceAll(b, []byte(`"$HOME/.local/bin/atc" serve`), []byte(`"$HOME/.local/bin/`+s.bin+`" hub`))
-		b = bytes.ReplaceAll(b, []byte("/tmp/atc.log"), []byte("/tmp/"+s.bin+".log"))
 	}
+	return macLoad(s, b)
+}
+
+// macRelabel makes atc's plist another job's: its label and its log.
+func macRelabel(plist []byte, s service) []byte {
+	plist = bytes.ReplaceAll(plist, []byte("<string>"+macLabel+"</string>"), []byte("<string>"+macName(s)+"</string>"))
+	return bytes.ReplaceAll(plist, []byte("/tmp/atc.log"), []byte("/tmp/"+s.bin+".log"))
+}
+
+// macLoad writes the plist and (re)starts the job from it.
+func macLoad(s service, plist []byte) error {
 	if err := os.MkdirAll(filepath.Dir(macPlist(s)), 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(macPlist(s), b, 0o644); err != nil {
+	if err := os.WriteFile(macPlist(s), plist, 0o644); err != nil {
 		return err
 	}
 	macUnload(s)

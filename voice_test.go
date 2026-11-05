@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bytes"
+	"encoding/xml"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/zcag/atc/internal/settings"
@@ -55,5 +59,79 @@ func TestWriteVoiceFilesIsIdempotent(t *testing.T) {
 	}
 	if changed, err := writeVoiceFiles(dir); err != nil || changed {
 		t.Fatal(changed, err)
+	}
+}
+
+func TestUnitCommandRunsTheUnit(t *testing.T) {
+	home := t.TempDir()
+	env := filepath.Join(home, "voice.env")
+	if err := os.WriteFile(env, []byte("B=\"from file\"\nC=\"split me\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unit := "[Service]\nEnvironment=A=%h/a b\nEnvironment=B=default\nEnvironment=PATH=/nowhere\nEnvironmentFile=-" + env + "\nEnvironmentFile=-%h/none\n" +
+		"ExecStart=/bin/sh -c 'for w; do echo \"$$w\"; done' x ${A} ${B} $C \"$$HOME\"\n"
+	out, err := exec.Command("sh", "-c", unitCommand(unit, home)).CombinedOutput()
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	want := home + "/a b\nfrom file\nsplit\nme\n" + home + "\n"
+	if string(out) != want {
+		t.Fatalf("got %q, want %q", out, want)
+	}
+}
+
+func TestVoicePlists(t *testing.T) {
+	tpl, err := units.ReadFile("deploy/atc.plist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries, err := voiceFiles.ReadDir("voice/systemd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		name, isUnit := strings.CutSuffix(e.Name(), ".service")
+		if !isUnit {
+			continue
+		}
+		unit, _ := voiceFiles.ReadFile("voice/systemd/" + e.Name())
+		command := unitCommand(string(unit), "/home/you")
+		if !strings.Contains(command, "exec ") || strings.Contains(command, "%h") || strings.Contains(command, "$$") {
+			t.Fatalf("%s: %s", name, command)
+		}
+		if out, err := exec.Command("sh", "-n", "-c", command).CombinedOutput(); err != nil {
+			t.Fatalf("%s: %v: %s", name, err, out)
+		}
+		s := service{name: name, bin: name, unit: name}
+		plist := voicePlist(tpl, s, command)
+		if err := xml.Unmarshal(plist, new(struct{})); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		for _, want := range []string{"<string>" + macName(s) + "</string>", "<key>ProcessType</key>", "/tmp/" + name + ".log", "<key>StandardOutPath</key>", "&amp;&amp;"} {
+			if !bytes.Contains(plist, []byte(want)) {
+				t.Fatalf("%s has no %s:\n%s", name, want, plist)
+			}
+		}
+		if bytes.Contains(plist, []byte("AbandonProcessGroup")) {
+			t.Fatalf("%s keeps its children past a stop", name)
+		}
+	}
+}
+
+func TestEnginesPerMachine(t *testing.T) {
+	if defaultEngine("darwin", "arm64") != "pocket-en" || defaultEngine("linux", "amd64") != "pocket-en" || defaultEngine("darwin", "amd64") != "piper" {
+		t.Fatal("default engine")
+	}
+	for _, c := range []struct {
+		engines, goos, goarch string
+		ok                    bool
+	}{
+		{"pocket-en", "darwin", "arm64", true}, {"pocket-en,pocket,kokoro,piper", "darwin", "arm64", true}, {"higgs", "linux", "amd64", true},
+		{"piper", "darwin", "amd64", true}, {"kokoro", "darwin", "amd64", true}, {"pocket-en", "darwin", "amd64", false},
+		{"piper,pocket", "darwin", "amd64", false},
+	} {
+		if err := engineRuns(c.engines, c.goos, c.goarch); (err == nil) != c.ok {
+			t.Errorf("%s on %s/%s: %v", c.engines, c.goos, c.goarch, err)
+		}
 	}
 }

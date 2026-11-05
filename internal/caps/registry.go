@@ -2,6 +2,7 @@ package caps
 
 import (
 	"cmp"
+	"runtime"
 	"strings"
 )
 
@@ -22,6 +23,13 @@ const (
 var Groups = []string{Core, Assistant, Agents, Calls, Phone, Machines, Browser, Models, Summaries, WhatsApp}
 
 const docs = "https://github.com/zcag/atc/blob/master/docs/"
+
+func onMac(mac, other string) string {
+	if runtime.GOOS == "darwin" {
+		return mac
+	}
+	return other
+}
 
 // A guide is a page in docs/ with an optional anchor: "install#requirements" or "calls". docs_test.go checks each exists.
 func GuideURL(guide string) string {
@@ -84,9 +92,10 @@ func All() []Cap {
 		},
 		{
 			ID: "calls", Title: "Calls with the assistant", Group: Calls, Optional: true, Why: "Talk to the assistant by voice, from this page or the phone app.",
-			Needs: []string{"hub", "call-line", "talker", "voices"},
+			Needs: []string{"hub", "call-line", "talker", "voice-engine"},
 			Fix:   Fix{Text: "Set up what it still needs, in the rows below.", Guide: "calls"},
-			Cost:  "2 CPU cores or more, about 2 GB of disk, and plan tokens for the assistant; a GPU gives a better voice.",
+			Cost: onMac("2 CPU cores or more, about 2 GB of disk, and plan tokens for the assistant. The Mac has to stay awake: closing the lid ends a call. An Intel Mac gets a plainer voice.",
+				"2 CPU cores or more, about 2 GB of disk, and plan tokens for the assistant; a GPU gives a better voice."),
 		},
 		{
 			ID: "agent-calls", Title: "Talking to agents on a call", Group: Calls, Optional: true, Why: "An agent with \"talk\": true in its agent.json can take the line from the assistant during a call.",
@@ -104,14 +113,18 @@ func All() []Cap {
 			ID: "talker", Title: "Talker", Group: Calls, Optional: true, Why: "Holds the call: hears you, knows when you are done, and speaks the assistant's words.",
 			Needs: []string{"call-line"}, Check: checkTalker,
 			Fix:  Fix{Command: "atc voice install", Text: "Installs the talker with the call line.", Guide: "calls"},
-			Cost: "A GPU, or a CPU with slower replies, for speech in and out.",
+			Cost: onMac("The CPU, for speech in and out.", "A GPU, or a CPU with slower replies, for speech in and out."),
 		},
 		{
-			ID: "voices", Title: "Voices", Group: Calls, Optional: true, Why: "Lists the voices a call can speak with and keeps your pick.",
+			ID: "voice-engine", Title: "Voice engine", Group: Calls, Optional: true, Why: "Turns the assistant's words into speech. Without it a call connects and stays silent.",
+			Needs: []string{"call-line"}, Check: checkVoiceEngine,
+			Fix: Fix{Command: "atc voice install", Text: onMac("Installs it with the call line; its log is /tmp/delta-tts.log.", "Installs it with the call line; its log is journalctl --user -u delta-tts."), Guide: "calls"},
+		},
+		{
+			ID: "voices", Title: "Voice picker", Group: Calls, Optional: true, Why: "Lists more voices to choose from on a call and keeps your pick. Without it a call speaks with the voice in voice.env.",
 			Fields: []Field{{Key: "ATC_CALL_VOICES", Label: "Voices address", Hint: "http://127.0.0.1:8806", URL: true}},
 			Check:  checkVoices,
-			Fix:    Fix{Text: "Run the voice service, then enter its address here.", Guide: "calls"},
-			Cost:   "A GPU for the better voices.",
+			Fix:    Fix{Text: "A service of your own that answers /api/voices: atc voice install doesn't include one. Enter its address here.", Guide: "calls"},
 		},
 		{
 			ID: "persons", Title: "Persons", Group: Calls, Optional: true, Why: "Who the assistant is in each language: a name, a character, a room and a voice.",

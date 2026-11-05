@@ -1,6 +1,6 @@
 # Calls
 
-Calls are an add-on: `atc voice install [--lang en] [--also tr] [--engine pocket-en]` sets up the call stack (`voice/`, its README lists the settings) on this machine: Linux with systemd for now, CPU only by default, about 2 GB on disk. `atc voice status` and `atc voice uninstall [--purge]` do what they say. No phone is needed: the atc app and the browser call it over atc.
+Calls are an add-on: `atc voice install [--lang en] [--also tr] [--engine pocket-en]` sets up the call stack (`voice/`, its README lists the settings) on this machine: Linux with systemd or macOS with launchd ([what differs on a Mac](#on-a-mac)), CPU only by default, about 2 GB on disk. `atc voice status` and `atc voice uninstall [--purge]` do what they say. No phone is needed: the atc app and the browser call it over atc.
 
 On CPU a call works on 2 cores (first audio about 2.5 to 3.2 s after you stop, most of it Claude's first token; the voice breaks up on 1 core). Streaming speech recognition is the weakest part: it reads some words wrong, which the assistant then has to guess at.
 
@@ -8,17 +8,45 @@ atc has no voice mode in a session: to talk, call the assistant. **Call about th
 menu or the palette tells it which session you mean. On the call, the assistant can hand the line to [an agent that
 can talk](#talking-to-an-agent); on that agent's own session the same entry is **Call**, which goes straight to it.
 
-Calls are an add-on. They need three services next to [the hub](assistant.md), each with a row in
-Settings: the **call line**, which carries a call's audio; a **talker**, which holds the call (hears
-you, knows when you are done, speaks the assistant's words); and a **voice service**, which lists the
-voices and keeps your pick. They cost a GPU, or a CPU with slower replies, plus plan tokens.
+They need three services next to [the hub](assistant.md), each with a row in Settings, all three set up by
+`atc voice install`: the **call line**, which carries a call's audio; a **talker**, which holds the call (hears you,
+knows when you are done, speaks the assistant's words); and a **voice engine**, which turns its words into speech. They
+cost a GPU, or a CPU with slower replies, plus plan tokens. A **voice picker** is optional and is a service of your own:
+without one a call speaks with the voice in `voice.env`.
 
 ```sh
 ATC_CALL_LINE=http://127.0.0.1:8807      # the call line, for atc call and the app
-ATC_CALL_VOICES=http://127.0.0.1:8806    # the voice service
+ATC_CALL_VOICES=http://127.0.0.1:8806    # optional: the voice picker, not part of atc voice install
 ATC_CALL_NUMBER=+15550100                # optional: the number atc call rings, defaults to the first ATC_WHATSAPP_OWNER
 ATC_CALL_LINE_NUMBER=+15550101           # optional: the assistant's own number, shown in the phone's call log
 ```
+
+## On a Mac
+
+`atc voice install` runs the same stack as launchd agents of your user (`io.github.zcag.atc.delta-*`), rendered from the
+same unit files, and `status` and `uninstall` work the same. No Xcode or Python of your own is needed, only
+[uv](https://docs.astral.sh/uv/). What differs:
+
+| | Apple Silicon | Intel |
+|---|---|---|
+| Default voice | `pocket-en`, as on Linux | `piper`: torch has no Intel Mac build, and `pocket-en` and `pocket` need it, so install refuses them and says so |
+| Other engines | `pocket` (Turkish), `piper`, `kokoro` | `kokoro`, which needs a fast machine: at about real time under Rosetta on an M5 Max, with 5 s before its first audio |
+| Turkish calls | Yes | The transcriber runs, but piper and kokoro only speak English here |
+| Measured | M5 Max: the voice starts 1.9 to 2.5 s after you stop, with a stand-in for Claude that takes 0.8 s, so about 2 to 3.5 s with Claude's real first token. `pocket-en` takes 0.03 s to its first audio and renders 14 times faster than real time, on 2 threads or 4 | Only under Rosetta on that same M5 Max (1.4 to 2.2 s the same way), never on a real Intel Mac |
+
+Smaller Apple Silicon chips have not been measured.
+
+- **The Mac has to be awake.** A call holds off idle sleep (`caffeinate`), but closing the lid still sleeps a laptop and
+  ends the call, and a sleeping Mac can't be called. Linux on a machine that stays on doesn't have this.
+- **You have to be logged in.** launchd starts user agents at login, as it does for atc itself.
+- **Logs** are `/tmp/delta-call.log`, `/tmp/delta-tts.log` and `/tmp/delta-talk-app.log`, gone after a reboot, not the journal.
+- **A busy machine.** Linux gives the units their own `calls.slice`; a Mac has no such thing, so they run as launchd's
+  `Interactive` process type, its highest. With all 18 cores of that M5 Max kept busy the voice started 0.4 s later and
+  held up (37 ms dry in a 45 s call).
+- **Higgs**, the GPU voice, has only been run on Linux, through audio.cpp's Vulkan build. On a Mac you would build audio.cpp
+  yourself and start it on `HIGGS_URL`.
+- **A phone on USB** (`--phone`) needs `adb` (`brew install android-platform-tools`). It has not been tested on a Mac.
+- `uninstall --purge` leaves uv's own cache in `~/.cache/uv`, as on Linux: `uv cache clean` removes it.
 
 ## Calling the user
 

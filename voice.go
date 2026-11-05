@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"embed"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"flag"
 	"fmt"
@@ -38,7 +39,8 @@ engine, and starts the services. Runs again safely; a restart waits for any call
 ~/.config/atc/voice.env, with every other setting (voice/README.md lists them).
 
   --lang, --also   the call's first language, and others it can switch to (voice/lang/)
-  --engine         pocket-en (default, CPU), pocket (Turkish, CPU), piper or kokoro (CPU); higgs needs a GPU and setup by hand
+  --engine         pocket-en (default, CPU), pocket (Turkish, CPU), piper or kokoro (CPU); higgs needs a GPU and setup by hand.
+                   An Intel Mac has no torch for pocket and pocket-en, so piper is its default (docs/calls.md, On a Mac)
   --voice          the engine's voice; empty is its default
   --phone          also run the phone-on-USB line (voice/device/), otherwise only the app line
 uninstall stops and removes the services and the stack's files; --purge also removes models, the venv, recordings and
@@ -57,6 +59,8 @@ func voiceCmd(args []string) error {
 		return voiceStatus()
 	case "uninstall":
 		return voiceUninstall(args[1:])
+	case "unit":
+		return voiceUnitCmd(args[1:])
 	}
 	fmt.Print(voiceHelp)
 	return nil
@@ -190,17 +194,31 @@ func voiceInstall(args []string) error {
 	user := fs.String("user", "", "")
 	phone := fs.Bool("phone", false, "")
 	fs.Parse(args)
-	if runtime.GOOS != "linux" {
-		return fmt.Errorf("atc voice install is Linux only for now (it installs systemd user units); on %s nothing was changed", runtime.GOOS)
-	}
-	if _, err := exec.LookPath("systemctl"); err != nil {
-		return errors.New("atc voice install needs systemd (no systemctl here)")
+	if !voiceOnMac() {
+		if runtime.GOOS != "linux" {
+			return fmt.Errorf("atc voice install runs on Linux and macOS; on %s nothing was changed", runtime.GOOS)
+		}
+		if _, err := exec.LookPath("systemctl"); err != nil {
+			return errors.New("atc voice install needs systemd (no systemctl here)")
+		}
 	}
 	if _, err := exec.LookPath("uv"); err != nil {
 		return errors.New("uv is missing, and the call stack runs on it. Install it with:\n  curl -LsSf https://astral.sh/uv/install.sh | sh\nthen run atc voice install again")
 	}
+	if *phone {
+		if _, err := exec.LookPath("adb"); err != nil {
+			return errors.New("--phone drives the phone with adb, which is missing. Install Android's platform-tools, then run atc voice install --phone again")
+		}
+	}
 	path := voiceEnvPath()
 	env := readEnvFile(path)
+	engines := cmp.Or(*engine, env["TTS_ENGINES"], defaultEngine(runtime.GOOS, runtime.GOARCH))
+	if err := engineRuns(engines, runtime.GOOS, runtime.GOARCH); err != nil {
+		return err
+	}
+	if voiceOnMac() && slices.Contains(strings.Split(engines, ","), "higgs") {
+		fmt.Println("Note: higgs has only been run on Linux. On a Mac it needs audio.cpp's server built and started by you on :8841 (HIGGS_URL); until it answers, the voice engine keeps restarting.")
+	}
 	set := map[string]string{}
 	first := func(key, flagValue, fallback string) {
 		if v := cmp.Or(flagValue, env[key], fallback); v != "" && v != env[key] {
@@ -211,8 +229,8 @@ func voiceInstall(args []string) error {
 	first("TALK_ALSO", *also, "")
 	first("TALK_ASSISTANT", *assistant, "")
 	first("TALK_USER", *user, "")
-	first("TTS_ENGINES", *engine, "pocket-en")
-	first("TALK_TTS_ENGINE", strings.Split(*engine, ",")[0], "pocket-en")
+	first("TTS_ENGINES", *engine, engines)
+	first("TALK_TTS_ENGINE", strings.Split(*engine, ",")[0], strings.Split(engines, ",")[0])
 	first("TALK_TTS_VOICE", *voice, "")
 	if *phone {
 		set["DELTA_CALL_BRIDGE"] = "1"
@@ -242,7 +260,7 @@ func voiceInstall(args []string) error {
 		if _, err := setEnvFile(atcEnv, map[string]string{"ATC_CALL_LINE": line}); err != nil {
 			return err
 		}
-		exec.Command("systemctl", "--user", "try-restart", "atc", "atc-hub").Run()
+		restartForLine()
 		fmt.Println("Set ATC_CALL_LINE in", atcEnv)
 	}
 	fmt.Println("Installed. Call the assistant from the atc app. atc voice status shows how it stands.")
@@ -252,16 +270,130 @@ func voiceInstall(args []string) error {
 func voiceRun(dir, name string, args ...string) error {
 	c := exec.Command(name, args...)
 	c.Dir, c.Stdout, c.Stderr = dir, os.Stdout, os.Stderr
+	if exe, err := os.Executable(); err == nil {
+		c.Env = append(os.Environ(), "ATC_BIN="+exe)
+	}
 	return c.Run()
+}
+
+func voiceOnMac() bool { return runtime.GOOS == "darwin" }
+
+// defaultEngine is pocket-en wherever torch ships for the machine, and piper on an Intel Mac, where it does not.
+func defaultEngine(goos, goarch string) string {
+	if goos == "darwin" && goarch == "amd64" {
+		return "piper"
+	}
+	return "pocket-en"
+}
+
+func engineRuns(engines, goos, goarch string) error {
+	for _, e := range strings.Split(engines, ",") {
+		if goos == "darwin" && goarch == "amd64" && (e == "pocket" || e == "pocket-en") {
+			return fmt.Errorf("the %s voice can't run on an Intel Mac: it needs torch 2.5 or newer, which has no Intel Mac build. Nothing was changed. Use --engine piper or --engine kokoro, or install on an Apple Silicon Mac or Linux", e)
+		}
+	}
+	return nil
+}
+
+// restartForLine has the services read the ATC_CALL_LINE just written. Only jobs of this home: launchd's labels are per
+// user, not per home, so a scratch HOME would otherwise restart the real atc.
+func restartForLine() {
+	if !voiceOnMac() {
+		exec.Command("systemctl", "--user", "try-restart", "atc", "atc-hub").Run()
+		return
+	}
+	for _, s := range services("") {
+		if _, err := os.Stat(macPlist(s)); err == nil {
+			exec.Command("launchctl", "kickstart", "-k", macDomain()+"/"+macName(s)).Run()
+		}
+	}
+}
+
+func voiceUnitState(u string) string {
+	if voiceOnMac() {
+		return macState(service{name: u, bin: u, unit: u})
+	}
+	out, _ := exec.Command("systemctl", "--user", "is-active", u+".service").Output()
+	return strings.TrimSpace(string(out))
 }
 
 func voiceAllActive(env map[string]string) bool {
 	for _, u := range voiceUnits(env) {
-		if exec.Command("systemctl", "--user", "is-active", "-q", u+".service").Run() != nil {
+		if s := voiceUnitState(u); s != "active" && s != "running" {
 			return false
 		}
 	}
 	return true
+}
+
+// voiceUnitCmd is deploy.sh's way to launchd, so that its plists come from one place.
+func voiceUnitCmd(args []string) error {
+	if len(args) != 2 || !voiceOnMac() {
+		return errors.New("usage, on macOS: atc voice unit start|active <unit>")
+	}
+	u := service{name: args[1], bin: args[1], unit: args[1]}
+	switch args[0] {
+	case "active":
+		if macState(u) != "running" {
+			os.Exit(1)
+		}
+		return nil
+	case "start":
+		home, _ := os.UserHomeDir()
+		unit, err := os.ReadFile(filepath.Join(voiceDir(readEnvFile(voiceEnvPath())), "systemd", args[1]+".service"))
+		if err != nil {
+			return err
+		}
+		tpl, err := units.ReadFile("deploy/atc.plist")
+		if err != nil {
+			return err
+		}
+		return macLoad(u, voicePlist(tpl, u, unitCommand(string(unit), home)))
+	}
+	return fmt.Errorf("atc voice unit: no %s", args[0])
+}
+
+var (
+	plistCommand = regexp.MustCompile(`<string>set -a;.*</string>`)
+	unitBraced   = regexp.MustCompile(`\$\{(\w+)\}`)
+)
+
+// unitCommand is a systemd unit as one sh command, so the units stay the only definition of how each service runs: what
+// systemd does with its Environment=, EnvironmentFile= and ExecStart= lines, in the same order. ${X} is one word to
+// systemd and $X is split, and %h and HOME are spelled out, since launchd gives a job the login's real home.
+func unitCommand(unit, home string) string {
+	out := []string{"set -a", "HOME=" + shellQuote(home), "PYTHONUNBUFFERED=1", "UV_PYTHON=3.12"}
+	var start string
+	for _, l := range strings.Split(strings.ReplaceAll(unit, "%h", home), "\n") {
+		key, v, _ := strings.Cut(l, "=")
+		switch key {
+		case "Environment":
+			k, val, _ := strings.Cut(v, "=")
+			if k != "PATH" {
+				out = append(out, k+"="+shellQuote(val))
+			}
+		case "EnvironmentFile":
+			f := shellQuote(strings.TrimPrefix(v, "-"))
+			out = append(out, "[ -f "+f+" ] && . "+f)
+		case "ExecStart":
+			start = strings.ReplaceAll(unitBraced.ReplaceAllString(v, `"$${$1}"`), "$$", "$")
+		}
+	}
+	path := home + "/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+	return strings.Join(append(out, "PATH="+shellQuote(path), "set +a", "exec "+start), "; ")
+}
+
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// voicePlist is atc's plist with a voice unit's command, with stdout in the log too, its children stopped with it (atc
+// keeps its sessions, a talker has none to keep), and first in line for the CPU, as calls.slice is on Linux.
+func voicePlist(tpl []byte, s service, command string) []byte {
+	var esc bytes.Buffer
+	xml.EscapeText(&esc, []byte(command))
+	b := macRelabel(tpl, s)
+	b = plistCommand.ReplaceAllLiteral(b, []byte("<string>"+esc.String()+"</string>"))
+	b = bytes.ReplaceAll(b, []byte("<key>AbandonProcessGroup</key>\n\t<true/>"), []byte("<key>ProcessType</key>\n\t<string>Interactive</string>"))
+	return bytes.ReplaceAll(b, []byte("<key>StandardErrorPath</key>"), []byte("<key>StandardOutPath</key>\n\t<string>/tmp/"+s.bin+".log</string>\n\t<key>StandardErrorPath</key>"))
 }
 
 func getJSON(url string) (map[string]any, error) {
@@ -284,8 +416,7 @@ func voiceStatus() error {
 	env := readEnvFile(path)
 	fmt.Printf("settings   %s\nfiles      %s\nlanguage   %s %s\nvoice      %s %s\n", path, voiceDir(env), env["TALK_LANG"], env["TALK_ALSO"], env["TALK_TTS_ENGINE"], env["TALK_TTS_VOICE"])
 	for _, u := range voiceUnits(env) {
-		out, _ := exec.Command("systemctl", "--user", "is-active", u+".service").Output()
-		fmt.Printf("%-16s %s\n", u, strings.TrimSpace(string(out)))
+		fmt.Printf("%-16s %s\n", u, voiceUnitState(u))
 	}
 	st, err := getJSON("http://127.0.0.1:" + voicePort(env) + "/status")
 	if err != nil {
@@ -301,6 +432,30 @@ func voiceStatus() error {
 	return nil
 }
 
+func removeVoiceUnits(home string) {
+	names := []string{"delta-talk-app", "delta-talk", "delta-tts", "delta-higgs", "delta-call"}
+	if voiceOnMac() {
+		for _, u := range names {
+			s := service{name: u, bin: u, unit: u}
+			if _, err := os.Stat(macPlist(s)); err == nil {
+				macUnload(s)
+				os.Remove(macPlist(s))
+				os.Remove("/tmp/" + u + ".log")
+			}
+		}
+		return
+	}
+	units := filepath.Join(home, ".config/systemd/user")
+	for _, u := range names {
+		if _, err := os.Stat(filepath.Join(units, u+".service")); err == nil {
+			exec.Command("systemctl", "--user", "disable", "--now", u+".service").Run()
+			os.Remove(filepath.Join(units, u+".service"))
+		}
+	}
+	os.Remove(filepath.Join(units, "calls.slice"))
+	exec.Command("systemctl", "--user", "daemon-reload").Run()
+}
+
 func voiceUninstall(args []string) error {
 	flags := flag.NewFlagSet("voice uninstall", flag.ExitOnError)
 	flags.Usage = func() { fmt.Print(voiceHelp) }
@@ -313,15 +468,7 @@ func voiceUninstall(args []string) error {
 		return errors.New("a call is on; try again when it ends, or use --force")
 	}
 	home, _ := os.UserHomeDir()
-	units := filepath.Join(home, ".config/systemd/user")
-	for _, u := range []string{"delta-talk-app", "delta-talk", "delta-tts", "delta-higgs", "delta-call"} {
-		if _, err := os.Stat(filepath.Join(units, u+".service")); err == nil {
-			exec.Command("systemctl", "--user", "disable", "--now", u+".service").Run()
-			os.Remove(filepath.Join(units, u+".service"))
-		}
-	}
-	os.Remove(filepath.Join(units, "calls.slice"))
-	exec.Command("systemctl", "--user", "daemon-reload").Run()
+	removeVoiceUnits(home)
 	dir := voiceDir(env)
 	var dirs []string
 	fs.WalkDir(voiceFiles, "voice", func(p string, d fs.DirEntry, err error) error {

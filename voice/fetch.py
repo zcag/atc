@@ -12,7 +12,8 @@ from langpack import Pack
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODELS = os.path.expanduser(os.environ.get("TALK_MODELS") or "~/.cache/atc/voice")
 VENV = os.path.expanduser(os.environ.get("TTS_VENV") or "~/.local/share/atc/voice/tts-venv")
-TORCH = ["--extra-index-url", "https://download.pytorch.org/whl/cpu", "--index-strategy", "unsafe-best-match", "torch==2.15.0+cpu"]
+TORCH = (["torch==2.11.0"] if sys.platform == "darwin" else
+         ["--extra-index-url", "https://download.pytorch.org/whl/cpu", "--index-strategy", "unsafe-best-match", "torch==2.15.0+cpu"])
 ENGINES = {
     "pocket": {"pip": TORCH + ["pocket-tts-turkish==0.1.0"]},
     "pocket-en": {"pip": TORCH + ["pocket-tts>=3.1"]},

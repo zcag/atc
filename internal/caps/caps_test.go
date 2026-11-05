@@ -150,6 +150,7 @@ func TestCallsNeedsItsParts(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{"alive": true, "talkers": map[string]int{"app": talkers}})
 	})
 	mux.HandleFunc("/api/voices", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{"en":{"voices":["a","b"]}}`)) })
+	mux.HandleFunc("/v1/voices", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{}`)) })
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
 	calls := func(c Cap) bool { return c.Group == Calls }
@@ -157,17 +158,41 @@ func TestCallsNeedsItsParts(t *testing.T) {
 
 	rows := new(Runner).Rows(ctx, envOf("true", nil), calls)
 	r := rowOf(t, rows, "calls")
-	if r.Status != Missing || r.Warn || !strings.Contains(r.Detail, "Talker") || !strings.Contains(r.Detail, "Voices") {
+	if r.Status != Missing || r.Warn || !strings.Contains(r.Detail, "Talker") || !strings.Contains(r.Detail, "Voice engine") {
 		t.Fatalf("calls with nothing: %s %q", r.Status, r.Detail)
 	}
 	if !slices.ContainsFunc(r.Needs, func(n Need) bool { return n.ID == "talker" && n.Status == Missing }) {
 		t.Fatalf("needs %+v", r.Needs)
 	}
 
-	all := map[string]string{"ATC_HUB": ts.URL, "ATC_CALL_LINE": ts.URL, "ATC_CALL_VOICES": ts.URL}
-	if r = rowOf(t, new(Runner).Rows(ctx, envOf("true", all), calls), "calls"); r.Status != OK {
-		t.Fatalf("calls with everything: %s %q %+v", r.Status, r.Detail, r.Needs)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	voiceEnv := filepath.Join(home, ".config/atc/voice.env")
+	if err := os.MkdirAll(filepath.Dir(voiceEnv), 0o755); err != nil {
+		t.Fatal(err)
 	}
+	if err := os.WriteFile(voiceEnv, []byte("TTS_PORT=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	all := map[string]string{"ATC_HUB": ts.URL, "ATC_CALL_LINE": ts.URL}
+	rows = new(Runner).Rows(ctx, envOf("true", all), calls)
+	if r = rowOf(t, rows, "voice-engine"); r.Status != Broken || !strings.Contains(r.Detail, "silent") {
+		t.Fatalf("no voice engine: %s %q", r.Status, r.Detail)
+	}
+	if r = rowOf(t, rows, "calls"); r.Status != Broken || !strings.Contains(r.Detail, "Voice engine") {
+		t.Fatalf("calls without a voice engine: %s %q", r.Status, r.Detail)
+	}
+	if err := os.WriteFile(voiceEnv, []byte("TALK_TTS="+ts.URL+"/v1/audio/speech\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r = rowOf(t, new(Runner).Rows(ctx, envOf("true", all), calls), "calls"); r.Status != OK {
+		t.Fatalf("calls with everything, no voice picker: %s %q %+v", r.Status, r.Detail, r.Needs)
+	}
+	all["ATC_CALL_LINE"] = "http://other-machine:8807"
+	if r = rowOf(t, new(Runner).Rows(ctx, envOf("true", all), calls), "voice-engine"); r.Status != OK {
+		t.Fatalf("voice engine with the line elsewhere: %s %q", r.Status, r.Detail)
+	}
+	all["ATC_CALL_LINE"] = ts.URL
 	talkers = 0
 	rows = new(Runner).Rows(ctx, envOf("true", all), calls)
 	if r = rowOf(t, rows, "talker"); r.Status != Broken {

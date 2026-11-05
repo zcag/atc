@@ -11,7 +11,7 @@ WebSocket at ws://127.0.0.1:8807/call carrying JSON events and commands as text 
 call audio as binary frames (s16le, 16 kHz, mono). README.md is the contract.
 DELTA_CALL_BRIDGE=0 runs without a phone: the app line only.
 """
-import asyncio, hashlib, html, json, os, re, time
+import asyncio, hashlib, html, json, os, re, sys, time
 from aiohttp import web
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -599,7 +599,17 @@ async def http_status(_):
                               "lines": {"app": {**app_status, "phase": app.get("phase")}, "device": {**status, "whatsapp": wa.get("phase")}}})
 
 
+async def keep_awake():
+    """A Mac that idles to sleep drops the call. Each caffeinate runs out by itself, so none outlives this process for long."""
+    while True:
+        if status["call"] != "idle" or app_status["call"] != "idle":
+            await asyncio.create_subprocess_exec("caffeinate", "-i", "-t", "30")
+        await asyncio.sleep(15)
+
+
 async def start(server):
+    if sys.platform == "darwin":
+        server["awake"] = asyncio.create_task(keep_awake())
     if BRIDGE:
         server["bridge"] = asyncio.create_task(run_bridge())
         server["whatsapp"] = asyncio.create_task(watch_whatsapp())

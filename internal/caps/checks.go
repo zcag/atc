@@ -295,10 +295,45 @@ func checkTalker(ctx context.Context, env Env) Result {
 	return Result{OK, fmt.Sprintf("%d connected to the call line.", n)}
 }
 
+// ttsAddress is where this machine's talker finds its voice engine, from voice.env (voice/README.md).
+func ttsAddress() string {
+	home, _ := os.UserHomeDir()
+	b, _ := os.ReadFile(filepath.Join(home, ".config/atc/voice.env"))
+	set := map[string]string{}
+	for _, l := range strings.Split(string(b), "\n") {
+		if k, v, ok := strings.Cut(strings.TrimSpace(l), "="); ok {
+			set[k] = strings.Trim(v, `"'`)
+		}
+	}
+	if u := set["TALK_TTS"]; u != "" {
+		return strings.TrimSuffix(u, "/v1/audio/speech")
+	}
+	return "http://127.0.0.1:" + cmp.Or(set["TTS_PORT"], "8812")
+}
+
+func checkVoiceEngine(ctx context.Context, env Env) Result {
+	line, err := url.Parse(env.Get("ATC_CALL_LINE"))
+	if err != nil || line.Host == "" {
+		return Result{Missing, "Waits for the call line."}
+	}
+	if ip := net.ParseIP(line.Hostname()); line.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback()) {
+		return Result{OK, "The call line is on another machine, so its voice engine is there too."}
+	}
+	u := ttsAddress()
+	code, _, err := fetch(ctx, u+"/v1/voices")
+	if err != nil {
+		return Result{Broken, fmt.Sprintf("%s doesn't answer, so a call would connect and stay silent.", site(u))}
+	}
+	if code != 200 {
+		return Result{Broken, fmt.Sprintf("%s answers, but not as a voice engine (%d).", site(u), code)}
+	}
+	return Result{OK, site(u) + " answers."}
+}
+
 func checkVoices(ctx context.Context, env Env) Result {
 	u := env.Get("ATC_CALL_VOICES")
 	if u == "" {
-		return Result{Missing, "Not set up: calls have no voice to speak with."}
+		return Result{Missing, "Not set up: calls speak with the voice set in voice.env."}
 	}
 	code, b, err := fetch(ctx, strings.TrimRight(u, "/")+"/api/voices")
 	if err != nil {

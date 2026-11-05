@@ -13,7 +13,8 @@ resumed.
 
 ## Requirements
 
-- Linux or macOS. On Windows, run atc inside WSL.
+- Linux or macOS. On Windows, run atc inside WSL. Calls (`atc voice install`) also run on both, with
+  [some differences on a Mac](calls.md#on-a-mac).
 - Claude Code 2.1.139 or newer, the first with background sessions and `claude agents`, signed in
   on the machine that runs atc:
 

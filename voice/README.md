@@ -16,8 +16,8 @@ atc app ── atc (/api/call/line) ── call.py :8807 ── talk.py ── a
 | `ttsd.py` | streaming TTS over HTTP; `--engine` names one or more engines |
 | `langpack.py`, `lang/<code>.json` | every word in a language (below) |
 | `fetch.py` | downloads models and the TTS venv for the configured languages and engines; safe to rerun |
-| `deploy.sh` | fetch, install the units, restart each only between calls |
-| `systemd/` | the user units; generic, every value of a setup comes from `~/.config/atc/voice.env` |
+| `deploy.sh` | fetch, install the units, restart each only between calls; on macOS through `atc voice unit`, which is launchd's side |
+| `systemd/` | the user units; generic, every value of a setup comes from `~/.config/atc/voice.env`. On macOS atc renders them into launchd plists (`unitCommand` in `voice.go`), so they are the only definition there too |
 | `hub/cli.py` | type into the hub from a shell, for testing |
 | `test/` | the pack test, `make check` runs it |
 
@@ -36,8 +36,15 @@ atc app ── atc (/api/call/line) ── call.py :8807 ── talk.py ── a
 | `ATC_VOICE_UNITS` | `delta-call delta-tts delta-talk-app` | what deploy.sh installs and restarts; add `delta-talk` for a phone, `delta-higgs` for Higgs |
 | `TALK_MODELS`, `HF_HOME` | `~/.cache/atc/voice`, its `hf` | models and the rendered-phrase cache |
 | `TALK_STATE` | `~/.local/state/atc/voice` | `calls/<talk-time>/`, `calls.jsonl`, `voice.json` |
-| `DELTA_CALL_BRIDGE`, `DELTA_CALL_PORT`, `DELTA_CALL_HOST`, `DELTA_CALL_DIAL_ALLOW`, `ANDROID_SERIAL` | `0`, `8807`, every interface, none, adb's pick | the line |
+| `DELTA_CALL_BRIDGE`, `DELTA_CALL_PORT`, `DELTA_CALL_HOST`, `DELTA_CALL_DIAL_ALLOW`, `ANDROID_SERIAL` | `0`, `8807`, `127.0.0.1` (empty is every interface), none, adb's pick | the line |
 | `HIGGS_DIR`, `HIGGS_VOICES`, `HIGGS_URL` | under the data dir, `:8841` | Higgs, on a GPU, set up by hand |
+
+## macOS
+
+`docs/calls.md`, "On a Mac", says what a user gets. For working on it: the labels are `io.github.zcag.atc.<unit>` in the
+user's launchd domain, which is per user and not per `HOME`, so a test in a scratch `HOME` has real labels (its plists
+spell out that `HOME`). Logs are `/tmp/<unit>.log`. `UV_PYTHON=3.12` is set there because uv otherwise takes the newest Python
+it finds, which can be newer than onnxruntime's wheels. On Linux it isn't, to leave a working setup's environments alone.
 
 ## Adding a language
 

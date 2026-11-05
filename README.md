@@ -23,7 +23,7 @@ curl -fsSL https://github.com/zcag/atc/releases/latest/download/install.sh | sh
 ```
 
 Linux or macOS, with Claude Code signed in. One install serves one user. [More on installing](#install). Calls are one more command,
-`atc voice install` (about 2 GB on disk, 2 CPU cores; Linux for now, macOS is coming). [Calls](docs/calls.md)
+`atc voice install` (about 2 GB on disk, 2 CPU cores; Linux or macOS). [Calls](docs/calls.md)
 
 **Keep atc off the public internet.** A login to atc is a shell on your machine. Out of the box it answers that machine, your local
 network and your tailnet, and refuses public addresses. [Reach it from other devices](docs/install.md#reach-it-from-other-devices)
@@ -332,7 +332,7 @@ The core and the assistant work right after install. The rest is optional.
 |---|---|---|
 | **Core** | The session list, transcripts, pages, agents, backlog, usage, one-line summaries of finished turns | Claude Code. The summaries use a little of your plan; they can use your own model or be off |
 | **Assistant** | One conversation that runs the others | On by default, a small second service |
-| **Calls** | Talk to it from the browser or the app | `atc voice install`: about 2 GB on disk, 2 CPU cores |
+| **Calls** | Talk to it from the browser or the app | `atc voice install`: about 2 GB on disk, 2 CPU cores. Linux or macOS; the Mac has to stay awake, and [an Intel Mac gets a plainer voice](docs/calls.md#on-a-mac) |
 | **The phone app** | The app, calls that ring and one-tap answers | Android only, there is no iPhone app. Push needs a [UnifiedPush](https://unifiedpush.org) distributor such as the ntfy app, and an ntfy server. [Android app](docs/android.md) |
 | **WhatsApp and a phone number** | Reach it from WhatsApp or a real number, and let a few other people reach it | Advanced: accounts and numbers of their own, and no promises |
 
