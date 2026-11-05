@@ -1867,6 +1867,7 @@ const ICON = {
   page: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2" width="11" height="12" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 5.5h6M5 8h6M5 10.5h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   list: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 4h7.5M6 8h7.5M6 12h7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2.5 3.3l.8.8 1.4-1.6M2.5 7.3l.8.8 1.4-1.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="3.4" cy="12" r="1" fill="currentColor"/></svg>`,
   gear: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M3.6 12.4L5 11M11 5l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
+  check: html`<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   more: html`<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="12.5" cy="8" r="1.3" fill="currentColor"/></svg>`,
 };
 
@@ -6687,16 +6688,21 @@ function FolderField({ dirs, folder, pick, host, listHost = host, live, presets 
   const shown = [...(ql || more ? rows.folders : rows.folders.slice(0, NS_ROWS)), ...rows.ps];
   const hidden = ql || more ? 0 : rows.folders.length - NS_ROWS;
   const isPick = (r) => (r.preset ? preset?.name === r.preset.name : !preset && r.path === folder);
-  const cur = hi >= 0 && hi < shown.length ? hi : Math.max(0, shown.findIndex(isPick));
+  const cur = hi >= 0 && hi < shown.length ? hi : ql ? 0 : Math.max(0, shown.findIndex(isPick));
   useEffect(() => setHi(-1), [ql, host]);
-  useEffect(() => { box.current?.querySelector(".fo.on")?.scrollIntoView({ block: "nearest" }); }, [cur]);
+  const reveal = (i) => box.current?.querySelector(`#ns-fo${i}`)?.scrollIntoView({ block: "nearest" });
+  useEffect(() => reveal(cur), [ql, folder, preset]);
   const choose = (r) => {
     if (r.preset) setPreset(preset?.name === r.preset.name ? null : r.preset);
     else { setPreset(null); pick(r.path); }
     setQ(""); setMore(false); setHi(-1);
   };
   const key = (e) => {
-    if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); setHi((cur + (e.key === "ArrowDown" ? 1 : shown.length - 1)) % Math.max(1, shown.length)); }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = (cur + (e.key === "ArrowDown" ? 1 : shown.length - 1)) % Math.max(1, shown.length);
+      setHi(next); reveal(next);
+    }
     else if (e.key === "Enter" && !e.isComposing) {
       e.preventDefault();
       const r = shown[cur];
@@ -6707,16 +6713,16 @@ function FolderField({ dirs, folder, pick, host, listHost = host, live, presets 
   let grp = "";
   return html`
     <div class="nsfld">
-      <label class="nslb" for="ns-folder">Folder <span>${preset ? `preset ${preset.name}` : folder}</span></label>
+      <label class="nslb" for="ns-folder">Folder <span class="now">${preset ? `preset ${preset.name}` : folder}</span></label>
       <input id="ns-folder" class="nsin mono" value=${q} onInput=${(e) => setQ(e.target.value)} onKeyDown=${key} placeholder="Search folders, or type a path"
         role="combobox" aria-expanded="true" aria-controls="ns-fl" aria-activedescendant=${shown.length ? `ns-fo${cur}` : ""} autocapitalize="off" autocomplete="off" spellcheck="false" />
-      <div class="nsfl" id="ns-fl" role="listbox" aria-label="Folders" ref=${box}>
+      <div class="nsfl" id="ns-fl" role="listbox" aria-label="Folders" ref=${box} onPointerLeave=${() => setHi(-1)}>
         ${shown.map((r, i) => {
           const head = r.grp !== grp && html`<div class="fh" role="presentation">${r.grp}</div>`;
           grp = r.grp;
-          return html`${head}<button type="button" tabindex="-1" role="option" id=${`ns-fo${i}`} aria-selected=${isPick(r)} class="fo ${i === cur ? "on" : ""} ${isPick(r) ? "pick" : ""}"
+          return html`${head}<button type="button" tabindex="-1" role="option" id=${`ns-fo${i}`} aria-selected=${isPick(r)} class="fo ${i === cur && (hi >= 0 || !isPick(r)) ? "on" : ""} ${isPick(r) ? "pick" : ""}"
             onPointerMove=${() => i !== cur && setHi(i)} onClick=${() => choose(r)}>
-            <span class="p ${r.preset ? "" : "mono"}">${r.typed ? html`Use <b>${r.path}</b>` : marked(r.path, r.hits)}${isPick(r) && html`<span class="pk">picked</span>`}</span><span class="m">${meta(r)}</span></button>`;
+            <span class="ck">${isPick(r) && ICON.check}</span><span class="p ${r.preset ? "" : "mono"}">${r.typed ? html`Use <b>${r.path}</b>` : marked(r.path, r.hits)}</span><span class="m">${meta(r)}</span></button>`;
         })}
         ${hidden > 0 && html`<button type="button" class="more" onClick=${() => { setMore(true); document.getElementById("ns-folder")?.focus(); }}>More folders, ${hidden} <span>(or type to search)</span></button>`}
         ${ql && !shown.length && html`<p class="none">No folder matches. Type a path that starts with ~ or / to use it.</p>`}
