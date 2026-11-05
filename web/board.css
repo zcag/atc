@@ -24,6 +24,10 @@
 .bview .grp, .rail .grp { display: flex; align-items: baseline; gap: var(--s2); margin: 0; padding: var(--s4) var(--s4) 6px; font-size: var(--fs-small); font-weight: 400; color: var(--faint); border-bottom: 1px solid var(--hair); }
 .bview .grp b, .rail .grp b { color: var(--dim); font-weight: 620; }
 .bview .grp .c, .rail .grp .c { font-family: var(--mono); }
+.earlierh button { flex: 1; min-width: 0; display: flex; align-items: center; gap: var(--s2); padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.earlierh button:hover b { color: var(--ink); }
+.earlierh .chev { flex: none; width: 6px; height: 6px; border-right: 1.5px solid var(--faint); border-bottom: 1.5px solid var(--faint); transform: rotate(-45deg); }
+.earlierh button[aria-expanded="true"] .chev { transform: rotate(45deg); }
 .bview .grp .r { margin-left: auto; }
 
 .bwrap { border-bottom: 1px solid var(--hair); position: relative; }
@@ -99,6 +103,7 @@
   .pindex, .bcols { display: none; }
   .bhead { padding: var(--s3) var(--s4) var(--s2); }
   .bhead .r .kb { display: none; }
+  .earlierh button { min-height: 44px; }
   .brow { grid-template-columns: 20px minmax(0, 1fr) auto; grid-template-areas: "b s n" "b t t" "b m m"; row-gap: 2px; padding: 10px var(--s4); }
   .brow > .sb { grid-area: b; }
   .brow .ses { grid-area: s; }

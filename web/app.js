@@ -576,6 +576,7 @@ function App() {
         <div class="ph"><b>${only || "Every bay"}</b><span>${plural(inBay, "session")}</span>
           <span class="r"><button class="kb" onClick=${() => setCreating(true)} aria-keyshortcuts="+">New session <kbd aria-hidden="true">+</kbd></button></span></div>
         <${RailList} live=${live} hist=${hist} only=${only} sel=${sel} cursor=${cursor} />
+        <${BacklogLine} only=${only} />
         <${UsageFoot} limits=${limits} onOpen=${openUsage} />
       </aside>
       <main class="main">
@@ -971,6 +972,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
   const counts = GROUPS.filter(([k]) => k in letter).map(([k]) => [k, by[k].length + (pinnedIn[k] || 0)]).filter(([, n]) => n > 0);
   const path = only && (live || []).find((s) => bayOf(s) === only);
   const [earlierAll, setEarlierAll] = useState(false);
+  const [earlierOpen, flipEarlier] = useEarlierOpen();
   const shownEarlier = earlierAll ? by.earlier : by.earlier.filter((s) => Date.now() - (Date.parse(s.updated || s.startedAt || 0) || 0) < 2 * 86400000).slice(0, 12);
   const pages = index && (live || []).filter((s) => (only ? bayOf(s) === only : !homeless(s))).flatMap((s) => (s.shown || []).map((p) => ({ p, s })))
     .sort((a, b) => (Date.parse(b.p.updated || b.p.shown) || 0) - (Date.parse(a.p.updated || a.p.shown) || 0));
@@ -984,12 +986,15 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
         </div>
         <div class="bcols" aria-hidden="true"><span></span><span>Session</span><span>Status, and what it last said or is doing</span><span>Context</span><span>Steps</span><span>Running, made</span><span>Since</span><span></span></div>
         ${GROUPS.map(([k, title]) => {
-          const list = k === "earlier" ? shownEarlier : by[k];
-          if (!list.length) return null;
+          const isEarlier = k === "earlier";
+          if (isEarlier ? !by.earlier.length : !by[k].length) return null;
+          const list = !isEarlier ? by[k] : earlierOpen ? shownEarlier : [];
           return html`<section class="bgrp ${k}">
-            <h2 class="grp"><b>${title}</b><span class="c">${k === "earlier" ? by.earlier.length : list.length}</span>${k === "earlier" && html`<span class="r">${earlierAll ? "all loaded" : "today and yesterday"}</span>`}</h2>
+            ${isEarlier
+              ? html`<${EarlierHead} open=${earlierOpen} toggle=${flipEarlier} n=${by.earlier.length} note=${earlierOpen && (earlierAll ? "all loaded" : "today and yesterday")} />`
+              : html`<h2 class="grp"><b>${title}</b><span class="c">${list.length}</span></h2>`}
             ${list.map((s) => html`<${BoardRow} key=${s.sessionId} s=${s} open=${open.has(s.sessionId)} toggle=${toggle} sel=${sel} cursor=${cursor} say=${say} qk=${QWERTY[qn++]} />`)}
-            ${k === "earlier" && (!earlierAll && by.earlier.length > shownEarlier.length
+            ${isEarlier && earlierOpen && (!earlierAll && by.earlier.length > shownEarlier.length
               ? html`<button class="kb bmore" onClick=${() => setEarlierAll(true)}>Show ${by.earlier.length - shownEarlier.length} older</button>`
               : earlierAll && more && html`<button class="kb bmore" onClick=${more}>Load more</button>`)}
           </section>`;
@@ -1006,10 +1011,20 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
     </div>`;
 }
 
+const useEarlierOpen = () => {
+  const [open, set] = useState(() => stored("atc.earlier", false));
+  return [open, () => { store("atc.earlier", !open); set(!open); }];
+};
+
+function EarlierHead({ open, toggle, n, note }) {
+  return html`<h2 class="grp earlierh"><button aria-expanded=${open} onClick=${toggle}><span class="chev" aria-hidden="true"></span><b>Earlier</b><span class="c">${n}</span></button>${note && html`<span class="r">${note}</span>`}</h2>`;
+}
+
 function RailList({ live, hist, only, sel, cursor }) {
   const by = bayLists(live, hist, only);
   const active = [...by.waiting, ...by.working];
-  const earlier = by.earlier.slice(0, 8), np = by.pinned.length;
+  const [earlierOpen, flipEarlier] = useEarlierOpen();
+  const earlier = earlierOpen ? by.earlier.slice(0, 8) : by.earlier.filter((s) => s.sessionId === sel?.sessionId), np = by.pinned.length;
   return html`<div class="rail" id="rscroll">
     ${np > 0 && html`<h2 class="grp"><b>Pinned</b><span class="c">${np}</span></h2>
       ${by.pinned.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[i]} />`)}
@@ -1017,9 +1032,9 @@ function RailList({ live, hist, only, sel, cursor }) {
     ${active.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + i]} />`)}
     ${by.parked.length > 0 && html`<h2 class="grp"><b>Parked</b><span class="c">${by.parked.length}</span><span class="r">to resume later</span></h2>
       ${by.parked.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + i]} />`)}`}
-    ${earlier.length > 0 && html`<h2 class="grp"><b>Earlier</b><span class="c">${by.earlier.length}</span></h2>
+    ${by.earlier.length > 0 && html`<${EarlierHead} open=${earlierOpen} toggle=${flipEarlier} n=${by.earlier.length} />
       ${earlier.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + by.parked.length + i]} />`)}`}
-    ${!np && !active.length && !by.parked.length && !earlier.length && html`<p class="calm">Nothing here yet.</p>`}
+    ${!np && !active.length && !by.parked.length && !by.earlier.length && html`<p class="calm">Nothing here yet.</p>`}
   </div>`;
 }
 
@@ -4617,7 +4632,7 @@ const backlogCounts = (items, only) => {
 
 function BacklogLine({ only }) {
   const counts = backlogCounts(useBacklog(), only);
-  return html`<button class="blline" onClick=${() => (location.hash = BACKLOG)} title="Open the backlog"><span class="mi">${ICON.list}</span>Backlog${counts ? `: ${counts}` : ""}</button>`;
+  return html`<button class="blline" onClick=${() => (location.hash = BACKLOG)} title="Open the backlog"><span class="mi">${ICON.list}</span><span class="t">Backlog${counts ? `: ${counts}` : ""}</span></button>`;
 }
 
 const BK_FILTERS = [

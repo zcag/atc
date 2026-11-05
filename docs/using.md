@@ -36,7 +36,7 @@
 - **Assistant** (the chat button, or `a`) opens one session with the atc tools, for asking about
   your other sessions or driving them. It is the same session the phone's side key opens, and with
   a hub (see [The assistant](assistant.md)) the same conversation as WhatsApp and calls.
-- **Earlier** lists past conversations. Open one and press **Resume** to continue it.
+- **Earlier** lists past conversations, folded until you open it. Open one and press **Resume** to continue it.
 - On a phone, a row of keys above the keyboard gives you Esc, Tab, Shift+Tab, Ctrl and arrows.
   Drag on the terminal to scroll.
 - Press `?` for keyboard shortcuts.

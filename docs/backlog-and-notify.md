@@ -2,8 +2,8 @@
 
 ## Backlog
 
-Work you want an agent to do, but not now. **Backlog** (`b`, or the header's menu) is its own
-screen, filtered by project like the list:
+Work you want an agent to do, but not now. **Backlog** (the line under the session list, the top of
+the board, or `/`) is its own screen, filtered by project like the list:
 
 - **Add** an item there, or press **Later** in the new session dialog: the same folder, name and
   first message, put aside instead of started. An item has a **title** (what the backlog shows,
