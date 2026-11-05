@@ -16,34 +16,34 @@ Linux or macOS, with Claude Code signed in. One install serves one user. [More w
 
 atc is an independent project. It is not affiliated with or endorsed by Anthropic.
 
-## A team of agents
+## Every session, wherever you are
 
-An agent is someone you go to for one thing. It keeps its own notes, keeps one long conversation, and wakes up when there's work.
-
-| | Wakes | Does |
-|---|---|---|
-| **@ops** | when an alert fires | Investigates, fixes the obvious on your machines, and rings you with the rest already worked out |
-| **@shopping** | every morning | Researches what's on your list across stores, checks stock and price, leaves a few options to pick from |
-| **@email** | when you ask | Sorts your inboxes onto a page you can act on. Marks read what you say, and never sends |
-| **@reviewer** | when a pull request has no review | Reads it and writes down what it thinks |
-| **@standup** | every morning | Drafts your standup from what you actually did yesterday |
-| **@invoice** | every second Friday | Prepares the invoice and the email, and sends on your go |
-| **@tracker** | every 3 hours | Sweeps mail, calendar and GitHub into one list of everything open |
-
-We run agents like these every day. Each is a folder: a page of instructions and a rule for when to wake.
-
-```json
-{ "title": "Ops", "check": "./unresolved-alerts.sh", "every": "2m", "prompt": "Look into these." }
-```
+All your sessions from all your machines in one list, with whatever is waiting on you at the top and a one-line result on each.
+Start one in any folder on any machine, and open any of them from a browser, a terminal or your phone.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/agents-dark.webp">
-  <img src="docs/img/agents-light.webp" alt="Eight windows, one team. The Agents list: @email, @invoice, @ops, @reviewer, @shopping, @standup and @tracker, each with what it is keeping track of, its last result, and when it wakes next. Then each agent's own page: @shopping's options with prices and stock and Pick buttons; @ops's alerts today, three fixed and one that rang you; @email's inbox sorted with buttons to act on; @tracker's 23 open items, the 4 that cost you something first; @invoice's invoice ready for your go; @standup's draft from yesterday; and @reviewer's pull requests.">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/board-dark.webp">
+  <img src="docs/img/board-light.webp" alt="The board: sessions from three machines and eleven projects, grouped into pinned, waiting on you, working and parked, each with a status line, context used, steps, what it made and its age.">
 </picture>
 
-Between wake-ups they stay out of your way. Ask one something any time with `atc send @shopping "the towel, in grey"`, point a
-Grafana alert or a CI webhook at it, or let the assistant read what it knows: "what's open?" gets answered from @tracker's list
-without waking anyone. [Starter agents](examples/agents/) · [Agents](docs/presets-and-agents.md)
+The Android app pushes when a session needs you, and you can approve or answer from the notification. Holding the side key opens
+what's waiting, even on the lock screen. Share a link or a screenshot from any app into a session, or see them all on a home
+screen widget.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/phones-dark.webp">
+  <img src="docs/img/phones-light.webp" alt="Four phones. The first shows the screen the side key opens: two sessions waiting, one with its question answered by buttons and a text field, one asking to run a git push with Allow once and Deny, and a green call button. The second shows a session's prompt, its steps and a small diff above its result. The third shows a finished report with one-tap replies, Push it and Draft the note for support. The fourth shows the report page that session made, with its figures and a chart.">
+</picture>
+
+Back at a desk, read what a session did as a transcript: each prompt and reply with the diffs, test results and commits, and search
+across the whole thing. Likely next messages are one tap away.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/transcript-dark.webp">
+  <img src="docs/img/transcript-light.webp" alt="A session's transcript: a word-level diff of the fix, a card for the page it made, then its report, with suggested replies above the message box.">
+</picture>
+
+[Using atc](docs/using.md) · [Android app](docs/android.md) · [Several machines](docs/machines.md)
 
 ## An assistant you can call
 
@@ -82,34 +82,34 @@ how they came out after you've hung up. Calling it needs no phone number, and it
   <img src="docs/img/assistant-light.webp" alt="The assistant: you ask it to find out why checkout is slow and to fix a build on the laptop. It starts both sessions, reads what they found, shows a page and answers with the numbers, offering replies. On the left and under the conversation, the sessions it set going and what each is doing now.">
 </picture>
 
-## Every session, wherever you are
+## A team of agents
 
-All your sessions from all your machines in one list, with whatever is waiting on you at the top and a one-line result on each.
-Start one in any folder on any machine, and open any of them from a browser, a terminal or your phone.
+An agent is someone you go to for one thing. It keeps its own notes, keeps one long conversation, and wakes up when there's work.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/board-dark.webp">
-  <img src="docs/img/board-light.webp" alt="The board: sessions from three machines and eleven projects, grouped into pinned, waiting on you, working and parked, each with a status line, context used, steps, what it made and its age.">
-</picture>
+| | Wakes | Does |
+|---|---|---|
+| **@ops** | when an alert fires | Investigates, fixes the obvious on your machines, and rings you with the rest already worked out |
+| **@shopping** | every morning | Researches what's on your list across stores, checks stock and price, leaves a few options to pick from |
+| **@email** | when you ask | Sorts your inboxes onto a page you can act on. Marks read what you say, and never sends |
+| **@reviewer** | when a pull request has no review | Reads it and writes down what it thinks |
+| **@standup** | every morning | Drafts your standup from what you actually did yesterday |
+| **@invoice** | every second Friday | Prepares the invoice and the email, and sends on your go |
+| **@tracker** | every 3 hours | Sweeps mail, calendar and GitHub into one list of everything open |
 
-The Android app pushes when a session needs you, and you can approve or answer from the notification. Holding the side key opens
-what's waiting, even on the lock screen. Share a link or a screenshot from any app into a session, or see them all on a home
-screen widget.
+We run agents like these every day. Each is a folder: a page of instructions and a rule for when to wake.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/phones-dark.webp">
-  <img src="docs/img/phones-light.webp" alt="Four phones. The first shows the screen the side key opens: two sessions waiting, one with its question answered by buttons and a text field, one asking to run a git push with Allow once and Deny, and a green call button. The second shows a session's prompt, its steps and a small diff above its result. The third shows a finished report with one-tap replies, Push it and Draft the note for support. The fourth shows the report page that session made, with its figures and a chart.">
-</picture>
-
-Back at a desk, read what a session did as a transcript: each prompt and reply with the diffs, test results and commits, and search
-across the whole thing. Likely next messages are one tap away.
+```json
+{ "title": "Ops", "check": "./unresolved-alerts.sh", "every": "2m", "prompt": "Look into these." }
+```
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/transcript-dark.webp">
-  <img src="docs/img/transcript-light.webp" alt="A session's transcript: a word-level diff of the fix, a card for the page it made, then its report, with suggested replies above the message box.">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/agents-dark.webp">
+  <img src="docs/img/agents-light.webp" alt="Eight windows, one team. The Agents list: @email, @invoice, @ops, @reviewer, @shopping, @standup and @tracker, each with what it is keeping track of, its last result, and when it wakes next. Then each agent's own page: @shopping's options with prices and stock and Pick buttons; @ops's alerts today, three fixed and one that rang you; @email's inbox sorted with buttons to act on; @tracker's 23 open items, the 4 that cost you something first; @invoice's invoice ready for your go; @standup's draft from yesterday; and @reviewer's pull requests.">
 </picture>
 
-[Using atc](docs/using.md) · [Android app](docs/android.md) · [Several machines](docs/machines.md)
+Between wake-ups they stay out of your way. Ask one something any time with `atc send @shopping "the towel, in grey"`, point a
+Grafana alert or a CI webhook at it, or let the assistant read what it knows: "what's open?" gets answered from @tracker's list
+without waking anyone. [Starter agents](examples/agents/) · [Agents](docs/presets-and-agents.md)
 
 ## Work you can see and step into
 
