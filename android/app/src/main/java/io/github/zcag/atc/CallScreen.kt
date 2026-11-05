@@ -167,7 +167,7 @@ private class Transcript(c: Context, private val limit: Int, onTap: () -> Unit) 
         setLineSpacing(0f, 1.15f)
         setTextColor(INK)
         setShadowLayer(8f, 0f, 1f, 0x99000000.toInt())
-        setPadding((20 * dp).toInt(), (40 * dp).toInt(), (20 * dp).toInt(), (16 * dp).toInt())
+        setPadding((20 * dp).toInt(), (20 * dp).toInt(), (20 * dp).toInt(), (16 * dp).toInt())
         setOnClickListener { onTap() }
     }
     private var following = true
@@ -178,7 +178,7 @@ private class Transcript(c: Context, private val limit: Int, onTap: () -> Unit) 
         isVerticalScrollBarEnabled = false
         overScrollMode = OVER_SCROLL_NEVER
         isVerticalFadingEdgeEnabled = true
-        setFadingEdgeLength((36 * dp).toInt())
+        setFadingEdgeLength((20 * dp).toInt())
         background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0, SHADE, SHADE, SHADE, SHADE, 0))
         addView(body)
         setOnScrollChangeListener { _, _, y, _, _ -> following = body.height - y - height < 32 * dp }
@@ -515,7 +515,7 @@ class CallActivity : Activity() {
             else if (Calls.face.value.state in setOf("speaking", "thinking", "tool")) Calls.send(Calls.Cmd.Interrupt)
         }
         statusView.setOnClickListener { if (Calls.state.value.held) Calls.send(Calls.Cmd.Resume) }
-        transcript = Transcript(this, (resources.displayMetrics.heightPixels * .42f).toInt()) { persona.view.performClick() }
+        transcript = Transcript(this, (resources.displayMetrics.heightPixels * .35f).toInt()) { persona.view.performClick() }
         val front = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL

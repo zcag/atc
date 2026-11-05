@@ -67,20 +67,19 @@ body.docked .app { margin-right: 380px; }
 .cph .w { color: var(--dim); }
 .cph .sp { flex: 1; }
 .cpers { flex: 1 1 60%; min-height: 260px; position: relative; overflow: hidden; background: var(--call-bg); border-bottom: 1px solid var(--line); }
-.cpers .fr { position: absolute; inset: 0; transition: transform .5s ease; }
-.callp.talked .cpers .fr { transform: translateY(-9%); }
-.callp.talked .cpers::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 14%; background: linear-gradient(to top, var(--call-bg) 65%, transparent); pointer-events: none; }
-@media (prefers-reduced-motion: reduce) { .cpers .fr { transition: none; } }
+/* one frame shape at every size, so a character is framed the same and the conversation gets what is left */
+.callp:has(.caps) .cpers { flex: 0 1 calc(380px * 1.15); }
+.cpers .fr { position: absolute; inset: 0; }
 .cpers .persona { position: absolute; inset: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .cpers canvas.orb { display: block; width: 100%; height: 100%; cursor: pointer; transition: opacity .6s; -webkit-tap-highlight-color: transparent; }
 .cpers canvas.orb.idle { opacity: .45; }
 .callp.ended .cpers canvas.orb { opacity: .2; }
-.cview { position: absolute; top: var(--s2); right: var(--s2); }
+.cview { position: absolute; bottom: var(--s2); right: var(--s2); }
 .cview .seg { display: inline-flex; border-radius: var(--r-md); background: oklch(15% 0.01 250 / .55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .cview .seg button { height: var(--btn-h); padding: 0 var(--s2); border: 0; border-radius: var(--r-md); background: none; font-size: var(--fs-small); color: oklch(92% 0.006 250); }
 .cview .seg button:hover { background: oklch(100% 0 0 / .12); }
 .cview .seg button[aria-pressed="true"] { background: oklch(95% 0.006 250); color: oklch(20% 0.01 250); }
-.cpers .st { position: absolute; left: var(--s3); right: 190px; top: var(--s3); margin: 0; font-size: var(--fs-small); color: oklch(92% 0.006 250); text-align: left; text-shadow: 0 1px 8px oklch(0% 0 0 / .7); pointer-events: none; }
+.cpers .st { position: absolute; left: var(--s3); right: 190px; bottom: var(--s3); margin: 0; font-size: var(--fs-small); color: oklch(92% 0.006 250); text-align: left; text-shadow: 0 1px 8px oklch(0% 0 0 / .7); pointer-events: none; }
 .personaname { position: absolute; left: 50%; top: var(--s3); transform: translateX(-50%); padding: 2px var(--s3); font-size: var(--fs-small); color: oklch(98% 0 0); background: oklch(0% 0 0 / .55); pointer-events: none; }
 .lstrip { flex: none; display: flex; gap: var(--s2); padding: var(--s2) var(--s4); overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: none; }
 .lstrip::-webkit-scrollbar { display: none; }
@@ -102,17 +101,15 @@ body.docked .app { margin-right: 380px; }
 .plan li em { font-style: normal; color: var(--faint); }
 .plan li.run { color: var(--ink); }
 .plan li.run em { color: var(--work); }
-.caps { position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; max-height: 54%; display: flex; flex-direction: column; background: linear-gradient(to top, oklch(12% 0.012 260 / .94), oklch(12% 0.012 260 / .86) calc(100% - 56px), transparent); }
-.capsin { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 44px var(--s4) var(--s3); display: flex; flex-direction: column; gap: var(--s3); scrollbar-width: none; -webkit-mask-image: linear-gradient(to bottom, transparent 8px, #000 44px); mask-image: linear-gradient(to bottom, transparent 8px, #000 44px); }
-.capsin::-webkit-scrollbar { display: none; }
+.caps { flex: 1 1 0; min-height: 150px; overflow-y: auto; overscroll-behavior: contain; padding: var(--s3) var(--s4); display: flex; flex-direction: column; gap: var(--s3); scrollbar-width: none; }
+.caps::-webkit-scrollbar { display: none; }
+.caps > :first-child { margin-top: auto; }
 .cap { flex: none; }
-.cap .w { display: block; font-size: var(--fs-small); color: oklch(74% 0.01 250); }
-.cap p { margin: 0; font-size: var(--fs-body); line-height: 1.5; color: oklch(97% 0.004 250); }
-.cap.you p { font-variation-settings: var(--v-you); color: oklch(84% 0.008 250); }
+.cap .w { display: block; font-size: var(--fs-small); color: var(--faint); }
+.cap p { margin: 0; font-size: var(--fs-body); line-height: 1.5; color: var(--ink); }
+.cap.you p { font-variation-settings: var(--v-you); color: var(--dim); }
 .cap.it p { font-family: var(--read); }
-.cap.past p { color: oklch(74% 0.008 250); }
-.cap .spoken { color: oklch(80% 0.008 250); }
-.cap .heard { color: oklch(74% 0.008 250); }
+.cap.past p, .cap .spoken, .cap .heard { color: var(--dim); }
 .cap .caret { display: inline-block; width: 7px; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--work); }
 .callp .ctl { flex: none; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--s2); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); margin-top: auto; }
 .callp .ctl .btn { height: 44px; justify-content: center; }
@@ -236,7 +233,8 @@ body.docked .app { margin-right: 380px; }
   .callp.full { position: fixed; top: 0; left: 0; right: 0; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); width: auto; border-left: 0; z-index: 22; padding-top: env(safe-area-inset-top); }
   .callp.full .cph { padding: 0 var(--s1) 0 var(--s4); height: 44px; }
   .callp.full .cph .kb { height: 44px; }
-  .callp.full .cpers { flex: 1 1 auto; min-height: 340px; }
+  .callp.full .cpers { min-height: 300px; }
+  .callp.full:has(.caps) .cpers { flex-basis: calc(100vw * 1.15); }
   .callp .ctl { gap: var(--s3); }
   .callp .ctl .btn { height: 44px; }
   .picks .pick { min-height: 52px; }
