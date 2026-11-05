@@ -24,6 +24,20 @@ def agreement(first, second):
     return sum(like(w, b) for w in a) / len(a) if a else 0
 
 
+def hangup_tags(packs):
+    return re.compile("|".join(re.escape(t) for p in packs.values() for t in p.HANGUP))
+
+
+def first_language(settings_path, packs, fallback):
+    """The language calls start in: the user's setting, when this talker has that language's pack and transcriber."""
+    try:
+        with open(settings_path, encoding="utf-8") as f:
+            lang = (json.load(f).get("language") or "").strip().lower()
+    except (OSError, ValueError):
+        lang = ""
+    return lang if lang in packs else fallback
+
+
 def named(value, names):
     if isinstance(value, str):
         return fill(value, **names)
@@ -44,4 +58,3 @@ class Pack:
         self.LINE_BACK = re.compile(fill(raw["LINE_BACK"], **{k: re.escape(v) for k, v in names.items()}), re.I)
         for k in WORDS:
             setattr(self, k, set(getattr(self, k)))
-        self.END = re.compile("|".join(map(re.escape, self.HANGUP)))

@@ -26,7 +26,7 @@ file keeps working as it is:
 
 `user` and `assistant` fill `{{user}}` and `{{assistant}}` in the built-in prompts (`{{User}}` and
 `{{Assistant}}` at a sentence's start), "the user" and "the assistant" without them; your own files
-in `~/.config/atc/modes` are never touched. `language` is the default for `ATC_STT_LANGUAGE`. atc
+in `~/.config/atc/modes` are never touched. `language` is the language calls start in, when the talker has it (read at each call; `TALK_LANG` otherwise), and the default for `ATC_STT_LANGUAGE`. atc
 reads all of it when it starts, and says when something waits for a restart.
 
 `atc prompts` prints every text the assistant is told, with your own files applied. With

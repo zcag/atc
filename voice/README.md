@@ -25,7 +25,7 @@ atc app ── atc (/api/call/line) ── call.py :8807 ── talk.py ── a
 
 | setting | default | |
 |---|---|---|
-| `TALK_LANG`, `TALK_ALSO` | `en`, none | first language; others (space separated) a call can switch to with `[LANG:xx]` |
+| `TALK_LANG`, `TALK_ALSO` | `en`, none | the languages this talker has, models and all: `TALK_LANG` and others (space separated) a call can switch to with `[LANG:xx]`. Calls start in Settings' Language when it is one of these (read at each call, no restart), else in `TALK_LANG` |
 | `TALK_ASSISTANT`, `TALK_USER` | the pack's neutral names | the names in its lines |
 | `TALK_TTS_ENGINE`, `TALK_TTS_VOICE`, `..._<CODE>` | ttsd's first engine, its default voice | per language, for example `TALK_TTS_VOICE_EN` |
 | `TALK_ANSWER` | empty | numbers answered on the device line as the user; the app line always is |
@@ -43,8 +43,11 @@ atc app ── atc (/api/call/line) ── call.py :8807 ── talk.py ── a
 
 Copy `lang/en.json` to `lang/<code>.json`, translate it and point `STT` at a streaming sherpa-onnx transducer (`hf`
 for a Hugging Face repo, or `base` and `dir` for files at a URL); `test/test_lang.py` checks the keys and slots match.
-The word lists (`BACKCHANNEL`, `STOP`, `UNFINISHED`, ...) come from the first language only, so put the words of the others
-in it too if a call really mixes them; each language's own `ACKS`, `STT` and voice follow the call. The built-in modes
+Everything heard and said follows the call's language: its word lists (`BACKCHANNEL`, `STOP`, `UNFINISHED`, ...), `STT`,
+voice, markers and spoken lines. Any language's hangup tag ends a call, whichever language it is in.
+`GARBLES_OTHERS` says this language's transcriber turns the call's other languages into noise (English's does, Turkish's spells
+English well enough): then a turn also carries another transcriber's reading when the two disagree, so the assistant can
+tell the user switched. The built-in modes
 (`modes/phone.md`, `guest-call.md`) quote the English `CUT_OFF` and `[HANGUP]`; a language with other markers needs its
 own copies of them in `~/.config/atc/modes`.
 

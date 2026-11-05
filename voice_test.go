@@ -4,7 +4,18 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/zcag/atc/internal/settings"
 )
+
+func TestInstallLanguageIsTheUsersWhenThereIsAPack(t *testing.T) {
+	for setting, want := range map[string]string{"": "en", "tr": "tr", " TR ": "tr", "de": "en", "../en": "en"} {
+		t.Setenv(settings.LanguageKey, setting)
+		if got := installLanguage(); got != want {
+			t.Errorf("%q: got %q, want %q", setting, got, want)
+		}
+	}
+}
 
 func TestSetEnvFileKeepsOtherLines(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "voice.env")

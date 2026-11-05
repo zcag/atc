@@ -132,7 +132,7 @@ function IdentityForm({ m, ui, reload }) {
     <div class="capfields">
       ${box("user", "Your name", "How the assistant's built-in prompts call you", "the user")}
       ${box("assistant", "Its name", "How they call it", "the assistant")}
-      ${box("language", "Language", "Two letters; the language voice notes are heard in", "en")}
+      ${box("language", "Language", "Two letters; the language calls start in and voice notes are heard in", "en")}
       <div class="capbtns"><button class="btn primary" disabled=${!dirty || busy}>${busy ? "Saving" : "Save"}</button></div>
     </div>
   </form>`;

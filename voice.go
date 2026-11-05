@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/client"
+	"github.com/zcag/atc/internal/settings"
 )
 
 //go:embed voice
@@ -158,6 +159,15 @@ func writeVoiceFiles(dir string) (bool, error) {
 	return changed, err
 }
 
+// installLanguage is the user's language when there is a pack for it, so a first install can start calls in it.
+func installLanguage() string {
+	l := strings.ToLower(strings.TrimSpace(os.Getenv(settings.LanguageKey)))
+	if _, err := voiceFiles.ReadFile("voice/lang/" + l + ".json"); l == "" || err != nil {
+		return "en"
+	}
+	return l
+}
+
 func voiceDir(env map[string]string) string {
 	home, _ := os.UserHomeDir()
 	return cmp.Or(env["ATC_VOICE_DIR"], filepath.Join(home, ".local/share/atc/voice"))
@@ -197,7 +207,7 @@ func voiceInstall(args []string) error {
 			set[key] = v
 		}
 	}
-	first("TALK_LANG", *lang, "en")
+	first("TALK_LANG", *lang, installLanguage())
 	first("TALK_ALSO", *also, "")
 	first("TALK_ASSISTANT", *assistant, "")
 	first("TALK_USER", *user, "")

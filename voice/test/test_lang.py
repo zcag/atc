@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """tr.json with their names gives exactly the words talk.py had before packs (tr_snapshot.json), so nothing they hear
 changes, and every pack has the same keys and slots."""
-import json, os, re, sys, unittest
+import json, os, re, sys, tempfile, unittest
 
 VOICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, VOICE)
-from langpack import Pack, agreement, fill
+from langpack import Pack, agreement, fill, first_language, hangup_tags
 
 
 
@@ -76,9 +76,10 @@ class Tr(unittest.TestCase):
         self.assertEqual(fill(p.CUT_OFF, heard="a", text="b"), "(sözünü kestim; cevabından sadece şunu duydum: «a») b")
 
     def test_kapat_and_hangup_both_end_the_call(self):
-        p = Pack("tr", **NAMES)
-        self.assertEqual(p.END.sub("", "Görüşürüz. [KAPAT]"), "Görüşürüz. ")
-        self.assertEqual(p.END.sub("", "Görüşürüz. [HANGUP]"), "Görüşürüz. ")
+        for packs in ({"tr": Pack("tr", **NAMES), "en": Pack("en", **NAMES)}, {"en": Pack("en", **NAMES), "tr": Pack("tr", **NAMES)}):
+            end = hangup_tags(packs)
+            self.assertEqual(end.sub("", "Görüşürüz. [KAPAT]"), "Görüşürüz. ")
+            self.assertEqual(end.sub("", "Bye. [HANGUP]"), "Bye. ")
 
 
 class En(unittest.TestCase):
@@ -111,6 +112,26 @@ class Packs(unittest.TestCase):
 
     def test_fill_leaves_his_braces_alone(self):
         self.assertEqual(fill("{a} {b}", a="{b}", b="x"), "{b} x")
+
+
+class FirstLanguage(unittest.TestCase):
+    PACKS = {"tr": None, "en": None}
+
+    def pick(self, content):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "settings.json")
+            if content is not None:
+                with open(path, "w") as f:
+                    f.write(content)
+            return first_language(path, self.PACKS, "tr")
+
+    def test_the_users_setting_when_the_talker_has_it(self):
+        self.assertEqual(self.pick('{"language": "en"}'), "en")
+        self.assertEqual(self.pick('{"language": " EN "}'), "en")
+
+    def test_otherwise_what_the_talker_was_installed_with(self):
+        for content in (None, "{", "{}", '{"language": ""}', '{"language": "de"}'):
+            self.assertEqual(self.pick(content), "tr", content)
 
 
 class Agreement(unittest.TestCase):

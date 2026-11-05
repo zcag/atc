@@ -17,7 +17,7 @@ Every call leaves <out>/talk-<time>/: call.wav (left caller, right voice), turns
 import argparse, asyncio, concurrent.futures, difflib, hashlib, io, json, os, random, re, time, wave
 import aiohttp
 import soxr, numpy as np, onnxruntime
-from langpack import Pack, agreement, fill, like
+from langpack import Pack, agreement, fill, first_language, hangup_tags, like
 
 RATE, FRAME = 16000, 640
 APP_RATE = 24000
@@ -32,6 +32,7 @@ VOICES = f"{STATE}/voice.json"
 PHRASES = f"{MODELS}/phrases"
 CONFIG = os.environ.get("ATC_CONFIG_DIR") or (os.environ["XDG_CONFIG_HOME"] + "/atc" if os.environ.get("XDG_CONFIG_HOME") else "~/.config/atc")
 GUESTS = os.path.expanduser(f"{CONFIG}/guests")
+SETTINGS = os.path.expanduser(f"{CONFIG}/settings.json")
 HIGGS_VOICES = os.path.expanduser(os.environ.get("HIGGS_VOICES") or "~/.local/share/atc/voice/audiocpp/voices")
 CPU = concurrent.futures.ThreadPoolExecutor(1)
 LANG_TAG = re.compile(r"\[LANG:([a-z]{2,3})\]\s*")
@@ -275,14 +276,16 @@ class Talk:
         self.brains = {None: self.brain}
         self.who, self.title, self.line_voices, self.line_since = None, ASSISTANT, {}, 0.0
         self.first_line, self.moving, self.leaving, self.knock = None, False, False, ""
-        self.packs, self.pack = args.packs, args.packs[args.lang]
+        self.packs, self.lang = args.packs, first_language(SETTINGS, args.packs, args.lang)
+        self.first = self.packs[self.lang]
+        self.hangup = hangup_tags(self.packs)
         self.heard, self.unfinished = None, None
         self.vad, self.cache = Vad(args.vad_fresh_peak), {}
         self.turn = once("turn", SmartTurn) if args.smart_turn else None
         self.stt = once(("stt", args.gain_db), lambda: StreamSTT(args.gain_db, args.packs)) if args.stt == "stream" else None
         if self.stt:
             self.stt.s, self.stt.heard = {}, {}
-        self.lang, self.voices = args.lang, voices(args)
+        self.voices = voices(args)
         self.history = []
         self.outbox: asyncio.Queue = asyncio.Queue()
         self.speaking, self.spoken = [], []   # [text, frames left, made, leftover(, "canned")] queued for the uplink / texts fully sent this reply
@@ -312,6 +315,11 @@ class Talk:
         pacing delta's voice: inline, a decode under load held the loop past the uplink's 120 ms lead and the phone
         ran dry mid-sentence (dry_ms 371 ms/s while speaking on one loaded call)."""
         return await asyncio.get_running_loop().run_in_executor(CPU, fn, *args)
+
+    @property
+    def pack(self):
+        """The language the call is in now, for what they say and what delta says; self.first is the one it started in."""
+        return self.packs[self.lang]
 
     def echoed(self, word, prefix=False):
         """A word delta itself said in the last few seconds of an app call (fuzzy, as the transcriber spells it):
@@ -368,7 +376,7 @@ class Talk:
         told with their next turn. Twice a call at most: past that the line itself is the trouble, and Claude may say so."""
         words = set(re.findall(r"\w+", re.sub(r"\(.*?\)", "", text).lower()))
         p = self.pack
-        return (self.lang == p.code and p.LINE_OK in self.cache and self.line_checks < 2 and not self.unfinished
+        return (p.LINE_OK in self.cache and self.line_checks < 2 and not self.unfinished
                 and not self.cut and not self.opening and bool(words & p.LINE_CORE) and words <= p.LINE_CHECK)
 
     def echo(self, text):
@@ -726,11 +734,12 @@ class Talk:
         mark = lambda k: timing.__setitem__(k, round(time.time() - ended, 3))
         if text is None:
             text = await self.whisper(utt, self.lang)
-        p, heard_first, also = self.pack, "", ""
+        p, others, also = self.pack, {}, ""
         if isinstance(text, dict):
-            heard_first, text = text.get(p.code, ""), text.get(self.lang, "")
-            if self.lang != p.code and heard_first and agreement(heard_first, text) < SAME_SPEECH:
-                also = fill(p.ALSO_HEARD, heard=heard_first)
+            others = {code: heard for code, heard in text.items() if code != self.lang and heard}
+            text = text.get(self.lang, "")
+            if p.GARBLES_OTHERS:
+                also = "".join(fill(self.packs[code].ALSO_HEARD, heard=heard) for code, heard in others.items() if agreement(heard, text) < SAME_SPEECH)
             if self.a.second_ms and utt:
                 text = await self.second_reading(utt, "" if p.HALLUCINATIONS.search(text) else text, voiced_ms)
         mark("stt")
@@ -740,7 +749,7 @@ class Talk:
         if self.echo(text):
             self.log(event="dropped", text=text, why="delta's own voice coming back", **timing)
             return
-        if self.who and (self.wants_back(text) or self.wants_back(heard_first)):
+        if self.who and (self.wants_back(text, p) or any(self.wants_back(heard, self.packs[code]) for code, heard in others.items())):
             await self.commit.wait()
             self.log(event="line-back", text=text, **timing)
             self.ask_line(ASSISTANT)
@@ -776,7 +785,7 @@ class Talk:
         self.history += [{"role": "user", "content": sent}, {"role": "assistant", "content": ""}]
         self.spoken = []
         reply, buf, first = "", "", True
-        spoken = lambda t: LINE_TAG.sub("", p.END.sub("", t)).strip()
+        spoken = lambda t: LINE_TAG.sub("", self.hangup.sub("", t)).strip()
         self.tools_open = 0
         wants_ack = self.a.ack_ms and not self.opening and not self.holding and not self.moving \
             and len(re.findall(r"\w+", re.sub(r"\s*\(.*", "", text))) > 2
@@ -814,7 +823,7 @@ class Talk:
                     if buf.strip():
                         await speak(spoken(buf))
                         buf = ""
-                    elif first and (line := next(t for r, t in p.PROGRESS if re.search(r, value, re.I))) and not self.canned_lately():
+                    elif first and (line := next(t for r, t in self.pack.PROGRESS if re.search(r, value, re.I))) and not self.canned_lately():
                         self.canned_at = time.monotonic()
                         await speak(line)
                     continue
@@ -849,7 +858,7 @@ class Talk:
             while self.speaking:
                 await asyncio.sleep(0.1)
             self.ask_line(tag.group(1))
-        if p.END.search(reply):
+        if self.hangup.search(reply):
             while self.speaking:
                 await asyncio.sleep(0.1)
             await asyncio.sleep(0.5)
@@ -859,8 +868,8 @@ class Talk:
     def picked(self):
         return {**voices(self.a), **self.line_voices}
 
-    def wants_back(self, text):
-        return len(re.findall(r"\w+", text)) <= BACK_WORDS and bool(self.pack.LINE_BACK.search(text))
+    def wants_back(self, text, pack):
+        return len(re.findall(r"\w+", text)) <= BACK_WORDS and bool(pack.LINE_BACK.search(text))
 
     def ask_line(self, to):
         """Who they talk to, from a tag in a reply, their words, or a tap on the app; before the call is up, for its start."""
@@ -939,7 +948,7 @@ class Talk:
         self.say("", self.beep(bool(to)))
         asyncio.create_task(self.render(self.phrases(), idle=True))
         minutes = max(1, round((time.monotonic() - since) / 60)) if since else 0
-        await self.turn_about(fill(p.LINE_TO, was=title, said=said) if to else fill(p.LINE_BACK_TO, was=title, minutes=minutes, said=said))
+        await self.turn_about((fill(p.LINE_TO, was=title, said=said) if to else fill(p.LINE_BACK_TO, was=title, minutes=minutes, said=said)) + p.LINE_LANG)
 
     def interrupt_quietly(self):
         while not self.outbox.empty():
@@ -1007,7 +1016,7 @@ class Talk:
         phrase ("Dur bakayım."), never the same one twice running and never within canned_gap_ms of another canned line
         (respond_claude decides when to try at all). They picked these over silence and a bare "Hmm" on real turns."""
         await asyncio.sleep(self.a.ack_ms / 1000)
-        ready = [a for a in self.packs[self.lang].ACKS if a in self.cache and a != self.last_ack]
+        ready = [a for a in self.pack.ACKS if a in self.cache and a != self.last_ack]
         if not self.speaking and not self.in_speech and ready and silent() and not self.canned_lately():
             self.last_ack, self.canned_at = random.choice(ready), time.monotonic()
             self.say("", self.cache[self.last_ack])
@@ -1030,13 +1039,13 @@ class Talk:
         asyncio.create_task(self.render(self.phrases(), rate=APP_RATE))
 
     def phrases(self, first=True, rest=True):
-        p = self.pack
-        lines = [(t, p.code) for t in [p.GREETING, p.LINE_OK, *p.FILLERS, *p.HOLD, *[t for _, t in p.PROGRESS if t]]] if first else []
-        return lines + ([(t, code) for code, pack in self.packs.items() for t in pack.ACKS] if rest else [])
+        said = lambda p: [(t, p.code) for t in [p.GREETING, p.LINE_OK, *p.FILLERS, *p.HOLD, *[t for _, t in p.PROGRESS if t]]]
+        lines = said(self.first) if first else []
+        return lines + ([(t, p.code) for p in self.packs.values() for t in p.ACKS] + [l for p in self.packs.values() if p is not self.first for l in said(p)] if rest else [])
 
     async def prerender(self):
         await self.render(self.phrases(rest=False))
-        self.greeting = self.cache.get(self.pack.GREETING, b"")
+        self.greeting = self.cache.get(self.first.GREETING, b"")
         asyncio.create_task(self.render(self.phrases(first=False)))
 
     async def render(self, lines, rate=None, idle=False):
@@ -1079,6 +1088,8 @@ class Talk:
                 return False
 
     def open(self):
+        if (lang := first_language(SETTINGS, self.packs, self.a.lang)) != self.first.code:
+            self.lang, self.first, self.greeting = lang, self.packs[lang], b""
         if (picked := self.picked()) != self.voices:
             self.voices, self.cache, self.greeting = picked, {}, b""
         self.t0 = t = time.time()
@@ -1116,7 +1127,7 @@ class Talk:
         if self.first_line:
             asyncio.create_task(self.move_line(self.first_line))
             return
-        hello = self.pack.GREETING
+        hello = self.first.GREETING
         if not self.greeting:
             self.greeting = self.cache[hello] = b"".join([c async for c in self.tts(hello)])
         self.history.append({"role": "assistant", "content": hello})
@@ -1133,7 +1144,7 @@ class Talk:
         if self.who:
             return
         self.log(event="greeting", waited_ms=round((time.monotonic() - start) * 1000), line_up=self.line_up)
-        self.say(self.pack.GREETING, self.greeting)
+        self.say(self.first.GREETING, self.greeting)
 
     async def release(self):
         """Let the prepared opening play once they have had their «Alo»: when they stop talking, or after
