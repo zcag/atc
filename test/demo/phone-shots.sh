@@ -5,7 +5,7 @@
 # The app takes its theme from the server, so nothing else may change the look while this runs: not shots.js's themes.
 #   phone-shots.sh setup <apk> <port>                 install and point at the demo
 #   phone-shots.sh shoot <port> <out dir> <dark|light>
-#   phone-shots.sh character <port> <out dir> <dark|light> <person>    a call with that person as the assistant (june, arthur; run.sh's DEMO_PERSONAS)
+#   phone-shots.sh character <port> <out dir> <dark|light> <person>    a call with that person as the assistant (june, arthur, tom; run.sh's DEMO_PERSONAS)
 set -eu
 dev=127.0.0.1:${ADB_PORT:?the port android14.sh up printed}
 adb=("$HOME/Android/sdk/platform-tools/adb" -s "$dev")
@@ -101,7 +101,8 @@ character)
 	ring
 	sleep 2.2
 	"${adb[@]}" shell input tap 600 200
-	sleep 2
+	sleep 4.5
+	shot "$who-ring"
 	"${adb[@]}" shell input tap 676 2104
 	sleep 4
 	shot "$who-1"
