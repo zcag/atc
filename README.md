@@ -197,8 +197,7 @@ and tells the interrupted ones to continue.
 - **Everything over HTTP and JSON.** The API behind the page is open to your scripts, and CLI commands take `-json`.
 
 The screenshots come from `test/demo/`: atc's real UI on made-up sessions and a fake Claude whose lines on calls are written for the demo, with made-up figures
-on the Resources screen. The frames are drawn on. The phones are a debug build of the app on a test device, and the call history is an
-open-source dialer reading the phone's real call log.
+on the Resources screen. The frames are drawn on. The phones are a debug build of the app on a test device.
 
 ## How it works with Claude Code
 
