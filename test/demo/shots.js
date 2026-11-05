@@ -1,4 +1,4 @@
-// Takes the README's raw screens from a running test/demo/run.sh. Run through a browser MCP's
+// Takes the README's raw screens from a running test/demo/run.sh. Run through a Playwright MCP's
 // browser_run_code_unsafe: read this file, eval it, call it with (page, {base, out, modes, only}).
 // Each screen gets its own browser context, so it has its own size, pixel ratio and localStorage and
 // touches nothing of a logged-in profile. compose.js then lays these out, and encode.sh writes docs/img.
@@ -182,14 +182,14 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
     },
     async phones(mode) {
       const p = await open(mode, { w: 412, h: 860, phone: true });
-      await to(p, "#/", 1800);
-      await p.screenshot({ path: `${out}/${mode}/phone-board.png` });
       await to(p, `#/s/${by("Cart totals").id}`, 2200);
-      await p.screenshot({ path: `${out}/${mode}/phone-session.png` });
-      await to(p, "#/usage", 2500);
-      await p.screenshot({ path: `${out}/${mode}/phone-usage.png` });
-      await to(p, "#/assist", 2200);
-      await p.screenshot({ path: `${out}/${mode}/phone-assist.png` });
+      await p.screenshot({ path: `${out}/${mode}/phone-reply.png` });
+      await to(p, `#/s/${by("Why checkout").id}`, 2200);
+      await p.getByText("src/checkout/expiry.ts").first().click();
+      await p.waitForTimeout(800);
+      await p.screenshot({ path: `${out}/${mode}/phone-read.png` });
+      await to(p, `#/p/${by("Why checkout").id}/checkout-latency`, 2600);
+      await p.screenshot({ path: `${out}/${mode}/phone-page.png` });
       return [[p, null]];
     },
   };

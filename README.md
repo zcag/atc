@@ -40,7 +40,7 @@ screenshot from any app into a session. Holding the side key opens what's waitin
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/phones-dark.webp">
-  <img src="docs/img/phones-light.webp" alt="Four phones: the board, a session's reply with suggested replies, the assistant, and the usage page.">
+  <img src="docs/img/phones-light.webp" alt="Four phones. The first shows the screen the side key opens: two sessions waiting, one with its question answered by buttons and a text field, one asking to run a git push with Allow once and Deny, and a green call button. The second shows a session's prompt, its steps and a small diff above its result. The third shows a finished report with one-tap replies, Push it and Draft the note for support. The fourth shows the report page that session made, with its figures and a chart.">
 </picture>
 
 Android app. On other devices, atc works in the browser. [Android app](docs/android.md)
@@ -53,7 +53,7 @@ needs a decision can ring your phone, and when you pick up, the assistant says w
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/call-dark.webp">
-  <img src="docs/img/call-light.webp" alt="Four phones. The first shows the screen the side key opens: machines up, usage, memory, questions with their answers as buttons, and a green call button. The other three show one call: a teal orb while it hears you with your words appearing, an amber orb while it uses a tool, a violet orb while it speaks, with the sessions on the call listed below.">
+  <img src="docs/img/call-light.webp" alt="Three phones showing one call to the assistant. A teal orb while it hears you, with your words appearing; an amber orb while it uses a tool; a violet orb while it speaks, with its answer written out. Under each orb, the sessions on the call and what they are doing.">
 </picture>
 
 Runs on your own machine on 2 CPU cores. No phone number needed; the app and the browser can both call. [Calls](docs/calls.md)
