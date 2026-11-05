@@ -1,11 +1,7 @@
 # atc
 
-atc is a web UI, a terminal UI and an Android app for Claude Code. It lists the sessions on all your machines and
-shows which ones are waiting on you. You can reply to them from your phone, or call an assistant that knows what they're
-all doing.
-
-It runs on your own machines and uses your own Claude Code sign-in. Sessions live in Claude Code's background
-service, so closing a tab or restarting atc doesn't stop them.
+**Air traffic control for Claude Code.** Every session on every machine, a team of agents working in the background, and an
+assistant you can call on the phone. All of it on your own machines, from a browser, a terminal or your phone.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/hero-dark.webp">
@@ -20,39 +16,43 @@ Linux or macOS, with Claude Code signed in. One install serves one user. [More w
 
 atc is an independent project. It is not affiliated with or endorsed by Anthropic.
 
-## Sessions
+## A team of agents
 
-Every session on every machine, in one list. Anything waiting on a permission or an answer is at the top, and each
-row has a one-line summary of what the session last did.
+An agent is someone you go to for one thing. It keeps its own notes, keeps one long conversation, and wakes up when there's work.
+
+| | Wakes | Does |
+|---|---|---|
+| **@ops** | when an alert fires | Investigates, fixes the obvious on your machines, and rings you with the rest already worked out |
+| **@shopping** | every morning | Researches what's on your list across stores, checks stock and price, leaves a few options to pick from |
+| **@email** | when you ask | Sorts your inboxes onto a page you can act on. Marks read what you say, and never sends |
+| **@reviewer** | when a pull request has no review | Reads it and writes down what it thinks |
+| **@standup** | every morning | Drafts your standup from what you actually did yesterday |
+| **@invoice** | every second Friday | Prepares the invoice and the email, and sends on your go |
+| **@tracker** | every 3 hours | Sweeps mail, calendar and GitHub into one list of everything open |
+
+We run agents like these every day. Each is a folder: a page of instructions and a rule for when to wake.
+
+```json
+{ "title": "Ops", "check": "./unresolved-alerts.sh", "every": "2m", "prompt": "Look into these." }
+```
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/board-dark.webp">
-  <img src="docs/img/board-light.webp" alt="The board: sessions from two machines and five projects, grouped into pinned, waiting on you, working and parked, each with a status line, context used, steps, what it made and its age.">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/agents-dark.webp">
+  <img src="docs/img/agents-light.webp" alt="The Agents screen: a list of standing agents with what each keeps, and the reviewer open: its conversation, and beside it the page it keeps, three open pull requests, one needing a change.">
 </picture>
 
-[Using atc](docs/using.md) · [Several machines](docs/machines.md)
+Between wake-ups they stay out of your way. Ask one something any time with `atc send @shopping "the towel, in grey"`, point a
+Grafana alert or a CI webhook at it, or let the assistant read what it knows: "what's open?" gets answered from @tracker's list
+without waking anyone. [Starter agents](examples/agents/) · [Agents](docs/presets-and-agents.md)
 
-## Android app
+## An assistant you can call
 
-You get a push when a session needs you, and you can answer from the notification. Holding the side key opens
-what's waiting, on the lock screen too. Other apps can share a link or a screenshot into a session.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/phones-dark.webp">
-  <img src="docs/img/phones-light.webp" alt="Four phones. The first shows the screen the side key opens: two sessions waiting, one with its question answered by buttons and a text field, one asking to run a git push with Allow once and Deny, and a green call button. The second shows a session's prompt, its steps and a small diff above its result. The third shows a finished report with one-tap replies, Push it and Draft the note for support. The fourth shows the report page that session made, with its figures and a chart.">
-</picture>
-
-There's no iOS app; atc works in a phone's browser. [Android app](docs/android.md)
-
-## Calls
-
-Anything urgent can ring your phone:
+One conversation that can see everything: your sessions, your agents, what just changed. It answers on a phone call, in
+the page and on WhatsApp, and it's the same conversation on all three. Anything urgent can ring you:
 
 ```sh
 atc call --reason "Checkout errors jumped to 8% after the last deploy"
 ```
-
-The assistant is on the line when you pick up.
 
 > **Assistant:** Hey, sorry to call. Checkout errors jumped to 8% right after the last deploy, and the coupon change looks like the cause. Do you want me to...
 >
@@ -73,91 +73,69 @@ The assistant is on the line when you pick up.
   <img src="docs/img/call-ring-light.webp" alt="Three phones. The first has woken to an incoming call: Assistant, with the reason under the name, Checkout errors jumped to 8% after the last deploy, and a red and a green button. The second is on the call: Assistant, a call timer, what it is saying, and mute, hang up and speaker buttons. The third is the phone's call history, with Assistant listed like any other caller.">
 </picture>
 
-You can call it as well, from the app or a browser. Calls run on your machine and need `atc voice install`: about 2 GB of
-disk and 2 CPU cores, and no phone number. [Calls](docs/calls.md) · [A recorded demo call](docs/img/call-demo.mp4)
-
-## The assistant
-
-One long-running Claude conversation with tools to read, start and message your other sessions. Ask it to find out why
-checkout is slow and to fix the build on the laptop, and it starts a session for each and tells you when they're done. Typing
-to it, calling it and writing to it on WhatsApp all reach the same conversation.
+You can talk over it, and it hears you. It says what it's doing while it works, starts sessions for anything long, and tells you
+how they came out after you've hung up. Calling it needs no phone number, and it runs on your machine on 2 CPU cores.
+[Calls](docs/calls.md) · [A recorded demo call](docs/img/call-demo.mp4) · [The assistant](docs/assistant.md)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/assistant-dark.webp">
   <img src="docs/img/assistant-light.webp" alt="The assistant: you ask it to find out why checkout is slow and to fix a build on the laptop. It starts both sessions, reads what they found, shows a page and answers with the numbers, offering replies. On the left and under the conversation, the sessions it set going and what each is doing now.">
 </picture>
 
-[The assistant](docs/assistant.md) · [Sessions driving sessions](docs/sessions.md) · [WhatsApp](docs/whatsapp.md)
+## Every session, wherever you are
 
-## Agents
-
-An agent is a folder with instructions and a rule for when to wake up. This one reviews new pull requests:
-
-```json
-{
-  "host": "desktop",
-  "title": "Reviewer",
-  "every": "30m",
-  "check": "gh pr list --search review:none",
-  "prompt": "Review what opened since last time."
-}
-```
-
-It wakes every 30 minutes, only if the check prints something. A webhook can wake one too, such as a Grafana alert. An
-agent keeps one conversation across wake-ups and stays out of your session list until it has something for you.
+All your sessions from all your machines in one list, with whatever is waiting on you at the top and a one-line result on each.
+Start one in any folder on any machine, and open any of them from a browser, a terminal or your phone.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/agents-dark.webp">
-  <img src="docs/img/agents-light.webp" alt="The Agents screen: a list of standing agents with what each keeps, and the reviewer open: its conversation, and beside it the page it keeps, three open pull requests, one needing a change.">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/board-dark.webp">
+  <img src="docs/img/board-light.webp" alt="The board: sessions from two machines and five projects, grouped into pinned, waiting on you, working and parked, each with a status line, context used, steps, what it made and its age.">
 </picture>
 
-[Presets and agents](docs/presets-and-agents.md)
+The Android app pushes when a session needs you, and you can approve or answer from the notification. Holding the side key opens
+what's waiting, even on the lock screen. Share a link or a screenshot from any app into a session, or see them all on a home
+screen widget.
 
-## Transcripts
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/phones-dark.webp">
+  <img src="docs/img/phones-light.webp" alt="Four phones. The first shows the screen the side key opens: two sessions waiting, one with its question answered by buttons and a text field, one asking to run a git push with Allow once and Deny, and a green call button. The second shows a session's prompt, its steps and a small diff above its result. The third shows a finished report with one-tap replies, Push it and Draft the note for support. The fourth shows the report page that session made, with its figures and a chart.">
+</picture>
 
-A reading view of a session, however long it gets: each prompt and reply, with the steps between them folded into a
-line and the diffs, test results and commits marked. Search covers the whole session and can filter to failures. Likely replies
-are one tap away.
+Back at a desk, read what a session did as a transcript: each prompt and reply with the diffs, test results and commits, and search
+across the whole thing. Likely next messages are one tap away.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/transcript-dark.webp">
   <img src="docs/img/transcript-light.webp" alt="A session's transcript: a word-level diff of the fix, a card for the page it made, then its report, with suggested replies above the message box.">
 </picture>
 
-## Pages
+[Using atc](docs/using.md) · [Android app](docs/android.md) · [Several machines](docs/machines.md)
 
-A session can show you a file:
+## Work you can see and step into
 
-```sh
-atc show report.html
-```
-
-It opens beside the conversation and redraws when the file changes. HTML, Markdown, images, PDF and CSV all work. An HTML
-page can keep state and run commands the session declared, so an inbox page can have a working mark-read button.
+A session can put anything in front of you. `atc show report.html` opens it beside the conversation and redraws it as the file
+changes: a chart, a comparison, an inbox with working buttons. Every page from every session stays one screen away, on your phone too.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/pages-dark.webp">
   <img src="docs/img/pages-light.webp" alt="The Pages screen: every page from every session, grouped by project, with one agent's daily page open.">
 </picture>
 
-[Pages](docs/pages.md)
-
-## Shared browser
-
-Sessions can share one Chromium through `atc browser mcp`. Logins are shared and each session sees only its own tabs.
-Its tab shows live beside the conversation, and you can click and type in it, which gets it past a login or a captcha.
+Sessions drive a real browser too. Each gets its own tabs with your logins shared, and you watch them live next to the conversation.
+When one hits a login or a captcha, click and type in its tab and it carries on.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/browser-dark.webp">
   <img src="docs/img/browser-light.webp" alt="A session driving a checkout page in a browser tab, shown live beside its conversation, with an address bar you can use.">
 </picture>
 
-[A browser for sessions](docs/browser.md)
+[Pages](docs/pages.md) · [A browser for sessions](docs/browser.md)
 
-## Limits and resources
+## Keep it all running
 
-Your 5-hour and weekly limits, with a projection of when you'd hit them at the current pace. Spend by day, model, project
-and session. Memory and CPU per session, including processes still running after their session ended.
+Your 5-hour and weekly limits with a projection of when you'd hit them, and spend by day, model, project and session. Memory and CPU
+per session, a week back, including the dev server a finished session left behind. After a reboot, atc brings your sessions back
+and tells the interrupted ones to continue.
 
 <table>
 <tr>
@@ -174,41 +152,48 @@ and session. Memory and CPU per session, including processes still running after
 
 [Usage and limits](docs/usage.md) · [Resources](docs/resources.md)
 
-## Also
+## And a lot more
 
 <table>
 <tr>
 <td width="50%"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/new-dark.webp">
   <img src="docs/img/new-light.webp" alt="New session: a prompt, a folder picker, presets, the machine and the engine.">
-</picture><br><b>New session.</b> Any folder on any machine, in its own git worktree if you like, on Claude or <a href="docs/models.md">a local model</a>.</td>
+</picture><br><b>Start anything.</b> Any folder on any machine, in its own git worktree, from a preset, on Claude, <a href="docs/models.md">a local model or opencode</a>.</td>
 <td width="50%"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/backlog-dark.webp">
   <img src="docs/img/backlog-light.webp" alt="The backlog: tasks by stage, some you added and some suggested by sessions.">
-</picture><br><b>Backlog.</b> Tasks you haven't started and sessions you've set aside. <a href="docs/backlog-and-notify.md">Backlog</a></td>
+</picture><br><b>A backlog.</b> Tasks for later, sessions set aside to resume, and suggestions from your agents. <a href="docs/backlog-and-notify.md">Backlog</a></td>
 </tr>
 <tr>
 <td width="50%"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/terminal-dark.webp">
   <img src="docs/img/terminal-light.webp" alt="A session's terminal in the page, running atc's terminal UI: the same sessions as the board, with keys for attach, new, filter and history.">
-</picture><br><b>Terminal.</b> <code>atc</code> is the same list as a terminal UI. <code>atc attach</code> opens a session. <a href="docs/using.md#from-a-terminal">From a terminal</a></td>
+</picture><br><b>A terminal UI.</b> <code>atc</code> is the whole list in your terminal, and <code>atc attach</code> opens any session. <a href="docs/using.md#from-a-terminal">From a terminal</a></td>
 <td width="50%"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/palette-dark.webp">
   <img src="docs/img/palette-light.webp" alt="The palette over the board, finding sessions and pages by a few letters.">
-</picture><br><b>Search.</b> <code>/</code> finds sessions, pages and commands. Most things have a key.</td>
+</picture><br><b>A key for everything.</b> <code>/</code> finds any session, page or command.</td>
 </tr>
 <tr>
 <td width="50%"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/settings-dark.webp">
   <img src="docs/img/settings-light.webp" alt="Settings: the feature list, each row saying how it stands and how to set it up.">
-</picture><br><b>Settings.</b> <code>atc doctor</code> and the settings page check what each feature needs and give the fix. <a href="docs/settings.md">Settings and doctor</a></td>
+</picture><br><b>Setup that checks itself.</b> <code>atc doctor</code> and Settings test every feature and give the fix. <a href="docs/settings.md">Settings and doctor</a></td>
 <td width="50%"><img src="docs/img/themes.webp" alt="The same board cut into six slanted bands: three themes, each in dark and light."><br><b>Themes.</b> Three, light and dark. <a href="docs/look.md">A new one is one CSS file.</a></td>
 </tr>
 </table>
 
-The screenshots come from `test/demo/`: atc's real UI on made-up sessions, a fake Claude and a scripted call line, with made-up
-figures on the Resources screen. The frames are drawn on. The phones are a debug build of the app on a test device, and the call
-history is an open-source dialer reading the phone's real call log.
+- **Sessions that run each other.** `atc mcp` gives any session tools to read, start and message the others. [Sessions driving sessions](docs/sessions.md)
+- **WhatsApp.** Text it, send photos and voice notes, and get answers back as voice notes. Let a few other people reach it too, in a conversation of their own. [WhatsApp](docs/whatsapp.md)
+- **Notifications from anything.** `atc notify` from a session, with one-tap replies. [Notify](docs/backlog-and-notify.md)
+- **Your phone as its home.** Digital assistant role, Quick Settings tile, Android Auto and Bluetooth for calls, QR pairing with per-device revoke. [Android app](docs/android.md)
+- **Summaries of every finished turn**, at three lengths, on your plan or your own model. [Summaries](docs/summaries.md)
+- **Everything over HTTP and JSON.** The API behind the page is open to your scripts, and CLI commands take `-json`.
+
+The screenshots come from `test/demo/`: atc's real UI on made-up sessions, a fake Claude and a scripted call line, with made-up figures
+on the Resources screen. The frames are drawn on. The phones are a debug build of the app on a test device, and the call history is an
+open-source dialer reading the phone's real call log.
 
 ## How it works with Claude Code
 
