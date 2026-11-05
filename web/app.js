@@ -8,6 +8,7 @@ import { persona } from "./persona.js";
 import { minimal } from "./minimal.js";
 import { cube, niceMax } from "./usage-cube.js";
 import { partsOf } from "./res-parts.js";
+import { glider, GLIDE_KEYS } from "./glide.js";
 import { personOf, speakers, VIEWS, nextView, personLangs, langName, voiceName } from "./persons.js";
 import { PersonsPage, useSample, ROOMS } from "./persons-page.js";
 import { useCaps, useSetup, CapsBanner, CapsSections, SetupScreen, slug } from "./caps.js";
@@ -850,7 +851,7 @@ const KEYMAP = [
   ["Sessions", [["q w e .. p", "The 1st to 10th session in the list, at once"], ["j k", "Next, previous session (on the board: the selection)"], ["enter", "On the board: open the selected session"], ["alt j k", "Next, previous session, even from a terminal"]]],
   ["Panes", [["[", "Sessions beside the transcript"], ["]", "Its page beside the transcript (board: the page index)"], ["\\", "State: now, running, made, the session's facts"]]],
   ["Session", [["enter", "Write to the session (on a stopped one: Resume)"], ["`", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
-  ["Reading", [["J K", "Next, previous turn: your prompts and its replies"], ["space", "A screen down; with shift, up"], ["home end", "Top, end of the transcript"], ["N", "Next thing you have not seen here: the divider, then the question"], ["c", "Contents: every turn and heading"], ["l", "Outline, story, everything, in turn"], ["f", "Find in the session"], ["z", "Zen: only the words, nothing around them; z or esc to leave"], ["a", "In zen: size, typeface, spacing, colours"], ["- =", "In zen: smaller, larger"]]],
+  ["Reading", [["J K", "Next, previous turn: your prompts and its replies"], ["space", "A screen down; with shift, up"], ["home end", "Top, end of the transcript"], ["N", "Next thing you have not seen here: the divider, then the question"], ["c", "Contents: every turn and heading"], ["l", "Outline, story, everything, in turn"], ["f", "Find in the session"], ["z", "Zen: only the words, nothing around them; z or esc to leave"], ["j k ↓ ↑", "In zen: scroll smoothly, tap for a few lines or hold to glide"], ["a", "In zen: size, typeface, spacing, colours"], ["- =", "In zen: smaller, larger"]]],
   ["Assistant", [[".", "Call it"], ["[", "Touched today and the agents"], ["esc", "Close the assistant"]]],
   ["Call", [["m", "Mute, unmute"], ["E", "End the call (shift e)"], [".", "Back to the call, from anywhere"], ["esc", "Minimize the call to the console line"]]],
   ["Answer", [["1..9", "With the question focused (click it, tab into it, or N): that option"]]],
@@ -6230,8 +6231,18 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     addEventListener("popstate", back);
     return () => removeEventListener("popstate", back);
   }, [zen]);
+  const glide = useRef(null);
+  useEffect(() => {
+    if (!zen || !box.current) return;
+    const g = glide.current = glider(box.current);
+    const up = (e) => g.release(e.code);
+    addEventListener("keyup", up);
+    addEventListener("blur", g.stop);
+    return () => { g.stop(); glide.current = null; removeEventListener("keyup", up); removeEventListener("blur", g.stop); };
+  }, [zen]);
   useKeyLayer((e) => {
     if (typingIn(e.target)) return false;
+    if (GLIDE_KEYS[e.key] && !e.shiftKey && glide.current) { hold.current = null; glide.current.press(GLIDE_KEYS[e.key], e.code, e.repeat); return true; }
     if (e.key === "a") return setPop(pop === "look" ? null : "look"), true;
     if (e.key === "-" || e.key === "=" || e.key === "+") return txPrefs.set({ size: Math.max(0, Math.min(4, prefs.size + (e.key === "-" ? -1 : 1))) }), true;
     if (e.key !== "z" && (e.key !== "Escape" || pop || shot || sel)) return false;
