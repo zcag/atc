@@ -1770,6 +1770,8 @@ const cmdName = (c) => {
 };
 
 function doing(s) {
+  const [, mcp, args] = (s.activity || "").match(/^(mcp__\S+)\s*(.*)$/) || [];
+  if (mcp) return args ? `${toolName(mcp)}: ${oneLine(args)}` : toolName(mcp);
   const a = oneLine(s.activity), m = a.match(/^(\w+)\s+(.+)$/);
   if (!m) return a || "Working…";
   const [, tool, rest] = m, file = rest.split("/").filter(Boolean).pop();
@@ -1780,7 +1782,7 @@ function doing(s) {
 }
 
 const headline = (s) => {
-  if (s.state === "needs-you" && s.activity) return `Waiting on you: ${oneLine(s.activity)}`;
+  if (s.state === "needs-you" && s.activity) return `Waiting on you: ${oneLine(s.activity).replace(/^AskUserQuestion\s+/, "")}`;
   const t = s.summary?.status?.replace(/^[A-Z][a-z]+:\s+/, "") || oneLine(s.lastReply) || oneLine(s.lastPrompt);
   return t ? t[0].toUpperCase() + t.slice(1) : "";
 };
@@ -3332,12 +3334,12 @@ function ResourcesPage({ hosts, home, live }) {
   const bayMem = (b) => allSessions.filter((g) => (bayByKey.get(g.key) || "other") === b).reduce((a, g) => a + g.mem, 0);
   const bayPicked = bayNames.includes(v.bay) ? v.bay : null;
   const sessions = bayPicked ? allSessions.filter((g) => (bayByKey.get(g.key) || "other") === bayPicked) : allSessions;
-  const sum = (l) => l.reduce((a, g) => a + g.mem, 0);
+  const sum = (l) => (l || []).reduce((a, g) => a + g.mem, 0);
   const toggle = (id) => setOpened((x) => (x === id ? null : id));
   const disk = m?.disks?.[0];
   const pressure = m?.pressure > 0 ? `${m.pressure.toFixed(1)}%` : "0%";
   const kpis = m ? [
-    { l: "Memory", big: true, v: `${gb(m.memUsed)} of ${gb(m.memTotal)}`, s: `sessions ${gb(sum(rep.sessions))}${rep.left.length ? `, outlived ${gb(sum(rep.left))}` : ""}, rest ${gb(Math.max(0, m.memUsed - sum(rep.sessions) - sum(rep.left)))}` },
+    { l: "Memory", big: true, v: `${gb(m.memUsed)} of ${gb(m.memTotal)}`, s: `sessions ${gb(sum(rep.sessions))}${rep.left?.length ? `, outlived ${gb(sum(rep.left))}` : ""}, rest ${gb(Math.max(0, m.memUsed - sum(rep.sessions) - sum(rep.left)))}` },
     { l: "CPU", v: `${Math.round(m.cpu / cores)}%`, s: `of ${m.cores} cores, load ${m.load.toFixed(1)}` },
     { l: "Waiting on memory", v: pressure, s: `of the last minute${m.swapTotal > 0 ? `, swap ${gb(m.swapUsed)} of ${gb(m.swapTotal)}` : ""}` },
     m.ramDisk > 0 && { l: "Files in RAM", v: gb(m.ramDisk), s: "/tmp and /dev/shm, owned by no process" },

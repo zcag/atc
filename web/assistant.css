@@ -163,7 +163,8 @@ body.docked .app { margin-right: 380px; }
 .hr .ask.compact { box-shadow: none; margin: 0; padding: 0 var(--s4) var(--s3) calc(22px + var(--s3) + var(--s4)); }
 .hr .ask.compact .aq { font-size: var(--fs-ui); font-weight: 400; color: var(--dim); }
 .hr .ask.compact .cmd { background: var(--sunk); }
-.hr .ask.compact .acts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: var(--s2); }
+.hr .ask.compact .acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+.hr .ask.compact .atype { grid-column: 1 / -1; }
 .hr .ask.compact .btn { justify-content: center; min-height: 48px; border-radius: var(--r-md); font-size: var(--fs-ui); font-weight: 650; border: 0; box-shadow: inset 0 0 0 1.5px var(--ink); }
 .hr .ask.compact .btn.primary, .hr .ask.compact .btn.ch { box-shadow: none; }
 .hr.sk { display: grid; gap: 8px; padding: var(--s4); }
