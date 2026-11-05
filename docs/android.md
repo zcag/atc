@@ -7,7 +7,7 @@ and your sessions beside it.
 
 ## Install
 
-`atc app update` downloads the latest app from atc's releases (`atc setup` offers it), and the server
+`atc app update` downloads the latest app and call characters from atc's releases (`atc setup` offers it), and the server
 offers it at `/app/`. Settings › Devices shows a QR code to its download. The app checks that folder
 and updates itself, and only installs an update signed like the app you have. The folder is
 `~/.local/share/atc/app`, or `ATC_APP_DIR`; a build of your own (`make android`) goes there too.

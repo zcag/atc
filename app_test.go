@@ -1,6 +1,9 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
@@ -36,5 +39,31 @@ func TestFetchAppChecksTheChecksum(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(other, "atc.apk")); err == nil {
 		t.Fatal("a bad download must not be kept")
+	}
+}
+
+func TestUntarPersonasStaysInItsFolder(t *testing.T) {
+	pack := func(name string) []byte {
+		var b bytes.Buffer
+		gz := gzip.NewWriter(&b)
+		tw := tar.NewWriter(gz)
+		tw.WriteHeader(&tar.Header{Name: name, Mode: 0o644, Size: 2, Typeflag: tar.TypeReg})
+		tw.Write([]byte("hi"))
+		tw.Close()
+		gz.Close()
+		return b.Bytes()
+	}
+	dir := t.TempDir()
+	if err := untarPersonas(pack("woman/persona.json"), dir); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "woman", "persona.json")); string(b) != "hi" {
+		t.Fatalf("%q", b)
+	}
+	if err := untarPersonas(pack("../evil"), dir); err == nil {
+		t.Fatal("a path out of the folder must fail")
+	}
+	if err := untarPersonas(pack("/evil"), dir); err == nil {
+		t.Fatal("an absolute path must fail")
 	}
 }

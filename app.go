@@ -1,6 +1,9 @@
 package main
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -9,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -16,7 +20,7 @@ const appReleases = "https://github.com/zcag/atc/releases/latest/download/"
 
 const appHelp = `Usage: atc app update
 
-Downloads the latest Android app from atc's releases into the folder this server offers it from
+Downloads the latest Android app and call characters from atc's releases into the folder this server offers it from
 (ATC_APP_DIR, by default ~/.local/share/atc/app), so phones can install it from /app/ and update from it.
 `
 
@@ -51,6 +55,7 @@ func fetchApp(base, dir string) (string, error) {
 	var v struct {
 		VersionName string `json:"versionName"`
 		SHA256      string `json:"sha256"`
+		Personas    string `json:"personasSha256"`
 	}
 	if err := json.Unmarshal(info, &v); err != nil || v.SHA256 == "" {
 		return "", fmt.Errorf("the release's version.json is not usable: %v", err)
@@ -69,7 +74,59 @@ func fetchApp(base, dir string) (string, error) {
 	if err := os.WriteFile(filepath.Join(dir, "atc.apk"), apk, 0o644); err != nil {
 		return "", err
 	}
+	if v.Personas != "" {
+		if err := fetchPersonas(c, base, dir, v.Personas); err != nil {
+			return "", err
+		}
+	}
 	return v.VersionName, os.WriteFile(filepath.Join(dir, "version.json"), info, 0o644)
+}
+
+func fetchPersonas(c *http.Client, base, dir, want string) error {
+	b, err := download(c, base+"personas.tar.gz")
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256(b)
+	if hex.EncodeToString(sum[:]) != want {
+		return fmt.Errorf("the downloaded characters do not match their checksum")
+	}
+	return untarPersonas(b, filepath.Join(dir, "personas"))
+}
+
+func untarPersonas(b []byte, dir string) error {
+	gz, err := gzip.NewReader(bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	tr := tar.NewReader(gz)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		name := filepath.Clean(h.Name)
+		if h.Typeflag != tar.TypeReg {
+			continue
+		}
+		if filepath.IsAbs(name) || name == ".." || strings.HasPrefix(name, "../") {
+			return fmt.Errorf("the characters archive names a path outside its folder: %s", h.Name)
+		}
+		to := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+			return err
+		}
+		data, err := io.ReadAll(tr)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(to, data, 0o644); err != nil {
+			return err
+		}
+	}
 }
 
 func download(c *http.Client, url string) ([]byte, error) {
