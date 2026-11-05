@@ -51,6 +51,7 @@ type Server struct {
 	linesMu sync.Mutex
 	lines   map[string]*hubLink
 	wakes   map[string]time.Time
+	told    map[string]string
 	M       *sessions.Manager
 	Res     *resources.Sampler
 	Term    *attach.Hub
@@ -1381,13 +1382,21 @@ func (s *Server) assist(w http.ResponseWriter, r *http.Request) {
 	s.done(w, id, err)
 }
 
+// DefaultAssistDir is the assistant's own folder, the hub's and atc's, so it never starts in the home
+// folder: Claude Code refuses a background session there unless it already has a yes on record.
+func DefaultAssistDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local/share/atc/assistant")
+}
+
 // keep returns the running session of a standing name (assistant, whatsapp): the newest one
 // by that name, resumed when it stopped, or a new one when there is none or fresh is set.
 func (s *Server) keep(ctx context.Context, name string, fresh bool) (string, error) {
-	home, err := expand(cmp.Or(s.AssistDir, "~"))
+	home, err := expand(cmp.Or(s.AssistDir, DefaultAssistDir()))
 	if err != nil {
 		return "", err
 	}
+	os.MkdirAll(home, 0o755)
 	if !fresh {
 		list, err := s.M.Live(ctx)
 		if err != nil {
@@ -1643,7 +1652,7 @@ func fail(w http.ResponseWriter, err error) {
 		code = http.StatusBadRequest
 		if !u.Home {
 			code = http.StatusConflict
-			w.Header().Set(claude.UntrustedHeader, url.PathEscape(u.Dir))
+			w.Header().Set(claude.UntrustedHeader, url.Values{"dir": {u.Dir}, "parent": {u.Parent}, "host": {u.Host}}.Encode())
 		}
 	}
 	http.Error(w, err.Error(), code)

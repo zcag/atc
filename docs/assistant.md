@@ -11,6 +11,11 @@ ATC_HUB_CLAUDE_ARGS=...                  # optional extra flags for its Claude
 atc hub status · atc hub reset           # what it is doing; start over now
 ```
 
+Installed the usual way, the assistant works with nothing accepted: `claude -p` doesn't ask for trust,
+and its folder is atc's own (`~/.local/share/atc/assistant`). Without a hub (`atc serve` by hand, or
+`--only atc`) it is a background session, in `ATC_ASSIST_DIR`, by default that same folder; Claude Code
+requires a yes for that, so the page asks you once with its own prompt.
+
 With `ATC_HUB` set, the Assistant button, the side key and WhatsApp all reach the hub's session. It
 shows in the list as **assistant**, with no terminal: its transcript is the chat, the box under it
 writes to it, the reply appears as it is written, and Esc or Stop interrupts it. A phone call is a

@@ -97,6 +97,7 @@ To log in a new device without typing the token, use `atc pair` (see
   covers the folder and everything under it, and is kept by Claude Code in `~/.claude.json`.
 - Claude Code doesn't remember a yes for your home folder itself, so a background session can't
   start there unless it already has one on record. Pick a folder under it instead.
+- Agents need the same yes: see [Trusting its folder](presets-and-agents.md#trusting-its-folder).
 - Sessions you started yourself in a terminal show up as **in a terminal**. atc can't attach to
   those, but you can read their transcript, and resume them once they have ended.
 - Resuming always keeps the session's original options. Passing flags to Claude Code while

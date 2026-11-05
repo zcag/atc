@@ -31,8 +31,8 @@ async function api(path, opts = {}) {
   });
   if (res.status === 401) throw Object.assign(new Error("Log in to continue."), { auth: true });
   if (!res.ok) {
-    const dir = res.headers.get("X-Atc-Untrusted-Dir");
-    throw Object.assign(new Error((await res.text()).trim() || res.statusText), { status: res.status, untrusted: dir && decodeURIComponent(dir) });
+    const why = res.headers.get("X-Atc-Untrusted");
+    throw Object.assign(new Error((await res.text()).trim() || res.statusText), { status: res.status, untrusted: why && Object.fromEntries(new URLSearchParams(why)) });
   }
   return res.json();
 }
@@ -1163,7 +1163,7 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
   useEffect(() => {
     if (!loaded || hub || asked.current) return;
     asked.current = true;
-    api("/api/assist", { method: "POST" }).catch((e) => say(`Could not start the assistant: ${e.message}`));
+    startTrusting(null, () => api("/api/assist", { method: "POST" })).catch((e) => say(`Could not start the assistant: ${e.message}`));
   }, [loaded, !!hub]);
   useKeyLayer((e) => {
     if (typingIn(e.target)) return false;
@@ -2828,24 +2828,19 @@ const leaveDialog = (id, finish) => {
 
 const TRUST_KEYS = [["↑", "\x1b[A"], ["↓", "\x1b[B"], ["Enter", "\r"]];
 
-function TrustDialog({ d: { id, trust: { dir, host }, done }, onGone }) {
-  const box = useRef(), term = useRef(), ended = useRef(false);
-  const [lost, setLost] = useState(false);
+function TrustDialog({ d: { id, trust: { dir, host, parent, agent }, done }, onGone }) {
+  const ended = useRef(false), box = useRef();
+  const [folder, setFolder] = useState(parent ? null : dir);
   const end = (answered) => {
     if (ended.current) return;
     ended.current = true;
     leaveDialog(id, () => { onGone(); done(answered); });
   };
   useEffect(() => {
-    const q = new URLSearchParams({ dir, id: Math.random().toString(36).slice(2, 4), ...(host ? { host } : {}) });
-    const t = term.current = makeDock(`trust-${q.get("id")}`, `/api/trust/term?${q}&`);
-    t.ui = ({ cover }) => { if (cover === "detached") end(true); else setLost(cover === "lost"); };
-    t.show(box.current);
-    if (!touch) t.focus();
     history.pushState({ ...history.state, atcDialog: id }, "");
     const back = () => history.state?.atcDialog !== id && end(false);
     const esc = (e) => {
-      if (e.key !== "Escape" || box.current?.contains(e.target)) return;
+      if (e.key !== "Escape" || e.target.closest?.(".trustterm")) return;
       e.stopImmediatePropagation();
       end(false);
     };
@@ -2854,13 +2849,38 @@ function TrustDialog({ d: { id, trust: { dir, host }, done }, onGone }) {
     return () => {
       removeEventListener("popstate", back);
       removeEventListener("keydown", esc, true);
-      t.dispose();
     };
+  }, []);
+  return html`
+    <div class="nsveil trustveil" ref=${box} onKeyDown=${(e) => e.stopPropagation()}>
+      <div class="nsdlg" role="dialog" aria-modal="true" aria-label="Trust this folder?">
+        ${folder ? html`<${TrustPrompt} dir=${folder} host=${host} end=${end} />` : html`
+          <div class="dh"><b>Trust every agent, or one?</b></div>
+          <div class="db">
+            <p class="trustwhy">Claude Code asks once for a folder, and a yes covers everything under it. <b class="mono">${agent ? `@${agent}` : tilde(dir)}</b> lives in <b class="mono">${tilde(parent)}</b>, so one yes there can do for all your agents.</p>
+            <button type="button" class="trustpick" onClick=${() => setFolder(parent)} ref=${touch ? null : focusOnMount}><b>All agents in ${tilde(parent)}</b>
+              <span>Every agent there now, and any added later, can read, edit and run what is in its folder without Claude Code asking again. So can anything that can add a folder there, such as a folder sync.</span></button>
+            <button type="button" class="trustpick" onClick=${() => setFolder(dir)}><b>Only ${agent ? `@${agent}` : tilde(dir)}</b>
+              <span>Just <span class="mono">${tilde(dir)}</span>. The next agent asks for itself.</span></button>
+          </div>
+          <div class="df"><span class="sum"></span><button type="button" class="btn" onClick=${() => end(false)}>Not now</button></div>`}
+      </div>
+    </div>`;
+}
+
+function TrustPrompt({ dir, host, end }) {
+  const box = useRef(), term = useRef();
+  const [lost, setLost] = useState(false);
+  useEffect(() => {
+    const q = new URLSearchParams({ dir, id: Math.random().toString(36).slice(2, 4), ...(host ? { host } : {}) });
+    const t = term.current = makeDock(`trust-${q.get("id")}`, `/api/trust/term?${q}&`);
+    t.ui = ({ cover }) => { if (cover === "detached") end(true); else setLost(cover === "lost"); };
+    t.show(box.current);
+    if (!touch) t.focus();
+    return () => t.dispose();
   }, []);
   const key = (seq) => { term.current?.send(seq); if (!touch) term.current?.focus(); };
   return html`
-    <div class="nsveil trustveil" onKeyDown=${(e) => e.stopPropagation()}>
-      <div class="nsdlg" role="dialog" aria-modal="true" aria-label="Trust this folder?">
         <div class="dh"><b>Trust this folder?</b></div>
         <div class="db">
           <p class="trustwhy">Claude Code asks this once for each folder, and you have to answer it yourself. Below is its own prompt for <b class="mono">${tilde(dir)}</b>${host ? ` on ${host}` : ""}, not atc's. A yes lets its sessions read, edit and run what is in this folder and everything under it, from now on. The session you asked for starts right after, with its first message.</p>
@@ -2871,9 +2891,7 @@ function TrustDialog({ d: { id, trust: { dir, host }, done }, onGone }) {
           <span class="trustkeys" onPointerDown=${(e) => e.preventDefault()}>${TRUST_KEYS.map(([label, seq]) => html`<button type="button" class="btn" onClick=${() => key(seq)}>${label}</button>`)}</span>
           <span class="sum"></span>
           <button type="button" class="btn" onClick=${() => end(false)}>Not now</button>
-        </div>
-      </div>
-    </div>`;
+        </div>`;
 }
 
 const untrustedBack = (dir) => `Claude Code doesn't trust ${tilde(dir)}, so nothing started.`;
@@ -2882,12 +2900,13 @@ async function startTrusting(host, start) {
   try {
     return await start();
   } catch (e) {
-    if (!e.untrusted) throw e;
-    if (!(await ask({ trust: { dir: e.untrusted, host } }))) throw new Error(untrustedBack(e.untrusted));
+    const u = e.untrusted;
+    if (!u) throw e;
+    if (!(await ask({ trust: { ...u, host: host || u.host } }))) throw new Error(untrustedBack(u.dir));
     try {
       return await start();
     } catch (again) {
-      throw again.untrusted ? new Error(untrustedBack(again.untrusted)) : again;
+      throw again.untrusted ? new Error(untrustedBack(u.dir)) : again;
     }
   }
 }
@@ -4780,6 +4799,22 @@ function usePastSession(id, known, remember) {
   return !!id && !known && !asked[id];
 }
 
+const askAgentTrust = async (a, say, reload) => {
+  const { dir, parent } = a.trust;
+  const answered = await ask({ trust: { dir, parent, agent: a.name, host: a.host } });
+  await reload();
+  if (answered) {
+    const q = new URLSearchParams({ dir, host: a.host || "" });
+    const r = await api(`/api/trust?${q}`).catch(() => null);
+    say(r?.state === "trusted" ? `@${a.name} is trusted now${a.every ? " and wakes on its schedule" : ""}.` : `Not trusted. @${a.name} stays stopped.`);
+  }
+};
+
+function TrustRow({ a, say, reload }) {
+  if (a.trust.state === "home") return html`<span class="l trustneed">Can't start: its folder is your home folder</span>`;
+  return html`<span class="l trustneed"><b>Needs trust</b><button type="button" class="kb" onClick=${(e) => { e.preventDefault(); e.stopPropagation(); askAgentTrust(a, say, reload); }}>Decide</button></span>`;
+}
+
 function AgentsPage({ name, agents, live, past, remember, say, reload, panes, togglePane }) {
   useNow(30000);
   const wide = useWide();
@@ -4822,8 +4857,9 @@ function AgentsPage({ name, agents, live, past, remember, say, reload, panes, to
               <${AgentMark} a=${a} /><b>${a.name === "assistant" ? "Assistant" : `@${a.name}`}${x?.parked && html`<span class="pz">parked</span>`}</b>
               <span class="ago">${a.last ? ago({ updated: a.last }) : ""}</span>
               <span class="k ${keeps ? "" : "none"}">${a.error ? "Can't start: see why" : keeps || "Keeps nothing"}</span>
+              ${a.trust && html`<${TrustRow} a=${a} say=${say} reload=${reload} />`}
               ${oneLine(x?.summary?.status || x?.lastReply) && html`<span class="l">${oneLine(x?.summary?.status || x?.lastReply)}</span>`}
-              <span class="l wk">wakes ${a.every ? `every ${a.every}` : agentWakes(a)}${a.next ? `, next ${soon(a.next)}` : ""}</span></a>`; })}
+              <span class="l wk">${a.trust && a.every ? "waiting for trust" : `wakes ${a.every ? `every ${a.every}` : agentWakes(a)}${a.next ? `, next ${soon(a.next)}` : ""}`}</span></a>`; })}
         </div>
       </aside>
       ${run ? html`<section class="agv"><${Session} key=${run.sessionId} s=${run} say=${say} live=${live} panes=${panes} togglePane=${togglePane} back=${() => (location.hash = AGENTS_ROUTE)} /></section>`
@@ -4842,13 +4878,14 @@ function AgentDetail({ a, live, say, reload, sheet, onClose }) {
     try { const r = await fn(); done && done(r); reload(); } catch (e) { say(e.message); }
     setBusy(false);
   };
-  const conv = x || a.sessionId ? () => { onClose?.(); go(x ? keyOf(x) : a.sessionId); } : act(() => agentApi(a.name, "message"), (r) => { onClose?.(); go(r.id); });
+  const conv = x || a.sessionId ? () => { onClose?.(); go(x ? keyOf(x) : a.sessionId); } : act(() => startTrusting(a.host, () => agentApi(a.name, "message")), (r) => { onClose?.(); go(r.id); });
   const keeps = agentKeeps(a);
   const said = oneLine(x?.summary?.status || x?.lastReply);
   const rule = a.rule && `${spanOf(a.rule.Quiet)} quiet past ${ktok(a.rule.Small)} tokens, or ${spanOf(a.rule.CapQuiet)} quiet past ${ktok(a.rule.Cap)}`;
-  const status = a.error ? `Can't start: ${a.error}` : x ? `${WORD[x.state] || x.state}${x.parked ? ", parked" : ""}${x.state === "working" && x.activity ? `: ${oneLine(x.activity)}` : ""}` : "No conversation running";
+  const status = a.error ? `Can't start: ${a.error}` : a.trust ? (a.trust.state === "home" ? "Can't start: Claude Code won't run a background session in your home folder. Give it a dir in agent.json." : "Waiting for you: Claude Code doesn't trust its folder yet") : x ? `${WORD[x.state] || x.state}${x.parked ? ", parked" : ""}${x.state === "working" && x.activity ? `: ${oneLine(x.activity)}` : ""}` : "No conversation running";
   const right = html`
-    ${a.prompt && x && html`<button class="btn" disabled=${busy || x.state === "working"} title=${a.prompt} onClick=${act(() => agentApi(a.name, "message"), () => say(`Woke ${title}.`))}>Wake now</button>`}
+    ${a.trust?.state === "untrusted" && html`<button class="btn primary" onClick=${() => askAgentTrust(a, say, reload)}>Trust its folder</button>`}
+    ${a.prompt && x && html`<button class="btn" disabled=${busy || x.state === "working"} title=${a.prompt} onClick=${act(() => startTrusting(a.host, () => agentApi(a.name, "message")), () => say(`Woke ${title}.`))}>Wake now</button>`}
     ${x && html`<button class="btn" disabled=${busy} onClick=${act(() => api(`/api/sessions/${x.sessionId}`, { method: "PATCH", body: { parked: !x.parked } }), () => say(x.parked ? `Unparked ${title}.` : `Parked ${title}.`))}>${x.parked ? "Unpark" : "Park"}</button>`}
     ${x && x.state !== "past" && html`<button class="btn" disabled=${busy || x.state === "working"} onClick=${act(() => agentApi(a.name, "reset"), () => say(`${title} is starting over.`))}>Start over</button>`}
     ${a.talk && html`<button class="btn" disabled=${busy} onClick=${() => { onClose?.(); callAgent(a.name, say); }}>Call</button>`}

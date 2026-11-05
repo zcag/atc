@@ -94,6 +94,22 @@ answers 202 at once, so a webhook never times out and retries. Any machine takes
 to the agent's `host`. A Grafana webhook contact point with that URL and the token as its
 Authorization header is all it takes; Grafana's grouping and repeat interval are the throttle.
 
+### Trusting its folder
+
+Claude Code won't start in a folder it doesn't trust, and an agent's folder is no exception, so a new
+agent can't wake until you say yes. atc can't say it for you, and with nobody at the screen it can't
+ask, so it doesn't fail quietly: the first refused wake-up pushes to your phone once, the agent's row
+and details say it needs trust, and the schedule waits (no `check`, no retry) until you decide. A
+`from=` webhook gets a 409 instead of losing its message. `atc doctor` lists these agents.
+
+**Decide** on the row, **Trust its folder** in its details, or just starting it or `atc send @name`
+in a terminal all show Claude Code's own prompt, which you answer yourself. A yes covers a folder and
+everything under it, so you are offered the folder of all agents (`agents.d`, or `ATC_AGENTS`) as one
+decision instead of one per agent. That means every agent there now and any added later can read,
+edit and run what is in its folder with no further question, and so can anything that can add a
+folder there: think twice if `ATC_AGENTS` is a folder others sync into. An agent with its own `dir`
+outside that folder asks for that one.
+
 ### Parking
 
 A parked agent is out of the session list (its row stays in the Agents tab) and sends no pushes. It

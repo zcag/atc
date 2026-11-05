@@ -65,10 +65,12 @@ type Env struct {
 	Devices []string
 	Peers   []Peer
 	Engines []Engine
+	Agents  []AgentFolder
 }
 
 type Peer struct{ Name, URL, Token string }
 type Engine struct{ Name, URL string }
+type AgentFolder struct{ Name, Dir string }
 
 type Need struct {
 	ID     string `json:"id"`

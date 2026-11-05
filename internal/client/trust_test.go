@@ -11,14 +11,14 @@ import (
 
 func TestStartReportsTheUntrustedFolder(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set(claude.UntrustedHeader, "/a%20b")
+		w.Header().Set(claude.UntrustedHeader, "dir=%2Fa+b&parent=%2Fa")
 		http.Error(w, "not trusted", http.StatusConflict)
 	}))
 	defer ts.Close()
 	c := &Client{URL: ts.URL, http: ts.Client()}
 	_, err := c.StartOn("other", "/a b", "", "", false)
 	var u *Untrusted
-	if !errors.As(err, &u) || u.Dir != "/a b" || u.Host != "other" || u.Msg != "not trusted" {
+	if !errors.As(err, &u) || u.Dir != "/a b" || u.Parent != "/a" || u.Host != "other" || u.Msg != "not trusted" {
 		t.Fatalf("got %#v", err)
 	}
 }

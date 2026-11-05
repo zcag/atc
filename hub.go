@@ -77,7 +77,7 @@ func hubCmd(args []string) error {
 	effort := fs.String("effort", "medium", "Claude effort")
 	home, _ := os.UserHomeDir()
 	state := fs.String("state", filepath.Join(home, ".local/state/atc/hub"), "where the session id and handover notes live")
-	dir := fs.String("dir", filepath.Join(home, ".local/share/atc/assistant"), "the folder a new session starts in")
+	dir := fs.String("dir", server.DefaultAssistDir(), "the folder a new session starts in")
 	guestState := fs.String("guest-state", filepath.Join(home, ".local/state/atc/guests"), "the guests' conversation's session id and handover notes")
 	d := startover.Default
 	quiet := fs.Duration("quiet", d.Quiet, "")
@@ -158,6 +158,9 @@ func atcNews() func(bool) string {
 	c := client.Load()
 	var seq int64
 	return func(full bool) string {
+		if c.Token == "" {
+			c = client.Load()
+		}
 		text, next, err := c.Feed(seq, full)
 		if err != nil {
 			log.Printf("hub: atc feed: %v", err)

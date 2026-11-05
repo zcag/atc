@@ -95,7 +95,7 @@ func (c *Client) Pairing(url string) (text string, err error) {
 	return out.Payload, err
 }
 
-type Untrusted struct{ Host, Dir, Msg string }
+type Untrusted struct{ Host, Dir, Parent, Msg string }
 
 func (u *Untrusted) Error() string { return u.Msg }
 
@@ -127,8 +127,8 @@ func (c *Client) do(method, path string, body, out any) error {
 	defer res.Body.Close()
 	if res.StatusCode >= 300 {
 		msg, _ := io.ReadAll(res.Body)
-		if d, err := url.PathUnescape(res.Header.Get(claude.UntrustedHeader)); err == nil && d != "" {
-			return &Untrusted{Dir: d, Msg: strings.TrimSpace(string(msg))}
+		if q, err := url.ParseQuery(res.Header.Get(claude.UntrustedHeader)); err == nil && q.Get("dir") != "" {
+			return &Untrusted{Host: q.Get("host"), Dir: q.Get("dir"), Parent: q.Get("parent"), Msg: strings.TrimSpace(string(msg))}
 		}
 		return fmt.Errorf("%s: %s", res.Status, strings.TrimSpace(string(msg)))
 	}
@@ -205,7 +205,7 @@ func (c *Client) Begin(host string, req map[string]any) (string, error) {
 	}
 	err := c.do("POST", path, req, &r)
 	var u *Untrusted
-	if errors.As(err, &u) {
+	if errors.As(err, &u) && u.Host == "" {
 		u.Host = host
 	}
 	return r.ID, err

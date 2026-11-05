@@ -151,6 +151,10 @@ func (s *Server) nextWake(name string) time.Time {
 }
 
 func (s *Server) tick(a Agent) {
+	if s.waitingOnTrust(a) {
+		log.Printf("agent %s: skip, Claude Code does not trust %s yet", a.Name, a.dir())
+		return
+	}
 	ctx := context.Background()
 	lctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	list, err := s.M.Live(lctx)
@@ -170,6 +174,7 @@ func (s *Server) tick(a Agent) {
 	}
 	if _, err := s.wakeAgent(ctx, a, "[wake-up from your schedule, every "+a.Every+"]\n"+msg); err != nil {
 		log.Printf("agent %s: wake-up: %v", a.Name, err)
+		s.tellUntrusted(a, err)
 	}
 	s.refresh()
 }

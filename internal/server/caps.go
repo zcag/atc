@@ -62,6 +62,9 @@ func (s *Server) capsEnv(f settings.File) caps.Env {
 	for _, e := range s.Engines {
 		env.Engines = append(env.Engines, caps.Engine{Name: e.Name, URL: e.URL})
 	}
+	for _, a := range s.localAgents() {
+		env.Agents = append(env.Agents, caps.AgentFolder{Name: a.Name, Dir: a.dir()})
+	}
 	if s.Push != nil {
 		for _, d := range s.Push.Devices() {
 			env.Devices = append(env.Devices, d.Endpoint)
@@ -118,6 +121,7 @@ func CapsAlone(ctx context.Context, set *settings.Settings, host, version, bin, 
 	s := &Server{Host: host, Version: version, Settings: set, aloneAt: self, M: &sessions.Manager{CLI: claude.CLI{Bin: bin}}}
 	s.Peers, _ = LoadPeers(filepath.Join(set.Dir, "peers.json"))
 	s.Engines, _ = LoadEngines(filepath.Join(set.Dir, "engines.json"))
+	s.AgentsDir = cmp.Or(os.Getenv("ATC_AGENTS"), filepath.Join(set.Dir, "agents.d"))
 	if _, err := os.Stat(filepath.Join(set.Dir, "devices.json")); err == nil {
 		s.Push, _ = push.Open(filepath.Join(set.Dir, "devices.json"))
 	}

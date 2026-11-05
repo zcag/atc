@@ -22,6 +22,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/zcag/atc/internal/claude"
 )
 
 func command(ctx context.Context, bin string, args ...string) (string, error) {
@@ -515,4 +517,21 @@ func checkWhatsApp(ctx context.Context, env Env) Result {
 		return Result{Broken, "The gateway's WhatsApp session is " + st.Status + ", not linked and ready."}
 	}
 	return Result{OK, "The gateway's session is ready."}
+}
+
+func checkAgentFolders(_ context.Context, env Env) Result {
+	if len(env.Agents) == 0 {
+		return Result{Missing, "No agents on this machine."}
+	}
+	trusted := claude.Trust()
+	var bad []string
+	for _, a := range env.Agents {
+		if !trusted(a.Dir) {
+			bad = append(bad, "@"+a.Name)
+		}
+	}
+	if len(bad) > 0 {
+		return Result{Broken, "Not trusted by Claude Code yet, so they can't wake: " + strings.Join(bad, ", ") + "."}
+	}
+	return Result{OK, fmt.Sprintf("All %d trusted by Claude Code.", len(env.Agents))}
 }

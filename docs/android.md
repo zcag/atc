@@ -78,7 +78,7 @@ kept current by a silent push (and a refresh button); tap one to open it. Its mi
 
 Choose atc under Settings → Apps → Default apps → Digital assistant app. Holding the side key then
 opens the assistant screen; on a call, it opens the call. Its assistant line opens the session named
-`assistant` in `ATC_ASSIST_DIR` (default: your home folder), starting or resuming it as needed.
+`assistant` in `ATC_ASSIST_DIR` (default: `~/.local/share/atc/assistant`), starting or resuming it as needed.
 
 The assistant can also put a page straight on the phone's screen with `atc show <file> --open` (on a
 call, say), or any session's or agent's page at a section with `atc open @reports/summary#intro`,
