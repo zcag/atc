@@ -124,7 +124,7 @@ These are installed by the user and keep their own licences: Claude Code (Anthro
 ## Tools in the repo that fetch other work
 
 `tools/persona/` builds a call character from a portrait. It holds scripts and JSON prompts, no model
-weights, images or characters. Releases carry two characters made with it, the professor and the woman,
+weights, images or characters. Releases carry three characters made with it, the professor, the woman and lanky,
 as a separate download (`atc app update`), and they depict no real person. A character you build with it
 carries the terms of what you built it with, so check them before you publish one:
 LivePortrait, FLUX.2 klein through mflux, MediaPipe's landmark and segmentation models, Meta's SAM,
