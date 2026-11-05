@@ -1,7 +1,7 @@
 # atc
 
-**Talk to your Claude Code on the phone.** Call an assistant that knows what every session on all your machines is doing, tell it what
-to do, cut it off mid-sentence, and let it ring you when something can't wait.
+**A control center for Claude Code across all your machines.** Sessions see and direct each other, and an assistant you talk to like a
+person on the phone keeps track of it all and calls you when something can't wait.
 
 Past a few parallel sessions, the hard part stops being the work. Which one is waiting on you? What did that one do while you were away?
 Which machine was it on? Ask out loud, or see it at a glance on atc's board, at your desk and on your phone. Agents look after
