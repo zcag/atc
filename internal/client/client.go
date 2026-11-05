@@ -363,12 +363,13 @@ func (c *Client) Transcript(sid string) (p history.Page, err error) {
 	return p, c.do("GET", "/api/sessions/"+sid+"/transcript", nil, &p)
 }
 
-func (c *Client) Turns(sid string) (turns []history.Turn, err error) {
+func (c *Client) Turns(sid string) (turns []history.Turn, waiting []history.Waiting, err error) {
 	var r struct {
-		Turns []history.Turn `json:"turns"`
+		Turns   []history.Turn    `json:"turns"`
+		Waiting []history.Waiting `json:"waiting"`
 	}
 	err = c.do("GET", "/api/sessions/"+url.PathEscape(sid)+"/turns", nil, &r)
-	return r.Turns, err
+	return r.Turns, r.Waiting, err
 }
 
 type Summary struct {

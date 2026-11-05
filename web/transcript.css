@@ -49,7 +49,7 @@
 .tx .lead-at { font-size: var(--fs-small); color: var(--dim); font-family: var(--mono); margin-bottom: 4px; }
 .tx .lead { margin-bottom: var(--s5); padding: var(--s3) var(--s4); background: color-mix(in srgb, var(--ink) 11%, var(--strip)); border-radius: var(--r-sm); }
 .tx .lead p { margin: 0; font-family: var(--sans); font-variation-settings: var(--v-you); font-size: var(--fs-title); line-height: 1.5; font-weight: 500; color: var(--ink); text-wrap: pretty; white-space: pre-wrap; overflow-wrap: anywhere; }
-.tx .lead p.clamp { display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; }
+.tx .lead p.clamp, .tx .queued .qt.clamp { display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; }
 .tx .lead .more { margin-top: 4px; padding: 0; height: 24px; }
 .tx .lead .attl { display: block; margin-top: 6px; font-size: var(--fs-small); color: var(--faint); font-family: var(--mono); }
 .tx .lead .imgs { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }

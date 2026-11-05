@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -107,6 +108,43 @@ func TestMidTurnMessagesBelongToTheTurn(t *testing.T) {
 	if len(turns) != 1 || len(turns[0].Notes) != 1 || turns[0].Notes[0] != "also check the tests" || turns[0].Reply != "Done, tests too." {
 		t.Fatalf("a message sent mid-turn should stay in its turn: %+v", turns)
 	}
+}
+
+func TestWaitingFollowsTheQueue(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "s.jsonl")
+	f, _ := os.Create(path)
+	defer f.Close()
+	x := New(dir)
+	step := func(want []string, lines ...string) {
+		t.Helper()
+		for _, l := range lines {
+			f.WriteString(l + "\n")
+		}
+		got, err := x.Waiting(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		texts := []string{}
+		for _, w := range got {
+			texts = append(texts, w.Text)
+		}
+		if !slices.Equal(texts, want) {
+			t.Fatalf("waiting = %q, want %q", texts, want)
+		}
+	}
+	op := func(kind, content string) string {
+		b, _ := json.Marshal(map[string]string{"type": "queue-operation", "operation": kind, "content": content, "timestamp": "2026-10-01T10:00:00Z"})
+		return string(b)
+	}
+	notice := "<task-notification><summary>done</summary></task-notification>"
+	step([]string{"one"}, op("enqueue", "<pasted_content id=\"1\">\none\n</pasted_content>"))
+	step([]string{"one", "two"}, op("enqueue", notice), op("enqueue", "two"))
+	step([]string{"two"}, op("remove", "<pasted_content id=\"1\">\none\n</pasted_content>"))
+	step([]string{"two"}, `{"type":"user","message":{"content":"mentions \"queue-operation\" in passing"}}`)
+	step([]string{}, `{"type":"queue-operation","operation":"dequeue","timestamp":"2026-10-01T10:00:00Z"}`)
+	step([]string{"three"}, op("enqueue", "three"))
+	step([]string{}, `{"type":"system","subtype":"turn_duration","durationMs":1,"timestamp":"2026-10-01T10:00:00Z"}`)
 }
 
 func TestNoticeAfterTheTurnStartsAnother(t *testing.T) {

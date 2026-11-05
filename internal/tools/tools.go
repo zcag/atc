@@ -228,6 +228,7 @@ type transcript struct {
 	Summary  *summary.Summary `json:"summary,omitempty" jsonschema:"its last reply in short"`
 	Turns    []string         `json:"turns,omitempty" jsonschema:"one line per turn, oldest first: when, what the user asked, files changed, tests, commits, pushes, deploys, failures, how long"`
 	Messages string           `json:"messages"`
+	Waiting  []string         `json:"waiting,omitempty" jsonschema:"messages sent mid-turn that it has not read yet; it reads them when its current step ends"`
 	Note     string           `json:"note,omitempty"`
 }
 
@@ -467,8 +468,9 @@ func (t *tools) read(ctx context.Context, _ *mcp.CallToolRequest, in readIn) (*m
 	out := transcript{Title: x.Title, State: x.State, Summary: x.Summary}
 	var wg sync.WaitGroup
 	var turns []history.Turn
+	var waiting []history.Waiting
 	var terr error
-	wg.Go(func() { turns, terr = t.c.Turns(x.SessionID) })
+	wg.Go(func() { turns, waiting, terr = t.c.Turns(x.SessionID) })
 	if out.Summary == nil && x.State != sessions.Working {
 		wg.Go(func() {
 			if r, err := t.c.Summary(x.SessionID, 0, false); err == nil {
@@ -499,6 +501,11 @@ func (t *tools) read(ctx context.Context, _ *mcp.CallToolRequest, in readIn) (*m
 		n = 8
 	}
 	out.Messages = render(p.Messages, n)
+	if x.State == sessions.Working || x.State == sessions.NeedsYou {
+		for _, w := range waiting {
+			out.Waiting = append(out.Waiting, clip(w.Text, 2000))
+		}
+	}
 	return nil, out, nil
 }
 
@@ -557,7 +564,7 @@ func oneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
 func render(msgs []history.Message, n int) string {
 	var talk []int
 	for i, m := range msgs {
-		if m.Role == "user" || m.Role == "assistant" {
+		if m.Role == "user" || m.Role == "note" || m.Role == "assistant" {
 			talk = append(talk, i)
 		}
 	}
@@ -580,6 +587,9 @@ func render(msgs []history.Message, n int) string {
 		case "user":
 			flush()
 			fmt.Fprintf(&b, "USER: %s\n", clip(m.Text, 2000))
+		case "note":
+			flush()
+			fmt.Fprintf(&b, "USER (mid-turn): %s\n", clip(m.Text, 2000))
 		case "assistant":
 			flush()
 			fmt.Fprintf(&b, "CLAUDE: %s\n", clip(m.Text, 4000))
@@ -625,6 +635,8 @@ func (t *tools) send(ctx context.Context, _ *mcp.CallToolRequest, in sendIn) (*m
 	out := done{Ref: id, Title: x.Title, State: "sent"}
 	if resumed {
 		out.Note = "resumed it first"
+	} else if x.State == sessions.Working {
+		out.Note = "it is mid-turn: it reads this when its current step ends, and read lists it under waiting until then"
 	}
 	return nil, out, nil
 }

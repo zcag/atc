@@ -72,6 +72,7 @@ type Index struct {
 	Price func(model string, u Usage) float64
 	mu    sync.Mutex
 	turns map[string]*turnCache
+	waits map[string]*waitCache
 	cache map[string]*Transcript
 }
 

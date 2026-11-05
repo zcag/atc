@@ -6089,6 +6089,14 @@ function Queued({ p, edit, cancel, now, undo }) {
     <p class="qt">${unpathed(p.text)}</p>${(p.text.match(UPLOADED) || []).length > 0 && html`<p class="qa">${plural((p.text.match(UPLOADED) || []).length, "attachment")}</p>`}</div>`;
 }
 
+function WaitingMessage({ w }) {
+  const [all, setAll] = useState(false);
+  const long = w.text.length > 600 || w.text.split("\n").length > 8;
+  return html`<div class="queued" role="status"><div class="qh"><b>Waiting</b><span>sent ${txClock(w.at)}, Claude reads it when its current step ends</span></div>
+    <p class=${long && !all ? "qt clamp" : "qt"}>${w.text}</p>
+    ${long && html`<button class="kb more" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}</div>`;
+}
+
 function SentState({ p, host, retry, edit }) {
   if (p.state === "sending") return html`<div class="mst" role="status"><span class="slow">Sending to ${host || "the host"}</span></div>`;
   if (p.state === "failed") return html`<div class="mst failed" role="alert"><b>Not sent.</b> <span>${p.err}</span><span class="acts"><button class="btn" onClick=${retry}>Retry</button><button class="btn" onClick=${edit}>Edit</button></span></div>`;
@@ -6129,6 +6137,8 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   const working = s.state === "working" && !s.turnDone;
   const asking = s.state === "needs-you" && s.asks?.length > 0 ? s.asks[0] : null;
   const turns = idx || [];
+  const [serverWaiting, setServerWaiting] = useState([]);
+  const waiting = s.state === "working" || s.state === "needs-you" ? serverWaiting : [];
   const stream = useHubStream(s, () => loadIdx());
   const setContents = (v) => { setContentsRaw(v); txStore.set("contents", v); };
 
@@ -6136,6 +6146,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     try {
       const r = await api(`/api/sessions/${sid}/turns`);
       setIdx(r.turns || []);
+      setServerWaiting(r.waiting || []);
       setErr(null);
     } catch (e) { setErr(e.message); setIdx((x) => x || []); }
   };
@@ -6154,7 +6165,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
 
   useEffect(() => {
     landed.current = false; mark.current = undefined;
-    setIdx(null); setBodies({}); setOpened(new Set()); setExpanded(new Set()); setPendingRaw(pendingOf(sid)); setQuotes([]);
+    setIdx(null); setServerWaiting([]); setBodies({}); setOpened(new Set()); setExpanded(new Set()); setPendingRaw(pendingOf(sid)); setQuotes([]);
     setDraftRaw(SYNC.drafts?.[sid]?.text || "");
     loadIdx();
   }, [sid]);
@@ -6188,12 +6199,12 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     if (!pending.length || !idx) return;
     const head = (p) => plain(unpathed(p.text)).slice(0, 24);
     const said = (t) => plain(cleanPrompt(t.prompt));
-    const there = (p) => turns.some((t) => (t.at && new Date(t.at) >= p.at - 60000 && (head(p) ? said(t).startsWith(head(p)) : t.images > 0 || /\[Image #\d+\]/.test(t.prompt))) || (head(p) && (t.notes || []).some((n) => plain(n).startsWith(head(p)))));
+    const there = (p) => (head(p) && waiting.some((w) => plain(w.text).startsWith(head(p)))) || turns.some((t) => (t.at && new Date(t.at) >= p.at - 60000 && (head(p) ? said(t).startsWith(head(p)) : t.images > 0 || /\[Image #\d+\]/.test(t.prompt))) || (head(p) && (t.notes || []).some((n) => plain(n).startsWith(head(p)))));
     const passed = (p) => turns.some((t) => t.at && new Date(t.at) > p.at + 60000);
     const stale = (p) => passed(p) || (!working && Date.now() - p.at > 5 * 60e3);
     const gone = (p) => (p.state === "sending" || p.state === "sent") && (there(p) || (p.state === "sent" && stale(p)));
     if (pending.some(gone)) setPending((ps) => ps.filter((p) => !gone(p)));
-  }, [idx, pending]);
+  }, [idx, pending, waiting]);
 
   useEffect(() => {
     const f = TX_FACES[prefs.face] || TX_FACES.text, st = box.current?.parentElement?.style;
@@ -6413,6 +6424,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   if (asking) rows.push({ k: "ask", key: `q${asking.id}`, at: s.updated, a: asking });
   const di = markMs ? rows.findIndex((r) => r.at && r.k !== "live" && msOf(r.at) > markMs) : -1;
   if (di > 0) rows.splice(di, 0, { k: "since", key: "since", at: mark.current, after: rows.slice(di) });
+  waiting.forEach((w, j) => rows.push({ k: "waiting", key: `w${w.at}:${j}`, w }));
   queued.forEach((p) => rows.push({ k: "queued", key: `qd${p.id}`, p }));
 
   const toc = [];
@@ -6472,6 +6484,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       case "stream": return html`${HUB_CHANNEL[r.st.channel] && html`<p class="evt">${HUB_CHANNEL[r.st.channel]}</p>`}<div class="prose live" dangerouslySetInnerHTML=${{ __html: quietCitations(md(r.st.text)) + '<span class="caret"></span>' }}></div>`;
       case "live": return html`<${LiveRow} s=${s} step=${running} since=${lastAt(lastBody) || last?.end} steps=${last?.steps || 0} />`;
       case "ask": return html`<${Ask} s=${s} a=${r.a} keyRef=${askKey} onType=${() => focusInput.current()} />`;
+      case "waiting": return html`<${WaitingMessage} w=${r.w} />`;
       case "queued": return html`<${Queued} p=${r.p} now=${() => deliver(r.p)}
         edit=${() => { setPending((ps) => ps.filter((x) => x.id !== r.p.id)); setDraft((d) => [d, unpathed(r.p.text)].filter(Boolean).join("\n")); focusInput.current(); }}
         cancel=${() => { setPending((ps) => ps.map((x) => (x.id === r.p.id ? { ...x, state: "cancelled" } : x))); setTimeout(() => setPending((ps) => ps.filter((x) => !(x.id === r.p.id && x.state === "cancelled"))), 8000); }}

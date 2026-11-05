@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -201,6 +202,96 @@ func (x *Index) Turns(path string) ([]Turn, int64, error) {
 	x.turns[path] = &turnCache{size: end, mod: st.ModTime(), turns: turns}
 	x.mu.Unlock()
 	return turns, end, nil
+}
+
+// Waiting is a message Claude Code holds in its queue: it logs one as a message only once it reads
+// it, when the running step ends, so until then only its queue-operation records show it.
+type Waiting struct {
+	Text string    `json:"text"`
+	At   time.Time `json:"at"`
+	raw  string
+}
+
+type waitCache struct {
+	off   int64
+	items []Waiting
+}
+
+func (x *Index) Waiting(path string) ([]Waiting, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	x.mu.Lock()
+	c := x.waits[path]
+	x.mu.Unlock()
+	if c != nil && c.off == st.Size() {
+		return c.items, nil
+	}
+	if c == nil || st.Size() < c.off {
+		c = &waitCache{}
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	f.Seek(c.off, io.SeekStart)
+	next := &waitCache{off: c.off, items: slices.Clone(c.items)}
+	r := bufio.NewReaderSize(f, 1<<20)
+	for {
+		line, err := r.ReadBytes('\n')
+		if err != nil {
+			break
+		}
+		next.off += int64(len(line))
+		next.items = applyQueue(next.items, line)
+	}
+	x.mu.Lock()
+	if x.waits == nil {
+		x.waits = map[string]*waitCache{}
+	}
+	x.waits[path] = next
+	x.mu.Unlock()
+	return next.items, nil
+}
+
+// applyQueue tracks only messages, not task notices: those queue too, but messages are taken ahead of
+// them, so a dequeue means the oldest message whenever one waits. A turn's end clears whatever a
+// missed record left behind; anything really queued then is read at once.
+func applyQueue(items []Waiting, line []byte) []Waiting {
+	if !bytes.Contains(line, []byte(`"queue-operation"`)) && !bytes.Contains(line, []byte(`"turn_duration"`)) {
+		return items
+	}
+	var m struct {
+		Type      string    `json:"type"`
+		Subtype   string    `json:"subtype"`
+		Operation string    `json:"operation"`
+		Content   string    `json:"content"`
+		Timestamp time.Time `json:"timestamp"`
+	}
+	if json.Unmarshal(line, &m) != nil {
+		return items
+	}
+	if m.Type == "system" && m.Subtype == "turn_duration" {
+		return nil
+	}
+	if m.Type != "queue-operation" {
+		return items
+	}
+	switch m.Operation {
+	case "enqueue":
+		if x, ok := queued(m.Content, m.Timestamp); ok && x.Role == "note" {
+			return append(items, Waiting{Text: x.Text, At: m.Timestamp, raw: m.Content})
+		}
+	case "dequeue":
+		if len(items) > 0 {
+			return items[1:]
+		}
+	case "remove":
+		return slices.DeleteFunc(items, func(w Waiting) bool { return w.raw == m.Content })
+	}
+	return items
 }
 
 type Hit struct {

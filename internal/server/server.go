@@ -564,7 +564,8 @@ func (s *Server) turns(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	reply(w, map[string]any{"turns": turns, "size": size})
+	waiting, _ := s.M.Index.Waiting(t.Path)
+	reply(w, map[string]any{"turns": turns, "size": size, "waiting": waiting})
 }
 
 func (s *Server) agent(w http.ResponseWriter, r *http.Request) {
