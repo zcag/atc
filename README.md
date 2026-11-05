@@ -9,7 +9,7 @@ things like your mail, alerts and invoices. It all runs on your own machines, on
 
 <img src="docs/img/call-demo.webp" alt="A recorded call on the real call stack. The phone rings with the reason, Checkout errors jumped to 8% after the last deploy. On the call, June says what happened and is cut off mid-sentence by Wait, was that the only thing in the deploy? She plays a thinking phrase, reads what @ops found and answers. Told to roll it back and have someone find out why, she hands the rollback to one session and starts another on the cause. Asked how many orders were lost, she says about forty and puts the chart on the phone's screen. A panel beside the phone names each thing as it happens.">
 
-*A recorded call on the real call stack, with the transcript and notes beside the phone. The incident and Claude's lines are written for the demo. [Watch it with sound](docs/img/call-demo.mp4).*
+*A recorded call on the real call stack, with the transcript and notes beside the phone. The incident and Claude's lines are written for the demo. [Watch it with sound](#an-assistant-you-talk-to-on-the-phone).*
 
 - **[An assistant you talk to on the phone](#an-assistant-you-talk-to-on-the-phone).** A natural conversation that can run your sessions, your agents and whatever else you connect it to.
 - **[Control of every session](#control-of-every-session).** Dozens running on several machines, and you still know what each one needs and did, from any screen.
@@ -34,6 +34,8 @@ atc is an independent project. It is not affiliated with or endorsed by Anthropi
 
 Call it from the app or a browser, with no phone number needed, or let anything that can't wait ring you. The assistant is one long
 conversation, shared with the atc page and WhatsApp, and it already knows the state of every session and machine when you say hello.
+
+https://github.com/user-attachments/assets/9466a58a-2f55-47ca-9010-11f6ca12b784
 
 **What you can get done on a call**
 
