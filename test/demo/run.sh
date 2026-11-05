@@ -4,6 +4,7 @@
 # second atc as the peer "laptop" (+3), a Chromium of its own for session tabs (+4) and the shop those tabs
 # open (+5). They share the host's network, so every address is set here and nothing falls back to atc's
 # default ports, where a real atc may be running.
+# With DEMO_LINE=real, +2 is left to voice-stack.sh (the real call.py, talk.py and ttsd.py) instead of the scripted line.
 # Runs in its own Linux namespaces: the hostname is devbox, /home holds only /home/you (the temp
 # HOME), so no real path, process or Claude Code state can reach a page. Stopping this script removes it all.
 set -eu
@@ -41,7 +42,7 @@ unshare -Urmu --pid --fork --kill-child --mount-proc /bin/bash -c '
 	p=$2
 	env -i HOME=/home/you DEMO_PEER=http://127.0.0.1:$((p + 3)) python3 .seed.py
 	env -i HOME=/home/laptop python3 .seed.py laptop
-	base="PATH=/home/you/.local/bin ATC_CALL_LINE=http://127.0.0.1:$((p + 2)) ATC_HUB=http://127.0.0.1:$((p + 1)) ATC_URL=http://127.0.0.1:$p"
+	base="PATH=/home/you/.local/bin ATC_CALL_LINE=http://127.0.0.1:$((p + 2)) ATC_HUB=http://127.0.0.1:$((p + 1)) ATC_URL=http://127.0.0.1:$p ATC_CALL_NUMBER=+15550100"
 	if [ -n "$3" ]; then
 		env -i HOME=/home/you /usr/bin/python3 -m http.server --bind 127.0.0.1 --directory .demo-shop $((p + 5)) >/dev/null 2>&1 &
 		env -i HOME=/home/you "$3" --headless=new --no-sandbox --disable-gpu --remote-debugging-address=127.0.0.1 --remote-debugging-port=$((p + 4)) \
@@ -49,11 +50,11 @@ unshare -Urmu --pid --fork --kill-child --mount-proc /bin/bash -c '
 		env -i HOME=/home/you /usr/bin/python3 .local/bin/demo-browser.py http://127.0.0.1:$((p + 4)) http://shop.example:$((p + 5))/
 		base="$base ATC_BROWSER=http://127.0.0.1:$((p + 4))"
 	fi
-	env -i HOME=/home/you $base demo-line 127.0.0.1:$((p + 2)) &
+	[ "$4" = real ] || env -i HOME=/home/you $base demo-line 127.0.0.1:$((p + 2)) &
 	env -i HOME=/home/you /usr/bin/python3 .local/bin/demo-tick.py &
 	env -i HOME=/home/you $base atc hub -addr 127.0.0.1:$((p + 1)) &
 	(cd /home/laptop; exec env -i HOME=/home/laptop PATH=/home/you/.local/bin ATC_URL=http://127.0.0.1:$((p + 3)) ATC_ADDR=127.0.0.1:$((p + 3)) atc serve --no-auth) &
 	exec env -i HOME=/home/you $base ATC_ADDR=127.0.0.1:$p atc serve --no-auth
-' demo "$tmp" "$port" "$chrome" &
+' demo "$tmp" "$port" "$chrome" "${DEMO_LINE:-scripted}" &
 ns=$!
 wait "$ns"

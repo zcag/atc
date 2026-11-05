@@ -36,7 +36,7 @@ atc app ── atc (/api/call/line) ── call.py :8807 ── talk.py ── a
 | `ATC_VOICE_UNITS` | `delta-call delta-tts delta-talk-app` | what deploy.sh installs and restarts; add `delta-talk` for a phone, `delta-higgs` for Higgs |
 | `TALK_MODELS`, `HF_HOME` | `~/.cache/atc/voice`, its `hf` | models and the rendered-phrase cache |
 | `TALK_STATE` | `~/.local/state/atc/voice` | `calls/<talk-time>/`, `calls.jsonl`, `voice.json` |
-| `DELTA_CALL_BRIDGE`, `DELTA_CALL_PORT`, `DELTA_CALL_DIAL_ALLOW`, `ANDROID_SERIAL` | `0`, `8807`, none, adb's pick | the line |
+| `DELTA_CALL_BRIDGE`, `DELTA_CALL_PORT`, `DELTA_CALL_HOST`, `DELTA_CALL_DIAL_ALLOW`, `ANDROID_SERIAL` | `0`, `8807`, every interface, none, adb's pick | the line |
 | `HIGGS_DIR`, `HIGGS_VOICES`, `HIGGS_URL` | under the data dir, `:8841` | Higgs, on a GPU, set up by hand |
 
 ## Adding a language

@@ -189,6 +189,7 @@ def coupons():
         {"label": "After shipping", "description": "The whole order, shipping included."}]}]}
     s.call("AskUserQuestion", args)
     s.live("blocked", reports=HUB, job={"tempo": "blocked", "block": args})
+    (CLAUDE / "demo-move-coupon").write_text(json.dumps({"sid": s.sid, "path": str(s.path)}))
     return s
 
 
@@ -224,6 +225,7 @@ def release():
     s.bash('git commit -am "Release v0.9.0" && git tag v0.9.0', "[main 7ad20e6] Release v0.9.0\n 1 file changed, 7 insertions(+)")
     s.call("Bash", {"command": "git push origin main v0.9.0", "description": "Push the release and its tag"})
     s.live("blocked", reports=HUB, job={"tempo": "blocked", "needs": "approve Bash: git push origin main v0.9.0"})
+    (CLAUDE / "demo-move-release").write_text(json.dumps({"sid": s.sid, "path": str(s.path)}))
     return s
 
 
@@ -468,12 +470,15 @@ def main_box():
 
 
 def main_laptop():
+    (CLAUDE / "demo-tick.json").parent.mkdir(parents=True, exist_ok=True)
     s = Session("iOS build red on main", "/home/laptop/code/shop-ios", "fix/ios-build", ago=900)
     s.user("The iOS build is red on main. Fix it. Report back.")
     s.bash("xcodebuild -scheme Shop -sdk iphonesimulator build 2>&1 | tail -3", "Shop/Checkout/CartView.swift:41:23: error: value of type 'Money' has no member 'cents'\n** BUILD FAILED **", error=True)
     s.edit("Shop/Checkout/CartView.swift", "total.cents", "total.minorUnits")
     s.call("Bash", {"command": "xcodebuild -scheme Shop -sdk iphonesimulator test", "description": "Build and run the iOS tests"}, 8)
     s.live("working", "busy")
+    CLAUDE.mkdir(parents=True, exist_ok=True)
+    (CLAUDE / "demo-move-ios").write_text(json.dumps({"sid": s.sid, "path": str(s.path)}))
     s = Session("Android release notes", "/home/laptop/code/shop-android", ago=4000, model=SONNET)
     s.user("Write the Play Store notes for 3.2 from the merged PRs.")
     s.say("Done, in `fastlane/metadata/en-US/changelogs/320.txt`: faster checkout, coupon codes, and a fix for the blank order screen.")

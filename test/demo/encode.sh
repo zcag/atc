@@ -7,7 +7,7 @@ mkdir -p "$out"
 width() {
 	case "$1" in
 	hero) echo 2400 ;;
-	call | phones) echo 2000 ;;
+	phones) echo 2000 ;;
 	palette | new | backlog | settings) echo 1400 ;;
 	*) echo 1800 ;;
 	esac

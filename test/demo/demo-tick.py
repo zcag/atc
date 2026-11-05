@@ -7,10 +7,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 home = Path(os.environ["HOME"])
-paths = [Path(p) for p in json.loads((home / ".claude/demo-tick.json").read_text())]
 while True:
     now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
-    for p in paths:
+    for p in json.loads((home / ".claude/demo-tick.json").read_text()):
         with open(p, "a") as f:
             f.write(json.dumps({"type": "permission-mode", "permissionMode": "default", "timestamp": now, "uuid": str(uuid.uuid4())}) + "\n")
     time.sleep(4)

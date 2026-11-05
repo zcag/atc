@@ -47,22 +47,32 @@ Android app. On other devices, atc works in the browser. [Android app](docs/andr
 
 ## Talk to them while you're out
 
-Your hands are busy and you want to know how things are going: call. The assistant knows what every session is
-doing, tells you what needs you, and passes your answer on. It works the other way too: a session that
-needs a decision can ring your phone, and when you pick up, the assistant says why and takes your answer back.
+Your hands are busy and you want to know how things are going: call. It isn't dictation read back to you. It's a
+conversation with someone who knows what all your sessions are doing and can act on them while you talk. And it
+calls you: a session that needs a decision can ring your phone, and when you pick up, the assistant says why.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/call-dark.webp">
-  <img src="docs/img/call-light.webp" alt="Three phones showing one call to the assistant. A teal orb while it hears you, with your words appearing; an amber orb while it uses a tool; a violet orb while it speaks, with its answer written out. Under each orb, the sessions on the call and what they are doing.">
-</picture>
+<img src="docs/img/call-demo.webp" alt="One phone call, playing. The phone rings: the release session wants an okay. The assistant speaks first and says why it called. You cut in to ask about the coupon session; it stops, says well, let me see, reads the session and tells you it is stuck on a question. You answer and it passes your words on, then mentions that the iOS build just finished. You ask about the checkout slowdown; it says let me look, gives the gist, and a chart opens on the phone while you keep talking. You tell it to go ahead with the release, it passes on your okay, says it will ring you if CI goes red, and says goodbye. On the phone, an orb moves with the voices and the sessions on the call are listed as they start working.">
+
+[Watch it with sound](docs/img/call-demo.mp4) (74 seconds, download). This is one recorded run of atc's real call stack on its
+default voice: the ringing, the turn-taking, the interruption and the thinking phrases all happened on the line. The
+assistant's words and how long it takes to start them are written for this demo, because no real Claude runs in it. The caller
+is synthetic, and the demo's script opens the chart.
+
+- **It rings you, and says why.** Any session can ask for you. You pick up and it starts talking.
+- **You can talk over it.** It stops, and it knows you cut it off. A quick "mm-hm" doesn't throw it off.
+- **It doesn't leave you in silence.** "Let me see" while it thinks, "looking that up online" before it goes to look.
+- **It keeps up.** What changes while you talk reaches it, and it decides whether that's worth mentioning now or can wait.
+- **It gets things done.** It tells a session what you said in your words, passes on your yes so the session doesn't ask
+  you again, and starts new sessions for anything long, then tells you what came of them.
+- **What's hard to say goes to your screen.** A table or chart opens on your phone while you keep talking.
 
 Runs on your own machine on 2 CPU cores. No phone number needed; the app and the browser can both call. [Calls](docs/calls.md)
 
 ## Say what you want, not which session
 
 Instead of finding the right tab, tell one assistant: "find out why checkout is slow and fix the build on the
-laptop." It starts the sessions, follows them, and tells you what came of it. Type to it, call it or message it
-on WhatsApp, and it's the same conversation.
+laptop." It starts the sessions, follows them, and tells you what came of it. Hang up and it keeps
+going. Type to it, call it or message it on WhatsApp, and it's the same conversation.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/assistant-dark.webp">

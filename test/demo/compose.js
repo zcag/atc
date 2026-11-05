@@ -34,7 +34,6 @@ async (page, { raw = "http://127.0.0.1:7440/raw", out = "/tmp/atc-final", modes 
 
   const layouts = {
     hero: { w: 1960, h: 1220, body: (r) => win(`${r}/desk.png`, 150, 60, 1760) + ph(`${r}/hold.png`, 44, 610, 268) },
-    call: row(["call-hearing", "call-tool", "call-speaking"], 56, 390, 46),
     assistant: solo("assistant"),
     board: solo("board", 1560, 1040),
     transcript: solo("transcript", 1560, 1040),

@@ -51,22 +51,6 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
       await to(p, "#/hold");
       return [[p, "hold"]];
     },
-    // Three moments of one phone call: the orb changes with what the assistant is doing.
-    async call(mode) {
-      const p = await open(mode, { w: 412, h: 860, phone: true });
-      await to(p, "#/hold", 800);
-      await p.locator(".dial").click();
-      await until(p, /hearing/);
-      await p.waitForTimeout(2600);
-      await p.screenshot({ path: `${out}/${mode}/call-hearing.png` });
-      await until(p, /working|thinking/);
-      await p.waitForTimeout(1400);
-      await p.screenshot({ path: `${out}/${mode}/call-tool.png` });
-      await until(p, /speaking/);
-      await p.waitForTimeout(3200);
-      await p.screenshot({ path: `${out}/${mode}/call-speaking.png` });
-      return [[p, null]];
-    },
     async assistant(mode) {
       const p = await open(mode);
       await to(p, "#/assist", 2200);
