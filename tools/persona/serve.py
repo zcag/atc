@@ -1,5 +1,6 @@
 import http.server, os, sys
 root, frames = sys.argv[1], sys.argv[2]
+port = int(sys.argv[3]) if len(sys.argv) > 3 else 8932
 os.makedirs(frames, exist_ok=True)
 
 class H(http.server.SimpleHTTPRequestHandler):
@@ -13,4 +14,4 @@ class H(http.server.SimpleHTTPRequestHandler):
         self.send_response(204); self.end_headers()
     def log_message(self, *a): pass
 
-http.server.ThreadingHTTPServer(("127.0.0.1", 8932), H).serve_forever()
+http.server.ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()

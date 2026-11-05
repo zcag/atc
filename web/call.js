@@ -1,4 +1,5 @@
 const OUT_RATE = 24000;
+const SPEECH_GAIN = 2.5;
 const FACE = { state: "listening", hearing: "", you: "", said: "", tool: "", line: "assistant", title: "", person: "", moving: false, knock: "", lang: "" };
 const WHY = { busy: "the line is busy", nobody: "nobody is there to answer", gone: "the call is over", lost: "connection lost", hangup: "hung up" };
 
@@ -10,12 +11,12 @@ const set = (p) => { st = { ...st, ...p }; emit(); };
 
 let ctx, mic, up, down, ears, mouth, low, high, ws, live = false, lostAt = 0, closed = true, stats = {}, timers = [], lock = null, sink = null;
 
-const rms = (an, buf) => {
+const rms = (an, buf, gain = 6) => {
   if (!an) return 0;
   an.getFloatTimeDomainData(buf);
   let s = 0;
   for (const v of buf) s += v * v;
-  return Math.min(1, Math.sqrt(s / buf.length) * 6);
+  return Math.min(1, Math.sqrt(s / buf.length) * gain);
 };
 const scratch = new Float32Array(512);
 
@@ -25,7 +26,7 @@ export const Call = {
   live: () => st.phase === "calling" || st.phase === "active",
   subscribe(f) { subs.add(f); return () => subs.delete(f); },
   levels: () => [st.muted ? 0 : rms(ears, scratch), rms(mouth, scratch)],
-  speech: () => [rms(mouth, scratch), rms(low, scratch), rms(high, scratch)],
+  speech: () => [rms(mouth, scratch, SPEECH_GAIN), rms(low, scratch, SPEECH_GAIN), rms(high, scratch, SPEECH_GAIN)],
   supported: () => !!(navigator.mediaDevices?.getUserMedia && window.AudioWorkletNode && window.WebSocket),
 
   async dial() {

@@ -17,17 +17,27 @@ short dissolve (20-120 ms), instead of stretching one painting.
   eyes, so an eye drawing always wins where they overlap.
 - **Bending between angles**: each angle's head is a mesh skinned to parallax bones (`face` follows landmark depth,
   so the nose and eyes move more than the outline, `back` moves the ears the other way), measured in pixels per
-  degree from the drawings' own nose tips. The nearest angle is drawn and the rest of the turn is bent (at most a
-  few degrees); a new angle dissolves in over 110 ms, with hysteresis so it doesn't flicker at a midpoint.
+  degree from the drawings' own nose tips. The nearest angle is drawn and the rest of the turn is bent (up to about
+  6 degrees); a new angle dissolves in over 140 ms, with wide hysteresis so it comes rarely and doesn't flicker. During
+  the dissolve both angles warp along the measured flow between them (`flows.png`), so the glasses and eyes meet
+  instead of showing twice.
 - **Poses**: layers cut (SAM) from image edits of the portrait: a hand to the chin (thinking), a notebook in both
-  hands (reading), a pen and notebook (writing), an open hand explaining (now and then at a phrase start while speaking). They rise into frame from below and sink back out.
-- **Mood**: a grade (contrast, cool shadows, warm highlights, a key light on the face from the lamp side), the room
-  darkened and softened for depth, a vignette, the lamp's glow with a slow flicker, dust drifting in its light.
+  hands (reading), a pen and notebook (writing), an open hand explaining (now and then at a phrase start while
+  speaking). They swing in from below the frame, each dropping as far as it needs to be fully out of view, so nothing
+  fades or pops into sight.
+- **Mood**: a grade (contrast, cool shadows, warm highlights, a key light on the face from the lamp side) baked into
+  the character.
+- **Room**: separate from the character, in `room.json`: the plate (the room behind the character, darkened and
+  softened for depth), a vignette, the lamp's glow with a slow flicker, dust drifting in its light. `opts.room: false`
+  draws the character alone on a transparent canvas; `opts.background` puts another picture in the plate's place and
+  leaves out the glow and dust, which belong to the character's own room.
 - **Acting** (`Behaviour` in `web/rig.js`): eyes lead, the head follows on springs, the body trails; blinks every
   2-6 s, breathing, glances. Listening is relaxed; hearing the user leans in, tilts, nods at their pauses; thinking puts a
-  hand to the chin (or looks up and away) with knit brows; a tool means reading (eyes scanning the page) or writing;
-  speaking keeps eye contact with glances away at phrase starts, nods and brow lifts on stressed syllables, and the
-  mouth shape picked from the played voice's loudness and bands. `Director` turns that into drawings.
+  hand to the chin (after a moment, so a short pause raises nothing) or looks up and away with knit brows and an
+  unsmiling mouth; a tool means reading (eyes scanning the page) or writing, and that prop stays through the short gaps
+  between tools; speaking keeps eye contact with glances away at phrase starts, nods and brow lifts on stressed
+  syllables, and a mouth from the played voice, judged against that voice's own recent loudness and tone, so a loud
+  voice, a quiet one and each client's filters look the same. `Director` turns that into drawings.
 
 ## Building a character
 
@@ -46,12 +56,18 @@ makes portraits through an OpenAI-compatible image server at `$IMAGES_URL`. Use 
    (boxes around each piece at 1x) writes `<work>/pose_<name>.png`.
 4. `build.py <work> <draw> <out>`: per angle landmarks, face parse, head mesh, patches into one atlas per angle, poses,
    overlays, `rig.json` and `persona.json`.
-5. `publish.py <out> <name>`: copies it to atc's personas folder and bumps its rev.
+5. `polish.py <out> <final> [--erase poly] [--move pose=dx,dy]`: repairs on the built drawings (stray body pieces,
+   mouth patches kept inside the head's outline, stronger knit brows, blink drawings that leave the glasses alone, a pose
+   nudged into place) and moves the room to `room.json`. Run it on a fresh build, once: it exaggerates the knit each time.
+6. `flows.py <final>`: draws each pair of neighbouring angles through `web/rig.js`, bent to the same pose, and measures
+   the flow between them. Needs playwright and a browser with WebGL2.
+7. `publish.py <final> <name>`: copies it to atc's personas folder and bumps its rev.
 
 ## Checking it
 
 - `node --test web/` (part of `make check`): pose maths, the dissolve, the director's choices (angle hysteresis,
-  blink, gaze sign, mouth, reading), ten simulated minutes of behaviour, poses per state.
+  blink, gaze sign, mouth, reading, only drawings that exist), ten simulated minutes of behaviour, poses per state, props
+  across tool gaps, blinks while reading, the mouth at two loudnesses.
 - `rec.sh <out> <mp4> [timeline.json]`: frame-exact render of a simulated call at phone size. A timeline is
   `{"plan": [[state, seconds], ...], "you": [...], "it": [...], "lo": [...], "hi": [...]}` (loudness at 50 Hz), default
   `$PERSONA_WORK/clip/timeline.json`, with `mix.wav` beside it for audio. The record page logs each frame's parameters and drawings

@@ -79,12 +79,77 @@ test("a long call never yields a bad or runaway parameter, and blinks at a human
   assert.ok(blinks > 600 / 7 && blinks < 600 / 1.5, `${blinks} blinks in 10 minutes`);
 });
 
+const run = (b, s, seconds, dt = 1 / 30) => { let p; for (let i = 0; i < seconds / dt; i++) p = b.step(dt, s, 0, 0, 0, 0); return p; };
+
+test("a rendered drawing that doesn't exist at this angle is never asked for", () => {
+  const angles = { y0p0: [0, 0], y0p12: [0, 12] };
+  const d = new Director({ ...rig, angles, parts: [{ name: "y0p12.eyes.r0" }, { name: "y0p12.eyes.r-12" }, { name: "y0p0.eyes.g0_-10" }] });
+  const base = { yaw: 0, pitch: 0, gazeX: 0, gazeY: .9, blinkR: 0, blinkL: 0, brow: 0, knit: 0, jaw: 0, round: 0, wide: 0, pose: "read" };
+  for (let i = 0; i < 30; i++) d.step(1 / 30, base);
+  assert.equal(d.angle.cur, "y0p0");
+  assert.equal(d.eyes.cur, "g0_-10");
+  for (let i = 0; i < 30; i++) d.step(1 / 30, { ...base, pitch: 1 });
+  assert.equal(d.angle.cur, "y0p12");
+  assert.equal(d.eyes.cur, "r0");
+});
+
+test("a prop stays through the gap between two tools and goes when speech starts", () => {
+  for (let n = 0; n < 20; n++) {
+    const b = new Behaviour();
+    const prop = run(b, "tool", 1).pose;
+    assert.equal(run(b, "thinking", 2).pose, prop);
+    assert.equal(run(b, "tool", 1).pose, prop);
+    assert.equal(run(b, "speaking", .1).pose, null);
+  }
+});
+
+test("a pause between sentences changes nothing, and thinking raises its hand only after a moment", () => {
+  for (let n = 0; n < 20; n++) {
+    const b = new Behaviour();
+    run(b, "speaking", 1);
+    run(b, "thinking", .3);
+    assert.equal(b.state, "speaking");
+    assert.equal(run(b, "speaking", .1).pose, null);
+    assert.equal(run(b, "thinking", .7).pose, null);
+  }
+});
+
+test("reading doesn't make the eyes flutter", () => {
+  const b = new Behaviour(), dt = 1 / 60;
+  let blinks = 0, closed = false;
+  b.step(dt, "tool", 0, 0, 0, 0);
+  for (let i = 0; i < 120 / dt; i++) {
+    const p = b.step(dt, "tool", 0, 0, 0, 0);
+    if (p.blinkR > .9 && !closed) blinks++;
+    closed = p.blinkR > .9;
+  }
+  assert.ok(blinks < 60, `${blinks} blinks in 2 minutes of reading`);
+});
+
+test("the mouth follows a voice's own range: as open at half the loudness, closed in its dips", () => {
+  const share = (gain) => {
+    const b = new Behaviour(), d = new Director(rig), dt = 1 / 60, use = {};
+    for (let i = 0; i < 60 / dt; i++) {
+      const t = i * dt, it = gain * (.5 + .5 * Math.sin(t * 9)) ** 2;
+      d.step(dt, b.step(dt, "speaking", 0, it, it * .8, it * .08));
+      if (t > 10) use[d.mouth.cur] = (use[d.mouth.cur] || 0) + 1;
+    }
+    return use;
+  };
+  const loud = share(.8), quiet = share(.4), count = 50 * 60;
+  for (const u of [loud, quiet]) {
+    assert.ok((u.base || 0) / count > .1, `closed too rarely ${JSON.stringify(u)}`);
+    assert.ok((u.a3 || 0) / count < .35, `wide open too often ${JSON.stringify(u)}`);
+  }
+  assert.ok(Math.abs((loud.a3 || 0) - (quiet.a3 || 0)) / count < .1, `${JSON.stringify(loud)} ${JSON.stringify(quiet)}`);
+});
+
 test("thinking and tool use bring their poses, the others none", () => {
   const seen = { thinking: new Set(), tool: new Set(), speaking: new Set() };
   for (let n = 0; n < 40; n++) for (const s of Object.keys(seen)) {
     const b = new Behaviour();
     b.step(1 / 30, "listening", 0, 0, 0, 0);
-    seen[s].add(b.step(1 / 30, s, 0, 0, 0, 0).pose);
+    seen[s].add(run(b, s, 1).pose);
   }
   assert.deepEqual([...seen.speaking], [null]);
   const b = new Behaviour(), poses = new Set();

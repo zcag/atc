@@ -2,9 +2,11 @@
 // portrait: the head at a few angles, and for each angle its eyes (gaze directions, half shut, shut), brows (up,
 // knit) and mouth shapes, plus pose layers (a hand to the chin, a notebook, a pen). Like cel animation, the right
 // drawing is swapped in for each moment with only a very short dissolve; between head angles the drawings are bent a
-// little (skinned meshes: the nose and eyes move more than the outline) so a turn reads as one motion. Pose layers
-// rise into frame from below. A grade and a vignette, the lamp's flickering glow and dust in its light give the room
-// depth. Behaviour decides the acting from the call's state and both voices; Director turns it into drawings.
+// little (skinned meshes: the nose and eyes move more than the outline), and while two angles dissolve both are warped
+// along the measured flow between them, so features meet instead of doubling. Pose layers swing in from below the
+// frame. The room (plate, vignette, the lamp's flickering glow, dust) lives in its own room.json, and a character can
+// be drawn without it. Behaviour decides the acting from the call's state and both voices; Director turns it into
+// drawings.
 
 import { PI, clamp, smooth, lerp, rand, chance, Spring, Saccade, Pulses, wander } from "./motion.js";
 
@@ -16,10 +18,16 @@ layout(location=3) in vec4 bw;
 uniform mat3x2 B[8];
 uniform vec4 view;
 uniform vec2 shift;
+uniform vec4 turn;
+uniform sampler2D flow;
+uniform vec4 flowBox, flowCell;
+uniform float morph, flowRange;
 out vec2 t;
 void main() {
   vec3 h = vec3(pos, 1.);
   vec2 q = bw.x * (B[int(bi.x)] * h) + bw.y * (B[int(bi.y)] * h) + bw.z * (B[int(bi.z)] * h) + bw.w * (B[int(bi.w)] * h);
+  if (morph != 0.) q += morph * flowRange * (textureLod(flow, flowCell.xy + clamp((pos - flowBox.xy) / flowBox.zw, .01, .99) * flowCell.zw, 0.).rg - 128. / 255.) * 255. / 127.;
+  q = turn.xy + mat2(turn.z, turn.w, -turn.w, turn.z) * (q - turn.xy);
   gl_Position = vec4((q + shift - view.xy) * view.zw, 0., 1.);
   t = uv;
 }`;
@@ -113,51 +121,61 @@ const YAW = 12, PITCH = 12; // degrees of head turn per unit of Behaviour's yaw 
 export class Director {
   constructor(rig) {
     this.keys = Object.entries(rig.angles);
+    this.has = rig.parts && new Set(rig.parts.map((p) => p.name));
     this.angle = new Swap(this.nearest(0, 0));
     this.eyes = new Swap();
     this.brows = new Swap();
     this.mouth = new Swap();
     this.pose = { cur: null, k: 0 };
-    this.gx = 0; this.gy = 0;
+    this.gx = 0; this.gy = 0; this.lvl = 0;
   }
 
   angles(k) { return this.keys.find(([n]) => n === k)[1]; }
 
   nearest(y, p, cur) {
     const d = (k) => { const [ky, kp] = this.angles(k); return Math.hypot(y - ky, (p - kp) * 1.2); };
-    let best = cur, bd = cur ? d(cur) - 1.5 : Infinity;
+    let best = cur, bd = cur ? d(cur) - 3 : Infinity;
     for (const [k] of this.keys) if (d(k) < bd) { best = k; bd = d(k); }
     return best;
   }
 
   step(dt, p) {
     const Y = -p.yaw * YAW, P = p.pitch * PITCH;
-    this.angle.to(this.nearest(Y, P, this.angle.cur), .11, .25);
+    this.angle.to(this.nearest(Y, P, this.angle.cur), .14, .25);
     const axis = (v, cur, hi) => (Math.abs(v) > .42 ? Math.sign(v) * hi : Math.abs(v) < .22 ? 0 : cur);
     this.gx = axis(p.gazeX, this.gx, 12);
     this.gy = axis(-p.gazeY, this.gy, 10);
     const b = Math.max(p.blinkR, p.blinkL);
     if (b > .7) this.eyes.to("shut", .02);
     else if (b > .28) this.eyes.to("half", .02);
-    else if ((p.pose === "read" || p.pose === "write") && p.gazeY > .5) this.eyes.to(`r${p.gazeX < -.15 ? -12 : 0}`, .035, this.eyes.cur === "half" ? 0 : .08);
+    else if ((p.pose === "read" || p.pose === "write") && p.gazeY > .5) {
+      const page = `r${p.gazeX < -.15 ? -12 : 0}`;
+      this.eyes.to(!this.has || this.has.has(`${this.angle.cur}.eyes.${page}`) ? page : `g${this.gx}_-10`, .035, this.eyes.cur === "half" ? 0 : .08);
+    }
     else this.eyes.to(this.gx || this.gy ? `g${this.gx}_${this.gy}` : "base", .035, this.eyes.cur === "half" ? 0 : .08);
     this.brows.to(p.brow > .3 ? "up" : p.knit > .3 ? "knit" : "base", .12, .2);
-    const open = p.jaw / .72;
+    const open = p.jaw / .72, was = this.mouth.cur, serious = p.serious > .5;
+    const calm = (n) => n === "base" || n[0] === "s" || (n === "u" && serious);
     let m = "base";
-    if (open >= .1) {
-      const lvl = open < .38 ? 1 : open < .7 ? 2 : 3;
-      m = p.round > .35 ? `o${Math.min(2, lvl)}` : p.wide > .3 ? `e${Math.min(2, lvl)}` : `a${lvl}`;
-    } else if (p.round > .5) m = "u";
-    else if (p.smile > .72) m = "s2";
-    else if (p.smile > .5) m = "s1";
-    const calm = (n) => n === "base" || n[0] === "s";
-    this.mouth.to(m, calm(m) && calm(this.mouth.cur) ? .15 : .045, calm(m) && this.mouth.cur[0] === "s" ? .4 : .07);
+    if (open >= (calm(was) ? .16 : .09)) {
+      this.lvl = open < (this.lvl >= 2 ? .33 : .43) ? 1 : open < (this.lvl >= 3 ? .65 : .75) ? 2 : 3;
+      const inRound = was === "u" || was[0] === "o", inWide = was[0] === "e";
+      m = p.round > (inRound ? .2 : .5) ? (this.lvl === 1 ? "u" : "o2") : p.wide > (inWide ? .15 : .4) ? `e${Math.min(2, this.lvl)}` : `a${this.lvl}`;
+    } else {
+      this.lvl = 0;
+      if (serious) m = "u";
+      else if (p.smile > .72) m = "s2";
+      else if (p.smile > .5) m = "s1";
+    }
+    const family = (n) => (n === "u" ? "o" : n[0]);
+    const across = !calm(m) && !calm(was) && family(m) !== family(was);
+    this.mouth.to(m, calm(m) && calm(was) ? .15 : .05, calm(m) && was[0] === "s" ? .4 : across ? .16 : .08);
     for (const s of [this.angle, this.eyes, this.brows, this.mouth]) s.step(dt);
     const Z = this.pose;
     if (Z.cur !== (p.pose || null)) {
-      Z.k -= dt / .4;
+      Z.k -= dt / .42;
       if (Z.k <= 0) { Z.k = 0; Z.cur = p.pose || null; }
-    } else if (Z.cur) Z.k = Math.min(1, Z.k + dt / .6);
+    } else if (Z.cur) Z.k = Math.min(1, Z.k + dt / .55);
     return { Y, P };
   }
 }
@@ -191,9 +209,13 @@ export class Behaviour {
     this.smile = new Spring(.7, .3);
     this.knit = new Spring(.8);
     this.browS = new Spring(3);
-    this.level = 0; this.slow = 0; this.lastBeat = 0;
+    this.level = 0; this.slow = 0; this.lastBeat = 0; this.lastBrow = -9; this.lastBlink = -9;
+    this.peak = .12;
     this.jaw = new Spring(9); this.round = new Spring(7); this.wide = new Spring(7);
-    this.bright = 0;
+    this.bright = 0; this.usual = .1;
+    this.serious = new Spring(2.5);
+    this.raw = "listening"; this.rawSince = 0;
+    this.prop = null; this.propUntil = 0; this.hand = false; this.poseGone = -9;
     this.youSince = -1; this.youQuiet = -9;
     this.pose = null;
     this.gestureUntil = 0; this.lastGesture = -9; this.quietSince = 0; this.nextWarm = rand(6, 12);
@@ -205,7 +227,12 @@ export class Behaviour {
     this.since = this.t;
     this.nextHead = this.t;
     this.nextGaze = this.t + (state === "speaking" ? .05 : .15);
-    this.pose = state === "thinking" ? (chance(.7) ? "think" : null) : state === "tool" ? (chance(.55) ? "read" : "write") : null;
+    const held = this.pose;
+    if (state === "tool") { this.prop ??= chance(.55) ? "read" : "write"; this.pose = this.prop; this.propUntil = Infinity; }
+    else if (state === "thinking" && was === "tool" && this.prop) { this.pose = this.prop; this.propUntil = this.t + 6; }
+    else { this.prop = null; this.pose = null; }
+    this.hand = state === "thinking" && !this.prop && chance(.7);
+    if (held && !this.pose) this.poseGone = this.t;
     this.readX = undefined;
     if (state === "hearing") { this.brow.hit(.5, .15, .8); this.tilt.hit(chance(.5) ? .35 : -.35, .5, 2.5); }
     if (state === "thinking") { this.brow.hit(-.2, .3, 1.5); if (chance(.6)) this.blinkNow(); }
@@ -213,20 +240,20 @@ export class Behaviour {
     if (was === "speaking" && state !== "speaking") { this.nod.hit(rand(.15, .25), .2, .55); this.smileP.hit(.25, .3, 1.5); }
   }
 
-  blinkNow(dur = rand(.16, .24)) { if (this.blink.t < 0) { this.blink.t = 0; this.blink.dur = dur; } }
+  blinkNow(dur = rand(.16, .24)) { if (this.blink.t < 0) { this.blink.t = 0; this.blink.dur = dur; this.lastBlink = this.t; } }
 
-  look(x, y, dur) {
+  look(x, y, dur, blinks = true) {
     const big = Math.hypot(x - this.gaze.x, y - this.gaze.y);
     this.gaze = { x, y };
     this.gx.go(x, dur + big * .05);
     this.gy.go(y, dur + big * .05);
-    if (big > .45 && chance(.35)) this.blinkNow(rand(.14, .2));
+    if (blinks && big > .45 && this.t - this.lastBlink > 1.5 && chance(.35)) this.blinkNow(rand(.14, .2));
   }
 
   /** Where he looks (eye direction, -1..1) and where his head goes, per state. */
   plan(s, t) {
     const T = this.target;
-    if (s === "thinking") {
+    if (s === "thinking" && !this.prop) {
       const side = (this.thinkSide ??= chance(.5) ? 1 : -1);
       if (t > this.nextGaze) {
         this.look(side * rand(.5, .9), rand(-.9, -.55), rand(.12, .2));
@@ -235,27 +262,27 @@ export class Behaviour {
       }
       if (t > this.nextHead) {
         const hand = this.pose === "think";
-        T.yaw = hand ? 0 : side * rand(.3, .5); T.pitch = hand ? -.05 : rand(-.5, -.35); T.roll = side * rand(.1, hand ? .15 : .3);
+        T.yaw = hand ? 0 : side * rand(.18, .34); T.pitch = hand ? -.05 : rand(-.3, -.18); T.roll = side * rand(.1, hand ? .15 : .3);
         this.nextHead = t + rand(1.8, 3.2);
       }
       return;
     }
     this.thinkSide = undefined;
-    if (s === "tool") {
+    if (s === "tool" || this.prop) {
       if (t > this.nextGaze) {
         if (this.pose === "write") {
-          this.look(rand(-.5, .5), rand(.7, 1), .05);
+          this.look(rand(-.5, .5), rand(.7, 1), .05, false);
           this.nextGaze = t + rand(.35, .8);
-        } else if (chance(.06) && t - this.since > 1.5) {
-          this.look(0, 0, .06);
+        } else if (chance(.03) && t - this.since > 1.5) {
+          this.look(0, 0, .06, false);
           this.nextGaze = t + rand(.5, .9);
         } else {
           this.readX = (this.readX ?? -.7) + rand(.6, .8);
-          if (this.readX > .8) { this.readX = -.7; this.look(-.7, rand(.75, 1), .08); this.nextGaze = t + rand(.3, .45); }
-          else { this.look(this.readX, rand(.75, 1), .04); this.nextGaze = t + rand(.25, .45); }
+          if (this.readX > .8) { this.readX = -.7; this.look(-.7, rand(.75, 1), .08, false); this.nextGaze = t + rand(.3, .45); }
+          else { this.look(this.readX, rand(.75, 1), .04, false); this.nextGaze = t + rand(.25, .45); }
         }
       }
-      if (t > this.nextHead) { T.yaw = rand(-.2, -.1); T.pitch = .95; T.roll = rand(-.08, .08); this.nextHead = t + rand(2, 4); }
+      if (t > this.nextHead) { T.yaw = rand(-.3, -.15); T.pitch = 1.15; T.roll = rand(-.08, .08); this.nextHead = t + rand(2, 4); }
       return;
     }
     const speaking = s === "speaking", hearing = s === "hearing";
@@ -276,16 +303,23 @@ export class Behaviour {
     }
     if (t > this.nextHead) {
       const k = speaking ? 1 : .6;
-      T.yaw = (this.away ? this.gaze.x * .5 : 0) + rand(-.25, .25) * k + (speaking && chance(.25) ? Math.sign(rand(-1, 1)) * rand(.45, .6) : 0);
+      T.yaw = (this.away ? this.gaze.x * .5 : 0) + rand(-.25, .25) * k + (speaking && chance(.15) ? Math.sign(rand(-1, 1)) * rand(.4, .55) : 0);
       T.pitch = (hearing ? .08 : 0) + rand(-.1, .12) * k;
       T.roll = (hearing ? .15 * Math.sign(T.roll || 1) : 0) + rand(-.12, .12) * k;
       this.nextHead = t + rand(speaking ? .9 : 1.8, speaking ? 2.4 : 4);
     }
   }
 
-  step(dt, s, you, it, lo, hi) {
+  step(dt, heard, you, it, lo, hi) {
     const t = (this.t += dt);
+    if (heard !== this.raw) { this.raw = heard; this.rawSince = t; }
+    // a gap between two sentences is still speaking, not a new thought
+    const s = this.state === "speaking" && heard === "thinking" && t - this.rawSince < .35 ? "speaking" : heard;
     if (s !== this.state) this.enter(s);
+    if (s === "thinking") {
+      if (this.prop && t > this.propUntil) { this.prop = null; this.pose = null; this.poseGone = t; this.hand = chance(.7); this.nextHead = t; }
+      if (this.hand && !this.prop && !this.pose && t - this.since > .8) { this.pose = "think"; this.nextHead = t; }
+    }
     const speaking = s === "speaking";
 
     if (you > .1) {
@@ -296,25 +330,31 @@ export class Behaviour {
       this.youSince = -1;
     }
 
-    const v = speaking ? it : 0;
+    // the voice as played is what moves the mouth, whatever the state says: the state can end while the last words play
+    const v = speaking || it > .03 ? it : 0;
     this.level = v > this.level ? lerp(this.level, v, 1 - Math.exp(-dt * 50)) : lerp(this.level, v, 1 - Math.exp(-dt * 16));
     this.slow = lerp(this.slow, this.level, 1 - Math.exp(-dt * 1.8));
-    if (speaking && this.level - this.slow > .16 && t - this.lastBeat > .3) {
+    this.peak = Math.max(this.level, .12, this.peak * Math.exp(-dt / 6));
+    const rel = this.level / this.peak;
+    if (speaking && rel - this.slow / this.peak > .22 && t - this.lastBeat > .3) {
       this.lastBeat = t;
       if (chance(.55)) this.nod.hit(rand(.08, .16), .16, .4);
-      if (chance(.4)) this.brow.hit(rand(.4, .7), .1, .5);
+      if (t - this.lastBrow > 2.2 && chance(.45)) { this.lastBrow = t; this.brow.hit(rand(.45, .7), .1, .5); }
       if (chance(.2)) this.tilt.hit(rand(-.15, .15), .2, .8);
-      if (t - this.quietSince < .5 && t - this.lastGesture > 7 && chance(.4)) { this.lastGesture = t; this.gestureUntil = t + rand(1.8, 3.4); }
+      if (t - this.quietSince < .5 && t - this.lastGesture > 7 && t - this.poseGone > 1.4 && chance(.4)) { this.lastGesture = t; this.gestureUntil = t + rand(1.8, 3.4); }
     }
     if (v < .03 && this.level < .05) this.quietSince = t;
     if (!speaking) this.gestureUntil = 0;
     if (s === "listening" && t > this.nextWarm) { this.nextWarm = t + rand(8, 16); if (chance(.6)) this.smileP.hit(rand(.2, .4), .6, 2.5); }
+    // shape from where the voice's energy sits compared with its own usual, so a voice and a client's filters don't decide it
     const bright = v > .03 ? hi / (lo + hi + .02) : this.bright;
     this.bright = lerp(this.bright, bright, 1 - Math.exp(-dt * 20));
-    const sib = speaking ? smooth(.28, .45, this.bright) * smooth(.03, .1, this.level) : 0;
-    const jaw = this.jaw.to(speaking ? .72 * smooth(.03, .85, this.level) * (1 - .7 * sib) : 0, dt);
-    const round = this.round.to(speaking ? smooth(.1, .04, this.bright) * smooth(.05, .3, this.level) * .8 : 0, dt);
-    const wide = this.wide.to(speaking ? (smooth(.14, .26, this.bright) * .6 + sib * .5) * smooth(.03, .2, this.level) : 0, dt);
+    if (v > .03) this.usual = lerp(this.usual, this.bright, 1 - Math.exp(-dt / 3));
+    const tone = this.bright / Math.max(this.usual, .01);
+    const sib = smooth(2.4, 3.6, tone) * smooth(.1, .25, rel);
+    const jaw = this.jaw.to(.72 * smooth(.07, 1, rel) * (1 - .7 * sib), dt);
+    const round = this.round.to(smooth(.72, .45, tone) * smooth(.1, .35, rel) * .8, dt);
+    const wide = this.wide.to((smooth(1.35, 2, tone) * .6 + sib * .5) * smooth(.08, .3, rel), dt);
 
     this.plan(s, t);
     const gx = this.gx.step(dt), gy = this.gy.step(dt);
@@ -355,7 +395,8 @@ export class Behaviour {
       yaw, pitch, roll, sway, lean, breath,
       gazeX: clamp(gx, -1, 1), gazeY: clamp(gy, -1, 1),
       blinkR: blink, blinkL: blink, brow, knit,
-      smile: smile * (1 - .5 * jaw), jaw, round, wide, pose: this.pose || (t < this.gestureUntil ? "explain" : null),
+      smile: smile * (1 - .5 * jaw), jaw, round, wide, serious: this.serious.to(s === "thinking" || s === "tool" ? 1 : 0, dt),
+      pose: this.pose || (t < this.gestureUntil ? "explain" : null),
     };
   }
 }
@@ -382,8 +423,13 @@ async function backdrop(url, plate) {
  *  draws nothing by itself and returns a frame function for fixed-step recording instead. */
 export async function rig(canvas, base, now, opts = {}) {
   const R = await (await fetch(base + "rig.json")).json();
+  if (R.room && opts.room !== false) {
+    const room = await (await fetch(base + R.room)).json();
+    R.parts.push(...room.parts);
+    R.dust = room.dust;
+  }
   const images = {};
-  await Promise.all([...new Set(R.parts.map((p) => p.tex))].map(async (f) => {
+  await Promise.all([...new Set([...R.parts.map((p) => p.tex), ...(R.flow ? [R.flow.tex] : [])])].map(async (f) => {
     const img = new Image();
     img.src = base + f;
     await img.decode();
@@ -425,7 +471,7 @@ export async function rig(canvas, base, now, opts = {}) {
       gl.bindTexture(gl.TEXTURE_2D, tex[f]);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
       gl.generateMipmap(gl.TEXTURE_2D);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f === R.flow?.tex ? gl.LINEAR : gl.LINEAR_MIPMAP_LINEAR);
       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
       for (const k of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE);
     }
@@ -450,7 +496,7 @@ export async function rig(canvas, base, now, opts = {}) {
       gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
       gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(p.t), gl.STATIC_DRAW);
       gl.bindVertexArray(null);
-      parts[p.name] = { vao, count: p.t.length, tex: tex[p.tex], blend: p.blend };
+      parts[p.name] = { vao, count: p.t.length, tex: tex[p.tex], blend: p.blend, box: p.box };
     }
     const dvao = gl.createVertexArray(), dbuf = gl.createBuffer();
     gl.bindVertexArray(dvao);
@@ -462,6 +508,16 @@ export async function rig(canvas, base, now, opts = {}) {
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(main.prog);
     gl.uniform1f(main.u("alpha"), 0);
+    gl.uniform4f(main.u("turn"), 0, 0, 1, 0);
+    gl.uniform1i(main.u("tex"), 0);
+    gl.uniform1i(main.u("flow"), 1);
+    if (R.flow) {
+      gl.activeTexture(gl.TEXTURE1);
+      gl.bindTexture(gl.TEXTURE_2D, tex[R.flow.tex]);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.uniform4fv(main.u("flowBox"), R.flow.box);
+      gl.uniform1f(main.u("flowRange"), R.flow.range);
+    }
     for (const q of Object.values(parts)) {
       gl.bindTexture(gl.TEXTURE_2D, q.tex);
       gl.bindVertexArray(q.vao);
@@ -523,18 +579,33 @@ export async function rig(canvas, base, now, opts = {}) {
     bones(null);
     draw("plate");
     draw("body");
-    for (const [key, a] of director.angle.layers()) {
+    const A = director.angle, e = smooth(0, 1, A.k);
+    const cell = A.prev && R.flow && (R.flow.cells[`${A.prev}|${A.cur}`] ?? R.flow.cells[`${A.cur}|${A.prev}`]);
+    if (cell !== undefined && cell !== null) {
+      const [nx, ny] = R.flow.grid;
+      gl.uniform4f(G.main.u("flowCell"), (cell % nx) / nx, Math.floor(cell / nx) / ny, 1 / nx, 1 / ny);
+    }
+    const toward = cell !== undefined && cell !== null ? (`${A.prev}|${A.cur}` in R.flow.cells ? 1 : -1) : 0;
+    for (const [key, a] of A.layers()) {
       if (a <= .002) continue;
       bones(key);
+      gl.uniform1f(G.main.u("morph"), toward * (key === A.prev ? e : e - 1));
       draw(`head.${key}`, a);
       for (const slot of ["brows", "eyes", "mouth"]) for (const [name, w_] of director[slot].layers()) if (name !== "base") draw(`${key}.${slot}.${name}`, a * w_);
     }
-    const Z = director.pose;
-    if (Z.cur && Z.k > 0) {
+    gl.uniform1f(G.main.u("morph"), 0);
+    const Z = director.pose, layer = Z.cur && G.parts[`pose.${Z.cur}`];
+    if (layer && Z.k > 0) {
       bones(director.angle.cur);
-      const e = 1 - (1 - Z.k) ** 3;
-      draw(`pose.${Z.cur}`, clamp(e * 4), [0, (1 - e) * .2 * R.size[1] + 3 * params.breath]);
+      const [bx, by, bw, bh] = layer.box, reach = smooth(0, 1, Z.k), rest = 1 - reach;
+      const drop = Math.max(0, view[1] + 1 / Math.abs(view[3]) - by + 160), out = bx + bw / 2 > R.size[0] / 2 ? 1 : -1;
+      const talking = Z.cur === "explain" ? params.jaw : 0;
+      const deg = -out * (rest * 14 + (Z.cur === "explain" ? 1.5 * Math.sin(clock * 1.7) + 2.5 * talking : 0));
+      gl.uniform4f(G.main.u("turn"), bx + bw / 2, by + bh, Math.cos(deg * PI / 180), Math.sin(deg * PI / 180));
+      draw(`pose.${Z.cur}`, 1, [out * rest * drop * .16, rest * drop + 3 * params.breath - 8 * talking]);
+      gl.uniform4f(G.main.u("turn"), 0, 0, 1, 0);
     }
+    gl.uniform2f(G.main.u("shift"), 0, 0);
     bones(null);
     draw("vignette");
     if (!room) draw("glow", .9 + .06 * Math.sin(clock * 1.3) + .04 * Math.sin(clock * 3.7 + 1));

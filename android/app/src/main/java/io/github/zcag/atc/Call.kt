@@ -67,10 +67,11 @@ object Calls {
     @Volatile var voice: Voice? = null
 
     /** The user's voice's and the assistant's loudness right now, 0 to 1, measured on the phone. */
-    fun levels() = voice?.let { it.you to it.heard()[0] } ?: (0f to 0f)
+    fun levels() = voice?.let { it.you to minOf(1f, it.heard()[0] * 6) } ?: (0f to 0f)
 
-    /** The assistant's voice as it is heard now: [loudness, below 700 Hz, above 3 kHz], each 0..1. */
-    fun speech() = voice?.heard() ?: FloatArray(3)
+    /** The assistant's voice as it is heard now: [loudness, below 700 Hz, above 3 kHz], each 0..1. Less gain than
+     *  levels(): at that gain most of a sentence sits at 1, and a mouth learns nothing from it. */
+    fun speech() = voice?.heard()?.let { h -> FloatArray(3) { minOf(1f, h[it] * Voice.SPEECH_GAIN) } } ?: FloatArray(3)
 
     fun persona(o: JSONObject) {
         val f = face.value
@@ -356,6 +357,7 @@ class Voice {
         const val FRAME = 640
         const val OUT_RATE = 24_000
         const val OUT_FRAME = 960
+        const val SPEECH_GAIN = 2.5f
         private const val MIN_HOLD = 3
         private const val MAX_HOLD = 50
         private const val SLACK = 10
@@ -397,7 +399,7 @@ class Voice {
     private var low = 0f
     private var high = 0f
 
-    /** What the speaker is playing now, from the frames written to it: [loudness, low band, high band]. Silence
+    /** What the speaker is playing now, from the frames written to it: [loudness, low band, high band] as raw RMS. Silence
      *  once nothing has played for a little while (an underrun, the end of a reply). */
     fun heard(): FloatArray {
         val t = SystemClock.elapsedRealtime()
@@ -426,7 +428,7 @@ class Voice {
             hi += (v - high) * (v - high)
         }
         val n = frame.size / 2
-        val k = { e: Double -> minOf(1f, (Math.sqrt(e / n) * 6).toFloat()) }
+        val k = { e: Double -> Math.sqrt(e / n).toFloat() }
         heard.offerLast(Heard(SystemClock.elapsedRealtime() + delay, floatArrayOf(k(all), k(lo), k(hi))))
         while (heard.size > 64) heard.pollFirst()
     }
