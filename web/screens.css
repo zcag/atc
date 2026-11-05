@@ -322,6 +322,7 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
   --am-c: var(--app-slate); background: light-dark(oklch(from var(--am-c) 48% 0.13 h), oklch(from var(--am-c) 76% 0.1 h)); color: light-dark(oklch(99% 0 0), oklch(18% 0.01 250)); }
 .am[data-ag="assistant"] { background: var(--ink); color: var(--strip); }
 .am.lg { width: 34px; height: 30px; font-size: 13px; }
+.agv { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .agd { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--strip); }
 .agd .hd .l1 .am { margin-right: 2px; }
 .agd .hd .l2 { padding-left: 32px; }
@@ -347,6 +348,9 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
 .agbody .kv dt { color: var(--faint); }
 .agbody .kv dd { padding-top: 7px; font-family: var(--mono); font-size: var(--fs-small); color: var(--dim); overflow-wrap: anywhere; }
 .agbody .acts-ph { display: none; }
+.agsheet .agbody { padding: 0; }
+.agsheet kbd { display: none; }
+.agsheet .agbody .acts-ph { display: flex; flex-wrap: wrap; gap: var(--s2); padding-bottom: var(--s4); }
 
 @media (max-width: 1199px) {
   .lim { grid-template-columns: 170px minmax(0, 1fr) 64px; }

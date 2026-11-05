@@ -220,7 +220,7 @@ func (m *Manager) History(q, dir string, limit int) []Session {
 		if dir != "" && s.StartCwd != dir && s.Cwd != dir {
 			continue
 		}
-		if q != "" && !strings.Contains(strings.ToLower(s.Title+" "+s.LastPrompt+" "+s.Cwd), q) {
+		if q != "" && !strings.Contains(strings.ToLower(s.Title+" "+s.LastPrompt+" "+s.Cwd+" "+s.SessionID), q) {
 			continue
 		}
 		out = append(out, s)

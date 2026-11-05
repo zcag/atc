@@ -117,8 +117,9 @@ An agent's conversation is a session like any other, under the agent's title and
 tab (the robot icon next to All in the project tabs) lists them the way a project tab lists its
 sessions, parked ones included, with the same dots; agents with no conversation yet are listed below
 by name. An agent with a `dir` also shows in that project's tab; the rest stay out of the project
-tabs. An agent's tag, in place of the project tag, and its name on the Agents tab open its details:
-what it is doing, when it wakes and when next, its check and prompt, when it starts over and last
+tabs. Picking an agent on the Agents screen opens its conversation beside the list, with its page if it
+has one, the stopped conversation if none is running. An agent's tag, in place of the project tag,
+and **Agent details** in the session's menu open its details: what it is doing, when it wakes and when next, its check and prompt, when it starts over and last
 did, its pages and folder, with Open (or Start), Wake, Park and Start over. The assistant (the hub's
 conversation, see [The assistant](assistant.md)) is listed there too, with its own reset rule and no
 dot while it is idle, since it never parks; `POST /api/agents/assistant/message` reaches it as another

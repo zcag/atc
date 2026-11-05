@@ -93,10 +93,8 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
     },
     async agents(mode) {
       const p = await open(mode);
-      await to(p, "#/agents/reviewer", 2200);
-      const q = await open(mode, { w: 900, h: 760 });
-      await to(q, "#/p/@reviewer/queue", 2600);
-      return [[p, "agents"], [q, "agent-page"]];
+      await to(p, "#/agents/reviewer", 2600);
+      return [[p, "agents"]];
     },
     async usage(mode) {
       const p = await open(mode, { h: 1040 });

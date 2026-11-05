@@ -39,7 +39,7 @@ async (page, { raw = "http://127.0.0.1:7440/raw", out = "/tmp/atc-final", modes 
     board: solo("board", 1560, 1040),
     transcript: solo("transcript", 1560, 1040),
     pages: solo("pages"),
-    agents: { w: 1860, h: 1100, body: (r) => win(`${r}/agents.png`, 60, 50, 1420) + win(`${r}/agent-page.png`, 1070, 290, 730) },
+    agents: solo("agents"),
     usage: solo("usage", 1560, 1040),
     resources: solo("resources", 1560, 1040),
     browser: solo("browser", 1560, 900),

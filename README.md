@@ -80,7 +80,7 @@ What it knows stays on a page you can open any time.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/agents-dark.webp">
-  <img src="docs/img/agents-light.webp" alt="The Agents screen: a list of standing agents with what each keeps, and the reviewer's details: when it wakes, the check that decides, when it starts over. In front, the page it keeps: three open pull requests, one needing a change.">
+  <img src="docs/img/agents-light.webp" alt="The Agents screen: a list of standing agents with what each keeps, and the reviewer open beside it: its conversation next to the page it keeps, three open pull requests, one needing a change.">
 </picture>
 
 [Presets and agents](docs/presets-and-agents.md)

@@ -237,7 +237,8 @@ function App() {
   const [quick, setQuick] = useState(null);
   QUICK = (s, rect) => setQuick({ s, rect });
   const [agentUse, setAgentUse] = useState(null);
-  AGENT_SHEET = (name, view) => (view === "usage" ? setAgentUse(name) : (location.hash = `${AGENTS_ROUTE}/${encodeURIComponent(name)}`));
+  const [agentSheet, setAgentSheet] = useState(null);
+  openAgent = (name, view) => (view === "usage" ? setAgentUse(name) : view === "details" ? setAgentSheet(name) : name === "assistant" ? openAssistant() : (location.hash = `${AGENTS_ROUTE}/${encodeURIComponent(name)}`));
   const [help, setHelp] = useState(false);
   const [toast, setToast] = useState(null);
   const [agentName, setAgentName] = useState(agentRoute);
@@ -247,6 +248,7 @@ function App() {
   const [panes, setPanesRaw] = useState(() => ({ rail: true, index: true, pgindex: true, aleft: true, ...stored("atc.panes", {}) }));
   const rememberPast = useCallback((list) => setPast((p) => Object.fromEntries([...Object.entries(p), ...list.map((s) => [s.sessionId, s])])), []);
   const [hist, moreHist, canMore] = useBayHistory(!!me, rememberPast);
+  const lookingUp = usePastSession(route, !runs || !!past[route] || runs.some((s) => s.id === route || s.sessionId === route), rememberPast);
   const togglePane = (k) => setPanesRaw((p) => { const n = { ...p, [k]: !p[k] }; store("atc.panes", n); return n; });
   const only = useBay();
   const wide = useWide();
@@ -326,7 +328,7 @@ function App() {
   const [calling, setCalling] = useState(location.hash === CALL);
   const [holding, setHolding] = useState(location.hash === HOLD);
   useEffect(() => {
-    const f = (e) => { if (location.hash === HOLD && e.oldURL) HOLD_FROM = new URL(e.oldURL).hash || "#/"; setHolding(location.hash === HOLD); setAssisting(fromCall() || location.hash === ASSIST); setCalling(location.hash === CALL); setScr(screenOf()); setAgentName(agentRoute()); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesAt(readPages()); setSettings(inSettings()); };
+    const f = (e) => { if (location.hash === HOLD && e.oldURL) HOLD_FROM = new URL(e.oldURL).hash || "#/"; setHolding(location.hash === HOLD); setAssisting(fromCall() || location.hash === ASSIST); setCalling(location.hash === CALL); setScr(screenOf()); setAgentName(agentRoute()); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesAt(readPages()); setSettings(inSettings()); setAgentSheet(null); };
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
@@ -548,7 +550,7 @@ function App() {
     : scr && !route ? html`<main class="shell scr">${scr === "usage" ? html`<${UsagePage} limits=${limits} live=${all} down=${down} onOpen=${openFromUsage} />`
       : scr === "resources" ? html`<${ResourcesPage} hosts=${(me.hosts || [me.host]).filter((h) => h)} home=${me.host} live=${all} />`
       : scr === "backlog" ? html`<${BacklogPage} live=${all} say=${say} onAdd=${setCreating} only=${only} />`
-      : html`<${AgentsPage} name=${agentName} agents=${agents} live=${all} say=${say} reload=${loadAgents} />`}</main>`
+      : html`<${AgentsPage} name=${agentName} agents=${agents} live=${all} past=${past} remember=${rememberPast} say=${say} reload=${loadAgents} panes=${panes} togglePane=${togglePane} />`}</main>`
     : !route ? html`<div class="shell boardv"><${BoardView} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} say=${say} index=${panes.index && wide} /></div>` : html`
     <div class="shell open ${!panes.rail ? "norail" : ""}">
       <aside class="side">
@@ -561,7 +563,7 @@ function App() {
         ${sel && !wide && html`<${SessionStrip} live=${live} sel=${sel} />`}
         ${sel
           ? html`<${Session} key=${sel.sessionId} s=${sel} say=${say} live=${all} panes=${panes} togglePane=${togglePane} />`
-          : html`<div class="blank">${!live ? "Opening…" : "This session is gone. Pick another from the list."}</div>`}
+          : html`<div class="blank">${!live || lookingUp ? "Opening…" : "This session is gone. Pick another from the list."}</div>`}
       </main>
     </div>`}
     <${Console} hub=${hub} agents=${agents} runs=${runs} onTalk=${openAssistant} onKeys=${() => setHelp(true)} />
@@ -579,6 +581,7 @@ function App() {
     ${holding && html`<${Hold} live=${live} me=${me} down=${down} limits=${limits} say=${say} />`}
     ${calling ? html`<${CallScreen} hub=${hub} live=${all} />` : html`<${CallDock} hub=${hub} live=${all} assisting=${assistView} />`}
     ${quick && html`<${QuickMenu} quick=${quick} say=${say} onClose=${() => setQuick(null)} />`}
+    ${agentSheet && html`<${AgentDetail} sheet a=${(agents || []).find((a) => a.name === agentSheet) || { name: agentSheet }} live=${all} say=${say} reload=${loadAgents} onClose=${() => setAgentSheet(null)} />`}
     ${agentUse && html`<${AgentUsage} name=${agentUse} onClose=${() => setAgentUse(null)} />`}
     <${Dialogs} />
     ${toast && html`<div class="toast" role="status">${toast.msg}${toast.undo && html` <button class="tundo" onClick=${undo} aria-keyshortcuts="z">Undo <kbd aria-hidden="true">z</kbd></button>`}</div>`}
@@ -788,9 +791,9 @@ const hubLine = (hub) => {
 function ConsoleAgents({ agents, runs }) {
   const last = (a) => Math.max(0, ...(runs || []).filter((x) => x.agent === a.name).map((x) => Date.parse(x.updated || 0) || 0));
   const list = (agents || []).filter((a) => !a.error).sort((a, b) => last(b) - last(a));
-  const link = (a) => html`<a href="#" onClick=${(e) => { e.preventDefault(); AGENT_SHEET(a.name); }}>@<b>${a.name}</b></a>`;
+  const link = (a) => html`<a href="#" onClick=${(e) => { e.preventDefault(); openAgent(a.name); }}>@<b>${a.name}</b></a>`;
   return html`<span class="agents">${list.slice(0, 4).map(link)}${list.length > 4 && html`<${Menu} cls="kb" up aria="Every agent" width=${220} label=${`+${list.length - 4}`}
-    items=${list.slice(4).map((a) => ({ cls: "viewitem", label: `@${a.name}`, run: () => AGENT_SHEET(a.name) }))} />`}</span>`;
+    items=${list.slice(4).map((a) => ({ cls: "viewitem", label: `@${a.name}`, run: () => openAgent(a.name) }))} />`}</span>`;
 }
 
 function Console({ hub, agents, runs, onTalk, onKeys }) {
@@ -835,7 +838,7 @@ const KEYMAP = [
   ["Pages", [["j k", "Next, previous page"], ["[", "The index"], ["0", "This bay or every bay"], ["q w e .. p", "The 1st to 10th page in the index"], ["\\", "The page beside its session"], ["enter", "Note: its session, at the composer"], ["d", "What changed, on an updated page"]]],
   ["Palette", [["↑ ↓", "Move (also ctrl j, ctrl k)"], ["enter", "Run it"], ["tab", "Preview it behind the palette"], ["1..9", "Alone: that bay"]]],
   ["Backlog", [["j k", "Next, previous task"], ["enter", "Start, take or open it"], ["d", "Done"], ["x", "Blocked, or unblock"], ["a", "The add box"]]],
-  ["Agents", [["j k", "Next, previous agent"], ["enter", "Its conversation"]]],
+  ["Agents", [["j k", "Next, previous agent"]]],
   ["Anywhere", [["/", "Search and commands"], ["+", "New session"], [",", "Settings"], ["z", "Undo, while an Undo toast shows"], ["?", "These keys"], ["esc", "Close what is open"]]],
 ];
 
@@ -1861,7 +1864,7 @@ function Pic({ src, alt = "", fallback }) {
 }
 
 let QUICK = () => {};
-let AGENT_SHEET = () => {};
+let openAgent = () => {};
 const CONTAINERS = new Set(["proj", "projects", "src", "code", "dev", "work", "repos", "git", "Developer"]);
 function project(path) {
   const parts = tilde(path || "").replace(/\/\.claude\/worktrees\/[^/]+/, "").split("/");
@@ -1983,7 +1986,7 @@ function scrollWhenThere(sel, tries = 20) {
   else if (tries > 0) setTimeout(() => scrollWhenThere(sel, tries - 1), 100);
 }
 
-function Session({ s, say, live, panes, togglePane }) {
+function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
   const canAttach = s.attachable;
   const hasTerm = s.kind !== "hub";
   const auto = useRef(AUTO_PANE);
@@ -2109,7 +2112,7 @@ function Session({ s, say, live, panes, togglePane }) {
   return html`
     <header class="hd">
       <div class="l1">
-        <button class="kb back" onClick=${() => go(null)} aria-label="Back to the board">Back</button>
+        <button class="kb back" onClick=${back} aria-label="Back">Back</button>
         <${StateBlock} s=${s} />
         ${renaming ? renameBox : html`<h1 onDblClick=${() => setRenaming(true)} title=${s.title}>${s.title || "Untitled"}</h1>`}
         ${where && html`<span class="where">${where}</span>`}
@@ -2123,7 +2126,7 @@ function Session({ s, say, live, panes, togglePane }) {
               ...(phoneNow && hasTerm ? [{ label: mode === "term" ? "Transcript" : "Terminal", run: () => choose(mode === "term" ? "chat" : "term") }] : []),
               { label: "Call about this", run: () => callAbout(s, say) },
               ...(mode === "chat" || sideBySide ? [{ label: "Find in the transcript", run: () => TX_API?.find() }, { label: "Contents", run: () => TX_API?.contents() }, { label: "Outline, story or everything", run: () => TX_API?.level() }, { label: "Files, commits and deploys", run: () => TX_API?.results() }] : []),
-              ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "State and outputs", run: openState }, { label: "Usage", run: () => setShowUse(true) }]} /></div>
+              ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "State and outputs", run: openState }, { label: "Usage", run: () => setShowUse(true) }, ...(s.agent ? [{ label: "Agent details", run: () => openAgent(s.agent, "details") }] : [])]} /></div>
         </span>
       </div>
       <div class="l2 items">
@@ -3636,7 +3639,7 @@ function SessionUsage({ s, use, onClose, agent }) {
             rows=${use.models.map((m) => ({ label: modelName(m.model), sub: `${tokens(m.total)} tokens · ${m.messages} replies`, cost: m.cost }))} />`}
         <h4>Activity</h4>
         <dl class="facts">${rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
-        ${!agent && s.agent && AGENT_INFO[s.agent] && html`<button class="btn" onClick=${() => { onClose(); AGENT_SHEET(s.agent, "usage"); }}>All of ${agentLabel(AGENT_INFO[s.agent])}'s conversations</button>`}
+        ${!agent && s.agent && AGENT_INFO[s.agent] && html`<button class="btn" onClick=${() => { onClose(); openAgent(s.agent, "usage"); }}>All of ${agentLabel(AGENT_INFO[s.agent])}'s conversations</button>`}
         <p class="note">The share of a limit counts this ${what}'s spend since that window opened. ${RATE} ${ESTIMATE(use.pricesAsOf)}${use.unpriced?.length ? ` No price known for ${use.unpriced.join(", ")}, so it counts as $0.` : ""} Working time adds up the gaps between messages in each turn, at most 10 minutes per gap.</p>`}
     <//>`;
 }
@@ -3852,7 +3855,7 @@ const pageRef = (p) => (p.at ? `${p.name}#${p.at}` : p.name);
 let AT_SEQ = 0;
 const atOf = (ref) => { const [name, id] = splitRef(ref); return id ? { name, id, seq: ++AT_SEQ } : null; };
 const atcRoute = (href) => { const u = new URL(href, location.href); return u.origin === location.origin && u.pathname === "/" && u.hash ? u.hash : null; };
-const routePage = () => { const m = location.hash.match(/^#\/s\/[^/]+\/p\/(.+)$/); return m ? decodeURIComponent(m[1]) : null; };
+const routePage = () => { const m = location.hash.match(/^#\/(?:s|agents)\/[^/]+\/p\/(.+)$/); return m ? decodeURIComponent(m[1]) : null; };
 let LAST_KEY = 0;
 addEventListener("keydown", () => { LAST_KEY = Date.now(); }, true);
 
@@ -4633,11 +4636,11 @@ const soon = (at) => {
 function AgentTag({ s }) {
   const a = AGENT_INFO[s.agent] || { name: s.agent };
   return html`<span class="agenttag" role="button" title=${`${agentLabel(a)}: details`}
-    onClick=${(e) => { e.stopPropagation(); AGENT_SHEET(a.name); }}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</span>`;
+    onClick=${(e) => { e.stopPropagation(); openAgent(a.name, "details"); }}><${AppTile} a=${a} size=${14} />${agentLabel(a)}</span>`;
 }
 
 const AGENTS_ROUTE = "#/agents";
-const agentRoute = () => { const m = location.hash.match(/^#\/agents(?:\/([^/?]+))?$/); return m ? decodeURIComponent(m[1] || "") : null; };
+const agentRoute = () => { const m = location.hash.match(/^#\/agents(?:\/([^/?]+))?(?:\/p\/.+)?$/); return m ? decodeURIComponent(m[1] || "") : null; };
 const monogram = (n) => { const w = n.split(/[-_ ]+/).filter(Boolean); return (w.length > 1 ? w[0][0] + w[1][0] : n.slice(0, 2)).toUpperCase(); };
 
 function AgentMark({ a, lg }) {
@@ -4649,21 +4652,39 @@ const agentBadge = (a) => { const b = a.badge == null ? null : typeof a.badge ==
 const agentKeeps = (a) => a.headline || (agentBadge(a) ? `${agentBadge(a)} on its page` : "");
 const agentWakes = (a) => a.every ? `every ${a.every}${a.from ? ` from ${a.from.replace("T", " ")}` : ""}` : "when messaged";
 
-function AgentsPage({ name, agents, live, say, reload }) {
+function usePastSession(id, known, remember) {
+  const [asked, setAsked] = useState({});
+  useEffect(() => {
+    if (!id || known || asked[id]) return;
+    api(`/api/history?q=${encodeURIComponent(id)}&limit=1`).then((l) => remember(l || []), () => {}).finally(() => setAsked((m) => ({ ...m, [id]: true })));
+  }, [id, known]);
+  return !!id && !known && !asked[id];
+}
+
+function AgentsPage({ name, agents, live, past, remember, say, reload, panes, togglePane }) {
   useNow(30000);
   const wide = useWide();
   const list = (agents || []).filter((a) => a.name);
-  const cur = list.find((a) => a.name === name) || (wide && !name ? list.find((a) => a.name === stored("atc.agentsel", "")) || list[0] : null);
-  useEffect(() => { if (cur) store("atc.agentsel", cur.name); }, [cur?.name]);
+  const openable = list.filter((a) => a.name !== "assistant");
+  const cur = openable.find((a) => a.name === name) || (wide && !name ? openable.find((a) => a.name === stored("atc.agentsel", "")) || openable[0] : null);
+  useEffect(() => { if (name === "assistant") location.replace(ASSIST); }, [name]);
+  useEffect(() => {
+    if (!cur) return;
+    store("atc.agentsel", cur.name);
+    if (!name) history.replaceState(null, "", `${AGENTS_ROUTE}/${encodeURIComponent(cur.name)}`);
+  }, [cur?.name, name]);
+  const run = cur && (agentRun(live, cur.name) || past[cur.sessionId]);
+  const lookingUp = usePastSession(cur?.sessionId, !!run, remember);
   const keys = useRef();
-  keys.current = { list, cur };
+  keys.current = { openable, cur };
   useEffect(() => {
     const k = (e) => {
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || document.querySelector(".nsveil, .pal, .veil, .keys-ov")) return;
-      const { list, cur } = keys.current, i = list.indexOf(cur);
+      const t = e.target;
+      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || document.querySelector(".nsveil, .pal, .veil, .keys-ov")) return;
+      const { openable: l, cur } = keys.current, i = l.indexOf(cur);
       const to = (a) => a && location.replace(`${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`);
-      const f = { j: () => to(list[i + 1]), k: () => to(list[i - 1]), ArrowDown: () => to(list[i + 1]), ArrowUp: () => to(list[i - 1]),
-        Enter: () => document.querySelector(".agd .conv")?.click() }[e.key];
+      const start = document.querySelector(".agd .conv");
+      const f = { j: () => to(l[i + 1]), k: () => to(l[i - 1]), Enter: start && (() => start.click()) }[e.key];
       if (f) { e.preventDefault(); f(); }
     };
     addEventListener("keydown", k);
@@ -4678,18 +4699,20 @@ function AgentsPage({ name, agents, live, say, reload }) {
           ${agents && !list.length && html`<p class="none">No standing agents. An agent is a folder with a brief under ~/.config/atc/agents.</p>`}
           ${list.map((a) => { const x = agentRun(live, a.name), keeps = agentKeeps(a); return html`
             <a class="ar ${a === cur ? "sel" : ""}" role="option" aria-selected=${a === cur} href=${`${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`}
-              onClick=${(e) => { e.preventDefault(); const to = `${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`; wide ? location.replace(to) : (location.hash = to); }}>
+              onClick=${(e) => { e.preventDefault(); if (a.name === "assistant") return openAssistant(); const to = `${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`; wide ? location.replace(to) : (location.hash = to); }}>
               <${AgentMark} a=${a} /><b>${a.name === "assistant" ? "Assistant" : `@${a.name}`}${x?.parked && html`<span class="pz">parked</span>`}</b>
               <span class="ago">${a.last ? ago({ updated: a.last }) : ""}</span>
               <span class="k ${keeps ? "" : "none"}">${a.error ? "Can't start: see why" : keeps || "Keeps nothing"}</span>
               <span class="l">${oneLine(x?.summary?.status || x?.lastReply) || `wakes ${agentWakes(a)}`}</span></a>`; })}
         </div>
       </aside>
-      ${cur ? html`<${AgentDetail} key=${cur.name} a=${cur} live=${live} say=${say} reload=${reload} />` : html`<section class="agd"></section>`}
+      ${run ? html`<section class="agv"><${Session} key=${run.sessionId} s=${run} say=${say} live=${live} panes=${panes} togglePane=${togglePane} back=${() => (location.hash = AGENTS_ROUTE)} /></section>`
+        : cur && !lookingUp ? html`<${AgentDetail} key=${cur.name} a=${cur} live=${live} say=${say} reload=${reload} />`
+        : html`<section class="agd">${lookingUp && html`<div class="blank">Opening…</div>`}</section>`}
     </section>`;
 }
 
-function AgentDetail({ a, live, say, reload }) {
+function AgentDetail({ a, live, say, reload, sheet, onClose }) {
   const [busy, setBusy] = useState(false);
   const [use, setUse] = useState(false);
   const x = agentRun(live, a.name);
@@ -4699,7 +4722,7 @@ function AgentDetail({ a, live, say, reload }) {
     try { const r = await fn(); done && done(r); reload(); } catch (e) { say(e.message); }
     setBusy(false);
   };
-  const conv = x ? () => go(keyOf(x)) : a.sessionId ? () => go(a.sessionId) : act(() => agentApi(a.name, "message"), (r) => go(r.id));
+  const conv = x || a.sessionId ? () => { onClose?.(); go(x ? keyOf(x) : a.sessionId); } : act(() => agentApi(a.name, "message"), (r) => { onClose?.(); go(r.id); });
   const keeps = agentKeeps(a);
   const said = oneLine(x?.summary?.status || x?.lastReply);
   const rule = a.rule && `${spanOf(a.rule.Quiet)} quiet past ${ktok(a.rule.Small)} tokens, or ${spanOf(a.rule.CapQuiet)} quiet past ${ktok(a.rule.Cap)}`;
@@ -4720,13 +4743,7 @@ function AgentDetail({ a, live, say, reload }) {
     a.lastReset && ["Last started over", agoLong(a.lastReset)],
     x?.context && ["Context", `${ktok(x.context)} tokens`],
   ].filter(Boolean);
-  return html`
-    <section class="agd">
-      <header class="hd">
-        <div class="l1"><a class="back kb" href=${AGENTS_ROUTE}>Agents</a><${AgentMark} a=${a} /><h1>${title}</h1><span class="where">${[a.host, tilde(a.folder || a.dir || "")].filter(Boolean).join(" ")}</span>
-          <span class="r">${right}</span></div>
-        <div class="l2"><span class="stat">${status}</span><span class="rd"><span class="l">wakes</span>${agentWakes(a)}</span>${a.next && html`<span class="rd"><span class="l">next</span>${soon(a.next)}</span>`}</div>
-      </header>
+  const body = html`
       <div class="scroll"><div class="agbody">
         <div class="acts-ph">${right}</div>
         <section class="sec"><div class="sh"><h2>Keeps</h2><span class="n">${keeps ? "its own state, from its page" : ""}</span></div>
@@ -4742,7 +4759,16 @@ function AgentDetail({ a, live, say, reload }) {
           <dl class="kv">${facts.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
         </section>
       </div></div>
-      ${use && html`<${AgentUsage} name=${a.name} onClose=${() => setUse(false)} />`}
+      ${use && html`<${AgentUsage} name=${a.name} onClose=${() => setUse(false)} />`}`;
+  if (sheet) return html`<${Sheet} cls="agsheet" title=${title} sub=${status} onClose=${onClose}><div class="scrpane">${body}</div><//>`;
+  return html`
+    <section class="agd">
+      <header class="hd">
+        <div class="l1"><a class="back kb" href=${AGENTS_ROUTE}>Agents</a><${AgentMark} a=${a} /><h1>${title}</h1><span class="where">${[a.host, tilde(a.folder || a.dir || "")].filter(Boolean).join(" ")}</span>
+          <span class="r">${right}</span></div>
+        <div class="l2"><span class="stat">${status}</span><span class="rd"><span class="l">wakes</span>${agentWakes(a)}</span>${a.next && html`<span class="rd"><span class="l">next</span>${soon(a.next)}</span>`}</div>
+      </header>
+      ${body}
     </section>`;
 }
 
@@ -6715,7 +6741,7 @@ function Palette({ live, sel, say, home, hosts, actions, onClose }) {
     add("Folders", tilde(d.path), { mono: true, sub: `new session on ${d.host}`, run: run(null, () => actions.create({ dir: d.path, host: d.host })) });
   }
   for (const a of Object.values(AGENT_INFO)) add("Agents", a.name === "assistant" ? "the assistant" : `@${a.name}`, { key: `g:${a.name}`, agent: a, boost: 2,
-    sub: a.headline || a.error || (a.every ? `wakes every ${a.every}` : "wakes when messaged"), run: run(`g:${a.name}`, () => AGENT_SHEET(a.name)) });
+    sub: a.headline || a.error || (a.every ? `wakes every ${a.every}` : "wakes when messaged"), run: run(`g:${a.name}`, () => openAgent(a.name)) });
   bays.forEach((b, i) => add("Bays", b.name, { bayN: i + 1, b, hint: i < 9 ? `alt ${i + 1}` : "", sub: bayWords(b, i).split(": ")[1] || "nothing open", run: run(null, () => goBay(b.name, live)) }));
 
   const ql = q.trim().toLowerCase();
