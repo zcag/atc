@@ -1,23 +1,19 @@
 # atc
 
-**Air traffic control for Claude Code.** Run every session on all your machines from one place, let sessions direct each other, and
-phone an assistant that keeps track of it all.
+**Talk to your Claude Code on the phone.** Call an assistant that knows what every session on all your machines is doing, tell it what
+to do, cut it off mid-sentence, and let it ring you when something can't wait.
 
 Past a few parallel sessions, the hard part stops being the work. Which one is waiting on you? What did that one do while you were away?
-Which machine was it on? atc answers those at a glance, at your desk and on your phone. Agents look after
-things like your mail, alerts and invoices, and the assistant picks up when you call and rings you when something can't wait. It all runs
-on your own machines, on your own Claude plan.
+Which machine was it on? Ask out loud, or see it at a glance on atc's board, at your desk and on your phone. Agents look after
+things like your mail, alerts and invoices. It all runs on your own machines, on your own Claude plan.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/hero-dark.webp">
-  <img src="docs/img/hero-light.webp" alt="atc's main screen, one window with three panes. On the left, the sessions of one project with what each did in a line. In the middle, the session Fix the coupon crash: your request, what it did as a short story with one failed test, and the edit as a diff. On the right, the page it made: 8.2% errors at the peak, 231 failed checkouts replayed and all passing, a chart of errors jumping at the deploy and falling at the rollback, and the cause.">
-</picture>
+<img src="docs/img/call-demo.webp" alt="A recorded call on the real call stack. The phone rings with the reason, Checkout errors jumped to 8% after the last deploy. On the call, June says what happened and is cut off mid-sentence by Wait, was that the only thing in the deploy? She plays a thinking phrase, reads what @ops found and answers. Told to roll it back and have someone find out why, she hands the rollback to one session and starts another on the cause. Asked how many orders were lost, she says about forty and puts the chart on the phone's screen. A panel beside the phone names each thing as it happens.">
 
-*One project's sessions, what the selected one did, and the page it made. Each session's key and state are on its row.*
+*A recorded call on the real call stack, with the transcript and notes beside the phone. The incident and Claude's lines are written for the demo. [Watch it with sound](docs/img/call-demo.mp4).*
 
+- **[An assistant you talk to on the phone](#an-assistant-you-talk-to-on-the-phone).** A natural conversation that can run your sessions, your agents and whatever else you connect it to.
 - **[Control of every session](#control-of-every-session).** Dozens running on several machines, and you still know what each one needs and did, from any screen.
 - **[Sessions that run other sessions](#sessions-that-run-other-sessions).** They start, ask and hand work to each other, and you can step into any of them.
-- **[An assistant you talk to on the phone](#an-assistant-you-talk-to-on-the-phone).** A natural conversation that can run your sessions, your agents and whatever else you connect it to.
 - **[Agents for your own stuff](#agents-for-your-own-stuff).** Standing specialists that wake up when there's work and remember what they've learned.
 - **[A bay for each project](#a-bay-for-each-project).** Switch projects with one key and land where you left off.
 - **[Pages instead of walls of text](#pages-instead-of-walls-of-text).** A session hands you a live report, chart or inbox with working buttons.
@@ -26,17 +22,72 @@ on your own machines, on your own Claude plan.
 curl -fsSL https://github.com/zcag/atc/releases/latest/download/install.sh | sh
 ```
 
-Linux or macOS, with Claude Code signed in. One install serves one user. [More on installing](#install).
+Linux or macOS, with Claude Code signed in. One install serves one user. [More on installing](#install). Calls are one more command,
+`atc voice install` (about 2 GB on disk, 2 CPU cores; Linux for now, macOS is coming). [Calls](docs/calls.md)
 
 **Keep atc off the public internet.** A login to atc is a shell on your machine. Out of the box it answers that machine, your local
 network and your tailnet, and refuses public addresses. [Reach it from other devices](docs/install.md#reach-it-from-other-devices)
 
 atc is an independent project. It is not affiliated with or endorsed by Anthropic.
 
+## An assistant you talk to on the phone
+
+Call it from the app or a browser, with no phone number needed, or let anything that can't wait ring you. The assistant is one long
+conversation, shared with the atc page and WhatsApp, and it already knows the state of every session and machine when you say hello.
+
+**What you can get done on a call**
+
+- **Ask how things stand** and hear the answer right away, from what it already knows.
+- **Start and steer work.** Start a session on any machine, or tell a running one what to do, in your own words. Say yes to a merge, push or deploy and the session goes ahead without asking you again. Anything long runs on after you hang up, and you hear how it came out.
+- **Talk to a specialist.** Say "put @ops on" and the line moves to that agent (any you have allowed to talk), which knows what you just said. Say "back to the assistant" to return, even in the middle of its work.
+- **See things.** It says the gist and puts the page or chart on your phone's screen while you keep talking.
+- **Reach past atc.** It is a Claude Code conversation on your machine, so it has your command-line tools, scripts and MCP servers. Whatever you've connected them to (mail, calendar, your home) is one sentence away. It reads back and waits for a clear yes before sending, buying or deleting anything.
+
+The one thing it can't do is answer a session's permission prompt. Those still take a tap.
+
+**Why it feels like talking to someone**
+
+- **Cut it off any time.** It stops at once and knows exactly how much of its answer you heard.
+- **Say "mhm" or "right" while it talks.** It carries on, because those words don't count as interrupting.
+- **Pause to think.** A model listens for whether your turn sounds finished, and a sentence left hanging on "and..." keeps the turn open.
+- **No dead air.** It says a short thinking phrase while it starts, and tells you what it's doing and what it has found so far as it goes.
+- **It talks the way people do on the phone.** Short sentences, rounded numbers, no paths or ids read aloud. If a session needs you mid-call, it judges whether that's worth interrupting you for.
+- **Switch language mid-call.** With more than one installed, the voice, the transcriber and the character all change with you.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/call-ring-dark.webp">
+  <img src="docs/img/call-ring-light.webp" alt="Three phones. The first is ringing with the character on screen: Assistant, June, with the reason under the name, Checkout errors jumped to 8% after the last deploy, and a red and a green button. The second is on the call with Arthur, a painted professor in glasses and a cardigan in their study, speaking. The third is on the call with Tom, a painted lanky young man in round glasses and a teal jumper in a lamp-lit sitting room, listening. Each call has the name and a timer above the face, and what was said below it.">
+</picture>
+
+*The three built-in characters: one ringing, one speaking, one listening. On Android it is a real phone call: it rings on the lock screen and appears in your call log, you answer from Bluetooth or car buttons, it works on Android Auto, and it goes on hold for a SIM call.*
+
+It runs on your machine on 2 CPU cores: about 3 seconds from when you stop talking to its first word, most of that Claude's first
+token. Streaming speech recognition is the weakest part, so it sometimes has to guess at a word.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/assistant-dark.webp">
+  <img src="docs/img/assistant-light.webp" alt="The assistant with a call on. On the left, the conversation: you ask it to find out why checkout is slow and to fix a build on the laptop, it starts both sessions and answers with the numbers, and the sessions it set going are listed under it. On the right, the call: Arthur, a painted professor in their study, thinking with their hand to their chin, and the sessions on this call under them.">
+</picture>
+
+*In a browser too: the conversation on the left, the call on the right, and the sessions it started on this call under both.*
+
+The character moves with both voices as it listens, thinks and speaks. Pick who the assistant is, give an agent its own person, voice and room, or use any picture you upload as a room. In public, a plain line or bars replace the face.
+
+<img src="docs/img/rooms.webp" alt="Arthur and June in five rooms: a night study with a desk lamp, a loft with rain on the window and a neon city outside, a cabin with a fire and snow outside, a library with a green lamp and a violet window, and a sunroom with plants." />
+
+[Calls](docs/calls.md) · [The assistant](docs/assistant.md)
+
 ## Control of every session
 
 Sessions from all your machines share one board, sorted by who needs you: what is asking you something, then what has finished,
 then what is working. Each finished turn gets a one-line result, so you can tell what happened without opening anything.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/hero-dark.webp">
+  <img src="docs/img/hero-light.webp" alt="atc's main screen, one window with three panes. On the left, the sessions of one project with what each did in a line. In the middle, the session Fix the coupon crash: your request, what it did as a short story with one failed test, and the edit as a diff. On the right, the page it made: 8.2% errors at the peak, 231 failed checkouts replayed and all passing, a chart of errors jumping at the deploy and falling at the rollback, and the cause.">
+</picture>
+
+*One project's sessions, what the selected one did, and the page it made. Each session's key and state are on its row.*
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/board-dark.webp">
@@ -94,57 +145,6 @@ Below is one such chain: a Grafana alert woke @ops, which worked out what broke,
 *The alert's session and its page behind the phone it rang.*
 
 [Sessions driving sessions](docs/sessions.md)
-
-## An assistant you talk to on the phone
-
-Call it from the app or a browser, with no phone number needed, or let anything that can't wait ring you. The assistant is one long
-conversation, shared with the atc page and WhatsApp, and it already knows the state of every session and machine when you say hello.
-
-<img src="docs/img/call-demo.webp" alt="A recorded call on the real call stack. The phone rings with the reason, Checkout errors jumped to 8% after the last deploy. On the call, June says what happened and is cut off mid-sentence by Wait, was that the only thing in the deploy? She plays a thinking phrase, reads what @ops found and answers. Told to roll it back and have someone find out why, she hands the rollback to one session and starts another on the cause. Asked how many orders were lost, she says about forty and puts the chart on the phone's screen. A panel beside the phone names each thing as it happens.">
-
-*A recorded call, with the transcript and notes beside the phone. [Watch it with sound](docs/img/call-demo.mp4).*
-
-**What you can get done on a call**
-
-- **Ask how things stand** and hear the answer right away, from what it already knows.
-- **Start and steer work.** Start a session on any machine, or tell a running one what to do, in your own words. Say yes to a merge, push or deploy and the session goes ahead without asking you again. Anything long runs on after you hang up, and you hear how it came out.
-- **Talk to a specialist.** Say "put @ops on" and the line moves to that agent (any you have allowed to talk), which knows what you just said. Say "back to the assistant" to return, even in the middle of its work.
-- **See things.** It says the gist and puts the page or chart on your phone's screen while you keep talking.
-- **Reach past atc.** It is a Claude Code conversation on your machine, so it has your command-line tools, scripts and MCP servers. Whatever you've connected them to (mail, calendar, your home) is one sentence away. It reads back and waits for a clear yes before sending, buying or deleting anything.
-
-The one thing it can't do is answer a session's permission prompt. Those still take a tap.
-
-**Why it feels like talking to someone**
-
-- **Cut it off any time.** It stops at once and knows exactly how much of its answer you heard.
-- **Say "mhm" or "right" while it talks.** It carries on, because those words don't count as interrupting.
-- **Pause to think.** A model listens for whether your turn sounds finished, and a sentence left hanging on "and..." keeps the turn open.
-- **No dead air.** It says a short thinking phrase while it starts, and tells you what it's doing and what it has found so far as it goes.
-- **It talks the way people do on the phone.** Short sentences, rounded numbers, no paths or ids read aloud. If a session needs you mid-call, it judges whether that's worth interrupting you for.
-- **Switch language mid-call.** With more than one installed, the voice, the transcriber and the character all change with you.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/call-ring-dark.webp">
-  <img src="docs/img/call-ring-light.webp" alt="Three phones. The first is ringing with the character on screen: Assistant, June, with the reason under the name, Checkout errors jumped to 8% after the last deploy, and a red and a green button. The second is on the call with Arthur, a painted professor in glasses and a cardigan in their study, speaking. The third is on the call with Tom, a painted lanky young man in round glasses and a teal jumper in a lamp-lit sitting room, listening. Each call has the name and a timer above the face, and what was said below it.">
-</picture>
-
-*The three built-in characters: one ringing, one speaking, one listening. On Android it is a real phone call: it rings on the lock screen and appears in your call log, you answer from Bluetooth or car buttons, it works on Android Auto, and it goes on hold for a SIM call.*
-
-It runs on your machine on 2 CPU cores: about 3 seconds from when you stop talking to its first word, most of that Claude's first
-token. Streaming speech recognition is the weakest part, so it sometimes has to guess at a word.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/assistant-dark.webp">
-  <img src="docs/img/assistant-light.webp" alt="The assistant with a call on. On the left, the conversation: you ask it to find out why checkout is slow and to fix a build on the laptop, it starts both sessions and answers with the numbers, and the sessions it set going are listed under it. On the right, the call: Arthur, a painted professor in their study, thinking with their hand to their chin, and the sessions on this call under them.">
-</picture>
-
-*In a browser too: the conversation on the left, the call on the right, and the sessions it started on this call under both.*
-
-The character moves with both voices as it listens, thinks and speaks. Pick who the assistant is, give an agent its own person, voice and room, or use any picture you upload as a room. In public, a plain line or bars replace the face.
-
-<img src="docs/img/rooms.webp" alt="Arthur and June in five rooms: a night study with a desk lamp, a loft with rain on the window and a neon city outside, a cabin with a fire and snow outside, a library with a green lamp and a violet window, and a sunroom with plants." />
-
-[Calls](docs/calls.md) · [The assistant](docs/assistant.md)
 
 ## Agents for your own stuff
 
