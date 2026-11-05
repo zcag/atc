@@ -118,7 +118,7 @@ changes: a chart, a comparison, an inbox with working buttons. Every page from e
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/pages-dark.webp">
-  <img src="docs/img/pages-light.webp" alt="The Pages screen: every page from every session, grouped by project, with one agent's daily page open.">
+  <img src="docs/img/pages-light.webp" alt="The Pages screen: every page from every session, grouped by project, with one agent's alerts page open.">
 </picture>
 
 Sessions drive a real browser too. Each gets its own tabs with your logins shared, and you watch them live next to the conversation.
@@ -191,7 +191,7 @@ and tells the interrupted ones to continue.
 - **Summaries of every finished turn**, at three lengths, on your plan or your own model. [Summaries](docs/summaries.md)
 - **Everything over HTTP and JSON.** The API behind the page is open to your scripts, and CLI commands take `-json`.
 
-The screenshots come from `test/demo/`: atc's real UI on made-up sessions, a fake Claude and a scripted call line, with made-up figures
+The screenshots come from `test/demo/`: atc's real UI on made-up sessions and a fake Claude whose lines on calls are written for the demo, with made-up figures
 on the Resources screen. The frames are drawn on. The phones are a debug build of the app on a test device, and the call history is an
 open-source dialer reading the phone's real call log.
 
