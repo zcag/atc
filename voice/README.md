@@ -32,6 +32,7 @@ atc app ── atc (/api/call/line) ── call.py :8807 ── talk.py ── a
 | `TALK_STT` | empty | a Whisper endpoint for the second reading of short turns; empty skips that reading |
 | `TALK_ARGS`, `TTS_ARGS` | empty | extra flags for `talk.py`, `ttsd.py` |
 | `TTS_ENGINES`, `TTS_PORT`, `TTS_VENV`, `TTS_HF_HOME` | each language's default (`pocket-en`, `pocket` for Turkish), `8812`, under the data dir, `~/.cache/atc/voice/hf` | ttsd; atc's voice picker (`ATC_CALL_VOICES`) is on the same port |
+| `TTS_REMOTE_URL`, `TTS_REMOTE_MODEL`, `TTS_REMOTE_VOICE`, `TTS_REMOTE_RATE`, `TTS_REMOTE_KEY` | none, `tts-1`, the server's first, `24000`, none | the `remote` engine, your own server (`--tts-url`). The rate has to be what the server sends: raw PCM doesn't say, and a wrong one plays at the wrong pitch. Keep this file private if it holds a key |
 | `ATC_VOICE_DIR` | `~/.local/share/atc/voice` | where the files run from |
 | `ATC_VOICE_UNITS` | `delta-call delta-tts delta-talk-app` | what deploy.sh installs and restarts; add `delta-talk` for a phone, `delta-higgs` for Higgs |
 | `TALK_MODELS`, `HF_HOME` | `~/.cache/atc/voice`, its `hf` | models and the rendered-phrase cache |

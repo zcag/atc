@@ -24,6 +24,21 @@ ATC_CALL_NUMBER=+15550100                # optional: the number atc call rings, 
 ATC_CALL_LINE_NUMBER=+15550101           # optional: the assistant's own number, shown in the phone's call log
 ```
 
+## Your own voice server
+
+The voice can come from a server of yours instead of an engine on this machine: a GPU box with Higgs or Kokoro, or a hosted
+service. Nothing heavy is installed here, so it also gives an Intel Mac or a small machine a better voice.
+
+```sh
+atc voice install --tts-url http://gpu-box:8880 --voice af_heart
+```
+
+It takes anything with OpenAI's `POST /v1/audio/speech` that returns raw 16-bit PCM. With no `--voice` it uses the first in the
+server's `/v1/audio/voices`. Its model, sample rate (24 kHz unless you say) and key are settings in `voice.env`
+([the list](../voice/README.md#settings-configatcvoiceenv)). Text and speech go over that connection as they are, so use a
+private network or HTTPS. There is no fallback: while the server is down, calls connect and stay silent, Settings says so,
+and the voice is back when the server is. It adds the network and the server's own first-audio time to each reply.
+
 ## On a Mac
 
 `atc voice install` runs the same stack as launchd agents of your user (`io.github.zcag.atc.delta-*`), rendered from the
@@ -33,8 +48,8 @@ same unit files, and `status` and `uninstall` work the same. No Xcode or Python 
 | | Apple Silicon | Intel |
 |---|---|---|
 | Default voice | `pocket-en`, as on Linux | `piper`: torch has no Intel Mac build, and `pocket-en` and `pocket` need it, so install refuses them and says so |
-| Other engines | `pocket` (Turkish), `piper`, `kokoro` | `kokoro`, which needs a fast machine: at about real time under Rosetta on an M5 Max, with 5 s before its first audio |
-| Turkish calls | Yes | The transcriber runs, but piper and kokoro only speak English here |
+| Other engines | `pocket` (Turkish), `piper`, `kokoro`, [your own server](#your-own-voice-server) | `kokoro`, which needs a fast machine: at about real time under Rosetta on an M5 Max, with 5 s before its first audio; [your own server](#your-own-voice-server) |
+| Turkish calls | Yes | The transcriber runs, but piper and kokoro only speak English here, so it takes your own server |
 | Measured | M5 Max: the voice starts 1.9 to 2.5 s after you stop, with a stand-in for Claude that takes 0.8 s, so about 2 to 3.5 s with Claude's real first token. `pocket-en` takes 0.03 s to its first audio and renders 14 times faster than real time, on 2 threads or 4 | Only under Rosetta on that same M5 Max (1.4 to 2.2 s the same way), never on a real Intel Mac |
 
 Smaller Apple Silicon chips have not been measured.
@@ -46,8 +61,8 @@ Smaller Apple Silicon chips have not been measured.
 - **A busy machine.** Linux gives the units their own `calls.slice`; a Mac has no such thing, so they run as launchd's
   `Interactive` process type, its highest. With all 18 cores of that M5 Max kept busy the voice started 0.4 s later and
   held up (37 ms dry in a 45 s call).
-- **Higgs**, the GPU voice, has only been run on Linux, through audio.cpp's Vulkan build. On a Mac you would build audio.cpp
-  yourself and start it on `HIGGS_URL`.
+- **Higgs**, the GPU voice, has only been run on Linux, through audio.cpp's Vulkan build. A Mac can use one running on
+  another machine, as [your own server](#your-own-voice-server).
 - **A phone on USB** (`--phone`) needs `adb` (`brew install android-platform-tools`). It has not been tested on a Mac.
 - `uninstall --purge` leaves uv's own cache in `~/.cache/uv`, as on Linux: `uv cache clean` removes it.
 

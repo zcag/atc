@@ -118,7 +118,7 @@ func All() []Cap {
 		{
 			ID: "voice-engine", Title: "Voice engine", Group: Calls, Optional: true, Why: "Turns the assistant's words into speech. Without it a call connects and stays silent.",
 			Needs: []string{"call-line"}, Check: checkVoiceEngine,
-			Fix: Fix{Command: "atc voice install", Text: onMac("Installs it with the call line; its log is /tmp/delta-tts.log.", "Installs it with the call line; its log is journalctl --user -u delta-tts."), Guide: "calls"},
+			Fix: Fix{Command: "atc voice install", Text: onMac("Installs it with the call line, or --tts-url uses your own voice server; its log is /tmp/delta-tts.log.", "Installs it with the call line, or --tts-url uses your own voice server; its log is journalctl --user -u delta-tts."), Guide: "calls#your-own-voice-server"},
 		},
 		{
 			ID: "voices", Title: "Voice picker", Group: Calls, Optional: true, Why: "Lists the voices to choose from, plays samples and keeps your pick. Without it a person's voice doesn't change the call's, which speaks with the voice in voice.env.",

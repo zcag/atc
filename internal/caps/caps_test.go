@@ -188,6 +188,18 @@ func TestCallsNeedsItsParts(t *testing.T) {
 	if r = rowOf(t, new(Runner).Rows(ctx, envOf("true", all), calls), "calls"); r.Status != OK {
 		t.Fatalf("calls with everything, no voice picker: %s %q %+v", r.Status, r.Detail, r.Needs)
 	}
+	if err := os.WriteFile(voiceEnv, []byte("TALK_TTS="+ts.URL+"/v1/audio/speech\nTTS_ENGINES=remote\nTTS_REMOTE_URL=http://127.0.0.1:1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r = rowOf(t, new(Runner).Rows(ctx, envOf("true", all), calls), "voice-engine"); r.Status != Broken || !strings.Contains(r.Detail, "Your voice server") {
+		t.Fatalf("own voice server down: %s %q", r.Status, r.Detail)
+	}
+	if err := os.WriteFile(voiceEnv, []byte("TALK_TTS="+ts.URL+"/v1/audio/speech\nTTS_ENGINES=pocket,remote\nTTS_REMOTE_URL="+ts.URL+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if r = rowOf(t, new(Runner).Rows(ctx, envOf("true", all), calls), "voice-engine"); r.Status != OK || !strings.Contains(r.Detail, "Your voice server") && !strings.Contains(r.Detail, "your voice server") {
+		t.Fatalf("own voice server up: %s %q", r.Status, r.Detail)
+	}
 	all["ATC_CALL_LINE"] = "http://other-machine:8807"
 	if r = rowOf(t, new(Runner).Rows(ctx, envOf("true", all), calls), "voice-engine"); r.Status != OK {
 		t.Fatalf("voice engine with the line elsewhere: %s %q", r.Status, r.Detail)

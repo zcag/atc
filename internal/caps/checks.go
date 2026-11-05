@@ -295,8 +295,7 @@ func checkTalker(ctx context.Context, env Env) Result {
 	return Result{OK, fmt.Sprintf("%d connected to the call line.", n)}
 }
 
-// ttsAddress is where this machine's talker finds its voice engine, from voice.env (voice/README.md).
-func ttsAddress() string {
+func voiceEnv() map[string]string {
 	home, _ := os.UserHomeDir()
 	b, _ := os.ReadFile(filepath.Join(home, ".config/atc/voice.env"))
 	set := map[string]string{}
@@ -305,10 +304,7 @@ func ttsAddress() string {
 			set[k] = strings.Trim(v, `"'`)
 		}
 	}
-	if u := set["TALK_TTS"]; u != "" {
-		return strings.TrimSuffix(u, "/v1/audio/speech")
-	}
-	return "http://127.0.0.1:" + cmp.Or(set["TTS_PORT"], "8812")
+	return set
 }
 
 func checkVoiceEngine(ctx context.Context, env Env) Result {
@@ -319,7 +315,11 @@ func checkVoiceEngine(ctx context.Context, env Env) Result {
 	if ip := net.ParseIP(line.Hostname()); line.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback()) {
 		return Result{OK, "The call line is on another machine, so its voice engine is there too."}
 	}
-	u := ttsAddress()
+	set := voiceEnv()
+	u := strings.TrimSuffix(set["TALK_TTS"], "/v1/audio/speech")
+	if u == "" {
+		u = "http://127.0.0.1:" + cmp.Or(set["TTS_PORT"], "8812")
+	}
 	code, _, err := fetch(ctx, u+"/v1/voices")
 	if err != nil {
 		return Result{Broken, fmt.Sprintf("%s doesn't answer, so a call would connect and stay silent.", site(u))}
@@ -327,7 +327,14 @@ func checkVoiceEngine(ctx context.Context, env Env) Result {
 	if code != 200 {
 		return Result{Broken, fmt.Sprintf("%s answers, but not as a voice engine (%d).", site(u), code)}
 	}
-	return Result{OK, site(u) + " answers."}
+	server := strings.TrimSuffix(strings.TrimRight(set["TTS_REMOTE_URL"], "/"), "/v1/audio/speech")
+	if server == "" || !slices.Contains(strings.Split(set["TTS_ENGINES"], ","), "remote") {
+		return Result{OK, site(u) + " answers."}
+	}
+	if _, _, err := fetch(ctx, server+"/v1/audio/voices"); err != nil {
+		return Result{Broken, fmt.Sprintf("Your voice server %s doesn't answer, so a call would connect and stay silent.", site(server))}
+	}
+	return Result{OK, "Speaks through your voice server, " + site(server) + "."}
 }
 
 func checkVoices(ctx context.Context, env Env) Result {

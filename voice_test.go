@@ -128,7 +128,7 @@ func TestEnginesPerMachine(t *testing.T) {
 	}{
 		{"pocket-en", "darwin", "arm64", true}, {"pocket-en,pocket,kokoro,piper", "darwin", "arm64", true}, {"higgs", "linux", "amd64", true},
 		{"piper", "darwin", "amd64", true}, {"kokoro", "darwin", "amd64", true}, {"pocket-en", "darwin", "amd64", false},
-		{"piper,pocket", "darwin", "amd64", false},
+		{"piper,pocket", "darwin", "amd64", false}, {"remote", "darwin", "amd64", true},
 	} {
 		if err := engineRuns(c.engines, c.goos, c.goarch); (err == nil) != c.ok {
 			t.Errorf("%s on %s/%s: %v", c.engines, c.goos, c.goarch, err)

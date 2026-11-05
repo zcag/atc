@@ -7,9 +7,11 @@ chunked as the engine produces it, so the first audio leaves before the sentence
 Engines: pocket (Turkish, CPU, pocket-tts-turkish), pocket-en (English, CPU, Kyutai's pocket-tts), kokoro (English, CPU,
 kokoro-onnx), piper (English, CPU, piper-tts), higgs (Higgs TTS 3 on the GPU, served by delta-higgs / audio.cpp on :8841,
 voice = a cloned reference in its voice_dir; it speaks whatever language the text is in, and voices named en_* are the
-English ones). fetch.py installs what each needs into the venv this runs from.
-Higgs sometimes never ends a line (it ran on for 72 s of near-silence after an 8 s sentence), so its output stops after
-1.5 s of near-silence, and in any case at 0.2 s per character plus 2 s, about three times normal speech.
+English ones), remote (any server with OpenAI's POST /v1/audio/speech and raw PCM: TTS_REMOTE_URL, and TTS_REMOTE_MODEL,
+TTS_REMOTE_VOICE, TTS_REMOTE_RATE, TTS_REMOTE_KEY). fetch.py installs what each needs into the venv this runs from.
+A server sometimes never ends a line (Higgs ran on for 72 s of near-silence after an 8 s sentence), so what comes from one
+stops after 1.5 s of near-silence, and in any case at 0.2 s per character plus 2 s, about three times normal speech. A
+server that is down doesn't stop this process: requests get no audio until it is back.
 Several engines can share one process; a request picks one with "engine", else the first.
 GET /v1/voices lists the voices of the engines that have a catalog.
 
@@ -54,35 +56,20 @@ def native(rate, warm="Hello, how are you?"):
 def engine(name, threads):
     """A generator of float32 chunks at the engine's own rate (gen.rate) for (text, voice)."""
     if name == "higgs":
-        import json, urllib.request
-
         def voices():
-            return [line.split("|")[0] for line in open(f"{HIGGS_VOICES}/prompt_text") if "|" in line]
-
-        @native(24000, "Merhaba, nasılsın?")
-        def gen(text, voice):
-            body = {"model": "higgs", "input": text, "voice": voice or voices()[0], "seed": 0,
-                    "response_format": "pcm", "stream_format": "audio"}
-            r = urllib.request.urlopen(urllib.request.Request(HIGGS, json.dumps(body).encode(),
-                                                              {"content-type": "application/json"}), timeout=60)
-            odd, left = b"", int((2 + 0.2 * len(text)) * 24000 * 2)
-            quiet = []
-            while left > 0 and (chunk := r.read1(1 << 14)):
-                left -= len(chunk)
-                chunk, odd = odd + chunk, b""
-                if len(chunk) % 2:
-                    chunk, odd = chunk[:-1], chunk[-1:]
-                out = np.frombuffer(chunk, "<i2").astype(np.float32) / 32768
-                if len(out) and np.sqrt(np.mean(out ** 2)) < 0.01:
-                    quiet.append(out)
-                    if sum(map(len, quiet)) > 1.5 * 24000:
-                        break
-                    continue
-                yield np.concatenate(quiet + [out])
-                quiet = []
-            r.close()
-        gen.voices = voices
-        return gen
+            try:
+                return [line.split("|")[0] for line in open(f"{HIGGS_VOICES}/prompt_text") if "|" in line]
+            except OSError:
+                return server_voices(HIGGS)
+        return speech_server(HIGGS, 24000, {"model": "higgs", "seed": 0}, {}, voices, "Merhaba, nasılsın?")
+    if name == "remote":
+        url = os.environ.get("TTS_REMOTE_URL")
+        if not url:
+            raise SystemExit("the remote engine needs TTS_REMOTE_URL")
+        key = os.environ.get("TTS_REMOTE_KEY")
+        picked = os.environ.get("TTS_REMOTE_VOICE")
+        return speech_server(url, int(os.environ.get("TTS_REMOTE_RATE") or 24000), {"model": os.environ.get("TTS_REMOTE_MODEL") or "tts-1"},
+                             {"authorization": f"Bearer {key}"} if key else {}, lambda: [picked] if picked else server_voices(url, key))
     if name == "kokoro":
         from kokoro_onnx import Kokoro
         os.environ["ONNX_NUM_THREADS"] = str(threads)
@@ -131,6 +118,51 @@ def engine(name, threads):
     raise SystemExit(f"unknown engine {name}")
 
 
+def speech_url(url):
+    return url.rstrip("/").removesuffix("/v1/audio/speech") + "/v1/audio/speech"
+
+
+def server_voices(url, key=None):
+    """What the server says it has, for the servers that say: audio.cpp and Kokoro-FastAPI do, OpenAI doesn't."""
+    req = urllib.request.Request(speech_url(url).removesuffix("/speech") + "/voices", headers={"authorization": f"Bearer {key}"} if key else {})
+    try:
+        with urllib.request.urlopen(req, timeout=3) as r:
+            got = json.load(r)
+    except (OSError, ValueError):
+        return []
+    got = got.get("voices", []) if isinstance(got, dict) else got
+    return [v if isinstance(v, str) else v.get("name") or v.get("id") for v in got]
+
+
+def speech_server(url, rate, body, headers, voices, warm="Hello, how are you?"):
+    """An engine that is a server elsewhere. voices() lists what it can speak with; the first is the default."""
+    @native(rate, warm)
+    def gen(text, voice):
+        ask = {**body, "input": text, "voice": voice or voices()[0], "response_format": "pcm", "stream_format": "audio"}
+        r = urllib.request.urlopen(urllib.request.Request(speech_url(url), json.dumps(ask).encode(),
+                                                          {"content-type": "application/json", **headers}), timeout=60)
+        odd, left = b"", int((2 + 0.2 * len(text)) * rate * 2)
+        quiet = []
+        try:
+            while left > 0 and (chunk := r.read1(1 << 14)):
+                left -= len(chunk)
+                chunk, odd = odd + chunk, b""
+                if len(chunk) % 2:
+                    chunk, odd = chunk[:-1], chunk[-1:]
+                out = np.frombuffer(chunk, "<i2").astype(np.float32) / 32768
+                if len(out) and np.sqrt(np.mean(out ** 2)) < 0.01:
+                    quiet.append(out)
+                    if sum(map(len, quiet)) > 1.5 * rate:
+                        break
+                    continue
+                yield np.concatenate(quiet + [out])
+                quiet = []
+        finally:
+            r.close()
+    gen.voices, gen.remote = voices, True
+    return gen
+
+
 def kokoro_stream(tts, text, voice):
     import asyncio
     stream = tts.create_stream(text, voice=voice, lang="en-us")
@@ -155,7 +187,8 @@ def pcm(synth, text, voice, rate):
 
 
 async def voices(request):
-    return web.json_response({n: synth.voices() for n, synth in ENGINES.items() if hasattr(synth, "voices")})
+    listed = {n: asyncio.to_thread(synth.voices) for n, synth in ENGINES.items() if hasattr(synth, "voices")}
+    return web.json_response({n: await got for n, got in listed.items()})
 
 
 def as_engine(voice, name):
@@ -287,9 +320,14 @@ if __name__ == "__main__":
     a = p.parse_args()
     NAMES = a.engine.split(",")
     LOCK, ENGINES = threading.Lock(), {n: engine(n, a.threads) for n in NAMES}
-    for synth in ENGINES.values():
-        for _ in synth(synth.warm, None):
-            pass
+    for n, synth in ENGINES.items():
+        try:
+            for _ in synth(synth.warm, None):
+                pass
+        except (OSError, IndexError) as e:
+            if not hasattr(synth, "remote"):
+                raise
+            print(f"{n}: its server gave no audio ({e}), so calls stay silent until it does", flush=True)
     if a.warm_only:
         raise SystemExit
     app = web.Application()

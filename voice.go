@@ -30,7 +30,7 @@ var voiceFiles embed.FS
 
 const voiceHelp = `atc voice: calls with the assistant, on this machine. Add-on: the app calls it over atc, no phone needed.
 
-  atc voice install [--lang en] [--also tr] [--engine pocket-en] [--voice alba]
+  atc voice install [--lang en] [--also tr] [--engine pocket-en] [--tts-url URL] [--voice alba]
                     [--assistant NAME] [--user NAME] [--phone]
   atc voice status
   atc voice uninstall [--purge] [--force]
@@ -43,6 +43,8 @@ engine, and starts the services. Runs again safely; a restart waits for any call
   --engine         by default the one for each language: pocket-en (CPU) for English, pocket (CPU) for Turkish. Also
                    piper or kokoro (English, CPU); higgs needs a GPU and setup by hand.
                    An Intel Mac has no torch for pocket and pocket-en, so piper is its default (docs/calls.md, On a Mac)
+  --tts-url        your own voice server instead of an engine here: anything with OpenAI's /v1/audio/speech and raw PCM
+                   (voice/README.md lists its model, rate and key settings)
   --voice          the engine's voice; empty is its default
   --phone          also run the phone-on-USB line (voice/device/), otherwise only the app line
 uninstall stops and removes the services and the stack's files; --purge also removes models, the venv, recordings and
@@ -267,11 +269,15 @@ func voiceInstall(args []string) error {
 	lang := fs.String("lang", "", "")
 	also := fs.String("also", "", "")
 	engine := fs.String("engine", "", "")
+	ttsURL := fs.String("tts-url", "", "")
 	voice := fs.String("voice", "", "")
 	assistant := fs.String("assistant", "", "")
 	user := fs.String("user", "", "")
 	phone := fs.Bool("phone", false, "")
 	fs.Parse(args)
+	if *ttsURL != "" && *engine == "" {
+		*engine = "remote"
+	}
 	if err := voiceHostError(); err != nil {
 		return err
 	}
@@ -292,11 +298,19 @@ func voiceInstall(args []string) error {
 			return fmt.Errorf("none of %s can speak %s. Nothing was changed. Leave out --engine for the default, or add one that can", engines, l)
 		}
 	}
+	if server := cmp.Or(*ttsURL, env["TTS_REMOTE_URL"]); slices.Contains(strings.Split(engines, ","), "remote") {
+		if server == "" {
+			return errors.New("the remote engine needs your voice server's address: atc voice install --tts-url http://host:port. Nothing was changed")
+		}
+		if _, err := (&http.Client{Timeout: 3 * time.Second}).Get(server); err != nil {
+			fmt.Printf("Note: %s doesn't answer yet, so calls will stay silent until it does.\n", server)
+		}
+	}
 	if err := ensureUV(); err != nil {
 		return err
 	}
 	if voiceOnMac() && slices.Contains(strings.Split(engines, ","), "higgs") {
-		fmt.Println("Note: higgs has only been run on Linux. On a Mac it needs audio.cpp's server built and started by you on :8841 (HIGGS_URL); until it answers, the voice engine keeps restarting.")
+		fmt.Println("Note: higgs runs on Linux, where it needs audio.cpp set up by hand. It hasn't been run on a Mac: point --tts-url at a machine that has it.")
 	}
 	set := map[string]string{}
 	first := func(key, flagValue, fallback string) {
@@ -308,6 +322,7 @@ func voiceInstall(args []string) error {
 	first("TALK_ALSO", *also, "")
 	first("TALK_ASSISTANT", *assistant, "")
 	first("TALK_USER", *user, "")
+	first("TTS_REMOTE_URL", *ttsURL, "")
 	first("TTS_ENGINES", engines, "")
 	for k, v := range voiceEngineKeys(env, engines, langs) {
 		set[k] = v

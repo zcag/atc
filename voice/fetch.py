@@ -24,6 +24,7 @@ ENGINES = {
         "piper/en_US-amy-medium.onnx": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx",
         "piper/en_US-amy-medium.onnx.json": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json"}},
     "higgs": {},
+    "remote": {},
 }
 FILES = {"silero_vad.onnx": "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx",
          "smart-turn-v3.2-cpu.onnx": "https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx"}
@@ -63,7 +64,7 @@ def venv(engines):
         subprocess.run(["uv", "venv", "--python", "3.12", VENV], check=True)
     pip = list(dict.fromkeys(a for e in engines for a in ENGINES[e].get("pip", [])))
     subprocess.run(["uv", "pip", "install", "--python", python, *pip, "soxr", "aiohttp", "numpy"], check=True)
-    local = [e for e in engines if e != "higgs"]
+    local = [e for e in engines if e not in ("higgs", "remote")]
     if local:
         print(f"loading {','.join(local)} once, which fetches its weights", flush=True)
         env = {**os.environ, "HF_HOME": os.path.expanduser(os.environ.get("TTS_HF_HOME") or "~/.cache/atc/voice/hf"), "TALK_MODELS": MODELS}

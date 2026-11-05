@@ -1092,6 +1092,8 @@ class Talk:
             if not ahead and t in self.cache:
                 continue
             voice, engine = voices[lang], self.engine(lang)
+            if engine == "remote":
+                engine += os.environ.get("TTS_REMOTE_URL", "")
             made = [os.stat(f).st_mtime_ns for f in (f"{HIGGS_VOICES}/{voice}.wav", f"{HIGGS_VOICES}/prompt_text") if os.path.exists(f)]
             if voice in shipped_voices():
                 made.append(os.stat(PERSONS).st_mtime_ns)
