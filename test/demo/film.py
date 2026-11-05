@@ -4,11 +4,29 @@ film.py <call dir> <film dir: callfilm.py's screen.mp4, events.json> <panels dir
 
 The audio is the call's call.wav (left the caller, right the assistant, on talk.py's clock) and the phone is the device's
 screen during that call. Only the panel beside the phone is drawn. beats.json holds the times of one recorded call, in
-seconds on the video's clock, read from callfilm.py's events.json and the call's turns.jsonl; a new recording needs new times."""
+seconds on the video's clock, read from callfilm.py's events.json and the call's turns.jsonl; a new recording needs new times.
+The caller's clips come straight from the TTS, about 13 dB under what ttsd sends, so each side is brought to SPEECH_DB."""
+import array
 import json
+import math
 import subprocess
 import sys
+import wave
 from pathlib import Path
+
+SPEECH_DB, SILENCE_DB = -18, -45
+
+
+def gains(wav):
+    """Per channel, what brings its speech (the 50 ms windows above SILENCE_DB) to SPEECH_DB."""
+    with wave.open(str(wav)) as w:
+        rate, data = w.getframerate(), array.array("h", w.readframes(w.getnframes()))
+    size, floor, out = rate // 20, 10 ** (SILENCE_DB / 10), []
+    for side in data[0::2], data[1::2]:
+        powers = [sum(v * v for v in side[i:i + size]) / size / 32768 ** 2 for i in range(0, len(side) - size, size)]
+        speech = [p for p in powers if p > floor]
+        out.append(10 ** ((SPEECH_DB - 10 * math.log10(sum(speech) / len(speech))) / 20))
+    return out
 
 
 def cut(call, film, panels, out):
@@ -32,7 +50,8 @@ def cut(call, film, panels, out):
         inputs += ["-loop", "1", "-i", f"{panels}/{i:02d}.png"]
         graph.append(f"[{last}][{i + 4}:v]overlay=0:0:eof_action=pass:enable='between(t,{t0:.2f},{t1:.2f})'[v{i + 1}]")
         last = f"v{i + 1}"
-    graph += [f"[{last}]fps=25,format=yuv420p[out]", "[2:a]pan=mono|c0=0.8*c0+0.8*c1,aresample=44100,apad[a]"]
+    caller, assistant = gains(call / "call.wav")
+    graph += [f"[{last}]fps=25,format=yuv420p[out]", f"[2:a]pan=mono|c0={caller:.3f}*c0+{assistant:.3f}*c1,aresample=44100,alimiter=limit=0.95:level=0,apad[a]"]
     subprocess.run(["ffmpeg", "-y", "-v", "error", *inputs, "-filter_complex", ";".join(graph), "-map", "[out]", "-map", "[a]",
                     "-c:v", "libx264", "-crf", "25", "-preset", "slow", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", "-t", str(span), f"{out}.mp4"], check=True)
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", f"{out}.mp4", "-vf", "fps=10,scale=1100:-2:flags=lanczos", "-an", "-c:v", "libwebp_anim",

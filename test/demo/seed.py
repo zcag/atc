@@ -581,10 +581,6 @@ def main_box():
         cfg = json.loads((d / "agent.json").read_text())
         cfg["host"] = "devbox"
         (d / "agent.json").write_text(json.dumps(cfg))
-    (ATC / "persons.json").write_text(json.dumps({"persons": [
-        {"id": "june", "name": "June", "character": "woman", "voices": {}},
-        {"id": "arthur", "name": "Arthur", "character": "professor", "voices": {}},
-        {"id": "tom", "name": "Tom", "character": "lanky", "voices": {}}], "langs": {"en": "june"}}))
     # What Claude Code records when you trust your home folder, so the agents here can wake.
     (HOME / ".claude.json").write_text(json.dumps({"projects": {str(HOME): {"hasTrustDialogAccepted": True}}}))
     (ATC / "presets.json").write_text(json.dumps([{"name": "reviewer", "dir": SHOP, "brief": "REVIEWER.md"}, {"name": "docs writer", "dir": DOCS, "worktree": True}]))
