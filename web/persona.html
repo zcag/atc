@@ -13,7 +13,7 @@ let state = "listening";
 window.persona = { state: (s) => (state = s) };
 const bridge = window.AtcPersona;
 const levels = () => (bridge ? bridge.levels().split(",").map(Number) : [0, 0, 0, 0]);
-persona(document.querySelector("canvas"), "/p/", () => { const [you, it, lo, hi] = levels(); return { state, you, it, lo, hi }; }, { first: () => bridge?.drawn() })
+persona(document.querySelector("canvas"), "/p/", () => { const [you, it, lo, hi] = levels(); return { state, you, it, lo, hi }; }, { first: () => bridge?.drawn(), background: new URLSearchParams(location.search).get("background") })
   .catch((e) => console.warn("persona", e));
 </script>
 </body>

@@ -104,12 +104,23 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   it speaks or thinks stops it (`interrupt`). A persona (`Persona.kt`) gets those states and reads
   both voices' loudness on the phone every frame it draws, so it moves with the sound and not with
   the network; the first one is an orb drawn by a shader.
+- **Persons** bundle what a call shows and speaks with: a name, a character, a background and a voice per
+  language, kept on the server in `persons.json` (`GET /api/call/persons`) with which one the assistant is in each
+  language. Pick and edit them under Person on the call or Settings, Persons. The talker sends the call's
+  language with every `persona` event, so when the language changes the call screen swaps character, background and
+  name at once while the voice changes with it. A pick tells the voice service, so the phone line speaks with it too.
+  With nobody picked for a language, the character kept on that device shows, and the voice service's voice speaks. A
+  person holds nothing about how the assistant behaves, and nothing in it is tied to the assistant, so an agent can name one too.
+- **Backgrounds** are images in `$ATC_APP_DIR/personas/_rooms/`, best at a character's 768x1344. One replaces a `rig`
+  character's room, darkened and softened like its own, without the lamp's glow and dust; it goes behind a `minimal` one
+  under a dark wash. The orb and the other kinds draw their own surroundings.
 - **Characters** are folders under `$ATC_APP_DIR/personas/<name>/` on the server (`persona.json` with
   `kind` and `files`, plus the files), listed in `personas/index.json` (`{"default", "personas":
   [{"name", "rev"}]}`); the phone downloads one when picked and keeps it until its `rev` changes.
   atc ships none besides the orb. The kept one starts from the phone with no wait on the server, on the
   dark backdrop until its first frame; the orb shows only when it is the choice, or when the character
-  is missing or stuck for 6 s. A long press on the persona switches to the next. Kinds: `minimal` (a
+  is missing or stuck for 6 s. A long press on the persona switches to the language's next person, or with no persons to
+  the next character. Kinds: `minimal` (a
   shader line or bars, `web/minimal.js`), `rig` (drawings swapped like cel animation, `web/rig.js`,
   built as in [the rig's notes](persona-rig.md)), `illustration` and `footage` (`web/persona.js`, in the
   app through a WebView), and `head3d` (`Head3D.kt`, a glTF head with ARKit morph targets drawn by

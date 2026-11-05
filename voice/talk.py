@@ -372,9 +372,10 @@ class Talk:
         return bool(words) and sum(map(self.echoed, words)) / len(words) >= .7
 
     def show(self, **kw):
-        """What the app's call screen shows: the state, what they are saying, what delta says, the tool it uses."""
+        """What the app's call screen shows: the state, what they are saying, what delta says, the tool it uses, and always
+        the language, so a screen opened mid-call or back from a dropped line draws the right person."""
         if self.app:
-            asyncio.ensure_future(self.send_cmd({"cmd": "persona", **kw}))
+            asyncio.ensure_future(self.send_cmd({"cmd": "persona", "lang": self.lang, **kw}))
 
     def follow(self, item):
         """Once per uplink frame: the state the call screen shows, sent once it has held for 100 ms (speech between
@@ -826,6 +827,7 @@ class Talk:
                     if tag.group(1) != self.lang and tag.group(1) in self.packs:
                         self.lang = tag.group(1)
                         self.log(event="language", lang=self.lang)
+                        self.show()
                 while cut := self.piece_end(buf, first):
                     sentence, buf = buf[:cut].strip(), buf[cut:]
                     await speak(spoken(sentence))

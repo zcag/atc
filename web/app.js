@@ -7,6 +7,7 @@ import { persona } from "./persona.js";
 import { minimal } from "./minimal.js";
 import { cube, niceMax } from "./usage-cube.js";
 import { partsOf } from "./res-parts.js";
+import { personOf, speakers, nextPerson, personLangs } from "./persons.js";
 import { useCaps, useSetup, CapsBanner, CapsSections, SetupScreen } from "./caps.js";
 import { DevicesSection } from "./devices.js";
 
@@ -1292,15 +1293,16 @@ function LineStrip() {
 /** The call itself: the persona, what it is doing now, captions when the conversation is not beside it, and the controls. */
 function CallPanel({ hub, live, captions, full, onMin }) {
   const [st, f] = useCall();
-  const look = usePersona();
+  const look = usePersona(f.lang, f.person);
   const [opts, setOpts] = useState(false);
   useNow(1000);
   const on = Call.live();
+  const who = look.person ? `${onLine(f)}, ${look.person.name}` : onLine(f);
   const mine = on ? touchedBy(hub, live, st.since || Date.now()) : [];
   const now = st.phase === "calling" ? "Ringing the assistant" : f.line !== "assistant" ? callDoing(f) : f.state === "tool" ? callDoing(f) : hub?.state === "working" && hub.activity ? doing(hub) : callDoing(f);
   return html`<aside class="callp ${full ? "full" : ""} ${st.phase}" aria-label=${`Call with ${onLine(f)}`}>
     <div class="cph">
-      ${on ? html`<${CallMark} /><span class="w">${onLine(f)}</span>` : html`<b>${st.phase === "ended" ? "Call ended" : "Call"}</b><span class="w">${onLine(f)}</span>`}
+      ${on ? html`<${CallMark} /><span class="w">${who}</span>` : html`<b>${st.phase === "ended" ? "Call ended" : "Call"}</b><span class="w">${who}</span>`}
       <span class="sp"></span>
       <button class="kb" onClick=${onMin} aria-keyshortcuts="Escape">${on ? "Minimize" : "Close"} <kbd aria-hidden="true">esc</kbd></button>
     </div>
@@ -1323,10 +1325,10 @@ function CallPanel({ hub, live, captions, full, onMin }) {
     <div class="ctl">
       ${on ? html`
         <button class="btn ${st.muted ? "on" : ""}" aria-pressed=${st.muted} onClick=${Call.mute} aria-keyshortcuts="m">${st.muted ? "Unmute" : "Mute"} <kbd aria-hidden="true">m</kbd></button>
-        <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)} title="The character on the call, and the assistant's voice">Character</button>
+        <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)} title="Who the assistant is in each language: character, background and voice">Person</button>
         <button class="btn end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>`
       : st.phase !== "ended" && html`<button class="btn prime" onClick=${callOrSetup}>Call the assistant</button>
-        <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)}>Character</button>`}
+        <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)}>Person</button>`}
     </div>
   </aside>`;
 }
@@ -1589,44 +1591,65 @@ async function personaList() {
   return { names: ["orb", ...usable.map(([n]) => n)], kinds: Object.fromEntries(usable), def: index.default || "orb" };
 }
 
-/** Which character the call shows: the orb or one from /app/personas, the choice kept in this browser. The list is kept
- *  too, and the choice is trusted until the server has answered, so a screen never opens on the orb by mistake. */
-function usePersona() {
-  const [list, setList] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("atc.personas")) ?? PERSONAS_UNKNOWN; } catch { return PERSONAS_UNKNOWN; }
-  });
+const ROOMS = `${PERSONAS}_rooms/`;
+const kept = (k, or) => { try { return JSON.parse(localStorage.getItem(k)) ?? or; } catch { return or; } };
+
+/** Who is on the line: `own` when an agent there names a person, else who the assistant is in `lang` (before a call says,
+ *  the language the last one opened in). And what that person looks like: their character and background, or with nobody picked for the language the character kept in this browser. The
+ *  lists are kept too and trusted until the server has answered, so a screen never opens on the orb by mistake. */
+function usePersona(lang, own) {
+  const [list, setList] = useState(() => kept("atc.personas", PERSONAS_UNKNOWN));
+  const [doc, setDoc] = useState(() => kept("atc.persons", { persons: [], langs: {} }));
   const [answered, setAnswered] = useState(false);
   const [name, setName] = useState(personaPick.get);
+  const [preview, setPreview] = useState(null);
+  const keep = (d) => {
+    setDoc(d);
+    try { localStorage.setItem("atc.persons", JSON.stringify(d)); } catch {}
+    return d;
+  };
   useEffect(() => {
+    api("/api/call/persons").then(keep, () => {});
     personaList().then((l) => {
       setList(l);
       try { localStorage.setItem("atc.personas", JSON.stringify(l)); } catch {}
     }).catch(() => {}).finally(() => setAnswered(true));
   }, []);
-  const want = name ?? list.def;
+  const speaking = lang || (() => { try { return localStorage.getItem("atc.callLang"); } catch { return null; } })() || "";
+  const person = doc.persons.find((p) => p.id === own) || personOf(doc, speaking);
+  const look = preview || person;
+  const want = look?.character ?? name ?? list.def;
   const shown = !answered || list.names.includes(want) ? want : "orb";
-  const pick = (n) => { personaPick.set(n); setName(n); };
-  return { names: list.names, kinds: list.kinds, shown, pick, framed: !["orb", "minimal"].includes(list.kinds[shown] || shown) };
+  const choose = (l, id) => api("/api/call/persons/pick", { method: "POST", body: { lang: l, id } }).then(keep);
+  /** The next person this language can have, or with nobody to go to the next character. Says who it landed on. */
+  const next = () => {
+    const p = nextPerson(doc, speaking);
+    if (p) { choose(speaking, p.id).catch(() => {}); return p.name; }
+    const n = list.names[(list.names.indexOf(shown) + 1) % list.names.length];
+    personaPick.set(n);
+    setName(n);
+    return n;
+  };
+  return { names: list.names, kinds: list.kinds, shown, background: look?.background || "", doc, keep, person, lang: speaking, choose, next, preview: setPreview,
+    framed: !["orb", "minimal"].includes(list.kinds[shown] || shown) };
 }
 
 /** The call's persona slot. Holding it (or a right click) switches to the next character. */
 function Persona({ look, state, on, onTap }) {
-  const { names, shown, pick, framed } = look;
+  const { shown, background, framed } = look;
   const [label, setLabel] = useState(null);
   const hold = useRef(null);
   const held = useRef(false);
   const next = (e) => {
     e?.preventDefault();
-    const n = names[(names.indexOf(shown) + 1) % names.length];
-    pick(n);
-    setLabel(n);
+    setLabel(look.next());
     setTimeout(() => setLabel(null), 1200);
   };
   const down = () => { held.current = false; hold.current = setTimeout(() => { held.current = true; next(); }, 600); };
   const up = () => clearTimeout(hold.current);
   const tap = () => { if (!held.current) onTap(); };
   return html`<div class="orb persona ${framed ? "framed" : ""}" onPointerDown=${down} onPointerUp=${up} onPointerLeave=${up} onContextMenu=${next}>
-    ${shown === "orb" ? html`<${Orb} full state=${state} on=${on} onTap=${tap} />` : html`<${Drawn} key=${shown} name=${shown} state=${state} on=${on} onTap=${tap} />`}
+    ${shown === "orb" ? html`<${Orb} full state=${state} on=${on} onTap=${tap} />` : html`<${Drawn} key=${`${shown}|${background}`} name=${shown} background=${background} state=${state} on=${on} onTap=${tap} />`}
     ${label && html`<span class="personaname">${label}</span>`}
   </div>`;
 }
@@ -1635,19 +1658,14 @@ const PERSONA_WORDS = { orb: "A glass sphere that swirls with the voices", line:
 const KIND_WORDS = { rig: "A drawn portrait that looks, nods and talks", illustration: "A drawn portrait", footage: "A filmed portrait", minimal: "A quiet mark that only moves with the voices" };
 const VOICE_LANG = { tr: "Turkish", en: "English" };
 const voiceName = (v) => v.replace(/^en_/, "").replace(/_/g, " ");
+const roomName = (f) => f.replace(/\.[^.]+$/, "").replace(/[_-]/g, " ");
+const takesRoom = (look, c) => ["rig", "minimal"].includes(look.kinds[c]);
 
-/** The character and the assistant's voice, inside the call panel: a character picked shows at once in the big frame
- *  above, a voice can be heard first (the voice service renders a sample once and keeps it), and a pick applies from its next reply. */
-function CallPicks({ look, onClose }) {
-  const [voices, setVoices] = useState(null);
-  const [note, setNote] = useState("");
+/** Hears a voice before it is picked: the voice service renders a sample once and keeps it. */
+function useSample(voices, setNote) {
   const [playing, setPlaying] = useState(null);
   const audio = useRef(null);
-  useEffect(() => {
-    api("/api/call/voices").then(setVoices, () => setNote("The voices are not reachable."));
-    return () => audio.current?.pause();
-  }, []);
-  useKeyLayer((e) => e.key === "Escape" && !typingIn(e.target) && (onClose(), true));
+  useEffect(() => () => audio.current?.pause(), []);
   const stop = () => { audio.current?.pause(); audio.current = null; setPlaying(null); };
   const play = async (lang, v) => {
     const k = `${lang}:${v}`;
@@ -1667,36 +1685,108 @@ function CallPicks({ look, onClose }) {
       setNote(`Can't play ${voiceName(v)}: ${e.message}.`);
     }
   };
-  const use = async (lang, v) => {
-    setNote(`Switching to ${voiceName(v)}`);
-    try { setVoices(await api("/api/call/voices", { method: "POST", body: { lang, voice: v } })); setNote(`${voiceName(v)} speaks from the assistant's next reply.`); }
-    catch (e) { setNote(`Couldn't switch the voice: ${e.message}`); }
+  return [playing, play];
+}
+
+/** One person: a name, a character, a background and a voice per language. The character and background show at once in the frame above. */
+function PersonForm({ look, voices, rooms, draft, onDone, setNote }) {
+  const [p, setP] = useState(draft);
+  const [playing, play] = useSample(voices, setNote);
+  const set = (o) => setP((old) => ({ ...old, ...o }));
+  useEffect(() => { look.preview(p); return () => look.preview(null); }, [p.character, p.background]);
+  const save = async (e) => {
+    e.preventDefault();
+    try { look.keep(await api("/api/call/persons", { method: "POST", body: p })); setNote(`${p.name.trim()} saved. A changed voice speaks from the next reply.`); onDone(); }
+    catch (err) { setNote(`Couldn't save: ${err.message}`); }
   };
-  const langs = Object.keys(voices || {}).sort((a, b) => (a === "tr" ? -1 : b === "tr" ? 1 : a.localeCompare(b)));
-  return html`<div class="picks" role="region" aria-label="Character and voice">
-    <div class="pkh"><b>Character and voice</b><button class="kb" onClick=${onClose} aria-keyshortcuts="Escape">Done <kbd aria-hidden="true">esc</kbd></button></div>
-    <h3 class="grp"><b>Character</b><span class="c">${look.names.length}</span></h3>
-    <div role="radiogroup" aria-label="Character">${look.names.map((n) => html`
-      <button class="pick ${n === look.shown ? "on" : ""}" role="radio" aria-checked=${n === look.shown} onClick=${() => look.pick(n)}>
-        <b>${n}</b><span>${PERSONA_WORDS[n] || KIND_WORDS[look.kinds[n]] || ""}</span></button>`)}</div>
-    ${langs.map((lang) => { const v = voices[lang]; return html`
-      <h3 class="grp"><b>${VOICE_LANG[lang] || lang} voice</b><span class="c">${v.voices.length}</span></h3>
-      ${v.voices.map((name) => { const on = name === v.current, k = `${lang}:${name}`; return html`
-        <div class="vpick ${on ? "on" : ""}"><span class="nm">${voiceName(name)}</span>
-          ${on ? html`<span class="use">in use</span>` : html`<button class="kb" onClick=${() => use(lang, name)}>Use</button>`}
-          <button class="kb" aria-pressed=${playing === k} onClick=${() => play(lang, name)}>${playing === k ? "Stop" : "Play"}</button></div>`; })}`; })}
-    ${!voices && !note && html`<p class="sub">Loading the voices</p>`}
-    ${note && html`<p class="sub" role="status">${note}</p>`}
+  const remove = async () => {
+    try { look.keep(await api(`/api/call/persons/${encodeURIComponent(p.id)}`, { method: "DELETE" })); setNote(`${p.name} deleted.`); onDone(); }
+    catch (err) { setNote(`Couldn't delete: ${err.message}`); }
+  };
+  const langs = personLangs(voices, { persons: [p] });
+  return html`<form class="pform" onSubmit=${save}>
+    <label><span>Name</span><input value=${p.name} maxlength="40" required ref=${focusOnMount} onInput=${(e) => set({ name: e.target.value })} /></label>
+    <label><span>Character</span><select value=${p.character} onChange=${(e) => set({ character: e.target.value })}>
+      ${look.names.map((n) => html`<option value=${n}>${n}</option>`)}</select></label>
+    <p class="sub">${PERSONA_WORDS[p.character] || KIND_WORDS[look.kinds[p.character]] || ""}</p>
+    <label><span>Background</span><select value=${p.background || ""} disabled=${!takesRoom(look, p.character)} onChange=${(e) => set({ background: e.target.value })}>
+      <option value="">The character's own</option>
+      ${rooms.map((f) => html`<option value=${f}>${roomName(f)}</option>`)}</select></label>
+    ${!takesRoom(look, p.character) && html`<p class="sub">This character draws its own surroundings.</p>`}
+    ${langs.map((lang) => { const v = p.voices?.[lang] || "", k = `${lang}:${v}`, all = voices?.[lang]?.voices || (v ? [v] : []); return html`
+      <label><span>${VOICE_LANG[lang] || lang} voice</span><select value=${v} onChange=${(e) => set({ voices: { ...p.voices, [lang]: e.target.value } })}>
+        <option value="">None: doesn't speak it</option>
+        ${all.map((n) => html`<option value=${n}>${voiceName(n)}</option>`)}</select>
+        ${v && voices && html`<button type="button" class="kb" aria-pressed=${playing === k} onClick=${() => play(lang, v)}>${playing === k ? "Stop" : "Play"}</button>`}</label>`; })}
+    <div class="row">
+      <button class="btn prime" type="submit">Save</button>
+      <button class="btn" type="button" onClick=${onDone}>Cancel</button>
+      ${p.id && html`<button class="btn end" type="button" onClick=${remove}>Delete</button>`}
+    </div>
+  </form>`;
+}
+
+/** The persons and who the assistant is in each language. A pick shows at once if it is the language being spoken, and its voice speaks from the next reply. */
+function Persons({ look }) {
+  const [voices, setVoices] = useState(null);
+  const [rooms, setRooms] = useState([]);
+  const [note, setNote] = useState("");
+  const [draft, setDraft] = useState(null);
+  const [playing, play] = useSample(voices, setNote);
+  useEffect(() => {
+    api("/api/call/voices").then(setVoices, () => setNote("The voices are not reachable."));
+    api("/api/call/backgrounds").then(setRooms, () => {});
+  }, []);
+  const { doc } = look;
+  const use = async (lang, p) => {
+    try { await look.choose(lang, p.id); setNote(`${p.name} is the assistant in ${VOICE_LANG[lang] || lang}, speaking from the next reply.`); }
+    catch (e) { setNote(`Couldn't switch: ${e.message}`); }
+  };
+  const blank = () => ({ name: "", character: look.shown, background: look.background, voices: Object.fromEntries(Object.entries(voices || {}).map(([l, v]) => [l, v.current])) });
+  if (draft) return html`<${PersonForm} look=${look} voices=${voices} rooms=${rooms} draft=${draft} onDone=${() => setDraft(null)} setNote=${setNote} />${note && html`<p class="sub" role="status">${note}</p>`}`;
+  return html`
+    ${doc.persons.length === 0 && html`<p class="sub">Nobody yet. A person is a name, a character, a background and a voice per language, and the assistant can be a different one in each language.</p>`}
+    ${doc.persons.length > 0 && personLangs(voices, doc).map((lang) => { const all = speakers(doc, lang); return html`
+      <h3 class="grp"><b>${VOICE_LANG[lang] || lang}</b><span class="c">${all.length}</span></h3>
+      <div role="radiogroup" aria-label=${`The assistant in ${VOICE_LANG[lang] || lang}`}>
+        ${all.length === 0 && html`<p class="sub">Nobody has a voice in this language yet.</p>`}
+        ${all.map((p) => { const on = doc.langs[lang] === p.id, v = p.voices[lang], k = `${lang}:${v}`; return html`
+          <div class="vpick ${on ? "on" : ""}">
+            <button class="pick ${on ? "on" : ""}" role="radio" aria-checked=${on} onClick=${() => use(lang, p)}>
+              <b>${p.name}</b><span>${[p.character, p.background && roomName(p.background), voiceName(v)].filter(Boolean).join(", ")}</span></button>
+            <button class="kb" aria-pressed=${playing === k} disabled=${!voices} onClick=${() => play(lang, v)}>${playing === k ? "Stop" : "Play"}</button>
+            <button class="kb" onClick=${() => setDraft(p)}>Edit</button>
+          </div>`; })}
+      </div>`; })}
+    <div class="row"><button class="btn" onClick=${() => setDraft(blank())}>New person</button></div>
+    ${note && html`<p class="sub" role="status">${note}</p>`}`;
+}
+
+function CallPicks({ look, onClose }) {
+  useKeyLayer((e) => e.key === "Escape" && !typingIn(e.target) && (onClose(), true));
+  return html`<div class="picks" role="region" aria-label="Persons">
+    <div class="pkh"><b>Persons</b><button class="kb" onClick=${onClose} aria-keyshortcuts="Escape">Done <kbd aria-hidden="true">esc</kbd></button></div>
+    <${Persons} look=${look} />
   </div>`;
 }
 
-function Drawn({ name, state, on, onTap }) {
+function PersonsSection() {
+  const look = usePersona("");
+  const ref = useRef(null);
+  useEffect(() => { if (location.hash.endsWith("#persons")) ref.current?.scrollIntoView(); }, []);
+  return html`<section id="persons" ref=${ref}>
+    <h2>Persons</h2>
+    <div class="picks"><${Persons} look=${look} /></div>
+  </section>`;
+}
+
+function Drawn({ name, background, state, on, onTap }) {
   const ref = useRef(null);
   const now = useRef(state);
   now.current = state;
   useEffect(() => {
     let stop = null, gone = false;
-    persona(ref.current, `${PERSONAS}${name}/`, () => { const [you] = Call.levels(), [it, lo, hi] = Call.speech(); return { state: now.current, you, it, lo, hi }; })
+    persona(ref.current, `${PERSONAS}${name}/`, () => { const [you] = Call.levels(), [it, lo, hi] = Call.speech(); return { state: now.current, you, it, lo, hi }; }, { background: background && ROOMS + background })
       .then((s) => (gone ? s() : (stop = s)))
       .catch((e) => console.warn("persona", name, e));
     return () => { gone = true; stop?.(); };
@@ -5321,6 +5411,7 @@ function SettingsPage({ me, say, onClose }) {
               <div class="ctl">${notif === "default" ? html`<button class="btn" onClick=${askNotif}>Turn on</button>` : html`<span class="fixed">${notif === "granted" ? "on" : "blocked"}</span>`}</div>
             </div>
           </section>`}
+        ${me?.call && html`<${PersonsSection} />`}
         <${CapsSections} rep=${caps} reload=${loadCaps} ui=${ui} noMic=${!APP && !!me?.call && !Call.supported()} />
         <${DevicesSection} api=${api} app=${APP} copy=${copyText} ago=${agoLong} openOut=${openOut} />
         <section id="about">

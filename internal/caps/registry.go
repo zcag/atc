@@ -108,6 +108,11 @@ func All() []Cap {
 			Cost:   "A GPU for the better voices.",
 		},
 		{
+			ID: "persons", Title: "Persons", Group: Calls, Optional: true, Why: "Who the assistant is in each language: a name, a character, a background and a voice.",
+			Check: checkPersons,
+			Fix:   Fix{Text: "Add character folders under personas/ in the app folder, and images for backgrounds under personas/_rooms/. Persons are made under Settings, Persons.", Guide: "calls"},
+		},
+		{
 			ID: "push", Title: "Phone notifications", Group: Phone, Optional: true, Why: "A push when a session waits on you or finishes its turn.",
 			Check: checkPush,
 			Fix:   Fix{Text: "Install the app and a UnifiedPush distributor such as ntfy on the phone, then open the app once so it registers.", Guide: "android"},

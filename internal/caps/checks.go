@@ -339,6 +339,18 @@ func expandHome(p string) string {
 	return p
 }
 
+func checkPersons(_ context.Context, env Env) Result {
+	dir := filepath.Join(expandHome(cmp.Or(env.Get("ATC_APP_DIR"), "~/.local/share/atc/app")), "personas")
+	var index struct {
+		Personas []struct{} `json:"personas"`
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, "index.json")); err != nil || json.Unmarshal(b, &index) != nil || len(index.Personas) == 0 {
+		return Result{Missing, "Only the orb to choose from: no characters are published."}
+	}
+	rooms, _ := os.ReadDir(filepath.Join(dir, "_rooms"))
+	return Result{OK, fmt.Sprintf("%d characters and the orb, %d backgrounds.", len(index.Personas), len(rooms))}
+}
+
 func checkApp(_ context.Context, env Env) Result {
 	dir := env.Get("ATC_APP_DIR")
 	b, err := os.ReadFile(filepath.Join(expandHome(cmp.Or(dir, "~/.local/share/atc/app")), "version.json"))

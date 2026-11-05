@@ -360,6 +360,24 @@ export class Behaviour {
   }
 }
 
+/** Another room for a rig, sized to its plate and put as far back as build.py puts the character's own: darkened and
+ *  softened. The lamp's glow and the dust stay in that own room, since they would float in this one. */
+async function backdrop(url, plate) {
+  const img = new Image();
+  img.src = url;
+  await img.decode();
+  const c = document.createElement("canvas");
+  c.width = plate.naturalWidth;
+  c.height = plate.naturalHeight;
+  const g = c.getContext("2d"), k = Math.max(c.width / img.naturalWidth, c.height / img.naturalHeight);
+  g.fillStyle = "#000";
+  g.fillRect(0, 0, c.width, c.height);
+  g.filter = "blur(2.5px)";
+  g.globalAlpha = .62;
+  g.drawImage(img, (c.width - img.naturalWidth * k) / 2, (c.height - img.naturalHeight * k) / 2, img.naturalWidth * k, img.naturalHeight * k);
+  return c;
+}
+
 /** Draws the character at `base` into a canvas. now() gives {state, you, it, lo, hi}. Returns stop; with opts.dt it
  *  draws nothing by itself and returns a frame function for fixed-step recording instead. */
 export async function rig(canvas, base, now, opts = {}) {
@@ -371,6 +389,9 @@ export async function rig(canvas, base, now, opts = {}) {
     await img.decode();
     images[f] = img;
   }));
+  const plate = R.parts.find((p) => p.name === "plate")?.tex;
+  const room = opts.background && plate && await backdrop(opts.background, images[plate]).catch((e) => console.warn("persona: background", e));
+  if (room) images[plate] = room;
   const gl = canvas.getContext("webgl2", { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: !!opts.dt });
   if (!gl) throw new Error("no WebGL2");
   const program = (vs, fs) => {
@@ -387,7 +408,7 @@ export async function rig(canvas, base, now, opts = {}) {
     const u = {};
     return { prog, u: (n) => (u[n] ??= gl.getUniformLocation(prog, n)) };
   };
-  const dust = R.dust && Array.from({ length: R.dust.n }, () => ({}));
+  const dust = room || !R.dust ? null : Array.from({ length: R.dust.n }, () => ({}));
   const respawn = (d, anywhere) => {
     const [x, y, w, h] = R.dust.box;
     Object.assign(d, { x: x + rand(0, w), y: anywhere ? y + rand(0, h) : y + h, vx: rand(-4, 4), vy: rand(-9, -3), s: rand(...R.dust.size), a: rand(.15, .55), ph: rand(0, 9), life: 0 });
@@ -516,7 +537,7 @@ export async function rig(canvas, base, now, opts = {}) {
     }
     bones(null);
     draw("vignette");
-    draw("glow", .9 + .06 * Math.sin(clock * 1.3) + .04 * Math.sin(clock * 3.7 + 1));
+    if (!room) draw("glow", .9 + .06 * Math.sin(clock * 1.3) + .04 * Math.sin(clock * 3.7 + 1));
     if (dust) {
       dust.forEach((d, i) => G.ddata.set([d.x, d.y, d.s, d.a * clamp(d.life / 2) * (.6 + .4 * Math.sin(clock * 1.5 + d.ph))], i * 4));
       gl.useProgram(G.motes.prog);

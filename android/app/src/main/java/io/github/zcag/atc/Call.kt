@@ -54,7 +54,7 @@ object Calls {
     /** What the assistant is doing, from the talker: listening, hearing (the user), thinking, tool, speaking. */
     data class Face(
         val state: String = "listening", val hearing: String = "", val you: String = "", val said: String = "", val tool: String = "",
-        val line: String = "assistant", val title: String = "", val moving: Boolean = false, val knock: String = "",
+        val line: String = "assistant", val title: String = "", val moving: Boolean = false, val knock: String = "", val person: String = "", val lang: String = "",
     )
 
     sealed interface Wire {
@@ -84,6 +84,8 @@ object Calls {
             title = if (o.has("title")) o.optString("title") else f.title,
             moving = if (o.has("moving")) o.optBoolean("moving") else f.moving,
             knock = if (o.has("knock")) o.optString("knock") else f.knock,
+            person = if (o.has("person")) o.optString("person") else f.person,
+            lang = o.optString("lang").ifEmpty { f.lang },
         )
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)

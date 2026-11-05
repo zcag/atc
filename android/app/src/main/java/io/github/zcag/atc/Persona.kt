@@ -33,19 +33,28 @@ interface Persona {
     fun drawn(go: () -> Unit) = false
 }
 
-/** The call screen's persona slot: the kept choice and nothing else. The orb shows only when it is the choice or
- *  when the character can't be had; a character already on the phone starts from there without asking the server,
- *  and until its first frame the slot is the dark backdrop.
+/** The call screen's persona slot. It draws the person the assistant is in the language the call is in (GET
+ *  /api/call/persons; before a call says, the language the last one opened in), with their background, so a change of
+ *  language swaps it; with nobody picked for the language, the character kept on this phone. The orb shows only when it
+ *  is the choice or when the character can't be had; a character already on the phone starts from there without asking
+ *  the server, and until its first frame the slot is the dark backdrop.
  *  Characters are folders on the server under /app/personas/<name>/ (persona.json with "kind" and "files", plus
  *  those files), listed in /app/personas/index.json ({"default": name, "personas": [{"name", "rev"}]}), and
- *  cached on the phone until their rev changes. The call screen's picker (or a long press, the next one) chooses,
- *  and the choice is kept. */
+ *  cached on the phone until their rev changes. Every person's character and background is fetched ahead, so a change
+ *  of language mid-call doesn't wait on the network. */
 class PersonaHost(c: Context) : FrameLayout(c), Persona {
     override val view get() = this
     private var current: Persona? = null
     private var face = Calls.Face()
     private val ui = Handler(Looper.getMainLooper())
     private var latest = 0
+    private var doc = Prefs(c).persons?.let { runCatching { JSONObject(it) }.getOrNull() }
+    private var lang = ""
+    private var look = "" to ""
+
+    /** Called with who is on screen now, null with nobody picked. */
+    var onPerson: (String?) -> Unit = {}
+        set(f) { field = f; f(person?.optString("name")) }
 
     /** Every character the server lists, the orb first. */
     var names = listOf("orb")
@@ -55,31 +64,103 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
     var shown = "orb"
         private set
 
+    private val speaking get() = lang.ifEmpty { Prefs(context).callLang.orEmpty() }
+
+    private val everyone get() = doc?.optJSONArray("persons").let { a -> List(a?.length() ?: 0) { a!!.getJSONObject(it) } }
+
+    /** An agent on the line that names a person, else who the assistant is in this language. */
+    private val person get() = everyone.firstOrNull { face.person.isNotEmpty() && it.optString("id") == face.person }
+        ?: doc?.optJSONObject("langs")?.optString(speaking)?.let { id -> everyone.firstOrNull { it.optString("id") == id } }
+
+    /** Each language with who can speak it and who does: for the picker. */
+    fun choices(): List<Triple<String, JSONObject, Boolean>> {
+        val langs = doc?.optJSONObject("langs")
+        return everyone.flatMap { p -> p.optJSONObject("voices")?.keys()?.asSequence()?.toList().orEmpty().map { l -> Triple(l, p, langs?.optString(l) == p.optString("id")) } }
+            .sortedWith(compareBy({ it.first != "tr" }, { it.first }))
+    }
+
     init {
-        val kept = Prefs(c).persona
-        if (kept == null || kept == "orb") enter(Orb(c)) else shown = kept
+        val (character, background) = wanted()
+        look = character to background
+        if (character.isEmpty() || character == "orb") enter(Orb(c)) else shown = character
         setOnLongClickListener {
-            pick(names[(names.indexOf(shown) + 1) % names.size])
-            Toast.makeText(context, shown, Toast.LENGTH_SHORT).show()
+            val all = everyone.filter { it.optJSONObject("voices")?.optString(speaking).orEmpty().isNotEmpty() }
+            if (all.size > 1) {
+                val next = all[(all.indexOfFirst { it === person } + 1) % all.size]
+                choose(speaking, next.optString("id"))
+                Toast.makeText(context, next.optString("name"), Toast.LENGTH_SHORT).show()
+            } else if (all.isEmpty()) {
+                pick(names[(names.indexOf(shown) + 1) % names.size])
+                Toast.makeText(context, shown, Toast.LENGTH_SHORT).show()
+            }
             true
         }
-        load(kept)
+        load(character.ifEmpty { null }, background)
+        thread {
+            val server = Prefs(context).server?.trimEnd('/') ?: return@thread
+            runCatching { Net.get(context, "$server/api/call/persons").let { adopt(it); ahead(server, it) } }.onFailure { Log.w("atc", "persons: ${it.message}") }
+        }
+    }
+
+    /** What to draw: a person's character and background, or the kept character with the room it came with. */
+    private fun wanted() = person?.let { it.optString("character") to it.optString("background") } ?: (Prefs(context).persona.orEmpty() to "")
+
+    private fun refresh() {
+        onPerson(person?.optString("name"))
+        val now = wanted()
+        if (now == look) return
+        look = now
+        load(now.first.ifEmpty { null }, now.second)
+    }
+
+    private fun adopt(said: String) {
+        val parsed = JSONObject(said)
+        ui.post {
+            doc = parsed
+            Prefs(context).persons = said
+            refresh()
+        }
+    }
+
+    /** Makes [id] the assistant in [language]; the voice speaks from its next reply. */
+    fun choose(language: String, id: String, done: (Boolean) -> Unit = {}) = thread {
+        val server = Prefs(context).server?.trimEnd('/') ?: return@thread
+        val (code, said) = runCatching { Net.send(context, "$server/api/call/persons/pick", JSONObject().put("lang", language).put("id", id)) }.getOrDefault(0 to "")
+        if (code == 200) adopt(said)
+        ui.post { done(code == 200) }
+    }
+
+    private fun ahead(server: String, said: String) {
+        val index = JSONObject(Net.get(context, "$server/app/personas/index.json")).optJSONArray("personas") ?: JSONArray()
+        val revs = List(index.length()) { index.getJSONObject(it) }.associate { it.getString("name") to it.optString("rev") }
+        for (p in JSONObject(said).optJSONArray("persons").let { a -> List(a?.length() ?: 0) { a!!.getJSONObject(it) } }) {
+            val name = p.optString("character")
+            revs[name]?.let { rev -> runCatching { current(server, name, rev) } }
+            p.optString("background").takeIf { it.isNotEmpty() }?.let { runCatching { room(context, server, it) } }
+        }
     }
 
     fun pick(name: String) {
         Prefs(context).persona = name
-        load(name)
+        look = name to ""
+        load(name, "")
     }
 
     override fun face(f: Calls.Face) {
+        val moved = f.person != face.person
         face = f
         current?.face(f)
+        if (f.lang.isNotEmpty() && f.lang != lang) {
+            if (lang.isEmpty()) Prefs(context).callLang = f.lang
+            lang = f.lang
+            refresh()
+        } else if (moved) refresh()
     }
 
-    private fun load(chosen: String?) {
+    private fun load(chosen: String?, background: String) {
         val mine = ++latest
         /* View.post holds the call until the view is attached: read from the phone, a character can be ready before that. */
-        fun present(made: Pair<File, JSONObject>?) = ui.post { post { if (mine == latest) show(made) } }
+        fun present(made: Pair<File, JSONObject>?) = ui.post { post { if (mine == latest) show(made, background) } }
         thread {
             val ready = chosen?.let(::onPhone)
             if (ready != null) present(ready)
@@ -91,9 +172,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
                 val name = (chosen ?: index.optString("default", "orb")).takeIf { it in names } ?: "orb"
                 if (name == "orb") return@runCatching null
                 val rev = List(list.length()) { list.getJSONObject(it) }.first { it.getString("name") == name }.optString("rev")
-                val dir = File(context.filesDir, "personas/$name")
-                if (dir.resolve(".rev").takeIf { it.exists() }?.readText() != rev || onPhone(name) == null) fetch(server, name, rev, dir)
-                else if (ready != null) return@thread
+                if (current(server, name, rev)) { if (ready != null) return@thread }
                 onPhone(name)
             }.onFailure {
                 Log.w("atc", "persona: ${it.message}")
@@ -101,6 +180,15 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
             }.getOrNull()
             present(made)
         }
+    }
+
+    /** Has this rev of the character on the phone, fetching it if not; true if it was there already. Calls queue, so the
+     *  one fetching ahead and the one about to show never write the same folder. */
+    private fun current(server: String, name: String, rev: String): Boolean = synchronized(FETCHING) {
+        val dir = File(context.filesDir, "personas/$name")
+        if (dir.resolve(".rev").takeIf { it.exists() }?.readText() == rev && onPhone(name) != null) return true
+        fetch(server, name, rev, dir)
+        false
     }
 
     private fun onPhone(name: String): Pair<File, JSONObject>? {
@@ -124,14 +212,14 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         check(incoming.renameTo(dir)) { "can't move $name into place" }
     }
 
-    private fun show(made: Pair<File, JSONObject>?) {
+    private fun show(made: Pair<File, JSONObject>?, background: String) {
         if (!isAttachedToWindow) return
         shown = made?.first?.name ?: "orb"
         if (made == null && current is Orb) return
         enter(runCatching {
             when (made?.second?.optString("kind")) {
                 "head3d" -> Head3D(context, made.first, made.second)
-                "illustration", "footage", "rig", "minimal" -> WebPersona(context, made.first, Prefs(context).server.orEmpty().trimEnd('/'))
+                "illustration", "footage", "rig", "minimal" -> WebPersona(context, made.first, Prefs(context).server.orEmpty().trimEnd('/'), background)
                 else -> Orb(context)
             }
         }.onFailure { Log.w("atc", "persona: ${it.message}") }.getOrElse { Orb(context) })
@@ -161,6 +249,19 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
          *  surface once it is drawn. */
         private const val UNSEEN = .01f
         private const val STUCK_MS = 6000L
+        private val FETCHING = Any()
+
+        /** A background from /app/personas/_rooms, kept on the phone once it has been there. */
+        fun room(c: Context, server: String, name: String): File {
+            require('/' !in name && ".." !in name)
+            val file = File(c.filesDir, "rooms/$name").apply { parentFile?.mkdirs() }
+            if (!file.exists()) {
+                val incoming = File(file.path + ".new")
+                Net.download(c, "$server/app/personas/_rooms/$name", incoming)
+                check(incoming.renameTo(file)) { "can't move $name into place" }
+            }
+            return file
+        }
     }
 }
 

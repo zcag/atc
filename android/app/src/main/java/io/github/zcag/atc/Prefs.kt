@@ -21,6 +21,8 @@ class Prefs(c: Context) {
     var feedAt by string()
     var feedError by string()
     var persona by string()
+    var persons by string()
+    var callLang by string()
     var callNumber by string()
     var askedContacts by string()
     var askedCallLog by string()

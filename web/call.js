@@ -1,5 +1,5 @@
 const OUT_RATE = 24000;
-const FACE = { state: "listening", hearing: "", you: "", said: "", tool: "", line: "assistant", title: "", person: "", moving: false, knock: "" };
+const FACE = { state: "listening", hearing: "", you: "", said: "", tool: "", line: "assistant", title: "", person: "", moving: false, knock: "", lang: "" };
 const WHY = { busy: "the line is busy", nobody: "nobody is there to answer", gone: "the call is over", lost: "connection lost", hangup: "hung up" };
 
 let st = { phase: "idle", since: 0, muted: false, why: "" };
@@ -119,7 +119,7 @@ function dropped(w, why) {
 }
 
 function persona(o) {
-  const has = (k) => k in o;
+  const has = (k) => k in o, first = face.lang;
   face = {
     state: o.state || face.state,
     hearing: has("hearing") ? o.hearing || "" : has("you") ? "" : face.hearing,
@@ -131,7 +131,9 @@ function persona(o) {
     person: has("person") ? o.person : face.person,
     moving: has("moving") ? o.moving : face.moving,
     knock: has("knock") ? o.knock : face.knock,
+    lang: o.lang || face.lang,
   };
+  if (o.lang && !first) try { localStorage.setItem("atc.callLang", o.lang); } catch {}
   emit();
 }
 

@@ -3,6 +3,7 @@ package io.github.zcag.atc
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Color
+import android.net.Uri
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -17,7 +18,7 @@ import java.io.File
  *  server's pinned certificate applies. The page reads both voices' loudness from the bridge on every frame and
  *  gets the call's state when it changes. */
 @SuppressLint("SetJavaScriptEnabled", "ViewConstructor")
-class WebPersona(c: Context, private val dir: File, private val server: String) : WebView(c), Persona {
+class WebPersona(c: Context, private val dir: File, private val server: String, background: String = "") : WebView(c), Persona {
     override val view get() = this
     private var go: (() -> Unit)? = null
     private var ready = false
@@ -33,14 +34,18 @@ class WebPersona(c: Context, private val dir: File, private val server: String) 
                 val path = request.url.path.orEmpty()
                 return runCatching {
                     require(".." !in path)
-                    val data = if (path.startsWith("/p/")) File(dir, path.removePrefix("/p/")).readBytes() else Net.bytes(context, server + path)
+                    val data = when {
+                        path.startsWith("/p/") -> File(dir, path.removePrefix("/p/")).readBytes()
+                        path.startsWith(ROOMS) -> PersonaHost.room(context, server, path.removePrefix(ROOMS)).readBytes()
+                        else -> Net.bytes(context, server + path)
+                    }
                     WebResourceResponse(type(path), null, data.inputStream())
                 }.getOrElse { WebResourceResponse("text/plain", null, 404, "Not found", null, null) }
             }
 
             override fun onPageFinished(view: WebView, url: String) = face(Calls.Face(state))
         }
-        loadUrl("https://persona.atc/persona.html")
+        loadUrl("https://persona.atc/persona.html" + if (background.isEmpty()) "" else "?background=" + Uri.encode(ROOMS + background))
     }
 
     /** Touches go to the host behind it (tap to stop, long press), never to the page. */
@@ -67,6 +72,10 @@ class WebPersona(c: Context, private val dir: File, private val server: String) 
             go?.invoke()
             go = null
         }
+    }
+
+    private companion object {
+        const val ROOMS = "/app/personas/_rooms/"
     }
 
     private fun type(path: String) = when (path.substringAfterLast('.')) {

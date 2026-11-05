@@ -186,6 +186,7 @@ class CallActivity : Activity() {
     private lateinit var youView: TextView
     private lateinit var saidView: TextView
     private lateinit var whoView: TextView
+    private var personName: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -221,7 +222,7 @@ class CallActivity : Activity() {
 
     /** Who the call is with; tapping the name moves it. An agent's call shows the assistant's knock under the status. */
     private fun showWho(st: Calls.State, f: Calls.Face) {
-        whoView.text = name(f) + if (st.phase == Calls.Phase.Active) " \u25BE" else ""
+        whoView.text = name(f) + personName?.let { " · $it" }.orEmpty() + if (st.phase == Calls.Phase.Active) " \u25BE" else ""
         val knock = f.knock.takeIf { it.isNotEmpty() && f.line != "assistant" }?.let { "Assistant: $it" }
         reasonView.text = knock ?: st.reason
         reasonView.visibility = if (reasonView.text.isNotEmpty() && st.phase != Calls.Phase.Ringing) View.VISIBLE else View.GONE
@@ -333,8 +334,13 @@ class CallActivity : Activity() {
     private fun menu(anchor: View) = PopupMenu(this, anchor).apply {
         menu.add("Sessions (the call keeps going)").setOnMenuItemClickListener { toSessions(); true }
         menu.add("Talk to…").setOnMenuItemClickListener { pickLine(); true }
-        menu.add("Character…").setOnMenuItemClickListener { pickPersona(); true }
-        menu.add("Voice…").setOnMenuItemClickListener { pickVoice(); true }
+        if (persona.choices().isEmpty()) menu.add("Character…").setOnMenuItemClickListener { pickPersona(); true }
+        else menu.add("Person…").setOnMenuItemClickListener { pickPerson(); true }
+        menu.add("Edit persons…").setOnMenuItemClickListener {
+            startActivity(Intent(this@CallActivity, MainActivity::class.java).putExtra(MainActivity.EXTRA_PATH, "/#/settings#persons")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            true
+        }
         show()
     }
 
@@ -375,31 +381,20 @@ class CallActivity : Activity() {
             .show()
     }
 
-    /** The voices the assistant can speak with (Turkish, then English), the current ones ticked; a pick applies
-     *  from its next reply. */
-    private fun pickVoice() {
-        val server = Prefs(this).server?.trimEnd('/') ?: return
-        thread {
-            val got = runCatching { JSONObject(Net.get(this, "$server/api/call/voices")) }
-            runOnUiThread {
-                val all = got.getOrNull() ?: return@runOnUiThread Toast.makeText(this, "Voices not reachable", Toast.LENGTH_SHORT).show()
-                val items = listOf("tr" to "", "en" to "English · ").flatMap { (lang, label) ->
-                    val l = all.optJSONObject(lang) ?: return@flatMap emptyList()
-                    val names = l.optJSONArray("voices") ?: return@flatMap emptyList()
-                    List(names.length()) { Triple(lang, names.getString(it), label + names.getString(it) + if (names.getString(it) == l.optString("current")) "  ✓" else "") }
+    /** Who the assistant is in each language, the current ones ticked; a pick shows at once if that language is being
+     *  spoken, and its voice speaks from the next reply. */
+    private fun pickPerson() {
+        val items = persona.choices()
+        fun language(l: String) = mapOf("tr" to "Turkish", "en" to "English")[l] ?: l
+        AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+            .setTitle("Person")
+            .setItems(items.map { (l, p, on) -> "${language(l)} · ${p.optString("name")}" + if (on) "  ✓" else "" }.toTypedArray()) { _, i ->
+                val (l, p, _) = items[i]
+                persona.choose(l, p.optString("id")) { ok ->
+                    Toast.makeText(this, if (ok) "${p.optString("name")} in ${language(l)}" else "Couldn't switch", Toast.LENGTH_SHORT).show()
                 }
-                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
-                    .setTitle("Voice")
-                    .setItems(items.map { it.third }.toTypedArray()) { _, i ->
-                        val (lang, voice) = items[i]
-                        thread {
-                            val ok = runCatching { Net.post(this, "$server/api/call/voices", JSONObject().put("lang", lang).put("voice", voice)) }.getOrNull() == 200
-                            runOnUiThread { Toast.makeText(this, if (ok) "$voice from the next reply" else "Couldn't switch the voice", Toast.LENGTH_SHORT).show() }
-                        }
-                    }
-                    .show()
             }
-        }
+            .show()
     }
 
     private fun tint(b: ImageButton, on: Boolean) {
@@ -453,6 +448,7 @@ class CallActivity : Activity() {
                 setOnClickListener { if (Calls.state.value.phase == Calls.Phase.Active) pickLine() }
             }
             addView(whoView)
+            persona.onPerson = { personName = it?.ifEmpty { null }; showWho(Calls.state.value, Calls.face.value) }
             addView(statusView)
             addView(timer)
             addView(reasonView)
