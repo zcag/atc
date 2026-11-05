@@ -331,6 +331,7 @@ The core and the assistant work right after install. The rest is optional.
 | **Core** | The session list, transcripts, pages, agents, backlog, usage, one-line summaries of finished turns | Claude Code. The summaries use a little of your plan; they can use your own model or be off |
 | **Assistant** | One conversation that runs the others | On by default, a small second service |
 | **Calls** | Talk to it from the browser or the app | `atc voice install`: about 2 GB on disk, 2 CPU cores |
+| **The phone app** | The app, calls that ring and one-tap answers | Android only, there is no iPhone app. Push needs a [UnifiedPush](https://unifiedpush.org) distributor such as the ntfy app, and an ntfy server. [Android app](docs/android.md) |
 | **WhatsApp and a phone number** | Reach it from WhatsApp or a real number, and let a few other people reach it | Advanced: accounts and numbers of their own, and no promises |
 
 ## Docs
