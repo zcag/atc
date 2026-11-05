@@ -11,7 +11,7 @@
     <color name="work">#2477d1</color>
     <dimen name="widget_radius">22dp</dimen>
     <string name="widget_description">What needs you, answered from the home screen, and the assistant a tap away</string>
-    <string name="tile_label">Talk to Claude</string>
+    <string name="tile_label">Talk to assistant</string>
     <string name="widget_loading">Loading</string>
     <string name="preview_title">Own dialogs instead of confirm()</string>
     <string name="preview_ask">Esc on phone Back: close the dialog or go back a screen?</string>

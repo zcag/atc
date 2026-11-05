@@ -72,7 +72,7 @@ optionally in its own git worktree, or a running session.
 
 The home-screen widget lists sessions that need you, are your turn or are working, most urgent first,
 kept current by a silent push (and a refresh button); tap one to open it. Its mic button and the
-**Talk to Claude** tile open the assistant, and the tile shows how many sessions need you.
+**Talk to assistant** tile open the assistant, and the tile shows how many sessions need you.
 
 ## The assistant on the side key
 
