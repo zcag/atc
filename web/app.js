@@ -1298,7 +1298,7 @@ function CallPanel({ hub, live, captions, full, onMin }) {
   useNow(1000);
   const on = Call.live();
   const who = look.person ? `${onLine(f)}, ${look.person.name}` : onLine(f);
-  const mine = on ? touchedBy(hub, live, st.since || Date.now()) : [];
+  const mine = on && f.line === "assistant" ? touchedBy(hub, live, st.since || Date.now()) : [];
   const now = st.phase === "calling" ? "Ringing the assistant" : f.line !== "assistant" ? callDoing(f) : f.state === "tool" ? callDoing(f) : hub?.state === "working" && hub.activity ? doing(hub) : callDoing(f);
   return html`<aside class="callp ${full ? "full" : ""} ${st.phase}" aria-label=${`Call with ${onLine(f)}`}>
     <div class="cph">
