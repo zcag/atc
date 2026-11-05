@@ -3,9 +3,16 @@ case "$1" in
 --version) echo "2.1.150 (Claude Code)" ;;
 agents) cat "$HOME/.claude/demo-agents.json" ;;
 auth) echo '{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"max"}' ;;
--p) echo '{"is_error":false,"result":"{\"status\":\"Finished.\"}"}' ;;
+-p)
+	case " $* " in
+	*" --input-format stream-json "*) exec /usr/bin/python3 "$HOME/.local/bin/demo-hub.py" "$@" ;;
+	esac
+	echo '{"is_error":false,"result":"{\"status\":\"Finished.\"}"}'
+	;;
 --bg) echo "backgrounded · abcd1234 · demo" ;;
 attach)
+	# One session's terminal runs atc's own terminal UI, the only real program the demo has to show in one.
+	[ "$2" = "$(cat "$HOME/.claude/demo-tui" 2>/dev/null)" ] && exec atc
 	printf 'Claude Code (demo): this session is fake and has no terminal.\r\n'
 	cat >/dev/null
 	;;

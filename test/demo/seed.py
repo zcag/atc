@@ -1,7 +1,10 @@
 """Fills $HOME with a fake Claude Code state: transcripts, its session list, atc's own files."""
 import json
+import math
 import os
+import random
 import subprocess
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -13,8 +16,11 @@ NOW = datetime.now(timezone.utc)
 OPUS, SONNET = "claude-opus-5-5", "claude-sonnet-4-5"
 
 SHOP, CLI, DOCS = "/home/you/code/shop", "/home/you/code/tally", "/home/you/code/docs"
+ASSIST = str(HOME / ".local/share/atc/assistant")
 
-agents, meta, summaries, pages = [], {}, {}, {}
+agents, meta, summaries, pages, page_state = [], {}, {}, {}, {}
+HUB = ""
+ticking = []
 
 
 def stamp(ago):
@@ -28,6 +34,7 @@ class Session:
         self.title, self.cwd, self.branch, self.model = title, cwd, branch, model
         self.ago = ago
         self.ctx = 18000
+        self.out, self.written = 380, 900
         self.reply = ""
         self.lines = []
         self.emit({"type": "permission-mode", "permissionMode": "default"})
@@ -48,7 +55,7 @@ class Session:
         self.ctx += 1400
         return self.emit({"type": "assistant", "message": {
             "id": "msg_" + uuid.uuid4().hex[:20], "role": "assistant", "model": self.model, "content": content,
-            "usage": {"input_tokens": 6, "output_tokens": 380, "cache_read_input_tokens": self.ctx, "cache_creation_input_tokens": 900},
+            "usage": {"input_tokens": 6, "output_tokens": self.out, "cache_read_input_tokens": self.ctx, "cache_creation_input_tokens": self.written},
         }}, step)
 
     def say(self, text, step=25):
@@ -90,10 +97,11 @@ class Session:
     def write(self):
         d = CLAUDE / "projects" / self.cwd.replace("/", "-")
         d.mkdir(parents=True, exist_ok=True)
-        (d / f"{self.sid}.jsonl").write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in self.lines))
+        self.path = d / f"{self.sid}.jsonl"
+        self.path.write_text("".join(json.dumps(x, ensure_ascii=False) + "\n" for x in self.lines))
         Path(self.cwd).mkdir(parents=True, exist_ok=True)
 
-    def live(self, state, status=None, kind="background", job=None, pid=True, agent=None, parked=False):
+    def live(self, state, status=None, kind="background", job=None, pid=True, agent=None, parked=False, reports=None, engine=None, pinned=False):
         self.write()
         p = subprocess.Popen(["sleep", "86400"], start_new_session=True).pid if pid else 0
         agents.append({"id": self.id, "sessionId": self.sid, "pid": p, "cwd": self.cwd, "kind": kind,
@@ -103,8 +111,10 @@ class Session:
             d = CLAUDE / "jobs" / self.id
             d.mkdir(parents=True, exist_ok=True)
             (d / "state.json").write_text(json.dumps(job))
-        if agent or parked:
-            meta[self.sid] = {"agent": agent or "", "parked": parked}
+        if reports and state == "working":
+            ticking.append(str(self.path))
+        if agent or parked or reports or engine or pinned:
+            meta[self.sid] = {"agent": agent or "", "parked": parked, "reportsTo": reports or "", "engine": engine or "", "pinned": pinned}
 
 
 def checkout():
@@ -178,7 +188,7 @@ def coupons():
         {"label": "Before shipping", "description": "Goods only. Shipping is always paid in full."},
         {"label": "After shipping", "description": "The whole order, shipping included."}]}]}
     s.call("AskUserQuestion", args)
-    s.live("blocked", job={"tempo": "blocked", "block": args})
+    s.live("blocked", reports=HUB, job={"tempo": "blocked", "block": args})
     return s
 
 
@@ -190,7 +200,7 @@ def images():
     s.edit("src/product/gallery.tsx", "<img src={photo.url} alt={photo.alt} />", "<Picture src={photo.url} alt={photo.alt} />")
     s.edit("src/product/card.tsx", "<img src={product.thumb} alt={product.name} />", "<Picture src={product.thumb} alt={product.name} />")
     s.call("Bash", {"command": "node scripts/convert-images.mjs --format webp public/products", "description": "Convert product images"}, 15)
-    s.live("working", "busy")
+    s.live("working", "busy", reports=HUB)
     return s
 
 
@@ -213,7 +223,7 @@ def release():
     s.edit("CHANGELOG.md", "# Changelog\n", "# Changelog\n\n## 0.9.0\n\n- `report --by week`\n- `import` accepts files that start with a BOM\n- Starts faster with a large ledger\n")
     s.bash('git commit -am "Release v0.9.0" && git tag v0.9.0', "[main 7ad20e6] Release v0.9.0\n 1 file changed, 7 insertions(+)")
     s.call("Bash", {"command": "git push origin main v0.9.0", "description": "Push the release and its tag"})
-    s.live("blocked", job={"tempo": "blocked", "needs": "approve Bash: git push origin main v0.9.0"})
+    s.live("blocked", reports=HUB, job={"tempo": "blocked", "needs": "approve Bash: git push origin main v0.9.0"})
     return s
 
 
@@ -242,14 +252,91 @@ def links():
     return s
 
 
+def page(key, name, title, note, ago=120, of=None):
+    dst = Path(of or HOME / "code") / "out" / f"{name}.html"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_text((HOME / ".demo-pages" / f"{name}.html").read_text())
+    pages.setdefault(key, []).append({"session": key, "name": name, "title": title, "path": str(dst), "note": note, "shown": stamp(ago), "updated": stamp(ago)})
+
+
+def assistant():
+    s = Session("assistant", ASSIST, ago=5400)
+    s.user("Morning. What's waiting on me, and is anything on fire?", wait=30)
+    s.tool("mcp__atc__status", {}, "2 need you: Release v0.9.0 (push the tag), Coupon codes (discount base). 3 working. No machine offline.")
+    s.say("Nothing on fire. Two sessions wait on you:\n\n- **Release v0.9.0** wants to push the tag.\n- **Coupon codes at checkout** asks whether discounts apply before or after shipping.\n\nCI on main is green, and @reviewer left one comment on #217 overnight.")
+    s.done(14000)
+    s.user("Checkout feels slow on phones. Have someone find out why, and get the iOS build green on the laptop while you're at it. Show me what they find.", wait=400)
+    s.tool("mcp__atc__start", {"dir": "~/code/shop", "prompt": "Find out why checkout is slow on phones. Report back.", "report": True, "worktree": True}, "Started \"Why checkout is slow on phones\" (3fa81c02 on devbox) in its own worktree.")
+    s.tool("mcp__atc__start", {"host": "laptop", "dir": "~/code/shop-ios", "prompt": "The iOS build is red on main. Fix it. Report back.", "report": True}, "Started \"iOS build red on main\" (a07d11e4 on laptop).")
+    s.say("Both started. **Why checkout is slow on phones** runs here in its own worktree, **iOS build red on main** on the laptop. I'll tell you what they find.")
+    s.done(9000)
+    s.tool("mcp__atc__read", {"session": "Why checkout is slow on phones"}, "Found it: moment on the payment step, 1.8 s of the 2.9 s. Page is up. Fix ready on perf/checkout-mobile.", step=900)
+    s.bash("atc show out/checkout-latency.html --as checkout-latency", 'Showing "Checkout on phones" (checkout-latency) in atc, live from ~/code/shop/out/checkout-latency.html.')
+    s.say("Found it. A date library on the payment step costs **1.8 s of the 2.9 s** on a mid-range phone. Dropping it brings p95 down to **1.3 s**; the chart is beside this, and the fix waits on `perf/checkout-mobile`.\n\nThe iOS build is still running on the laptop. Merge the fix, or should @reviewer look first?")
+    s.done(11000)
+    s.summary("Checkout fix is ready: p95 on phones 2.9 s to 1.3 s.", replies=["Have @reviewer look first", "Merge it"])
+    s.write()
+    state = HOME / ".local/state/atc/hub"
+    state.mkdir(parents=True, exist_ok=True)
+    (state / "session").write_text(s.sid + "\n")
+    (state / "home").write_text("atc\n")
+    (ATC / "hub.json").write_text(json.dumps({"Session": s.sid}))
+    page(s.sid, "checkout-latency", "Checkout on phones", "Where the 2.9 s goes", ago=1000, of=SHOP)
+    return s.sid
+
+
+def checkout_perf(hub):
+    s = Session("Why checkout is slow on phones", SHOP, "perf/checkout-mobile", ago=1500)
+    s.user("Find out why checkout is slow on phones. Report back.")
+    s.bash("npx lighthouse http://localhost:5173/checkout --preset=perf --form-factor=mobile --output=json | jq .audits.bootup-time.displayValue", '"2.9 s"')
+    s.grep("from 'moment'", "src/checkout/payment.tsx:4:import moment from 'moment'\nsrc/checkout/expiry.ts:1:import moment from 'moment'")
+    s.edit("src/checkout/expiry.ts", "import moment from 'moment'\n\nexport const expired = (m: string, y: string) => moment(`${y}-${m}`).isBefore(moment(), 'month')", "export const expired = (m: string, y: string) => new Date(+y, +m) <= new Date()")
+    s.bash("npm test -- test/checkout", "Test Files  9 passed (9)\nTests  87 passed (87)")
+    s.bash('git commit -qam "Checkout: drop moment from the payment step" -v', "[perf/checkout-mobile 91c3e07] Checkout: drop moment from the payment step\n 2 files changed, 4 insertions(+), 9 deletions(-)")
+    s.bash("atc show out/checkout-latency.html", 'Showing "Checkout on phones" in atc.')
+    s.say("The payment step imported all of moment for one month comparison. Without it p95 on a mid-range phone goes from 2.9 s to 1.3 s. Committed on `perf/checkout-mobile`, tests pass, and the page has the numbers.")
+    s.done(520000)
+    s.summary("Checkout p95 on phones goes from 2.9 s to 1.3 s; fix on a branch.", ["moment cost 1.8 s on the payment step."], ["Open a PR"])
+    s.live("idle", reports=hub)
+    page(s.sid, "checkout-latency", "Checkout on phones", "Where the 2.9 s goes", ago=1000, of=SHOP)
+
+
+def browser_tab():
+    s = Session("Try the coupon flow in a browser", SHOP, "feat/coupons", ago=240)
+    s.user("Walk through checkout with SPRING15 in a real browser and tell me if the totals look right.")
+    s.tool("mcp__browser__browser_navigate", {"url": "http://shop.example/checkout"}, "Navigated to the checkout page.")
+    s.tool("mcp__browser__browser_type", {"element": "Coupon code", "text": "SPRING15"}, "Typed SPRING15.")
+    s.tool("mcp__browser__browser_click", {"element": "Apply"}, "Clicked. The summary now shows 15% off goods.")
+    s.call("mcp__browser__browser_snapshot", {}, 8)
+    s.live("working", "busy", reports=HUB)
+    (ATC / "demo-browser-session").write_text(s.sid + "\n")
+
+
+def local_model():
+    s = Session("Summarize support tickets by theme", DOCS, ago=500, model="qwen3-coder-30b")
+    s.user("Group last month's support tickets by theme and say which docs pages would have prevented them.")
+    s.bash("python3 scripts/tickets.py --month last | wc -l", "1284")
+    s.call("Bash", {"command": "python3 scripts/themes.py --month last", "description": "Cluster tickets by theme"}, 15)
+    s.live("working", "busy", engine="qwen")
+
+
+def scheduler():
+    s = Session("Nightly export runs twice after DST", CLI, "fix/dst-export", ago=800)
+    s.user("The nightly export ran twice the night clocks changed. Fix the scheduler and add a test that crosses the change.")
+    s.read("internal/sched/next.go", "func next(t time.Time, every time.Duration) time.Time {\n\treturn t.Add(every)\n}")
+    s.edit("internal/sched/next.go", "\treturn t.Add(every)", "\ty, m, d := t.Date()\n\treturn time.Date(y, m, d+int(every/(24*time.Hour)), t.Hour(), t.Minute(), 0, 0, t.Location())")
+    s.call("Bash", {"command": "go test ./internal/sched/... -run DST -v", "description": "Run the DST tests"}, 12)
+    s.live("working", "busy", pinned=True)
+
+
 def reviewer():
     s = Session("Review open pull requests", SHOP, ago=2000)
     s.user("Review what opened since last time.")
     s.bash("gh pr list --state open --json number,title", '[{"number":214,"title":"Search: debounce the query"},{"number":217,"title":"Account: export my data"}]')
-    s.say("#214 looks fine. #217 writes the export to a public bucket path, I left a comment asking for a signed link.")
+    s.say("Two look fine. #217 writes the export to a public bucket path, I left a comment asking for a signed link.")
     s.done(95000)
-    s.summary("#214 fine; #217 needs a signed link for the export.")
-    s.live("idle", agent="reviewer")
+    s.summary("Two look fine; #217 needs a signed link for the export.")
+    s.live("idle", agent="reviewer", parked=True)
 
 
 def ci():
@@ -259,28 +346,149 @@ def ci():
     s.say("One flaky timeout on the macOS runner, passed on retry. Nothing to do.")
     s.done(40000)
     s.summary("One flaky timeout, passed on retry.")
-    s.live("idle", agent="ci-watch")
+    s.live("idle", agent="ci-watch", parked=True)
 
 
-def agent_folder(name, title, icon, color, dir, brief):
+def agent_folder(name, **cfg):
+    brief = cfg.pop("brief")
     d = ATC / "agents.d" / name
     d.mkdir(parents=True, exist_ok=True)
-    (d / "agent.json").write_text(json.dumps({"host": "devbox", "title": title, "icon": icon, "color": color, "dir": dir}))
+    (d / "agent.json").write_text(json.dumps({"host": "devbox", **cfg}))
     (d / "brief.md").write_text(brief + "\n")
 
 
-def main():
-    for f in (checkout, coupons, images, jsonflag, release, guide, links, reviewer, ci):
-        f()
-    agent_folder("reviewer", "Reviewer", "pr", "violet", SHOP, "Review new pull requests and comment on what you find.")
-    agent_folder("ci-watch", "CI watch", "pulse", "amber", CLI, "Look at failed CI runs on main and say what they mean.")
+PAST = [("Stripe webhook retries", "Retries now back off and stop after a day."), ("Search index rebuild", "Rebuilt in 4 minutes, no downtime."),
+        ("Dark mode on the account page", "Done, using the existing tokens."), ("Flaky upload test", "It raced the temp folder cleanup; fixed."),
+        ("Move CI to arm runners", "Runs are 31% cheaper and no slower."), ("Tax rounding for SEK", "Rounds per line now, like the invoice."),
+        ("Import: handle a BOM", "Files with a BOM import cleanly."), ("Report: group by week", "Added `--by week` with tests."),
+        ("Docs: API auth page", "Rewritten around one curl example."), ("Refund flow copy", "Three screens reworded, support signed off."),
+        ("Faster startup with a large ledger", "Startup went from 2.1 s to 240 ms."), ("Upgrade to Vite 6", "Upgraded, the build is 18% faster."),
+        ("Session cookie rotation", "Rotates on login and on privilege change."), ("Email templates in MJML", "Six templates moved, all render in Outlook."),
+        ("Add OpenTelemetry to the API", "Traces reach the collector; sampling at 5%."), ("Postgres 17 migration plan", "Plan written, one risky index called out."),
+        ("Rate limit the public API", "100 per minute per key, with headers."), ("Sitemap generation", "Generated at build, 214 pages."),
+        ("Cart page accessibility pass", "Fixed 11 issues, axe is clean."), ("Remove the old feature flags", "Nine flags and 640 lines gone.")]
+BAYS = [SHOP, SHOP, SHOP, CLI, CLI, DOCS]
 
-    CLAUDE.mkdir(parents=True, exist_ok=True)
-    (CLAUDE / "demo-agents.json").write_text(json.dumps(agents))
+
+def past_sessions():
+    """Ninety days of finished conversations: what Earlier searches and Usage counts."""
+    rng = random.Random(7)
+    titles = iter([x for _ in range(40) for x in rng.sample(PAST, len(PAST))])
+    for day in range(90, 0, -1):
+        weekend = (NOW - timedelta(days=day)).weekday() > 4
+        for _ in range(rng.choice([1, 1, 2]) if weekend else rng.choice([2, 3, 4, 5])):
+            hour = rng.choice([9, 10, 10, 11, 11, 14, 15, 15, 16, 17, 21, 22])
+            ago = day * 86400 + (NOW.hour - hour) * 3600 + rng.randint(0, 3000)
+            title, said = next(titles)
+            s = Session(title, rng.choice(BAYS), ago=ago, model=rng.choice([OPUS, OPUS, OPUS, SONNET]))
+            s.user(title + ".", wait=30)
+            for _ in range(rng.randint(40, 180)):
+                s.ctx, s.out, s.written = rng.randint(60000, 190000), rng.randint(300, 2400), rng.randint(600, 6000)
+                s.assistant([{"type": "text", "text": "Working through it."}], 20)
+            s.say(said)
+            s.done(rng.randint(60000, 900000))
+            s.write()
+
+
+def resource_history():
+    """A day of the points atc writes every minute, so the charts have a past."""
+    d = ATC / "resources"
+    d.mkdir(parents=True, exist_ok=True)
+    gb = 1 << 30
+    groups = [("session", "Why checkout is slow on phones", 5.2, 90, "vite"), ("session", "Move product images to WebP", 9.5, 520, "node"),
+              ("session", "Add --json to tally report", 2.4, 60, "go"), ("session", "Nightly export runs twice after DST", 3.6, 220, "go"),
+              ("session", "Try the coupon flow in a browser", 2.8, 110, "chromium"), ("left", "dev stack (outlived its session)", 6.1, 30, "postgres")]
+    start = NOW - timedelta(hours=24)
+    for m in range(0, 24 * 60, 5):
+        t = start + timedelta(minutes=m)
+        wave = math.sin(m / 70) * .5 + .5
+        rows = []
+        for i, (kind, title, mem, cpu, top) in enumerate(groups):
+            k = max(0, math.sin(m / (55 + i * 30) + i * 1.3)) ** .6
+            mb, c = int(mem * (.5 + .6 * k) * gb), round(cpu * k * (.4 + wave), 1)
+            rows.append({"k": str(i), "o": kind, "l": title, "c": c, "m": mb, "p": [{"n": top, "m": mb, "c": c}]})
+        row = {"t": int(t.timestamp()), "cpu": round(sum(r["c"] for r in rows) + 12, 1), "mem": sum(r["m"] for r in rows) + 9 * gb,
+               "total": 64 * gb, "ram": 64 * gb, "cores": 12, "g": rows}
+        with open(d / (t.strftime("%Y-%m-%d") + ".jsonl"), "a") as f:
+            f.write(json.dumps(row) + "\n")
+
+
+def backlog():
+    def item(title, by="", why="", ago=3600, dir=SHOP, status="ready"):
+        return {"id": uuid.uuid4().hex[:8], "dir": dir, "title": title, "prompt": title, "status": status, "why": why, "by": by,
+                "created": stamp(ago), "updated": stamp(ago), "host": "devbox"}
+    (ATC / "backlog.json").write_text(json.dumps([
+        item("Support note for the 41 orders that changed", "Cart totals one cent off", ago=1400),
+        item("Signed links for the data export", "Review open pull requests", ago=9000),
+        item("Remove moment from the rest of the app", "Why checkout is slow on phones", ago=1100),
+        item("Ship the WebP images behind a flag", ago=40000),
+        item("Retry the macOS runner once before failing", "CI failures on main", dir=CLI, ago=86000),
+        item("tally report --by month", dir=CLI, ago=190000),
+        item("Fix the six broken links", dir=DOCS, status="blocked", why="the restructure", ago=90000),
+        item("Getting started video", dir=DOCS, ago=400000)]))
+
+
+def main_box():
+    global HUB
     ATC.mkdir(parents=True, exist_ok=True)
-    (ATC / "meta.json").write_text(json.dumps(meta))
-    (ATC / "summaries.json").write_text(json.dumps(summaries))
-    (ATC / "pages.json").write_text(json.dumps({"pages": pages}))
+    HUB = assistant()
+    checkout_perf(HUB)
+    browser_tab()
+    checkout()
+    coupons()
+    images()
+    jsonflag()
+    release()
+    guide()
+    (CLAUDE / "demo-tui").parent.mkdir(parents=True, exist_ok=True)
+    (CLAUDE / "demo-tui").write_text(links().id + "\n")
+    local_model()
+    scheduler()
+    reviewer()
+    ci()
+    past_sessions()
+    resource_history()
+    backlog()
+    for key, name, title, note, ago, state in (
+            ("reviewer", "queue", "Review queue", "What is open and what I think", 1800, {"headline": "#217 needs a signed link; 2 fine", "badge": 3}),
+            ("ci-watch", "health", "CI health", "Last 14 days on main", 3000, {"headline": "Main is green, one flaky test", "badge": "green"}),
+            ("standup", "today", "Today", "Written at 09:00", 5000, {"headline": "4 merged yesterday, 2 wait on you", "badge": 2})):
+        page("@" + key, name, title, note, ago, ATC / "agents.d" / key)
+        page_state[f"@{key}/{name}"] = state
+    agent_folder("reviewer", title="Reviewer", icon="pr", color="violet", dir=SHOP, every="30m", check="gh pr list --search review:none --json number", prompt="Review what opened since last time.", brief="Review new pull requests and comment on what you find.")
+    agent_folder("ci-watch", title="CI watch", icon="pulse", color="amber", dir=CLI, every="5m", check="./failed-runs.sh", prompt="A run on main failed. Say what it means.", brief="Look at failed CI runs on main and say what they mean.")
+    agent_folder("standup", title="Standup", icon="calendar", color="teal", every="1d", **{"from": "2026-01-05T09:00"}, prompt="Write today's page.", brief="Each morning, write what merged, what is stuck and what waits on the user.")
+    agent_folder("deps", title="Dependencies", icon="target", color="green", dir=SHOP, every="1w", prompt="Check for updates worth taking.", brief="Open a session for any dependency update worth taking.")
+    (ATC / "presets.json").write_text(json.dumps([{"name": "reviewer", "dir": SHOP, "brief": "REVIEWER.md"}, {"name": "docs writer", "dir": DOCS, "worktree": True}]))
+    (ATC / "engines.json").write_text(json.dumps([{"name": "qwen", "model": "qwen3-coder-30b", "url": "http://127.0.0.1:1"}]))
+    (ATC / "peers.json").write_text(json.dumps([{"name": "laptop", "url": os.environ["DEMO_PEER"], "token": "demo"}]))
+    subprocess.run(["/home/you/.local/bin/atc", "limits", "-tap"], check=True, input=json.dumps({"rate_limits": {
+        "five_hour": {"used_percentage": 38, "resets_at": (NOW + timedelta(hours=2, minutes=12)).timestamp()},
+        "seven_day": {"used_percentage": 61, "resets_at": (NOW + timedelta(days=3)).timestamp()}}}).encode())
 
 
-main()
+def main_laptop():
+    s = Session("iOS build red on main", "/home/laptop/code/shop-ios", "fix/ios-build", ago=900)
+    s.user("The iOS build is red on main. Fix it. Report back.")
+    s.bash("xcodebuild -scheme Shop -sdk iphonesimulator build 2>&1 | tail -3", "Shop/Checkout/CartView.swift:41:23: error: value of type 'Money' has no member 'cents'\n** BUILD FAILED **", error=True)
+    s.edit("Shop/Checkout/CartView.swift", "total.cents", "total.minorUnits")
+    s.call("Bash", {"command": "xcodebuild -scheme Shop -sdk iphonesimulator test", "description": "Build and run the iOS tests"}, 8)
+    s.live("working", "busy")
+    s = Session("Android release notes", "/home/laptop/code/shop-android", ago=4000, model=SONNET)
+    s.user("Write the Play Store notes for 3.2 from the merged PRs.")
+    s.say("Done, in `fastlane/metadata/en-US/changelogs/320.txt`: faster checkout, coupon codes, and a fix for the blank order screen.")
+    s.done(61000)
+    s.summary("Play Store notes for 3.2 are written.", replies=["Commit it"])
+    s.live("idle")
+
+
+(main_laptop if sys.argv[1:] == ["laptop"] else main_box)()
+(CLAUDE / "jobs").mkdir(parents=True, exist_ok=True)
+(CLAUDE / "demo-tick.json").write_text(json.dumps(ticking))
+(CLAUDE / "demo-agents.json").write_text(json.dumps(agents))
+ATC.mkdir(parents=True, exist_ok=True)
+(ATC / "meta.json").write_text(json.dumps(meta))
+(ATC / "summaries.json").write_text(json.dumps(summaries))
+(ATC / "pages.json").write_text(json.dumps({"pages": pages, "state": page_state}))
+
+

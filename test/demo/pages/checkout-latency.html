@@ -1,0 +1,35 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checkout on phones</title><link rel="stylesheet" href="/atc.css"></head>
+<body><main class="pg">
+<header class="head"><h1>One date library costs 1.8 s of checkout</h1>
+<p class="lede">The payment step imports all of moment for one month comparison. Without it, p95 on a mid-range phone drops from 2.9 s to 1.3 s.</p>
+<p class="meta"><span>Moto G Power, 4G</span><span>20 runs each</span><span>perf/checkout-mobile</span></p></header>
+<div class="stats"><div><b>2.9<small>s</small></b><span>p95 before</span></div><div><b>1.3<small>s</small></b><span>p95 after</span></div><div><b>412<small>KB</small></b><span>JS removed</span></div><div><b>+6.1<small>%</small></b><span>completed orders, est.</span></div></div>
+<section id="trend"><h2>Time to interactive, p95 <small>last 14 days, then the branch</small></h2>
+<div class="chart"><svg viewBox="0 0 720 220" role="img" aria-label="Time to interactive stays near 2.9 seconds, then falls to 1.3 on the branch">
+<line class="grid" x1="40" x2="710" y1="20" y2="20"/><line class="grid" x1="40" x2="710" y1="70" y2="70"/><line class="grid" x1="40" x2="710" y1="120" y2="120"/><line class="grid" x1="40" x2="710" y1="170" y2="170"/>
+<text x="4" y="24">3 s</text><text x="4" y="74">2 s</text><text x="4" y="124">1 s</text><text x="4" y="174">0</text>
+<path class="area" d="M40 30L88 34L136 26L184 32L232 28L280 36L328 30L376 25L424 33L472 29L520 31L568 27L616 30L640 104L676 106L710 105L710 170L40 170Z"/>
+<path class="line" d="M40 30L88 34L136 26L184 32L232 28L280 36L328 30L376 25L424 33L472 29L520 31L568 27L616 30L640 104L676 106L710 105"/>
+<line class="now" x1="628" x2="628" y1="10" y2="170"/><text x="560" y="14">this branch</text>
+<circle class="pt" cx="616" cy="30" r="4"/><circle class="pt" cx="710" cy="105" r="4"/>
+<text class="k" x="584" y="52">2.9 s</text><text class="k" x="676" y="94">1.3 s</text>
+<line class="ax" x1="40" x2="710" y1="170" y2="170"/><text x="40" y="192">Oct 22</text><text x="340" y="192">Oct 29</text><text x="640" y="192">Nov 5</text>
+</svg></div></section>
+<section id="where"><h2>Where the 2.9 s goes</h2>
+<table><thead><tr><th>Step</th><th class="n">Before</th><th class="n">After</th><th>Share of before</th></tr></thead><tbody>
+<tr><td>moment and its locales</td><td class="n">1.82 s</td><td class="n">0</td><td><span class="dbar" style="--v:63"></span></td></tr>
+<tr><td>Payment form</td><td class="n">0.54 s</td><td class="n">0.51 s</td><td><span class="dbar" style="--v:19"></span></td></tr>
+<tr><td>Cart summary</td><td class="n">0.31 s</td><td class="n">0.30 s</td><td><span class="dbar" style="--v:11"></span></td></tr>
+<tr><td>Everything else</td><td class="n">0.23 s</td><td class="n">0.49 s</td><td><span class="dbar" style="--v:8"></span></td></tr>
+</tbody></table></section>
+<section id="change"><h2>The change</h2>
+<pre class="diff"><span class="h">src/checkout/expiry.ts</span>
+<del>import moment from 'moment'</del>
+<del>export const expired = (m, y) =&gt; moment(`${y}-${m}`).isBefore(moment(), 'month')</del>
+<ins>export const expired = (m, y) =&gt; new Date(+y, +m) &lt;= new Date()</ins></pre></section>
+<section id="checks"><h2>Checked</h2>
+<ul class="checks"><li class="done">87 checkout tests</li><li class="done">Lighthouse, 20 runs on each side</li><li class="now">@reviewer is reading it</li><li>Merge</li></ul></section>
+<p class="foot">From Lighthouse on the branch's preview build. The order estimate is from last year's speed test, not measured here.</p>
+</main></body></html>
