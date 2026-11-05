@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pose, Behaviour, Director, Swap } from "./rig.js";
+import { pose, Behaviour, Director, Swap, daylight } from "./rig.js";
 
 const rig = {
   boneOrder: ["root", "head"],
@@ -160,4 +160,11 @@ test("thinking and tool use bring their poses, the others none", () => {
   assert.ok(poses.has("explain"), "speaking gestures now and then");
   assert.ok(seen.thinking.has("think"));
   assert.ok(seen.tool.has("read") && seen.tool.has("write") && !seen.tool.has(null));
+});
+
+test("a lamp-lit room counts as none, a sunny one as full daylight", () => {
+  assert.equal(daylight(.15), 0);
+  assert.equal(daylight(.3), 0);
+  assert.equal(daylight(.7), 1);
+  assert.ok(daylight(.45) > 0 && daylight(.45) < 1);
 });

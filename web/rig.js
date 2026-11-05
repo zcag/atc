@@ -401,22 +401,42 @@ export class Behaviour {
   }
 }
 
-/** Another room for a rig, sized to its plate and put as far back as build.py puts the character's own: darkened and
- *  softened. The lamp's glow and the dust stay in that own room, since they would float in this one. */
+/** How far a room's mean brightness (0 to 1) says it is daylit: 0 is a lamp-lit room, 1 a sunny one. */
+export const daylight = (mean) => smooth(.3, .6, mean);
+
+/** Another room for a rig, sized to its plate and softened like build.py softens the character's own. A lamp-lit room goes
+ *  as far back as that one, to 62% and under the vignette; a daylit one stays bright, or a sunny office turns to dusk. The
+ *  lamp's glow and the dust stay in the character's own room, since they would float in this one. */
 async function backdrop(url, plate) {
   const img = new Image();
   img.src = url;
   await img.decode();
-  const c = document.createElement("canvas");
-  c.width = plate.naturalWidth;
-  c.height = plate.naturalHeight;
-  const g = c.getContext("2d"), k = Math.max(c.width / img.naturalWidth, c.height / img.naturalHeight);
+  const probe = document.createElement("canvas");
+  probe.width = probe.height = 16;
+  const p = probe.getContext("2d", { willReadFrequently: true });
+  p.drawImage(img, 0, 0, 16, 16);
+  const px = p.getImageData(0, 0, 16, 16).data;
+  let sum = 0;
+  for (let i = 0; i < px.length; i += 4) sum += .2126 * px[i] + .7152 * px[i + 1] + .0722 * px[i + 2];
+  const light = daylight(sum / (px.length / 4) / 255);
+  const canvas = document.createElement("canvas");
+  canvas.width = plate.naturalWidth;
+  canvas.height = plate.naturalHeight;
+  const g = canvas.getContext("2d"), k = Math.max(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight);
   g.fillStyle = "#000";
-  g.fillRect(0, 0, c.width, c.height);
+  g.fillRect(0, 0, canvas.width, canvas.height);
   g.filter = "blur(2.5px)";
-  g.globalAlpha = .62;
-  g.drawImage(img, (c.width - img.naturalWidth * k) / 2, (c.height - img.naturalHeight * k) / 2, img.naturalWidth * k, img.naturalHeight * k);
-  return c;
+  g.globalAlpha = lerp(.62, .96, light);
+  g.drawImage(img, (canvas.width - img.naturalWidth * k) / 2, (canvas.height - img.naturalHeight * k) / 2, img.naturalWidth * k, img.naturalHeight * k);
+  /* The call screen's white name and status sit up there. */
+  const shade = g.createLinearGradient(0, 0, 0, canvas.height * .42);
+  shade.addColorStop(0, `rgba(8, 14, 28, ${.62 * light})`);
+  shade.addColorStop(1, "rgba(8, 14, 28, 0)");
+  g.filter = "none";
+  g.globalAlpha = 1;
+  g.fillStyle = shade;
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  return { canvas, light };
 }
 
 /** Draws the character at `base` into a canvas. now() gives {state, you, it, lo, hi}. Returns stop; with opts.dt it
@@ -437,7 +457,7 @@ export async function rig(canvas, base, now, opts = {}) {
   }));
   const plate = R.parts.find((p) => p.name === "plate")?.tex;
   const room = opts.background && plate && await backdrop(opts.background, images[plate]).catch((e) => console.warn("persona: background", e));
-  if (room) images[plate] = room;
+  if (room) images[plate] = room.canvas;
   const gl = canvas.getContext("webgl2", { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: !!opts.dt });
   if (!gl) throw new Error("no WebGL2");
   const program = (vs, fs) => {
@@ -534,7 +554,7 @@ export async function rig(canvas, base, now, opts = {}) {
   canvas.addEventListener("webglcontextrestored", restored);
 
   const behaviour = new Behaviour(), director = new Director(R);
-  const BLEND = { add: [gl.ONE, gl.ONE], mul: [gl.DST_COLOR, gl.ZERO] };
+  const BLEND = { add: [gl.ONE, gl.ONE], mul: [gl.DST_COLOR, gl.ONE_MINUS_SRC_ALPHA] };
   let last = performance.now(), raf, drew = false, clock = 0;
   const draw = (name, alpha = 1, shift = [0, 0]) => {
     const q = G.parts[name];
@@ -608,7 +628,7 @@ export async function rig(canvas, base, now, opts = {}) {
     }
     gl.uniform2f(G.main.u("shift"), 0, 0);
     bones(null);
-    draw("vignette");
+    draw("vignette", 1 - .8 * (room?.light || 0));
     if (!room) draw("glow", .9 + .06 * Math.sin(clock * 1.3) + .04 * Math.sin(clock * 3.7 + 1));
     if (dust) {
       dust.forEach((d, i) => G.ddata.set([d.x, d.y, d.s, d.a * clamp(d.life / 2) * (.6 + .4 * Math.sin(clock * 1.5 + d.ph))], i * 4));
