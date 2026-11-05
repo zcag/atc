@@ -586,4 +586,4 @@ server.router.add_post("/{cmd:answer|hangup|dial|mute}", http_command)
 server.on_startup.append(start)
 
 if __name__ == "__main__":
-    web.run_app(server, host=os.environ.get("DELTA_CALL_HOST") or None, port=PORT, print=None, shutdown_timeout=1)
+    web.run_app(server, host=os.environ.get("DELTA_CALL_HOST", "127.0.0.1") or None, port=PORT, print=None, shutdown_timeout=1)
