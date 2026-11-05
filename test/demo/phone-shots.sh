@@ -5,7 +5,7 @@
 # The app takes its theme from the server, so nothing else may change the look while this runs: not shots.js's themes.
 #   phone-shots.sh setup <apk> <port>                 install and point at the demo
 #   phone-shots.sh shoot <port> <out dir> <dark|light>
-#   phone-shots.sh character <port> <out dir> <dark|light> <name>    a call with that character (DEMO_PERSONAS)
+#   phone-shots.sh character <port> <out dir> <dark|light> <person>    a call with that person as the assistant (june, arthur; run.sh's DEMO_PERSONAS)
 set -eu
 dev=127.0.0.1:${ADB_PORT:-5599}
 adb=("$HOME/Android/sdk/platform-tools/adb" -s "$dev")
@@ -62,7 +62,7 @@ shoot)
 	"${adb[@]}" shell input tap 600 200
 	sleep 1.5
 	shot ring-full
-	"${adb[@]}" shell input tap 676 2062
+	"${adb[@]}" shell input tap 676 2104
 	sleep 6.5
 	shot call-speaking
 	sleep 3
@@ -95,14 +95,14 @@ character)
 	curl -s -m 3 -X POST "http://127.0.0.1:$((port + 2))/hangup" >/dev/null
 	sleep 1
 	"${adb[@]}" shell am force-stop $pkg
-	"${adb[@]}" shell "run-as $pkg sh -c \"sed -i '/name=.persona/d; s#</map>#<string name=\\\"persona\\\">$who</string></map>#' shared_prefs/atc.xml\""
+	python3 -c "import json,sys; f=sys.argv[1]; d=json.load(open(f)); d['langs']['en']=sys.argv[2]; json.dump(d,open(f,'w'))" "$(ls -t /tmp/tmp.*/.config/atc/persons.json | head -1)" "$who"
 	"${adb[@]}" shell am start -W -n $pkg/.MainActivity >/dev/null
 	sleep 4
 	ring
 	sleep 2.2
 	"${adb[@]}" shell input tap 600 200
 	sleep 2
-	"${adb[@]}" shell input tap 676 2062
+	"${adb[@]}" shell input tap 676 2104
 	sleep 4
 	shot "$who-1"
 	sleep 2.5

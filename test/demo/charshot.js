@@ -1,12 +1,11 @@
 // Shoots the assistant with a character on a call in the browser: run.sh with DEMO_LINE=real and DEMO_PERSONAS, voice-stack.sh.
-// The microphone plays a made-up caller's clip so the character hears, thinks and speaks. Run like shots.js, with
+// Set the person in persons.json first. The microphone plays a made-up caller's clip so the character hears, thinks and speaks. Run like shots.js, with
 // (page, {base, hub, clips, out, mode, who}).
-async (page, { base = "http://127.0.0.1:7431", hub = "http://127.0.0.1:7432", clips = "http://127.0.0.1:7440/clips", out = "/tmp/atc-shots", mode = "dark", who = "professor", w = 1400, h = 900 } = {}) => {
+async (page, { base = "http://127.0.0.1:7431", hub = "http://127.0.0.1:7432", clips = "http://127.0.0.1:7440/clips", out = "/tmp/atc-shots", mode = "dark", who = "june", w = 1400, h = 900 } = {}) => {
   const browser = page.context().browser();
   const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, colorScheme: mode });
   const p = await ctx.newPage();
-  await p.addInitScript((name) => {
-    localStorage.setItem("atc.persona", name);
+  await p.addInitScript(() => {
     navigator.mediaDevices.getUserMedia = async () => {
       const c = new AudioContext(), d = c.createMediaStreamDestination();
       await c.resume();
@@ -18,7 +17,7 @@ async (page, { base = "http://127.0.0.1:7431", hub = "http://127.0.0.1:7432", cl
       };
       return d.stream;
     };
-  }, who);
+  });
   const status = () => p.evaluate(() => document.querySelector(".callp .st")?.innerText || "");
   const until = async (re, ms = 40000) => { for (const end = Date.now() + ms; Date.now() < end; await p.waitForTimeout(150)) if (re.test(await status())) return true; return false; };
   const shots = [];

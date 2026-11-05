@@ -23,6 +23,7 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
+import android.text.TextUtils
 import android.view.Gravity
 import android.view.View
 import android.window.OnBackInvokedDispatcher
@@ -225,7 +226,8 @@ class CallActivity : Activity() {
         whoView.text = name(f) + personName?.let { " · $it" }.orEmpty() + if (st.phase == Calls.Phase.Active) " \u25BE" else ""
         val knock = f.knock.takeIf { it.isNotEmpty() && f.line != "assistant" }?.let { "Assistant: $it" }
         reasonView.text = knock ?: st.reason
-        reasonView.visibility = if (reasonView.text.isNotEmpty() && st.phase != Calls.Phase.Ringing) View.VISIBLE else View.GONE
+        val talking = f.said.isNotEmpty() || f.you.isNotEmpty() || f.hearing.isNotEmpty()
+        reasonView.visibility = if (reasonView.text.isNotEmpty() && st.phase != Calls.Phase.Ringing && (knock != null || !talking)) View.VISIBLE else View.GONE
     }
 
     private fun activity(f: Calls.Face) = if (f.moving) "Connecting to ${name(f)}…" else when (f.state) {
@@ -418,10 +420,15 @@ class CallActivity : Activity() {
         setShadowLayer(14f, 0f, 1f, 0x99000000.toInt())
     }
 
+    /** The name and the captions stay readable over a character, whose face keeps the middle of the screen to itself. */
+    private fun scrim(from: GradientDrawable.Orientation) = View(this).apply {
+        background = GradientDrawable(from, intArrayOf(0xcc05070c.toInt(), 0x9905070c.toInt(), 0x0005070c))
+    }
+
     private fun layout(): View {
-        statusView = text(18f, 0.8f)
-        reasonView = text(16f, 0.7f)
-        timer = Chronometer(this).apply { textSize = 18f; setTextColor(Color.WHITE); alpha = 0.8f; gravity = Gravity.CENTER }
+        statusView = text(15f, 0.85f).apply { setPadding(dp(4), 0, dp(4), 0) }
+        reasonView = text(15f, 0.8f).apply { maxLines = 3 }
+        timer = Chronometer(this).apply { textSize = 15f; setTextColor(Color.WHITE); alpha = 0.85f; gravity = Gravity.CENTER; setShadowLayer(14f, 0f, 1f, 0x99000000.toInt()); setPadding(dp(4), 0, dp(4), 0) }
         incomingRow = row(
             round(R.drawable.ic_call_end, 0xffe5484d.toInt()) { Calls.send(Calls.Cmd.Hangup) },
             round(R.drawable.ic_call, 0xff30a46c.toInt()) { handle(Intent(ANSWER)) },
@@ -438,22 +445,22 @@ class CallActivity : Activity() {
             else if (Calls.face.value.state in setOf("speaking", "thinking", "tool")) Calls.send(Calls.Cmd.Interrupt)
         }
         statusView.setOnClickListener { if (Calls.state.value.held) Calls.send(Calls.Cmd.Resume) }
-        youView = text(15f, .7f).apply { maxLines = 3 }
-        saidView = text(19f, 1f).apply { maxLines = 4; setPadding(dp(24), dp(4), dp(24), dp(20)) }
+        youView = text(14f, .7f).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.START }
+        saidView = text(16f, 1f).apply { maxLines = 4; ellipsize = TextUtils.TruncateAt.START; setPadding(dp(24), dp(2), dp(24), dp(16)) }
         val front = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(0, dp(96), 0, dp(72))
-            whoView = text(34f, 1f).apply {
+            setPadding(0, dp(36), 0, dp(56))
+            whoView = text(24f, 1f).apply {
+                setPadding(dp(24), dp(4), dp(24), 0)
                 text = "Assistant"
                 setOnClickListener { if (Calls.state.value.phase == Calls.Phase.Active) pickLine() }
             }
             addView(whoView)
+            addView(row(statusView, timer).apply { setPadding(dp(24), 0, dp(24), 0) })
             persona.onPerson = { personName = it?.ifEmpty { null }; showWho(Calls.state.value, Calls.face.value) }
-            addView(statusView)
-            addView(timer)
-            addView(reasonView)
             addView(Space(context), LinearLayout.LayoutParams(0, 0, 1f))
+            addView(reasonView)
             addView(youView)
             addView(saidView)
             addView(incomingRow)
@@ -462,6 +469,8 @@ class CallActivity : Activity() {
         return FrameLayout(this).apply {
             setBackgroundColor(Orb.BACKDROP)
             addView(persona.view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            addView(scrim(GradientDrawable.Orientation.TOP_BOTTOM), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(150), Gravity.TOP))
+            addView(scrim(GradientDrawable.Orientation.BOTTOM_TOP), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(340), Gravity.BOTTOM))
             addView(front, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }
     }

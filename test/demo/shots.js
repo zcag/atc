@@ -44,13 +44,6 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
       await to(p, `#/s/${by("Checkout errors").id}/p/checkout-errors`, 3200);
       return [[p, "desk"]];
     },
-    async assistant(mode) {
-      const p = await open(mode);
-      await to(p, "#/assist", 2200);
-      for (const row of await p.locator(".turn.fold, .turnline, [data-folded]").all()) await row.click().catch(() => {});
-      await p.waitForTimeout(600);
-      return [[p, "assistant"]];
-    },
     async board(mode) {
       const p = await open(mode, { h: 1040 });
       await to(p, "#/", 1800);
@@ -75,7 +68,7 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
       await to(l, "#/agents", 2600);
       out.push([l, "team-list"]);
       for (const [name, pg] of [["shopping", "picks"], ["ops", "alerts"], ["email", "inbox"], ["tracker", "items"], ["invoice", "invoice"], ["reviewer", "queue"]]) {
-        const p = await open(mode, { w: 620, h: 800, phone: true, dpr: 2 });
+        const p = await open(mode, { w: ["tracker", "invoice", "reviewer"].includes(name) ? 840 : 620, h: 800, phone: true, dpr: 2 });
         await to(p, `#/p/@${name}/${pg}`, 2400);
         out.push([p, `team-${name}`]);
       }

@@ -35,16 +35,13 @@ async (page, { raw = "http://127.0.0.1:7440/raw", out = "/tmp/atc-final", modes 
   const layouts = {
     hero: { w: 1320, h: 930, body: (r) => win(`${r}/hero.png`, 20, 20, 1280) },
     fleet: { w: 2300, h: 1400, body: (r) => win(`${r}/fleet.png`, 40, 40, 1560) + win(`${r}/desk.png`, 1000, 300, 1260) + ph(`${r}/ring-headsup.png`, 60, 500, 400) },
-    "call-ring": row(["ring-full", "call-speaking"], 56, 400, 60),
-    // With characters, which aren't in the repo (run.sh's DEMO_PERSONAS): only when asked for by name.
-    "call-ring-characters": { ...row(["ring-full", "professor-2", "woman-4"], 56, 400, 60), asked: true },
-    "assistant-characters": { ...solo("assist-professor-speaking", 1400, 900), asked: true },
-    assistant: solo("assistant"),
+    "call-ring": row(["ring-full", "arthur-2", "june-4"], 56, 400, 60),
+    assistant: solo("assist-arthur-thinking", 1400, 900),
     board: solo("board", 1560, 1040),
     transcript: solo("transcript", 1560, 1040),
     pages: solo("pages"),
-    agents: { w: 2720, h: 1800, body: (r) => ["list", "shopping", "ops", "email", "tracker", "invoice", "reviewer"].map((n, i) =>
-      win(`${r}/team-${n}.png`, 50 + (i % 4) * 660, 50 + Math.floor(i / 4) * 860, 620)).join("") },
+    agents: { w: 2700, h: 1800, body: (r) => ["list", "shopping", "ops", "email"].map((n, i) => win(`${r}/team-${n}.png`, 50 + i * 660, 50, 620)).join("") +
+      ["tracker", "invoice", "reviewer"].map((n, i) => win(`${r}/team-${n}.png`, 50 + i * 880, 910, 840)).join("") },
     usage: solo("usage", 1560, 1040),
     resources: solo("resources", 1560, 1040),
     browser: solo("browser", 1560, 900),
@@ -71,7 +68,7 @@ async (page, { raw = "http://127.0.0.1:7440/raw", out = "/tmp/atc-final", modes 
   const done = [];
   for (const mode of modes) {
     for (const [name, l] of Object.entries(layouts)) {
-      if (only ? !only.includes(name) : l.asked) continue;
+      if (only && !only.includes(name)) continue;
       if (l.once && mode !== "dark") continue;
       const ctx = await browser.newContext({ viewport: { width: l.w, height: l.h }, deviceScaleFactor: 2 });
       const p = await ctx.newPage();

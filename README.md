@@ -70,7 +70,7 @@ atc call --reason "Checkout errors jumped to 8% after the last deploy"
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/call-ring-dark.webp">
-  <img src="docs/img/call-ring-light.webp" alt="Two phones. The first has woken to an incoming call: Assistant, with the reason under the name, Checkout errors jumped to 8% after the last deploy, and a red and a green button. The second is on the call: Assistant, a call timer, what it is saying, and mute, hang up and speaker buttons.">
+  <img src="docs/img/call-ring-light.webp" alt="Three phones. The first has woken to an incoming call: Assistant, June, with the reason under the name, Checkout errors jumped to 8% after the last deploy, and a red and a green button. The second is on the call with Arthur, a painted professor in glasses and a cardigan in their study, smiling as they speak. The third is on the call with June, a painted woman with long dark hair in a cream sweater, listening. Each has the name and a timer above the face, and what was said below it.">
 </picture>
 
 You can talk over it, and it hears you. It says what it's doing while it works, starts sessions for anything long, and tells you
@@ -79,7 +79,7 @@ how they came out after you've hung up. Calling it needs no phone number, and it
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/assistant-dark.webp">
-  <img src="docs/img/assistant-light.webp" alt="The assistant: you ask it to find out why checkout is slow and to fix a build on the laptop. It starts both sessions, reads what they found, shows a page and answers with the numbers, offering replies. On the left and under the conversation, the sessions it set going and what each is doing now.">
+  <img src="docs/img/assistant-light.webp" alt="The assistant with a call on. On the left, the conversation: you ask it to find out why checkout is slow and to fix a build on the laptop, it starts both sessions and answers with the numbers, and the sessions it set going are listed under it. On the right, the call: Arthur, a painted professor in their study, thinking with their hand to their chin, and the sessions on this call under them.">
 </picture>
 
 ## A team of agents
@@ -103,7 +103,7 @@ We run agents like these every day. You make your own: each is a folder with a p
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/agents-dark.webp">
-  <img src="docs/img/agents-light.webp" alt="Eight windows, one team. The Agents list: @email, @invoice, @ops, @reviewer, @shopping, @standup and @tracker, each with what it is keeping track of, its last result, and when it wakes next. Then each agent's own page: @shopping's options with prices and stock and Pick buttons; @ops's alerts today, three fixed and one that rang you; @email's inbox sorted with buttons to act on; @tracker's 23 open items, the 4 that cost you something first; @invoice's invoice ready for your go; @standup's draft from yesterday; and @reviewer's pull requests.">
+  <img src="docs/img/agents-light.webp" alt="Seven windows, one team. The Agents list: @email, @invoice, @ops, @reviewer, @shopping and @tracker, each with what it is keeping track of, its last result, and when it wakes next. Then each agent's own page: @shopping's options with prices and stock and Pick buttons; @ops's alerts today, three fixed and one that rang you; @email's inbox sorted with buttons to act on; @tracker's 23 open items, the 4 that cost you something first; @invoice's invoice ready for your go; and @reviewer's pull requests.">
 </picture>
 
 Between wake-ups they stay out of your way. Ask one something any time with `atc send @shopping "the towel, in grey"`, point a
@@ -155,7 +155,7 @@ and tells the interrupted ones to continue.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/fleet-dark.webp">
-  <img src="docs/img/fleet-light.webp" alt="atc on a desktop with a lot going on: the board with sixteen sessions waiting and thirteen working across three machines, and in front of it @ops's session on the checkout errors with the page it made, a chart of errors jumping to 8% at the last deploy. In front of those, a phone taking an incoming call from Assistant, Checkout errors jumped to 8% after the last deploy, with Decline and Answer buttons.">
+  <img src="docs/img/fleet-light.webp" alt="atc on a desktop with a lot going on: the board with dozens of sessions across three machines, more than a dozen of them waiting on you, and in front of it @ops's session on the checkout errors with the page it made, a chart of errors jumping to 8% at the last deploy. In front of those, a phone taking an incoming call from Assistant, Checkout errors jumped to 8% after the last deploy, with Decline and Answer buttons.">
 </picture>
 
 <table>
