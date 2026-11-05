@@ -3,6 +3,7 @@ import { marked as Marked } from "./vendor/marked.esm.js";
 import hljs from "./vendor/highlight.min.js";
 import { diffLines, diffWords } from "./vendor/diff.mjs";
 import { Call } from "./call.js";
+import { extended, onLine } from "./call-log.js";
 import { persona } from "./persona.js";
 import { minimal } from "./minimal.js";
 import { cube, niceMax } from "./usage-cube.js";
@@ -1237,7 +1238,6 @@ function useCallDock() {
 
 const closeCall = () => (history.length > 1 ? history.back() : location.replace("#/"));
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
-const onLine = (f) => (f.line && f.line !== "assistant" ? f.title || f.line : "assistant");
 const callDoing = (f) => ({
   hearing: "Hearing you",
   thinking: "Thinking",
@@ -1300,7 +1300,29 @@ function LineStrip() {
   ${f.knock && f.line !== "assistant" && html`<p class="lknock" aria-live="polite">Assistant: ${f.knock}</p>`}`;
 }
 
-/** The call itself: the persona, what it is doing now, captions when the conversation is not beside it, and the controls. */
+/** The call so far, over the persona and growing up from its foot. It follows the end unless you scrolled back, until you next speak. */
+function CallLog({ f }) {
+  const ref = useRef(null);
+  const following = useRef(true);
+  const turns = f.hearing ? extended(f.log, "you", "you", f.hearing) : f.log;
+  const yours = f.log.filter((t) => t.by === "you").length;
+  useLayoutEffect(() => { following.current = true; }, [yours]);
+  useLayoutEffect(() => { if (following.current) ref.current.scrollTop = ref.current.scrollHeight; });
+  const onScroll = (e) => { const el = e.currentTarget; following.current = el.scrollHeight - el.scrollTop - el.clientHeight < 32; };
+  const speaking = f.state === "speaking";
+  return html`<div class="caps"><div class="capsin" role="log" ref=${ref} onScroll=${onScroll}>
+    ${turns.map((t, i) => {
+      const end = i === turns.length - 1;
+      return html`<div class="cap ${t.by} ${end ? "" : "past"}"><span class="w">${t.who}</span><p>${t.parts.map((part, j) => {
+        const newest = end && j === t.parts.length - 1;
+        const heard = newest && t.by === "you" && !!f.hearing;
+        return html`<span class=${heard ? "heard" : end && speaking && t.by === "it" && !newest ? "spoken" : ""}>${part}${(heard || (newest && speaking && t.by === "it")) && html`<i class="caret"></i>`} </span>`;
+      })}</p></div>`;
+    })}
+  </div></div>`;
+}
+
+/** The call itself: the persona with the conversation over it when it is not beside it, what it is doing now, and the controls. */
 function CallPanel({ hub, live, captions, full, onMin }) {
   const [st, f] = useCall();
   const look = usePersona(f.lang, f.person, f.background);
@@ -1309,8 +1331,10 @@ function CallPanel({ hub, live, captions, full, onMin }) {
   const on = Call.live();
   const who = look.person ? `${onLine(f)}, ${look.person.name}` : onLine(f);
   const mine = on && f.line === "assistant" ? touchedBy(hub, live, st.since || Date.now()) : [];
-  const now = st.phase === "calling" ? "Ringing the assistant" : f.line !== "assistant" ? callDoing(f) : f.state === "tool" ? callDoing(f) : hub?.state === "working" && hub.activity ? doing(hub) : callDoing(f);
-  return html`<aside class="callp ${full ? "full" : ""} ${st.phase}" aria-label=${`Call with ${onLine(f)}`}>
+  const busy = st.phase === "active" && !f.moving && !st.muted && f.state !== "speaking";
+  const word = busy && f.state === "tool" ? callDoing(f) : busy && f.line === "assistant" && hub?.state === "working" && hub.activity ? doing(hub) : callWord(st, f);
+  const talked = captions && on && !opts && (f.log.length > 0 || !!f.hearing);
+  return html`<aside class="callp ${full ? "full" : ""} ${talked ? "talked" : ""} ${st.phase}" aria-label=${`Call with ${onLine(f)}`}>
     <div class="cph">
       ${on ? html`<${CallMark} /><span class="w">${who}</span>` : html`<b>${st.phase === "ended" ? "Call ended" : "Call"}</b><span class="w">${who}</span>`}
       <span class="sp"></span>
@@ -1319,19 +1343,15 @@ function CallPanel({ hub, live, captions, full, onMin }) {
     <div class="cpers">
       <div class="fr"><${Persona} look=${look} state=${f.state} on=${st.phase === "active"} onTap=${Call.interrupt} /></div>
       <div class="cview"><${Seg} label="View" value=${look.view} set=${look.setView} options=${VIEWS} /></div>
-      <p class="st" aria-live="polite">${callWord(st, f)}</p>
+      <p class="st" aria-live="polite">${word}</p>
+      ${talked && html`<${CallLog} f=${f} />`}
     </div>
     ${opts && html`<${CallPicks} look=${look} onClose=${() => setOpts(false)} />`}
     ${!opts && html`<${LineStrip} />`}
-    ${on && !opts && html`<div class="cnow">
-      <div class="h">Doing now${mine.length > 0 && html`<span>${plural(mine.length, "session")} on this call</span>`}</div>
-      <div class="d">${now}</div>
-      ${mine.length > 0 && html`<ol class="plan">${mine.map((s, i) => html`<li class=${s.state === "working" ? "run" : ""}>
-        <span>${i + 1}</span><a href=${`#/s/${keyOf(s)}`}>${s.title || "Untitled"}</a><em>${away(s) ? "parked" : WORD[s.state] || "earlier"}</em></li>`)}</ol>`}
-    </div>`}
-    ${captions && on && !opts && html`<div class="caps" aria-live="polite">
-      ${(f.hearing || f.you) && html`<div class="cap you ${f.hearing ? "" : "old"}"><span class="w">you</span><p>${f.hearing || f.you}${f.hearing && html`<span class="caret"></span>`}</p></div>`}
-      ${f.said && html`<div class="cap it"><span class="w">${onLine(f)}</span><p>${f.said}${f.state === "speaking" && html`<span class="caret"></span>`}</p></div>`}
+    ${mine.length > 0 && !opts && html`<div class="cnow">
+      <div class="h">${plural(mine.length, "session")} on this call</div>
+      <ol class="plan">${mine.map((s, i) => html`<li class=${s.state === "working" ? "run" : ""}>
+        <span>${i + 1}</span><a href=${`#/s/${keyOf(s)}`}>${s.title || "Untitled"}</a><em>${away(s) ? "parked" : WORD[s.state] || "earlier"}</em></li>`)}</ol>
     </div>`}
     <div class="ctl">
       ${on ? html`

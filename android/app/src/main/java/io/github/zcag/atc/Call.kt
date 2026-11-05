@@ -54,8 +54,29 @@ object Calls {
     /** What the assistant is doing, from the talker: listening, hearing (the user), thinking, tool, speaking. */
     data class Face(
         val state: String = "listening", val hearing: String = "", val you: String = "", val said: String = "", val tool: String = "",
-        val line: String = "assistant", val title: String = "", val moving: Boolean = false, val knock: String = "", val person: String = "", val background: String = "", val lang: String = "",
-    )
+        val line: String = "assistant", val title: String = "", val moving: Boolean = false, val knock: String = "", val person: String = "", val background: String = "", val lang: String = "", val log: List<Turn> = emptyList(),
+    ) {
+        val who get() = if (line == "assistant") "Assistant" else title.ifEmpty { line }
+    }
+
+    /** What one side said in a row, each sentence a part. */
+    data class Turn(val yours: Boolean, val who: String, val parts: List<String>)
+
+    private const val KEEP = 200
+
+    fun extended(log: List<Turn>, yours: Boolean, who: String, text: String): List<Turn> {
+        val last = log.lastOrNull()
+        return if (last != null && last.yours == yours && last.who == who) log.dropLast(1) + last.copy(parts = last.parts + text)
+        else (log + Turn(yours, who, listOf(text))).takeLast(KEEP)
+    }
+
+    /** The talker sends each sentence once, as it starts being spoken, and only what you finished saying as "you". */
+    fun logged(log: List<Turn>, you: String, said: String, who: String): List<Turn> {
+        val heard = if (you.isEmpty()) log else extended(log, true, YOU, you)
+        return if (said.isEmpty()) heard else extended(heard, false, who, said)
+    }
+
+    const val YOU = "You"
 
     sealed interface Wire {
         data object Active : Wire
@@ -75,7 +96,7 @@ object Calls {
 
     fun persona(o: JSONObject) {
         val f = face.value
-        face.value = f.copy(
+        val next = f.copy(
             state = o.optString("state").ifEmpty { f.state },
             hearing = if (o.has("hearing")) o.optString("hearing") else if (o.has("you")) "" else f.hearing,
             you = if (o.has("you")) o.optString("you") else f.you,
@@ -89,6 +110,7 @@ object Calls {
             background = if (o.has("background")) o.optString("background") else f.background,
             lang = o.optString("lang").ifEmpty { f.lang },
         )
+        face.value = next.copy(log = logged(f.log, o.optString("you"), o.optString("said"), next.who))
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var cmds: Channel<Cmd>? = null

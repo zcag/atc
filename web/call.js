@@ -1,6 +1,8 @@
+import { logged, onLine } from "./call-log.js";
+
 const OUT_RATE = 24000;
 const SPEECH_GAIN = 2.5;
-const FACE = { state: "listening", hearing: "", you: "", said: "", tool: "", line: "assistant", title: "", person: "", background: "", moving: false, knock: "", lang: "" };
+const FACE = { state: "listening", hearing: "", you: "", said: "", tool: "", line: "assistant", title: "", person: "", background: "", moving: false, knock: "", lang: "", log: [] };
 const WHY = { busy: "the line is busy", nobody: "nobody is there to answer", gone: "the call is over", lost: "connection lost", hangup: "hung up" };
 
 let st = { phase: "idle", since: 0, muted: false, why: "" };
@@ -134,7 +136,9 @@ function persona(o) {
     moving: has("moving") ? o.moving : face.moving,
     knock: has("knock") ? o.knock : face.knock,
     lang: o.lang || face.lang,
+    log: face.log,
   };
+  face.log = logged(face.log, o, onLine(face));
   if (o.lang && !first) try { localStorage.setItem("atc.callLang", o.lang); } catch {}
   emit();
 }

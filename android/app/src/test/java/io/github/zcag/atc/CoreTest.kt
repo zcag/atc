@@ -15,6 +15,26 @@ class CoreTest {
     @Test fun pinnedRootRefusesExpiredLeaf() = assertFalse(Pin.validates(pem("chain.pem"), pem("root.pem")[0], java.util.Date(issued.time + 400L * 86400_000)))
     @Test fun selfSignedLeafCanBeItsOwnAnchor() = assertTrue(Pin.validates(pem("other.pem"), pem("other.pem")[0]))
 
+    @Test fun sentencesInARowAreOneTurn() {
+        var log = emptyList<Calls.Turn>()
+        for ((you, said) in listOf("hi" to "", "" to "One.", "" to "Two.", "more" to "", "" to "Three.")) log = Calls.logged(log, you, said, "Assistant")
+        assertEquals(listOf(listOf("hi"), listOf("One.", "Two."), listOf("more"), listOf("Three.")), log.map { it.parts })
+        assertEquals(listOf(true, false, true, false), log.map { it.yours })
+    }
+
+    @Test fun aMovedLineKeepsTheLogAndStartsItsOwnTurn() {
+        val log = Calls.logged(emptyList(), "", "Moving you.", "Assistant")
+        assertEquals(log, Calls.logged(log, "", "", "Tracker"))
+        assertEquals(listOf("Assistant", "Tracker"), Calls.logged(log, "", "Hello.", "Tracker").map { it.who })
+    }
+
+    @Test fun aLongCallKeepsItsLatestTurns() {
+        var log = emptyList<Calls.Turn>()
+        repeat(300) { log = Calls.extended(log, it % 2 == 0, "x", "$it") }
+        assertEquals(200, log.size)
+        assertEquals(listOf("299"), log.last().parts)
+    }
+
     @Test fun fingerprint() {
         assertEquals("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad", sha256("abc".toByteArray()))
         assertEquals("BA:78:16", pretty("ba7816"))

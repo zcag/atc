@@ -23,7 +23,10 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
-import android.text.TextUtils
+import android.text.SpannableStringBuilder
+import android.text.style.ForegroundColorSpan
+import android.text.style.RelativeSizeSpan
+import android.text.style.TypefaceSpan
 import android.view.Gravity
 import android.view.View
 import android.window.OnBackInvokedDispatcher
@@ -32,6 +35,7 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.ScrollView
 import android.widget.Space
 import android.widget.TextView
 import android.widget.Toast
@@ -155,8 +159,75 @@ class CallService : Service() {
     }
 }
 
+/** The call so far, growing up from the controls to [limit], then scrolling. It follows the end unless scrolled back, until you next speak. */
+private class Transcript(c: Context, private val limit: Int, onTap: () -> Unit) : ScrollView(c) {
+    private val dp = c.resources.displayMetrics.density
+    private val body = TextView(c).apply {
+        textSize = 16f
+        setLineSpacing(0f, 1.15f)
+        setTextColor(INK)
+        setShadowLayer(8f, 0f, 1f, 0x99000000.toInt())
+        setPadding((20 * dp).toInt(), (40 * dp).toInt(), (20 * dp).toInt(), (16 * dp).toInt())
+        setOnClickListener { onTap() }
+    }
+    private var following = true
+    private var yours = 0
+
+    init {
+        visibility = GONE
+        isVerticalScrollBarEnabled = false
+        overScrollMode = OVER_SCROLL_NEVER
+        isVerticalFadingEdgeEnabled = true
+        setFadingEdgeLength((36 * dp).toInt())
+        background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(0, SHADE, SHADE, SHADE, SHADE, 0))
+        addView(body)
+        setOnScrollChangeListener { _, _, y, _, _ -> following = body.height - y - height < 32 * dp }
+        body.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> if (following) scrollTo(0, body.height) }
+    }
+
+    override fun onMeasure(w: Int, h: Int) = super.onMeasure(w, MeasureSpec.makeMeasureSpec(minOf(limit, MeasureSpec.getSize(h)), MeasureSpec.AT_MOST))
+
+    fun show(f: Calls.Face) {
+        val mine = f.log.count { it.yours }
+        if (mine != yours) following = true
+        yours = mine
+        val turns = if (f.hearing.isEmpty()) f.log else Calls.extended(f.log, true, Calls.YOU, f.hearing)
+        visibility = if (turns.isEmpty()) GONE else VISIBLE
+        body.text = SpannableStringBuilder().apply {
+            turns.forEachIndexed { i, t ->
+                val end = i == turns.lastIndex
+                if (i > 0) inSpans(RelativeSizeSpan(.6f)) { append("\n\n") }
+                inSpans(RelativeSizeSpan(.8f), ForegroundColorSpan(LABEL)) { append(t.who) }
+                append("\n")
+                val start = length
+                t.parts.forEachIndexed { j, part ->
+                    val newest = end && j == t.parts.lastIndex
+                    val quiet = !end || t.yours || (f.state == "speaking" && !newest)
+                    inSpans(ForegroundColorSpan(if (quiet) PAST else INK)) { append(part) }
+                    if (j < t.parts.lastIndex) append(" ")
+                }
+                if (!t.yours) setSpan(TypefaceSpan("serif"), start, length, 0)
+            }
+        }
+    }
+
+    private inline fun SpannableStringBuilder.inSpans(vararg spans: Any, add: SpannableStringBuilder.() -> Unit) {
+        val start = length
+        add()
+        spans.forEach { setSpan(it, start, length, 0) }
+    }
+
+    private companion object {
+        const val INK = 0xfff7f8fa.toInt()
+        const val PAST = 0xffb4b9c1.toInt()
+        const val LABEL = 0xffa8adb5.toInt()
+        const val SHADE = 0xc405070c.toInt()
+    }
+}
+
 class CallActivity : Activity() {
     companion object {
+        private const val FACE_LIFT = .09f
         const val DIAL = "io.github.zcag.atc.DIAL"
         const val ANSWER = "io.github.zcag.atc.ANSWER"
         private const val REQ_MIC = 1
@@ -184,8 +255,8 @@ class CallActivity : Activity() {
     private lateinit var mute: ImageButton
     private lateinit var speaker: ImageButton
     private lateinit var persona: PersonaHost
-    private lateinit var youView: TextView
-    private lateinit var saidView: TextView
+    private lateinit var transcript: Transcript
+    private lateinit var floor: View
     private lateinit var whoView: TextView
     private var personName: String? = null
 
@@ -212,25 +283,24 @@ class CallActivity : Activity() {
 
     private fun show(f: Calls.Face) {
         persona.face(f)
-        youView.text = f.hearing.ifEmpty { f.you }
-        youView.alpha = if (f.hearing.isNotEmpty()) .5f else .7f
-        saidView.text = f.said
+        transcript.show(f)
+        val talked = transcript.visibility == View.VISIBLE
+        persona.view.animate().translationY(if (talked) resources.displayMetrics.heightPixels * -FACE_LIFT else 0f).setDuration(500)
+        floor.animate().alpha(if (talked) 1f else 0f).setDuration(500)
         showWho(Calls.state.value, f)
         if (Calls.state.value.phase == Calls.Phase.Active && !Calls.state.value.held) statusView.text = activity(f)
     }
 
-    private fun name(f: Calls.Face) = if (f.line == "assistant") "Assistant" else f.title.ifEmpty { f.line }
-
     /** Who the call is with; tapping the name moves it. An agent's call shows the assistant's knock under the status. */
     private fun showWho(st: Calls.State, f: Calls.Face) {
-        whoView.text = name(f) + personName?.let { " · $it" }.orEmpty() + if (st.phase == Calls.Phase.Active) " \u25BE" else ""
+        whoView.text = f.who + personName?.let { " · $it" }.orEmpty() + if (st.phase == Calls.Phase.Active) " \u25BE" else ""
         val knock = f.knock.takeIf { it.isNotEmpty() && f.line != "assistant" }?.let { "Assistant: $it" }
         reasonView.text = knock ?: st.reason
-        val talking = f.said.isNotEmpty() || f.you.isNotEmpty() || f.hearing.isNotEmpty()
+        val talking = f.log.isNotEmpty() || f.hearing.isNotEmpty()
         reasonView.visibility = if (reasonView.text.isNotEmpty() && st.phase != Calls.Phase.Ringing && (knock != null || !talking)) View.VISIBLE else View.GONE
     }
 
-    private fun activity(f: Calls.Face) = if (f.moving) "Connecting to ${name(f)}…" else when (f.state) {
+    private fun activity(f: Calls.Face) = if (f.moving) "Connecting to ${f.who}…" else when (f.state) {
         "hearing" -> "Hearing you"
         "thinking" -> "Thinking…"
         "tool" -> "Using " + f.tool.substringAfterLast("__").replace('_', ' ').ifEmpty { "a tool" } + "…"
@@ -445,8 +515,7 @@ class CallActivity : Activity() {
             else if (Calls.face.value.state in setOf("speaking", "thinking", "tool")) Calls.send(Calls.Cmd.Interrupt)
         }
         statusView.setOnClickListener { if (Calls.state.value.held) Calls.send(Calls.Cmd.Resume) }
-        youView = text(14f, .7f).apply { maxLines = 2; ellipsize = TextUtils.TruncateAt.START }
-        saidView = text(16f, 1f).apply { maxLines = 4; ellipsize = TextUtils.TruncateAt.START; setPadding(dp(24), dp(2), dp(24), dp(16)) }
+        transcript = Transcript(this, (resources.displayMetrics.heightPixels * .42f).toInt()) { persona.view.performClick() }
         val front = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
@@ -461,16 +530,20 @@ class CallActivity : Activity() {
             persona.onPerson = { personName = it?.ifEmpty { null }; showWho(Calls.state.value, Calls.face.value) }
             addView(Space(context), LinearLayout.LayoutParams(0, 0, 1f))
             addView(reasonView)
-            addView(youView)
-            addView(saidView)
+            addView(transcript, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             addView(incomingRow)
             addView(callRow)
+        }
+        floor = View(this).apply {
+            alpha = 0f
+            background = GradientDrawable(GradientDrawable.Orientation.BOTTOM_TOP, intArrayOf(Orb.BACKDROP, Orb.BACKDROP, Orb.BACKDROP and 0xffffff))
         }
         return FrameLayout(this).apply {
             setBackgroundColor(Orb.BACKDROP)
             addView(persona.view, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
             addView(scrim(GradientDrawable.Orientation.TOP_BOTTOM), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(150), Gravity.TOP))
             addView(scrim(GradientDrawable.Orientation.BOTTOM_TOP), FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, dp(340), Gravity.BOTTOM))
+            addView(floor, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, (resources.displayMetrics.heightPixels * FACE_LIFT * 2.4f).toInt(), Gravity.BOTTOM))
             addView(front, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         }
     }
