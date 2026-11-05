@@ -26,7 +26,7 @@ async (page, { base = "http://127.0.0.1:7431", hub = "http://127.0.0.1:7432", cl
   await p.waitForTimeout(2500);
   const notNow = p.getByRole("button", { name: "Not now" });
   if (await notNow.count()) await notNow.click();
-  await ctx.request.post(`${hub}/message`, { data: { channel: "phone", text: "(next: orders)" } }).catch(() => {});
+  await ctx.request.post(`${hub}/message`, { data: { channel: "phone", text: "(next: slow)" } }).catch(() => {});
   await p.waitForTimeout(1500);
   await p.getByRole("button", { name: /^Call/ }).first().click();
   await until(/speaking|listening/);
@@ -40,12 +40,15 @@ async (page, { base = "http://127.0.0.1:7431", hub = "http://127.0.0.1:7432", cl
   await until(/hearing/, 8000);
   await p.waitForTimeout(800);
   await snap(`assist-${who}-hearing`);
-  await until(/thinking|working/, 8000);
-  await p.waitForTimeout(600);
+  await until(/thinking/, 8000);
+  await p.waitForTimeout(900);
   await snap(`assist-${who}-thinking`);
-  for (const end = Date.now() + 25000; Date.now() < end; await p.waitForTimeout(150))
-    if (/forty/.test(await p.evaluate(() => document.querySelector(".callp .cap.it")?.innerText || ""))) break;
-  await p.waitForTimeout(1300);
+  await p.waitForTimeout(700);
+  await snap(`assist-${who}-thinking2`);
+  await until(/speaking/, 8000);
+  await until(/thinking|working/, 6000);
+  await until(/speaking/, 8000);
+  await p.waitForTimeout(1500);
   await snap(`assist-${who}-speaking`);
   await ctx.close();
   return shots;

@@ -144,9 +144,7 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
     },
     async settings(mode) {
       const p = await open(mode, { h: 680 });
-      await to(p, "#/settings", 2000);
-      await p.getByRole("heading", { name: "Core" }).first().evaluate((h) => h.scrollIntoView({ block: "start" }));
-      await p.waitForTimeout(600);
+      await to(p, "#/settings/system", 2500);
       return [[p, "settings"]];
     },
     // The same board in every theme; the look is one setting on the server, so it goes back to auto after.

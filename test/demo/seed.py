@@ -584,6 +584,8 @@ def main_box():
     (ATC / "persons.json").write_text(json.dumps({"persons": [
         {"id": "june", "name": "June", "character": "woman", "voices": {}},
         {"id": "arthur", "name": "Arthur", "character": "professor", "voices": {}}], "langs": {"en": "june"}}))
+    # What Claude Code records when you trust your home folder, so the agents here can wake.
+    (HOME / ".claude.json").write_text(json.dumps({"projects": {str(HOME): {"hasTrustDialogAccepted": True}}}))
     (ATC / "presets.json").write_text(json.dumps([{"name": "reviewer", "dir": SHOP, "brief": "REVIEWER.md"}, {"name": "docs writer", "dir": DOCS, "worktree": True}]))
     (ATC / "engines.json").write_text(json.dumps([{"name": "qwen", "model": "qwen3-coder-30b", "url": "http://127.0.0.1:1"}]))
     (ATC / "peers.json").write_text(json.dumps([{"name": "laptop", "url": os.environ["DEMO_PEER"], "token": "demo"}, {"name": "gpu", "url": os.environ["DEMO_PEER2"], "token": "demo"}]))

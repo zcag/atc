@@ -182,7 +182,7 @@ and tells the interrupted ones to continue.
 <tr>
 <td width="50%"><picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/settings-dark.webp">
-  <img src="docs/img/settings-light.webp" alt="Settings: the feature list, each row saying how it stands and how to set it up.">
+  <img src="docs/img/settings-light.webp" alt="Settings, with its pages down the side and System open: every feature on this machine with whether it works, what is not set up, and the fix, plus a button to check everything again.">
 </picture><br><b>Setup that checks itself.</b> <code>atc doctor</code> and Settings test every feature and give the fix. <a href="docs/settings.md">Settings and doctor</a></td>
 <td width="50%"><img src="docs/img/themes.webp" alt="The same board cut into six slanted bands: three themes, each in dark and light."><br><b>Themes.</b> Three, light and dark. <a href="docs/look.md">A new one is one CSS file.</a></td>
 </tr>
