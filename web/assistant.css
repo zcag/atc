@@ -74,6 +74,16 @@ body.docked .app { margin-right: 380px; }
 .callp.ended .cpers canvas.orb { opacity: .2; }
 .cpers .st { position: absolute; left: 0; right: 0; bottom: var(--s3); margin: 0; font-size: var(--fs-small); color: oklch(92% 0.006 250); text-align: center; text-shadow: 0 1px 8px oklch(0% 0 0 / .7); pointer-events: none; }
 .personaname { position: absolute; left: 50%; top: var(--s3); transform: translateX(-50%); padding: 2px var(--s3); font-size: var(--fs-small); color: oklch(98% 0 0); background: oklch(0% 0 0 / .55); pointer-events: none; }
+.lstrip { flex: none; display: flex; gap: var(--s2); padding: var(--s2) var(--s4); overflow-x: auto; border-bottom: 1px solid var(--line); scrollbar-width: none; }
+.lstrip::-webkit-scrollbar { display: none; }
+.lchip { flex: none; min-height: 36px; padding: 0 var(--s3); display: inline-flex; align-items: center; gap: 6px; color: var(--dim); background: none; border: 1px solid var(--line); cursor: pointer; font: inherit; white-space: nowrap; }
+.lchip:hover:not(:disabled) { color: var(--ink); border-color: var(--line-strong); }
+.lchip.on { color: var(--ink); border-color: var(--end); cursor: default; }
+.lchip.moving { animation: lmove 1s ease-in-out infinite alternate; }
+.lchip em { font-style: normal; font-size: var(--fs-small); color: var(--work); }
+@keyframes lmove { to { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .lchip.moving { animation: none; } }
+.lknock { flex: none; margin: 0; padding: var(--s2) var(--s4); font-size: var(--fs-small); color: var(--work); border-bottom: 1px solid var(--line); }
 .cnow { flex: none; padding: var(--s3) var(--s4); border-bottom: 1px solid var(--line); }
 .cnow .h { font-size: var(--fs-small); color: var(--faint); display: flex; justify-content: space-between; gap: var(--s3); }
 .cnow .h span { font-family: var(--mono); }

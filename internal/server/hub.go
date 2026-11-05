@@ -50,10 +50,13 @@ type hubLink struct {
 	onAtc   bool
 	streams map[chan hub.Event]string
 	wa      chan hub.Event
+	// ctx ends the watch; only an agent's line (line.go) ever ends.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func (s *Server) newHubLink(name string, c *hub.Client, state string) *hubLink {
-	l := &hubLink{name: name, c: c, streams: map[chan hub.Event]string{}, wa: make(chan hub.Event, 4096)}
+	l := &hubLink{name: name, c: c, ctx: context.Background(), streams: map[chan hub.Event]string{}, wa: make(chan hub.Event, 4096)}
 	if s.StateDir != "" {
 		l.path = filepath.Join(s.StateDir, state)
 		var saved struct{ Session string }
@@ -76,11 +79,12 @@ func (s *Server) startHub() {
 			go s.guestsClaim(e.Text)
 		}
 	})
+	go s.watchLines()
 }
 
 func (s *Server) watchHub(l *hubLink, also func(hub.Event)) {
-	for {
-		err := l.c.Watch(context.Background(), func(e hub.Event) {
+	for l.ctx.Err() == nil {
+		err := l.c.Watch(l.ctx, func(e hub.Event) {
 			l.mu.Lock()
 			if !l.up {
 				l.up = true
@@ -97,7 +101,9 @@ func (s *Server) watchHub(l *hubLink, also func(hub.Event)) {
 		l.up = false
 		l.mu.Unlock()
 		s.refresh()
-		time.Sleep(3 * time.Second)
+		if l.ctx.Err() == nil {
+			time.Sleep(3 * time.Second)
+		}
 	}
 }
 
@@ -126,7 +132,7 @@ func (l *hubLink) session() string {
 
 // linkOf is the hub conversation whose session id this is, nil for any other session.
 func (s *Server) linkOf(id string) *hubLink {
-	for _, l := range []*hubLink{s.hub, s.guests} {
+	for _, l := range s.links() {
 		if l.is(id) {
 			return l
 		}
@@ -262,7 +268,7 @@ func (s *Server) guestsClaim(sid string) {
 // hubMark shows the hub's conversations as what they are: ones atc can send to but not attach
 // to, working while the hub runs a turn.
 func (s *Server) hubMark(ctx context.Context, list []sessions.Session) []sessions.Session {
-	for _, l := range []*hubLink{s.hub, s.guests} {
+	for _, l := range s.links() {
 		list = s.markLink(ctx, list, l)
 	}
 	return list
@@ -415,7 +421,7 @@ func (s *Server) call(w http.ResponseWriter, r *http.Request) {
 			log.Printf("call: %v", err)
 			out = "failed: " + err.Error()
 		}
-		if out == hub.Answered || fromHub || req.Session == "" {
+		if out == hub.Answered || out == hub.Knocked || fromHub || req.Session == "" {
 			return
 		}
 		note := fmt.Sprintf(modes.Line("call.not_picked_up"), time.Now().Format("15:04"), out)

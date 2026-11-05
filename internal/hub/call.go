@@ -28,6 +28,8 @@ const (
 	Answered = "answered"
 	NoAnswer = "no-answer"
 	Busy     = "busy"
+	// Knocked is a call that found the user on the line with an agent: they were told on that call.
+	Knocked = "knocked"
 )
 
 type call struct {
@@ -155,6 +157,14 @@ func (h *Hub) Call(ctx context.Context, r CallReq) (string, error) {
 		return Busy, nil
 	}
 	pc := &call{reason: strings.TrimSpace(r.Reason), from: strings.TrimSpace(r.From), at: h.cfg.Now()}
+	if h.onLine != "" {
+		pc.answered = true
+		h.call = pc
+		h.emit(Event{Type: "knock", Channel: Phone, Text: pc.reason})
+		h.mu.Unlock()
+		log.Printf("hub: knocked on the call with %s: %s", h.onLine, pc.reason)
+		return Knocked, nil
+	}
 	if r.Notify {
 		pc.notify = h.last
 		if h.turn != nil {
@@ -276,4 +286,13 @@ func cmpDur(ds ...time.Duration) time.Duration {
 		}
 	}
 	return 0
+}
+
+// movedTo is the talker saying who has the call now, "" for this conversation.
+func (h *Hub) movedTo(channel, agent string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if channel == Phone {
+		h.onLine = agent
+	}
 }

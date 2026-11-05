@@ -223,6 +223,24 @@ async def app_end(why):
         await app_event("state", call="idle", precise="idle", number=None, audio=False)
 
 
+NEXT_LINE_S = 60
+next_line = []
+
+
+async def move_line(to):
+    """Who the app's call talks to: the talker moves a live call now; asked before they call, it opens the next one there."""
+    next_line.clear()
+    if app.get("phase") == "active":
+        await broadcast({"event": "line", "to": to, "via": "app"}, "app")
+    elif to:
+        next_line.extend([to, time.time()])
+
+
+async def http_line(request):
+    await move_line((await request.json()).get("to") or "")
+    return web.json_response({"ok": True})
+
+
 async def app_command(msg):
     """Commands from the talker for a call on atc's app line. A dial stays quiet until the app reports that
     it rings: the hub falls back to the phone line when it never does, and the talker must not have started
@@ -296,6 +314,9 @@ async def ws_app(request):
                         app["out_rate"] = m["out_rate"]
                     app_call.clear()
                     await app_event("state", call="ringing", precise="incoming", number=APP_NUMBER, audio=False)
+                    if next_line and time.time() - next_line[1] < NEXT_LINE_S:
+                        await broadcast({"event": "line", "to": next_line[0], "via": "app"}, "app")
+                    next_line.clear()
             elif cmd == "ringing":
                 if phase == "dialing" and free():
                     app["ws"], app["phase"] = ws, "alerting"
@@ -314,6 +335,8 @@ async def ws_app(request):
                 continue
             elif cmd == "accept" and phase in ("dialing", "alerting"):
                 await app_active()
+            elif cmd == "line":
+                await move_line(m.get("to") or "")
             elif cmd == "interrupt":
                 if phase == "active":
                     await broadcast({"event": "interrupt", "via": "app"}, "app")
@@ -582,6 +605,7 @@ server = web.Application()
 server.router.add_get("/call", ws_call)
 server.router.add_get("/app", ws_app)
 server.router.add_get("/status", http_status)
+server.router.add_post("/line", http_line)
 server.router.add_post("/{cmd:answer|hangup|dial|mute}", http_command)
 server.on_startup.append(start)
 

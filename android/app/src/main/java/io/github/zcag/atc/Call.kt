@@ -52,7 +52,10 @@ object Calls {
     enum class Cmd { Answer, Hangup, Mute, Speaker, Hold, Unhold, Resume, Interrupt }
 
     /** What the assistant is doing, from the talker: listening, hearing (the user), thinking, tool, speaking. */
-    data class Face(val state: String = "listening", val hearing: String = "", val you: String = "", val said: String = "", val tool: String = "")
+    data class Face(
+        val state: String = "listening", val hearing: String = "", val you: String = "", val said: String = "", val tool: String = "",
+        val line: String = "assistant", val title: String = "", val moving: Boolean = false, val knock: String = "",
+    )
 
     sealed interface Wire {
         data object Active : Wire
@@ -74,9 +77,13 @@ object Calls {
         face.value = f.copy(
             state = o.optString("state").ifEmpty { f.state },
             hearing = if (o.has("hearing")) o.optString("hearing") else if (o.has("you")) "" else f.hearing,
-            you = o.optString("you").ifEmpty { f.you },
-            said = o.optString("said").ifEmpty { f.said },
+            you = if (o.has("you")) o.optString("you") else f.you,
+            said = if (o.has("said")) o.optString("said") else f.said,
             tool = o.optString("tool").ifEmpty { f.tool },
+            line = o.optString("line").ifEmpty { f.line },
+            title = if (o.has("title")) o.optString("title") else f.title,
+            moving = if (o.has("moving")) o.optBoolean("moving") else f.moving,
+            knock = if (o.has("knock")) o.optString("knock") else f.knock,
         )
     }
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)

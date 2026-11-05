@@ -48,6 +48,8 @@ import (
 
 type Server struct {
 	agentMu map[string]*sync.Mutex
+	linesMu sync.Mutex
+	lines   map[string]*hubLink
 	wakes   map[string]time.Time
 	M       *sessions.Manager
 	Res     *resources.Sampler
@@ -203,6 +205,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/agents", s.agents)
 	mux.HandleFunc("POST /api/agents/{name}/message", s.agentMessage)
 	mux.HandleFunc("POST /api/agents/{name}/reset", s.agentReset)
+	mux.HandleFunc("POST /api/agents/{name}/line", s.agentLine)
 	mux.HandleFunc("GET /api/agents/{name}/usage", s.agentUsage)
 	mux.HandleFunc("GET /api/engines", s.engines)
 	mux.HandleFunc("POST /api/presence", s.presencePost)
@@ -242,6 +245,7 @@ func (s *Server) Handler() http.Handler {
 		s.Term.Serve(w, r, r.PathValue("id"))
 	})
 	mux.HandleFunc("POST /api/call/about", s.callAbout)
+	mux.HandleFunc("POST /api/call/to", s.callTo)
 	mux.HandleFunc("GET /api/call/voices", s.callVoices)
 	mux.HandleFunc("POST /api/call/voices", s.callVoices)
 	mux.HandleFunc("GET /api/call/voices/sample", s.callVoiceSample)

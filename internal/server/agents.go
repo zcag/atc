@@ -44,6 +44,9 @@ type Agent struct {
 	Prompt string     `json:"prompt,omitempty"`
 	Reset  *resetSpec `json:"reset,omitempty"`
 	Share  *share     `json:"share,omitempty"`
+	// Talk lets the user talk to it directly on a call; Person is who it sounds and looks like there.
+	Talk   bool       `json:"talk,omitempty"`
+	Person string     `json:"person,omitempty"`
 	Err    string     `json:"error,omitempty"`
 }
 
@@ -302,6 +305,9 @@ func (s *Server) wakeAgent(ctx context.Context, a Agent, text string) (string, e
 // deliverAgent types text into the agent's conversation: its running one, the last one resumed,
 // or a new one. A message that lands mid-turn is queued by Claude Code for the turn's end.
 func (s *Server) deliverAgent(ctx context.Context, a Agent, text string) (string, error) {
+	if l := s.lineTo(a.Name); l != nil {
+		return l.session(), s.linkSend(ctx, l, hub.Agent, text)
+	}
 	live, err := s.M.Live(ctx)
 	if err != nil {
 		return "", err
@@ -442,6 +448,9 @@ func (s *Server) resetAgent(ctx context.Context, a Agent, why string) error {
 		return errAgentBusy
 	}
 	defer mu.Unlock()
+	if s.lineTo(a.Name) != nil {
+		return errAgentBusy
+	}
 	live, err := s.M.Live(ctx)
 	if err != nil {
 		return err
@@ -572,7 +581,7 @@ func (s *Server) hubAgent(ctx context.Context, l *hubLink) (AgentView, bool) {
 
 // hubNamed is the hub conversation with this agent name while it is up.
 func (s *Server) hubNamed(name string) *hubLink {
-	for _, l := range []*hubLink{s.hub, s.guests} {
+	for _, l := range s.links() {
 		if l != nil && l.name == name && l.live() {
 			return l
 		}
@@ -637,7 +646,7 @@ func (s *Server) agentMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) agentReset(w http.ResponseWriter, r *http.Request) {
-	if l := s.hubNamed(r.PathValue("name")); l != nil {
+	if l := s.hubNamed(r.PathValue("name")); l != nil && s.lineTo(l.name) == nil {
 		s.done(w, l.session(), l.c.Reset(r.Context()))
 		return
 	}

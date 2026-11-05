@@ -241,6 +241,7 @@ type Agent struct {
 	} `json:"share,omitempty"`
 	Badge    any    `json:"badge,omitempty"`
 	Headline string `json:"headline,omitempty"`
+	Talk     bool   `json:"talk,omitempty"`
 }
 
 func (c *Client) Agents() (list []Agent, err error) {
@@ -282,6 +283,22 @@ func (c *Client) Resume(sid string) (string, error) {
 func (c *Client) Message(agent, text string) (string, error) {
 	var r struct{ ID string }
 	return r.ID, c.do("POST", "/api/agents/"+url.PathEscape(agent)+"/message", map[string]string{"text": text}, &r)
+}
+
+// AgentLine asks atc for an agent's conversation to put on a call, for the hub: the status and body as they came.
+func (c *Client) AgentLine(agent string) (int, []byte, error) {
+	req, err := http.NewRequest("POST", c.URL+"/api/agents/"+url.PathEscape(agent)+"/line", nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Token)
+	res, err := c.http.Do(req)
+	if err != nil {
+		return 0, nil, err
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	return res.StatusCode, body, err
 }
 
 // Send types text into a session. From inside a Claude session it says which one sent it,

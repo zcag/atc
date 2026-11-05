@@ -204,6 +204,12 @@ const callAbout = (s, say) => {
   api("/api/call/about", { method: "POST", body: { id: s.sessionId, title: s.title } }).catch((e) => say(`Could not tell the assistant which session: ${e.message}`));
   Call.live() ? returnToCall() : callAssistant();
 };
+/** Moves the live call to an agent, or has the next call open on it; "assistant" brings it back. */
+const callAgent = (name, say) => {
+  if (!CAN_CALL) return void (location.hash = CALLS_ROW);
+  api("/api/call/to", { method: "POST", body: { agent: name } }).catch((e) => say?.(`Could not reach ${name}: ${e.message}`));
+  if (name !== "assistant") Call.live() ? returnToCall() : callAssistant();
+};
 const KEYLAYERS = [];
 function useKeyLayer(fn, on = true) {
   const ref = useRef(fn);
@@ -1220,6 +1226,7 @@ function useCallDock() {
 
 const closeCall = () => (history.length > 1 ? history.back() : location.replace("#/"));
 const clock = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
+const onLine = (f) => (f.line && f.line !== "assistant" ? f.title || f.line : "assistant");
 const callDoing = (f) => ({
   hearing: "Hearing you",
   thinking: "Thinking",
@@ -1229,6 +1236,7 @@ const callDoing = (f) => ({
 const callWord = (st, f) => st.phase === "calling" ? "calling"
   : st.phase === "ended" ? `call ended${st.why ? `: ${st.why}` : ""}`
   : st.phase !== "active" ? (CAN_CALL ? "not on a call" : "calls need atc's call line and a microphone")
+  : f.moving ? `connecting to ${onLine(f)}`
   : st.muted ? "muted" : ({ hearing: "hearing you", thinking: "thinking", tool: "working", speaking: "speaking, tap to stop it" })[f.state] || "listening";
 
 /** The call's level, drawn by the "line" character (minimal.js) small and in the page's ink: a hairline that ripples with the voices. */
@@ -1258,6 +1266,29 @@ function useCallKeys(onEsc, esc) {
   });
 }
 
+/** Who the call is with: the assistant and the agents that can talk. A tap moves the line; saying so does the same. */
+function LineStrip() {
+  const [st, f] = useCall();
+  const [agents, setAgents] = useState([]);
+  const active = st.phase === "active";
+  useEffect(() => {
+    if (!active) return;
+    let off = false;
+    const load = () => api("/api/agents").then((l) => { if (!off) setAgents((l || []).filter((a) => a.talk && !a.error)); }, () => {});
+    load();
+    const t = setInterval(load, 15000);
+    return () => { off = true; clearInterval(t); };
+  }, [active]);
+  if (!active || !agents.length) return null;
+  const chip = (name, label, note) => html`<button class="lchip ${f.line === name ? "on" : ""} ${f.line === name && f.moving ? "moving" : ""}" aria-pressed=${f.line === name} disabled=${f.line === name} onClick=${() => callAgent(name)}>
+    ${label}${note && html`<em>${note}</em>`}</button>`;
+  return html`<div class="lstrip" role="group" aria-label="Who the call is with">
+    ${chip("assistant", "Assistant", f.knock && f.line !== "assistant" ? "wants you" : "")}
+    ${agents.map((a) => chip(a.name, a.title || a.name, a.state === "working" && f.line !== a.name ? "busy" : ""))}
+  </div>
+  ${f.knock && f.line !== "assistant" && html`<p class="lknock" aria-live="polite">Assistant: ${f.knock}</p>`}`;
+}
+
 /** The call itself: the persona, what it is doing now, captions when the conversation is not beside it, and the controls. */
 function CallPanel({ hub, live, captions, full, onMin }) {
   const [st, f] = useCall();
@@ -1266,10 +1297,10 @@ function CallPanel({ hub, live, captions, full, onMin }) {
   useNow(1000);
   const on = Call.live();
   const mine = on ? touchedBy(hub, live, st.since || Date.now()) : [];
-  const now = st.phase === "calling" ? "Ringing the assistant" : f.state === "tool" ? callDoing(f) : hub?.state === "working" && hub.activity ? doing(hub) : callDoing(f);
-  return html`<aside class="callp ${full ? "full" : ""} ${st.phase}" aria-label="Call with the assistant">
+  const now = st.phase === "calling" ? "Ringing the assistant" : f.line !== "assistant" ? callDoing(f) : f.state === "tool" ? callDoing(f) : hub?.state === "working" && hub.activity ? doing(hub) : callDoing(f);
+  return html`<aside class="callp ${full ? "full" : ""} ${st.phase}" aria-label=${`Call with ${onLine(f)}`}>
     <div class="cph">
-      ${on ? html`<${CallMark} /><span class="w">assistant</span>` : html`<b>${st.phase === "ended" ? "Call ended" : "Call"}</b><span class="w">assistant</span>`}
+      ${on ? html`<${CallMark} /><span class="w">${onLine(f)}</span>` : html`<b>${st.phase === "ended" ? "Call ended" : "Call"}</b><span class="w">${onLine(f)}</span>`}
       <span class="sp"></span>
       <button class="kb" onClick=${onMin} aria-keyshortcuts="Escape">${on ? "Minimize" : "Close"} <kbd aria-hidden="true">esc</kbd></button>
     </div>
@@ -1278,6 +1309,7 @@ function CallPanel({ hub, live, captions, full, onMin }) {
       <p class="st" aria-live="polite">${callWord(st, f)}</p>
     </div>
     ${opts && html`<${CallPicks} look=${look} onClose=${() => setOpts(false)} />`}
+    ${!opts && html`<${LineStrip} />`}
     ${on && !opts && html`<div class="cnow">
       <div class="h">Doing now${mine.length > 0 && html`<span>${plural(mine.length, "session")} on this call</span>`}</div>
       <div class="d">${now}</div>
@@ -1286,7 +1318,7 @@ function CallPanel({ hub, live, captions, full, onMin }) {
     </div>`}
     ${captions && on && !opts && html`<div class="caps" aria-live="polite">
       ${(f.hearing || f.you) && html`<div class="cap you ${f.hearing ? "" : "old"}"><span class="w">you</span><p>${f.hearing || f.you}${f.hearing && html`<span class="caret"></span>`}</p></div>`}
-      ${f.said && html`<div class="cap it"><span class="w">assistant</span><p>${f.said}${f.state === "speaking" && html`<span class="caret"></span>`}</p></div>`}
+      ${f.said && html`<div class="cap it"><span class="w">${onLine(f)}</span><p>${f.said}${f.state === "speaking" && html`<span class="caret"></span>`}</p></div>`}
     </div>`}
     <div class="ctl">
       ${on ? html`
@@ -1336,7 +1368,7 @@ function CallPill() {
   const phone = usePhone();
   if (!phone || !Call.live()) return null;
   return html`<div class="callpill" role="group" aria-label="Call">
-    <button class="back" onClick=${returnToCall} aria-label="Back to the call"><${CallMark} /><${Trace} /><span class="w">assistant</span></button>
+    <button class="back" onClick=${returnToCall} aria-label="Back to the call"><${CallMark} /><${Trace} /><span class="w">${onLine(Call.face())}</span></button>
     <button class="btn end" onClick=${Call.hangup}>End</button>
   </div>`;
 }
@@ -1346,7 +1378,7 @@ function CallLine({ docked }) {
   const f = Call.face();
   return html`<footer class="console callline" aria-label="Call">
     <button class="back" onClick=${returnToCall} aria-keyshortcuts="." title=${docked ? "The call" : "Back to the call"}>
-      <${CallMark} />${!docked && html`<${Trace} />`}<span class="w">assistant</span><span class="said">${f.said || callDoing(f)}</span></button>
+      <${CallMark} />${!docked && html`<${Trace} />`}<span class="w">${onLine(f)}</span><span class="said">${f.said || callDoing(f)}</span></button>
     ${!docked && html`<button class="kb" onClick=${returnToCall} tabindex="-1">Return <kbd aria-hidden="true">.</kbd></button>`}
     <button class="kb end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>
   </footer>`;
@@ -4735,6 +4767,7 @@ function AgentDetail({ a, live, say, reload, sheet, onClose }) {
     ${a.prompt && x && html`<button class="btn" disabled=${busy || x.state === "working"} title=${a.prompt} onClick=${act(() => agentApi(a.name, "message"), () => say(`Woke ${title}.`))}>Wake now</button>`}
     ${x && html`<button class="btn" disabled=${busy} onClick=${act(() => api(`/api/sessions/${x.sessionId}`, { method: "PATCH", body: { parked: !x.parked } }), () => say(x.parked ? `Unparked ${title}.` : `Parked ${title}.`))}>${x.parked ? "Unpark" : "Park"}</button>`}
     ${x && x.state !== "past" && html`<button class="btn" disabled=${busy || x.state === "working"} onClick=${act(() => agentApi(a.name, "reset"), () => say(`${title} is starting over.`))}>Start over</button>`}
+    ${a.talk && html`<button class="btn" disabled=${busy} onClick=${() => { onClose?.(); callAgent(a.name, say); }}>Call</button>`}
     <button class="btn primary conv" disabled=${busy || (!x && !a.sessionId && !!a.error)} onClick=${conv} aria-keyshortcuts="Enter">Conversation <kbd aria-hidden="true">enter</kbd></button>`;
   const facts = [
     ["Host", a.host],
@@ -4742,6 +4775,7 @@ function AgentDetail({ a, live, say, reload, sheet, onClose }) {
     ["Wakes", agentWakes(a)],
     a.next && ["Next", soon(a.next)],
     a.check && ["Only if", html`<code>${a.check}</code> prints something`],
+    a.name !== "assistant" && a.name !== "guests" && ["On a call", a.talk ? "Can take the line" : html`Off. <code>"talk": true</code> in its agent.json lets you talk to it`],
     a.prompt && ["Prompt", a.prompt],
     rule && ["Starts over", rule],
     a.lastReset && ["Last started over", agoLong(a.lastReset)],

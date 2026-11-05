@@ -65,6 +65,10 @@ type Config struct {
 	Guests *Hub
 	// GuestDesk is set on that conversation: the user never talks into it, so it is not told where they are.
 	GuestDesk bool
+
+	// OpenLine asks atc for an agent's conversation to take onto a call, LineMode is how those talk; see lines.go.
+	OpenLine OpenLine
+	LineMode func(channel string) string
 }
 
 type Event struct {
@@ -90,6 +94,7 @@ type Status struct {
 	Held     []string       `json:"held"`
 	Home     string         `json:"home,omitempty"`
 	Call     string         `json:"call,omitempty"`
+	OnLine   string         `json:"onLine,omitempty"`
 	Channels map[string]int `json:"channels"`
 
 	Reset     startover.Policy `json:"reset"`
@@ -143,6 +148,11 @@ type Hub struct {
 	subs     map[*sub]bool
 	fails    int
 	stopped  bool
+	lines    map[string]*Hub
+	lineMu   sync.Mutex
+	talked   bool
+	// onLine is the agent the user's call is with instead of this conversation, "" for here.
+	onLine string
 }
 
 func New(cfg Config) *Hub {
@@ -152,7 +162,7 @@ func New(cfg Config) *Hub {
 	if cfg.Mode == nil {
 		cfg.Mode = func(string) string { return "" }
 	}
-	h := &Hub{cfg: cfg, subs: map[*sub]bool{}, lastTurn: cfg.Now()}
+	h := &Hub{cfg: cfg, subs: map[*sub]bool{}, lines: map[string]*Hub{}, lastTurn: cfg.Now()}
 	if b, err := os.ReadFile(h.sidPath()); err == nil {
 		h.sid = strings.TrimSpace(string(b))
 	}
@@ -176,7 +186,7 @@ func (h *Hub) start() error {
 		"--include-partial-messages", "--replay-user-messages"}, h.cfg.Args...)
 	switch {
 	case h.sid == "":
-		h.saveSID(newID())
+		h.saveSID(NewID())
 		args = append(args, "--session-id", h.sid)
 	case written(h.sid):
 		args = append(args, "--resume", h.sid)
@@ -246,7 +256,8 @@ func startedIn(sid string) string {
 	return ""
 }
 
-func newID() string {
+// NewID is a new session id.
+func NewID() string {
 	b := make([]byte, 16)
 	rand.Read(b)
 	b[6], b[8] = b[6]&0x0f|0x40, b[8]&0x3f|0x80
@@ -261,6 +272,9 @@ func (h *Hub) Left(channel string) {
 	defer h.mu.Unlock()
 	if spoken(channel) && h.last == channel {
 		h.last = ""
+	}
+	if channel == Phone {
+		h.onLine = ""
 	}
 }
 
@@ -333,6 +347,9 @@ func (h *Hub) asideNote(ch string) string {
 	where := "The user is not on a call"
 	if h.onCall() {
 		where = "The user is on a call with you right now"
+		if h.onLine != "" {
+			where = "The user is on a call, on the line with @" + h.onLine + " right now, so they don't hear you. They can come back to you at any moment; `atc call --reason TEXT` tells them on the line that you want them, for what can't wait"
+		}
 		h.unsaid = true
 	}
 	if h.home != "" {
@@ -642,6 +659,7 @@ func (h *Hub) Subscribe(channel string) (<-chan Event, func()) {
 	s := &sub{channel: channel, all: channel == "", ch: make(chan Event, 4096)}
 	h.mu.Lock()
 	h.subs[s] = true
+	h.talked = h.talked || spoken(channel)
 	if s.all && h.sid != "" {
 		s.ch <- Event{Type: "session", Text: h.sid}
 	}
@@ -660,7 +678,7 @@ func (h *Hub) Status() Status {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	st := Status{Session: h.sid, Alive: h.alive, Context: h.context, IdleS: int(h.cfg.Now().Sub(h.lastTurn).Seconds()),
-		Pending: []string{}, Held: []string{}, Home: h.home, Channels: map[string]int{}, Reset: h.cfg.Reset, Dir: h.cfg.Dir}
+		Pending: []string{}, Held: []string{}, Home: h.home, OnLine: h.onLine, Channels: map[string]int{}, Reset: h.cfg.Reset, Dir: h.cfg.Dir}
 	if ents, err := os.ReadDir(filepath.Join(h.cfg.State, "handovers")); err == nil {
 		for _, e := range ents {
 			if i, err := e.Info(); err == nil && i.ModTime().After(st.LastReset) {
@@ -773,5 +791,8 @@ func (h *Hub) Stop() {
 	if h.cmd != nil && h.cmd.Process != nil {
 		h.in.Close()
 		h.cmd.Process.Kill()
+	}
+	for _, sub := range h.lines {
+		go sub.Stop()
 	}
 }

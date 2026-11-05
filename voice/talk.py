@@ -35,6 +35,9 @@ GUESTS = os.path.expanduser(f"{CONFIG}/guests")
 HIGGS_VOICES = os.path.expanduser(os.environ.get("HIGGS_VOICES") or "~/.local/share/atc/voice/audiocpp/voices")
 CPU = concurrent.futures.ThreadPoolExecutor(1)
 LANG_TAG = re.compile(r"\[LANG:([a-z]{2,3})\]\s*")
+LINE_TAG = re.compile(r"\[LINE:@?([\w.-]+)\]\s*")
+ASSISTANT = "assistant"
+BACK_WORDS = 6
 
 
 def setting(name, lang, primary):
@@ -179,9 +182,10 @@ def normalize(pcm):
 class HubBrain:
     """atc's hub (`atc hub`, :8820): this call is the "phone" channel of the assistant's one conversation,
     or "guest-call" when one of their guests is on the line."""
-    def __init__(self, args, http):
+    def __init__(self, args, http, line=None, on_knock=None):
         self.a, self.http, self.ws, self.busy, self.events = args, http, None, False, asyncio.Queue()
         self.channel, self.guest = "phone", None
+        self.base, self.on_knock = args.hub + (f"/lines/{line}" if line else ""), on_knock
 
     async def as_guest(self, name):
         self.channel, self.guest = "guest-call", name
@@ -193,7 +197,7 @@ class HubBrain:
         if self.ws and not self.ws.closed:
             return
         if not getattr(self, "connecting", None) or self.connecting.done():
-            self.connecting = asyncio.ensure_future(self.http.ws_connect(f"{self.a.hub}/ws?channel={self.channel}", heartbeat=15))
+            self.connecting = asyncio.ensure_future(self.http.ws_connect(f"{self.base}/ws?channel={self.channel}", heartbeat=15))
         ws = await self.connecting
         if ws is not self.ws:
             self.ws = ws
@@ -202,7 +206,11 @@ class HubBrain:
     async def read(self, ws):
         async for msg in ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
-                self.events.put_nowait(json.loads(msg.data))
+                e = json.loads(msg.data)
+                if e["type"] == "knock":
+                    self.on_knock and self.on_knock(e.get("text", ""))
+                else:
+                    self.events.put_nowait(e)
         self.events.put_nowait({"type": "done", "lost": True})
 
     async def quiet(self):
@@ -212,7 +220,7 @@ class HubBrain:
         opening took that text, and its done, for its own, so they heard it first."""
         for _ in range(100):
             try:
-                async with self.http.get(f"{self.a.hub}/status", timeout=aiohttp.ClientTimeout(total=2)) as r:
+                async with self.http.get(f"{self.base}/status", timeout=aiohttp.ClientTimeout(total=2)) as r:
                     st = await r.json()
             except Exception:
                 return
@@ -244,6 +252,10 @@ class HubBrain:
         if self.busy and self.ws and not self.ws.closed:
             asyncio.ensure_future(self.ws.send_str(json.dumps({"type": "interrupt"})))
 
+    async def send(self, kind, text):
+        await self.start()
+        await self.ws.send_str(json.dumps({"type": kind, "text": text}))
+
     async def finish(self, note):
         if self.ws and not self.ws.closed:
             if note:
@@ -254,7 +266,10 @@ class HubBrain:
 class Talk:
     def __init__(self, args, http, send_audio, send_cmd):
         self.a, self.http, self.send_audio, self.send_cmd = args, http, send_audio, send_cmd
-        self.brain = HubBrain(args, http)
+        self.brain = HubBrain(args, http, on_knock=self.knocked)
+        self.brains = {None: self.brain}
+        self.who, self.title, self.line_voices, self.line_since = None, ASSISTANT, {}, 0.0
+        self.first_line, self.moving, self.leaving, self.knock = None, False, False, ""
         self.packs, self.pack = args.packs, args.packs[args.lang]
         self.heard, self.unfinished = None, None
         self.vad, self.cache = Vad(args.vad_fresh_peak), {}
@@ -697,7 +712,8 @@ class Talk:
         return fill(p.SECOND_TOO if text else p.SECOND_ONLY, text=text, second=second)
 
     async def respond(self, utt, ended, text=None, voiced_ms=0):
-        if (picked := voices(self.a)) != self.voices:
+        self.moving = False
+        if (picked := self.picked()) != self.voices:
             self.voices, self.cache = picked, {}
             self.log(event="voice", voices=picked)
             asyncio.create_task(self.render(self.phrases()))
@@ -718,6 +734,11 @@ class Talk:
             return
         if self.echo(text):
             self.log(event="dropped", text=text, why="delta's own voice coming back", **timing)
+            return
+        if self.who and self.wants_back(text):
+            await self.commit.wait()
+            self.log(event="line-back", text=text, **timing)
+            self.ask_line(ASSISTANT)
             return
         return await self.respond_claude(text, timing, mark)
 
@@ -746,19 +767,22 @@ class Talk:
             self.checked = []
         self.cut, self.heard, self.unfinished = False, None, text
         self.log(event="user", text=sent, **timing)
-        self.show(you=text)
+        if not self.moving:
+            self.show(you=text)
         self.history += [{"role": "user", "content": sent}, {"role": "assistant", "content": ""}]
         self.spoken = []
         reply, buf, first = "", "", True
-        spoken = lambda t: p.END.sub("", t).strip()
+        spoken = lambda t: LINE_TAG.sub("", p.END.sub("", t)).strip()
         self.tools_open = 0
-        wants_ack = self.a.ack_ms and not self.opening and not self.holding \
+        wants_ack = self.a.ack_ms and not self.opening and not self.holding and not self.moving \
             and len(re.findall(r"\w+", re.sub(r"\s*\(.*", "", text))) > 2
         ack = asyncio.create_task(self.ack_later(lambda: first and not reply) if wants_ack else asyncio.sleep(0))
         hold = asyncio.create_task(self.hold_on())
 
         async def speak(sentence):
             nonlocal first
+            if not sentence:
+                return
             ack.cancel()
             if first:
                 mark("first_audio")
@@ -809,17 +833,151 @@ class Talk:
                 await speak(spoken(buf))
         except asyncio.CancelledError:
             ack.cancel(), hold.cancel()
-            self.brain.interrupt()
+            if not self.leaving:
+                self.brain.interrupt()
             raise
         ack.cancel(), hold.cancel()
-        self.unfinished = None
+        self.unfinished, self.moving = None, False
         self.log(event="delta", text=reply, **timing)
+        if tag := LINE_TAG.search(reply):
+            self.history[-1]["content"] = LINE_TAG.sub("", reply).strip()
+            while self.speaking:
+                await asyncio.sleep(0.1)
+            self.ask_line(tag.group(1))
         if p.END.search(reply):
             while self.speaking:
                 await asyncio.sleep(0.1)
             await asyncio.sleep(0.5)
             self.log(event="hangup")
             await self.send_cmd({"cmd": "hangup"})
+
+    def picked(self):
+        return {**voices(self.a), **self.line_voices}
+
+    def wants_back(self, text):
+        return len(re.findall(r"\w+", text)) <= BACK_WORDS and bool(self.pack.LINE_BACK.search(text))
+
+    def ask_line(self, to):
+        """Who they talk to, from a tag in a reply, their words, or a tap on the app; before the call is up, for its start."""
+        if not self.speaking_task:
+            self.first_line = to
+        else:
+            asyncio.create_task(self.move_line(to))
+
+    def beep(self, up):
+        """Two short notes on every move: they hear the line change before anyone speaks."""
+        notes = (660, 880) if up else (880, 660)
+        t = np.arange(int(self.rate * .09)) / self.rate
+        fade = np.minimum(1, np.minimum(t, t[::-1]) / .01)
+        pcm = np.concatenate([np.sin(2 * np.pi * f * t) * fade for f in notes])
+        return (pcm * 5000).astype(np.int16).tobytes()
+
+    async def open_line(self, name):
+        """The hub puts the agent's conversation on the line. None and why, for one that can't take it now."""
+        try:
+            async with self.http.post(f"{self.a.hub}/lines/{name}", timeout=aiohttp.ClientTimeout(total=30)) as r:
+                body = await r.json(content_type=None)
+                return (body, None) if r.status == 200 else (None, body)
+        except Exception as e:
+            self.log(event="error", error=repr(e))
+            return None, {"why": "off", "title": name}
+
+    def recent(self, turns=4):
+        """The last turns as plain lines, so whoever takes the line knows what was just said."""
+        out = []
+        for h in self.history[-turns:]:
+            text = LINE_TAG.sub("", h["content"]).strip()
+            if text and not text.startswith("["):
+                out.append(f"{'them' if h['role'] == 'user' else 'answer'}: {text[:240]}")
+        return " / ".join(out) or "-"
+
+    async def move_line(self, to):
+        """Moves the call to an agent's conversation, or back to the assistant: the same talker, ears and turn-taking,
+        another brain and voice. A brain moved away from keeps its turn running, its work isn't cut, and stays open
+        until the call ends, so coming back is instant."""
+        to = None if to in ("", ASSISTANT) else to
+        p = self.pack
+        if self.guest or to == self.who:
+            return
+        self.show(line=to or ASSISTANT, moving=True)
+        info = {}
+        if to:
+            info, why = await self.open_line(to)
+            if not info:
+                self.show(line=self.who or ASSISTANT, moving=False)
+                self.log(event="line-refused", to=to, why=why)
+                key = p.LINE_BUSY if why.get("why") == "busy" else p.LINE_OFF
+                await self.turn_about(fill(key, name=why.get("title") or to, doing=why.get("activity") or why.get("state") or ""))
+                return
+        was, title, since, said = self.brain, self.title, self.line_since, self.recent()
+        running = self.reply and not self.reply.done()
+        self.leaving = True
+        if running:
+            self.reply.cancel()
+            await asyncio.wait([self.reply])
+        self.leaving = False
+        if self.talking():
+            self.interrupt_quietly()
+        if was.busy:
+            await was.send("note", p.LINE_LEFT)
+        if to and to not in self.brains:
+            self.brains[to] = HubBrain(self.a, self.http, to)
+        self.brain, self.who = self.brains[to], to
+        self.title, self.line_voices = (info.get("title") or to) if to else ASSISTANT, (info.get("voices") or {}) if to else {}
+        self.line_since = time.monotonic() if to else 0.0
+        self.voices, self.cache = self.picked(), {}
+        await self.brains[None].send("line", to or "")
+        self.log(event="line", to=to or ASSISTANT, voices=self.voices)
+        self.show(line=to or ASSISTANT, title=self.title, person=info.get("person") or "", color=info.get("color") or "", moving=False, said="", you="", **({"knock": ""} if not to else {}))
+        if not to:
+            self.knock = ""
+        self.say("", self.beep(bool(to)))
+        asyncio.create_task(self.render(self.phrases(), idle=True))
+        minutes = max(1, round((time.monotonic() - since) / 60)) if since else 0
+        await self.turn_about(fill(p.LINE_TO, was=title, said=said) if to else fill(p.LINE_BACK_TO, was=title, minutes=minutes, said=said))
+
+    def interrupt_quietly(self):
+        while not self.outbox.empty():
+            self.outbox.get_nowait()
+        self.speaking.clear()
+        self.first_audio.clear()
+        self.live = False
+        if self.app:
+            asyncio.ensure_future(self.send_cmd({"cmd": "flush"}))
+
+    async def turn_about(self, text):
+        """A turn nobody on the line said, for whoever has it now to speak to."""
+        running = self.reply and not self.reply.done()
+        if running:
+            self.leaving = True
+            self.reply.cancel()
+            await asyncio.wait([self.reply])
+            self.leaving = False
+            self.interrupt_quietly()
+        self.moving, self.cut, self.heard, self.unfinished = True, False, None, None
+        self.commit.set()
+        ended = time.time()
+        timing = {"speech_end": round(ended - self.t0, 3), "utt_s": 0}
+        self.reply = asyncio.create_task(self.respond_claude(text, timing, lambda k: timing.__setitem__(k, round(time.time() - ended, 3))))
+        self.reply.add_done_callback(lambda t: t.cancelled() or not t.exception() or self.log(event="error", error=repr(t.exception())))
+
+    def knocked(self, reason):
+        """The assistant wants them while they are on the line with an agent: the note, in its voice, at the next pause."""
+        self.knock = reason
+        self.show(knock=reason or self.pack.LINE_KNOCK_ANY)
+        self.log(event="knock", reason=reason)
+        asyncio.create_task(self.say_knock(reason))
+
+    async def say_knock(self, reason):
+        while self.who and (self.speaking or self.in_speech or self.reply and not self.reply.done()):
+            await asyncio.sleep(0.2)
+        if not self.who:
+            return
+        line = fill(self.pack.LINE_KNOCK, reason=reason or self.pack.LINE_KNOCK_ANY)
+        voice = voices(self.a)[self.lang]
+        pcm = b"".join([c async for c in self.tts(line, voice=voice)])
+        self.canned_at = time.monotonic()
+        self.say("", self.beep(True) + pcm)
 
     async def hold_on(self):
         """While a tool runs and the line has been quiet for progress_ms, a short "still on it" line, at most
@@ -876,7 +1034,7 @@ class Talk:
         self.greeting = self.cache.get(self.pack.GREETING, b"")
         asyncio.create_task(self.render(self.phrases(first=False)))
 
-    async def render(self, lines, rate=None):
+    async def render(self, lines, rate=None, idle=False):
         """Into the cache, through a disk copy per voice, engine and text (Higgs renders the same text identically,
         and a Talk lives for one call, so without it every call re-rendered every phrase). The thinking phrases
         render in the background: warm() blocks the bridge's socket, and once it took ~37 s the bridge dropped it
@@ -896,6 +1054,8 @@ class Talk:
             path = os.path.join(PHRASES, key + ".pcm")
             if os.path.exists(path):
                 pcm = open(path, "rb").read()
+            elif idle and await self.until_idle(voices) is False:
+                return
             elif pcm := b"".join([c async for c in self.tts(t, lang, voice, rate)]):
                 open(path + ".tmp", "wb").write(pcm)
                 os.replace(path + ".tmp", path)
@@ -906,8 +1066,15 @@ class Talk:
             if pcm:
                 self.cache[t] = pcm
 
+    async def until_idle(self, voices):
+        """Rendering a new voice's phrases must not hold up the words of the call: one request is voiced at a time."""
+        while self.speaking or self.in_speech or (self.reply and not self.reply.done()):
+            await asyncio.sleep(0.3)
+            if self.voices is not voices:
+                return False
+
     def open(self):
-        if (picked := voices(self.a)) != self.voices:
+        if (picked := self.picked()) != self.voices:
             self.voices, self.cache, self.greeting = picked, {}, b""
         self.t0 = t = time.time()
         name = lambda t: os.path.join(self.a.out, f"talk-{time.strftime('%Y%m%d-%H%M%S', time.localtime(t))}")
@@ -941,6 +1108,9 @@ class Talk:
         if self.holding:
             asyncio.create_task(self.release())
             return
+        if self.first_line:
+            asyncio.create_task(self.move_line(self.first_line))
+            return
         hello = self.pack.GREETING
         if not self.greeting:
             self.greeting = self.cache[hello] = b"".join([c async for c in self.tts(hello)])
@@ -955,6 +1125,8 @@ class Talk:
         start = time.monotonic()
         while not self.app and not self.line_up and time.monotonic() - start < self.a.greet_wait_ms / 1000:
             await asyncio.sleep(0.02)
+        if self.who:
+            return
         self.log(event="greeting", waited_ms=round((time.monotonic() - start) * 1000), line_up=self.line_up)
         self.say(self.pack.GREETING, self.greeting)
 
@@ -1014,7 +1186,10 @@ def call_over(talk):
 
 
 async def tell_brain_over(talk, note):
-    await talk.brain.finish(talk.pack.CALL_ENDED + note if note else None)
+    for name, brain in talk.brains.items():
+        if name:
+            await brain.finish(talk.pack.CALL_ENDED + talk.pack.LINE_OVER if note else None)
+    await talk.brains[None].finish(talk.pack.CALL_ENDED + note if note else None)
 
 
 def line_of(event):
@@ -1068,6 +1243,9 @@ async def phone(args):
             if event.get("event") == "hold":
                 talk.on_hold = bool(event.get("on"))
                 talk.log(event="hold", on=talk.on_hold)
+                continue
+            if event.get("event") == "line":
+                talk.ask_line(event.get("to") or ASSISTANT)
                 continue
             if event.get("event") == "interrupt":
                 if talk.talking():
@@ -1127,6 +1305,9 @@ async def sim(args):
         if args.sim_guest:
             await be_guest(talk, args.sim_guest)
         await talk.start()
+        if args.sim_line:
+            for at, to in (x.split("=") for x in args.sim_line):
+                asyncio.get_running_loop().call_later(float(at), talk.ask_line, to)
         start = time.monotonic()
         for n, i in enumerate(range(0, len(pcm) + RATE * 2 * args.tail, FRAME)):
             await talk.on_audio(pcm[i:i + FRAME].ljust(FRAME, b"\0"))
@@ -1142,6 +1323,7 @@ if __name__ == "__main__":
     p.add_argument("--line", choices=["app", "device"], help="take calls on this line only (atc's app, or delta's SIM and WhatsApp), so a talker per line can each hold a call; none = both")
     p.add_argument("--dial")
     p.add_argument("--sim")
+    p.add_argument("--sim-line", action="append", help="sim: SECONDS=NAME moves the line there at that time; repeatable")
     p.add_argument("--sim-guest", help="sim: play the caller as this guest (needs --brain hub)")
     p.add_argument("--out", default=".", help="where each call's folder goes")
     p.add_argument("--loop", action="store_true", help="phone: keep answering calls")

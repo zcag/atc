@@ -5,7 +5,8 @@ Calls are an add-on: `atc voice install [--lang en] [--also tr] [--engine pocket
 On CPU a call works on 2 cores (first audio about 2.5 to 3.2 s after you stop, most of it Claude's first token; the voice breaks up on 1 core). Streaming speech recognition is the weakest part: it reads some words wrong, which the assistant then has to guess at.
 
 atc has no voice mode in a session: to talk, call the assistant. **Call about this** in a session's
-menu or the palette tells it which session you mean.
+menu or the palette tells it which session you mean. On the call, the assistant can hand the line to [an agent that
+can talk](#talking-to-an-agent).
 
 Calls are an add-on. They need three services next to [the hub](assistant.md), each with a row in
 Settings: the **call line**, which carries a call's audio; a **talker**, which holds the call (hears
@@ -36,6 +37,34 @@ assistant's own calls come back on the channel it was busy with). `--wait` print
 `answered`, `no-answer` or `busy` (a call is already on). A call they decline in the app is not
 retried on the phone line. `--app` and `--phone` pin one line; `--whatsapp` makes it a WhatsApp voice
 call from the bot account instead.
+
+## Talking to an agent
+
+The assistant answers every call. An agent with `"talk": true` in its `agent.json` can take the line from it, in
+that same call, and hand it back.
+
+- **Moving the line.** Say so ("put Focus on"): the assistant connects you when it finishes speaking. In the app or
+  the page, tap the name on the call screen (or the strip of names, or ⋯ Talk to). An agent's **Call** button
+  (Agent details) starts a call that opens on it. "Back to the assistant" works on any line, also while the agent is
+  in the middle of a long tool, because the talker hears it, not the agent. On a phone line with no screen, the
+  words are all there is.
+- **Knowing who you hear.** Two notes on every move (rising to an agent, falling back), then the one you moved to
+  speaks first, knowing what was just said. With `"person": "<id>"` in its `agent.json` it has that person's voices
+  and avatar. The app shows its name.
+- **Busy or asleep.** An agent in the middle of a turn, or waiting on a permission prompt, can't take the line: it
+  stays where it is, and the one you are talking to says so and offers to pass a message. One that is stopped or
+  has no conversation yet starts in about 2 seconds.
+- **What you miss.** While you talk to an agent, reports still reach the assistant, who is told you are elsewhere,
+  and the next time you are back it tells you what you need to hear. `atc call` from anything rings on the line
+  instead (outcome `knocked`): two notes and one sentence in the assistant's voice at the next pause.
+- **What it costs the agent.** Nothing lasting. While on the line its conversation runs in the hub as a stream-json
+  process on its own session, so its words stream to the voice; messages to it (`atc send`, wake-ups) go through the
+  hub, and its reply to those isn't spoken. The way it talks comes from one talk-mode message at the start of the
+  line (`modes/line.md`), and the end-of-call message returns it to writing; those and the short spoken turns are
+  all that stay in its transcript. When the call ends and its last turn is done, it goes back to the background.
+
+Moving away from an agent doesn't cut its work: its turn runs on, and it stays open until the call ends, so coming
+back is instant. Agents run on the machine with the call line, for now.
 
 ## Calls in the app
 

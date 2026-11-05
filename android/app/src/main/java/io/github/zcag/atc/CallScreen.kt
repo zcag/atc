@@ -35,6 +35,7 @@ import android.widget.Space
 import android.widget.TextView
 import android.widget.Toast
 import kotlinx.coroutines.Job
+import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.concurrent.thread
 import kotlinx.coroutines.MainScope
@@ -184,6 +185,7 @@ class CallActivity : Activity() {
     private lateinit var persona: PersonaHost
     private lateinit var youView: TextView
     private lateinit var saidView: TextView
+    private lateinit var whoView: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -211,10 +213,21 @@ class CallActivity : Activity() {
         youView.text = f.hearing.ifEmpty { f.you }
         youView.alpha = if (f.hearing.isNotEmpty()) .5f else .7f
         saidView.text = f.said
+        showWho(Calls.state.value, f)
         if (Calls.state.value.phase == Calls.Phase.Active && !Calls.state.value.held) statusView.text = activity(f)
     }
 
-    private fun activity(f: Calls.Face) = when (f.state) {
+    private fun name(f: Calls.Face) = if (f.line == "assistant") "Assistant" else f.title.ifEmpty { f.line }
+
+    /** Who the call is with; tapping the name moves it. An agent's call shows the assistant's knock under the status. */
+    private fun showWho(st: Calls.State, f: Calls.Face) {
+        whoView.text = name(f) + if (st.phase == Calls.Phase.Active) " \u25BE" else ""
+        val knock = f.knock.takeIf { it.isNotEmpty() && f.line != "assistant" }?.let { "Assistant: $it" }
+        reasonView.text = knock ?: st.reason
+        reasonView.visibility = if (reasonView.text.isNotEmpty() && st.phase != Calls.Phase.Ringing) View.VISIBLE else View.GONE
+    }
+
+    private fun activity(f: Calls.Face) = if (f.moving) "Connecting to ${name(f)}…" else when (f.state) {
         "hearing" -> "Hearing you"
         "thinking" -> "Thinking…"
         "tool" -> "Using " + f.tool.substringAfterLast("__").replace('_', ' ').ifEmpty { "a tool" } + "…"
@@ -274,8 +287,7 @@ class CallActivity : Activity() {
     private fun show(st: Calls.State) {
         statusView.text = if (st.phase == Calls.Phase.Active && !st.muted && !st.held) activity(Calls.face.value) else status(st)
         persona.view.visibility = if (st.phase == Calls.Phase.Active || st.phase == Calls.Phase.Connecting) View.VISIBLE else View.INVISIBLE
-        reasonView.text = st.reason
-        reasonView.visibility = if (st.reason.isNotEmpty() && st.phase != Calls.Phase.Ringing) View.VISIBLE else View.GONE
+        showWho(st, Calls.face.value)
         incomingRow.visibility = if (st.phase == Calls.Phase.Ringing) View.VISIBLE else View.GONE
         callRow.visibility = if (st.live && st.phase != Calls.Phase.Ringing) View.VISIBLE else View.GONE
         if (st.phase == Calls.Phase.Active) {
@@ -320,9 +332,36 @@ class CallActivity : Activity() {
     /** The ⋯ button: options that don't need a button of their own. */
     private fun menu(anchor: View) = PopupMenu(this, anchor).apply {
         menu.add("Sessions (the call keeps going)").setOnMenuItemClickListener { toSessions(); true }
+        menu.add("Talk to…").setOnMenuItemClickListener { pickLine(); true }
         menu.add("Character…").setOnMenuItemClickListener { pickPersona(); true }
         menu.add("Voice…").setOnMenuItemClickListener { pickVoice(); true }
         show()
+    }
+
+    /** The assistant and the agents that can talk; a pick moves the line. Saying so on the call does the same. */
+    private fun pickLine() {
+        val server = Prefs(this).server?.trimEnd('/') ?: return
+        thread {
+            val got = runCatching { JSONArray(Net.get(this, "$server/api/agents")) }
+            runOnUiThread {
+                val all = got.getOrNull() ?: return@runOnUiThread Toast.makeText(this, "Agents not reachable", Toast.LENGTH_SHORT).show()
+                val on = Calls.face.value.line
+                val items = listOf("assistant" to "Assistant") + List(all.length()) { all.getJSONObject(it) }
+                    .filter { it.optBoolean("talk") && it.optString("error").isEmpty() }
+                    .map { it.getString("name") to it.optString("title").ifEmpty { it.getString("name") } + if (it.optString("state") == "working") " · busy" else "" }
+                if (items.size == 1) return@runOnUiThread Toast.makeText(this, "No agent can take the line", Toast.LENGTH_SHORT).show()
+                AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle("Talk to")
+                    .setItems(items.map { (n, label) -> if (n == on) "$label  ✓" else label }.toTypedArray()) { _, i ->
+                        val to = items[i].first
+                        if (to != on) thread {
+                            val ok = runCatching { Net.post(this, "$server/api/call/to", JSONObject().put("agent", to)) }.getOrNull() == 200
+                            if (!ok) runOnUiThread { Toast.makeText(this, "Couldn't move the call", Toast.LENGTH_SHORT).show() }
+                        }
+                    }
+                    .show()
+            }
+        }
     }
 
     private fun pickPersona() {
@@ -409,7 +448,11 @@ class CallActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, dp(96), 0, dp(72))
-            addView(text(34f, 1f).apply { text = "Assistant" })
+            whoView = text(34f, 1f).apply {
+                text = "Assistant"
+                setOnClickListener { if (Calls.state.value.phase == Calls.Phase.Active) pickLine() }
+            }
+            addView(whoView)
             addView(statusView)
             addView(timer)
             addView(reasonView)

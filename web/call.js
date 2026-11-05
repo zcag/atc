@@ -1,5 +1,5 @@
 const OUT_RATE = 24000;
-const FACE = { state: "listening", hearing: "", you: "", said: "", tool: "" };
+const FACE = { state: "listening", hearing: "", you: "", said: "", tool: "", line: "assistant", title: "", person: "", moving: false, knock: "" };
 const WHY = { busy: "the line is busy", nobody: "nobody is there to answer", gone: "the call is over", lost: "connection lost", hangup: "hung up" };
 
 let st = { phase: "idle", since: 0, muted: false, why: "" };
@@ -123,9 +123,14 @@ function persona(o) {
   face = {
     state: o.state || face.state,
     hearing: has("hearing") ? o.hearing || "" : has("you") ? "" : face.hearing,
-    you: o.you || face.you,
-    said: o.said || face.said,
+    you: has("you") ? o.you : face.you,
+    said: has("said") ? o.said : face.said,
     tool: o.tool || face.tool,
+    line: o.line || face.line,
+    title: has("title") ? o.title : face.title,
+    person: has("person") ? o.person : face.person,
+    moving: has("moving") ? o.moving : face.moving,
+    knock: has("knock") ? o.knock : face.knock,
   };
   emit();
 }

@@ -69,6 +69,11 @@ func (c *Client) Interrupt(ctx context.Context, channel string) (bool, error) {
 	return r.Interrupted, c.do(ctx, "POST", "/interrupt", map[string]string{"channel": channel}, &r)
 }
 
+// Lines is what agents' conversations the hub holds on calls right now.
+func (c *Client) Lines(ctx context.Context) (out []Line, err error) {
+	return out, c.do(ctx, "GET", "/lines", nil, &out)
+}
+
 func (c *Client) Reset(ctx context.Context) error { return c.do(ctx, "POST", "/reset", nil, nil) }
 
 func (c *Client) Call(ctx context.Context, r CallReq) (string, error) {

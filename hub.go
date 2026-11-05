@@ -100,9 +100,9 @@ func hubCmd(args []string) error {
 		Call: hub.CallConfig{URL: line}, GuestDesk: true,
 	})
 	h := hub.New(hub.Config{
-		Bin: bin, Args: cargs, Dir: *dir, State: *state, Mode: modes.Text, News: atcNews(), Reset: policy,
+		Bin: bin, Args: cargs, Dir: *dir, State: *state, Mode: withLines(modes.Text), News: atcNews(), Reset: policy,
 		Call:   hub.CallConfig{URL: line, Number: callNumber()},
-		Guests: guests,
+		Guests: guests, OpenLine: client.Load().AgentLine, LineMode: withLines(lineMode),
 	})
 	for _, x := range []*hub.Hub{h, guests} {
 		if err := x.Start(); err != nil {
@@ -119,6 +119,39 @@ func guestsMode(ch string) string {
 		return modes.Text("guests-agent")
 	}
 	return modes.Text(ch)
+}
+
+// lineMode is how an agent's conversation talks while it is on a call; the rest is as for any conversation.
+func lineMode(ch string) string {
+	if ch == hub.Phone {
+		return modes.Text("line")
+	}
+	return modes.Text(ch)
+}
+
+// withLines adds to the spoken mode who the call can move to, as of the call's start.
+func withLines(mode func(string) string) func(string) string {
+	return func(ch string) string {
+		text := mode(ch)
+		if ch != hub.Phone {
+			return text
+		}
+		list, err := client.Load().Agents()
+		if err != nil {
+			log.Printf("hub: agents: %v", err)
+			return text
+		}
+		var names []string
+		for _, a := range list {
+			if a.Talk {
+				names = append(names, "@"+a.Name+" ("+cmp.Or(a.Title, a.Name)+")")
+			}
+		}
+		if len(names) == 0 {
+			return text + "\n- No agent can take the line right now."
+		}
+		return text + "\n- Agents who can take the line: " + strings.Join(names, ", ") + "."
+	}
 }
 
 func atcNews() func(bool) string {

@@ -24,6 +24,19 @@ def raw(code):
     return json.loads(load("lang", code + ".json"))
 
 
+class LineBack(unittest.TestCase):
+    def test_back_to_the_assistant(self):
+        for code, yes, no in (
+            ("tr", ["asistana dön", "Asistana geri dönelim, asistana geç", "asistanı bağla", "geri dön asistana"], ["asistan ne dedi", "bunu asistana söyleyeceğim sonra"]),
+            ("en", ["back to the assistant", "put the assistant on", "get the assistant"], ["what did the assistant say", "the assistant was wrong"]),
+        ):
+            p = Pack(code)
+            for text in yes:
+                self.assertTrue(p.LINE_BACK.search(text), text)
+            for text in no:
+                self.assertFalse(p.LINE_BACK.search(text), text)
+
+
 class Tr(unittest.TestCase):
     def test_every_constant_is_today(self):
         p = Pack("tr", **NAMES)

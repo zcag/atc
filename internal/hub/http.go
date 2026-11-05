@@ -42,6 +42,9 @@ func (h *Hub) routes() http.Handler {
 	if g := h.cfg.Guests; g != nil {
 		mux.Handle("/guests/", http.StripPrefix("/guests", g.Handler()))
 	}
+	mux.HandleFunc("GET /lines", h.serveLines)
+	mux.HandleFunc("POST /lines/{name}", h.serveOpenLine)
+	mux.HandleFunc("/lines/{name}/", h.serveLine)
 	mux.HandleFunc("GET /ws", func(w http.ResponseWriter, r *http.Request) {
 		ch := r.URL.Query().Get("channel")
 		h.forChannel(ch).serveWS(w, r, ch, true)
@@ -167,6 +170,8 @@ func (h *Hub) serveWS(w http.ResponseWriter, r *http.Request, channel string, ta
 			h.Say(channel, "["+channel+" event] "+m.Text)
 		case "interrupt":
 			h.Interrupt(channel, false)
+		case "line":
+			h.movedTo(channel, m.Text)
 		}
 	}
 }

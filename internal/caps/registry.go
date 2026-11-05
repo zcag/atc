@@ -83,6 +83,12 @@ func All() []Cap {
 			Cost:  "2 CPU cores or more, about 2 GB of disk, and plan tokens for the assistant; a GPU gives a better voice.",
 		},
 		{
+			ID: "agent-calls", Title: "Talking to agents on a call", Group: Calls, Optional: true, Why: "An agent with \"talk\": true in its agent.json can take the line from the assistant during a call.",
+			Needs: []string{"calls"},
+			Fix:   Fix{Text: "Set up calls, then add \"talk\": true to the agent.json of each agent you want to talk to.", Guide: "calls#talking-to-an-agent"},
+			Cost:  "A Claude process per agent for the length of the call, plus plan tokens.",
+		},
+		{
 			ID: "call-line", Title: "Call line", Group: Calls, Optional: true, Why: "The service that carries a call's audio between your device and the talker.",
 			Fields: []Field{{Key: "ATC_CALL_LINE", Label: "Call line address", Hint: "http://127.0.0.1:8807", URL: true, Hub: true}},
 			Check:  checkCallLine,
