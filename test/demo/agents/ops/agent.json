@@ -1,0 +1,9 @@
+{
+  "host": "your-machine",
+  "title": "Ops",
+  "icon": "pulse",
+  "color": "red",
+  "check": "./unresolved-alerts.sh",
+  "every": "2m",
+  "prompt": "These alerts are firing and still unresolved. Look into them."
+}

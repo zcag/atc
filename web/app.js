@@ -3567,7 +3567,7 @@ function UsagePage({ limits, live, down, onOpen }) {
   const isDown = (h) => down.some((p) => p.name === h);
   const status = !limits ? "Checking the limits…" : !ws.length ? `Limits are not available here${limits.error ? `: ${limits.error}` : ""}`
     : hit ? `${hit.name} runs out ${hit.when} at this rate, ${hit.left} before the reset` : "Every limit lasts to its reset at this rate";
-  const src = limits && (limits.source === "live" ? `checked ${agoLong(limits.fetchedAt)}` : limits.source === "cached" ? `from Claude Code's last check, ${agoLong(limits.fetchedAt)}` : limits.source === "statusline" ? `from Claude Code's status line, ${agoLong(limits.fetchedAt)}` : "");
+  const src = limits && (limits.source === "cached" ? `from Claude Code's last check, ${agoLong(limits.fetchedAt)}` : limits.source === "statusline" ? `from Claude Code's status line, ${agoLong(limits.fetchedAt)}` : "");
 
   const hourly = rangeDef[0] === "24h";
   const todayKey = new Date().toLocaleDateString("en-CA");

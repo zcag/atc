@@ -92,11 +92,10 @@ An agent is someone you go to for one thing. It keeps its own notes, keeps one l
 | **@shopping** | every morning | Researches what's on your list across stores, checks stock and price, leaves a few options to pick from |
 | **@email** | when you ask | Sorts your inboxes onto a page you can act on. Marks read what you say, and never sends |
 | **@reviewer** | when a pull request has no review | Reads it and writes down what it thinks |
-| **@standup** | every morning | Drafts your standup from what you actually did yesterday |
 | **@invoice** | every second Friday | Prepares the invoice and the email, and sends on your go |
 | **@tracker** | every 3 hours | Sweeps mail, calendar and GitHub into one list of everything open |
 
-We run agents like these every day. Each is a folder: a page of instructions and a rule for when to wake.
+We run agents like these every day. You make your own: each is a folder with a page of instructions and a rule for when to wake.
 
 ```json
 { "title": "Ops", "check": "./unresolved-alerts.sh", "every": "2m", "prompt": "Look into these." }
@@ -109,7 +108,7 @@ We run agents like these every day. Each is a folder: a page of instructions and
 
 Between wake-ups they stay out of your way. Ask one something any time with `atc send @shopping "the towel, in grey"`, point a
 Grafana alert or a CI webhook at it, or let the assistant read what it knows: "what's open?" gets answered from @tracker's list
-without waking anyone. [Starter agents](examples/agents/) · [Agents](docs/presets-and-agents.md)
+without waking anyone. [Agents](docs/presets-and-agents.md)
 
 ## Work you can see and step into
 
@@ -214,7 +213,7 @@ account and no key of its own.
   line and adds atc's MCP server; and atc lists its live sessions in `jobs/pins.json`, which keeps
   Claude Code's background service from retiring them.
 - It does not proxy Claude's traffic, modify the `claude` binary, or send your sessions anywhere but
-  the devices you connect. By default it does not read Claude Code's stored credentials.
+  the devices you connect. It does not read Claude Code's stored credentials.
 
 Everything sessions spend comes out of your own plan or API key, under your agreement with Anthropic.
 

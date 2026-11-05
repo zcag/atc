@@ -1,0 +1,12 @@
+{
+  "host": "your-machine",
+  "title": "Tracker",
+  "icon": "target",
+  "color": "slate",
+  "every": "3h",
+  "prompt": "Sweep the sources and update the list.",
+  "share": {
+    "page": "items",
+    "about": "everything open, what ignoring it costs, and who it waits on"
+  }
+}

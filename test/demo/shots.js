@@ -74,7 +74,7 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
       const l = await open(mode, { w: 620, h: 800, phone: true, dpr: 2 });
       await to(l, "#/agents", 2600);
       out.push([l, "team-list"]);
-      for (const [name, pg] of [["shopping", "picks"], ["ops", "alerts"], ["email", "inbox"], ["tracker", "items"], ["invoice", "invoice"], ["standup", "today"], ["reviewer", "queue"]]) {
+      for (const [name, pg] of [["shopping", "picks"], ["ops", "alerts"], ["email", "inbox"], ["tracker", "items"], ["invoice", "invoice"], ["reviewer", "queue"]]) {
         const p = await open(mode, { w: 620, h: 800, phone: true, dpr: 2 });
         await to(p, `#/p/@${name}/${pg}`, 2400);
         out.push([p, `team-${name}`]);

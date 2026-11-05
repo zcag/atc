@@ -1,0 +1,7 @@
+{
+  "host": "your-machine",
+  "title": "Email",
+  "icon": "mail",
+  "color": "blue",
+  "prompt": "Read my mail: fold what's new into the inbox page."
+}

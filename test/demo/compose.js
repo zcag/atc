@@ -43,7 +43,7 @@ async (page, { raw = "http://127.0.0.1:7440/raw", out = "/tmp/atc-final", modes 
     board: solo("board", 1560, 1040),
     transcript: solo("transcript", 1560, 1040),
     pages: solo("pages"),
-    agents: { w: 2720, h: 1800, body: (r) => ["list", "shopping", "ops", "email", "tracker", "invoice", "standup", "reviewer"].map((n, i) =>
+    agents: { w: 2720, h: 1800, body: (r) => ["list", "shopping", "ops", "email", "tracker", "invoice", "reviewer"].map((n, i) =>
       win(`${r}/team-${n}.png`, 50 + (i % 4) * 660, 50 + Math.floor(i / 4) * 860, 620)).join("") },
     usage: solo("usage", 1560, 1040),
     resources: solo("resources", 1560, 1040),

@@ -1,0 +1,9 @@
+{
+  "host": "your-machine",
+  "title": "Shopping",
+  "icon": "present",
+  "color": "orange",
+  "every": "1d",
+  "from": "2026-01-05T08:00",
+  "prompt": "Check the list: research what's new, recheck price and stock on what's waiting."
+}

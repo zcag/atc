@@ -1,0 +1,9 @@
+{
+  "host": "your-machine",
+  "title": "Invoice",
+  "icon": "doc",
+  "color": "green",
+  "every": "2w",
+  "from": "2026-01-09T09:00",
+  "prompt": "Prepare this period's invoice."
+}

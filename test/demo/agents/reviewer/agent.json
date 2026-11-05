@@ -1,0 +1,9 @@
+{
+  "host": "your-machine",
+  "title": "Reviewer",
+  "icon": "pr",
+  "color": "violet",
+  "check": "./prs-without-review.sh",
+  "every": "15m",
+  "prompt": "These pull requests have no review yet. Read them."
+}

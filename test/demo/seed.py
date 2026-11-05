@@ -401,11 +401,6 @@ TEAM = [
      "#217 writes the export to a public bucket path, that needs a signed link. #221 and #214 look fine.",
      "Needs a signed link on #217; two look fine.", 2000, "queue", "Review queue", "What is open and what I think",
      {"headline": "#217 needs a signed link; 2 fine", "badge": 3}),
-    ("standup", "Draft today's standup.",
-     [("Bash", {"command": "gh search commits --author @me --committer-date yesterday"}, "17 commits"), ("Bash", {"command": "atc show today.html"}, "Showing Standup.")],
-     "Today's draft is on the page: four things shipped, one stuck on review.",
-     "Draft is ready: 4 shipped, 1 blocked.", 2500, "today", "Standup", "Drafted from yesterday",
-     {"headline": "Draft ready: 4 shipped, 1 blocked"}),
     ("invoice", "Prepare this period's invoice.",
      [("Bash", {"command": "./next-number.sh"}, "2026-23"), ("Bash", {"command": "atc show invoice.html"}, "Showing Invoice.")],
      "Invoice 2026-23 is ready, 9,600 for the two weeks. It matches the last one apart from the dates. Say go and I'll send it.",
@@ -420,9 +415,9 @@ TEAM = [
 
 
 def team():
-    """The agents from examples/agents, each after its last wake-up, with its own page."""
+    """The agents from test/demo/agents, each after its last wake-up, with its own page."""
     for name, prompt, steps, said, status, ago, pg, title, note, state in TEAM:
-        s = Session({"shopping": "Morning look at the list", "email": "Read my mail", "reviewer": "Review open pull requests", "standup": "Today's standup",
+        s = Session({"shopping": "Morning look at the list", "email": "Read my mail", "reviewer": "Review open pull requests", 
                      "invoice": "Invoice 2026-23", "tracker": "Sweep: what's open"}[name], ASSIST, ago=ago)
         s.user(prompt)
         for t, args, out in steps:
@@ -430,7 +425,7 @@ def team():
         s.say(said)
         s.done(85000)
         s.summary(status)
-        s.live("idle", agent=name, parked=name not in ("invoice", "standup"))
+        s.live("idle", agent=name, parked=name != "invoice")
         page("@" + name, pg, title, note, ago - 60, ATC / "agents.d" / name)
         page_state[f"@{name}/{pg}"] = state
     page("@ops", "alerts", "Alerts", "What fired, what I did", 660, ATC / "agents.d/ops")
@@ -580,7 +575,7 @@ def main_box():
     past_sessions()
     resource_history()
     backlog()
-    for name in ("ops", "shopping", "email", "reviewer", "standup", "invoice", "tracker"):
+    for name in ("ops", "shopping", "email", "reviewer", "invoice", "tracker"):
         d = ATC / "agents.d" / name
         shutil.copytree(HOME / ".demo-agents" / name, d, dirs_exist_ok=True)
         cfg = json.loads((d / "agent.json").read_text())

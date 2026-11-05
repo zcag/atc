@@ -1,26 +1,17 @@
 package usage
 
 import (
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
-	"runtime"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
-
-	"github.com/zcag/atc/internal/claude"
 )
 
 type Window struct {
@@ -52,72 +43,18 @@ type Limits struct {
 }
 
 type LimitsClient struct {
-	URL    string
-	HTTP   *http.Client
-	Creds  func() (Creds, error)
 	Cached func() ([]byte, time.Time, error)
 	Tapped func() ([]byte, time.Time, error)
-	Saved  string
-
-	mu      sync.Mutex
-	loaded  bool
-	last    Limits
-	err     string
-	until   time.Time
-	backoff time.Duration
 }
 
-type Creds struct {
-	AccessToken      string `json:"accessToken"`
-	ExpiresAt        int64  `json:"expiresAt"`
-	SubscriptionType string `json:"subscriptionType"`
-	RateLimitTier    string `json:"rateLimitTier"`
-}
-
-var errExpired = errors.New("Claude Code's sign-in has expired; it renews the next time a session runs")
-
-func (c *LimitsClient) Get(ctx context.Context) Limits {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if !c.loaded {
-		c.loaded = true
-		if b, err := os.ReadFile(c.savedPath()); err == nil {
-			json.Unmarshal(b, &c.last)
-		}
-	}
-	if now := time.Now(); c.usesLogin() && now.After(c.until) {
-		l, wait, err := c.fetch(ctx)
-		c.last.Plan = cmp.Or(l.Plan, c.last.Plan)
-		if err == nil {
-			c.last, c.err, c.backoff, c.until = l, "", 0, now.Add(10*time.Minute)
-			if b, err := json.Marshal(l); err == nil && os.MkdirAll(filepath.Dir(c.savedPath()), 0o755) == nil {
-				os.WriteFile(c.savedPath(), b, 0o600)
-			}
-		} else {
-			c.err = err.Error()
-			if wait > 0 {
-				c.backoff = min(max(2*c.backoff, wait), time.Hour)
-			}
-			c.until = now.Add(cmp.Or(c.backoff, time.Minute))
-		}
-	}
+// Get is the latest Claude Code itself reported: what it handed its status line, or the copy it keeps for /usage. atc
+// never reads its sign-in or asks Anthropic on its own.
+func (c *LimitsClient) Get(_ context.Context) Limits {
 	return c.merged(time.Now())
 }
 
-// usesLogin is whether atc may read Claude Code's own sign-in to ask for the limits itself. Off by default: Claude Code
-// hands the limits to its status line (atc limits -tap), which needs no token.
-func (c *LimitsClient) usesLogin() bool {
-	return c.Creds != nil || os.Getenv("ATC_LIMITS_LOGIN") == "1"
-}
-
 func (c *LimitsClient) merged(now time.Time) Limits {
-	l := c.last
-	l.Windows = []Window{}
-	for _, w := range c.last.Windows {
-		if w.ResetsAt.IsZero() || w.ResetsAt.After(now) {
-			l.Windows = append(l.Windows, w)
-		}
-	}
+	l := Limits{Windows: []Window{}}
 	for _, src := range []struct {
 		name string
 		read func() ([]byte, time.Time, error)
@@ -140,66 +77,10 @@ func (c *LimitsClient) merged(now time.Time) Limits {
 		l.FetchedAt, l.Source = at, src.name
 	}
 	sort.SliceStable(l.Windows, func(i, j int) bool { return l.Windows[i].Key == "session" && l.Windows[j].Key != "session" })
-	if l.Source != "statusline" || now.Sub(l.FetchedAt) > 10*time.Minute {
-		l.Error = c.err
+	if len(l.Windows) == 0 {
+		l.Error = "no reading yet: atc setup points Claude Code's status line at atc, and a running session then reports them"
 	}
 	return l
-}
-
-func (c *LimitsClient) savedPath() string {
-	if c.Saved != "" {
-		return c.Saved
-	}
-	return cachePath("limits.json")
-}
-
-func cachePath(name string) string {
-	dir, _ := os.UserCacheDir()
-	return filepath.Join(dir, "atc", name)
-}
-
-func (c *LimitsClient) fetch(ctx context.Context) (Limits, time.Duration, error) {
-	cr, err := c.creds()
-	if err != nil {
-		return Limits{}, 0, err
-	}
-	l := Limits{Plan: planName(cr), Source: "live"}
-	if cr.AccessToken == "" {
-		return l, 0, errors.New("Claude Code is not signed in with a Claude account here")
-	}
-	if cr.ExpiresAt > 0 && time.UnixMilli(cr.ExpiresAt).Before(time.Now()) {
-		return l, 0, errExpired
-	}
-	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
-	defer cancel()
-	req, _ := http.NewRequestWithContext(ctx, "GET", cmp.Or(c.URL, "https://api.anthropic.com/api/oauth/usage"), nil)
-	req.Header.Set("Authorization", "Bearer "+cr.AccessToken)
-	req.Header.Set("anthropic-beta", "oauth-2025-04-20")
-	req.Header.Set("User-Agent", "atc")
-	res, err := cmp.Or(c.HTTP, http.DefaultClient).Do(req)
-	if err != nil {
-		return l, 0, fmt.Errorf("could not reach Anthropic: %w", err)
-	}
-	defer res.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(res.Body, 1<<20))
-	switch {
-	case res.StatusCode == http.StatusTooManyRequests:
-		secs, _ := strconv.Atoi(res.Header.Get("Retry-After"))
-		return l, max(time.Duration(secs)*time.Second, 5*time.Minute), errors.New("Anthropic asked to check less often")
-	case res.StatusCode == http.StatusUnauthorized:
-		return l, 0, errExpired
-	case res.StatusCode != http.StatusOK:
-		return l, 0, fmt.Errorf("usage request failed: %s", res.Status)
-	}
-	l.Windows, l.FetchedAt = ParseWindows(b, time.Now()), time.Now()
-	return l, 0, nil
-}
-
-func (c *LimitsClient) creds() (Creds, error) {
-	if c.Creds != nil {
-		return c.Creds()
-	}
-	return ReadCreds()
 }
 
 func (c *LimitsClient) cached() ([]byte, time.Time, error) {
@@ -214,6 +95,11 @@ func (c *LimitsClient) tapped() ([]byte, time.Time, error) {
 		return c.Tapped()
 	}
 	return ReadTapped()
+}
+
+func cachePath(name string) string {
+	dir, _ := os.UserCacheDir()
+	return filepath.Join(dir, "atc", name)
 }
 
 func ReadTapped() ([]byte, time.Time, error) {
@@ -262,27 +148,6 @@ func Tap(r io.Reader) error {
 	return os.Rename(tmp, p)
 }
 
-func ReadCreds() (Creds, error) {
-	var b []byte
-	var err error
-	if runtime.GOOS == "darwin" {
-		b, err = exec.Command("security", "find-generic-password", "-s", "Claude Code-credentials", "-w").Output()
-	}
-	if runtime.GOOS != "darwin" || err != nil {
-		b, err = os.ReadFile(filepath.Join(claude.ConfigDir(), ".credentials.json"))
-	}
-	if err != nil {
-		return Creds{}, errors.New("no Claude Code sign-in found on this machine")
-	}
-	var v struct {
-		Claude Creds `json:"claudeAiOauth"`
-	}
-	if err := json.Unmarshal(b, &v); err != nil {
-		return Creds{}, errors.New("could not read Claude Code's sign-in")
-	}
-	return v.Claude, nil
-}
-
 func ReadCached() ([]byte, time.Time, error) {
 	home, _ := os.UserHomeDir()
 	b, err := os.ReadFile(filepath.Join(home, ".claude.json"))
@@ -299,20 +164,6 @@ func ReadCached() ([]byte, time.Time, error) {
 		return nil, time.Time{}, errors.New("no cached usage")
 	}
 	return v.C.Utilization, time.UnixMilli(v.C.FetchedAtMs), nil
-}
-
-var tierRe = regexp.MustCompile(`_(\d+x)$`)
-
-func planName(c Creds) string {
-	p := c.SubscriptionType
-	if p == "" {
-		return ""
-	}
-	p = strings.ToUpper(p[:1]) + p[1:]
-	if m := tierRe.FindStringSubmatch(c.RateLimitTier); m != nil {
-		p += " " + m[1]
-	}
-	return p
 }
 
 type window struct {

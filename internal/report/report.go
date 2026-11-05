@@ -131,8 +131,6 @@ func LimitsNote(l usage.Limits, now time.Time) string {
 	}
 	var s string
 	switch l.Source {
-	case "live":
-		s = "Checked " + Ago(l.FetchedAt, now) + " with your Claude account."
 	case "cached":
 		s = "Not current: from Claude Code's last check, " + Ago(l.FetchedAt, now) + "."
 	case "statusline":
