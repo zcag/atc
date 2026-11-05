@@ -6,7 +6,7 @@ On CPU a call works on 2 cores (first audio about 2.5 to 3.2 s after you stop, m
 
 atc has no voice mode in a session: to talk, call the assistant. **Call about this** in a session's
 menu or the palette tells it which session you mean. On the call, the assistant can hand the line to [an agent that
-can talk](#talking-to-an-agent).
+can talk](#talking-to-an-agent); on that agent's own session the same entry is **Call**, which goes straight to it.
 
 Calls are an add-on. They need three services next to [the hub](assistant.md), each with a row in
 Settings: the **call line**, which carries a call's audio; a **talker**, which holds the call (hears
@@ -44,8 +44,9 @@ The assistant answers every call. An agent with `"talk": true` in its `agent.jso
 that same call, and hand it back.
 
 - **Moving the line.** Say so ("put Focus on"): the assistant connects you when it finishes speaking. In the app or
-  the page, tap the name on the call screen (or the strip of names, or ⋯ Talk to). An agent's **Call** button
-  (Agent details) starts a call that opens on it. "Back to the assistant", or the assistant's own name (`TALK_ASSISTANT`), works on any line, also while the agent is
+  the page, tap the name on the call screen (or the strip of names, or ⋯ Talk to). **Call**, in the More menu and
+  the palette on the agent's session and as a button in Agent details, starts a call that opens on it, or moves the
+  live call to it. "Back to the assistant", or the assistant's own name (`TALK_ASSISTANT`), works on any line, also while the agent is
   in the middle of a long tool, because the talker hears it, not the agent. On a phone line with no screen, the
   words are all there is.
 - **Knowing who you hear.** Two notes on every move (rising to an agent, falling back), then the one you moved to
@@ -68,8 +69,9 @@ back is instant. Agents run on the machine with the call line, for now.
 
 ## Calls in the app
 
-**Call about this**, in a session's More menu and the palette, starts a call (or returns to the live
-one) and tells the assistant which session you mean: `POST /api/call/about` keeps a one-time note that
+**Call about this**, in a session's More menu and the palette (**Call** instead on an agent that can talk, see
+[Talking to an agent](#talking-to-an-agent)), starts a call (or returns to the live one) and tells the assistant
+which session you mean: `POST /api/call/about` keeps a one-time note that
 the feed puts in front of the assistant's next turn, dropped after five minutes if no turn comes. It
 hears you through `modes/phone.md` and passes your words on with `send`; it cannot answer a session's
 permission prompt, so those are still a tap.

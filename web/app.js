@@ -216,6 +216,11 @@ const callAgent = (name, say) => {
   api("/api/call/to", { method: "POST", body: { agent: name } }).catch((e) => say?.(`Could not reach ${name}: ${e.message}`));
   if (name !== "assistant") Call.live() ? returnToCall() : callAssistant();
 };
+/** A session's call action: straight to it when it is an agent that can talk, otherwise the assistant, told which session. */
+const callSession = (s, say) => {
+  const a = AGENT_INFO[s.agent];
+  return a?.talk && !a.error ? { label: "Call", boost: 5, run: () => callAgent(a.name, say) } : { label: "Call about this", run: () => callAbout(s, say) };
+};
 const KEYLAYERS = [];
 function useKeyLayer(fn, on = true) {
   const ref = useRef(fn);
@@ -2171,7 +2176,7 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
           <div class="more"><${Menu} cls="kb" busy=${busy} aria="Session menu" label=${html`More <kbd aria-hidden="true">x</kbd>`}
             items=${[
               ...(phoneNow && hasTerm ? [{ label: mode === "term" ? "Transcript" : "Terminal", run: () => choose(mode === "term" ? "chat" : "term") }] : []),
-              { label: "Call about this", run: () => callAbout(s, say) },
+              callSession(s, say),
               ...(mode === "chat" || sideBySide ? [{ label: "Find in the transcript", run: () => TX_API?.find() }, { label: "Contents", run: () => TX_API?.contents() }, { label: "Outline, story or everything", run: () => TX_API?.level() }, { label: "Files, commits and deploys", run: () => TX_API?.results() }] : []),
               ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "State and outputs", run: openState }, { label: "Usage", run: () => setShowUse(true) }, ...(s.agent ? [{ label: "Agent details", run: () => openAgent(s.agent, "details") }] : [])]} /></div>
         </span>
@@ -6910,14 +6915,15 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
   const cur = SESSION_API;
   if (cur && sel) {
     const s = cur.s, g = "This session";
-    const act = (label, f, kw = "", hint) => add(g, label, { run: run(null, f), kw, hint, sub: s.title || "Untitled" });
+    const act = (label, f, kw = "", hint, boost) => add(g, label, { run: run(null, f), kw, hint, boost, sub: s.title || "Untitled" });
     if (cur.canAttach) act("Terminal", () => cur.mode("term"), "shell attach", "t");
     act("Transcript", () => cur.mode("chat"), "read conversation");
     act("Outputs", () => cur.mode("out"), "files servers links");
     act("Sessions pane", () => actions.pane("rail"), "rail list", "[");
     act("State pane", () => actions.pane("state"), "summary facts", "]");
     for (const p of cur.pages || []) act(`Page: ${pageTitle(p)}`, () => cur.page(p.name), `show ${p.name}`);
-    act("Call about this", () => callAbout(s, say), "voice talk phone assistant");
+    const call = callSession(s, say);
+    act(call.label, call.run, "voice talk phone assistant", undefined, call.boost);
     act("Session usage", cur.usage, "tokens cost limit");
     act("Rename", cur.rename, "title name");
     act(s.pinned ? "Unpin" : "Pin", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }));
