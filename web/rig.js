@@ -211,8 +211,12 @@ export class Director {
  *  means reading or writing in a notebook, speaking looks at the user with beats on stressed syllables and now and then
  *  an open-handed gesture at the start of a phrase. Warm smiles come when the user finishes a thought and now and then
  *  while waiting. */
+/** How a character carries itself, from rig.json "manner". 1 is the measure the first characters act at. */
+const MANNER = { head: 1, glance: 1, brow: 1, nod: 1, tilt: 1, gesture: 1, smile: 0, sheepish: 0 };
+
 export class Behaviour {
-  constructor() {
+  constructor(manner) {
+    this.m = { ...MANNER, ...manner };
     this.t = 0;
     this.state = "listening";
     this.since = 0;
@@ -262,7 +266,17 @@ export class Behaviour {
     if (state === "hearing") { this.brow.hit(.5, .15, .8); this.tilt.hit(chance(.5) ? .35 : -.35, .5, 2.5); }
     if (state === "thinking") { this.brow.hit(-.2, .3, 1.5); if (chance(.6)) this.blinkNow(); }
     if (state === "tool") this.blinkNow();
-    if (was === "speaking" && state !== "speaking") { this.nod.hit(rand(.15, .25), .2, .55); this.smileP.hit(.25, .3, 1.5); }
+    if (was === "speaking" && state !== "speaking") {
+      this.nod.hit(rand(.15, .25), .2, .55);
+      this.smileP.hit(.25, .3, 1.5);
+      if (this.m.sheepish && chance(this.m.sheepish)) {
+        this.look(chance(.5) ? rand(.45, .7) : rand(-.7, -.45), rand(.35, .6), .08);
+        this.away = 1;
+        this.nextGaze = this.t + rand(.6, 1.1);
+        this.smileP.hit(rand(.25, .4), .25, 1.6);
+        this.tilt.hit(chance(.5) ? .22 : -.22, .3, 1.4);
+      }
+    }
   }
 
   blinkNow(dur = rand(.16, .24)) { if (this.blink.t < 0) { this.blink.t = 0; this.blink.dur = dur; this.lastBlink = this.t; } }
@@ -315,8 +329,8 @@ export class Behaviour {
       if (this.away) {
         this.away = 0;
         this.look(rand(-.08, .08), rand(-.06, .06), .05);
-        this.nextGaze = t + rand(1.2, speaking ? 3 : 5);
-      } else if (chance(speaking ? .45 : hearing ? .1 : .3)) {
+        this.nextGaze = t + rand(1.2, speaking ? 3 : 5) / this.m.glance;
+      } else if (chance(Math.min(.9, (speaking ? .45 : hearing ? .1 : .3) * this.m.glance))) {
         this.away = 1;
         const a = rand(0, 2 * PI);
         this.look(Math.cos(a) * rand(.5, .9), Math.sin(a) * rand(.3, .7) - (speaking ? .15 : 0), rand(.06, .1));
@@ -327,11 +341,11 @@ export class Behaviour {
       }
     }
     if (t > this.nextHead) {
-      const k = speaking ? 1 : .6;
+      const k = (speaking ? 1 : .6) * this.m.head;
       T.yaw = (this.away ? this.gaze.x * .5 : 0) + rand(-.25, .25) * k + (speaking && chance(.15) ? Math.sign(rand(-1, 1)) * rand(.4, .55) : 0);
       T.pitch = (hearing ? .08 : 0) + rand(-.1, .12) * k;
       T.roll = (hearing ? .15 * Math.sign(T.roll || 1) : 0) + rand(-.12, .12) * k;
-      this.nextHead = t + rand(speaking ? .9 : 1.8, speaking ? 2.4 : 4);
+      this.nextHead = t + rand(speaking ? .9 : 1.8, speaking ? 2.4 : 4) / this.m.head;
     }
   }
 
@@ -363,10 +377,10 @@ export class Behaviour {
     const rel = this.level / this.peak;
     if (speaking && rel - this.slow / this.peak > .22 && t - this.lastBeat > .3) {
       this.lastBeat = t;
-      if (chance(.55)) this.nod.hit(rand(.08, .16), .16, .4);
-      if (t - this.lastBrow > 2.2 && chance(.45)) { this.lastBrow = t; this.brow.hit(rand(.45, .7), .1, .5); }
-      if (chance(.2)) this.tilt.hit(rand(-.15, .15), .2, .8);
-      if (t - this.quietSince < .5 && t - this.lastGesture > 7 && t - this.poseGone > 1.4 && chance(.4)) { this.lastGesture = t; this.gestureUntil = t + rand(1.8, 3.4); }
+      if (chance(.55)) this.nod.hit(rand(.08, .16) * this.m.nod, .16, .4);
+      if (t - this.lastBrow > 2.2 / this.m.brow && chance(Math.min(.9, .45 * this.m.brow))) { this.lastBrow = t; this.brow.hit(rand(.45, .7), .1, .5); }
+      if (chance(Math.min(.9, .2 * this.m.tilt))) this.tilt.hit(rand(-.15, .15) * this.m.tilt, .2, .8);
+      if (t - this.quietSince < .5 && t - this.lastGesture > 7 / this.m.gesture && t - this.poseGone > 1.4 && chance(Math.min(.9, .4 * this.m.gesture))) { this.lastGesture = t; this.gestureUntil = t + rand(1.8, 3.4); }
     }
     if (v < .03 && this.level < .05) this.quietSince = t;
     if (!speaking) this.gestureUntil = 0;
@@ -414,7 +428,7 @@ export class Behaviour {
     const knit = this.knit.to(s === "thinking" && !this.prop ? .55 + .15 * wander(t, 9) : s === "tool" || this.prop ? .2 : 0, dt);
     const brow = this.browS.to(browHit + (s === "hearing" ? .1 : 0) - knit * .2, dt);
     const smileBase = { listening: .35, hearing: .25, thinking: .1, tool: .12, speaking: .22 }[s] ?? .25;
-    const smile = this.smile.to(smileBase + .12 * wander(t * .5, 4), dt) + this.smileP.step(dt);
+    const smile = this.smile.to(smileBase + this.m.smile + .12 * wander(t * .5, 4), dt) + this.smileP.step(dt);
 
     return {
       yaw, pitch, roll, sway, lean, breath,
@@ -635,7 +649,7 @@ export async function rig(canvas, base, now, opts = {}) {
   canvas.addEventListener("webglcontextlost", lost);
   canvas.addEventListener("webglcontextrestored", restored);
 
-  const behaviour = new Behaviour(), director = new Director(R), mood = new Mood(look.moods);
+  const behaviour = new Behaviour(R.manner), director = new Director(R), mood = new Mood(look.moods);
   const BLEND = { add: [gl.ONE, gl.ONE], mul: [gl.DST_COLOR, gl.ZERO] };
   let last = performance.now(), raf, drew = false, clock = 0;
   const lightKind = look.light.flicker;

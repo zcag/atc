@@ -35,7 +35,9 @@ short dissolve (20-120 ms), instead of stretching one painting.
   unsmiling mouth; a tool means reading (eyes scanning the page) or writing, and that prop stays through the short gaps
   between tools; speaking keeps eye contact with glances away at phrase starts, nods and brow lifts on stressed
   syllables, and a mouth from the played voice, judged against that voice's own recent loudness and tone, so a loud
-  voice, a quiet one and each client's filters look the same. `Director` turns that into drawings.
+  voice, a quiet one and each client's filters look the same. `Director` turns that into drawings. A character's `manner`
+  in `rig.json` (`polish.py --manner`) scales this to suit its voice: how much the head moves (`head`), glances (`glance`), brows, nods, tilts,
+  hand gestures, a resting `smile`, and `sheepish`, the chance of looking aside with a small smile after finishing a sentence.
 
 ## Rooms
 
@@ -91,7 +93,7 @@ the prompt, model and seed to `source.json` in the character's folder.
    (boxes around each piece at 1x) writes `<work>/pose_<name>.png`.
 4. `build.py <work> <draw> <out>`: per angle landmarks, face parse, head mesh, patches into one atlas per angle, poses,
    overlays, `rig.json` and `persona.json`.
-5. `polish.py <out> <final> [--erase poly] [--move pose=dx,dy] [--serious k]`: repairs on the built drawings (stray body
+5. `polish.py <out> <final> [--erase poly] [--move pose=dx,dy] [--serious k] [--edge n] [--manner json]`: repairs on the built drawings (stray body
    pieces, stronger knit brows, blink drawings that leave the glasses alone, a pose nudged into place) and moves the room
    to `room.json`. It takes a fresh build only, since it exaggerates the knit each time.
 6. `flows.py <final>`: draws each pair of neighbouring angles through `web/rig.js`, bent to the same pose, and measures

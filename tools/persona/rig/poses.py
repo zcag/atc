@@ -1,14 +1,16 @@
 """poses.py <work dir> <poses dir> <out dir> name=file=x0,y0,x1,y1;... ...: cuts the arm, hand and prop out of image edits of
 the portrait (hand to the chin, a notebook, a pen) as layers for the rig: SAM masks from boxes around each piece (1x
 coordinates) where the edit changed the picture, never above the lower lip inside the face (the edit repaints the face slightly)
-and never the grey of the beard,
+and, with --grey-beard, never the grey of the beard (without a grey beard that rule only bites holes in fingernails),
 upscaled to the rig's 2x with Real-ESRGAN. Writes
 <out>/pose_<name>.png (full 2x frame, RGBA) for build.py."""
 import sys, os, subprocess, tempfile, numpy as np, cv2
 from PIL import Image
 from common import *
 
-W_DIR, P_DIR, OUT = sys.argv[1:4]
+grey_beard = "--grey-beard" in sys.argv
+args = [v for v in sys.argv[1:] if v != "--grey-beard"]
+W_DIR, P_DIR, OUT = args[:3]
 base1 = load(os.path.join(W_DIR, "base.png"))
 H1, W1 = base1.shape[:2]
 P = landmarks(base1, MODEL)
@@ -34,14 +36,15 @@ def segment(img, boxes):
     return out
 
 
-for spec in sys.argv[4:]:
+for spec in args[3:]:
     name, f, boxes = spec.split("=")
     edit = load(os.path.join(P_DIR, f))
     changed = cv2.dilate((cv2.GaussianBlur(np.abs(edit - base1).max(2), (0, 0), 2) > 20).astype(np.uint8), np.ones((25, 25), np.uint8))
     keep = (segment(edit, [[int(v) for v in q.split(",")] for q in boxes.split(";")]) & (changed > 0)).astype(np.uint8)
     keep[face & (np.mgrid[0:H1, 0:W1][0] < below_lip)] = 0
-    hsv = cv2.cvtColor(edit.astype(np.uint8), cv2.COLOR_RGB2HSV)
-    keep[beard & (hsv[..., 1] < 75)] = 0
+    if grey_beard:
+        hsv = cv2.cvtColor(edit.astype(np.uint8), cv2.COLOR_RGB2HSV)
+        keep[beard & (hsv[..., 1] < 75)] = 0
     keep = cv2.morphologyEx(keep, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8))
     n, cc, st, _ = cv2.connectedComponentsWithStats(keep)
     keep = np.isin(cc, [i for i in range(1, n) if st[i, cv2.CC_STAT_AREA] > 800]).astype(np.uint8)

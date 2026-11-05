@@ -56,7 +56,7 @@ def inpaint(img, mask, scale=.5):
 
 
 if not os.path.exists(c("fill_plate.png")):
-    save(c("fill_plate.png"), inpaint(base, cv2.dilate((matte > .5).astype(np.uint8), np.ones((31, 31), np.uint8)) > 0))
+    save(c("fill_plate.png"), inpaint(base, cv2.dilate((matte > .5).astype(np.uint8), np.ones((71, 71), np.uint8)) > 0))
 if not os.path.exists(c("fill_body.png")):
     save(c("fill_body.png"), inpaint(base, cv2.dilate(head_mask(parse(base)), np.ones((9, 9), np.uint8)) > 0))
 if not os.path.exists(c("crop.json")):

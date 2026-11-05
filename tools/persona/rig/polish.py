@@ -8,7 +8,11 @@ its room into room.json, without needing its sources. Run with numpy, opencv and
 - knit brows: the brow's movement from the neutral drawing is exaggerated a little, since the drawings' own is faint.
 - half and shut eyes: pixels the lid doesn't change go back to the neutral drawing, which removes ghost glasses.
 - --move shifts a pose layer: a hand that doesn't reach the chin.
+- --edge N: the outer N art px of the head and body take their colour from just inside, then lose a little alpha: the cut
+  edge carries the portrait's dark room, which shows as an outline on a bright background. On the head, dark paint reached
+  from outside the cut is removed first (room caught between hair tips).
 - --serious blends the small closed mouth with the resting one when there is no neutral drawing and the full one pouts.
+- --manner sets how the character acts: match it to the voice, in a real call.
 Coordinates are in the portrait's pixels (rig.json "size")."""
 import argparse, json, shutil
 from pathlib import Path
@@ -23,6 +27,8 @@ ap.add_argument("--erase", action="append", default=[])
 ap.add_argument("--move", action="append", default=[])
 ap.add_argument("--knit", type=float, default=1.5)
 ap.add_argument("--serious", type=float)
+ap.add_argument("--edge", type=int, default=0)
+ap.add_argument("--manner", type=json.loads, help="how he carries himself, Behaviour's manner in web/rig.js, as JSON")
 a = ap.parse_args()
 assert not json.load(open(a.src / "rig.json")).get("polished"), "already polished: start from a fresh build"
 if a.out.exists():
@@ -80,6 +86,32 @@ n, lab, stats, _ = cv2.connectedComponentsWithStats((b[..., 3] > 8).astype(np.ui
 b[..., 3] *= (lab == 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA])))
 put(body, b)
 
+
+
+def clean_edge(p, trim_dark=False):
+    pc = get(p)
+    n = max(1, round(a.edge * pc.shape[1] / p["box"][2]))
+    if trim_dark:
+        dark, reached = pc[..., :3].mean(2) < 60, (pc[..., 3] < 128).astype(np.uint8)
+        for _ in range(5 * n):
+            reached = cv2.dilate(reached, np.ones((3, 3), np.uint8)) & (dark | (reached > 0)).astype(np.uint8)
+        pc[..., 3][reached > 0] = 0
+    inner = cv2.erode((pc[..., 3] > 200).astype(np.uint8), np.ones((2 * n + 1, 2 * n + 1), np.uint8))
+    _, labels = cv2.distanceTransformWithLabels(1 - inner, cv2.DIST_L2, 5, labelType=cv2.DIST_LABEL_PIXEL)
+    ys, xs = np.nonzero(inner)
+    by_label = np.zeros((labels.max() + 1, 3), np.float32)
+    by_label[labels[ys, xs]] = pc[ys, xs, :3]
+    rim = inner == 0
+    pc[..., :3][rim] = by_label[labels[rim]]
+    pc[..., 3] = cv2.GaussianBlur(cv2.erode(pc[..., 3], np.ones((3, 3), np.uint8)), (0, 0), 1)
+    put(p, pc)
+
+
+if a.edge:
+    clean_edge(body)
+    for angle in R["angles"]:
+        clean_edge(parts[f"head.{angle}"], trim_dark=True)
+
 # ---- head angles
 for angle in R["angles"]:
     head = parts[f"head.{angle}"]
@@ -135,5 +167,7 @@ if not R.get("room"):
 R["polished"] = 1
 if a.serious is not None:
     R["serious"] = a.serious
+if a.manner:
+    R["manner"] = a.manner
 json.dump(R, open(a.out / "rig.json", "w"), separators=(",", ":"))
 print("polished", a.out)

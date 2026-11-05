@@ -72,6 +72,15 @@ b = get(parts["body"])
 n, lab, stats, _ = cv2.connectedComponentsWithStats((b[..., 3] > 8).astype(np.uint8), connectivity=8)
 check("body in one piece", n == 2, f"{n - 1} pieces")
 
+# ---- the cut edge doesn't carry the portrait's dark room, an outline on any bright background
+hd = get(parts["head.y0p0"])
+solid = (hd[..., 3] > 128).astype(np.uint8)
+ring = lambda r: cv2.erode(solid, np.ones((2 * r + 1, 2 * r + 1), np.uint8))
+lum = hd[..., :3].mean(2)
+edge_, inside_ = (solid > 0) & (ring(5) == 0), (ring(5) > 0) & (ring(16) == 0)
+drop = float(lum[inside_].mean() - lum[edge_].mean())
+check("no dark outline", drop < 4, f"the head's outer edge is {drop:.1f} levels darker than just inside it")
+
 # ---- half and shut eyes touch only the lid; knit brows show; mouth drawings reach the jaw line, which they carry
 lens, knit, reach_jaw, scraps = [], [], [], []
 for a in angles:

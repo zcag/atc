@@ -162,6 +162,26 @@ test("thinking and tool use bring their poses, the others none", () => {
   assert.ok(seen.tool.has("read") && seen.tool.has("write") && !seen.tool.has(null));
 });
 
+test("a character's manner moves more and gestures more, stays in range, and leaves the default alone", () => {
+  const run = (manner) => {
+    const b = new Behaviour(manner), dt = 1 / 30;
+    let turn = 0, gesture = 0, last = null;
+    for (let i = 0; i < 18000; i++) {
+      const t = i * dt, it = .2 + .2 * Math.sin(t * 9) * (Math.sin(t * 1.3) > -.6);
+      const p = b.step(dt, t % 40 < 30 ? "speaking" : "listening", 0, it, .2, .1);
+      for (const k of ["yaw", "pitch", "roll", "brow", "smile", "gazeX", "gazeY"]) assert.ok(Number.isFinite(p[k]) && Math.abs(p[k]) < 2.5, `${k} ${p[k]}`);
+      turn += Math.abs(p.yaw) * dt;
+      if (p.pose === "explain" && last !== "explain") gesture++;
+      last = p.pose;
+    }
+    return { turn, gesture };
+  };
+  const plain = run(), lively = run({ head: 1.5, glance: 1.5, brow: 1.5, nod: 1.2, tilt: 1.5, gesture: 2.2, smile: .08, sheepish: .5 });
+  assert.ok(lively.turn > plain.turn * 1.2, `turn ${lively.turn} against ${plain.turn}`);
+  assert.ok(lively.gesture > plain.gesture, `gestures ${lively.gesture} against ${plain.gesture}`);
+  assert.deepEqual(new Behaviour().m, new Behaviour({}).m);
+});
+
 test("a lamp-lit room counts as none, a sunny one as full daylight", () => {
   assert.equal(daylight(.15), 0);
   assert.equal(daylight(.3), 0);
