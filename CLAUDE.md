@@ -37,6 +37,13 @@ key). `voice/lang/` holds a language's words for calls.
 from a `prompts.golden` beside them: read the diff, then accept it with `atc prompts --update`. A `~/.config/atc/private-words`
 (`git grep -Ef` patterns) makes it fail too when anything of yours reaches the tree.
 
+## Characters
+
+A new or changed call character goes through `docs/persona-rig.md` to the end: `polish.py`, `flows.py`, `verify.py`, then
+`publish.py`, which refuses anything that didn't pass. Look at `verify.jpg` before publishing, and at the character in a
+real call after. When `verify.py` fails, fix the character, not the threshold. Every fault found in a character later
+becomes a new check there, so the next one can't repeat it. Keep each character's prompt in its `source.json`.
+
 ## Services
 
 `make install` does atc only (`atc service install --only atc`, restarting is safe: `KillMode=process` keeps every session alive).

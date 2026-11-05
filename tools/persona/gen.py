@@ -2,7 +2,7 @@ import os, sys, json, base64, urllib.request, pathlib
 out = pathlib.Path(sys.argv[1]); out.mkdir(parents=True, exist_ok=True)
 subj = ("a warm, kind academic man in his mid fifties, completely bald head, short neat grey beard, round thin gold-rimmed glasses, "
         "wearing a soft brown knit cardigan over a light collared shirt, head and shoulders portrait, facing the viewer directly, "
-        "looking straight into the camera, gentle closed-mouth expression, relaxed, centered, head in the upper third, ")
+        "looking straight into the camera, neutral relaxed face, mouth closed, not smiling, centered, head in the upper third, ")
 room = "in a cozy study with wooden bookshelves and a warm desk lamp, background softly out of focus, "
 styles = {
  "paint": "painterly digital illustration, visible soft brush strokes, warm golden light, rich colors, high quality concept art",

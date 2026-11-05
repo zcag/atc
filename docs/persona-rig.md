@@ -46,7 +46,9 @@ simple-lama-inpainting and triangle. Working files go in `$PERSONA_WORK/rig/` (`
 `~/.local/share/persona2d`), including `face_landmarker.task` (MediaPipe's) and `esr/` (realesrgan-ncnn-vulkan).
 
 Each character has a work dir with its portrait as `base.png` (768x1344). `tools/persona/gen.py <out dir> [jobs.json]`
-makes portraits through an OpenAI-compatible image server at `$IMAGES_URL`. Use an original face, not a likeness of anyone.
+makes portraits through an OpenAI-compatible image server at `$IMAGES_URL`. Use an original face, not a likeness of anyone,
+with a neutral, unsmiling mouth: smiles are added as drawings, while a smile in the portrait can't be taken out. Write
+the prompt, model and seed to `source.json` in the character's folder.
 
 1. `prep.py <work>`: 2x upscale, figure matte, LaMa fills (room, body without the head), the head crop the drawings
    are rendered from (`crop.png`, `crop.json`) and the lamp position (`char.json`).
@@ -56,14 +58,22 @@ makes portraits through an OpenAI-compatible image server at `$IMAGES_URL`. Use 
    (boxes around each piece at 1x) writes `<work>/pose_<name>.png`.
 4. `build.py <work> <draw> <out>`: per angle landmarks, face parse, head mesh, patches into one atlas per angle, poses,
    overlays, `rig.json` and `persona.json`.
-5. `polish.py <out> <final> [--erase poly] [--move pose=dx,dy]`: repairs on the built drawings (stray body pieces,
-   mouth patches kept inside the head's outline, stronger knit brows, blink drawings that leave the glasses alone, a pose
-   nudged into place) and moves the room to `room.json`. Run it on a fresh build, once: it exaggerates the knit each time.
+5. `polish.py <out> <final> [--erase poly] [--move pose=dx,dy] [--serious k]`: repairs on the built drawings (stray body
+   pieces, stronger knit brows, blink drawings that leave the glasses alone, a pose nudged into place) and moves the room
+   to `room.json`. It takes a fresh build only, since it exaggerates the knit each time.
 6. `flows.py <final>`: draws each pair of neighbouring angles through `web/rig.js`, bent to the same pose, and measures
    the flow between them. Needs playwright and a browser with WebGL2.
-7. `publish.py <final> <name>`: copies it to atc's personas folder and bumps its rev.
+7. `verify.py <final>`: the gate. See "Checking it". Fix what fails, then look at `verify.jpg`.
+8. `publish.py <final> <name> --sources <work>`: copies it to atc's personas folder, bumps its rev, and archives the
+   sources to `$PERSONA_SOURCES/<name>`. It refuses anything that hasn't passed `verify.py` as it stands now.
 
 ## Checking it
+
+`verify.py` measures each fault the first two characters had: the record of the prompt, every drawing the director can
+ask for, a room of its own, measured morphs, a body in one piece, a jaw line that holds while talking, blinks that touch
+only the lid, knit brows that show but don't look worried, a thinking hand that reaches the chin, poses that don't pop,
+and head swaps that stay sharp. Numbers can't judge a face: `verify.jpg` is a contact sheet, and a person looks at it,
+at phone size, before publishing. A repair that passes the numbers can still look wrong. Compare against the portrait.
 
 - `node --test web/` (part of `make check`): pose maths, the dissolve, the director's choices (angle hysteresis,
   blink, gaze sign, mouth, reading, only drawings that exist), ten simulated minutes of behaviour, poses per state, props

@@ -134,7 +134,7 @@ export class Director {
 
   nearest(y, p, cur) {
     const d = (k) => { const [ky, kp] = this.angles(k); return Math.hypot(y - ky, (p - kp) * 1.2); };
-    let best = cur, bd = cur ? d(cur) - 3 : Infinity;
+    let best = cur, bd = cur ? d(cur) - 2.5 : Infinity;
     for (const [k] of this.keys) if (d(k) < bd) { best = k; bd = d(k); }
     return best;
   }
@@ -155,7 +155,7 @@ export class Director {
     else this.eyes.to(this.gx || this.gy ? `g${this.gx}_${this.gy}` : "base", .035, this.eyes.cur === "half" ? 0 : .08);
     this.brows.to(p.brow > .3 ? "up" : p.knit > .3 ? "knit" : "base", .12, .2);
     const open = p.jaw / .72, was = this.mouth.cur, serious = p.serious > .5;
-    const calm = (n) => n === "base" || n[0] === "s" || (n === "u" && serious);
+    const calm = (n) => n === "base" || n === "n" || n[0] === "s" || (n === "u" && serious);
     let m = "base";
     if (open >= (calm(was) ? .16 : .09)) {
       this.lvl = open < (this.lvl >= 2 ? .33 : .43) ? 1 : open < (this.lvl >= 3 ? .65 : .75) ? 2 : 3;
@@ -163,7 +163,7 @@ export class Director {
       m = p.round > (inRound ? .2 : .5) ? (this.lvl === 1 ? "u" : "o2") : p.wide > (inWide ? .15 : .4) ? `e${Math.min(2, this.lvl)}` : `a${this.lvl}`;
     } else {
       this.lvl = 0;
-      if (serious) m = "u";
+      if (serious) m = this.has?.has(`${this.angle.cur}.mouth.n`) ? "n" : "u";
       else if (p.smile > .72) m = "s2";
       else if (p.smile > .5) m = "s1";
     }
@@ -353,7 +353,7 @@ export class Behaviour {
     const tone = this.bright / Math.max(this.usual, .01);
     const sib = smooth(2.4, 3.6, tone) * smooth(.1, .25, rel);
     const jaw = this.jaw.to(.72 * smooth(.07, 1, rel) * (1 - .7 * sib), dt);
-    const round = this.round.to(smooth(.72, .45, tone) * smooth(.1, .35, rel) * .8, dt);
+    const round = this.round.to(smooth(.6, .35, tone) * smooth(.1, .35, rel) * .8, dt);
     const wide = this.wide.to((smooth(1.35, 2, tone) * .6 + sib * .5) * smooth(.08, .3, rel), dt);
 
     this.plan(s, t);
@@ -590,8 +590,9 @@ export async function rig(canvas, base, now, opts = {}) {
       if (a <= .002) continue;
       bones(key);
       gl.uniform1f(G.main.u("morph"), toward * (key === A.prev ? e : e - 1));
+      draw(`${key}.mouth.u`, a); // under the head: mouth drawings carry the jaw line, so it never changes with the mouth
       draw(`head.${key}`, a);
-      for (const slot of ["brows", "eyes", "mouth"]) for (const [name, w_] of director[slot].layers()) if (name !== "base") draw(`${key}.${slot}.${name}`, a * w_);
+      for (const slot of ["brows", "eyes", "mouth"]) for (const [name, w_] of director[slot].layers()) if (name !== "base") draw(`${key}.${slot}.${name}`, a * w_ * (name === "u" && params.serious > .5 ? R.serious ?? 1 : 1));
     }
     gl.uniform1f(G.main.u("morph"), 0);
     const Z = director.pose, layer = Z.cur && G.parts[`pose.${Z.cur}`];
