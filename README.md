@@ -77,6 +77,10 @@ You can talk over it, and it hears you. It says what it's doing while it works, 
 how they came out after you've hung up. Calling it needs no phone number, and it runs on your machine on 2 CPU cores.
 [Calls](docs/calls.md) · [A recorded demo call](docs/img/call-demo.mp4) · [The assistant](docs/assistant.md)
 
+A character stands in a room, which brings its own light, weather and mood, and any picture you upload works as one.
+
+<img src="docs/img/rooms.webp" alt="Arthur and June in five rooms: a night study with a desk lamp, a loft with rain on the window and a neon city outside, a cabin with a fire and snow outside, a library with a green lamp and a violet window, and a sunroom with plants." />
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/assistant-dark.webp">
   <img src="docs/img/assistant-light.webp" alt="The assistant with a call on. On the left, the conversation: you ask it to find out why checkout is slow and to fix a build on the laptop, it starts both sessions and answers with the numbers, and the sessions it set going are listed under it. On the right, the call: Arthur, a painted professor in their study, thinking with their hand to their chin, and the sessions on this call under them.">

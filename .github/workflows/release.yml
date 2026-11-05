@@ -26,7 +26,8 @@ jobs:
           done
           cp install.sh dist/
           (cd dist && sha256sum * > checksums.txt)
-      # The signed Android app is added by hand, with gh release upload: its key is not in CI.
+      # Added by hand, with gh release upload: the signed Android app (its key is not in CI), and from make personas the
+      # characters and rooms with the version.json that names them. They are not in the repo.
       - run: gh release create "$GITHUB_REF_NAME" --generate-notes dist/*
         env:
           GH_TOKEN: ${{ github.token }}

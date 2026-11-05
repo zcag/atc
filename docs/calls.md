@@ -114,8 +114,8 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   name at once while the voice changes with it. A pick tells the voice service, so the phone line speaks with it too.
   With nobody picked for a language, the character kept on that device shows, and the voice service's voice speaks. A
   person holds nothing about how the assistant behaves, and nothing in it is tied to the assistant, so an agent can name one too.
-- **Backgrounds** are images in `$ATC_APP_DIR/personas/_rooms/`, best at a character's 768x1344; a person's editor adds and removes them. One replaces a `rig`
-  character's room, softened like its own, without the lamp's glow and dust; a lamp-lit image is darkened like that room, a bright one (by its mean brightness) stays bright. The orb and the other kinds draw their own surroundings.
+- **Rooms** are in `$ATC_APP_DIR/personas/_rooms/`: a picture, best at a character's 768x1344, and optionally its light, glows, particles and moods in a `.json` of the same name ([the format](persona-rig.md#rooms)). A person's editor adds and removes pictures. One replaces a `rig`
+  character's own room. A picture with no settings gets a look from its pixels: a lamp-lit one is darkened like that room, a bright one (by its mean brightness) stays bright. The orb and the other kinds draw their own surroundings.
 - **View** is how a device shows the call, kept on that device: **Character** (whoever is on the line, as above), or
   **Line** or **Bars**, built-in marks that only move with the voices, for a call in public. It leaves the person alone:
   the voice and name stay, and going back to Character shows whoever is on the line by then. On the call screen it is
@@ -123,7 +123,7 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
 - **Characters** are folders under `$ATC_APP_DIR/personas/<name>/` on the server (`persona.json` with
   `kind` and `files`, plus the files), listed in `personas/index.json` (`{"default", "personas":
   [{"name", "rev"}]}`); the phone downloads one when picked and keeps it until its `rev` changes.
-  atc ships none besides the orb. The kept one starts from the phone with no wait on the server, on the
+  atc's binary carries none besides the orb; `atc app update` unpacks the characters and rooms of a release that has them (`make personas`). The kept one starts from the phone with no wait on the server, on the
   dark backdrop until its first frame; the orb shows only when it is the choice, or when the character
   is missing or stuck for 6 s. Kinds: `rig` (drawings swapped like cel animation, `web/rig.js`,
   built as in [the rig's notes](persona-rig.md)), `illustration` and `footage` (`web/persona.js`, in the
