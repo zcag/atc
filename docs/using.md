@@ -36,7 +36,8 @@
     could not be sent. Above the box, the summary's suggested replies send with one tap.
   - Select any text for **Quote**, **Explain**, **Push back** or **Do this** (each quotes it into
     the box with a start you can edit), **Copy** or **Find**.
-- **New session** starts Claude in any folder, with an optional name and first message. In a folder
+- **New session** starts Claude in any folder, with an optional name and first message. Paste, drop
+  or attach images and files in the prompt; they upload to the session's machine when it starts. In a folder
   Claude Code doesn't trust yet, Start shows you its trust prompt first ([Install](install.md#notes)).
 - **Assistant** (the chat button, or `a`) opens one session with the atc tools, for asking about
   your other sessions or driving them. It is the same session the phone's side key opens, and with

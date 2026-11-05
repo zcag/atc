@@ -453,9 +453,14 @@ func saveUpload(folder, filename string, src io.Reader) (string, error) {
 	if name == "" || name == "." {
 		name = "upload"
 	}
-	path := filepath.Join(dir, time.Now().Format("150405")+"-"+name)
 	os.MkdirAll(dir, 0o755)
-	out, err := os.Create(path)
+	stamp := time.Now().Format("150405")
+	path := filepath.Join(dir, stamp+"-"+name)
+	out, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	for i := 2; errors.Is(err, fs.ErrExist); i++ {
+		path = filepath.Join(dir, fmt.Sprintf("%s-%d-%s", stamp, i, name))
+		out, err = os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	}
 	if err != nil {
 		return "", err
 	}

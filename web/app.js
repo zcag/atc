@@ -2683,13 +2683,9 @@ function Term({ s, say }) {
   const upload = useRef();
   upload.current = async (files) => {
     for (const f of files) {
-      const fd = new FormData();
-      fd.append("file", f, f.name || "pasted.png");
       try {
-        const res = await fetch(`/api/sessions/${s.sessionId}/upload`, { method: "POST", body: fd });
-        if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
-        const { path } = await res.json();
-        if (!api_.current.send?.(` \x1b[200~${/\s/.test(path) ? `"${path}"` : path}\x1b[201~`)) say(`Uploaded, but the terminal is not connected, so it did not get the path: ${path}`);
+        const path = await uploadFile(`/api/sessions/${s.sessionId}/upload`, f);
+        if (!api_.current.send?.(` \x1b[200~${quotePath(path)}\x1b[201~`)) say(`Uploaded, but the terminal is not connected, so it did not get the path: ${path}`);
       } catch (e) {
         say(`Upload failed: ${e.message}`);
       }
@@ -2782,6 +2778,15 @@ function FileList({ files, remove }) {
         </div>`)}
     </div>`;
 }
+
+const quotePath = (p) => (/\s/.test(p) ? `"${p}"` : p);
+const uploadFile = async (url, file, name = file.name || "pasted.png") => {
+  const fd = new FormData();
+  fd.append("file", file, name);
+  const res = await fetch(url, { method: "POST", body: fd });
+  if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
+  return (await res.json()).path;
+};
 
 const pref = (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } };
 const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
@@ -5648,6 +5653,7 @@ function highlight(el, q) {
 function BgStrip({ s }) {
   const seen = useRef(new Map());
   const [open, setOpen] = useState(() => pref("atc.bgopen", "off") === "on");
+  const [showDone, setShowDone] = useState(() => pref("atc.bgdone", "off") === "on");
   const [more, setMoreRaw] = useState(null);
   const [src, setSrc] = useState({});
   const setMore = (id) => {
@@ -5664,14 +5670,18 @@ function BgStrip({ s }) {
   if (!running && now - Math.max(...all.map((t) => t.done)) > 60e3) { seen.current.clear(); return null; }
   const word = (n) => (all.every((t) => t.kind === "agent") ? (n === 1 ? "agent" : "agents") : n === 1 ? "task" : "tasks");
   const toggle = () => { setOpen(!open); setPref("atc.bgopen", open ? "off" : "on"); };
+  const toggleDone = () => { setShowDone(!showDone); setPref("atc.bgdone", showDone ? "off" : "on"); };
+  const finished = all.length - running;
   return html`<div class="bgstrip ${running ? "" : "finished"}">
     <button class="bg-head" onClick=${toggle} aria-expanded=${open && running > 0}>
       <span class="bg-dot ${running ? "run" : ""}"></span>
       <span>${running ? `${running} ${word(running)} running in the background` : `${all.length} background ${word(all.length)} finished`}</span>
-      ${running > 0 && all.length > running && html`<span class="bg-sub">${all.length - running} done</span>`}
+      ${running > 0 && finished > 0 && !open && html`<span class="bg-sub">${finished} done</span>`}
       ${running > 0 && html`<span class="chev" aria-hidden="true"></span>`}
     </button>
-    ${open && running > 0 && html`<ul>${all.map((t) => html`<li class="${t.done ? "done" : ""} ${more === t.id ? "more" : ""}" onClick=${() => setMore(more === t.id ? null : t.id)}>
+    ${open && running > 0 && html`<ul>
+      ${finished > 0 && html`<li class="bg-fold"><button aria-expanded=${showDone} onClick=${toggleDone}>${finished} done<span class="chev" aria-hidden="true"></span></button></li>`}
+      ${all.filter((t) => showDone || !t.done).map((t) => html`<li class="${t.done ? "done" : ""} ${more === t.id ? "more" : ""}" onClick=${() => setMore(more === t.id ? null : t.id)}>
       <span class="bg-k">${t.kind === "shell" ? "shell" : "agent"}</span>
       <span class="bg-l" title=${more === t.id ? null : t.label}>${more === t.id
         ? html`${src[t.id]?.description && t.kind === "shell" && html`<b>${src[t.id].description}</b>`}${src[t.id]?.detail || t.label}`
@@ -5688,6 +5698,13 @@ const SLASH = [["/compact", "summarize the conversation to free context"], ["/cl
   ["/review", "review the current diff"], ["/cost", "what this session has cost"], ["/memory", "edit CLAUDE.md memory"], ["/permissions", "what it may run without asking"],
   ["/agents", "subagents it can call"], ["/init", "write a CLAUDE.md for this repo"], ["/add-dir", "let it read another folder"], ["/mcp", "MCP servers and their tools"], ["/status", "model, account, connections"]];
 const fileSize2 = (n) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
+
+function AttChips({ atts, up, zoom, remove }) {
+  return atts.length > 0 && html`<div class="atts" aria-label="Attached">${atts.map((a) => html`<span class="att ${up(a) ? "up" : ""}">
+    ${a.url ? html`<img src=${a.url} alt="" onClick=${() => zoom(a.url)} />` : html`<span class="fi" aria-hidden="true">${(a.name.split(".").pop() || "").slice(0, 4)}</span>`}
+    <span class="nm">${a.name}</span><span class="sz">${up(a) ? "uploading" : a.size ? fileSize2(a.size) : ""}</span>
+    <button type="button" class="rm" aria-label=${`Remove ${a.name}`} onClick=${() => remove(a)}></button></span>`)}</div>`;
+}
 
 function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, focusRef, uploadRef, working, asking, interrupt, top, prompt, doors, hintFor }) {
   const ta = useRef(), file = useRef();
@@ -5706,7 +5723,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   useEffect(() => { if (!working) setConfirm(false); }, [working]);
   useLayoutEffect(() => { const el = ta.current; if (el) { el.style.height = ""; if (el.scrollHeight > el.clientHeight + 2) el.style.height = Math.min(el.scrollHeight, phone ? 132 : 220) + "px"; } }, [draft]);
   const go = async () => {
-    const paths = atts.map((a) => (/\s/.test(a.path) ? `"${a.path}"` : a.path)).join("\n");
+    const paths = atts.map((a) => quotePath(a.path)).join("\n");
     const text = [...quotes.map((q) => q.split("\n").map((l) => `> ${l}`).join("\n")), draft.trim(), paths].filter(Boolean).join("\n\n");
     if (!text || busy || atts.some((a) => !a.path)) return;
     setBusy(true);
@@ -5717,15 +5734,11 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   };
   const upload = async (files) => {
     for (const f of files) {
-      const fd = new FormData();
-      fd.append("file", f, f.name);
       const id = Math.random().toString(36).slice(2), url = f.type.startsWith("image/") ? URL.createObjectURL(f) : null;
       if (url) ATT_URL.set(id, url);
       setAtts((as) => [...as, { id, name: f.name || "pasted.png", url, size: f.size }]);
       try {
-        const res = await fetch(`/api/sessions/${s.sessionId}/upload`, { method: "POST", body: fd });
-        if (!res.ok) throw new Error((await res.text()).trim() || res.statusText);
-        const path = (await res.json()).path;
+        const path = await uploadFile(`/api/sessions/${s.sessionId}/upload`, f);
         setAtts((as) => as.map((a) => (a.id === id ? { ...a, path } : a)));
       } catch (e) {
         setAtts((as) => as.filter((a) => a.id !== id));
@@ -5769,10 +5782,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
           ${chips.length > 0 && html`<div class="chips" aria-label="Suggested replies">${chips.map((r) => html`<button class="chip" onClick=${() => { setDraft(r); requestAnimationFrame(() => { ta.current?.focus(); ta.current?.setSelectionRange(1e4, 1e4); }); }}>${r}</button>`)}</div>`}
           <div class="box" onClick=${(e) => e.target === e.currentTarget && ta.current?.focus()}>
             ${prompt}
-            ${atts.length > 0 && html`<div class="atts" aria-label="Attached">${atts.map((a) => html`<span class="att ${a.path ? "" : "up"}">
-              ${a.url ? html`<img src=${a.url} alt="" onClick=${() => setBig(a.url)} />` : html`<span class="fi" aria-hidden="true">${(a.name.split(".").pop() || "").slice(0, 4)}</span>`}
-              <span class="nm">${a.name}</span><span class="sz">${a.path ? (a.size ? fileSize2(a.size) : "") : "uploading"}</span>
-              <button class="rm" aria-label=${`Remove ${a.name}`} onClick=${() => setAtts(atts.filter((x) => x.id !== a.id))}></button></span>`)}</div>`}
+            <${AttChips} atts=${atts} up=${(a) => !a.path} zoom=${setBig} remove=${(a) => setAtts(atts.filter((x) => x.id !== a.id))} />
             <button class="kb att-b" title="Attach files (or paste, or drop them on the transcript)" onClick=${() => file.current?.click()}>Attach</button>
             <input type="file" multiple hidden ref=${file} onChange=${(e) => { upload([...e.target.files]); e.target.value = ""; }} />
             <textarea ref=${ta} rows="1" value=${draft} placeholder=${hint} aria-label=${`Reply to ${s.title || "the session"}`} enterkeyhint=${touch ? "enter" : "send"}
@@ -6711,6 +6721,7 @@ const hostQ = (host, home) => (host && host !== home ? `?host=${encodeURICompone
 
 const NS_DRAFT = "atc.nsdraft", NS_HOSTS = "atc.nshost", NS_ROWS = 6;
 let nsSave = 0;
+let nsFiles = [];
 const nsDraft = {
   get: () => stored(NS_DRAFT, null),
   set(d) {
@@ -6852,6 +6863,12 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
   const lastHosts = stored(NS_HOSTS, {});
   const [host, setHostRaw] = useState(() => from?.host || saved?.host || (folder && lastHosts[folder]) || context?.host || home);
   const [prompt, setPrompt] = useState(from?.prompt || saved?.prompt || "");
+  const [files, setFilesRaw] = useState(() => (later || seeded ? [] : nsFiles));
+  const setFiles = (fs) => { setFilesRaw(fs); if (!later) nsFiles = fs; };
+  const addFiles = (fs) => setFiles([...files, ...fs.map((f) => ({ id: Math.random().toString(36).slice(2), name: f.name || "pasted.png", size: f.size, file: f, url: f.type.startsWith("image/") ? URL.createObjectURL(f) : null }))]);
+  const [big, setBig] = useState(null);
+  const [dropping, setDropping] = useState(false);
+  const pickFile = useRef();
   const [name, setName] = useState(from?.title || "");
   const [naming, setNaming] = useState(false);
   const [wt, setWt] = useState(null);
@@ -6896,20 +6913,26 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
     nsDraft.set(prompt.trim() || (folder && folder !== ctxDir) ? { prompt, folder, host } : null);
   }, [prompt, folder, host]);
   useEffect(() => {
-    const f = (e) => e.key === "Escape" && onClose();
+    const f = (e) => { if (e.key === "Escape") big ? setBig(null) : onClose(); };
     addEventListener("keydown", f);
     return () => removeEventListener("keydown", f);
-  }, []);
+  }, [big]);
   const setHost = (h) => { setHostRaw(h); setWt(null); setErr(null); };
   const pick = (p) => { setFolder(p); setWt(null); setErr(null); const h = stored(NS_HOSTS, {})[p]; if (h && hosts.includes(h) && !isDown(h)) setHostRaw(h); };
-  const clear = () => { nsDraft.set(null); setPrompt(""); setFolder(ctxDir); setHostRaw(context?.host || home); setPreset(null); setWt(null); setErr(null); };
+  const clear = () => { nsDraft.set(null); setFiles([]); setPrompt(""); setFolder(ctxDir); setHostRaw(context?.host || home); setPreset(null); setWt(null); setErr(null); };
 
+  const withFiles = async (h) => {
+    const paths = [];
+    for (const f of files) paths.push(await uploadFile(`/api/uploads${hostQ(h, home)}`, f.file, f.name));
+    return [prompt.trim() && prompt, paths.map(quotePath).join("\n")].filter(Boolean).join("\n\n");
+  };
   const putAside = async () => {
     setBusy(true);
     setErr(null);
     try {
-      await api(`/api/backlog${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), title: name, prompt, worktree: wtOn } });
+      await api(`/api/backlog${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), title: name, prompt: await withFiles(host), worktree: wtOn } });
       if (!later) nsDraft.set(null);
+      setFiles([]);
       onClose();
       say("On the backlog.");
       loadBacklog();
@@ -6926,11 +6949,13 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
     setBusy(h);
     setErr(null);
     try {
+      const opening = await withFiles(h);
       const r = await startTrusting(h, () => preset
-        ? api(`/api/sessions${hostQ(preset.host, home)}`, { method: "POST", body: { preset: preset.name, name: name.trim(), prompt, engine } })
-        : api(`/api/sessions${hostQ(h, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt, worktree: wtOn, engine } }));
+        ? api(`/api/sessions${hostQ(preset.host, home)}`, { method: "POST", body: { preset: preset.name, name: name.trim(), prompt: opening, engine } })
+        : api(`/api/sessions${hostQ(h, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt: opening, worktree: wtOn, engine } }));
       if (!preset) store(NS_HOSTS, { ...stored(NS_HOSTS, {}), [dir]: h });
       nsDraft.set(null);
+      setFiles([]);
       onClose();
       say(`Started on ${h}.`);
       go(r.id);
@@ -6946,19 +6971,29 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
     ? html`<b>${target} is unreachable${off?.error ? `: ${off.error}` : ""}.</b> ${lastHosts[dir] === target ? `You usually start ${dir} there. ` : ""}${other ? `Start on ${other} instead, or come back when ${target} is up.` : ""}`
     : down.length ? `${down.map((p) => p.name).join(" and ")} ${down.length === 1 ? "is" : "are"} unreachable, so ${down.length === 1 ? "it" : "they"} can't be picked.`
     : lastHosts[dir] === host ? `Last time you used ${host} for this folder.` : "";
-  const draft = !later && !!(prompt.trim() || (folder && folder !== ctxDir));
+  const draft = !later && !!(prompt.trim() || files.length || (folder && folder !== ctxDir));
+  const hasFiles = (e) => e.dataTransfer?.types?.includes("Files");
   const engLine = eng ? `${eng.name}${eng.harness ? `, ${eng.harness}` : ""}${eng.model ? `, ${eng.model}` : ""}` : "Claude, as configured";
   const startLabel = busy ? `Starting on ${busy}…` : later ? "Add to backlog" : hostDown && other ? `Start on ${other} instead` : "Start";
   return html`
-    <div class="nsveil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
-      <form class="nsdlg" role="dialog" aria-modal="true" aria-label=${later ? "Put on the backlog" : "New session"} onSubmit=${submit}>
+    <div class="nsveil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}
+      onDragOver=${(e) => { if (hasFiles(e)) { e.preventDefault(); setDropping(true); } }}
+      onDragLeave=${(e) => { if (!e.relatedTarget) setDropping(false); }}
+      onDrop=${(e) => { if (hasFiles(e)) { e.preventDefault(); e.stopPropagation(); addFiles([...e.dataTransfer.files]); } setDropping(false); }}>
+      <form class="nsdlg" role="dialog" aria-modal="true" aria-label=${later ? "Put on the backlog" : "New session"} onSubmit=${submit}
+        onPaste=${(e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } }}>
         <div class="dh"><b>${later ? "Put on the backlog" : "New session"}</b><span class="r"><button type="button" class="kb" onClick=${onClose} aria-keyshortcuts="Escape">Close <kbd aria-hidden="true">esc</kbd></button></span></div>
         <div class="db">
           ${later && html`<div class="nsfld"><label class="nslb" for="ns-title">Title <span>what the backlog shows, in a few words</span></label>
             <input id="ns-title" class="nsin" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} ref=${touch ? null : focusOnMount} /></div>`}
           <div class="nsfld"><label class="nslb" for="ns-prompt">Prompt <span>${later ? "the session's first message when you start it" : "optional; without one you start in an empty session with the composer ready"}</span></label>
-            <textarea id="ns-prompt" class="nsprompt" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} onKeyDown=${submitOnEnter}
-              ref=${touch || later ? null : focusOnMount} placeholder="What should it do?"></textarea></div>
+            <div class="nsbox ${dropping ? "drop" : ""}">
+              <${AttChips} atts=${files} up=${() => !!busy} zoom=${setBig} remove=${(a) => setFiles(files.filter((x) => x.id !== a.id))} />
+              <textarea id="ns-prompt" class="nsprompt" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} onKeyDown=${submitOnEnter}
+                ref=${touch || later ? null : focusOnMount} placeholder="What should it do?"></textarea>
+              <div class="nsatt"><button type="button" class="kb" onClick=${() => pickFile.current?.click()}>Attach</button><span>${dropping ? "Drop to attach" : "or paste or drop images and files"}</span>
+                <input type="file" multiple hidden ref=${pickFile} onChange=${(e) => { addFiles([...e.target.files]); e.target.value = ""; }} /></div>
+            </div></div>
           <${FolderField} dirs=${dirs} folder=${dir} pick=${pick} host=${target} listHost=${listHost} live=${live} presets=${later ? [] : presets} preset=${preset} setPreset=${setPreset} home=${home}
             onStart=${() => start(hostDown && !later && other ? other : null)} />
           ${trust === "untrusted" && html`<div class="nstrust"><b>Claude Code hasn't been trusted in this folder yet.</b> Start shows you its prompt first, and starts the session if you accept.</div>`}
@@ -6985,10 +7020,11 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
           <span class="sum">${preset ? html`preset <b>${preset.name}</b>, ${tilde(preset.dir)}` : html`<b>${dir}</b> on ${hostDown && other ? other : host}${wtOn ? ", own worktree" : ""}`}</span>
           ${draft && html`<button type="button" class="btn clr" onClick=${clear} title="Empty the sheet; it keeps what you typed until you start or clear it">Clear</button>`}
           <button type="button" class="btn nsx" onClick=${onClose}>Cancel</button>
-          ${!later && !preset && html`<button type="button" class="btn" title="Put it on the backlog to start later" disabled=${!dir.trim() || !(name.trim() || prompt.trim()) || !!busy} onClick=${putAside}>Later</button>`}
-          <button class="btn primary go" disabled=${(!preset && !dir.trim()) || (later && !(name.trim() || prompt.trim())) || !!busy || (hostDown && !other && !later)}>${startLabel}${!busy && html` <kbd aria-hidden="true">enter</kbd>`}</button>
+          ${!later && !preset && html`<button type="button" class="btn" title="Put it on the backlog to start later" disabled=${!dir.trim() || !(name.trim() || prompt.trim() || files.length) || !!busy} onClick=${putAside}>Later</button>`}
+          <button class="btn primary go" disabled=${(!preset && !dir.trim()) || (later && !(name.trim() || prompt.trim() || files.length)) || !!busy || (hostDown && !other && !later)}>${startLabel}${!busy && html` <kbd aria-hidden="true">enter</kbd>`}</button>
         </div>
       </form>
+      ${big && html`<div class="lightbox" onClick=${() => setBig(null)}><img src=${big} alt="" /></div>`}
     </div>
   `;
 }
@@ -7237,7 +7273,6 @@ function Share({ live, hosts, home, say }) {
   const [err, setErr] = useState(null);
 
   const close = (id) => { APP?.clearShared?.(); id ? go(id) : go(null); };
-  const quote = (p) => (/\s/.test(p) ? `"${p}"` : p);
 
   const send = async (e) => {
     e.preventDefault();
@@ -7247,13 +7282,10 @@ function Share({ live, hosts, home, say }) {
       const paths = [];
       for (const f of files) {
         const blob = await (await fetch(f.url)).blob();
-        const fd = new FormData();
-        fd.append("file", blob, f.name);
-        const res = await fetch(to === "new" ? `/api/uploads${hostQ(host, home)}` : `/api/sessions/${target.sessionId}/upload`, { method: "POST", body: fd });
-        if (!res.ok) throw new Error(`Uploading ${f.name} failed: ${(await res.text()).trim() || res.statusText}`);
-        paths.push((await res.json()).path);
+        const url = to === "new" ? `/api/uploads${hostQ(host, home)}` : `/api/sessions/${target.sessionId}/upload`;
+        paths.push(await uploadFile(url, blob, f.name).catch((e) => { throw new Error(`Uploading ${f.name} failed: ${e.message}`); }));
       }
-      const prompt = [ask.trim(), text.trim(), paths.map(quote).join("\n")].filter(Boolean).join("\n\n");
+      const prompt = [ask.trim(), text.trim(), paths.map(quotePath).join("\n")].filter(Boolean).join("\n\n");
       if (to === "new") {
         const r = await startTrusting(host, () => api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), prompt, worktree: wtOn } }));
         say("Session started.");

@@ -59,7 +59,11 @@
 .nsprompt { display: block; width: 100%; min-height: 96px; resize: vertical; padding: var(--s2) var(--s3); border: 0; border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--strip); color: var(--ink); font-family: var(--sans); font-variation-settings: var(--v-you); font-size: var(--fs-title); line-height: 1.45; outline: none; }
 .nsin { display: block; width: 100%; height: 32px; padding: 0 var(--s3); border: 0; border-radius: var(--r-sm); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--strip); color: var(--ink); font-size: var(--fs-ui); outline: none; }
 .nsin.mono, .nsfl .mono { font-family: var(--mono); }
-.nsprompt:focus, .nsin:focus, .nseng select:focus { box-shadow: inset 0 0 0 2px var(--focus); }
+.nsin:focus, .nseng select:focus, .nsbox:focus-within, .nsbox.drop { box-shadow: inset 0 0 0 2px var(--focus); }
+.nsbox { border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--strip); }
+.nsbox .nsprompt { box-shadow: none; background: none; outline: none; }
+.nsbox .atts { margin: 0 var(--s1); padding-top: var(--s1); width: auto; }
+.nsatt { display: flex; align-items: center; gap: var(--s1); padding: 0 var(--s1) var(--s1); font-size: var(--fs-small); color: var(--faint); }
 .nsprompt::placeholder, .nsin::placeholder { color: var(--faint); }
 .nsfl { margin-top: 4px; box-shadow: inset 0 0 0 1px var(--line); background: var(--strip); max-height: 340px; overflow-y: auto; }
 .nsfl .fh { padding: 6px var(--s3) 2px; font-size: var(--fs-small); color: var(--faint); }
@@ -385,7 +389,7 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
   .bk-h .c-by, .bk-it .byc { display: none; }
 }
 @media (max-width: 899px) {
-  .scrpane .btn, .nsdlg .btn, .pal .btn, .scrpane .seg button, .nsseg button, .nsin, .nseng select, .filt { height: var(--hit); }
+  .scrpane .btn, .nsdlg .btn, .nsatt .kb, .pal .btn, .scrpane .seg button, .nsseg button, .nsin, .nseng select, .filt { height: var(--hit); }
   .scrpane .hd .l1 .r .btn { height: 36px; }
 
   .nsdlg { top: auto; bottom: 0; left: 0; right: 0; transform: none; width: auto; max-height: 94dvh; border-radius: 10px 10px 0 0; }
