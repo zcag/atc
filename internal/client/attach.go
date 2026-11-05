@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"time"
@@ -23,14 +24,14 @@ type control struct {
 
 const detachKey = 0x1a
 
-func (c *Client) dial(id string, out int) (*websocket.Conn, error) {
+func (c *Client) dial(path string, out int) (*websocket.Conn, error) {
 	cols, rows, err := term.GetSize(out)
 	if err != nil {
 		cols, rows = 120, 40
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	conn, _, err := websocket.Dial(ctx, fmt.Sprintf("%s/api/sessions/%s/attach?cols=%d&rows=%d", c.URL, id, cols, rows),
+	conn, _, err := websocket.Dial(ctx, fmt.Sprintf("%s%scols=%d&rows=%d", c.URL, path, cols, rows),
 		&websocket.DialOptions{HTTPClient: &http.Client{Transport: c.tr}, HTTPHeader: http.Header{"Authorization": {"Bearer " + c.Token}}})
 	if err != nil {
 		return nil, err
@@ -40,10 +41,22 @@ func (c *Client) dial(id string, out int) (*websocket.Conn, error) {
 }
 
 func (c *Client) Attach(id string) error {
-	in, out := int(os.Stdin.Fd()), int(os.Stdout.Fd())
-	conn, err := c.dial(id, out)
-	if err != nil {
+	if err := c.terminal("/api/sessions/" + id + "/attach?"); err != nil {
 		return fmt.Errorf("cannot attach to %s: %w", id, err)
+	}
+	return nil
+}
+
+// Trust puts Claude Code's own trust prompt for the folder in this terminal, and returns once it is answered.
+func (c *Client) Trust(u *Untrusted) error {
+	return c.terminal("/api/trust/term?" + url.Values{"dir": {u.Dir}, "host": {u.Host}}.Encode() + "&")
+}
+
+func (c *Client) terminal(path string) error {
+	in, out := int(os.Stdin.Fd()), int(os.Stdout.Fd())
+	conn, err := c.dial(path, out)
+	if err != nil {
+		return err
 	}
 	old, err := term.MakeRaw(in)
 	if err != nil {
@@ -89,13 +102,13 @@ func (c *Client) Attach(id string) error {
 			return nil
 		}
 		os.Stdout.WriteString("\r\n\x1b[2m[atc] connection lost, reconnecting… (Ctrl+Z leaves; the session keeps running)\x1b[0m\r\n")
-		if conn = c.redial(id, out, keys); conn == nil {
+		if conn = c.redial(path, out, keys); conn == nil {
 			return nil
 		}
 	}
 }
 
-func (c *Client) redial(id string, out int, keys <-chan []byte) *websocket.Conn {
+func (c *Client) redial(path string, out int, keys <-chan []byte) *websocket.Conn {
 	deadline := time.Now().Add(5 * time.Minute)
 	for wait := time.Second; time.Now().Before(deadline); wait = min(wait*2, 10*time.Second) {
 		select {
@@ -104,7 +117,7 @@ func (c *Client) redial(id string, out int, keys <-chan []byte) *websocket.Conn 
 				return nil
 			}
 		case <-time.After(wait):
-			if conn, err := c.dial(id, out); err == nil {
+			if conn, err := c.dial(path, out); err == nil {
 				return conn
 			}
 		}

@@ -37,7 +37,13 @@ type CLI struct {
 
 var shortID = regexp.MustCompile(`\b[0-9a-f]{8}\b`)
 
-var printing sync.Map
+var hidden sync.Map
+
+// Hide keeps a Claude process of atc's own out of the session list.
+func Hide(pid int) func() {
+	hidden.Store(pid, true)
+	return func() { hidden.Delete(pid) }
+}
 
 func (c CLI) run(ctx context.Context, dir string, args ...string) (string, error) {
 	argv := append([]string{c.Bin}, args...)
@@ -51,7 +57,7 @@ func (c CLI) run(ctx context.Context, dir string, args ...string) (string, error
 	err := cmd.Run()
 	s := strings.TrimSpace(out.String())
 	if strings.Contains(s, "Workspace not trusted") {
-		return s, ErrUntrusted
+		return s, &Untrusted{Dir: dir, Home: strings.Contains(s, "home directory")}
 	}
 	if err != nil {
 		return s, fmt.Errorf("claude %s: %w: %s", args[0], err, s)
@@ -66,7 +72,7 @@ func (c CLI) Agents(ctx context.Context) ([]Agent, error) {
 	}
 	var as []Agent
 	err = json.Unmarshal([]byte(out), &as)
-	return slices.DeleteFunc(as, func(a Agent) bool { _, ok := printing.Load(a.PID); return ok }), err
+	return slices.DeleteFunc(as, func(a Agent) bool { _, ok := hidden.Load(a.PID); return ok }), err
 }
 
 func (c CLI) Start(ctx context.Context, dir, name, prompt string, extra ...string) (string, error) {
@@ -113,8 +119,7 @@ func (c CLI) Print(ctx context.Context, model, system, input string) (string, er
 	if err := cmd.Start(); err != nil {
 		return "", fmt.Errorf("claude -p: %v", err)
 	}
-	printing.Store(cmd.Process.Pid, true)
-	defer printing.Delete(cmd.Process.Pid)
+	defer Hide(cmd.Process.Pid)()
 	if err := cmd.Wait(); err != nil {
 		return "", fmt.Errorf("claude -p: %v: %s", err, strings.TrimSpace(errOut.String()+out.String()))
 	}

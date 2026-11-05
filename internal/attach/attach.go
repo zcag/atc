@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -123,6 +122,16 @@ func size(q string, def uint16) uint16 {
 }
 
 func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
+	h.serve(w, r, id, h.command(id), nil)
+}
+
+// Run gives a browser a terminal on cmd instead of on a session; watch runs alongside it until the viewer is gone.
+func (h *Hub) Run(w http.ResponseWriter, r *http.Request, id string, cmd *exec.Cmd, watch func(context.Context, *exec.Cmd)) {
+	cmd.Env = termEnv()
+	h.serve(w, r, id, cmd, watch)
+}
+
+func (h *Hub) serve(w http.ResponseWriter, r *http.Request, id string, cmd *exec.Cmd, watch func(context.Context, *exec.Cmd)) {
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return
@@ -137,7 +146,6 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 	h.seq++
 	v.n = h.seq
 	h.mu.Unlock()
-	cmd := h.command(id)
 	v.pty, err = pty.StartWithSize(cmd, &pty.Winsize{Cols: v.cols, Rows: v.rows})
 	if err != nil {
 		v.logf("attach failed: %v", err)
@@ -146,6 +154,9 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 	}
 	v.logf("connected %dx%d hidden=%v reconnect=%v", v.cols, v.rows, v.hidden, v.rejoin)
 	h.join(id, v)
+	if watch != nil {
+		go watch(ctx, cmd)
+	}
 	var sent atomic.Int64
 	why := "closed by the browser"
 	defer func() {
@@ -178,7 +189,7 @@ func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
 			code = ee.ExitCode()
 		}
 		if ctx.Err() == nil {
-			v.logf("%s %s exited (%d)", filepath.Base(cmd.Args[0]), cmd.Args[1], code)
+			v.logf("%s exited (%d)", strings.Join(cmd.Args, " "), code)
 		}
 		v.control(ctx, Control{Type: "exit", Code: code})
 		conn.Close(websocket.StatusNormalClosure, "attach exited")
@@ -263,9 +274,11 @@ func (h *Hub) command(id string) *exec.Cmd {
 	if cmd == nil {
 		cmd = exec.Command(h.Bin, "attach", id)
 	}
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
+	cmd.Env = termEnv()
 	return cmd
 }
+
+func termEnv() []string { return append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor") }
 
 func (h *Hub) Viewing(id string) bool {
 	h.mu.Lock()

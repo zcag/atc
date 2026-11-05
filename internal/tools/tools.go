@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"slices"
@@ -678,6 +679,10 @@ func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*m
 
 func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (*mcp.CallToolResult, done, error) {
 	id, _, err := t.c.Launch(ctx, client.Launch{Host: in.Host, Dir: in.Dir, Name: in.Name, Preset: in.Preset, Prompt: in.Prompt, Worktree: in.Worktree, Report: in.Report, Approved: in.Approved})
+	var u *client.Untrusted
+	if errors.As(err, &u) {
+		return nil, done{}, fmt.Errorf("%s Only the user can accept this, it is a security decision: tell them, and start it once they have. Do not get around it by editing Claude Code's config or starting it another way", u.Msg)
+	}
 	if err != nil {
 		return nil, done{}, err
 	}

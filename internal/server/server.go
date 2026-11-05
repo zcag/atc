@@ -244,6 +244,8 @@ func (s *Server) Handler() http.Handler {
 		s.nameViewer(r)
 		s.Term.Serve(w, r, r.PathValue("id"))
 	})
+	mux.HandleFunc("GET /api/trust", s.trustState)
+	mux.HandleFunc("GET /api/trust/term", s.trustTerm)
 	mux.HandleFunc("POST /api/call/about", s.callAbout)
 	mux.HandleFunc("POST /api/call/to", s.callTo)
 	mux.HandleFunc("GET /api/call/voices", s.callVoices)
@@ -713,7 +715,7 @@ func (s *Server) route(next http.Handler) http.Handler {
 			attachID = parts[3]
 			s.nameViewer(r)
 		}
-		if len(parts) == 6 && parts[4] == "asks" {
+		if len(parts) == 6 && parts[4] == "asks" || r.URL.Path == "/api/trust/term" {
 			s.nameViewer(r)
 		}
 		s.fleet.proxy(w, r, p, attachID)
@@ -752,13 +754,7 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 		}
 		req.Dir, req.Name, req.Worktree = cmp.Or(req.Dir, p.Dir), cmp.Or(req.Name, p.Name), req.Worktree || p.Worktree
 	}
-	dir, err := expand(req.Dir)
-	if err == nil {
-		var st os.FileInfo
-		if st, err = os.Stat(dir); err == nil && !st.IsDir() {
-			err = fmt.Errorf("%s is not a directory", dir)
-		}
-	}
+	dir, err := folderAt(req.Dir)
 	if err != nil {
 		return "", badRequest{err}
 	}
@@ -1609,6 +1605,18 @@ const appPage = `<!doctype html><meta charset="utf-8"><meta name="viewport" cont
 <h1>atc for Android</h1><p>Version %s.</p><p><a class="b" href="atc.apk">Download the app</a></p>
 <p>Open the downloaded file to install or update it. Android asks once to allow installs from your browser.</p>`
 
+func folderAt(p string) (string, error) {
+	dir, err := expand(p)
+	if err != nil {
+		return "", err
+	}
+	st, err := os.Stat(dir)
+	if err == nil && !st.IsDir() {
+		err = fmt.Errorf("%s is not a directory", dir)
+	}
+	return dir, err
+}
+
 func expand(p string) (string, error) {
 	if p == "" {
 		return "", errors.New("dir is required")
@@ -1630,8 +1638,13 @@ func reply(w http.ResponseWriter, v any) {
 
 func fail(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
-	if errors.Is(err, claude.ErrUntrusted) {
-		code = http.StatusConflict
+	var u *claude.Untrusted
+	if errors.As(err, &u) {
+		code = http.StatusBadRequest
+		if !u.Home {
+			code = http.StatusConflict
+			w.Header().Set(claude.UntrustedHeader, url.PathEscape(u.Dir))
+		}
 	}
 	http.Error(w, err.Error(), code)
 }

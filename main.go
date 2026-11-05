@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -486,7 +487,16 @@ func newSession(args []string) error {
 		}
 		dir = cmp.Or(dir, tildePWD())
 	}
-	id, dir, err := client.Load().Launch(context.Background(), client.Launch{Host: *host, Dir: dir, Name: *name, Preset: *preset, Prompt: strings.Join(rest, " "), Report: *report})
+	c, l := client.Load(), client.Launch{Host: *host, Dir: dir, Name: *name, Preset: *preset, Prompt: strings.Join(rest, " "), Report: *report}
+	id, dir, err := c.Launch(context.Background(), l)
+	var u *client.Untrusted
+	if errors.As(err, &u) && term.IsTerminal(int(os.Stdin.Fd())) {
+		fmt.Printf("Claude Code has not been trusted in %s. This is its own prompt; a no starts nothing.\n", u.Dir)
+		if err := c.Trust(u); err != nil {
+			return err
+		}
+		id, dir, err = c.Launch(context.Background(), l)
+	}
 	if err != nil {
 		return err
 	}

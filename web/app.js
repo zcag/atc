@@ -30,7 +30,10 @@ async function api(path, opts = {}) {
     body: opts.body && JSON.stringify(opts.body),
   });
   if (res.status === 401) throw Object.assign(new Error("Log in to continue."), { auth: true });
-  if (!res.ok) throw Object.assign(new Error((await res.text()).trim() || res.statusText), { status: res.status });
+  if (!res.ok) {
+    const dir = res.headers.get("X-Atc-Untrusted-Dir");
+    throw Object.assign(new Error((await res.text()).trim() || res.statusText), { status: res.status, untrusted: dir && decodeURIComponent(dir) });
+  }
   return res.json();
 }
 
@@ -2441,7 +2444,7 @@ function dock(s) {
   return d;
 }
 
-function makeDock(id) {
+function makeDock(id, path = `/api/sessions/${id}/attach?`) {
   const el = document.createElement("div");
   el.className = "termhost";
   shelf().append(el);
@@ -2500,7 +2503,7 @@ function makeDock(id) {
   const connect = () => {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
     const q = `cols=${term.cols}&rows=${term.rows}&device=${encodeURIComponent(DEVICE)}${d.box && !document.hidden ? "" : "&hidden=1"}${tries > 0 ? "&reconnect=1" : ""}`;
-    ws = new WebSocket(`${proto}//${location.host}/api/sessions/${id}/attach?${q}`);
+    ws = new WebSocket(`${proto}//${location.host}${path}${q}`);
     ws.binaryType = "arraybuffer";
     const started = Date.now();
     ws.onmessage = (e) => {
@@ -2810,7 +2813,83 @@ function Dialogs() {
     return () => { ASK = null; };
   }, []);
   const d = queue[0];
-  return d ? html`<${Dialog} key=${d.id} d=${d} onGone=${() => setQueue((q) => q.slice(1))} />` : null;
+  return d ? html`<${d.trust ? TrustDialog : Dialog} key=${d.id} d=${d} onGone=${() => setQueue((q) => q.slice(1))} />` : null;
+}
+
+const leaveDialog = (id, finish) => {
+  let t;
+  const left = () => { removeEventListener("popstate", left); clearTimeout(t); finish(); };
+  if (history.state?.atcDialog === id) {
+    addEventListener("popstate", left);
+    t = setTimeout(left, 400);
+    history.back();
+  } else left();
+};
+
+const TRUST_KEYS = [["↑", "\x1b[A"], ["↓", "\x1b[B"], ["Enter", "\r"]];
+
+function TrustDialog({ d: { id, trust: { dir, host }, done }, onGone }) {
+  const box = useRef(), term = useRef(), ended = useRef(false);
+  const [lost, setLost] = useState(false);
+  const end = (answered) => {
+    if (ended.current) return;
+    ended.current = true;
+    leaveDialog(id, () => { onGone(); done(answered); });
+  };
+  useEffect(() => {
+    const q = new URLSearchParams({ dir, id: Math.random().toString(36).slice(2, 4), ...(host ? { host } : {}) });
+    const t = term.current = makeDock(`trust-${q.get("id")}`, `/api/trust/term?${q}&`);
+    t.ui = ({ cover }) => { if (cover === "detached") end(true); else setLost(cover === "lost"); };
+    t.show(box.current);
+    if (!touch) t.focus();
+    history.pushState({ ...history.state, atcDialog: id }, "");
+    const back = () => history.state?.atcDialog !== id && end(false);
+    const esc = (e) => {
+      if (e.key !== "Escape" || box.current?.contains(e.target)) return;
+      e.stopImmediatePropagation();
+      end(false);
+    };
+    addEventListener("popstate", back);
+    addEventListener("keydown", esc, true);
+    return () => {
+      removeEventListener("popstate", back);
+      removeEventListener("keydown", esc, true);
+      t.dispose();
+    };
+  }, []);
+  const key = (seq) => { term.current?.send(seq); if (!touch) term.current?.focus(); };
+  return html`
+    <div class="nsveil trustveil" onKeyDown=${(e) => e.stopPropagation()}>
+      <div class="nsdlg" role="dialog" aria-modal="true" aria-label="Trust this folder?">
+        <div class="dh"><b>Trust this folder?</b></div>
+        <div class="db">
+          <p class="trustwhy">Claude Code asks this once for each folder, and you have to answer it yourself. Below is its own prompt for <b class="mono">${tilde(dir)}</b>${host ? ` on ${host}` : ""}, not atc's. A yes lets its sessions read, edit and run what is in this folder and everything under it, from now on. The session you asked for starts right after, with its first message.</p>
+          <div class="stage trustterm" style=${`--term-bg: ${termTheme().background}`}><div class="term" ref=${box}></div></div>
+          ${lost && html`<div class="nserr" role="alert"><b>Lost the link to this prompt.</b> Nothing was accepted by this.</div>`}
+        </div>
+        <div class="df">
+          <span class="trustkeys" onPointerDown=${(e) => e.preventDefault()}>${TRUST_KEYS.map(([label, seq]) => html`<button type="button" class="btn" onClick=${() => key(seq)}>${label}</button>`)}</span>
+          <span class="sum"></span>
+          <button type="button" class="btn" onClick=${() => end(false)}>Not now</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+const untrustedBack = (dir) => `Claude Code doesn't trust ${tilde(dir)}, so nothing started.`;
+
+async function startTrusting(host, start) {
+  try {
+    return await start();
+  } catch (e) {
+    if (!e.untrusted) throw e;
+    if (!(await ask({ trust: { dir: e.untrusted, host } }))) throw new Error(untrustedBack(e.untrusted));
+    try {
+      return await start();
+    } catch (again) {
+      throw again.untrusted ? new Error(untrustedBack(again.untrusted)) : again;
+    }
+  }
 }
 
 const FOCUSABLE = "button:not(:disabled), input:not(:disabled), textarea, select, a[href], [tabindex]:not([tabindex='-1'])";
@@ -2825,13 +2904,7 @@ function Dialog({ d, onGone }) {
   const end = (r) => {
     if (ended.current) return;
     ended.current = true;
-    const finish = () => { removeEventListener("popstate", finish); clearTimeout(t); onGone(); done(r); };
-    let t;
-    if (history.state?.atcDialog === id) {
-      addEventListener("popstate", finish);
-      t = setTimeout(finish, 400);
-      history.back();
-    } else finish();
+    leaveDialog(id, () => { onGone(); done(r); });
   };
   const cancel = () => !busyNow.current && end(null);
   useEffect(() => {
@@ -4530,7 +4603,7 @@ function BacklogPage({ live, say, onAdd, only }) {
     } catch (e) { say(`Not ${verb.toLowerCase()}: ${e.message}`); }
   };
   const remove = async (it) => { try { await call(it, "DELETE"); load(); say(`Deleted: ${itemTitle(it)}`); } catch (e) { say(e.message); } };
-  const start = async (it) => { try { go((await call(it, "POST", undefined, "/start")).id); say(it.aside ? "Resumed." : "Session started."); load(); } catch (e) { say(e.message); } };
+  const start = async (it) => { try { go((await startTrusting(it.host, () => call(it, "POST", undefined, "/start"))).id); say(it.aside ? "Resumed." : "Session started."); load(); } catch (e) { say(e.message); } };
   const run = (it) => itemRun(it, live);
   const primary = (it) => {
     const st = itemStage(it), r = run(it);
@@ -6482,7 +6555,7 @@ function rankFolder(q, path) {
   return hits.length === q.length ? { r: 1, hits } : null;
 }
 
-function FolderField({ dirs, folder, pick, host, listHost = host, live, presets = [], preset, setPreset, onStart, home }) {
+function FolderField({ dirs, folder, pick, host, listHost = host, live, presets = [], preset, setPreset = () => {}, onStart, home }) {
   const [q, setQ] = useState("");
   const [hi, setHi] = useState(-1);
   const [more, setMore] = useState(false);
@@ -6565,13 +6638,26 @@ function WorktreeSwitch({ on, setOn, why }) {
 const workingIn = (live, dir, host, home) => (live || []).filter((s) => s.kind !== "hub" && s.state === "working" && (s.host || home) === host && tilde(baseDir(s.cwd)) === dir);
 const wtWhy = (n, dir, host) => n ? html`<b>On because ${plural(n, "session")} ${n === 1 ? "is" : "are"} working in ${dir} on ${host}.</b>` : "Nothing else is working in this folder.";
 
-const untrusted = "Claude Code hasn't been trusted in this folder yet. Open Claude there once and accept the prompt, then try again.";
 const submitOnEnter = (e) => {
   const mod = e.metaKey || e.ctrlKey;
   if (e.key !== "Enter" || e.isComposing || (!mod && (touch || e.shiftKey))) return;
   e.preventDefault();
   e.target.form?.requestSubmit();
 };
+
+const intoView = (el) => el?.scrollIntoView({ block: "nearest" });
+
+function useTrustState(dir, host) {
+  const [state, setState] = useState("");
+  useEffect(() => {
+    setState("");
+    if (!dir) return;
+    let gone = false;
+    const t = setTimeout(() => api(`/api/trust?${new URLSearchParams({ dir, host })}`).then((r) => gone || setState(r.state), () => {}), 200);
+    return () => { gone = true; clearTimeout(t); };
+  }, [dir, host]);
+  return state;
+}
 
 function NewSession({ onClose, say, hosts, down = [], home, live, start: from, context }) {
   const later = !!from?.later;
@@ -6617,6 +6703,7 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
   const harness = eng?.harness;
   const git = !!dirs.find((d) => tilde(d.path) === dir)?.git;
   const busyHere = workingIn(live, dir, target, home);
+  const trust = useTrustState(later || harness ? "" : preset ? preset.dir : dir.trim(), target);
   const wtOn = git && !harness && !preset && (wt ?? busyHere.length > 0);
   const hostDown = isDown(target);
   const other = up.find((h) => h !== target);
@@ -6656,16 +6743,16 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
     setBusy(h);
     setErr(null);
     try {
-      const r = preset
-        ? await api(`/api/sessions${hostQ(preset.host, home)}`, { method: "POST", body: { preset: preset.name, name: name.trim(), prompt, engine } })
-        : await api(`/api/sessions${hostQ(h, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt, worktree: wtOn, engine } });
+      const r = await startTrusting(h, () => preset
+        ? api(`/api/sessions${hostQ(preset.host, home)}`, { method: "POST", body: { preset: preset.name, name: name.trim(), prompt, engine } })
+        : api(`/api/sessions${hostQ(h, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt, worktree: wtOn, engine } }));
       if (!preset) store(NS_HOSTS, { ...stored(NS_HOSTS, {}), [dir]: h });
       nsDraft.set(null);
       onClose();
       say(`Started on ${h}.`);
       go(r.id);
     } catch (e) {
-      setErr(e.status === 409 ? untrusted : e.message);
+      setErr(e.message);
     }
     setBusy(false);
   };
@@ -6691,6 +6778,8 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
               ref=${touch || later ? null : focusOnMount} placeholder="What should it do?"></textarea></div>
           <${FolderField} dirs=${dirs} folder=${dir} pick=${pick} host=${target} listHost=${listHost} live=${live} presets=${later ? [] : presets} preset=${preset} setPreset=${setPreset} home=${home}
             onStart=${() => start(hostDown && !later && other ? other : null)} />
+          ${trust === "untrusted" && html`<div class="nstrust"><b>Claude Code hasn't been trusted in this folder yet.</b> Start shows you its prompt first, and starts the session if you accept.</div>`}
+          ${trust === "home" && html`<div class="nstrust"><b>Claude Code trusts the home folder one session at a time,</b> so a background session can't start here. Pick a project folder.</div>`}
           <div class="nsrow2">
             ${!preset && hosts.length > 1 && html`<div class="nsfld"><div class="nslb" id="ns-hl">Host</div><${HostPick} hosts=${hosts} down=${down} host=${host} setHost=${setHost} />
               ${why && html`<div class="why">${why}</div>`}</div>`}
@@ -6707,7 +6796,7 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
                 ? html`<input class="nsin nsname" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} placeholder=${preset ? preset.name : "Session name"} aria-label="Session name" ref=${focusOnMount} />`
                 : html`<button type="button" class="kb" title=${`Without one, ${harness || "Claude"} titles the session from what you ask`} onClick=${() => setNaming(true)}>Name it</button>`}
             </div></div>`}
-          ${err && html`<div class="nserr" role="alert"><b>Couldn't ${later ? "add it" : `start on ${preset ? preset.host || home : host}`}.</b> ${err}</div>`}
+          ${err && html`<div class="nserr" role="alert" ref=${intoView}><b>Couldn't ${later ? "add it" : `start on ${preset ? preset.host || home : host}`}.</b> ${err}</div>`}
         </div>
         <div class="df">
           <span class="sum">${preset ? html`preset <b>${preset.name}</b>, ${tilde(preset.dir)}` : html`<b>${dir}</b> on ${hostDown && other ? other : host}${wtOn ? ", own worktree" : ""}`}</span>
@@ -6981,7 +7070,7 @@ function Share({ live, hosts, home, say }) {
       }
       const prompt = [ask.trim(), text.trim(), paths.map(quote).join("\n")].filter(Boolean).join("\n\n");
       if (to === "new") {
-        const r = await api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), prompt, worktree: wtOn } });
+        const r = await startTrusting(host, () => api(`/api/sessions${hostQ(host, home)}`, { method: "POST", body: { dir: dir.trim(), prompt, worktree: wtOn } }));
         say("Session started.");
         close(r.id);
       } else {
@@ -6990,7 +7079,7 @@ function Share({ live, hosts, home, say }) {
         close(target.id);
       }
     } catch (e) {
-      setErr(e.status === 409 ? untrusted : e.message);
+      setErr(e.message);
     }
     setBusy(false);
   };

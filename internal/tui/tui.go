@@ -392,9 +392,6 @@ func (m *model) setErr(err error) {
 		return
 	}
 	m.err = err.Error()
-	if strings.Contains(m.err, "not trusted") {
-		m.err += " (run claude there once to trust it)"
-	}
 }
 
 func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {

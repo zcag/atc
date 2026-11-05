@@ -206,7 +206,11 @@ account and no key of its own.
 - It runs the unmodified `claude` binary as the signed-in user: `claude --bg`, `claude attach`,
   `claude agents`, and `claude -p` for summaries.
 - It reads what Claude Code keeps on disk for that user: conversation transcripts, its list of
-  background sessions.
+  background sessions, and which folders it trusts.
+- It never answers Claude Code's trust prompt or records a yes itself. For a folder not yet trusted,
+  atc runs plain `claude` there in its terminal so you answer that prompt yourself. Claude Code writes
+  the yes to its own `~/.claude.json`; atc only reads that file, to stop the prompt and start your
+  session.
 - It reads your plan limits from Claude Code's status line. `atc setup` sets that up
   (`atc limits -tap`), or tells you the line to add if you have your own status line.
 - It changes Claude Code's own files in two places: `atc setup`, when you say yes, sets the status
