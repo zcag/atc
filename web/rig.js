@@ -440,11 +440,17 @@ export class Behaviour {
   }
 }
 
+/** Waits for the load event, not decode(), which rejects good images when many large ones fill the decode cache at once. */
+export const loadImage = (src) => new Promise((done, fail) => {
+  const img = new Image();
+  img.onload = () => done(img);
+  img.onerror = () => fail(new Error(`can't load ${src}`));
+  img.src = src;
+});
+
 /** A room's picture and settings: <name>.json beside the picture, or a look worked out from the picture alone. */
 async function roomFile(url) {
-  const img = new Image();
-  img.src = url;
-  await img.decode();
+  const img = await loadImage(url);
   const spec = await fetch(url.replace(/\.[^./?]+$/, ".json")).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   const small = document.createElement("canvas");
   small.width = 16;
@@ -531,10 +537,7 @@ export async function rig(canvas, base, now, opts = {}) {
   }
   const images = {};
   await Promise.all([...new Set([...R.parts.map((p) => p.tex), ...(R.flow ? [R.flow.tex] : [])])].map(async (f) => {
-    const img = new Image();
-    img.src = base + f;
-    await img.decode();
-    images[f] = img;
+    images[f] = await loadImage(base + f);
   }));
   const plate = R.parts.find((p) => p.name === "plate")?.tex;
   const picked = opts.background && plate && await roomFile(opts.background).catch((e) => console.warn("persona: room", e));

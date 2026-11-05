@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pose, Behaviour, Director, Swap, daylight } from "./rig.js";
+import { pose, Behaviour, Director, Swap, daylight, loadImage } from "./rig.js";
 
 const rig = {
   boneOrder: ["root", "head"],
@@ -198,4 +198,17 @@ test("a lamp-lit room counts as none, a sunny one as full daylight", () => {
   assert.equal(daylight(.3), 0);
   assert.equal(daylight(.7), 1);
   assert.ok(daylight(.45) > 0 && daylight(.45) < 1);
+});
+
+test("an image counts as loaded when it loads, even if decode() would reject it, and fails only when it can't load", async () => {
+  globalThis.Image = class {
+    decode() { return Promise.reject(new Error("decode cache full")); }
+    set src(url) { setTimeout(() => (url.includes("bad") ? this.onerror() : this.onload())); }
+  };
+  try {
+    assert.ok(await loadImage("head.webp"));
+    await assert.rejects(loadImage("bad.webp"), /bad\.webp/);
+  } finally {
+    delete globalThis.Image;
+  }
 });

@@ -6,7 +6,7 @@
 // voices' loudness. The phone's call screen runs this same file in a WebView (persona.html).
 
 import { PI, clamp, smooth, lerp, rand, chance, pick, Spring, Saccade, Pulses, Drawing, wander } from "./motion.js";
-import { rig } from "./rig.js";
+import { rig, loadImage } from "./rig.js";
 import { minimal } from "./minimal.js";
 
 /** The behaviour: from the call's state and both voices' loudness to the face's weights and the head's pose. */
@@ -343,9 +343,7 @@ export async function illustration(canvas, base, now, opts = {}) {
   gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
   const files = [["plate.jpg", "plate"], ["char.png", "chr"], ["face.jpg", "face"], ["faceflow.png", "fflow"], ["facemask.jpg", "fmask"], ["head.png", "head"]];
   await Promise.all(files.map(async ([file, name], unit) => {
-    const img = new Image();
-    img.src = base + file;
-    await img.decode();
+    const img = await loadImage(base + file);
     gl.activeTexture(gl.TEXTURE0 + unit);
     gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
