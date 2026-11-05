@@ -22,6 +22,17 @@ header where it has one, and from the npm package otherwise.
 
 `web/themes/` uses the colours of Catppuccin (Frappé), Rosé Pine (Dawn) and Nord. No code from them.
 
+## Downloaded for Turkish calls
+
+`atc voice install` fetches these when calls speak Turkish; they aren't in the binary. The voice is synthetic: a designed
+voice, not a real person's or a recording of one. Their licence asks that you say it is AI-generated when you share what it makes.
+
+| What | Version | Licence | Credit |
+|---|---|---|---|
+| Ahenk Cep weights (`ozgurguler/ahenk-cep-tr`) | `345c4cb` | CC BY 4.0 | Ahenk (https://github.com/ozguradmin/ahenk-turkish-tts), CC BY 4.0. Alania Turkish Synthetic Speech by PatientDesk AI and Alania Turkish Domain Text by PatientDesk AI (CC BY 4.0) |
+| `ahenk_cep.py`, trnorm | `345c4cb`, `8981df9` | Apache-2.0 | Özgür Güler |
+| ema-lightning | 1.1.2 | Apache-2.0 | canberkkkkkk/ema-lightning |
+
 ## Compiled into the binary (Go)
 
 Every module `go list -deps ./...` reaches, at the versions in `go.mod`.

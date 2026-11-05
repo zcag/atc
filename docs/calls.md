@@ -4,7 +4,7 @@ Calls are an add-on: `atc voice install [--lang en] [--also tr] [--engine pocket
 
 On CPU a call works on 2 cores (first audio about 2.5 to 3.2 s after you stop, most of it Claude's first token; the voice breaks up on 1 core). Streaming speech recognition is the weakest part: it reads some words wrong, which the assistant then has to guess at.
 
-Voice quality depends on the engine. The default, `pocket-en`, runs on CPU with preset voices you choose from in Settings, Persons, or with `--voice`, and can sound less natural. Higgs, on a GPU with about 5 GB of memory, sounds much better, and clones a voice from a short clip and its transcript. It is set up by hand (`voice/README.md` lists its settings) and its licence is research and non-commercial, so check those terms before using it for work.
+Voice quality depends on the engine. The default, `pocket-en`, runs on CPU with preset voices you choose from in Settings, Persons, or with `--voice`, and can sound less natural. Turkish gets `pocket` and [Ahenk Cep](https://github.com/ozguradmin/ahenk-turkish-tts), also on CPU, which has one designed voice, not a real person's. Higgs, on a GPU with about 5 GB of memory, sounds much better, and clones a voice from a short clip and its transcript. It is set up by hand (`voice/README.md` lists its settings) and its licence is research and non-commercial, so check those terms before using it for work.
 
 atc has no voice mode in a session: to talk, call the assistant. **Call about this** in a session's
 menu or the palette tells it which session you mean. On the call, the assistant can hand the line to [an agent that

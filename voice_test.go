@@ -119,7 +119,7 @@ func TestVoicePlists(t *testing.T) {
 }
 
 func TestEnginesPerMachine(t *testing.T) {
-	if defaultEngine("en", "darwin", "arm64") != "pocket-en" || defaultEngine("en", "linux", "amd64") != "pocket-en" || defaultEngine("en", "darwin", "amd64") != "piper" || defaultEngine("tr", "linux", "amd64") != "pocket" {
+	if defaultEngine("en", "darwin", "arm64") != "pocket-en" || defaultEngine("en", "linux", "amd64") != "pocket-en" || defaultEngine("en", "darwin", "amd64") != "piper" || defaultEngine("tr", "linux", "amd64") != "pocket,ahenk" {
 		t.Fatal("default engine")
 	}
 	for _, c := range []struct {

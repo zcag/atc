@@ -23,6 +23,7 @@ ENGINES = {
     "piper": {"pip": ["piper-tts"], "files": {
         "piper/en_US-amy-medium.onnx": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx",
         "piper/en_US-amy-medium.onnx.json": "https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/amy/medium/en_US-amy-medium.onnx.json"}},
+    "ahenk": {"pip": TORCH + ["ema-lightning==1.1.2", "trnorm @ https://github.com/ozguradmin/ahenk-turkish-tts/archive/8981df9354a6dc95a3a2b4730b7fbff196dda219.tar.gz"]},
     "higgs": {},
     "remote": {},
 }

@@ -31,7 +31,7 @@ atc app ── atc (/api/call/line) ── call.py :8807 ── talk.py ── a
 | `TALK_ANSWER` | empty | numbers answered on the device line as the user; the app line always is |
 | `TALK_STT` | empty | a Whisper endpoint for the second reading of short turns; empty skips that reading |
 | `TALK_ARGS`, `TTS_ARGS` | empty | extra flags for `talk.py`, `ttsd.py` |
-| `TTS_ENGINES`, `TTS_PORT`, `TTS_VENV`, `TTS_HF_HOME` | each language's default (`pocket-en`, `pocket` for Turkish), `8812`, under the data dir, `~/.cache/atc/voice/hf` | ttsd; atc's voice picker (`ATC_CALL_VOICES`) is on the same port |
+| `TTS_ENGINES`, `TTS_PORT`, `TTS_VENV`, `TTS_HF_HOME` | each language's default (`pocket-en`, `pocket,ahenk` for Turkish), `8812`, under the data dir, `~/.cache/atc/voice/hf` | ttsd; atc's voice picker (`ATC_CALL_VOICES`) is on the same port |
 | `TTS_REMOTE_URL`, `TTS_REMOTE_MODEL`, `TTS_REMOTE_VOICE`, `TTS_REMOTE_RATE`, `TTS_REMOTE_KEY` | none, `tts-1`, the server's first, `24000`, none | the `remote` engine, your own server (`--tts-url`). The rate has to be what the server sends: raw PCM doesn't say, and a wrong one plays at the wrong pitch. Keep this file private if it holds a key |
 | `ATC_VOICE_DIR` | `~/.local/share/atc/voice` | where the files run from |
 | `ATC_VOICE_UNITS` | `delta-call delta-tts delta-talk-app` | what deploy.sh installs and restarts; add `delta-talk` for a phone, `delta-higgs` for Higgs |
@@ -50,7 +50,9 @@ change its line in `voices`:
 ```
 
 A value is the engine's own voice name, or a file in `voices/` beside it, which `atc voice install` writes with the rest
-of the stack. An engine with no entry speaks with its default. pocket-en takes a voice exported to `.safetensors` on any
+of the stack. A voice can choose its engine: June lists `ahenk` and not `pocket`, so she speaks Turkish on Ahenk Cep even
+though the language's engine is `pocket`. With no entry for any engine that is loaded and speaks the language, it is the
+default voice of the language's engine. pocket-en takes a voice exported to `.safetensors` on any
 machine, and a recording only where Kyutai's gated weights are available, so ship the export (without those weights a
 recording falls back to `alba`, with a line in the log). pocket takes a recording. A file in `voices/` is compiled into the
 binary, so keep it small.

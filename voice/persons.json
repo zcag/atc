@@ -6,8 +6,8 @@
     {"id": "tom", "name": "Tom", "character": "lanky", "background": "fireside.jpg", "voices": {"en": "tom", "tr": "tom"}}
   ],
   "voices": {
-    "june": {"pocket-en": "vera", "pocket": "female_2", "kokoro": "af_heart"},
-    "arthur": {"pocket-en": "george", "pocket": "male_1", "kokoro": "bm_george"},
-    "tom": {"pocket-en": "paul", "pocket": "male_2", "kokoro": "am_michael"}
+    "june": {"pocket-en": "fantine", "ahenk": "cep", "kokoro": "af_heart"},
+    "arthur": {"pocket-en": "jean", "pocket": "male_1", "kokoro": "bm_george"},
+    "tom": {"pocket-en": "marius", "pocket": "male_2", "kokoro": "am_michael"}
   }
 }

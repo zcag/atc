@@ -40,8 +40,8 @@ engine, and starts the services. Runs again safely; a restart waits for any call
 ~/.config/atc/voice.env, with every other setting (voice/README.md lists them).
 
   --lang, --also   the call's first language, and others it can switch to (voice/lang/)
-  --engine         by default the one for each language: pocket-en (CPU) for English, pocket (CPU) for Turkish. Also
-                   piper or kokoro (English, CPU); higgs needs a GPU and setup by hand.
+  --engine         by default what each language needs: pocket-en (CPU) for English, pocket and ahenk (CPU) for Turkish.
+                   Also piper or kokoro (English, CPU); higgs needs a GPU and setup by hand.
                    An Intel Mac has no torch for pocket and pocket-en, so piper is its default (docs/calls.md, On a Mac)
   --tts-url        your own voice server instead of an engine here: anything with OpenAI's /v1/audio/speech and raw PCM
                    (voice/README.md lists its model, rate and key settings)
@@ -202,7 +202,7 @@ func speaks(engine, lang string) bool {
 	switch engine {
 	case "higgs", "remote":
 		return true
-	case "pocket":
+	case "pocket", "ahenk":
 		return lang == "tr"
 	}
 	return lang == "en"
@@ -220,7 +220,7 @@ func wantedEngines(have string, langs []string, goos, goarch string) string {
 	engines := strings.FieldsFunc(have, func(r rune) bool { return r == ',' })
 	for _, l := range langs {
 		if engineForLang(engines, l) == "" {
-			engines = append(engines, defaultEngine(l, goos, goarch))
+			engines = append(engines, strings.Split(defaultEngine(l, goos, goarch), ",")...)
 		}
 	}
 	return strings.Join(engines, ",")
@@ -441,11 +441,11 @@ func voiceRun(dir, name string, args ...string) error {
 
 func voiceOnMac() bool { return runtime.GOOS == "darwin" }
 
-// defaultEngine is pocket for Turkish, and for English pocket-en wherever torch ships for the machine, and piper on an Intel
+// defaultEngine is pocket and ahenk for Turkish, and for English pocket-en wherever torch ships for the machine, and piper on an Intel
 // Mac, where it does not.
 func defaultEngine(lang, goos, goarch string) string {
 	if lang == "tr" {
-		return "pocket"
+		return "pocket,ahenk"
 	}
 	if goos == "darwin" && goarch == "amd64" {
 		return "piper"
@@ -455,7 +455,7 @@ func defaultEngine(lang, goos, goarch string) string {
 
 func engineRuns(engines, goos, goarch string) error {
 	for _, e := range strings.Split(engines, ",") {
-		if goos == "darwin" && goarch == "amd64" && (e == "pocket" || e == "pocket-en") {
+		if goos == "darwin" && goarch == "amd64" && (e == "pocket" || e == "pocket-en" || e == "ahenk") {
 			return fmt.Errorf("the %s voice can't run on an Intel Mac: it needs torch 2.5 or newer, which has no Intel Mac build. Nothing was changed. Use --engine piper or --engine kokoro, or install on an Apple Silicon Mac or Linux", e)
 		}
 	}

@@ -121,4 +121,30 @@ class Remote(unittest.TestCase):
             p.wait()
 
 
+class ShippedVoices(unittest.TestCase):
+    def on(self, *engines):
+        ttsd.ENGINES = dict.fromkeys(engines)
+
+    def test_a_voice_can_choose_its_engine_within_the_language(self):
+        self.on("pocket", "ahenk")
+        self.assertEqual(ttsd.as_engine("june", "pocket"), ("ahenk", "cep"))
+        self.assertEqual(ttsd.as_engine("arthur", "pocket"), ("pocket", "male_1"))
+
+    def test_with_its_engine_missing_it_is_the_languages_default(self):
+        self.on("pocket")
+        self.assertEqual(ttsd.as_engine("june", "pocket"), ("pocket", None))
+        self.on("piper")
+        self.assertEqual(ttsd.as_engine("june", "piper"), ("piper", None))
+
+    def test_it_never_changes_language(self):
+        self.on("pocket-en", "ahenk")
+        self.assertEqual(ttsd.as_engine("june", "pocket-en"), ("pocket-en", "fantine"))
+
+    def test_any_other_voice_is_left_as_it_is(self):
+        self.on("higgs", "pocket")
+        self.assertEqual(ttsd.as_engine("en_x", "higgs"), ("higgs", "en_x"))
+        self.assertEqual(ttsd.as_engine("june", "higgs"), ("higgs", None))
+        self.assertEqual(ttsd.as_engine(None, "pocket"), ("pocket", None))
+
+
 unittest.main(verbosity=0)
