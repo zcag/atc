@@ -66,6 +66,9 @@ The one thing it can't do is answer a session's permission prompt. Those still t
 It runs on your machine on 2 CPU cores: about 3 seconds from when you stop talking to its first word, most of that Claude's first
 token. Streaming speech recognition is the weakest part, so it sometimes has to guess at a word.
 
+Voice quality depends on the engine. The default runs on CPU with preset voices you choose from (`atc voice install --voice`), and can sound less
+natural. Higgs, on a GPU, sounds much better, but it is set up by hand and its licence is research and non-commercial. [Calls](docs/calls.md)
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/assistant-dark.webp">
   <img src="docs/img/assistant-light.webp" alt="The assistant with a call on. On the left, the conversation: you ask it to find out why checkout is slow and to fix a build on the laptop, it starts both sessions and answers with the numbers, and the sessions it set going are listed under it. On the right, the call: Arthur, a painted professor in their study, thinking with their hand to their chin, and the sessions on this call under them.">
