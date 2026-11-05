@@ -16,7 +16,7 @@ import aiohttp
 from aiohttp import web
 
 port, clips, out, reason = int(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4]
-ADB = [os.path.expanduser("~/Android/sdk/platform-tools/adb"), "-s", f"127.0.0.1:{os.environ.get('ADB_PORT', '5599')}"]
+ADB = [os.path.expanduser("~/Android/sdk/platform-tools/adb"), "-s", f"127.0.0.1:{os.environ['ADB_PORT']}"]
 PKG = "io.github.zcag.atc"
 HUB, LINE = f"http://127.0.0.1:{port + 1}", f"http://127.0.0.1:{port + 2}"
 FRAME = 640

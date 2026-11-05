@@ -7,7 +7,7 @@
 #   phone-shots.sh shoot <port> <out dir> <dark|light>
 #   phone-shots.sh character <port> <out dir> <dark|light> <person>    a call with that person as the assistant (june, arthur; run.sh's DEMO_PERSONAS)
 set -eu
-dev=127.0.0.1:${ADB_PORT:-5599}
+dev=127.0.0.1:${ADB_PORT:?the port android14.sh up printed}
 adb=("$HOME/Android/sdk/platform-tools/adb" -s "$dev")
 pkg=io.github.zcag.atc
 reason="Checkout errors jumped to 8% after the last deploy."
