@@ -14,14 +14,13 @@ sid = next((args[i + 1] for i, a in enumerate(args) if a in ("--resume", "--sess
 HOME = Path(os.environ["HOME"])
 LOG = HOME / ".claude/demo-brain.log"
 
-# (seconds before the first word, tool or None, what it says before the tool, what it says after, what changes in atc first)
+# (seconds before the first word, tools, what it says before them, what it says after, what changes in atc first)
 DIALOGUE = [
-    (.8, None, "", "Hey, it's your assistant. The release session needs your okay before it pushes version zero nine, and CI is green on main. Should I tell it to go ahead?", None),
-    (3.4, "mcp__atc__read", "", "Not yet. It's stuck on a question for you: should a percent coupon apply before or after shipping?", "ios"),
-    (1.2, "mcp__atc__send", "", "Done, it has your words. And the iOS build on the laptop just finished, so that's one less thing.", "coupon"),
-    (1.0, "Bash", "", "A date library was costing almost two seconds on phones. The fix takes it from about three seconds to just over one. I put the chart on your screen.", None),
-    (1.0, "mcp__atc__send", "Telling it now, with your okay.", "It's pushing. I'll ring you if CI goes red.", "release"),
-    (.8, None, "", "Talk soon. [HANGUP]", None),
+    (.8, [], "", "Hey, sorry to call. Checkout errors jumped to eight percent right after the last deploy, and the coupon change looks like the cause. Do you want me to roll it back, or look at it first?", []),
+    (3.4, ["mcp__atc__read"], "", "That and a copy fix. The errors all come from the coupon code.", ["ios"]),
+    (1.2, ["mcp__atc__send", "mcp__atc__start"], "", "Rolling back now, and I've started a session on the cause. The iOS build on the laptop just finished too, so that's one less thing.", ["errors", "cause"]),
+    (1.0, ["Bash"], "", "About forty, in eleven minutes. I put the chart on your screen.", []),
+    (.8, [], "", "I will. Talk soon. [HANGUP]", []),
 ]
 
 
@@ -50,13 +49,15 @@ def tool(name):
 
 def change(what):
     """A session moves while the assistant talks, as it would on its own: the fake `claude agents` reports its new state,
-    and its transcript starts moving if it is working."""
+    a session it started appears, and the transcript of one that is working starts moving."""
     for home in (HOME, Path("/home/laptop")):
         f = home / f".claude/demo-move-{what}"
         if not f.exists():
             continue
         move = json.loads(f.read_text())
         state = json.loads((home / ".claude/demo-agents.json").read_text())
+        if "agent" in move:
+            state.append(move["agent"])
         for a in state:
             if a["sessionId"] == move["sid"]:
                 a["state"], a["status"] = ("idle", "idle") if what == "ios" else ("working", "busy")
@@ -71,25 +72,30 @@ put(type="system", subtype="init", session_id=sid)
 turn = 0
 for raw in sys.stdin:
     m = json.loads(raw)
+    if "message" not in m:
+        continue
     words = m["message"]["content"]
     with open(LOG, "a") as f:
         f.write(json.dumps({"at": time.time(), "got": words}, ensure_ascii=False) + "\n")
     put(type="user", isReplay=True, session_id=sid, message=m["message"])
     if "· you called" in words:
         turn = 0
+    if "my last message was only half" in words:
+        turn = max(0, turn - 1)
     if "[talk-mode: phone" in words or "[phone ·" in words or turn:
         if "The call has ended" in words or "[call over]" in words:
             put(type="result", subtype="success", session_id=sid)
             continue
-        wait, name, before, after, move = DIALOGUE[min(turn, len(DIALOGUE) - 1)]
+        wait, names, before, after, moves = DIALOGUE[min(turn, len(DIALOGUE) - 1)]
         turn += 1
-        if move:
+        for move in moves:
             change(move)
         time.sleep(wait)
         if before:
             text(before)
-        if name:
+        for name in names:
             tool(name)
+        if names:
             time.sleep(.5)
         text(after)
     else:

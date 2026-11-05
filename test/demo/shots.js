@@ -23,10 +23,10 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
   const to = async (p, hash, wait = 1500) => { await p.evaluate((h) => { location.hash = h; }, hash); await p.waitForTimeout(wait); };
 
   const shots = {
-    // The hero's window: a session and the page it made. The phone in front of it comes from phone-shots.sh.
+    // The hero's window: the session on the checkout errors and its page. The phone in front of it comes from phone-shots.sh.
     async desk(mode) {
       const p = await open(mode, { w: 1760, h: 1000 });
-      await to(p, `#/s/${by("Why checkout").id}/p/checkout-latency`, 3000);
+      await to(p, `#/s/${by("Checkout errors").id}/p/checkout-errors`, 3200);
       return [[p, "desk"]];
     },
     async assistant(mode) {

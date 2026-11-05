@@ -8,7 +8,7 @@ tab, lose the connection or restart atc.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/hero-dark.webp">
-  <img src="docs/img/hero-light.webp" alt="atc on a desktop: a session list, a transcript and the report page that session made, side by side. In front, a phone taking an incoming call from Assistant, The release session wants your okay to push the tag, with Decline and Answer buttons.">
+  <img src="docs/img/hero-light.webp" alt="atc on a desktop: an agent's session on the checkout errors, with the page it made beside it, a chart of errors jumping to 8% at the last deploy and what is failing. In front, a phone taking an incoming call from Assistant, Checkout errors jumped to 8% after the last deploy, with Decline and Answer buttons.">
 </picture>
 
 ```sh
@@ -65,7 +65,7 @@ Most things can wait for a notification. This one can't, so it calls.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/call-ring-dark.webp">
-  <img src="docs/img/call-ring-light.webp" alt="Three phones. The first has woken to an incoming call: Assistant, with the reason under the name, The release session wants your okay to push the tag, and a red and a green button. The second is on the call: Assistant, a call timer, what it is saying, and mute, hang up and speaker buttons. The third is the phone's call history, with Assistant listed like any other caller.">
+  <img src="docs/img/call-ring-light.webp" alt="Three phones. The first has woken to an incoming call: Assistant, with the reason under the name, Checkout errors jumped to 8% after the last deploy, and a red and a green button. The second is on the call: Assistant, a call timer, what it is saying, and mute, hang up and speaker buttons. The third is the phone's call history, with Assistant listed like any other caller.">
 </picture>
 
 You can call it too, from the app or the browser, whenever you want to know how things are going. No phone number

@@ -4,11 +4,11 @@ async (page, { beats = "http://127.0.0.1:7440/film/beats.json", out = "/tmp/atc-
   const list = await (await page.context().request.get(beats)).json();
   const ctx = await page.context().browser().newContext({ viewport: { width: 1280, height: 780 }, deviceScaleFactor: 1 });
   const p = await ctx.newPage();
-  const PW = 335, PH = 700, X = 56, Y = 40;
+  const PW = 323, PH = 700, X = 56, Y = 40;
   const base = `*{box-sizing:border-box}html,body{margin:0;background:transparent;font:18px/1.42 ui-sans-serif,'Inter','Noto Sans',system-ui,sans-serif;color:#eef0f6}
   #s{position:relative;width:1280px;height:780px;overflow:hidden}
   .bg{position:absolute;inset:0;background:radial-gradient(900px 700px at 90% 8%,#2d2262,transparent 62%),radial-gradient(800px 640px at 0% 100%,#0e4a50,transparent 60%),#090c14}
-  .p{position:absolute;left:444px;right:44px;top:44px;bottom:30px;display:flex;flex-direction:column}
+  .p{position:absolute;left:430px;right:44px;top:44px;bottom:30px;display:flex;flex-direction:column}
   .log{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:13px;min-height:0;overflow:hidden}
   .l{display:grid;grid-template-columns:62px 1fr;gap:12px;opacity:.5}
   .l.now{opacity:1}
@@ -36,7 +36,7 @@ async (page, { beats = "http://127.0.0.1:7440/film/beats.json", out = "/tmp/atc-
   for (let i = 0; i < list.length; i++) {
     const b = list[i];
     let body;
-    if (b.ring) body = `<div class="ring"><em>Your phone rings</em><b>Assistant</b><span>${b.ring}</span><em>A session needs a decision, so it asked for you.</em></div>`;
+    if (b.ring) body = `<div class="ring"><em>Your phone rings</em><b>Assistant</b><span>${b.ring}</span><em>An agent watching your errors decided this can't wait.</em></div>`;
     else if (b.end) body = `<div class="endc"><b>${b.end}</b><span>${b.sub || ""}</span></div>`;
     else {
       if (b.cut) [...seen].reverse().find((l) => l.it).cut = true;

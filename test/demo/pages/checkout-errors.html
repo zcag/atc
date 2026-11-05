@@ -1,0 +1,29 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Checkout errors</title><link rel="stylesheet" href="/atc.css"></head>
+<body><main class="pg">
+<header class="head"><h1>Checkout errors jumped to 8% at the last deploy</h1>
+<p class="lede">Almost all of them come from the coupon code. About forty orders failed in the eleven minutes since.</p>
+<p class="meta"><span>from the error rate alert</span><span>deploy 214</span><span>shop</span></p></header>
+<div class="stats"><div class="needs"><b>8.2<small>%</small></b><span>checkout errors</span></div><div><b>0.3<small>%</small></b><span>before the deploy</span></div><div><b>41</b><span>orders failed</span></div><div><b>11<small>m</small></b><span>since the deploy</span></div></div>
+<section id="trend"><h2>Checkout errors <small>last hour</small></h2>
+<div class="chart"><svg viewBox="0 0 720 220" role="img" aria-label="Checkout errors stay near zero, then jump to 8 percent at the deploy">
+<line class="grid" x1="40" x2="710" y1="20" y2="20"/><line class="grid" x1="40" x2="710" y1="70" y2="70"/><line class="grid" x1="40" x2="710" y1="120" y2="120"/><line class="grid" x1="40" x2="710" y1="170" y2="170"/>
+<text x="4" y="24">9%</text><text x="4" y="74">6%</text><text x="4" y="124">3%</text><text x="4" y="174">0</text>
+<path class="area" d="M40 166L140 165L240 167L340 166L440 165L540 166L566 166L584 60L620 44L650 38L680 40L710 36L710 170L40 170Z"/>
+<path class="line" d="M40 166L140 165L240 167L340 166L440 165L540 166L566 166L584 60L620 44L650 38L680 40L710 36"/>
+<line class="now" x1="570" x2="570" y1="10" y2="170"/><text x="498" y="14">deploy 214</text>
+<circle class="pt" cx="710" cy="36" r="4"/><text class="k" x="664" y="26">8.2%</text>
+<line class="ax" x1="40" x2="710" y1="170" y2="170"/><text x="40" y="192">1 h ago</text><text x="340" y="192">30 m</text><text x="670" y="192">now</text>
+</svg></div></section>
+<section id="errors"><h2>What is failing</h2>
+<table><thead><tr><th>Error</th><th class="n">Count</th><th>Share</th></tr></thead><tbody>
+<tr><td><code>TypeError: discount of undefined</code> in applyCoupon</td><td class="n">212</td><td><span class="dbar" style="--v:92"></span></td></tr>
+<tr><td><code>CouponError: code not found</code></td><td class="n">14</td><td><span class="dbar" style="--v:6"></span></td></tr>
+<tr><td>Everything else</td><td class="n">5</td><td><span class="dbar" style="--v:2"></span></td></tr>
+</tbody></table></section>
+<section id="deploy"><h2>What was in the deploy</h2>
+<ul class="rows"><li class="needs"><div class="main"><b><a class="ref commit" href="#">a81f3c2</a> Coupon codes: percent discounts</b><small>Every error's stack goes through this change.</small></div></li>
+<li><div class="main"><b><a class="ref commit" href="#">5d07e19</a> Checkout: fix a typo in the shipping copy</b><small>Text only.</small></div></li></ul></section>
+<p class="foot">From the error tracker and the deploy log. Orders failed counts checkouts that reached the payment step.</p>
+</main></body></html>

@@ -1,28 +1,30 @@
 #!/usr/bin/env python3
 """Cuts callshot.js's recording into the README's film, once film.js has drawn test/demo/beats.json's panels:
-film.py <call dir> <video> <accept ms> <panels dir> <out prefix>
+film.py <call dir> <film dir: callfilm.py's screen.mp4, events.json> <panels dir> <out prefix>
 
-The audio is the call's call.wav (left the caller, right the assistant, on talk.py's clock) and the phone is the browser's
+The audio is the call's call.wav (left the caller, right the assistant, on talk.py's clock) and the phone is the device's
 screen during that call. Only the panel beside the phone is drawn. beats.json holds the times of one recorded call, in
-seconds on the video's clock, read from callshot.js's events and the call's turns.jsonl; a new recording needs new times."""
+seconds on the video's clock, read from callfilm.py's events.json and the call's turns.jsonl; a new recording needs new times."""
 import json
 import subprocess
 import sys
 from pathlib import Path
 
 
-def cut(call, video, accept_ms, panels, out):
+def cut(call, film, panels, out):
     call = Path(call)
+    video = Path(film) / "screen.mp4"
+    accept = next(e["at"] for e in json.loads((Path(film) / "events.json").read_text()) if e.get("line", {}).get("event") == "active")
     answered = next(json.loads(l)["t"] for l in (call / "turns.jsonl").read_text().splitlines() if json.loads(l)["event"] == "answered")
-    offset = accept_ms / 1000 - answered  # video time = call time + offset
+    offset = accept - answered  # video time = call time + offset
     spec = json.loads((Path(panels) / "beats.json").read_text())
     start, stop = spec[0]["t"], spec[-1]["t"] + spec[-1].get("hold", 4)
     span = stop - start
-    PW, PH, X, Y = 335, 700, 56, 40
-    inputs = ["-loop", "1", "-i", f"{panels}/stage.png", "-ss", str(start), "-t", str(span), "-i", video,
+    PW, PH, X, Y = 323, 700, 56, 40
+    inputs = ["-loop", "1", "-i", f"{panels}/stage.png", "-ss", str(start), "-t", str(span), "-i", str(video),
               "-ss", str(max(0, start - offset)), "-t", str(span), "-i", str(call / "call.wav")]
     inputs += ["-loop", "1", "-i", f"{panels}/frame.png"]
-    graph = [f"[1:v]crop=412:860:0:0,scale={PW}:{PH}:flags=lanczos,tpad=stop_mode=clone:stop_duration=6[ph]",
+    graph = [f"[1:v]scale={PW}:{PH}:flags=lanczos,tpad=stop_mode=clone:stop_duration=6[ph]",
              f"[0:v][ph]overlay={X}:{Y}:shortest=1[v00]", "[v00][3:v]overlay=0:0:shortest=1[v0]"]
     last = "v0"
     for i, b in enumerate(spec):
@@ -36,4 +38,4 @@ def cut(call, video, accept_ms, panels, out):
 
 
 if __name__ == "__main__":
-    cut(sys.argv[1], sys.argv[2], float(sys.argv[3]), sys.argv[4], sys.argv[5])
+    cut(*sys.argv[1:5])

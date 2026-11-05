@@ -331,6 +331,34 @@ def scheduler():
     s.live("working", "busy", pinned=True)
 
 
+def error_watch():
+    """The alert that raises the call: the error rate reaches the assistant only because this agent watches it and posts it."""
+    s = Session("Checkout errors after the deploy", SHOP, ago=720)
+    s.user('[message from grafana] {"alertname": "CheckoutErrorRate", "state": "alerting", "value": "8.2%", "for": "5m"}')
+    s.bash("./recent-deploys.sh --last 1", "deploy 214, 11 minutes ago\na81f3c2 Coupon codes: percent discounts\n5d07e19 Checkout: fix a typo in the shipping copy")
+    s.bash("./errors.sh checkout --since deploy --group", "212  TypeError: discount of undefined (applyCoupon)\n 14  CouponError: code not found\n  5  other")
+    s.bash("./orders.sh failed --since deploy", "41 checkouts failed at the payment step")
+    s.bash("atc show out/checkout-errors.html", 'Showing "Checkout errors" (checkout-errors) in atc.')
+    s.bash('atc call --reason "Checkout errors jumped to 8% after the last deploy."', "Calling.")
+    s.say("Checkout errors are at 8.2%, up from 0.3%, since deploy 214 eleven minutes ago. 92% of them are `TypeError: discount of undefined` in `applyCoupon`, from the coupon change. 41 orders failed so far. This can't wait for a notification, so I've had you rung.")
+    s.done(95000)
+    s.summary("Checkout errors at 8.2% since deploy 214; the coupon change looks like the cause.", ["41 orders failed in eleven minutes."], ["Roll it back"])
+    s.live("idle", agent="errors", reports=HUB)
+    (CLAUDE / "demo-move-errors").write_text(json.dumps({"sid": s.sid, "path": str(s.path)}))
+    page("@errors", "checkout-errors", "Checkout errors", "Since deploy 214", ago=620, of=SHOP)
+    page_state["@errors/checkout-errors"] = {"headline": "Checkout errors at 8.2% since deploy 214", "badge": "8.2%"}
+    # What the assistant starts when you ask: not in the list until then.
+    c = Session("Why the coupon change broke checkout", SHOP, "fix/coupon-discount", ago=30)
+    c.user("Find out why applyCoupon throws since deploy 214, and propose a fix. Report back.")
+    c.grep("applyCoupon", "src/checkout/coupon.ts:12:export function applyCoupon(cart: Cart, code: string) {")
+    c.call("Read", {"file_path": f"{SHOP}/src/checkout/coupon.ts"}, 5)
+    c.write()
+    meta[c.sid] = {"reportsTo": HUB}
+    agent = {"id": c.id, "sessionId": c.sid, "pid": subprocess.Popen(["sleep", "86400"], start_new_session=True).pid, "cwd": SHOP, "kind": "background",
+             "name": "", "state": "working", "status": "busy", "startedAt": int(NOW.timestamp() * 1000)}
+    (CLAUDE / "demo-move-cause").write_text(json.dumps({"sid": c.sid, "path": str(c.path), "agent": agent}))
+
+
 def reviewer():
     s = Session("Review open pull requests", SHOP, ago=2000)
     s.user("Review what opened since last time.")
@@ -446,6 +474,8 @@ def main_box():
     (CLAUDE / "demo-tui").write_text(links().id + "\n")
     local_model()
     scheduler()
+    (CLAUDE).mkdir(parents=True, exist_ok=True)
+    error_watch()
     reviewer()
     ci()
     past_sessions()
@@ -457,6 +487,7 @@ def main_box():
             ("standup", "today", "Today", "Written at 09:00", 5000, {"headline": "4 merged yesterday, 2 wait on you", "badge": 2})):
         page("@" + key, name, title, note, ago, ATC / "agents.d" / key)
         page_state[f"@{key}/{name}"] = state
+    agent_folder("errors", title="Error watch", icon="pulse", color="red", dir=SHOP, prompt="An alert fired. Look into it, and if it can't wait, have the user rung with atc call.", brief="Alerts post here. Find what changed and how bad it is. If it hurts customers now, ring the user; anything else is a notification.")
     agent_folder("reviewer", title="Reviewer", icon="pr", color="violet", dir=SHOP, every="30m", check="gh pr list --search review:none --json number", prompt="Review what opened since last time.", brief="Review new pull requests and comment on what you find.")
     agent_folder("ci-watch", title="CI watch", icon="pulse", color="amber", dir=CLI, every="5m", check="./failed-runs.sh", prompt="A run on main failed. Say what it means.", brief="Look at failed CI runs on main and say what they mean.")
     agent_folder("standup", title="Standup", icon="calendar", color="teal", every="1d", **{"from": "2026-01-05T09:00"}, prompt="Write today's page.", brief="Each morning, write what merged, what is stuck and what waits on the user.")

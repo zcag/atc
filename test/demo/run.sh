@@ -4,7 +4,8 @@
 # second atc as the peer "laptop" (+3), a Chromium of its own for session tabs (+4) and the shop those tabs
 # open (+5). They share the host's network, so every address is set here and nothing falls back to atc's
 # default ports, where a real atc may be running.
-# With DEMO_LINE=real, +2 is left to voice-stack.sh (the real call.py, talk.py and ttsd.py) instead of the scripted line.
+# With DEMO_LINE=real, +2 is left to voice-stack.sh (the real call.py, talk.py and ttsd.py) instead of the scripted line, and
+# with DEMO_LINE=film atc's app line also goes through callfilm.py on +7.
 # Runs in its own Linux namespaces: the hostname is devbox, /home holds only /home/you (the temp
 # HOME), so no real path, process or Claude Code state can reach a page. Stopping this script removes it all.
 set -eu
@@ -50,10 +51,11 @@ unshare -Urmu --pid --fork --kill-child --mount-proc /bin/bash -c '
 		env -i HOME=/home/you /usr/bin/python3 .local/bin/demo-browser.py http://127.0.0.1:$((p + 4)) http://shop.example:$((p + 5))/
 		base="$base ATC_BROWSER=http://127.0.0.1:$((p + 4))"
 	fi
-	[ "$4" = real ] || env -i HOME=/home/you $base demo-line 127.0.0.1:$((p + 2)) &
+	[ "$4" != scripted ] || env -i HOME=/home/you $base demo-line 127.0.0.1:$((p + 2)) &
 	env -i HOME=/home/you /usr/bin/python3 .local/bin/demo-tick.py &
 	env -i HOME=/home/you $base atc hub -addr 127.0.0.1:$((p + 1)) &
 	(cd /home/laptop; exec env -i HOME=/home/laptop PATH=/home/you/.local/bin ATC_URL=http://127.0.0.1:$((p + 3)) ATC_ADDR=127.0.0.1:$((p + 3)) atc serve --no-auth) &
+	[ "$4" != film ] || base="$base ATC_CALL_LINE=http://127.0.0.1:$((p + 7))"
 	exec env -i HOME=/home/you $base ATC_ADDR=127.0.0.1:$p atc serve --no-auth
 ' demo "$tmp" "$port" "$chrome" "${DEMO_LINE:-scripted}" &
 ns=$!
