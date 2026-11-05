@@ -240,10 +240,14 @@ func macState(s service) string {
 	if err != nil {
 		return "not running"
 	}
-	if m := regexp.MustCompile(`(?m)^\s*state = (.+)$`).FindSubmatch(out); m != nil && string(m[1]) != "running" {
-		return string(m[1])
+	m := regexp.MustCompile(`(?m)^\s*state = (.+)$`).FindSubmatch(out)
+	switch {
+	case m == nil || string(m[1]) == "running":
+		return "running"
+	case string(m[1]) == "xpcproxy" || string(m[1]) == "spawned":
+		return "starting"
 	}
-	return "running"
+	return string(m[1])
 }
 
 func macInstall(s service) error {
