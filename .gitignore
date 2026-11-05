@@ -1,4 +1,5 @@
 /atc
+/dist/
 /.claude/
 __pycache__/
 test/shots/

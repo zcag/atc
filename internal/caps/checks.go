@@ -79,6 +79,11 @@ func checkClaude(ctx context.Context, env Env) Result {
 	return Result{OK, "Version " + v + "."}
 }
 
+// SignedIn says whether the Claude Code at bin has a sign-in.
+func SignedIn(ctx context.Context, bin string) bool {
+	return checkSignin(ctx, Env{Bin: bin}).Status == OK
+}
+
 func checkSignin(ctx context.Context, env Env) Result {
 	out, err := command(ctx, env.Bin, "auth", "status")
 	if notInstalled(err) {
@@ -226,6 +231,9 @@ func checkHub(ctx context.Context, env Env) Result {
 	}
 	code, b, err := fetch(ctx, strings.TrimRight(u, "/")+"/status")
 	if err != nil {
+		if _, e := command(ctx, env.Bin, "--version"); notInstalled(e) {
+			return Result{Missing, "Waits for Claude Code to be installed: the hub starts by itself once it is."}
+		}
 		return down(u, err)
 	}
 	var st struct {

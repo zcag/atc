@@ -107,6 +107,19 @@ func TestClaude(t *testing.T) {
 	}
 }
 
+func TestHubWaitsForClaude(t *testing.T) {
+	ctx := context.Background()
+	hub := map[string]string{"ATC_HUB": "http://127.0.0.1:1"}
+	rows := new(Runner).Rows(ctx, envOf(filepath.Join(t.TempDir(), "nope"), hub), nil)
+	if r := rowOf(t, rows, "hub"); r.Status != Missing || !strings.Contains(r.Detail, "Waits for Claude Code") {
+		t.Errorf("without Claude Code: %s %q", r.Status, r.Detail)
+	}
+	rows = new(Runner).Rows(ctx, envOf("true", hub), nil)
+	if r := rowOf(t, rows, "hub"); r.Status != Broken || !strings.Contains(r.Detail, "nothing is listening") {
+		t.Errorf("with Claude Code: %s %q", r.Status, r.Detail)
+	}
+}
+
 func TestOptionalIsQuietUntilSetUp(t *testing.T) {
 	bad := httptest.NewServer(http.NotFoundHandler())
 	badURL := bad.URL
