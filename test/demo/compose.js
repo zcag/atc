@@ -35,7 +35,7 @@ async (page, { raw = "http://127.0.0.1:7440/raw", out = "/tmp/atc-final", modes 
   const layouts = {
     hero: { w: 1320, h: 930, body: (r) => win(`${r}/hero.png`, 20, 20, 1280) },
     fleet: { w: 2300, h: 1400, body: (r) => win(`${r}/fleet.png`, 40, 40, 1560) + win(`${r}/desk.png`, 1000, 300, 1260) + ph(`${r}/ring-headsup.png`, 60, 500, 400) },
-    "call-ring": row(["ring-headsup", "arthur-3", "june-5"], 56, 400, 60),
+    "call-ring": row(["ring-full", "arthur-3", "june-5"], 56, 400, 60),
     bays: { w: 1320, h: 830, body: (r) => win(`${r}/bays.png`, 20, 20, 1280) },
     assistant: solo("assist-arthur-thinking", 1400, 900),
     board: solo("board", 1560, 1040),

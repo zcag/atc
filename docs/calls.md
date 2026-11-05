@@ -100,7 +100,7 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   its log: read them before reaching for Opus or UDP. On speaker or in a car the assistant's voice can
   come back through your mic; the talker drops a turn mostly made of its own words from the last seconds
   (app calls only).
-- **The call screen follows the call.** The talker sends `persona` events over the line (listening,
+- **The call screen follows the call.** The character is on screen from the ring on, or while you are calling. The talker sends `persona` events over the line (listening,
   hearing with your words as they are recognised, thinking, the tool it uses, speaking with the
   sentence) and the screen shows them as a live transcript and a persona. Tapping the persona while
   it speaks or thinks stops it (`interrupt`). Push to talk (the PTT button on the call, `t` in a browser; each device remembers

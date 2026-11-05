@@ -60,7 +60,7 @@ shoot)
 	sleep 2.2
 	shot ring-headsup
 	"${adb[@]}" shell input tap 600 200
-	sleep 1.5
+	sleep 4.5
 	shot ring-full
 	"${adb[@]}" shell input tap 676 2104
 	sleep 6.5

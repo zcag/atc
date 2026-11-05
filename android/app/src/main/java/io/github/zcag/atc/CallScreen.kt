@@ -364,7 +364,7 @@ class CallActivity : Activity() {
 
     private fun show(st: Calls.State) {
         statusView.text = if (st.phase == Calls.Phase.Active && !st.muted && !st.held && !st.talking) activity(Calls.face.value) else status(st)
-        persona.view.visibility = if (st.phase == Calls.Phase.Active || st.phase == Calls.Phase.Connecting) View.VISIBLE else View.INVISIBLE
+        persona.view.visibility = if (st.live) View.VISIBLE else View.INVISIBLE
         showWho(st, Calls.face.value)
         incomingRow.visibility = if (st.phase == Calls.Phase.Ringing) View.VISIBLE else View.GONE
         callRow.visibility = if (st.live && st.phase != Calls.Phase.Ringing) View.VISIBLE else View.GONE
@@ -549,7 +549,7 @@ class CallActivity : Activity() {
         }
         persona.view.setOnClickListener {
             if (Calls.state.value.held) Calls.send(Calls.Cmd.Resume)
-            else if (Calls.face.value.state in setOf("speaking", "thinking", "tool")) Calls.send(Calls.Cmd.Interrupt)
+            else if (Calls.state.value.phase == Calls.Phase.Active && Calls.face.value.state in setOf("speaking", "thinking", "tool")) Calls.send(Calls.Cmd.Interrupt)
         }
         statusView.setOnClickListener { if (Calls.state.value.held) Calls.send(Calls.Cmd.Resume) }
         transcript = Transcript(this, (resources.displayMetrics.heightPixels * .35f).toInt()) { persona.view.performClick() }

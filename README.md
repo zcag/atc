@@ -122,7 +122,7 @@ The one thing it can't do is answer a session's permission prompt. Those still t
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/call-ring-dark.webp">
-  <img src="docs/img/call-ring-light.webp" alt="Three phones. The first is on the session list when the call arrives: Assistant, with the reason under the name, Checkout errors jumped to 8% after the last deploy, and Decline and Answer buttons. The second is on the call with Arthur, a painted professor in glasses and a cardigan in their study, speaking. The third is on the call with June, a painted woman with long dark hair in a cream sweater, listening. Each call has the name and a timer above the face, and what was said below it.">
+  <img src="docs/img/call-ring-light.webp" alt="Three phones. The first is ringing with the character on screen: Assistant, June, with the reason under the name, Checkout errors jumped to 8% after the last deploy, and a red and a green button. The second is on the call with Arthur, a painted professor in glasses and a cardigan in their study, speaking. The third is on the call with June, a painted woman with long dark hair in a cream sweater, listening. Each call has the name and a timer above the face, and what was said below it.">
 </picture>
 
 *The ring, then two of the built-in characters speaking and listening. On Android it is a real phone call: it rings on the lock screen and appears in your call log, you answer from Bluetooth or car buttons, it works on Android Auto, and it goes on hold for a SIM call.*

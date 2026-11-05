@@ -35,7 +35,7 @@ interface Persona {
 
 /** The call screen's persona slot. It draws the view picked on this phone: line or bars, built in and the same for anyone,
  *  or the character of whoever is on the line. That is the person the assistant is in the language the call is in (GET
- *  /api/call/persons; before a call says, the language the last one opened in), with their background, so a change of
+ *  /api/call/persons; before a call says, the language the last one opened in, or on a first call any language with someone picked), with their background, so a change of
  *  language swaps it; with nobody picked for the language, the character kept on this phone. The orb shows only when it
  *  is the choice or when the character can't be had; a character already on the phone starts from there without asking
  *  the server, and until its first frame the slot is the dark backdrop.
@@ -61,7 +61,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
     var mode = Prefs(c).callView ?: CHARACTER
         private set
 
-    private val speaking get() = lang.ifEmpty { Prefs(context).callLang.orEmpty() }
+    private val speaking get() = lang.ifEmpty { Prefs(context).callLang.orEmpty() }.ifEmpty { doc?.optJSONObject("langs")?.keys()?.asSequence()?.firstOrNull().orEmpty() }
 
     private val everyone get() = doc?.optJSONArray("persons").let { a -> List(a?.length() ?: 0) { a!!.getJSONObject(it) } }
 
