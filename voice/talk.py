@@ -17,7 +17,7 @@ Every call leaves <out>/talk-<time>/: call.wav (left caller, right voice), turns
 import argparse, asyncio, concurrent.futures, difflib, hashlib, io, json, os, random, re, time, wave
 import aiohttp
 import soxr, numpy as np, onnxruntime
-from langpack import Pack, fill
+from langpack import Pack, agreement, fill, like
 
 RATE, FRAME = 16000, 640
 APP_RATE = 24000
@@ -38,6 +38,7 @@ LANG_TAG = re.compile(r"\[LANG:([a-z]{2,3})\]\s*")
 LINE_TAG = re.compile(r"\[LINE:@?([\w.-]+)\]\s*")
 ASSISTANT = "assistant"
 BACK_WORDS = 6
+SAME_SPEECH = .5
 
 
 def setting(name, lang, primary):
@@ -124,6 +125,7 @@ class StreamSTT:
     [LANG:xx], picks which one Claude gets)."""
     def __init__(self, gain_db, packs):
         self.recs = {code: self.recognizer(p.STT) for code, p in packs.items()}
+        self.flush = {code: p.STT.get("flush", 0.4) for code, p in packs.items()}
         self.first = next(iter(packs))
         self.gain, self.s, self.heard = 10 ** (gain_db / 20), {}, {}
 
@@ -147,22 +149,25 @@ class StreamSTT:
     def feed(self, pcm):
         if self.s and pcm:
             a = np.clip(np.frombuffer(pcm, np.int16) / 32768 * self.gain, -1, 1).astype(np.float32)
-            for lang, s in self.s.items():
-                s.accept_waveform(RATE, a)
-                while self.recs[lang].is_ready(s):
-                    self.recs[lang].decode_stream(s)
-                self.heard[lang] = self.recs[lang].get_result(s).strip()
+            for lang in self.s:
+                self.push(lang, a)
+
+    def push(self, lang, a):
+        s, rec = self.s[lang], self.recs[lang]
+        s.accept_waveform(RATE, a)
+        while rec.is_ready(s):
+            rec.decode_stream(s)
+        self.heard[lang] = rec.get_result(s).strip()
 
     def partial(self, lang):
         """What the last feed heard: feed runs on Talk's worker thread, and reading a stream while it decodes is not safe."""
         return self.heard.get(lang, self.heard.get(self.first, ""))
 
     def text(self):
-        """Text so far in every language. The decoders run ~0.3 s behind the audio, so flush them with silence
-        first; if the caller goes on, that silence just sits inside the turn."""
-        if not self.s:
-            return {}
-        self.feed(bytes(int(0.4 * RATE) * 2))
+        """Text so far in every language. The decoders run behind the audio (a pack's STT says how far when it is
+        not ~0.3 s), so flush them with silence first; if the caller goes on, that silence just sits inside the turn."""
+        for lang in self.s:
+            self.push(lang, np.zeros(int(self.flush[lang] * RATE), np.float32))
         return dict(self.heard)
 
 
@@ -355,8 +360,7 @@ class Talk:
         earlier words as the turn grows: «gelmiyor mu» became «geliyorum»), leaving out «alo», «ses geliyor mu» and
         backchannels."""
         sent = re.findall(r"\w+", re.sub(r"\(.*?\)", "", self.unfinished or "").lower())
-        like = lambda w: any(w == s or difflib.SequenceMatcher(None, w, s).ratio() >= .75 for s in sent)
-        return [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.LINE_CHECK and w not in self.pack.BACKCHANNEL and not like(w)]
+        return [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.LINE_CHECK and w not in self.pack.BACKCHANNEL and not like(w, sent)]
 
     def line_check(self, text):
         """A turn that only tests the line («Alo?», «Ses geliyor mu?», «Duyuyor musun?») is answered at once with
@@ -722,28 +726,28 @@ class Talk:
         mark = lambda k: timing.__setitem__(k, round(time.time() - ended, 3))
         if text is None:
             text = await self.whisper(utt, self.lang)
-        p = self.pack
+        p, heard_first, also = self.pack, "", ""
         if isinstance(text, dict):
             heard_first, text = text.get(p.code, ""), text.get(self.lang, "")
-            if self.lang != p.code and heard_first:
-                text += fill(p.ALSO_HEARD, heard=heard_first)
+            if self.lang != p.code and heard_first and agreement(heard_first, text) < SAME_SPEECH:
+                also = fill(p.ALSO_HEARD, heard=heard_first)
             if self.a.second_ms and utt:
                 text = await self.second_reading(utt, "" if p.HALLUCINATIONS.search(text) else text, voiced_ms)
         mark("stt")
-        if p.HALLUCINATIONS.search(text):
+        if p.HALLUCINATIONS.search(text + also):
             self.log(event="dropped", text=text, **timing)
             return
         if self.echo(text):
             self.log(event="dropped", text=text, why="delta's own voice coming back", **timing)
             return
-        if self.who and self.wants_back(text):
+        if self.who and (self.wants_back(text) or self.wants_back(heard_first)):
             await self.commit.wait()
             self.log(event="line-back", text=text, **timing)
             self.ask_line(ASSISTANT)
             return
-        return await self.respond_claude(text, timing, mark)
+        return await self.respond_claude(text, timing, mark, also)
 
-    async def respond_claude(self, text, timing, mark):
+    async def respond_claude(self, text, timing, mark, also=""):
         """Claude talks: its text streams into TTS sentence by sentence. Nothing is sent before the turn is
         committed (a message to Claude can't be taken back); a tool call gets a spoken progress line."""
         await self.commit.wait()
@@ -757,12 +761,11 @@ class Talk:
             self.log(event="line-check", text=text, **timing)
             self.history += [{"role": "user", "content": text}, {"role": "assistant", "content": p.LINE_OK}]
             return
+        sent = (text + also).strip()
         if self.unfinished:
-            sent = fill(p.HALF_SENT, text=text)
+            sent = fill(p.HALF_SENT, text=sent)
         elif self.cut and self.heard is not None:
-            sent = fill(p.CUT_OFF, heard=self.heard, text=text)
-        else:
-            sent = text
+            sent = fill(p.CUT_OFF, heard=self.heard, text=sent)
         if self.checked:
             sent = fill(p.LINE_TESTED, tried=" / ".join(self.checked), line_ok=p.LINE_OK, text=sent)
             self.checked = []

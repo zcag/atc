@@ -5,7 +5,7 @@ import json, os, re, sys, unittest
 
 VOICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, VOICE)
-from langpack import Pack, fill
+from langpack import Pack, agreement, fill
 
 
 
@@ -111,6 +111,28 @@ class Packs(unittest.TestCase):
 
     def test_fill_leaves_his_braces_alone(self):
         self.assertEqual(fill("{a} {b}", a="{b}", b="x"), "{b} x")
+
+
+class Agreement(unittest.TestCase):
+    SAME_SPEECH = .5
+
+    def test_english_speech_both_transcribers_spell(self):
+        for tr, en in (
+            ("Okey, you can just keep talking for a bit", "Okay, you can just keep talking for a bit"),
+            ("Aywas to king to maybe like we have this un ations and buttons", "I was thinking to maybe like we have this animations and buttons"),
+        ):
+            self.assertGreaterEqual(agreement(tr, en), self.SAME_SPEECH, tr)
+
+    def test_turkish_speech_the_english_transcriber_mangles(self):
+        for tr, en in (
+            ("Türkçeye dönebilirsin", "to children every listen"),
+            ("biraz Türkçe konuşabilir misin?", "Brastructure consequence"),
+            ("Okey tamam şimdi. Peki çalışan session'lar nasıl gidiyor?", "Okay, Tim Shamble is session though on session on the sigh"),
+        ):
+            self.assertLess(agreement(tr, en), self.SAME_SPEECH, tr)
+
+    def test_no_english_reading_at_all(self):
+        self.assertEqual(agreement("evet", ""), 0)
 
 
 if __name__ == "__main__":

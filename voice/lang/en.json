@@ -1,6 +1,6 @@
 {
   "DEFAULTS": {"assistant": "your assistant", "user": "the user"},
-  "STT": {"base": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26/resolve/main", "dir": "sherpa-onnx-streaming-zipformer-en-2023-06-26", "tokens": "tokens.txt", "encoder": "encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx", "decoder": "decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx", "joiner": "joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx"},
+  "STT": {"base": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-kroko-2025-08-06/resolve/main", "dir": "sherpa-onnx-streaming-zipformer-en-kroko-2025-08-06", "tokens": "tokens.txt", "encoder": "encoder.onnx", "decoder": "decoder.onnx", "joiner": "joiner.onnx", "flush": 1.2},
   "GREETING": "Hello, this is {assistant}.",
   "LINE_OK": "I'm here, I can hear you.",
   "UNCLEAR": "(said something short, but it could not be made out)",

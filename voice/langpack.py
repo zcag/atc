@@ -1,5 +1,5 @@
 """A language pack, lang/<code>.json: every word the call stack says, hears for or tells the assistant in that language."""
-import json, os, re
+import difflib, json, os, re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SLOT = re.compile(r"\{(\w+)\}")
@@ -10,6 +10,18 @@ WORDS = "LINE_CHECK", "LINE_CORE", "BACKCHANNEL"
 def fill(template, **values):
     """Slots filled in one pass, so a value holding a brace (their words go through here) is left as it is."""
     return SLOT.sub(lambda m: str(values[m[1]]) if m[1] in values else m[0], template)
+
+
+def like(word, words):
+    """A word two transcribers, or two readings of one, spell differently still counts as the same word."""
+    return any(word == w or difflib.SequenceMatcher(None, word, w).ratio() >= .75 for w in words)
+
+
+def agreement(first, second):
+    """Share of the words of first that second also has. Two languages' transcribers mostly agree only on speech in a
+    language both can spell, so this tells which language they are speaking without a list of either's words."""
+    a, b = (re.findall(r"\w+", t.lower()) for t in (first, second))
+    return sum(like(w, b) for w in a) / len(a) if a else 0
 
 
 def named(value, names):
