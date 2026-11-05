@@ -17,6 +17,7 @@ import (
 
 	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/sessions"
+	"github.com/zcag/atc/internal/settings"
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/modes"
 )
@@ -27,15 +28,32 @@ const (
 )
 
 // GuestsArgs are the flags for the guests' conversation: its own brief, only atc's tools (no WhatsApp,
-// mail or browser of the user's), and no approvals to pass on.
-func GuestsArgs() []string {
-	return append(standingArgs(modes.Text("guests-desk")), "--strict-mcp-config", "--disallowedTools", "AskUserQuestion,EnterPlanMode")
+// mail or browser of the user's), no approvals to pass on, and allowed only what its brief asks of it: answering a
+// guest, the guests' folder and looking things up.
+func GuestsArgs(dir string) []string {
+	allow := []string{"mcp__atc", "Bash(atc wa --to *)", "Read(/" + dir + "/**)", "Edit(/" + dir + "/**)", "WebSearch", "WebFetch"}
+	return append(standingArgs(modes.Text("guests-desk")), "--strict-mcp-config", "--disallowedTools", "AskUserQuestion,EnterPlanMode",
+		"--allowedTools", strings.Join(allow, ","))
+}
+
+// autonomyArgs is what the assistant may do alone. Nobody can approve a tool on a call or on WhatsApp, so what isn't allowed
+// here is refused. The user's own allow rules in Claude Code's settings still apply on top.
+func autonomyArgs(level, dir string) []string {
+	if level == settings.AutonomyFull {
+		return []string{"--dangerously-skip-permissions"}
+	}
+	allow := []string{"mcp__atc", "Bash(atc show *)", "Bash(atc open *)", "Bash(atc wa *)", "Bash(atc call *)", "Bash(atc notify *)"}
+	if level != settings.AutonomyLimited {
+		allow = append(allow, "Read", "Glob", "Grep", "WebSearch", "WebFetch", "Edit(/"+dir+"/**)", "Bash(atc guest *)")
+	}
+	return []string{"--allowedTools", strings.Join(allow, ",")}
 }
 
 // HubArgs are the flags for the hub's Claude: the same tools and switchboard as atc's standing
-// sessions, plus how the channels work.
-func HubArgs() []string {
-	return append(standingArgs(modes.Text("hub")+" "+switchboard), "--disallowedTools", "AskUserQuestion,EnterPlanMode")
+// sessions, plus how the channels work, and what the user lets it do alone, in its folder dir.
+func HubArgs(dir string) []string {
+	args := append(standingArgs(modes.Text("hub")+" "+switchboard), "--disallowedTools", "AskUserQuestion,EnterPlanMode")
+	return append(args, autonomyArgs(os.Getenv(settings.AutonomyKey), dir)...)
 }
 
 // hubLink is atc's view of one of the hub's conversations (the assistant's, or the guests'): its

@@ -16,6 +16,24 @@ and its folder is atc's own (`~/.local/share/atc/assistant`). Without a hub (`at
 `--only atc`) it is a background session, in `ATC_ASSIST_DIR`, by default that same folder; Claude Code
 requires a yes for that, so the page asks you once with its own prompt.
 
+## What it may do alone
+
+On a call or on WhatsApp nobody can tap Allow, so whatever isn't allowed beforehand is refused, and the assistant hands that
+work to a session, which asks you as usual. You choose how much in `atc setup` or Settings, Assistant (`ATC_ASSISTANT_AUTONOMY`):
+
+| Level | It may |
+|---|---|
+| `limited` | use atc's tools, show you pages (`atc show`, `atc open`), and reach you (`atc wa`, `atc call`, `atc notify`) |
+| `daily`, the default | also read your files, search the web, keep notes in its own folder, and run `atc guest` |
+| `full` | do anything Claude can, with no checks (`--dangerously-skip-permissions`). A message or page that fools it can do real damage |
+
+`daily` can read anything your user can, atc's token included, and can reach the web, so something it reads could talk it
+into sending what it read somewhere: [Security](security.md) says more. For more than `daily` without going to `full`, add
+allow rules to Claude Code's own settings, which still apply. `ATC_HUB_CLAUDE_ARGS` is added last. The guests' conversation
+is not affected by this: it may only use atc's tools, answer a guest, use the guests' folder and look things up.
+
+## How it reaches you
+
 With `ATC_HUB` set, the Assistant button, the side key and WhatsApp all reach the hub's session. It
 shows in the list as **assistant**, with no terminal: its transcript is the chat, the box under it
 writes to it, the reply appears as it is written, and Esc or Stop interrupts it. A phone call is a

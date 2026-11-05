@@ -87,12 +87,12 @@ func hubCmd(args []string) error {
 	fs.Parse(args)
 	modes.Dir = filepath.Join(client.ConfigDir(), "modes")
 	bin := cmp.Or(os.Getenv("ATC_CLAUDE_BIN"), "claude")
-	cargs := append([]string{"--model", *model, "--effort", *effort}, server.HubArgs()...)
+	cargs := append([]string{"--model", *model, "--effort", *effort}, server.HubArgs(*dir)...)
 	cargs = append(cargs, strings.Fields(os.Getenv("ATC_HUB_CLAUDE_ARGS"))...)
 	policy := startover.Policy{Quiet: *quiet, Small: *small, CapQuiet: *capQuiet, Cap: *cap}
 	line := os.Getenv("ATC_CALL_LINE")
 	gdir := filepath.Join(home, "guests")
-	gargs := append([]string{"--model", *model, "--effort", *effort}, server.GuestsArgs()...)
+	gargs := append([]string{"--model", *model, "--effort", *effort}, server.GuestsArgs(gdir)...)
 	guests := hub.New(hub.Config{
 		Bin: bin, Args: gargs, Dir: gdir, State: *guestState, Mode: guestsMode, Reset: policy,
 		Call: hub.CallConfig{URL: line}, GuestDesk: true,

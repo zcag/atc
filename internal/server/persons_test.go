@@ -38,6 +38,28 @@ func newPersonsRig(t *testing.T) *personsRig {
 	return rig
 }
 
+func TestAutonomyArgs(t *testing.T) {
+	has := func(args []string, s string) bool { return strings.Contains(strings.Join(args, " "), s) }
+	daily := autonomyArgs("", "/home/x/assistant")
+	if !has(daily, "mcp__atc") || !has(daily, "Read,") || !has(daily, "Edit(//home/x/assistant/**)") || has(daily, "dangerously") {
+		t.Fatal(daily)
+	}
+	if got := autonomyArgs("nonsense", "/d"); strings.Join(got, " ") != strings.Join(autonomyArgs("daily", "/d"), " ") {
+		t.Fatalf("an unknown level isn't daily: %v", got)
+	}
+	limited := autonomyArgs("limited", "/d")
+	if !has(limited, "mcp__atc") || !has(limited, "Bash(atc wa *)") || has(limited, "Read") || has(limited, "Edit") || has(limited, "WebFetch") {
+		t.Fatal(limited)
+	}
+	if full := autonomyArgs("full", "/d"); !has(full, "--dangerously-skip-permissions") || has(full, "allowedTools") {
+		t.Fatal(full)
+	}
+	guests := GuestsArgs("/home/x/guests")
+	if !has(guests, "Bash(atc wa --to *)") || !has(guests, "Edit(//home/x/guests/**)") || has(guests, "dangerously") || has(guests, "Read,") {
+		t.Fatal(guests)
+	}
+}
+
 func TestSeedPersonsOnlyWhenNobodyWasEverSaved(t *testing.T) {
 	s := &Server{StateDir: filepath.Join(t.TempDir(), "new")}
 	seed := []byte(`{"langs":{"en":"june"},"persons":[{"id":"june","name":"June","character":"woman","voices":{"en":"june"}}],"voices":{"june":{"pocket-en":"vera"}}}`)

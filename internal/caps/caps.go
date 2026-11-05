@@ -32,6 +32,8 @@ type Field struct {
 	Secret bool   `json:"secret,omitempty"`
 	URL    bool   `json:"url,omitempty"`
 	Hub    bool   `json:"-"`
+	// Options makes it a choice, by value; the first is what empty means.
+	Options []string `json:"options,omitempty"`
 }
 
 // Fix is how to get a feature working: a command to copy, plain words, and the docs page with the rest. GuideURL and

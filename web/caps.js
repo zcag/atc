@@ -66,8 +66,10 @@ function Fields({ r, host, ui, reload, onTested }) {
   return html`<form class="capfields" onSubmit=${(e) => { e.preventDefault(); dirty && save(body()); }}>
     ${fields.map((f) => html`<label class="capfield">
       <span>${f.label}</span>
-      <input value=${vals[f.key] ?? (f.secret ? "" : f.value || "")} type=${f.secret ? "password" : "text"} autocomplete="off" autocapitalize="off" spellcheck="false" disabled=${f.source === "env"}
-        placeholder=${f.secret && f.set ? "Set, and hidden" : f.hint || ""} onInput=${(e) => typed(f, e.target.value)} />
+      ${f.options ? html`<select value=${vals[f.key] ?? (f.value || f.options[0])} disabled=${f.source === "env"} onChange=${(e) => typed(f, e.target.value)}>
+        ${f.options.map((o) => html`<option value=${o}>${o}</option>`)}
+      </select>` : html`<input value=${vals[f.key] ?? (f.secret ? "" : f.value || "")} type=${f.secret ? "password" : "text"} autocomplete="off" autocapitalize="off" spellcheck="false" disabled=${f.source === "env"}
+        placeholder=${f.secret && f.set ? "Set, and hidden" : f.hint || ""} onInput=${(e) => typed(f, e.target.value)} />`}
       <small>${f.key}${f.source === "env" ? ", set in atc's environment, which overrides this page" : ""}</small>
       ${f.secret && f.set && f.source === "settings" && html`<button type="button" class="linkish" onClick=${() => save({ [f.key]: null })}>Remove this one</button>`}
     </label>`)}

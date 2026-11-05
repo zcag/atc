@@ -11,6 +11,7 @@ import (
 
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/server"
+	"github.com/zcag/atc/internal/settings"
 )
 
 func isolate(t *testing.T) string {
@@ -83,9 +84,9 @@ func TestEnginesFollowTheLanguages(t *testing.T) {
 		keep, wants map[string]string
 	}{
 		{"", []string{"en"}, "pocket-en", nil, map[string]string{"TALK_TTS_ENGINE": "pocket-en"}},
-		{"", []string{"tr"}, "pocket", nil, map[string]string{"TALK_TTS_ENGINE": "pocket"}},
-		{"", []string{"tr", "en"}, "pocket,pocket-en", nil, map[string]string{"TALK_TTS_ENGINE": "pocket", "TALK_TTS_ENGINE_EN": "pocket-en"}},
-		{"pocket-en", []string{"tr"}, "pocket-en,pocket", map[string]string{"TALK_TTS_ENGINE": "pocket-en"}, map[string]string{"TALK_TTS_ENGINE": "pocket"}},
+		{"", []string{"tr"}, "pocket,ahenk", nil, map[string]string{"TALK_TTS_ENGINE": "pocket"}},
+		{"", []string{"tr", "en"}, "pocket,ahenk,pocket-en", nil, map[string]string{"TALK_TTS_ENGINE": "pocket", "TALK_TTS_ENGINE_EN": "pocket-en"}},
+		{"pocket-en", []string{"tr"}, "pocket-en,pocket,ahenk", map[string]string{"TALK_TTS_ENGINE": "pocket-en"}, map[string]string{"TALK_TTS_ENGINE": "pocket"}},
 		{"higgs", []string{"tr", "en"}, "higgs", map[string]string{"TALK_TTS_ENGINE": "higgs", "TALK_TTS_ENGINE_EN": "higgs"}, map[string]string{}},
 		{"kokoro", []string{"en"}, "kokoro", map[string]string{"TALK_TTS_ENGINE": "kokoro"}, map[string]string{}},
 	} {
@@ -155,6 +156,33 @@ func TestSetUnsetKeepsWhatIsSet(t *testing.T) {
 	got := readEnvFile(path)
 	if got["ATC_CALL_VOICES"] != "http://mine" || got["ATC_CALL_LINE"] != "http://line" {
 		t.Fatal(got)
+	}
+}
+
+func TestSetupAutonomyAsksKeepsAndIsChangedByTheFlag(t *testing.T) {
+	isolate(t)
+	t.Setenv(settings.AutonomyKey, "")
+	var err error
+	if conf, err = settings.Apply(client.ConfigDir()); err != nil {
+		t.Fatal(err)
+	}
+	saved := func() string { f, _ := conf.Load(); return f.Env[settings.AutonomyKey] }
+	for _, c := range []struct {
+		yes         bool
+		input, flag string
+		want        string
+	}{
+		{true, "", "", "daily"},
+		{false, "limited\n", "", "limited"},
+		{false, "\n", "", "limited"},
+		{false, "FULL\n", "", "full"},
+		{false, "lots\n", "", "daily"},
+		{true, "", "full", "full"},
+	} {
+		setupAutonomy(asker{bufio.NewReader(strings.NewReader(c.input)), c.yes}, c.flag)
+		if got := saved(); got != c.want {
+			t.Errorf("%+v: saved %q", c, got)
+		}
 	}
 }
 

@@ -22,7 +22,7 @@ import (
 	"github.com/zcag/atc/internal/settings"
 )
 
-const setupHelp = `Usage: atc setup [--yes] [--calls] [--trust-tailnet] [--user NAME] [--assistant NAME] [--language CODE]
+const setupHelp = `Usage: atc setup [--yes] [--calls] [--trust-tailnet] [--autonomy LEVEL] [--user NAME] [--assistant NAME] [--language CODE]
 
 Walks through what a new install needs: who you are, Claude Code's status line (how atc learns your
 plan limits), atc's tools for your sessions, how to reach atc from other devices, the call characters
@@ -31,6 +31,7 @@ and calls. Safe to run again: what is already set stays, and nothing changes wit
   --yes             accept every suggestion without asking, except the two below
   --calls           set up calls without asking; about 2 GB, so --yes alone doesn't
   --trust-tailnet   let your own Tailscale devices in without a token; it widens who gets in, so --yes alone doesn't
+  --autonomy        what the assistant may do alone: limited, daily (what --yes takes) or full
 `
 
 type asker struct {
@@ -137,6 +138,7 @@ func setupCmd(args []string) error {
 	language := fs.String("language", "", "")
 	calls := fs.Bool("calls", false, "")
 	trustTailnet := fs.Bool("trust-tailnet", false, "")
+	autonomy := fs.String("autonomy", "", "")
 	fs.Parse(args)
 	a := asker{bufio.NewReader(setupInput()), *yes}
 
@@ -178,6 +180,7 @@ func setupCmd(args []string) error {
 		}
 	}
 
+	setupAutonomy(a, *autonomy)
 	setupReach(a, *trustTailnet)
 	fmt.Println("\nThe Android app. atc offers it to your phone, and updates it from this machine.")
 	if a.confirm("  Download it now?") {
@@ -201,6 +204,44 @@ func setupCmd(args []string) error {
 		fmt.Println("  claude auth login")
 	}
 	return nil
+}
+
+func setupAutonomy(a asker, given string) {
+	fmt.Println("\nWhat the assistant may do alone. On a call or on WhatsApp nobody can tap Allow, so what isn't allowed is refused,")
+	fmt.Println("and it hands that work to a session, which asks you as usual. Settings, Assistant changes this.")
+	fmt.Println("  limited  atc's tools, showing you pages and messaging you")
+	fmt.Println("  daily    also reads your files, searches the web and keeps notes in its own folder")
+	fmt.Println("  full     anything Claude can do, with no checks: a message that fools it can do real damage")
+	f, err := conf.Load()
+	if err != nil {
+		fmt.Println("  " + err.Error())
+		return
+	}
+	if env := os.Getenv(settings.AutonomyKey); env != "" && f.Env[settings.AutonomyKey] == "" {
+		fmt.Println("  Set in atc's environment, which wins: " + env)
+		return
+	}
+	level := given
+	if level == "" {
+		level = a.text("  Which one", cmp.Or(f.Env[settings.AutonomyKey], settings.AutonomyDaily))
+	}
+	level = strings.ToLower(strings.TrimSpace(level))
+	if !slices.Contains(settings.AutonomyLevels, level) {
+		level = settings.AutonomyDaily
+		fmt.Println("  That isn't one of them, so daily.")
+	}
+	if f.Env[settings.AutonomyKey] == level {
+		return
+	}
+	if f.Env == nil {
+		f.Env = map[string]string{}
+	}
+	f.Env[settings.AutonomyKey] = level
+	if err := conf.Save(f); err != nil {
+		fmt.Println("  " + err.Error())
+		return
+	}
+	restartServices("hub")
 }
 
 func setupCalls(a asker, given bool) {

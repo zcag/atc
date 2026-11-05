@@ -78,6 +78,9 @@ and the sender uses atc's client; the rest are what a login means.
   the receiving Claude reading it. Any session with a shell can read your token (`~/.config/atc/token`)
   and post a message that ends in that line. A session
   talked into it by something it read can therefore approve work in another session.
+- **The assistant acts without a tap.** Nobody can approve a tool on a call or on WhatsApp, so what it may do is set up front:
+  [its level](assistant.md#what-it-may-do-alone), `daily` by default. At `daily` it reads your files and the web, so a page that
+  talks it into something has more to work with than at `limited`; at `full` there are no checks at all.
 - **Guest isolation is the same kind of thing.** The guests' conversation is kept apart by its brief,
   `--strict-mcp-config` (no MCP servers but atc's) and the name check in `atc wa`. It runs as your user,
   so a shell that Claude Code's permissions allow it reaches your files and your atc login. A guest's

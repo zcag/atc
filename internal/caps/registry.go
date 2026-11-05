@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"runtime"
 	"strings"
+
+	"github.com/zcag/atc/internal/settings"
 )
 
 const (
@@ -84,6 +86,13 @@ func All() []Cap {
 			Check: checkHub,
 			Fix:   Fix{Command: "atc service install --only hub", Text: "Run the hub as a service on this machine, then enter its address here.", Guide: "assistant"},
 			Cost:  "Plan tokens for what you ask it.",
+		},
+		{
+			ID: "autonomy", Title: "What the assistant may do alone", Group: Assistant, Optional: true, Why: "On a call or on WhatsApp nobody can tap Allow, so what isn't allowed here is refused, and it hands that work to a session, which asks you as usual.",
+			Needs:  []string{"hub"},
+			Fields: []Field{{Key: settings.AutonomyKey, Label: "limited: atc's tools and messaging you. daily: also reads your files, searches the web and keeps notes in its folder. full: anything, with no checks", Hub: true, Options: []string{settings.AutonomyDaily, settings.AutonomyLimited, settings.AutonomyFull}}},
+			Check:  checkAutonomy,
+			Fix:    Fix{Text: "Choose here, or in atc setup. For more than daily without going to full, add allow rules to Claude Code's settings: the assistant honours them.", Guide: "assistant#what-it-may-do-alone"},
 		},
 		{
 			ID: "agent-folders", Title: "Agents' folders", Group: Agents, Optional: true, Why: "An agent can't wake until Claude Code trusts its folder, and with nobody at the screen nothing else says so.",

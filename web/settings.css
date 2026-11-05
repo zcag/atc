@@ -77,9 +77,9 @@
 .setpage .capcmd code { flex: 1; min-width: 0; padding: var(--s1) var(--s2); border-radius: var(--r-sm); background: var(--code); font-family: var(--mono); font-size: var(--fs-small); color: var(--ink); overflow-wrap: anywhere; }
 .setpage .capfields { display: flex; flex-direction: column; gap: var(--s2); max-width: 520px; }
 .setpage .capfield { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-small); color: var(--ink); }
-.setpage .capfield input { height: var(--btn-h); min-width: 0; width: 100%; box-sizing: border-box; padding: 0 var(--s2); border: 0; border-radius: var(--r-sm); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink); font-family: var(--mono); font-size: var(--fs-small); outline: none; }
-.setpage .capfield input:focus { box-shadow: inset 0 0 0 2px var(--focus); }
-.setpage .capfield input:disabled { background: var(--sunk); color: var(--faint); }
+.setpage .capfield input, .setpage .capfield select { height: var(--btn-h); min-width: 0; width: 100%; box-sizing: border-box; padding: 0 var(--s2); border: 0; border-radius: var(--r-sm); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink); font-family: var(--mono); font-size: var(--fs-small); outline: none; }
+.setpage .capfield input:focus, .setpage .capfield select:focus { box-shadow: inset 0 0 0 2px var(--focus); }
+.setpage .capfield input:disabled, .setpage .capfield select:disabled { background: var(--sunk); color: var(--faint); }
 .setpage .capfield small { font-family: var(--mono); font-size: var(--fs-micro); color: var(--faint); overflow-wrap: anywhere; }
 .setpage .ident .capfield small { font-family: inherit; font-size: var(--fs-small); }
 .setpage .linkish { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--dim); font-size: var(--fs-small); text-decoration: underline; }
@@ -93,7 +93,7 @@
 @media (max-width: 899px) {
   .setpage .btn { height: var(--hit); padding: 0 var(--s4); }
   .setpage .caphd { min-height: var(--hit); }
-  .setpage .capfield input { height: var(--hit); font-size: 16px; }
+  .setpage .capfield input, .setpage .capfield select { height: var(--hit); font-size: 16px; }
   .setpage .capcmd { flex-direction: column; align-items: stretch; }
   .setpage .capcmd .btn { align-self: flex-start; }
   .setpage { padding: var(--s4) var(--s4) var(--s7); }

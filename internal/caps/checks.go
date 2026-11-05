@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/claude"
+
+	"github.com/zcag/atc/internal/settings"
 )
 
 func command(ctx context.Context, bin string, args ...string) (string, error) {
@@ -246,6 +248,22 @@ func checkHub(ctx context.Context, env Env) Result {
 		return Result{OK, "Running, and asleep until the next message."}
 	}
 	return Result{OK, "Running, with its conversation open."}
+}
+
+func checkAutonomy(_ context.Context, env Env) Result {
+	if strings.Contains(env.Get("ATC_HUB_CLAUDE_ARGS"), "dangerously-skip-permissions") {
+		return Result{OK, "Anything, with no checks: ATC_HUB_CLAUDE_ARGS turns permissions off, whatever is chosen here."}
+	}
+	switch level := env.Get(settings.AutonomyKey); level {
+	case settings.AutonomyLimited:
+		return Result{OK, "Limited: atc's tools and messaging you. Anything else goes to a session."}
+	case "", settings.AutonomyDaily:
+		return Result{OK, "Daily: atc's tools, messaging you, reading your files, the web and notes in its own folder."}
+	case settings.AutonomyFull:
+		return Result{OK, "Anything, with no checks: a message that fools it can do real damage."}
+	default:
+		return Result{Broken, fmt.Sprintf("%q isn't one of limited, daily or full, so it runs as daily.", level)}
+	}
 }
 
 type callStatus struct {

@@ -27,6 +27,16 @@ type Settings struct {
 
 const LanguageKey = "ATC_STT_LANGUAGE"
 
+// AutonomyKey is how much the assistant may do with nobody to approve it. Empty is AutonomyDaily.
+const (
+	AutonomyKey     = "ATC_ASSISTANT_AUTONOMY"
+	AutonomyLimited = "limited"
+	AutonomyDaily   = "daily"
+	AutonomyFull    = "full"
+)
+
+var AutonomyLevels = []string{AutonomyLimited, AutonomyDaily, AutonomyFull}
+
 func (s *Settings) Path() string { return filepath.Join(s.Dir, "settings.json") }
 
 func (s *Settings) Load() (File, error) {

@@ -50,7 +50,7 @@ Core:
 
 Features, each on its own page:
 
-- Assistant and hub: `ATC_HUB`, `ATC_HUB_ADDR`, `ATC_HUB_CLAUDE_ARGS`, `ATC_ASSIST_DIR`:
+- Assistant and hub: `ATC_HUB`, `ATC_HUB_ADDR`, `ATC_HUB_CLAUDE_ARGS`, `ATC_ASSISTANT_AUTONOMY`, `ATC_ASSIST_DIR`:
   [The assistant](assistant.md)
 - Calls: `ATC_CALL_LINE`, `ATC_CALL_NUMBER`, `ATC_CALL_LINE_NUMBER`, `ATC_CALL_VOICES`,
   `ATC_CALL_TEST_LINE`, `ATC_CALL_TEST_FROM`: [Calls](calls.md). `ATC_DELTA_CALL`, the older name for
