@@ -1,6 +1,6 @@
 import { html, useState, useEffect, useCallback } from "./vendor/preact-htm.js";
 
-const slug = (g) => g.toLowerCase().replace(/\s+/g, "-");
+export const slug = (g) => g.toLowerCase().replace(/\s+/g, "-");
 const word = (r) => (r.status === "ok" ? "Working" : r.status === "broken" ? "Stopped working" : r.optional ? "Not set up" : "Needed");
 const tone = (r) => (r.status === "ok" ? "ok" : r.status === "broken" || r.warn ? "bad" : "off");
 
@@ -145,7 +145,7 @@ export function CapsBanner({ rep }) {
   return html`<p class="capsum" role="status">Needs attention: ${warn.map((r, i) => html`${i > 0 && ", "}<a href=${`#/settings#${r.id}`}>${r.title}${m.length > 1 ? ` on ${r.host}` : ""}</a>`)}.</p>`;
 }
 
-export function CapsSections({ rep, reload, ui, noMic }) {
+export function CapsSections({ rep, reload, ui, noMic, only = () => true }) {
   const machines = rep?.machines || [];
   const [host, setHost] = useState(null);
   const [at, setAt] = useState(anchorNow);
@@ -169,7 +169,7 @@ export function CapsSections({ rep, reload, ui, noMic }) {
     ${m.settingsError && html`<p class="capmsg bad" role="alert">${m.settingsError}</p>`}
     <div class="capbtns capagain"><button class="btn" onClick=${() => reload(true)}>Check everything again</button></div>
     ${m.restartCommand && html`<div class="caprestart" role="status"><p>Saved settings wait for a restart.</p><${Command} text=${m.restartCommand} ui=${ui} /></div>`}
-    ${rep.groups.filter((g) => inGroup(g).length).map((g) => {
+    ${rep.groups.filter((g) => inGroup(g).length && only(g)).map((g) => {
       const rows = inGroup(g), set = rows.filter((r) => r.status === "ok").length, bad = rows.filter((r) => r.status === "broken").length;
       return html`<section id=${slug(g)}>
         <h2>${g} <span class="n">${bad ? `${bad} stopped working` : set === rows.length ? "all working" : set ? `${set} of ${rows.length} working` : "not set up"}</span></h2>

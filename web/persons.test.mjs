@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { personOf, speakers, nextView, personLangs } from "./persons.js";
+import { personOf, speakers, nextView, personLangs, langName, voiceName, roomName } from "./persons.js";
 
 const doc = {
   persons: [
@@ -32,4 +32,11 @@ test("the view goes round, and an unknown one starts over", () => {
 test("languages come from voices and persons, Turkish first", () => {
   assert.deepEqual(personLangs({ en: {}, de: {} }, doc), ["tr", "de", "en"]);
   assert.deepEqual(personLangs(null, null), []);
+});
+
+test("names read as words", () => {
+  assert.equal(langName("tr"), "Turkish");
+  assert.equal(langName("de"), "de");
+  assert.equal(voiceName("en_old_man"), "old man");
+  assert.equal(roomName("my-big_room.webp"), "my big room");
 });

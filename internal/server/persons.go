@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,7 +15,12 @@ import (
 	"strings"
 )
 
-const personsFile = "persons.json"
+const (
+	personsFile   = "persons.json"
+	maxBackground = 16 << 20
+)
+
+var backgroundTypes = map[string]string{"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 
 // Person is who a call shows and speaks as: a name, a character from /app/personas (or "orb") and a voice per language.
 // How the assistant behaves stays out of it. Nothing here is tied to the assistant, so an agent can name a person too.
@@ -74,8 +80,8 @@ func (s *Server) callPersons(w http.ResponseWriter, r *http.Request) {
 // callBackgrounds lists the images a person can stand in front of.
 func (s *Server) callBackgrounds(w http.ResponseWriter, r *http.Request) {
 	files := []string{}
-	if s.AppDir != "" {
-		found, _ := os.ReadDir(filepath.Join(s.AppDir, "personas", "_rooms"))
+	if dir, err := s.roomsDir(); err == nil {
+		found, _ := os.ReadDir(dir)
 		for _, f := range found {
 			switch strings.ToLower(filepath.Ext(f.Name())) {
 			case ".jpg", ".jpeg", ".png", ".webp":
@@ -86,6 +92,132 @@ func (s *Server) callBackgrounds(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	reply(w, files)
+}
+
+// callBackgroundAdd keeps an uploaded image in the rooms, under a name of its own.
+func (s *Server) callBackgroundAdd(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBackground)
+	f, hdr, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "want a file up to 16 MB: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	defer f.Close()
+	b, err := io.ReadAll(f)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	ext := backgroundTypes[http.DetectContentType(b)]
+	if ext == "" {
+		http.Error(w, "want a JPEG, PNG or WebP image", http.StatusBadRequest)
+		return
+	}
+	s.prefMu.Lock()
+	defer s.prefMu.Unlock()
+	dir, err := s.roomsDir()
+	if err == nil {
+		err = os.MkdirAll(dir, 0o755)
+	}
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	base := strings.TrimSuffix(filepath.Base(hdr.Filename), filepath.Ext(hdr.Filename))
+	base = cmp.Or(strings.Trim(notInID.ReplaceAllString(strings.ToLower(base), "-"), "-"), "background")
+	name := base + ext
+	for n := 2; ; n++ {
+		if _, err := os.Stat(filepath.Join(dir, name)); os.IsNotExist(err) {
+			break
+		}
+		name = fmt.Sprintf("%s-%d%s", base, n, ext)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), b, 0o644); err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]string{"file": name})
+}
+
+// callBackgroundDelete removes a background nobody stands in front of.
+func (s *Server) callBackgroundDelete(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("file")
+	if !characterName.MatchString(name) {
+		http.Error(w, "no such background", http.StatusBadRequest)
+		return
+	}
+	s.prefMu.Lock()
+	defer s.prefMu.Unlock()
+	var d Persons
+	s.loadPref(personsFile, &d)
+	for _, p := range d.Persons {
+		if p.Background == name {
+			http.Error(w, p.Name+" uses this background", http.StatusConflict)
+			return
+		}
+	}
+	dir, err := s.roomsDir()
+	if err == nil {
+		err = os.Remove(filepath.Join(dir, name))
+	}
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]string{"file": name})
+}
+
+func (s *Server) roomsDir() (string, error) {
+	if s.AppDir == "" {
+		return "", errors.New("atc has no app folder (ATC_APP_DIR)")
+	}
+	return filepath.Join(s.AppDir, "personas", "_rooms"), nil
+}
+
+// agentPerson sets who an agent is on a call, in its agent.json; empty leaves it the assistant's.
+func (s *Server) agentPerson(w http.ResponseWriter, r *http.Request) {
+	a, ok := s.agentNamed(r.PathValue("name"))
+	if !ok || a.Folder == "" {
+		http.Error(w, "no such agent", http.StatusNotFound)
+		return
+	}
+	var b struct{ Person string }
+	if !decodeOr400(w, r, &b, "{person}", func() bool { return len(b.Person) <= 80 }) {
+		return
+	}
+	s.prefMu.Lock()
+	defer s.prefMu.Unlock()
+	var d Persons
+	s.loadPref(personsFile, &d)
+	if b.Person != "" && d.find(b.Person) == nil {
+		http.Error(w, "no such person", http.StatusNotFound)
+		return
+	}
+	file := filepath.Join(a.Folder, "agent.json")
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		fail(w, err)
+		return
+	}
+	if b.Person == "" {
+		delete(fields, "person")
+	} else {
+		fields["person"], _ = json.Marshal(b.Person)
+	}
+	out, err := json.MarshalIndent(fields, "", "  ")
+	if err == nil {
+		err = os.WriteFile(file, append(out, '\n'), 0o644)
+	}
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	reply(w, map[string]string{"person": b.Person})
 }
 
 // callPersonSave creates a person (no id) or changes one. A language with nobody yet gets a new person, so the first

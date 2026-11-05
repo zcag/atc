@@ -14,3 +14,8 @@ export const nextView = (v) => VIEWS[(VIEWS.findIndex(([k]) => k === v) + 1) % V
 /** Your language first as the call's is, then the rest, whether a language came from the voices or from the persons. */
 export const personLangs = (voices, doc) => [...new Set([...Object.keys(voices || {}), ...Object.keys(doc?.langs || {}), ...(doc?.persons || []).flatMap((p) => Object.keys(p.voices || {}))])]
   .sort((a, b) => (a === "tr" ? -1 : b === "tr" ? 1 : a.localeCompare(b)));
+
+const LANGS = { tr: "Turkish", en: "English" };
+export const langName = (l) => LANGS[l] || l;
+export const voiceName = (v) => v.replace(/^en_/, "").replace(/_/g, " ");
+export const roomName = (f) => f.replace(/\.[^.]+$/, "").replace(/[_-]/g, " ");

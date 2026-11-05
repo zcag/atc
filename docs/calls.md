@@ -106,12 +106,13 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   the network; the first one is an orb drawn by a shader.
 - **Persons** bundle what a call shows and speaks with: a name, a character, a background and a voice per
   language, kept on the server in `persons.json` (`GET /api/call/persons`) with which one the assistant is in each
-  language. Pick and edit them under Person on the call or Settings, Persons. The talker sends the call's
+  language. Settings, Persons shows them as portraits: who the assistant is per language, everyone, and which person each
+  talking agent is (it writes `person` in that agent's `agent.json`). Person on the call swaps who the assistant is. The talker sends the call's
   language with every `persona` event, so when the language changes the call screen swaps character, background and
   name at once while the voice changes with it. A pick tells the voice service, so the phone line speaks with it too.
   With nobody picked for a language, the character kept on that device shows, and the voice service's voice speaks. A
   person holds nothing about how the assistant behaves, and nothing in it is tied to the assistant, so an agent can name one too.
-- **Backgrounds** are images in `$ATC_APP_DIR/personas/_rooms/`, best at a character's 768x1344. One replaces a `rig`
+- **Backgrounds** are images in `$ATC_APP_DIR/personas/_rooms/`, best at a character's 768x1344; a person's editor adds and removes them. One replaces a `rig`
   character's room, darkened and softened like its own, without the lamp's glow and dust. The orb and the other kinds draw their own surroundings.
 - **View** is how a device shows the call, kept on that device: **Character** (whoever is on the line, as above), or
   **Line** or **Bars**, built-in marks that only move with the voices, for a call in public. It leaves the person alone:

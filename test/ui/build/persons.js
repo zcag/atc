@@ -20,7 +20,7 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
 
   const b = await chromium.launch({ executablePath: process.env.CHROME_BIN, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   for (const [label, scheme, width] of [['light400', 'light', 400], ['dark620', 'dark', 620]]) {
-    const ctx = await b.newContext({ viewport: { width, height: 860 }, isMobile: true, hasTouch: true, colorScheme: scheme });
+    const ctx = await b.newContext({ viewport: { width, height: 860 }, isMobile: width < 900, hasTouch: width < 900, colorScheme: scheme });
     await ctx.addInitScript(() => { try { sessionStorage.setItem('atc.setup.skip', '1'); localStorage.setItem('atc.notifask', '1'); } catch {} });
     await ctx.route('**/call.js', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE }));
     const p = await ctx.newPage();
@@ -94,20 +94,49 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
     await p.getByRole('radio', { name: /Hoca/ }).last().click();
     await p.waitForFunction(() => document.querySelector('.cph .w')?.textContent.includes('Hoca'));
 
-    await p.getByRole('button', { name: 'Edit' }).first().click();
-    await p.waitForSelector('.pform');
-    await shot('edit');
-    ok(!(await p.locator('.pform select').first().innerText()).match(/line|bars/), 'line and bars are not characters a person can have');
-    const box = await p.locator('.pform').boundingBox();
-    ok(box.width <= width, 'the form fits the phone');
-    ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'no sideways scroll');
-    await p.getByRole('button', { name: 'Cancel' }).click();
+    ok(await p.getByRole('link', { name: 'Edit persons' }).count() === 1, 'the panel points at the persons page');
 
-    await p.goto(base + '/#/settings#persons');
-    await p.waitForSelector('#persons .vpick');
+    await p.goto(base + '/#/settings/persons');
+    await p.waitForSelector('.gallery .personcard');
+    ok(await p.locator('.slots .slot').count() === 2, 'a slot per language');
+    ok(await p.locator('.gallery .personcard:not(.new)').count() === 3, 'everyone is in the gallery');
+    await p.waitForFunction(() => document.querySelectorAll('.gallery .face img').length === 3, null, { timeout: 90000 });
     await p.waitForTimeout(300);
-    ok(await p.locator('#persons').evaluate((e) => e.getBoundingClientRect().top < innerHeight), 'Settings opens at the persons');
-    await shot('settings');
+    await shot('gallery');
+    ok(await p.evaluate(() => [...document.querySelectorAll('.gallery .face img')].every((i) => i.naturalWidth > 0)), 'portraits are real pictures');
+    ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'gallery: no sideways scroll');
+    await p.locator('.slot').first().getByRole('radio', { name: /Hoca/ }).click();
+    await p.waitForFunction(() => document.querySelector('.slotcap b')?.textContent === 'Hoca');
+    ok(true, 'a slot swaps who speaks that language');
+    await p.locator('.slot').first().getByRole('radio', { name: /Mira/ }).click();
+    await p.waitForFunction(() => document.querySelector('.slotcap b')?.textContent === 'Mira');
+
+    await p.locator('.gallery .personcard', { hasText: 'Sessiz' }).click();
+    await p.waitForSelector('.peditor');
+    await p.waitForTimeout(3000);
+    await shot('edit');
+    ok(await p.locator('.picktiles').first().locator('.tile').count() === 3, 'orb and two characters: line and bars are views, not characters');
+    ok(await p.locator('.pvframe canvas').count() === 1, 'the editor has a live preview');
+    await p.locator('.tile', { hasText: 'Orb' }).click();
+    await p.waitForTimeout(500);
+    ok(await p.locator('.peditor').getByText('draws its own surroundings').count() === 1, 'the orb takes no background');
+    await p.locator('.tile', { hasText: 'Professor' }).click();
+    ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth), 'editor: no sideways scroll');
+    await p.getByRole('link', { name: 'Cancel' }).click();
+    await p.waitForSelector('.gallery');
+
+    if (width < 900) {
+      await p.goto(base + '/#/settings');
+      await p.waitForSelector('.setnav a');
+      ok(!(await p.isVisible('.setpage')), 'phone: Settings opens on the list of pages');
+      await shot('list');
+      await p.locator('.setnav a', { hasText: 'Persons' }).click();
+      await p.waitForSelector('.gallery');
+      ok(!(await p.isVisible('.setnav')), 'phone: a page takes the whole screen');
+      await p.locator('.settings .pghead .icon').click();
+      await p.waitForSelector('.setnav a');
+      ok(await p.isVisible('.setnav'), 'phone: Back returns to the list');
+    }
     ok(errors.length === 0, `no page errors ${errors.join('; ')}`);
     await ctx.close();
   }

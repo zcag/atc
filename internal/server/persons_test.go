@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -125,6 +127,66 @@ func TestBackgroundsAreKeptAndListed(t *testing.T) {
 	rig.callBackgrounds(rec, httptest.NewRequest("GET", "/api/call/backgrounds", nil))
 	if got := strings.TrimSpace(rec.Body.String()); got != `["day.webp","night.jpg"]` {
 		t.Fatal(got)
+	}
+}
+
+func TestBackgroundUploadAndDelete(t *testing.T) {
+	rig := newPersonsRig(t)
+	rig.AppDir = t.TempDir()
+	rig.mux.HandleFunc("POST /api/call/backgrounds", rig.callBackgroundAdd)
+	rig.mux.HandleFunc("DELETE /api/call/backgrounds/{file}", rig.callBackgroundDelete)
+	send := func(name string, data []byte) *httptest.ResponseRecorder {
+		var body bytes.Buffer
+		m := multipart.NewWriter(&body)
+		f, _ := m.CreateFormFile("file", name)
+		f.Write(data)
+		m.Close()
+		req := httptest.NewRequest("POST", "/api/call/backgrounds", &body)
+		req.Header.Set("Content-Type", m.FormDataContentType())
+		rec := httptest.NewRecorder()
+		rig.mux.ServeHTTP(rec, req)
+		return rec
+	}
+	png := []byte("\x89PNG\r\n\x1a\n0000")
+	if got := send("../My Room!.txt", png); !strings.Contains(got.Body.String(), `"my-room.png"`) {
+		t.Fatalf("%d %s", got.Code, got.Body)
+	}
+	if got := send("my room.png", png); !strings.Contains(got.Body.String(), `"my-room-2.png"`) {
+		t.Fatalf("%d %s", got.Code, got.Body)
+	}
+	if got := send("page.html", []byte("<html>")); got.Code != http.StatusBadRequest {
+		t.Fatalf("%d", got.Code)
+	}
+	rig.do(t, "POST", "/api/call/persons", `{"name":"A","character":"woman","background":"my-room.png"}`, 200)
+	rig.do(t, "DELETE", "/api/call/backgrounds/my-room.png", "", 409)
+	rig.do(t, "DELETE", "/api/call/backgrounds/my-room-2.png", "", 200)
+	if _, err := os.Stat(filepath.Join(rig.AppDir, "personas", "_rooms", "my-room-2.png")); !os.IsNotExist(err) {
+		t.Fatal("still there")
+	}
+}
+
+func TestAgentPersonKeepsTheRestOfAgentJSON(t *testing.T) {
+	rig := newPersonsRig(t)
+	rig.AgentsDir = t.TempDir()
+	rig.Host = "here"
+	folder := filepath.Join(rig.AgentsDir, "focus")
+	os.MkdirAll(folder, 0o755)
+	os.WriteFile(filepath.Join(folder, "agent.json"), []byte(`{"host":"here","talk":true,"extra":{"kept":1}}`), 0o644)
+	rig.mux.HandleFunc("POST /api/agents/{name}/person", rig.agentPerson)
+	rig.do(t, "POST", "/api/call/persons", `{"name":"A","character":"woman"}`, 200)
+	rig.do(t, "POST", "/api/agents/focus/person", `{"person":"gone"}`, 404)
+	rec := httptest.NewRecorder()
+	rig.mux.ServeHTTP(rec, httptest.NewRequest("POST", "/api/agents/focus/person", strings.NewReader(`{"person":"a"}`)))
+	b, _ := os.ReadFile(filepath.Join(folder, "agent.json"))
+	var got map[string]any
+	if err := json.Unmarshal(b, &got); err != nil || got["person"] != "a" || got["talk"] != true || got["extra"] == nil {
+		t.Fatalf("%d %s", rec.Code, b)
+	}
+	rec = httptest.NewRecorder()
+	rig.mux.ServeHTTP(rec, httptest.NewRequest("POST", "/api/agents/focus/person", strings.NewReader(`{"person":""}`)))
+	b, _ = os.ReadFile(filepath.Join(folder, "agent.json"))
+	if strings.Contains(string(b), "person") {
+		t.Fatal(string(b))
 	}
 }
 

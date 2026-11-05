@@ -138,14 +138,8 @@ body.docked .app { margin-right: 380px; }
 .vpick .kb[aria-pressed="true"] { color: var(--ink); background: var(--strip-hi); box-shadow: inset 0 0 0 1px var(--ink); }
 .vpick .pick { flex: 1; min-width: 0; padding: 6px 0; border: 0; background: none; box-shadow: none; text-align: left; }
 .vpick .pick:hover, .vpick .pick.on { background: none; box-shadow: none; }
-.picks > .row, .pform .row { display: flex; flex-wrap: wrap; gap: var(--s2); padding: var(--s3) var(--s4); }
-.pform { display: grid; padding-top: var(--s2); }
-.pform label { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: 6px var(--s4); }
-.pform label > span { flex: 0 0 9em; color: var(--dim); font-size: var(--fs-small); }
-.pform input, .pform select { flex: 1 1 10em; min-width: 0; height: var(--btn-h); padding: 0 var(--s2); border: 0; border-radius: var(--r-sm); background: var(--board); box-shadow: inset 0 0 0 1px var(--line-strong); }
-.pform input:focus, .pform select:focus { box-shadow: inset 0 0 0 2px var(--focus); outline: 0; }
-.pform select:disabled { opacity: .5; }
-.pform .sub { padding-block: 0 6px; }
+.picks > .row a.btn { display: inline-flex; align-items: center; color: var(--ink); text-decoration: none; }
+.picks > .row { display: flex; flex-wrap: wrap; gap: var(--s2); padding: var(--s3) var(--s4); }
 .picks .sub { margin: 0; padding: var(--s3) var(--s4); font-size: var(--fs-small); color: var(--dim); }
 
 
@@ -243,9 +237,8 @@ body.docked .app { margin-right: 380px; }
   .callp .ctl .btn { height: 44px; }
   .picks .pick { min-height: 52px; }
   .vpick { min-height: 44px; }
+  .picks > .row .btn { height: var(--hit); }
   .cview .seg button { height: var(--hit); padding: 0 var(--s3); }
-  .pform input, .pform select, .pform .kb, .pform .btn, .picks > .row .btn { height: var(--hit); }
-  .pform label > span { flex-basis: 100%; }
   .vpick .kb, .picks .pkh .kb { height: 44px; min-width: 56px; justify-content: center; }
 
 }
