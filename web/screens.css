@@ -574,4 +574,7 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
   .rp .cmd { grid-column: 1 / -1; }
   .brow .ctx .load { display: inline; margin-left: auto; }
   .brow .b2 .reschip, .bhead .reschip { height: 24px; padding: 0 var(--s2); }
+  .bhead .b2 { align-items: center; gap: var(--s1) var(--s3); }
+  .bhead .b2 .reschip { margin-left: auto; }
+  .bhead .b2 .wide { display: none; }
 }

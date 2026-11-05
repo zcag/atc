@@ -84,7 +84,7 @@
 .setpage .ident .capfield small { font-family: inherit; font-size: var(--fs-small); }
 .setpage .linkish { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--dim); font-size: var(--fs-small); text-decoration: underline; }
 .setpage .capbtns { display: flex; flex-wrap: wrap; gap: var(--s2); }
-.setpage .capagain { margin-top: var(--s6); }
+.setpage .capagain { margin: var(--s6) 0 var(--s5); }
 .setpage .capbtns.end { justify-content: flex-end; margin-top: var(--s4); }
 .setpage h1 { margin: 0 0 var(--s2); font-size: var(--fs-4xl); font-weight: 650; color: var(--ink); }
 .setpage .capintro { margin: 0 0 var(--s3); max-width: 62ch; font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--dim); }

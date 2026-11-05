@@ -45,7 +45,7 @@ Core:
 | `ATC_CONFIG_DIR` | The config folder |
 | `ATC_PUBLIC_URL` | The HTTPS address atc answers at, for links and pairing |
 | `ATC_TOKEN`, `ATC_URL` | The login and server the `atc` client uses, instead of a saved login |
-| `ATC_TRUST_TAILNET`, `ATC_TRUSTED_PROXIES` | See [Security](security.md) |
+| `ATC_TRUST_TAILNET`, `ATC_TRUSTED_PROXIES`, `ATC_ALLOWED_HOSTS` | See [Security](security.md) |
 | `ATC_CONTAIN` | `1` starts sessions in `claude.slice` on systemd |
 
 Features, each on its own page:

@@ -23,7 +23,10 @@ the same.
 - **Tailscale, opt-in:** with `ATC_TRUST_TAILNET=1`, requests from devices of your own Tailscale user
   need no token. atc checks each with `tailscale whois`. That trusts the device, not a person: any
   program or other user on it gets a full login. Revoking a device in Settings does not stop that;
-  removing it from your tailnet does. Requests a browser marks as cross-site are refused.
+  removing it from your tailnet does. Requests a browser marks as cross-site are refused. The address
+  alone is not enough: the request's Host must be an IP, a name with no dot, a `.ts.net` name, the host of
+  `ATC_PUBLIC_URL`, or one listed in `ATC_ALLOWED_HOSTS` (space separated), so a site can't reach atc by
+  rebinding its own name to this machine. On any other name you get the login prompt.
 - **Behind a proxy:** with `ATC_TRUSTED_PROXIES` (CIDR list) atc takes the client's address from the
   forwarded header of those proxies only. It matters for the tailnet check and the claim rate limit.
 - **`atc serve -no-auth`** turns the token off. Use it only behind something else that authenticates.
