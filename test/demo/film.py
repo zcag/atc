@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cuts callshot.js's recording into the README's film, once film.js has drawn test/demo/beats.json's panels:
+"""Cuts callshot.js's recording into the README's film (an mp4 with sound, and the silent animated WebP the README plays inline), once film.js has drawn test/demo/beats.json's panels:
 film.py <call dir> <film dir: callfilm.py's screen.mp4, events.json> <panels dir> <out prefix>
 
 The audio is the call's call.wav (left the caller, right the assistant, on talk.py's clock) and the phone is the device's
@@ -35,6 +35,8 @@ def cut(call, film, panels, out):
     graph += [f"[{last}]fps=25,format=yuv420p[out]", "[2:a]pan=mono|c0=0.8*c0+0.8*c1,aresample=44100,apad[a]"]
     subprocess.run(["ffmpeg", "-y", "-v", "error", *inputs, "-filter_complex", ";".join(graph), "-map", "[out]", "-map", "[a]",
                     "-c:v", "libx264", "-crf", "25", "-preset", "slow", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", "-t", str(span), f"{out}.mp4"], check=True)
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", f"{out}.mp4", "-vf", "fps=10,scale=1100:-2:flags=lanczos", "-an", "-c:v", "libwebp_anim",
+                    "-quality", "62", "-compression_level", "5", "-loop", "0", f"{out}.webp"], check=True)
 
 
 if __name__ == "__main__":

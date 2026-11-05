@@ -38,6 +38,14 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
       await p.waitForTimeout(500);
       return [[p, "hero"]];
     },
+    // Working in one project with a peek at another: alt+shift+2 is bay 2's sessions, answerable where they are.
+    async bays(mode) {
+      const p = await open(mode, { w: 1280, h: 760 });
+      await to(p, `#/s/${by("Fix the coupon crash").id}`, 2600);
+      await p.keyboard.press("Alt+Shift+Digit2");
+      await p.waitForTimeout(900);
+      return [[p, "bays"]];
+    },
     // The fleet image's front window: @ops's session on the checkout errors and its page.
     async desk(mode) {
       const p = await open(mode, { w: 1760, h: 1000 });
