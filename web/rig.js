@@ -386,7 +386,7 @@ export class Behaviour {
     }
 
     const browHit = this.brow.step(dt);
-    const knit = this.knit.to(s === "thinking" ? .55 + .15 * wander(t, 9) : s === "tool" ? .2 : 0, dt);
+    const knit = this.knit.to(s === "thinking" && !this.prop ? .55 + .15 * wander(t, 9) : s === "tool" || this.prop ? .2 : 0, dt);
     const brow = this.browS.to(browHit + (s === "hearing" ? .1 : 0) - knit * .2, dt);
     const smileBase = { listening: .35, hearing: .25, thinking: .1, tool: .12, speaking: .22 }[s] ?? .25;
     const smile = this.smile.to(smileBase + .12 * wander(t * .5, 4), dt) + this.smileP.step(dt);
