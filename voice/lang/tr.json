@@ -29,7 +29,7 @@
   "CALL_OVER": "(Görüşme kapandı. Yarım kalan bir iş varsa bitir, sonucunu `atc notify` ile kısaca bildir.)",
   "CALL_OVER_GUEST": "({guest} ile görüşme kapandı. {user}'ın bilmesi ya da karar vermesi gereken bir şey çıktıysa report ile asistana bildir; ona söz verdiğin bir şey varsa onu da takip et.)",
   "NOT_PICKED_UP": "(Açmadı: telefon çaldı ama açmadı, hazırladığın açılış duyulmadı.)",
-  "LINE_BACK": "\\basistan\\w*\\s+(dön\\w*|geç\\w*|bağla\\w*|ver\\w*|aç\\w*)|\\b(geri\\s+dön|dön)\\w*\\s+asistan\\w*|\\bback to (the )?assistant\\b",
+  "LINE_BACK": "\\basistan\\w*\\s+(geri\\s+)?(dön\\w*|geç\\w*|bağla\\w*|ver\\w*|aç\\w*)|\\b{assistant}\\W?\\s?(y?[aeıiuü])?\\s+(geri\\s+)?(dön\\w*|geç\\w*|bağla\\w*)|\\b(geri\\s+dön|dön)\\w*\\s+(asistan|{assistant})\\w*|\\bback to (the )?assistant\\b",
   "LINE_TO": "[Hat az önce sana geçti: {user} seni istedi, şu an seni duyuyor. Hemen öncesinde {was} ile: {said}. Sana bir şey sorduysa cevapla, sormadıysa kısaca hatta olduğunu söyle.]",
   "LINE_BACK_TO": "[Hat yaklaşık {minutes} dakika sonra {was} tarafından sana döndü, {user} şu an seni duyuyor. Orada son konuşulan: {said}. Döndüğünü tek kısa cümleyle söyle, duyması gereken bir şey varsa onu da; o konuşmayı ancak isterse oku.]",
   "LINE_BUSY": "[Hattı {name} tarafına geçirmeye çalıştın ama şu an bir işin ortasında ({doing}). Hat sende kalıyor. Bunu bir cümleyle söyle, mesaj iletmeyi ya da işi bitince tekrar denemeyi öner.]",

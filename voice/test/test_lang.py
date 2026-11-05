@@ -37,6 +37,18 @@ class LineBack(unittest.TestCase):
                 self.assertFalse(p.LINE_BACK.search(text), text)
 
 
+    def test_back_by_the_assistants_own_name(self):
+        for code, yes, no in (
+            ("tr", ["delta'ya dön", "deltaya dön", "Delta’ya geri dön", "delta ya geç", "dön deltaya", "deltayı bağla"], ["delta verisini aç", "delta grafiğine dön", "delta ne dedi"]),
+            ("en", ["back to delta", "put delta on", "get delta"], ["the delta is wrong", "what did delta say"]),
+        ):
+            p = Pack(code, assistant="delta")
+            for text in yes:
+                self.assertTrue(p.LINE_BACK.search(text), text)
+            for text in no:
+                self.assertFalse(p.LINE_BACK.search(text), text)
+
+
 class Tr(unittest.TestCase):
     def test_every_constant_is_today(self):
         p = Pack("tr", **NAMES)

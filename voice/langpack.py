@@ -3,7 +3,7 @@ import json, os, re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SLOT = re.compile(r"\{(\w+)\}")
-REGEXES = "UNFINISHED", "HALLUCINATIONS", "WHISPER_JUNK", "STOP", "LINE_BACK"
+REGEXES = "UNFINISHED", "HALLUCINATIONS", "WHISPER_JUNK", "STOP"
 WORDS = "LINE_CHECK", "LINE_CORE", "BACKCHANNEL"
 
 
@@ -29,6 +29,7 @@ class Pack:
         self.__dict__.update({k: named(v, names) for k, v in raw.items()})
         for k in REGEXES:
             setattr(self, k, re.compile(getattr(self, k), re.I))
+        self.LINE_BACK = re.compile(fill(raw["LINE_BACK"], **{k: re.escape(v) for k, v in names.items()}), re.I)
         for k in WORDS:
             setattr(self, k, set(getattr(self, k)))
         self.END = re.compile("|".join(map(re.escape, self.HANGUP)))

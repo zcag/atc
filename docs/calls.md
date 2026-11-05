@@ -45,7 +45,7 @@ that same call, and hand it back.
 
 - **Moving the line.** Say so ("put Focus on"): the assistant connects you when it finishes speaking. In the app or
   the page, tap the name on the call screen (or the strip of names, or ⋯ Talk to). An agent's **Call** button
-  (Agent details) starts a call that opens on it. "Back to the assistant" works on any line, also while the agent is
+  (Agent details) starts a call that opens on it. "Back to the assistant", or the assistant's own name (`TALK_ASSISTANT`), works on any line, also while the agent is
   in the middle of a long tool, because the talker hears it, not the agent. On a phone line with no screen, the
   words are all there is.
 - **Knowing who you hear.** Two notes on every move (rising to an agent, falling back), then the one you moved to

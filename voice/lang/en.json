@@ -29,7 +29,7 @@
   "CALL_OVER": "(The call has ended. If some work is unfinished, finish it and report the result briefly with `atc notify`.)",
   "CALL_OVER_GUEST": "(The call with {guest} has ended. If something came up that {user} should know or decide, tell the assistant with report; if you promised them anything, follow up on that too.)",
   "NOT_PICKED_UP": "(Not answered: the phone rang but nobody picked up, so your prepared opening was not heard.)",
-  "LINE_BACK": "\\b(back to (the )?assistant|(put|get|give me) (the )?assistant|assistant (please|back))\\b",
+  "LINE_BACK": "\\b(back to (the )?assistant|(put|get|give me) (the )?assistant|assistant (please|back)|back to {assistant}|(put|get|give me) {assistant})\\b",
   "LINE_TO": "[The line just moved to you: {user} asked for you and hears you now. Just before, with {was}: {said}. If they already asked you something, answer it. Otherwise say in a few words that you are on.]",
   "LINE_BACK_TO": "[The line just came back to you from {was} after about {minutes} minutes, and {user} hears you now. The last of what they said there: {said}. One short sentence that you are back, with whatever they need to hear; read that conversation only if they ask.]",
   "LINE_BUSY": "[You tried to move the line to {name}, but it is in the middle of something ({doing}). The line stays with you. Say so in a sentence and offer to pass a message or try again when it is done.]",
