@@ -106,8 +106,8 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   the network; the first one is an orb drawn by a shader.
 - **Persons** bundle what a call shows and speaks with: a name, a character, a background and a voice per
   language, kept on the server in `persons.json` (`GET /api/call/persons`) with which one the assistant is in each
-  language. Settings, Persons shows them as portraits: who the assistant is per language, everyone, and which person each
-  talking agent is (it writes `person` in that agent's `agent.json`). Person on the call swaps who the assistant is. The talker sends the call's
+  language. Settings, Persons shows them as portraits: who the assistant is per language, everyone, and which person and background each
+  talking agent has (it writes `person` and `background` in that agent's `agent.json`; with no person an agent keeps the assistant's, and a background of its own still applies). Person on the call swaps who the assistant is. The talker sends the call's
   language with every `persona` event, so when the language changes the call screen swaps character, background and
   name at once while the voice changes with it. A pick tells the voice service, so the phone line speaks with it too.
   With nobody picked for a language, the character kept on that device shows, and the voice service's voice speaks. A

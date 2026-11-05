@@ -188,6 +188,17 @@ func TestAgentPersonKeepsTheRestOfAgentJSON(t *testing.T) {
 	if strings.Contains(string(b), "person") {
 		t.Fatal(string(b))
 	}
+
+	rec = httptest.NewRecorder()
+	rig.mux.ServeHTTP(rec, httptest.NewRequest("POST", "/api/agents/focus/person", strings.NewReader(`{"background":"night.jpg"}`)))
+	b, _ = os.ReadFile(filepath.Join(folder, "agent.json"))
+	if !strings.Contains(string(b), `"background": "night.jpg"`) || strings.Contains(string(b), "person") {
+		t.Fatalf("an agent can keep the assistant's person and only change the background: %d %s", rec.Code, b)
+	}
+	rig.AppDir = t.TempDir()
+	rig.mux.HandleFunc("DELETE /api/call/backgrounds/{file}", rig.callBackgroundDelete)
+	rig.do(t, "DELETE", "/api/call/backgrounds/night.jpg", "", 409)
+	rig.do(t, "POST", "/api/agents/focus/person", `{"background":"../night.jpg"}`, 400)
 }
 
 func TestNoPersonsYetStillDraws(t *testing.T) {

@@ -1295,7 +1295,7 @@ function LineStrip() {
 /** The call itself: the persona, what it is doing now, captions when the conversation is not beside it, and the controls. */
 function CallPanel({ hub, live, captions, full, onMin }) {
   const [st, f] = useCall();
-  const look = usePersona(f.lang, f.person);
+  const look = usePersona(f.lang, f.person, f.background);
   const [opts, setOpts] = useState(false);
   useNow(1000);
   const on = Call.live();
@@ -1596,10 +1596,10 @@ async function personaList() {
 
 const kept = (k, or) => { try { return JSON.parse(localStorage.getItem(k)) ?? or; } catch { return or; } };
 
-/** Who is on the line: `own` when an agent there names a person, else who the assistant is in `lang` (before a call says,
+/** Who is on the line: `own` when an agent there names a person (`ownRoom` when it overrides their background), else who the assistant is in `lang` (before a call says,
  *  the language the last one opened in). And what that person looks like: their character and background, or with nobody picked for the language the character kept in this browser. The
  *  lists are kept too and trusted until the server has answered, so a screen never opens on the orb by mistake. */
-function usePersona(lang, own) {
+function usePersona(lang, own, ownRoom) {
   const [list, setList] = useState(() => kept("atc.personas", PERSONAS_UNKNOWN));
   const [doc, setDoc] = useState(() => kept("atc.persons", { persons: [], langs: {} }));
   const [answered, setAnswered] = useState(false);
@@ -1623,7 +1623,7 @@ function usePersona(lang, own) {
   const want = person?.character ?? (VIEWS.some(([v]) => v === name) ? null : name) ?? list.def;
   const shown = !answered || list.names.includes(want) ? want : "orb";
   const choose = (l, id) => api("/api/call/persons/pick", { method: "POST", body: { lang: l, id } }).then(keep);
-  return { names: list.names, kinds: list.kinds, shown, revs: list.revs, background: person?.background || "", doc, keep, person, lang: speaking, choose,
+  return { names: list.names, kinds: list.kinds, shown, revs: list.revs, background: ownRoom || person?.background || "", doc, keep, person, lang: speaking, choose,
     view, setView, mark: view !== "character" ? view : null, framed: shown !== "orb" && view === "character" };
 }
 

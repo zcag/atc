@@ -165,7 +165,7 @@ func (s *Server) agentLine(w http.ResponseWriter, r *http.Request) {
 	home, _ := os.UserHomeDir()
 	s.refresh()
 	reply(w, map[string]any{"session": sid, "dir": existingDir(a.dir(), home), "args": args,
-		"name": a.Name, "title": a.label(), "icon": a.Icon, "color": a.Color, "person": a.Person, "voices": personVoices(a.Person)})
+		"name": a.Name, "title": a.label(), "icon": a.Icon, "color": a.Color, "person": a.Person, "background": a.Background, "voices": personVoices(a.Person)})
 }
 
 func lineRefused(w http.ResponseWriter, code int, body map[string]string) {

@@ -1,6 +1,6 @@
 const OUT_RATE = 24000;
 const SPEECH_GAIN = 2.5;
-const FACE = { state: "listening", hearing: "", you: "", said: "", tool: "", line: "assistant", title: "", person: "", moving: false, knock: "", lang: "" };
+const FACE = { state: "listening", hearing: "", you: "", said: "", tool: "", line: "assistant", title: "", person: "", background: "", moving: false, knock: "", lang: "" };
 const WHY = { busy: "the line is busy", nobody: "nobody is there to answer", gone: "the call is over", lost: "connection lost", hangup: "hung up" };
 
 let st = { phase: "idle", since: 0, muted: false, why: "" };
@@ -130,6 +130,7 @@ function persona(o) {
     line: o.line || face.line,
     title: has("title") ? o.title : face.title,
     person: has("person") ? o.person : face.person,
+    background: has("background") ? o.background : face.background,
     moving: has("moving") ? o.moving : face.moving,
     knock: has("knock") ? o.knock : face.knock,
     lang: o.lang || face.lang,

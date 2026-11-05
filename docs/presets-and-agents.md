@@ -53,7 +53,7 @@ email/
   conversation from atc.
 - `reset`: when its conversation starts over (below).
 - `talk`: `true` lets the user talk to it directly on a call ([Talking to an agent](calls.md#talking-to-an-agent)), off
-  by default. `person` names who it sounds and looks like there.
+  by default. `person` names who it sounds and looks like there, and `background` a background of its own over theirs. Settings, Persons sets both.
 - `share`: `{"page": "items", "about": "what it holds"}` names the page whose state other sessions
   read with the `state` tool, so the assistant answers "what's open?" from it instead of asking the
   agent. Give that state a `headline` and `badge` and keep its keys small and named (`counts`

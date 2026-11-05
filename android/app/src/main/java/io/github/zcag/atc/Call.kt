@@ -54,7 +54,7 @@ object Calls {
     /** What the assistant is doing, from the talker: listening, hearing (the user), thinking, tool, speaking. */
     data class Face(
         val state: String = "listening", val hearing: String = "", val you: String = "", val said: String = "", val tool: String = "",
-        val line: String = "assistant", val title: String = "", val moving: Boolean = false, val knock: String = "", val person: String = "", val lang: String = "",
+        val line: String = "assistant", val title: String = "", val moving: Boolean = false, val knock: String = "", val person: String = "", val background: String = "", val lang: String = "",
     )
 
     sealed interface Wire {
@@ -86,6 +86,7 @@ object Calls {
             moving = if (o.has("moving")) o.optBoolean("moving") else f.moving,
             knock = if (o.has("knock")) o.optString("knock") else f.knock,
             person = if (o.has("person")) o.optString("person") else f.person,
+            background = if (o.has("background")) o.optString("background") else f.background,
             lang = o.optString("lang").ifEmpty { f.lang },
         )
     }

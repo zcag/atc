@@ -156,6 +156,12 @@ func (s *Server) callBackgroundDelete(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	for _, a := range s.agentList() {
+		if a.Background == name {
+			http.Error(w, a.label()+" uses this background", http.StatusConflict)
+			return
+		}
+	}
 	dir, err := s.roomsDir()
 	if err == nil {
 		err = os.Remove(filepath.Join(dir, name))
@@ -174,15 +180,18 @@ func (s *Server) roomsDir() (string, error) {
 	return filepath.Join(s.AppDir, "personas", "_rooms"), nil
 }
 
-// agentPerson sets who an agent is on a call, in its agent.json; empty leaves it the assistant's.
+// agentPerson sets who an agent is on a call and the background it overrides theirs with, in its agent.json; an empty person
+// leaves it the assistant's, an empty background leaves that person's.
 func (s *Server) agentPerson(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.agentNamed(r.PathValue("name"))
 	if !ok || a.Folder == "" {
 		http.Error(w, "no such agent", http.StatusNotFound)
 		return
 	}
-	var b struct{ Person string }
-	if !decodeOr400(w, r, &b, "{person}", func() bool { return len(b.Person) <= 80 }) {
+	var b struct{ Person, Background string }
+	if !decodeOr400(w, r, &b, "{person, background}", func() bool {
+		return len(b.Person) <= 80 && (b.Background == "" || characterName.MatchString(b.Background))
+	}) {
 		return
 	}
 	s.prefMu.Lock()
@@ -204,10 +213,12 @@ func (s *Server) agentPerson(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	if b.Person == "" {
-		delete(fields, "person")
-	} else {
-		fields["person"], _ = json.Marshal(b.Person)
+	for key, value := range map[string]string{"person": b.Person, "background": b.Background} {
+		if value == "" {
+			delete(fields, key)
+		} else {
+			fields[key], _ = json.Marshal(value)
+		}
 	}
 	out, err := json.MarshalIndent(fields, "", "  ")
 	if err == nil {
@@ -217,7 +228,7 @@ func (s *Server) agentPerson(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	reply(w, map[string]string{"person": b.Person})
+	reply(w, map[string]string{"person": b.Person, "background": b.Background})
 }
 
 // callPersonSave creates a person (no id) or changes one. A language with nobody yet gets a new person, so the first

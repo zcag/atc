@@ -81,31 +81,46 @@ function PersonCard({ look, p, agents }) {
   </a>`;
 }
 
-/** Agents you can talk to on a call, and who each one is there. */
-function AgentPersons({ api, look, agents, reload, setNote }) {
+/** Agents you can talk to on a call: who each one is there, and its own background if it wants one over theirs. */
+function AgentPersons({ api, look, agents, rooms, reload, setNote }) {
   const talking = agents.filter((a) => a.talk);
-  const set = async (a, person) => {
+  const { doc } = look;
+  const set = async (a, change) => {
+    const name = a.title || a.name;
     try {
-      await api(`/api/agents/${encodeURIComponent(a.name)}/person`, { method: "POST", body: { person } });
-      setNote(person ? `${a.title || a.name} is ${look.doc.persons.find((p) => p.id === person)?.name} on a call now.` : `${a.title || a.name} looks and sounds like the assistant now.`);
+      await api(`/api/agents/${encodeURIComponent(a.name)}/person`, { method: "POST", body: { person: a.person || "", background: a.background || "", ...change } });
+      setNote(`${name} looks that way from the next time you talk to it.`);
       reload();
-    } catch (e) { setNote(`Couldn't change ${a.title || a.name}: ${e.message}`); }
+    } catch (e) { setNote(`Couldn't change ${name}: ${e.message}`); }
   };
   return html`<section>
     <h2>Agents on a call</h2>
     ${talking.length === 0 && html`<p class="sub">No agent can talk on a call yet. Add <code>"talk": true</code> to an agent's agent.json and it appears here.</p>`}
-    ${talking.map((a) => { const p = look.doc.persons.find((x) => x.id === a.person); return html`<div class="agrow">
-      ${p ? html`<${Portrait} look=${look} character=${p.character} background=${p.background} />` : html`<span class="face empty" aria-hidden="true"></span>`}
-      <b>${a.title || a.name}</b>
-      <select aria-label=${`Who ${a.title || a.name} is on a call`} value=${a.person || ""} onChange=${(e) => set(a, e.target.value)}>
-        <option value="">Same as the assistant</option>
-        ${look.doc.persons.map((x) => html`<option value=${x.id}>${x.name}</option>`)}
-      </select>
-    </div>`; })}
+    ${talking.map((a) => {
+      const name = a.title || a.name;
+      const own = doc.persons.find((x) => x.id === a.person);
+      const seen = own || look.person || doc.persons.find((x) => Object.values(doc.langs).includes(x.id));
+      return html`<div class="agrow" key=${a.name}>
+        ${seen ? html`<${Portrait} look=${look} character=${seen.character} background=${a.background || seen.background} />` : html`<span class="face empty" aria-hidden="true"></span>`}
+        <div class="agmain">
+          <b>${name}</b>
+          <label><span>Person</span><select aria-label=${`Who ${name} is on a call`} value=${a.person || ""} onChange=${(e) => set(a, { person: e.target.value })}>
+            <option value="">Same as the assistant</option>
+            ${doc.persons.map((x) => html`<option value=${x.id}>${x.name}</option>`)}
+          </select></label>
+          ${seen && !takesRoom(look, seen.character) ? html`<p class="sub">${title(seen.character)} draws its own surroundings.</p>` : html`
+            <div class="swap" role="radiogroup" aria-label=${`Background for ${name}`}>
+              <button role="radio" aria-checked=${!a.background} onClick=${() => set(a, { background: "" })}>
+                ${seen ? html`<${Portrait} look=${look} character=${seen.character} background=${seen.background} />` : html`<span class="face empty"></span>`}<span>Their own</span></button>
+              ${rooms.map((f) => html`<button role="radio" key=${f} aria-checked=${a.background === f} onClick=${() => set(a, { background: f })}>
+                <span class="face"><img src=${ROOMS + f} alt="" loading="lazy" /></span><span>${title(roomName(f))}</span></button>`)}
+            </div>`}
+        </div>
+      </div>`; })}
   </section>`;
 }
 
-function Gallery({ api, look, agents, reloadAgents, voices }) {
+function Gallery({ api, look, agents, rooms, reloadAgents, voices }) {
   const [note, setNote] = useState("");
   const { doc } = look;
   const langs = personLangs(voices, doc);
@@ -127,7 +142,8 @@ function Gallery({ api, look, agents, reloadAgents, voices }) {
           <a class="personcard new" href="#/settings/persons/new"><span class="face plus" aria-hidden="true"></span><b>New person</b></a>
         </div>
       </section>
-      <${AgentPersons} api=${api} look=${look} agents=${agents} reload=${reloadAgents} setNote=${setNote} />`}`;
+      <${AgentPersons} api=${api} look=${look} agents=${agents} rooms=${rooms} reload=${reloadAgents} setNote=${setNote} />
+      ${note && html`<p class="sub" role="status">${note}</p>`}`}`;
 }
 
 function Tile({ on, label, onClick, children }) {
@@ -234,7 +250,7 @@ export function PersonsPage({ api, look, sub, Preview, go }) {
     reloadRooms();
     reloadAgents();
   }, []);
-  if (!sub) return html`<${Gallery} api=${api} look=${look} agents=${agents} reloadAgents=${reloadAgents} voices=${voices} />`;
+  if (!sub) return html`<${Gallery} api=${api} look=${look} agents=${agents} rooms=${rooms} reloadAgents=${reloadAgents} voices=${voices} />`;
   const found = look.doc.persons.find((p) => p.id === sub);
   if (sub !== "new" && !found) return html`<p class="sub">Nobody here by that name. <a href="#/settings/persons">Back to Persons</a></p>`;
   const first = look.names.find((n) => look.kinds[n] === "rig") || "orb";

@@ -96,8 +96,8 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         }
     }
 
-    /** What to draw: a person's character and background, or the kept character with the room it came with. */
-    private fun wanted() = person?.let { it.optString("character") to it.optString("background") } ?: (Prefs(context).persona.orEmpty().takeIf { it !in MARKS }.orEmpty() to "")
+    /** What to draw: a person's character and background (an agent's own background over theirs), or the kept character with the room it came with. */
+    private fun wanted() = person?.let { it.optString("character") to face.background.ifEmpty { it.optString("background") } } ?: (Prefs(context).persona.orEmpty().takeIf { it !in MARKS }.orEmpty() to face.background)
 
     private fun refresh() {
         onPerson(person?.optString("name"))
@@ -147,7 +147,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
     }
 
     override fun face(f: Calls.Face) {
-        val moved = f.person != face.person
+        val moved = f.person != face.person || f.background != face.background
         face = f
         current?.face(f)
         if (f.lang.isNotEmpty() && f.lang != lang) {

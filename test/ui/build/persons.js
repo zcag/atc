@@ -22,6 +22,9 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
   for (const [label, scheme, width] of [['light400', 'light', 400], ['dark620', 'dark', 620]]) {
     const ctx = await b.newContext({ viewport: { width, height: 860 }, isMobile: width < 900, hasTouch: width < 900, colorScheme: scheme });
     await ctx.addInitScript(() => { try { sessionStorage.setItem('atc.setup.skip', '1'); localStorage.setItem('atc.notifask', '1'); } catch {} });
+    const focus = { name: 'focus', title: 'Focus', talk: true, person: '', background: '' };
+    await ctx.route('**/api/agents', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([focus]) }));
+    await ctx.route('**/api/agents/focus/person', (r) => { Object.assign(focus, r.request().postDataJSON()); return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
     await ctx.route('**/call.js', (r) => r.fulfill({ status: 200, contentType: 'text/javascript', body: FAKE }));
     const p = await ctx.newPage();
     const asked = [];
@@ -55,7 +58,12 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
     await p.evaluate(() => window.__call.set({}, { line: 'other', title: 'Other', person: '' }));
     await p.waitForTimeout(300);
     ok(await p.locator('.cph .w').innerText() === 'Other, Hoca', 'an agent without one: who the assistant is in this language');
-    await p.evaluate(() => window.__call.set({}, { line: 'assistant', title: '', person: '' }));
+    asked.length = 0;
+    await p.evaluate(() => window.__call.set({}, { line: 'focus', title: 'Focus', person: 'hoca', background: 'night.jpg' }));
+    await p.waitForTimeout(3000);
+    ok(seen('/personas/professor/rig.json') && seen('/_rooms/night.jpg') && await drawn(), 'an agent with its own background: their character in that room');
+    await p.evaluate(() => window.__call.set({}, { line: 'assistant', title: '', person: '', background: '' }));
+    await p.waitForTimeout(800);
 
     asked.length = 0;
     const view = (name) => p.locator('.cview').getByRole('button', { name, exact: true });
@@ -110,6 +118,23 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
     ok(true, 'a slot swaps who speaks that language');
     await p.locator('.slot').first().getByRole('radio', { name: /Mira/ }).click();
     await p.waitForFunction(() => document.querySelector('.slotcap b')?.textContent === 'Mira');
+
+    const row = p.locator('.agrow', { hasText: 'Focus' });
+    ok(await row.count() === 1, 'a talking agent has a row');
+    await row.getByRole('radio', { name: /Night/ }).click();
+    await p.waitForFunction(() => document.querySelector('.agrow [aria-checked="true"]')?.textContent.includes('Night'));
+    ok(focus.background === 'night.jpg' && focus.person === '', 'an agent can take a background and stay the assistant');
+    await row.locator('select').selectOption('sessiz');
+    await p.waitForTimeout(500);
+    ok(focus.person === 'sessiz' && focus.background === 'night.jpg', 'picking a person keeps its background');
+    await p.waitForFunction(() => document.querySelector('.agrow > .face img'), null, { timeout: 60000 });
+    await p.locator('.agrow').scrollIntoViewIfNeeded();
+    await p.waitForTimeout(800);
+    await shot('agents');
+    await row.getByRole('radio', { name: /Their own/ }).click();
+    await p.waitForTimeout(300);
+    ok(focus.background === '', 'and go back to their own');
+    Object.assign(focus, { person: '', background: '' });
 
     await p.locator('.gallery .personcard', { hasText: 'Sessiz' }).click();
     await p.waitForSelector('.peditor');

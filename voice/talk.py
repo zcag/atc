@@ -930,7 +930,7 @@ class Talk:
         self.voices, self.cache = self.picked(), {}
         await self.brains[None].send("line", to or "")
         self.log(event="line", to=to or ASSISTANT, voices=self.voices)
-        self.show(line=to or ASSISTANT, title=self.title, person=info.get("person") or "", color=info.get("color") or "", moving=False, said="", you="", **({"knock": ""} if not to else {}))
+        self.show(line=to or ASSISTANT, title=self.title, person=info.get("person") or "", background=info.get("background") or "", color=info.get("color") or "", moving=False, said="", you="", **({"knock": ""} if not to else {}))
         if not to:
             self.knock = ""
         self.say("", self.beep(bool(to)))

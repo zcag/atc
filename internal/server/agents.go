@@ -44,10 +44,12 @@ type Agent struct {
 	Prompt string     `json:"prompt,omitempty"`
 	Reset  *resetSpec `json:"reset,omitempty"`
 	Share  *share     `json:"share,omitempty"`
-	// Talk lets the user talk to it directly on a call; Person is who it sounds and looks like there.
-	Talk   bool   `json:"talk,omitempty"`
-	Person string `json:"person,omitempty"`
-	Err    string `json:"error,omitempty"`
+	// Talk lets the user talk to it directly on a call; Person is who it sounds and looks like there, and Background
+	// replaces the background of whoever that is.
+	Talk       bool   `json:"talk,omitempty"`
+	Person     string `json:"person,omitempty"`
+	Background string `json:"background,omitempty"`
+	Err        string `json:"error,omitempty"`
 }
 
 // share names the page whose state the agent keeps for other sessions to read, and what it holds.
