@@ -1,4 +1,4 @@
-// Takes the README's raw screens from a running test/demo/run.sh. Run through the desktop-chrome MCP's
+// Takes the README's raw screens from a running test/demo/run.sh. Run through a browser MCP's
 // browser_run_code_unsafe: read this file, eval it, call it with (page, {base, out, modes, only}).
 // Each screen gets its own browser context, so it has its own size, pixel ratio and localStorage and
 // touches nothing of a logged-in profile. compose.js then lays these out, and encode.sh writes docs/img.

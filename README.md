@@ -183,8 +183,8 @@ screen on the left above, even on the lock screen.
 
 Light and dark, three themes, [one file to add another](docs/look.md). Every image here comes from atc running on
 made-up sessions (`test/demo/`), with its real UI: a real hub, a browser and a second machine, on a fake Claude and a
-scripted call line. The window and phone frames are drawn around the screenshots, and the phones are the page at phone
-width.
+scripted call line. The figures on the Resources screen are made up too. The window and phone frames are drawn around the
+screenshots, and the phones are the page at phone width, not the Android app.
 
 ## How it works with Claude Code
 
