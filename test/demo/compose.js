@@ -28,12 +28,13 @@ async (page, { raw = "http://127.0.0.1:7440/raw", out = "/tmp/atc-final", modes 
   const ph = (src, x, y, w) => `<div class="ph" style="left:${x}px;top:${y}px;width:${w}px"><img src="${src}"></div>`;
   const solo = (name, sw = 1560, sh = 940) => ({ w: sw + 120, h: sh + 30 + 100, body: (r) => win(`${r}/${name}.png`, 60, 50, sw) });
   const row = (names, y = 56, w = 390, gap = 50, tilt = 0) => ({
-    w: names.length * w + (names.length - 1) * gap + 2 * 70, h: Math.round((w - 18) * (860 / 412)) + 18 + 2 * y + tilt,
+    w: names.length * w + (names.length - 1) * gap + 2 * 70, h: Math.round((w - 18) * (2340 / 1080)) + 18 + 2 * y + tilt,
     body: (r) => names.map((n, i) => ph(`${r}/${n}.png`, 70 + i * (w + gap), y + (i % 2 ? tilt : 0), w)).join(""),
   });
 
   const layouts = {
-    hero: { w: 1960, h: 1220, body: (r) => win(`${r}/desk.png`, 150, 60, 1760) + ph(`${r}/hold.png`, 44, 610, 268) },
+    hero: { w: 1960, h: 1220, body: (r) => win(`${r}/desk.png`, 250, 60, 1660) + ph(`${r}/ring-headsup.png`, 40, 240, 440) },
+    "call-ring": row(["ring-full", "call-speaking", "recents"], 56, 400, 60),
     assistant: solo("assistant"),
     board: solo("board", 1560, 1040),
     transcript: solo("transcript", 1560, 1040),
@@ -47,7 +48,7 @@ async (page, { raw = "http://127.0.0.1:7440/raw", out = "/tmp/atc-final", modes 
     new: solo("new", 1560, 860),
     backlog: solo("backlog", 1560, 760),
     settings: solo("settings", 1560, 680),
-    phones: row(["hold", "phone-read", "phone-reply", "phone-page"], 56, 390, 46),
+    phones: row(["phone-hold", "phone-read", "phone-reply", "phone-page"], 56, 390, 46),
     themes: {
       w: 1640, h: 900, once: true,
       body: (r) => {

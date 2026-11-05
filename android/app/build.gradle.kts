@@ -23,7 +23,7 @@ android {
         targetSdk = 35
         versionCode = commits + rootProject.file("version-base").readText().trim().toInt()
         versionName = "0.$commits"
-        ndk { abiFilters += "arm64-v8a" }
+        ndk { abiFilters += (findProperty("atc.abi") as String? ?: "arm64-v8a") }
         buildConfigField("String", "APP_LINK_HOST", "\"${appLinkHost.orEmpty()}\"")
         if (appLinkHost != null) manifestPlaceholders["appLinkHost"] = appLinkHost
     }

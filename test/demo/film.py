@@ -33,8 +33,6 @@ def cut(call, video, accept_ms, panels, out):
     graph += [f"[{last}]fps=25,format=yuv420p[out]", "[2:a]pan=mono|c0=0.8*c0+0.8*c1,aresample=44100,apad[a]"]
     subprocess.run(["ffmpeg", "-y", "-v", "error", *inputs, "-filter_complex", ";".join(graph), "-map", "[out]", "-map", "[a]",
                     "-c:v", "libx264", "-crf", "25", "-preset", "slow", "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", "-t", str(span), f"{out}.mp4"], check=True)
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", f"{out}.mp4", "-vf", "fps=10,scale=1100:-2:flags=lanczos", "-c:v", "libwebp_anim", "-q:v", "72",
-                    "-compression_level", "6", "-loop", "0", "-an", f"{out}.webp"], check=True)
 
 
 if __name__ == "__main__":

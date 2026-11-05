@@ -5,15 +5,6 @@
 // The Resources screen's live numbers come from the host, so this replaces them for the shot; its charts are seeded.
 async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = ["dark", "light"], only = null } = {}) => {
   const browser = page.context().browser();
-  const MIC = () => {
-    navigator.mediaDevices.getUserMedia = async () => {
-      const c = new AudioContext(), o = c.createOscillator(), g = c.createGain(), d = c.createMediaStreamDestination();
-      g.gain.value = .25; o.frequency.value = 170;
-      o.connect(g).connect(d); o.start();
-      await c.resume();
-      return d.stream;
-    };
-  };
   const apiCtx = await browser.newContext(), api = apiCtx.request;
   const list = await api.get(`${base}/api/sessions`).then((r) => r.json());
   const setLook = (theme) => api.put(`${base}/api/look`, { data: { scheme: "auto", theme } });
@@ -22,7 +13,6 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
   async function open(mode, { w = 1560, h = 940, phone = false, dpr = 2 } = {}) {
     const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: dpr, isMobile: phone, hasTouch: phone, colorScheme: mode, reducedMotion: "no-preference" });
     const p = await ctx.newPage();
-    await p.addInitScript(MIC);
     await p.goto(`${base}/#/`);
     await p.waitForTimeout(1400);
     const notNow = p.getByRole("button", { name: "Not now" });
@@ -31,25 +21,13 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
     return p;
   }
   const to = async (p, hash, wait = 1500) => { await p.evaluate((h) => { location.hash = h; }, hash); await p.waitForTimeout(wait); };
-  const say = (p) => p.evaluate(() => document.querySelector(".callp")?.innerText || "");
-  const until = (p, re) => p.waitForFunction((s) => new RegExp(s).test(document.querySelector(".callp .st")?.innerText || ""), re.source, { timeout: 60000 });
 
   const shots = {
-    // The hero's window: a session, the page it made, and a call docked beside them.
+    // The hero's window: a session and the page it made. The phone in front of it comes from phone-shots.sh.
     async desk(mode) {
       const p = await open(mode, { w: 1760, h: 1000 });
-      await p.getByRole("button", { name: /^Call/ }).first().click();
-      await p.waitForTimeout(500);
-      await to(p, `#/s/${by("Why checkout").id}/p/checkout-latency`, 800);
-      await until(p, /hearing/);
-      await until(p, /speaking/);
-      await p.waitForTimeout(2600);
+      await to(p, `#/s/${by("Why checkout").id}/p/checkout-latency`, 3000);
       return [[p, "desk"]];
-    },
-    async hold(mode) {
-      const p = await open(mode, { w: 412, h: 860, phone: true });
-      await to(p, "#/hold");
-      return [[p, "hold"]];
     },
     async assistant(mode) {
       const p = await open(mode);
@@ -161,18 +139,6 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
       }
       await setLook("");
       return shoot.map(([q]) => [q, null]);
-    },
-    async phones(mode) {
-      const p = await open(mode, { w: 412, h: 860, phone: true });
-      await to(p, `#/s/${by("Cart totals").id}`, 2200);
-      await p.screenshot({ path: `${out}/${mode}/phone-reply.png` });
-      await to(p, `#/s/${by("Why checkout").id}`, 2200);
-      await p.getByText("src/checkout/expiry.ts").first().click();
-      await p.waitForTimeout(800);
-      await p.screenshot({ path: `${out}/${mode}/phone-read.png` });
-      await to(p, `#/p/${by("Why checkout").id}/checkout-latency`, 2600);
-      await p.screenshot({ path: `${out}/${mode}/phone-page.png` });
-      return [[p, null]];
     },
   };
 

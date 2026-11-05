@@ -8,7 +8,7 @@ tab, lose the connection or restart atc.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/hero-dark.webp">
-  <img src="docs/img/hero-light.webp" alt="atc on a desktop: a session list, a transcript and the report page that session made, side by side, with a live call to the assistant docked on the right, a glowing orb above what the assistant is saying. In front, a phone with two sessions asking for an answer, each answerable in place, and a call button.">
+  <img src="docs/img/hero-light.webp" alt="atc on a desktop: a session list, a transcript and the report page that session made, side by side. In front, a phone taking an incoming call from Assistant, The release session wants your okay to push the tag, with Decline and Answer buttons.">
 </picture>
 
 ```sh
@@ -63,7 +63,10 @@ You're out, and a session needs a decision. So it calls you, and you talk it thr
 >
 > **Assistant:** A date library was costing almost two seconds on phones. I put the chart on your screen.
 
-<img src="docs/img/call-demo.webp" alt="One phone call, playing. The phone rings: the release session wants an okay. The assistant speaks first and says why it called. You cut in to ask about the coupon session; it stops, says well, let me see, reads the session and tells you it is stuck on a question. You answer and it passes your words on, then mentions that the iOS build just finished. You ask about the checkout slowdown; it says let me look, gives the gist, and a chart opens on the phone while you keep talking. You tell it to go ahead with the release, it passes on your okay, says it will ring you if CI goes red, and says goodbye. On the phone, an orb moves with the voices and the sessions on the call are listed as they start working.">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/call-ring-dark.webp">
+  <img src="docs/img/call-ring-light.webp" alt="Three phones. The first has woken to an incoming call: Assistant, with the reason under the name, The release session wants your okay to push the tag, and a red and a green button. The second is on the call: Assistant, a call timer, what it is saying, and mute, hang up and speaker buttons. The third is the phone's call history, with Assistant listed like any other caller.">
+</picture>
 
 You can call it too, from the app or the browser, whenever you want to know how things are going. No phone number
 needed, and it runs on your own machine on 2 CPU cores. [Calls](docs/calls.md) · [Hear a recorded demo call](docs/img/call-demo.mp4)
@@ -90,7 +93,7 @@ What it knows stays on a page you can open any time.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/agents-dark.webp">
-  <img src="docs/img/agents-light.webp" alt="The Agents screen: a list of standing agents with what each keeps, and the reviewer open beside it: its conversation next to the page it keeps, three open pull requests, one needing a change.">
+  <img src="docs/img/agents-light.webp" alt="The Agents screen: a list of standing agents with what each keeps, and the reviewer open: its conversation, and beside it the page it keeps, three open pull requests, one needing a change.">
 </picture>
 
 [Presets and agents](docs/presets-and-agents.md)
