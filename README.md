@@ -190,7 +190,8 @@ behind.
 
 Every image here comes from atc running on made-up sessions (`test/demo/`), with its real UI, on a fake Claude and a
 scripted call line. The figures on the Resources screen are made up too. The window and phone frames are drawn around the
-screenshots, and the phones are the page at phone width, not the Android app.
+screenshots. The phones are the Android app, a debug build on a test device, and the call history is an open-source dialer
+reading the phone's real call log.
 
 ## How it works with Claude Code
 
