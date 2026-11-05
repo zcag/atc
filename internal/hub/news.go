@@ -16,7 +16,7 @@ func (h *Hub) withNews(ch, text string) string {
 		return text
 	}
 	h.fresh = false
-	return news + "\n" + text
+	return news + "\n\n" + text
 }
 
 // Notice is atc saying a session now needs the user. While a phone turn is running a tool, the change

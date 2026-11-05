@@ -9,7 +9,9 @@ atc's address and tokens like an SSH key.
 atc is built for one user per install. There are no accounts or roles: every login sees and can do
 the same.
 
-**Don't serve atc on the public internet.** Run it on `127.0.0.1`, your local network or a tailnet. atc has not been
+**Don't serve atc on the public internet.** By default it answers only this machine, your local network and your tailnet, and refuses
+public addresses; `ATC_ADDR=127.0.0.1:7272` narrows that to this machine. A port forward keeps the public address, so it is refused too,
+but setting `ATC_ADDR` yourself or a proxy on the same machine bypasses the check. atc has not been
 hardened or audited for exposure to strangers: pairing claims, the login and the webhook would all face the whole internet, with
 a shell behind them. [Reach it from other devices](install.md#reach-it-from-other-devices) lists the private ways in.
 
@@ -37,14 +39,16 @@ a shell behind them. [Reach it from other devices](install.md#reach-it-from-othe
 - Cross-site requests that change something are refused: a non-GET `/api/` request whose `Origin`
   host differs from the request's host gets a 403.
 
-atc serves plain HTTP on `127.0.0.1` by default. On a network you don't fully trust, put HTTPS in
-front, or the token travels in clear. See
+atc serves plain HTTP by default, and anyone on your local network can reach its login page, the Android app's download and whatever
+else [is not behind the token](#what-is-not-behind-the-token). On a network you don't fully trust, set
+`ATC_ADDR=127.0.0.1:7272` or put HTTPS in front, or the token travels in clear. See
 [Reach it from other devices](install.md#reach-it-from-other-devices).
 
 ## What is not behind the token
 
 - `/healthz`, the login and pairing-claim endpoints.
 - The page's own files (HTML, scripts, styles), which hold no data.
+- `/app/`: the Android app and the call characters, for a phone that isn't logged in yet.
 - `/api/whatsapp/hook`, which checks the webhook's signature against `ATC_WHATSAPP_SECRET` and then
   the sender.
 - Output file links, which are signed for a session and folder and expire after 12 hours.

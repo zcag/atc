@@ -155,7 +155,11 @@ func serviceInstall(list []service, mac, everything bool) error {
 		} else if err := systemdStart(s); err != nil {
 			return err
 		}
-		fmt.Printf("%s: %s\n", s.name, serviceState(s, mac))
+		state := serviceState(s, mac)
+		if _, found := claudeBin(); s.name == "hub" && !found {
+			state = "waits for Claude Code, and starts by itself once it is installed"
+		}
+		fmt.Printf("%s: %s\n", s.name, state)
 	}
 	return nil
 }

@@ -57,7 +57,7 @@ func TestNewsInFrontOfEachMessage(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	for i, w := range []string{`[atc now] all\none`, `[atc since] change2\ntwo`, `[atc now] all\nthree`} {
+	for i, w := range []string{`[atc now] all\n\none`, `[atc since] change2\n\ntwo`, `[atc now] all\n\nthree`} {
 		if !strings.Contains(written[i], w) {
 			t.Errorf("message %d: %s, want %s", i, written[i], w)
 		}

@@ -23,6 +23,9 @@ func versionString() string {
 	if !ok {
 		return Version
 	}
+	if v := info.Main.Version; Version == "dev" && strings.HasPrefix(v, "v") {
+		return v
+	}
 	var rev, dirty string
 	for _, s := range info.Settings {
 		switch {

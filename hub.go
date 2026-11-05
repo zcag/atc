@@ -86,14 +86,12 @@ func hubCmd(args []string) error {
 	cap := fs.Int("cap", d.Cap, "")
 	fs.Parse(args)
 	modes.Dir = filepath.Join(client.ConfigDir(), "modes")
-	os.MkdirAll(*dir, 0o755)
 	bin := cmp.Or(os.Getenv("ATC_CLAUDE_BIN"), "claude")
 	cargs := append([]string{"--model", *model, "--effort", *effort}, server.HubArgs()...)
 	cargs = append(cargs, strings.Fields(os.Getenv("ATC_HUB_CLAUDE_ARGS"))...)
 	policy := startover.Policy{Quiet: *quiet, Small: *small, CapQuiet: *capQuiet, Cap: *cap}
 	line := os.Getenv("ATC_CALL_LINE")
 	gdir := filepath.Join(home, "guests")
-	os.MkdirAll(gdir, 0o755)
 	gargs := append([]string{"--model", *model, "--effort", *effort}, server.GuestsArgs()...)
 	guests := hub.New(hub.Config{
 		Bin: bin, Args: gargs, Dir: gdir, State: *guestState, Mode: guestsMode, Reset: policy,
@@ -105,8 +103,10 @@ func hubCmd(args []string) error {
 		Guests: guests, OpenLine: client.Load().AgentLine, LineMode: withLines(lineMode),
 	})
 	for _, x := range []*hub.Hub{h, guests} {
-		if err := x.Start(); err != nil {
-			return err
+		if x == h || x.HasConversation() {
+			if err := x.Start(); err != nil {
+				return err
+			}
 		}
 		go x.Watch(context.Background(), time.Minute)
 	}

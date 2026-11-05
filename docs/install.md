@@ -57,7 +57,7 @@ Settings go in `~/.config/atc/env`, or in Settings on the page, which writes `se
 [Settings and doctor](settings.md)):
 
 ```sh
-ATC_ADDR=127.0.0.1:7272                 # where to listen
+ATC_ADDR=127.0.0.1:7272                 # where to listen; unset, every interface for private addresses only
 ATC_CLAUDE_ARGS=--model opus            # extra flags for sessions atc starts
 ATC_ROOTS=/home/you/code:/home/you      # folders whose subfolders are offered for new sessions
 ```
@@ -77,16 +77,25 @@ logged in. `atc token` prints the token again.
 is a shell on this machine ([Security](security.md)), and the token is the only thing between that shell and anyone who can reach the
 address.
 
-atc listens on `127.0.0.1` unless you set `ATC_ADDR`. To reach it from your other devices:
+Unless you set `ATC_ADDR`, atc listens on every interface and answers only private addresses: this machine, your local network
+(10.x, 172.16-31.x, 192.168.x, and private IPv6) and your tailnet. A connection from a public address gets a 403. Every request
+still needs the login token. Anything that reaches atc through a proxy on the same machine counts as this machine, so a proxy
+must do its own keeping out.
 
-- **Tailscale (easiest):** `tailscale serve --bg 7272` serves atc over HTTPS to your own devices. `atc setup`
+To reach it from your other devices:
+
+- **Plain HTTP at home:** nothing to set up. `atc setup` and `atc pair` give the address. The token travels in clear, so only do this
+  on a network you trust. On one you don't (a laptop on public Wi-Fi), `ATC_ADDR=127.0.0.1:7272` keeps atc to this machine.
+- **Tailscale (easiest for HTTPS):** `tailscale serve --bg 7272` serves atc over HTTPS to your own devices. `atc setup`
   offers this when Tailscale is installed. Don't use `tailscale funnel`, which publishes it to the internet.
 - **A reverse proxy on your own network:** Caddy or similar with a certificate, reachable only from inside, then set
   `ATC_PUBLIC_URL` to the address it answers at. Don't forward a router port to it.
-- **Plain HTTP at home:** `ATC_ADDR=:7272` on a network you trust. Check your firewall first, since this listens on every
-  interface, and on a machine with a public address that includes the internet.
+- **Over ssh, on a server with no private network:** `ssh -L 7272:127.0.0.1:7272 <server>`, then open the link `atc setup` printed.
 
-A browser only gives a page the microphone over HTTPS, so calls from a browser need one of the first two.
+Setting `ATC_ADDR` yourself turns the private-address check off: `ATC_ADDR=:7272` answers everyone who can reach the port, which on a
+machine with a public address includes the internet.
+
+A browser only gives a page the microphone over HTTPS, so calls from a browser need Tailscale or a reverse proxy.
 
 To log in a new device without typing the token, use `atc pair` (see
 [Android app](android.md#pairing) and [Using atc](using.md#from-a-terminal)).

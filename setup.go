@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"github.com/zcag/atc/internal/caps"
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/client"
+	"github.com/zcag/atc/internal/server"
 )
 
 const setupHelp = `Usage: atc setup [--yes] [--user NAME] [--assistant NAME] [--language CODE]
@@ -151,7 +153,7 @@ func setupCmd(args []string) error {
 		if name, err := fetchApp(appReleases, cmp.Or(os.Getenv("ATC_APP_DIR"), defaultAppDir())); err != nil {
 			fmt.Println("  That failed; to retry: atc app update (" + err.Error() + ")")
 		} else {
-			fmt.Println("  Version " + name + " is ready.")
+			fmt.Println("  App version " + name + " is ready.")
 		}
 	}
 	fmt.Println("\nTo connect the phone app or another computer: atc pair prints a QR code and the text to paste.")
@@ -197,10 +199,13 @@ func setupStatusLine(a asker) error {
 	return os.WriteFile(path, append(out, '\n'), 0o600)
 }
 
+func setupAddr() string {
+	return cmp.Or(os.Getenv("ATC_ADDR"), envFileValue("ATC_ADDR"), client.DefaultListen)
+}
+
 func setupPort() string {
-	addr := cmp.Or(os.Getenv("ATC_ADDR"), envFileValue("ATC_ADDR"), client.DefaultAddr)
-	_, port, ok := strings.Cut(addr, ":")
-	if !ok || port == "" {
+	_, port, err := net.SplitHostPort(setupAddr())
+	if err != nil || port == "" {
 		return "7272"
 	}
 	return port
@@ -214,8 +219,16 @@ func setupLink() string {
 func setupReach(a asker) {
 	port := setupPort()
 	fmt.Println("\nOn this computer atc is at " + setupLink())
-	fmt.Println("\nOther devices. A phone or another computer needs HTTPS for its microphone and the app.")
+	fmt.Println("\nOther devices. atc answers this machine, your local network and your tailnet, and refuses public addresses.")
 	fmt.Println("  Keep atc on a private network, never the public internet: a login is a shell on this machine.")
+	if ip := server.ReachableIP(); ip != "" && listensWide(setupAddr()) {
+		fmt.Printf("  From your network it is at http://%s:%s, over plain HTTP, so use it only on a network you trust.\n", ip, port)
+		fmt.Printf("  To keep atc to this machine, put ATC_ADDR=127.0.0.1:%s in %s and run atc service install.\n", port, filepath.Join(client.ConfigDir(), "env"))
+	}
+	if os.Getenv("SSH_CONNECTION") != "" {
+		fmt.Printf("  You are on ssh. From the computer you came from: ssh -L %s:127.0.0.1:%s <this machine>, then open the link above.\n", port, port)
+	}
+	fmt.Println("  A browser only gives a page the microphone over HTTPS, which calls need.")
 	if _, err := exec.LookPath("tailscale"); err == nil {
 		if a.confirm("  Tailscale is here. Serve atc over HTTPS to your own devices?") {
 			if err := run("tailscale", "serve", "--bg", port); err != nil {

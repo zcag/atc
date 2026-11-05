@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -124,6 +125,29 @@ func TestGuestCallIsSpokenAndHoldsHim(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(r.h.homePath()); strings.TrimSpace(string(b)) != "whatsapp" {
 		t.Fatalf("home %q", b)
+	}
+}
+
+func TestUnusedConversationStartsWithItsFirstMessage(t *testing.T) {
+	exe, _ := os.Executable()
+	t.Setenv("HUB_FAKE_CLAUDE", "1")
+	dir := filepath.Join(t.TempDir(), "guests")
+	g := New(Config{Bin: exe, Dir: dir, State: t.TempDir(), Mode: func(ch string) string { return "" }, GuestDesk: true})
+	t.Cleanup(g.Stop)
+	if g.HasConversation() {
+		t.Fatal("nobody has talked to it")
+	}
+	if _, err := os.Stat(dir); err == nil {
+		t.Fatal("its folder should not exist before it is used")
+	}
+	if _, err := g.Say(Guest, "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if !g.HasConversation() {
+		t.Fatal("the first message should start it")
+	}
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatal(err)
 	}
 }
 

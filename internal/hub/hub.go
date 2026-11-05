@@ -181,7 +181,15 @@ func (h *Hub) Start() error {
 	return h.start()
 }
 
+// HasConversation says whether this hub has ever talked to anyone. One that hasn't starts with its first message.
+func (h *Hub) HasConversation() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.sid != ""
+}
+
 func (h *Hub) start() error {
+	os.MkdirAll(h.cfg.Dir, 0o755)
 	args := append([]string{"-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
 		"--include-partial-messages", "--replay-user-messages"}, h.cfg.Args...)
 	switch {
@@ -286,6 +294,11 @@ func (h *Hub) Say(channel, text string) (string, error) {
 }
 
 func (h *Hub) say(ch, text string) (string, error) {
+	if !h.alive && h.sid == "" {
+		if err := h.start(); err != nil {
+			return "", err
+		}
+	}
 	if !h.alive {
 		return "", ErrRestarting
 	}

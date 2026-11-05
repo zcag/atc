@@ -89,6 +89,7 @@ type Server struct {
 	CallVoices string
 	hub        *hubLink
 	guests     *hubLink
+	Reachable  func() string
 	// PublicURL is where the user reaches atc (links in messages), LocalURL where this
 	// machine's own browser does.
 	PublicURL, LocalURL string

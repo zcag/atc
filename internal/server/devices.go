@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -80,8 +81,12 @@ func (s *Server) pairURL(r *http.Request) string {
 	if err != nil {
 		host, port = r.Host, ""
 	}
-	if ip := net.ParseIP(host); (host == "localhost" || (ip != nil && ip.IsLoopback())) && s.Host != "" {
-		host = s.Host
+	if ip := net.ParseIP(host); host == "localhost" || (ip != nil && ip.IsLoopback()) {
+		if s.Reachable != nil {
+			host = cmp.Or(s.Reachable(), s.Host, host)
+		} else if s.Host != "" {
+			host = s.Host
+		}
 	}
 	if port != "" {
 		host = net.JoinHostPort(host, port)

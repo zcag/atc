@@ -261,7 +261,7 @@ func (m *multi) Set(v string) error { *m = append(*m, v); return nil }
 
 func serve(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	addr := fs.String("addr", cmp.Or(os.Getenv("ATC_ADDR"), client.DefaultAddr), "listen address ($ATC_ADDR)")
+	addr := fs.String("addr", cmp.Or(os.Getenv("ATC_ADDR"), client.DefaultListen), "listen address ($ATC_ADDR); by default every interface, answering only private addresses")
 	noAuth := fs.Bool("no-auth", false, "serve without a token (only behind something that authenticates)")
 	var roots multi
 	fs.Var(&roots, "root", "dir whose subdirs are offered for new sessions (repeatable, or $ATC_ROOTS separated by :)")
@@ -370,13 +370,27 @@ func serve(args []string) error {
 			return err
 		}
 	}
-	log.Printf("atc listening on http://%s", *addr)
+	handler := srv.Handler()
+	explicit := os.Getenv("ATC_ADDR") != ""
+	fs.Visit(func(f *flag.Flag) { explicit = explicit || f.Name == "addr" })
+	if !explicit {
+		handler = server.PrivateOnly(handler)
+	}
+	if listensWide(*addr) {
+		srv.Reachable = server.ReachableIP
+	}
+	log.Printf("atc listening on %s", *addr)
 	if srv.Token != "" && term.IsTerminal(int(os.Stderr.Fd())) {
-		log.Printf("open http://%s/?token=%s to log in a browser", *addr, srv.Token)
+		log.Printf("open %s/?token=%s to log in a browser", loopback(*addr), srv.Token)
 	} else if srv.Token != "" {
 		log.Printf("run `atc token` for the login token")
 	}
-	return http.ListenAndServe(*addr, srv.Handler())
+	return http.ListenAndServe(*addr, handler)
+}
+
+func listensWide(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	return err == nil && (host == "" || host == "0.0.0.0" || host == "::")
 }
 
 func hubClient() *hub.Client {

@@ -25,7 +25,10 @@ import (
 	"github.com/zcag/atc/internal/summary"
 )
 
-const DefaultAddr = "127.0.0.1:7272"
+const (
+	DefaultAddr   = "127.0.0.1:7272"
+	DefaultListen = ":7272"
+)
 
 type Client struct {
 	URL   string `json:"url"`

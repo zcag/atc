@@ -38,7 +38,7 @@ Core:
 
 | Variable | What it does |
 |---|---|
-| `ATC_ADDR` | Where to listen, default `127.0.0.1:7272` |
+| `ATC_ADDR` | Where to listen. By default every interface on port 7272, answering only private addresses; setting it turns that check off |
 | `ATC_ROOTS` | Folders whose subfolders are offered for new sessions, separated by `:` |
 | `ATC_CLAUDE_BIN` | Where `claude` is, when it is not on the service's PATH |
 | `ATC_CLAUDE_ARGS` | Extra flags for sessions atc starts |

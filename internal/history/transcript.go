@@ -419,7 +419,7 @@ var pastedTag = regexp.MustCompile(`</?pasted_content[^>]*>\n?`)
 var talkMode = regexp.MustCompile(`(?s)^\[talk-mode: [\w-]+, until the next talk-mode line\]\n.*?\n\[message\]\n`)
 
 func unpaste(t string) string {
-	return talkMode.ReplaceAllString(pastedTag.ReplaceAllString(t, ""), "")
+	return withoutNews(strings.TrimSpace(talkMode.ReplaceAllString(pastedTag.ReplaceAllString(t, ""), "")))
 }
 
 func queued(text string, at time.Time) (Message, bool) {
@@ -497,6 +497,17 @@ func convert(m rawMsg) []Message {
 		out = append(out, Message{Role: "user", Images: images, Time: m.Timestamp})
 	}
 	return out
+}
+
+// withoutNews drops what the hub tells the assistant ahead of a message, which the user never wrote. The hub ends it with
+// a blank line.
+func withoutNews(t string) string {
+	if strings.HasPrefix(t, "[atc now") || strings.HasPrefix(t, "[atc since") {
+		if _, rest, ok := strings.Cut(t, "\n\n"); ok {
+			return rest
+		}
+	}
+	return t
 }
 
 func IsNoise(t string) bool {
