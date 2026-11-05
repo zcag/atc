@@ -130,7 +130,10 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         for (p in JSONObject(said).optJSONArray("persons").let { a -> List(a?.length() ?: 0) { a!!.getJSONObject(it) } }) {
             val name = p.optString("character")
             revs[name]?.let { rev -> runCatching { current(server, name, rev) } }
-            p.optString("background").takeIf { it.isNotEmpty() }?.let { runCatching { room(context, server, it) } }
+            p.optString("background").takeIf { it.isNotEmpty() }?.let {
+                runCatching { room(context, server, it) }
+                runCatching { room(context, server, it.substringBeforeLast('.') + ".json") }
+            }
         }
     }
 
@@ -253,14 +256,19 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         val VIEWS = listOf(CHARACTER) + MARKS
         private val FETCHING = Any()
 
-        /** A background from /app/personas/_rooms, kept on the phone once it has been there. */
+        /** A room's file from /app/personas/_rooms, kept on the phone once it has been there. A room's settings (its
+         *  .json) are looked for again each time, so a retuned room arrives, and the kept copy serves when offline. */
         fun room(c: Context, server: String, name: String): File {
             require('/' !in name && ".." !in name)
             val file = File(c.filesDir, "rooms/$name").apply { parentFile?.mkdirs() }
-            if (!file.exists()) {
+            if (!file.exists() || name.endsWith(".json")) {
                 val incoming = File(file.path + ".new")
-                Net.download(c, "$server/app/personas/_rooms/$name", incoming)
-                check(incoming.renameTo(file)) { "can't move $name into place" }
+                try {
+                    Net.download(c, "$server/app/personas/_rooms/$name", incoming)
+                    check(incoming.renameTo(file)) { "can't move $name into place" }
+                } catch (e: Exception) {
+                    if (!file.exists()) throw e
+                }
             }
             return file
         }

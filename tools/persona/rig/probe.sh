@@ -3,7 +3,7 @@
 W=${PERSONA_WORK:-$HOME/.local/share/persona2d}
 C=$W/rig/clip
 R=$(cd "$(dirname "$0")" && pwd)
-cp "$R/../../../web/rig.js" "$R/../../../web/motion.js" "$R/record.html" "$R/poses.json" $C/
+cp "$R/../../../web/rig.js" "$R/../../../web/motion.js" "$R/../../../web/room.js" "$R/record.html" "$R/poses.json" $C/
 rm -rf $C/frames
 python3 "$R/../serve.py" $C $C/frames &
 srv=$!

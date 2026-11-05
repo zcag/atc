@@ -350,7 +350,13 @@ func checkPersons(_ context.Context, env Env) Result {
 		return Result{Missing, "Only the orb to choose from: no characters are published."}
 	}
 	rooms, _ := os.ReadDir(filepath.Join(dir, "_rooms"))
-	return Result{OK, fmt.Sprintf("%d characters and the orb, %d backgrounds.", len(index.Personas), len(rooms))}
+	pictures := 0
+	for _, f := range rooms {
+		if filepath.Ext(f.Name()) != ".json" {
+			pictures++
+		}
+	}
+	return Result{OK, fmt.Sprintf("%d characters and the orb, %d rooms.", len(index.Personas), pictures)}
 }
 
 func checkApp(_ context.Context, env Env) Result {

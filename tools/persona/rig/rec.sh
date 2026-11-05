@@ -6,7 +6,7 @@ R=$(cd "$(dirname "$0")" && pwd)
 W=${PERSONA_WORK:-$HOME/.local/share/persona2d}
 C=$W/rig/clip
 mkdir -p $C
-cp "$R/../../../web/rig.js" "$R/../../../web/motion.js" "$R/record.html" "$R/poses.json" $C/
+cp "$R/../../../web/rig.js" "$R/../../../web/motion.js" "$R/../../../web/room.js" "$R/record.html" "$R/poses.json" $C/
 TL=${3:-$W/clip/timeline.json}
 cp "$TL" $C/timeline.json
 rm -rf $C/p $C/frames

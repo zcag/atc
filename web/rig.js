@@ -4,11 +4,14 @@
 // drawing is swapped in for each moment with only a very short dissolve; between head angles the drawings are bent a
 // little (skinned meshes: the nose and eyes move more than the outline), and while two angles dissolve both are warped
 // along the measured flow between them, so features meet instead of doubling. Pose layers swing in from below the
-// frame. The room (plate, vignette, the lamp's flickering glow, dust) lives in its own room.json, and a character can
-// be drawn without it. Behaviour decides the acting from the call's state and both voices; Director turns it into
-// drawings.
+// frame. The room (web/room.js) is everything around the character: its picture, the light it throws on them, its grade,
+// glows, particles and moods. A character can be drawn without one. Behaviour decides the acting from the call's state
+// and both voices; Director turns it into drawings.
 
 import { PI, clamp, smooth, lerp, rand, chance, Spring, Saccade, Pulses, wander } from "./motion.js";
+import { roomLook, lookFromPixels, brightness, daylight, Mood, flicker, Particles } from "./room.js";
+
+export { daylight };
 
 const VS = `#version 300 es
 layout(location=0) in vec2 pos;
@@ -22,7 +25,9 @@ uniform vec4 turn;
 uniform sampler2D flow;
 uniform vec4 flowBox, flowCell;
 uniform float morph, flowRange;
+uniform vec2 size;
 out vec2 t;
+out vec2 w;
 void main() {
   vec3 h = vec3(pos, 1.);
   vec2 q = bw.x * (B[int(bi.x)] * h) + bw.y * (B[int(bi.y)] * h) + bw.z * (B[int(bi.z)] * h) + bw.w * (B[int(bi.w)] * h);
@@ -30,14 +35,33 @@ void main() {
   q = turn.xy + mat2(turn.z, turn.w, -turn.w, turn.z) * (q - turn.xy);
   gl_Position = vec4((q + shift - view.xy) * view.zw, 0., 1.);
   t = uv;
+  w = q / size;
 }`;
 const FS = `#version 300 es
-precision mediump float;
+precision highp float;
 uniform sampler2D tex;
-uniform float alpha;
+uniform float alpha, bias, multiply, shade, lit, sat, con, wrap, wrapEnd;
+uniform vec3 tint, left, right, keyColor, wrapColor;
+uniform vec4 key;
 in vec2 t;
+in vec2 w;
 out vec4 o;
-void main() { o = texture(tex, t) * alpha; }`;
+void main() {
+  if (shade > 0.) { o = vec4(0., 0., 0., texture(tex, t, 6.5).a * shade * alpha); return; }
+  vec4 c = texture(tex, t, bias);
+  if (multiply >= 0.) { o = vec4(mix(vec3(1.), c.rgb, multiply), 1.); return; }
+  if (lit > 0. && c.a > .003) {
+    vec3 r = c.rgb / c.a;
+    r = mix(vec3(dot(r, vec3(.3, .59, .11))), r, sat);
+    r = (r - .5) * con + .5;
+    r *= tint * mix(left, right, clamp(w.x, 0., 1.));
+    vec2 d = (w - key.xy) * vec2(.57, 1.) / key.z;
+    r += r * keyColor * key.w * exp(-dot(d, d));
+    if (wrap > 0.) r += wrapColor * wrap * (1. - texture(tex, t, 3.5).a) * (1. - smoothstep(wrapEnd - .035, wrapEnd, w.y));
+    c.rgb = clamp(r, 0., 1.) * c.a;
+  }
+  o = c * alpha;
+}`;
 const DUST_VS = `#version 300 es
 layout(location=0) in vec4 d;
 uniform vec4 view;
@@ -47,9 +71,10 @@ void main() { gl_Position = vec4((d.xy - view.xy) * view.zw, 0., 1.); gl_PointSi
 const DUST_FS = `#version 300 es
 precision mediump float;
 uniform vec3 color;
+uniform float streak;
 in float a;
 out vec4 o;
-void main() { float r = length(gl_PointCoord - .5) * 2.; float k = a * smoothstep(1., 0., r) * smoothstep(1., .2, r); o = vec4(color * k, 0.); }`;
+void main() { float r = length((gl_PointCoord - .5) * vec2(1. + streak, 1.)) * 2.; float k = a * smoothstep(1., 0., r) * smoothstep(1., .2, r); o = vec4(color * k, 0.); }`;
 
 /** 2x3 affine matrices as [a, b, c, d, e, f]: x' = a x + c y + e, y' = b x + d y + f (column-major like mat3x2). */
 const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
@@ -401,52 +426,94 @@ export class Behaviour {
   }
 }
 
-/** How far a room's mean brightness (0 to 1) says it is daylit: 0 is a lamp-lit room, 1 a sunny one. */
-export const daylight = (mean) => smooth(.3, .6, mean);
-
-/** Another room for a rig, sized to its plate and softened like build.py softens the character's own. A lamp-lit room goes
- *  as far back as that one, to 62% and under the vignette; a daylit one stays bright, or a sunny office turns to dusk. The
- *  lamp's glow and the dust stay in the character's own room, since they would float in this one. */
-async function backdrop(url, plate) {
+/** A room's picture and settings: <name>.json beside the picture, or a look worked out from the picture alone. */
+async function roomFile(url) {
   const img = new Image();
   img.src = url;
   await img.decode();
-  const probe = document.createElement("canvas");
-  probe.width = probe.height = 16;
-  const p = probe.getContext("2d", { willReadFrequently: true });
-  p.drawImage(img, 0, 0, 16, 16);
-  const px = p.getImageData(0, 0, 16, 16).data;
-  let sum = 0;
-  for (let i = 0; i < px.length; i += 4) sum += .2126 * px[i] + .7152 * px[i + 1] + .0722 * px[i + 2];
-  const light = daylight(sum / (px.length / 4) / 255);
-  const canvas = document.createElement("canvas");
-  canvas.width = plate.naturalWidth;
-  canvas.height = plate.naturalHeight;
-  const g = canvas.getContext("2d"), k = Math.max(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight);
+  const spec = await fetch(url.replace(/\.[^./?]+$/, ".json")).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  const small = document.createElement("canvas");
+  small.width = 16;
+  small.height = 28;
+  const g = small.getContext("2d", { willReadFrequently: true });
+  g.drawImage(img, 0, 0, 16, 28);
+  const px = g.getImageData(0, 0, 16, 28).data;
+  return { img, day: daylight(brightness(px)), look: roomLook(spec || {}, spec ? {} : lookFromPixels(px, 16)) };
+}
+
+/** Where a room's picture goes on the plate: most of it inside what the character's framing can show, so a lamp at the
+ *  picture's edge stays on screen, with a little to spare for parallax. Returns (x, y) 0..1 of the plate. */
+function roomFit(view = {}) {
+  const zoom = view.zoom || 1, [fx, fy] = view.focus || [.5, .4], shown = 1 / zoom, s = Math.min(1, shown + .035);
+  const ox = clamp(fx, shown / 2, 1 - shown / 2) - s / 2, oy = clamp(fy, shown / 2, 1 - shown / 2) - s / 2;
+  return { s, ox, oy, at: ([x, y]) => [ox + x * s, oy + y * s] };
+}
+
+/** The picture sized to the plate and put as far back as the room says: darkened and softened. The call screen's white
+ *  name and status sit at the top, so a daylit room gets a soft shade there. */
+function backdrop(img, plate, look, fit, day) {
+  const c = document.createElement("canvas");
+  c.width = plate.naturalWidth;
+  c.height = plate.naturalHeight;
+  const g = c.getContext("2d"), k = Math.max(c.width / img.naturalWidth, c.height / img.naturalHeight);
   g.fillStyle = "#000";
-  g.fillRect(0, 0, canvas.width, canvas.height);
-  g.filter = "blur(2.5px)";
-  g.globalAlpha = lerp(.62, .96, light);
-  g.drawImage(img, (canvas.width - img.naturalWidth * k) / 2, (canvas.height - img.naturalHeight * k) / 2, img.naturalWidth * k, img.naturalHeight * k);
-  /* The call screen's white name and status sit up there. */
-  const shade = g.createLinearGradient(0, 0, 0, canvas.height * .42);
-  shade.addColorStop(0, `rgba(8, 14, 28, ${.62 * light})`);
+  g.fillRect(0, 0, c.width, c.height);
+  g.filter = `blur(${look.blur}px)`;
+  g.globalAlpha = look.dim;
+  g.drawImage(img, (c.width - img.naturalWidth * k) / 2, (c.height - img.naturalHeight * k) / 2, img.naturalWidth * k, img.naturalHeight * k);
+  g.drawImage(img, fit.ox * c.width, fit.oy * c.height, fit.s * c.width, fit.s * c.height);
+  const shade = g.createLinearGradient(0, 0, 0, c.height * .42);
+  shade.addColorStop(0, `rgba(8, 14, 28, ${.62 * day})`);
   shade.addColorStop(1, "rgba(8, 14, 28, 0)");
   g.filter = "none";
   g.globalAlpha = 1;
   g.fillStyle = shade;
-  g.fillRect(0, 0, canvas.width, canvas.height);
-  return { canvas, light };
+  g.fillRect(0, 0, c.width, c.height);
+  return c;
+}
+
+const quad = (name, tex, [x, y, w, h], extra) => ({ name, tex, box: [x, y, w, h], v: [x, y, x + w, y, x, y + h, x + w, y + h], t: [0, 1, 2, 1, 3, 2], bi: Array(4).fill([0, 0, 0, 0]), bw: Array(4).fill([1, 0, 0, 0]), ...extra });
+
+/** A soft round glow, drawn once. */
+function glowImage(color, core = .35) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d"), [r, gg, b] = color, f = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  f.addColorStop(0, `rgba(${r},${gg},${b},.95)`);
+  f.addColorStop(core * .4, `rgba(${r},${gg},${b},.5)`);
+  f.addColorStop(core, `rgba(${r},${gg},${b},.2)`);
+  f.addColorStop(1, `rgba(${r},${gg},${b},0)`);
+  g.fillStyle = f;
+  g.fillRect(0, 0, 128, 128);
+  return c;
+}
+
+/** A shaft of light through a window: a blurred polygon, fading along its length. Corners are 0..1 of the picture. */
+function shaftImage(poly, color) {
+  const c = document.createElement("canvas");
+  c.width = 192;
+  c.height = 336;
+  const g = c.getContext("2d"), [r, gg, b] = color, [x0, y0] = poly[0], [x1, y1] = poly[poly.length >> 1];
+  const f = g.createLinearGradient(x0 * 192, y0 * 336, x1 * 192, y1 * 336);
+  f.addColorStop(0, `rgba(${r},${gg},${b},.75)`);
+  f.addColorStop(1, `rgba(${r},${gg},${b},0)`);
+  g.filter = "blur(7px)";
+  g.fillStyle = f;
+  g.beginPath();
+  poly.forEach(([x, y], i) => (i ? g.lineTo(x * 192, y * 336) : g.moveTo(x * 192, y * 336)));
+  g.fill();
+  return c;
 }
 
 /** Draws the character at `base` into a canvas. now() gives {state, you, it, lo, hi}. Returns stop; with opts.dt it
  *  draws nothing by itself and returns a frame function for fixed-step recording instead. */
 export async function rig(canvas, base, now, opts = {}) {
   const R = await (await fetch(base + "rig.json")).json();
+  let ownRoom = null;
   if (R.room && opts.room !== false) {
-    const room = await (await fetch(base + R.room)).json();
-    R.parts.push(...room.parts);
-    R.dust = room.dust;
+    ownRoom = await (await fetch(base + R.room)).json();
+    R.parts.push(...ownRoom.parts);
+    R.dust = ownRoom.dust;
   }
   const images = {};
   await Promise.all([...new Set([...R.parts.map((p) => p.tex), ...(R.flow ? [R.flow.tex] : [])])].map(async (f) => {
@@ -456,8 +523,29 @@ export async function rig(canvas, base, now, opts = {}) {
     images[f] = img;
   }));
   const plate = R.parts.find((p) => p.name === "plate")?.tex;
-  const room = opts.background && plate && await backdrop(opts.background, images[plate]).catch((e) => console.warn("persona: background", e));
-  if (room) images[plate] = room.canvas;
+  const picked = opts.background && plate && await roomFile(opts.background).catch((e) => console.warn("persona: room", e));
+  const fit = roomFit(R.view);
+  if (picked) images[plate] = backdrop(picked.img, images[plate], picked.look, fit, picked.day);
+  const look = picked ? picked.look : roomLook(ownRoom || {});
+  if (picked) look.light.from = fit.at(look.light.from);
+  const [artW, artH] = R.size, lights = [];
+  if (picked) {
+    R.parts = R.parts.filter((p) => p.name !== "glow");
+    look.glows.forEach((l, i) => {
+      const name = `glow${i}`, r = (l.radius ?? .2) * artW * fit.s, [gx, gy] = fit.at(l.at);
+      images[name] = glowImage(l.color || [255, 178, 105], l.core);
+      R.parts.push(quad(name, name, [gx * artW - r, gy * artH - r, 2 * r, 2 * r], { blend: "add" }));
+      lights.push({ name, strength: l.strength ?? .9, kind: l.flicker || "lamp", seed: i * 1.7, back: !l.front });
+    });
+    look.shafts.forEach((l, i) => {
+      const name = `shaft${i}`;
+      images[name] = shaftImage(l.poly.map(fit.at), l.color || [255, 226, 170]);
+      R.parts.push(quad(name, name, [0, 0, artW, artH], { blend: "add" }));
+      lights.push({ name, strength: l.strength ?? .5, kind: l.flicker || "sun", seed: i * 2.3, back: true });
+    });
+  } else if (R.parts.some((p) => p.name === "glow")) lights.push({ name: "glow", strength: 1, kind: "lamp", seed: 0 });
+  const dustSets = picked ? look.particles.map((p) => { const [x, y, w, h] = p.box || [0, 0, 1, 1], [px, py] = fit.at([x, y]); return { ...p, box: [px, py, w * fit.s, h * fit.s] }; }) : R.dust ? [{ kind: "dust", px: R.dust.box, n: R.dust.n, size: R.dust.size, color: R.dust.color }] : [];
+  const sets = dustSets.map((s) => new Particles(s, R.size));
   const gl = canvas.getContext("webgl2", { premultipliedAlpha: true, alpha: true, antialias: true, preserveDrawingBuffer: !!opts.dt });
   if (!gl) throw new Error("no WebGL2");
   const program = (vs, fs) => {
@@ -474,12 +562,6 @@ export async function rig(canvas, base, now, opts = {}) {
     const u = {};
     return { prog, u: (n) => (u[n] ??= gl.getUniformLocation(prog, n)) };
   };
-  const dust = room || !R.dust ? null : Array.from({ length: R.dust.n }, () => ({}));
-  const respawn = (d, anywhere) => {
-    const [x, y, w, h] = R.dust.box;
-    Object.assign(d, { x: x + rand(0, w), y: anywhere ? y + rand(0, h) : y + h, vx: rand(-4, 4), vy: rand(-9, -3), s: rand(...R.dust.size), a: rand(.15, .55), ph: rand(0, 9), life: 0 });
-  };
-  dust?.forEach((d) => respawn(d, true));
   let G = null;
   const setup = () => {
     const main = program(VS, FS), motes = program(DUST_VS, DUST_FS);
@@ -518,11 +600,9 @@ export async function rig(canvas, base, now, opts = {}) {
       gl.bindVertexArray(null);
       parts[p.name] = { vao, count: p.t.length, tex: tex[p.tex], blend: p.blend, box: p.box };
     }
-    const dvao = gl.createVertexArray(), dbuf = gl.createBuffer();
+    const dvao = gl.createVertexArray(), dbufs = sets.map(() => gl.createBuffer());
     gl.bindVertexArray(dvao);
-    gl.bindBuffer(gl.ARRAY_BUFFER, dbuf);
     gl.enableVertexAttribArray(0);
-    gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0);
     gl.bindVertexArray(null);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
@@ -531,6 +611,8 @@ export async function rig(canvas, base, now, opts = {}) {
     gl.uniform4f(main.u("turn"), 0, 0, 1, 0);
     gl.uniform1i(main.u("tex"), 0);
     gl.uniform1i(main.u("flow"), 1);
+    gl.uniform2f(main.u("size"), artW, artH);
+    gl.uniform1f(main.u("multiply"), -1);
     if (R.flow) {
       gl.activeTexture(gl.TEXTURE1);
       gl.bindTexture(gl.TEXTURE_2D, tex[R.flow.tex]);
@@ -545,7 +627,7 @@ export async function rig(canvas, base, now, opts = {}) {
     }
     gl.bindVertexArray(null);
     gl.finish();
-    G = { main, motes, parts, dvao, dbuf, ddata: new Float32Array((dust?.length || 0) * 4) };
+    G = { main, motes, parts, dvao, dbufs, ddata: sets.map((s) => new Float32Array(s.list.length * 4)) };
   };
   setup();
   const lost = (e) => { e.preventDefault(); G = null; };
@@ -553,9 +635,46 @@ export async function rig(canvas, base, now, opts = {}) {
   canvas.addEventListener("webglcontextlost", lost);
   canvas.addEventListener("webglcontextrestored", restored);
 
-  const behaviour = new Behaviour(), director = new Director(R);
-  const BLEND = { add: [gl.ONE, gl.ONE], mul: [gl.DST_COLOR, gl.ONE_MINUS_SRC_ALPHA] };
+  const behaviour = new Behaviour(), director = new Director(R), mood = new Mood(look.moods);
+  const BLEND = { add: [gl.ONE, gl.ONE], mul: [gl.DST_COLOR, gl.ZERO] };
   let last = performance.now(), raf, drew = false, clock = 0;
+  const lightKind = look.light.flicker;
+  const shine = (grade, on, wrap, blur = 0) => {
+    const u = G.main.u, warm = mood.warm, e = mood.exposure * grade.exposure;
+    gl.uniform1f(u("lit"), on ? 1 : 0);
+    if (!on) return;
+    gl.uniform1f(u("sat"), grade.saturation);
+    gl.uniform1f(u("con"), grade.contrast);
+    gl.uniform3f(u("tint"), grade.tint[0] * e * (1 + warm), grade.tint[1] * e, grade.tint[2] * e * (1 - warm));
+    gl.uniform1f(u("wrap"), wrap);
+    gl.uniform1f(u("bias"), blur);
+  };
+  const lighting = (on) => {
+    const u = G.main.u, l = look.light, k = lightKind ? flicker(lightKind, clock, 1) : 1;
+    gl.uniform3fv(u("left"), on ? l.left : [1, 1, 1]);
+    gl.uniform3fv(u("right"), on ? l.right : [1, 1, 1]);
+    gl.uniform4f(u("key"), l.from[0], l.from[1], l.reach, on ? l.strength * k * mood.glow : 0);
+    gl.uniform3fv(u("keyColor"), l.color);
+    gl.uniform3f(u("wrapColor"), l.wrapColor[0] * k, l.wrapColor[1] * k, l.wrapColor[2] * k);
+  };
+  const motes = (layer, view, w) => {
+    sets.forEach((s, i) => {
+      if (s.layer !== layer) return;
+      gl.useProgram(G.motes.prog);
+      gl.uniform4fv(G.motes.u("view"), view);
+      gl.uniform1f(G.motes.u("px"), view[2] * w / 2);
+      gl.uniform3fv(G.motes.u("color"), s.color);
+      gl.uniform1f(G.motes.u("streak"), s.streak);
+      gl.blendFunc(gl.ONE, gl.ONE);
+      gl.bindVertexArray(G.dvao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, G.dbufs[i]);
+      gl.bufferData(gl.ARRAY_BUFFER, s.fill(G.ddata[i], clock), gl.DYNAMIC_DRAW);
+      gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0);
+      gl.drawArrays(gl.POINTS, 0, s.list.length);
+      gl.bindVertexArray(null);
+    });
+    gl.useProgram(G.main.prog);
+  };
   const draw = (name, alpha = 1, shift = [0, 0]) => {
     const q = G.parts[name];
     if (!q || alpha <= .002) return;
@@ -576,12 +695,8 @@ export async function rig(canvas, base, now, opts = {}) {
     const params = (opts.params || ((p) => p))(behaviour.step(dt, state, you || 0, it || 0, lo || 0, hi || 0));
     const { Y, P } = director.step(dt, params);
     opts.tick?.(params, director);
-    if (dust) for (const d of dust) {
-      d.life += dt;
-      d.x += (d.vx + 3 * Math.sin(clock * .7 + d.ph)) * dt;
-      d.y += d.vy * dt;
-      if (d.y < R.dust.box[1] || d.life > 40) respawn(d, false);
-    }
+    mood.step(dt, behaviour.state);
+    for (const s of sets) s.step(dt, clock);
     if (!G) return;
     const k = Math.min(devicePixelRatio || 1, 2), w = opts.dt ? canvas.width : Math.round(canvas.clientWidth * k), h = opts.dt ? canvas.height : Math.round(canvas.clientHeight * k);
     if (!w || !h) return;
@@ -597,9 +712,35 @@ export async function rig(canvas, base, now, opts = {}) {
       gl.uniformMatrix3x2fv(G.main.u("B"), false, pose(R, { ...params, yawRes: key ? clamp(Y - ky, -6, 6) : 0, pitchRes: key ? clamp(P - kp, -6, 6) : 0 }));
     };
     bones(null);
-    draw("plate");
-    draw("body");
+    const u = G.main.u;
+    lighting(false);
+    shine(look.picture, true, 0, mood.blur);
+    gl.uniform1f(u("shade"), 0);
+    draw("plate", 1, [-(params.yaw * 14 + params.lean * 10 + params.sway * 6) * look.parallax, 0]);
+    gl.uniform2f(u("shift"), 0, 0);
+    gl.uniform1f(u("bias"), 0);
+    shine(look.picture, false, 0);
+    for (const l of lights) if (l.back) draw(l.name, l.strength * flicker(l.kind, clock, l.seed) * mood.glow);
+    motes("back", view, w);
     const A = director.angle, e = smooth(0, 1, A.k);
+    if (look.light.shadow > 0 && G.parts.plate) {
+      const off = [(.5 - look.light.from[0]) * 26, 12];
+      gl.uniform1f(u("shade"), look.light.shadow);
+      draw("body", 1, off);
+      bones(A.cur);
+      draw(`head.${A.cur}`, 1, off);
+      bones(null);
+      gl.uniform1f(u("shade"), 0);
+      gl.uniform2f(u("shift"), 0, 0);
+    }
+    lighting(true);
+    shine(look.character, true, G.parts.plate ? look.light.wrap : 0);
+    gl.uniform1f(u("wrapEnd"), 9);
+    draw("body");
+    gl.uniform1f(u("wrap"), 0);
+    // below the mouth the head's edge lies over the character itself, not against the room
+    const lips = G.parts[`${A.cur}.mouth.a1`]?.box;
+    gl.uniform1f(u("wrapEnd"), lips ? (lips[1] + lips[3] * .35) / artH : 9);
     const cell = A.prev && R.flow && (R.flow.cells[`${A.prev}|${A.cur}`] ?? R.flow.cells[`${A.cur}|${A.prev}`]);
     if (cell !== undefined && cell !== null) {
       const [nx, ny] = R.flow.grid;
@@ -611,7 +752,9 @@ export async function rig(canvas, base, now, opts = {}) {
       bones(key);
       gl.uniform1f(G.main.u("morph"), toward * (key === A.prev ? e : e - 1));
       draw(`${key}.mouth.u`, a); // under the head: mouth drawings carry the jaw line, so it never changes with the mouth
+      gl.uniform1f(u("wrap"), G.parts.plate ? look.light.wrap : 0);
       draw(`head.${key}`, a);
+      gl.uniform1f(u("wrap"), 0);
       for (const slot of ["brows", "eyes", "mouth"]) for (const [name, w_] of director[slot].layers()) if (name !== "base") draw(`${key}.${slot}.${name}`, a * w_ * (name === "u" && params.serious > .5 ? R.serious ?? 1 : 1));
     }
     gl.uniform1f(G.main.u("morph"), 0);
@@ -628,20 +771,12 @@ export async function rig(canvas, base, now, opts = {}) {
     }
     gl.uniform2f(G.main.u("shift"), 0, 0);
     bones(null);
-    draw("vignette", 1 - .8 * (room?.light || 0));
-    if (!room) draw("glow", .9 + .06 * Math.sin(clock * 1.3) + .04 * Math.sin(clock * 3.7 + 1));
-    if (dust) {
-      dust.forEach((d, i) => G.ddata.set([d.x, d.y, d.s, d.a * clamp(d.life / 2) * (.6 + .4 * Math.sin(clock * 1.5 + d.ph))], i * 4));
-      gl.useProgram(G.motes.prog);
-      gl.uniform4fv(G.motes.u("view"), view);
-      gl.uniform1f(G.motes.u("px"), view[2] * w / 2);
-      gl.uniform3fv(G.motes.u("color"), R.dust.color.map((c) => c / 255));
-      gl.blendFunc(gl.ONE, gl.ONE);
-      gl.bindVertexArray(G.dvao);
-      gl.bindBuffer(gl.ARRAY_BUFFER, G.dbuf);
-      gl.bufferData(gl.ARRAY_BUFFER, G.ddata, gl.DYNAMIC_DRAW);
-      gl.drawArrays(gl.POINTS, 0, dust.length);
-    }
+    shine(look.picture, false, 0);
+    gl.uniform1f(u("multiply"), look.vignette);
+    draw("vignette");
+    gl.uniform1f(u("multiply"), -1);
+    for (const l of lights) if (!l.back) draw(l.name, l.strength * flicker(l.kind, clock, l.seed) * mood.glow);
+    motes("front", view, w);
     gl.bindVertexArray(null);
     if (!drew) { drew = true; opts.first?.(); }
   };

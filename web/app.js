@@ -1331,7 +1331,7 @@ function CallPanel({ hub, live, captions, full, onMin }) {
     <div class="ctl">
       ${on ? html`
         <button class="btn ${st.muted ? "on" : ""}" aria-pressed=${st.muted} onClick=${Call.mute} aria-keyshortcuts="m">${st.muted ? "Unmute" : "Mute"} <kbd aria-hidden="true">m</kbd></button>
-        <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)} title="Who the assistant is in each language: character, background and voice">Person</button>
+        <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)} title="Who the assistant is in each language: character, room and voice">Person</button>
         <button class="btn end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>`
       : st.phase !== "ended" && html`<button class="btn prime" onClick=${callOrSetup}>Call the assistant</button>
         <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)}>Person</button>`}
@@ -1667,7 +1667,7 @@ function CallPicks({ look, onClose }) {
   };
   return html`<div class="picks" role="region" aria-label="Persons">
     <div class="pkh"><b>Person</b><button class="kb" onClick=${onClose} aria-keyshortcuts="Escape">Done <kbd aria-hidden="true">esc</kbd></button></div>
-    ${doc.persons.length === 0 && html`<p class="sub">Nobody yet. A person is a name, a character, a background and a voice for each language.</p>`}
+    ${doc.persons.length === 0 && html`<p class="sub">Nobody yet. A person is a name, a character, a room and a voice for each language.</p>`}
     ${doc.persons.length > 0 && personLangs(voices, doc).map((lang) => { const all = speakers(doc, lang); return html`
       <h3 class="grp"><b>${langName(lang)}</b><span class="c">${all.length}</span></h3>
       <div role="radiogroup" aria-label=${`The assistant in ${langName(lang)}`}>

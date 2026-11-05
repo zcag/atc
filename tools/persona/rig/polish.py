@@ -4,6 +4,7 @@ its room into room.json, without needing its sources. Run with numpy, opencv and
 - room: plate, vignette, glow and dust go from rig.json to room.json, which rig.js loads separately.
 - body: --erase cuts a polygon (art px) out, then only the largest piece stays (stray chips of the portrait float otherwise).
 - mouth drawings lose what they carried of the old room: scraps beside the jaw that show on any other background.
+- the head's edge is smoothed and pulled in a little: the matte's steps and rough rim show on any lighter room.
 - knit brows: the brow's movement from the neutral drawing is exaggerated a little, since the drawings' own is faint.
 - half and shut eyes: pixels the lid doesn't change go back to the neutral drawing, which removes ghost glasses.
 - --move shifts a pose layer: a hand that doesn't reach the chin.
@@ -82,10 +83,13 @@ put(body, b)
 # ---- head angles
 for angle in R["angles"]:
     head = parts[f"head.{angle}"]
+    h = get(head)
+    h[..., 3] = np.clip((cv2.GaussianBlur(h[..., 3], (0, 0), 1.8) - 150) * 2.4 + 128, 0, 255)
+    put(head, h)
     for p in [q for q in R["parts"] if q.get("angle") == angle and q.get("slot") == "mouth"]:
         pc = get(p)
         solid = ((under(p, head)[..., 3] > 128) | (under(p, body)[..., 3] > 128)).astype(np.uint8)
-        near = cv2.GaussianBlur(cv2.dilate(solid, np.ones((17, 17), np.uint8)).astype(np.float32), (0, 0), 3)
+        near = cv2.GaussianBlur(cv2.dilate(solid, np.ones((9, 9), np.uint8)).astype(np.float32), (0, 0), 2.5)
         pc[..., 3] *= near
         put(p, pc)
     knit = parts.get(f"{angle}.brows.knit")

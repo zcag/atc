@@ -12,7 +12,8 @@ import { rig } from "./rig.js";
 const seq = await (await fetch("seq.json")).json(), c = document.getElementById("c"), seen = {}, done = new Set();
 let i = 0, dir = null;
 const save = async (name) => { const blob = await new Promise((r) => c.toBlob(r, "image/png")); await fetch("/f/" + name, { method: "POST", body: blob }); };
-const frame = await rig(c, "./p/", () => ({ state: "listening" }), { dt: 1 / 60, room: %s, params: () => seq[i].p, tick: (p, d) => { dir = d; } });
+const now = () => ({ state: seq[i]?.state || "listening" });
+const frame = await rig(c, "./p/", now, { dt: 1 / 60, room: %s, background: %s, params: () => seq[i].p, tick: (p, d) => { dir = d; } });
 for (; i < seq.length; i++) {
   frame(i * 1000 / 60);
   if (seq[i].shot) { seen[seq[i].shot] = dir.angle.cur; await save(seq[i].shot); }
@@ -23,17 +24,25 @@ document.title = "done";
 </script>"""
 
 
-def render(char, seq, size, room=False, rewrite=None, port=8933):
-    """Returns (folder of shots, {shot: head angle}). The caller removes the folder's parent, returned as stage."""
+def render(char, seq, size, room=False, rewrite=None, port=8933, background=None):
+    """Returns (folder of shots, {shot: head angle}). The caller removes the folder's parent, returned as stage.
+    background is (picture, settings) of a room to stand in."""
     stage = Path(tempfile.mkdtemp(prefix="rigpage"))
     shutil.copy(web / "rig.js", stage)
     shutil.copy(web / "motion.js", stage)
+    shutil.copy(web / "room.js", stage)
     shutil.copytree(char, stage / "p")
     if rewrite:
         R = json.load(open(stage / "p/rig.json"))
         json.dump(rewrite(R), open(stage / "p/rig.json", "w"))
     json.dump(seq, open(stage / "seq.json", "w"))
-    (stage / "index.html").write_text(PAGE % (size[0], size[1], "undefined" if room else "false"))
+    picked = "undefined"
+    if background:
+        (stage / "rooms").mkdir()
+        shutil.copy(background[0], stage / "rooms")
+        shutil.copy(background[1], stage / "rooms")
+        picked = json.dumps("./rooms/" + Path(background[0]).name)
+    (stage / "index.html").write_text(PAGE % (size[0], size[1], "undefined" if room else "false", picked))
     srv = subprocess.Popen(["python3", str(here.parent / "serve.py"), str(stage), str(stage / "shots"), str(port)])
     time.sleep(1)
     try:

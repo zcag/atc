@@ -28,7 +28,8 @@ type Person struct {
 	ID        string `json:"id"`
 	Name      string `json:"name"`
 	Character string `json:"character"`
-	// Background is a file in /app/personas/_rooms that replaces the character's own room; empty keeps that room.
+	// Background is a room: a picture in /app/personas/_rooms, with its settings in a .json beside it when it has any,
+	// that replaces the character's own room; empty keeps that room.
 	Background string            `json:"background,omitempty"`
 	Voices     map[string]string `json:"voices"`
 }
@@ -77,7 +78,7 @@ func (s *Server) callPersons(w http.ResponseWriter, r *http.Request) {
 	reply(w, d.tidy())
 }
 
-// callBackgrounds lists the images a person can stand in front of.
+// callBackgrounds lists the rooms a person can stand in, by their pictures.
 func (s *Server) callBackgrounds(w http.ResponseWriter, r *http.Request) {
 	files := []string{}
 	if dir, err := s.roomsDir(); err == nil {
@@ -139,11 +140,11 @@ func (s *Server) callBackgroundAdd(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]string{"file": name})
 }
 
-// callBackgroundDelete removes a background nobody stands in front of.
+// callBackgroundDelete removes a room nobody stands in, with its settings.
 func (s *Server) callBackgroundDelete(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("file")
 	if !characterName.MatchString(name) {
-		http.Error(w, "no such background", http.StatusBadRequest)
+		http.Error(w, "no such room", http.StatusBadRequest)
 		return
 	}
 	s.prefMu.Lock()
@@ -152,13 +153,13 @@ func (s *Server) callBackgroundDelete(w http.ResponseWriter, r *http.Request) {
 	s.loadPref(personsFile, &d)
 	for _, p := range d.Persons {
 		if p.Background == name {
-			http.Error(w, p.Name+" uses this background", http.StatusConflict)
+			http.Error(w, p.Name+" uses this room", http.StatusConflict)
 			return
 		}
 	}
 	for _, a := range s.agentList() {
 		if a.Background == name {
-			http.Error(w, a.label()+" uses this background", http.StatusConflict)
+			http.Error(w, a.label()+" uses this room", http.StatusConflict)
 			return
 		}
 	}
@@ -170,6 +171,7 @@ func (s *Server) callBackgroundDelete(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	os.Remove(filepath.Join(dir, strings.TrimSuffix(name, filepath.Ext(name))+".json"))
 	reply(w, map[string]string{"file": name})
 }
 

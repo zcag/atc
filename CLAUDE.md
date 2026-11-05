@@ -43,6 +43,7 @@ A new or changed call character goes through `docs/persona-rig.md` to the end: `
 `publish.py`, which refuses anything that didn't pass. Look at `verify.jpg` before publishing, and at the character in a
 real call after. When `verify.py` fails, fix the character, not the threshold. Every fault found in a character later
 becomes a new check there, so the next one can't repeat it. Keep each character's prompt in its `source.json`.
+A new room goes through `tools/persona/rig/rooms.py` the same way, with its prompt in its `.json`.
 
 ## Services
 

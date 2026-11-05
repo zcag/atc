@@ -12,7 +12,7 @@ C = work / "rig/live"
 src, out = Path(sys.argv[1]), sys.argv[2]
 shutil.rmtree(C, ignore_errors=True)
 C.mkdir(parents=True)
-for f in ("persona.js", "rig.js", "motion.js", "minimal.js"):
+for f in ("persona.js", "rig.js", "motion.js", "room.js", "minimal.js"):
     shutil.copy(web / f, C)
 shutil.copy(here / "live.html", C)
 shutil.copy(work / "clip/timeline.json", C)

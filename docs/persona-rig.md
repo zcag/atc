@@ -27,10 +27,8 @@ short dissolve (20-120 ms), instead of stretching one painting.
   fades or pops into sight.
 - **Mood**: a grade (contrast, cool shadows, warm highlights, a key light on the face from the lamp side) baked into
   the character.
-- **Room**: separate from the character, in `room.json`: the plate (the room behind the character, darkened and
-  softened for depth), a vignette, the lamp's glow with a slow flicker, dust drifting in its light. `opts.room: false`
-  draws the character alone on a transparent canvas; `opts.background` puts another picture in the plate's place and
-  leaves out the glow and dust, which belong to the character's own room.
+- **Room**: everything around the character. See "Rooms". `opts.room: false` draws the character alone on a transparent
+  canvas; `opts.background` is the picture of another room to stand in.
 - **Acting** (`Behaviour` in `web/rig.js`): eyes lead, the head follows on springs, the body trails; blinks every
   2-6 s, breathing, glances. Listening is relaxed; hearing the user leans in, tilts, nods at their pauses; thinking puts a
   hand to the chin (after a moment, so a short pause raises nothing) or looks up and away with knit brows and an
@@ -38,6 +36,41 @@ short dissolve (20-120 ms), instead of stretching one painting.
   between tools; speaking keeps eye contact with glances away at phrase starts, nods and brow lifts on stressed
   syllables, and a mouth from the played voice, judged against that voice's own recent loudness and tone, so a loud
   voice, a quiet one and each client's filters look the same. `Director` turns that into drawings.
+
+## Rooms
+
+A room is a picture in `personas/_rooms/` and its settings in a `.json` of the same name (`web/room.js`). A character's
+own room is `room.json` in its folder. A picture with no settings, like an upload, gets a look worked out from its pixels.
+
+```json
+{
+  "title": "Fireside",
+  "source": { "prompt": "...", "model": "flux2-klein-4b", "seed": 42 },
+  "dim": 0.85, "blur": 1.5, "parallax": 0.9, "vignette": 1,
+  "light": {
+    "from": [0.1, 0.6], "reach": 0.8, "color": [1, 0.55, 0.25], "strength": 0.3, "flicker": "fire",
+    "left": [1.03, 0.98, 0.92], "right": [0.9, 0.92, 1.02],
+    "wrap": 0.3, "wrapColor": [1, 0.6, 0.3], "shadow": 0.3
+  },
+  "character": { "tint": [1, 0.97, 0.92], "contrast": 1, "saturation": 1, "exposure": 1 },
+  "picture": { "tint": [1, 1, 1], "contrast": 1, "saturation": 1, "exposure": 1 },
+  "glows": [{ "at": [0.1, 0.62], "radius": 0.3, "color": [255, 140, 60], "strength": 0.8, "flicker": "fire" }],
+  "shafts": [{ "poly": [[0, 0.1], [0.3, 0.1], [0.9, 0.9], [0.3, 0.9]], "color": [255, 226, 170], "strength": 0.4 }],
+  "particles": [{ "kind": "ember", "box": [0, 0.4, 0.3, 0.3], "n": 24, "color": [255, 150, 70] }],
+  "moods": { "thinking": { "exposure": 0.92, "warm": -0.02, "blur": 0.5, "glow": 0.9 } }
+}
+```
+
+Everything is optional. Positions are 0..1 of the picture. `light` is what the room does to the character: a soft pool of
+light (`from`, `reach`, `color`, `strength`), a tint across them (`left`, `right`), the room's light spilling around their
+edges (`wrap`), and a soft shadow behind them (`shadow`). Glows sit behind the character unless they say `"front": true`. Particles are `dust`, `rain`, `snow` or `ember`, in front of the
+character except rain, which falls behind. `flicker` is `lamp`, `fire`, `neon`, `sun` or `steady`. `moods` shift the whole
+room by call state (`listening`, `hearing`, `thinking`, `tool`, `speaking`), easing over about a second.
+
+Make the picture 768x1344 with `tools/persona/gen.py`, an empty room with nothing important behind where a head goes, and
+the main light on the left: the characters have a lamp baked in on that side, so a room can shift their colour but can't
+truly relight them. `rooms.py <room.json> <character dir>... [--publish]` checks it, draws each character in it, and
+publishes it to `_rooms`. Look at `<room>-verify.png` first, on a light room especially: it shows edges a dark one hides.
 
 ## Building a character
 

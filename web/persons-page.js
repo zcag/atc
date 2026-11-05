@@ -41,7 +41,7 @@ function Portrait({ look, character, background }) {
   return html`<span class="face ${url ? "" : "waiting"}" aria-hidden="true">${url && html`<img src=${url} alt="" />`}</span>`;
 }
 
-const describe = (p) => [p.character, p.background && `${roomName(p.background)} background`].filter(Boolean).join(", ");
+const describe = (p) => [p.character, p.background && `${roomName(p.background)} room`].filter(Boolean).join(", ");
 
 /** One language's person, big, with everyone who can speak it underneath to swap to. */
 function LanguageSlot({ look, lang, setNote }) {
@@ -81,7 +81,7 @@ function PersonCard({ look, p, agents }) {
   </a>`;
 }
 
-/** Agents you can talk to on a call: who each one is there, and its own background if it wants one over theirs. */
+/** Agents you can talk to on a call: who each one is there, and its own room if it wants one over theirs. */
 function AgentPersons({ api, look, agents, rooms, reload, setNote }) {
   const talking = agents.filter((a) => a.talk);
   const { doc } = look;
@@ -109,7 +109,7 @@ function AgentPersons({ api, look, agents, rooms, reload, setNote }) {
             ${doc.persons.map((x) => html`<option value=${x.id}>${x.name}</option>`)}
           </select></label>
           ${seen && !takesRoom(look, seen.character) ? html`<p class="sub">${title(seen.character)} draws its own surroundings.</p>` : html`
-            <div class="swap" role="radiogroup" aria-label=${`Background for ${name}`}>
+            <div class="swap" role="radiogroup" aria-label=${`Room for ${name}`}>
               <button role="radio" aria-checked=${!a.background} onClick=${() => set(a, { background: "" })}>
                 ${seen ? html`<${Portrait} look=${look} character=${seen.character} background=${seen.background} />` : html`<span class="face empty"></span>`}<span>Their own</span></button>
               ${rooms.map((f) => html`<button role="radio" key=${f} aria-checked=${a.background === f} onClick=${() => set(a, { background: f })}>
@@ -126,7 +126,7 @@ function Gallery({ api, look, agents, rooms, reloadAgents, voices }) {
   const langs = personLangs(voices, doc);
   return html`
     <h1>Persons</h1>
-    <p class="capintro">Who you hear and see on a call: a name, a character, a background and a voice for each language.</p>
+    <p class="capintro">Who you hear and see on a call: a name, a character, a room and a voice for each language.</p>
     ${doc.persons.length === 0 ? html`
       <a class="personcard new first" href="#/settings/persons/new"><span class="face plus" aria-hidden="true"></span><b>Make the first person</b><span class="d">The assistant becomes them in every language they speak.</span></a>`
     : html`
@@ -207,8 +207,8 @@ function Editor({ api, look, voices, rooms, reloadRooms, draft, Preview, onDone 
         <p class="sub">${WORDS[p.character] || KINDS[look.kinds[p.character]] || ""}</p>
       </fieldset>
       <fieldset disabled=${!canRoom}>
-        <legend>Background</legend>
-        ${canRoom ? html`<div class="picktiles" role="radiogroup" aria-label="Background">
+        <legend>Room</legend>
+        ${canRoom ? html`<div class="picktiles" role="radiogroup" aria-label="Room">
           <${Tile} on=${!p.background} label="Their own room" onClick=${() => set({ background: "" })}><${Portrait} look=${look} character=${p.character} /><//>
           ${rooms.map((f) => html`<div class="roomtile" key=${f}>
             <${Tile} on=${p.background === f} label=${title(roomName(f))} onClick=${() => set({ background: f })}><span class="face"><img src=${ROOMS + f} alt="" loading="lazy" /></span><//>
