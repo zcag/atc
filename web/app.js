@@ -1248,7 +1248,8 @@ const callWord = (st, f) => st.phase === "calling" ? "calling"
   : st.phase === "ended" ? `call ended${st.why ? `: ${st.why}` : ""}`
   : st.phase !== "active" ? (CAN_CALL ? "not on a call" : "calls need atc's call line and a microphone")
   : f.moving ? `connecting to ${onLine(f)}`
-  : st.muted ? "muted" : ({ hearing: "hearing you", thinking: "thinking", tool: "working", speaking: "speaking, tap to stop it" })[f.state] || "listening";
+  : st.talking ? "talking, let go to send"
+  : st.muted ? "muted" : ({ hearing: "hearing you", thinking: "thinking", tool: "working", speaking: st.ptt ? "speaking, hold to cut in" : "speaking, tap to stop it" })[f.state] || (st.ptt ? "hold to talk" : "listening");
 
 /** The call's level, drawn by the "line" character (minimal.js) small and in the page's ink: a hairline that ripples with the voices. */
 function Trace() {
@@ -1270,11 +1271,23 @@ function useCallKeys(onEsc, esc) {
   useKeyLayer((e) => {
     if (!Call.live() || typingIn(e.target)) return false;
     if (e.key === "m") return Call.mute(), true;
+    if (e.key === "t") return Call.togglePtt(), true;
+    if (e.key === " " && Call.get().ptt) return Call.press(), true;
     if (e.key === "E") return Call.hangup(), true;
     if (e.key === ".") return returnToCall(), true;
     if (e.key === "Escape" && esc) return onEsc(), true;
     return false;
   });
+}
+
+/** The talk button: the mic is open only while it is held, and letting go sends what was said. */
+function TalkButton({ small }) {
+  const [st] = useCall();
+  return html`<button class="btn talkb ${small ? "small" : ""} ${st.talking ? "on" : ""}" aria-pressed=${st.talking} disabled=${st.phase !== "active"}
+    onPointerDown=${(e) => { e.currentTarget.setPointerCapture(e.pointerId); Call.press(); }}
+    onPointerUp=${Call.release} onPointerCancel=${Call.release} onLostPointerCapture=${Call.release}
+    onContextMenu=${(e) => e.preventDefault()} aria-keyshortcuts="Space">
+    ${st.talking ? (small ? "Talking" : "Talking, let go to send") : (small ? "Talk" : "Hold to talk")}${!small && html` <kbd aria-hidden="true">space</kbd>`}</button>`;
 }
 
 /** Who the call is with: the assistant and the agents that can talk. A tap moves the line; saying so does the same. */
@@ -1331,7 +1344,7 @@ function CallPanel({ hub, live, captions, full, onMin }) {
   const on = Call.live();
   const who = look.person ? `${onLine(f)}, ${look.person.name}` : onLine(f);
   const mine = on && f.line === "assistant" ? touchedBy(hub, live, st.since || Date.now()) : [];
-  const busy = st.phase === "active" && !f.moving && !st.muted && f.state !== "speaking";
+  const busy = st.phase === "active" && !f.moving && !st.muted && !st.talking && f.state !== "speaking";
   const word = busy && f.state === "tool" ? callDoing(f) : busy && f.line === "assistant" && hub?.state === "working" && hub.activity ? doing(hub) : callWord(st, f);
   return html`<aside class="callp ${full ? "full" : ""} ${st.phase}" aria-label=${`Call with ${onLine(f)}`}>
     <div class="cph">
@@ -1352,9 +1365,11 @@ function CallPanel({ hub, live, captions, full, onMin }) {
         <span>${i + 1}</span><a href=${`#/s/${keyOf(s)}`}>${s.title || "Untitled"}</a><em>${away(s) ? "parked" : WORD[s.state] || "earlier"}</em></li>`)}</ol>
     </div>`}
     ${captions && on && !opts && html`<${CallLog} f=${f} />`}
-    <div class="ctl">
+    ${on && st.ptt && html`<div class="ctalk"><${TalkButton} /></div>`}
+    <div class="ctl ${on ? "live" : ""}">
       ${on ? html`
-        <button class="btn ${st.muted ? "on" : ""}" aria-pressed=${st.muted} onClick=${Call.mute} aria-keyshortcuts="m">${st.muted ? "Unmute" : "Mute"} <kbd aria-hidden="true">m</kbd></button>
+        <button class="btn ${st.ptt ? "on" : ""}" aria-pressed=${st.ptt} aria-label="Push to talk" onClick=${Call.togglePtt} aria-keyshortcuts="t" title="Push to talk: the microphone stays closed unless you hold the talk button">PTT <kbd aria-hidden="true">t</kbd></button>
+        ${!st.ptt && html`<button class="btn ${st.muted ? "on" : ""}" aria-pressed=${st.muted} onClick=${Call.mute} aria-keyshortcuts="m">${st.muted ? "Unmute" : "Mute"} <kbd aria-hidden="true">m</kbd></button>`}
         <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)} title="Who the assistant is in each language: character, room and voice">Person</button>
         <button class="btn end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>`
       : st.phase !== "ended" && html`<button class="btn prime" onClick=${callOrSetup}>Call the assistant</button>
@@ -1401,6 +1416,7 @@ function CallPill() {
   if (!phone || !Call.live()) return null;
   return html`<div class="callpill" role="group" aria-label="Call">
     <button class="back" onClick=${returnToCall} aria-label="Back to the call"><${CallMark} /><${Trace} /><span class="w">${onLine(Call.face())}</span></button>
+    ${Call.get().ptt && html`<${TalkButton} small />`}
     <button class="btn end" onClick=${Call.hangup}>End</button>
   </div>`;
 }
@@ -1412,6 +1428,7 @@ function CallLine({ docked }) {
     <button class="back" onClick=${returnToCall} aria-keyshortcuts="." title=${docked ? "The call" : "Back to the call"}>
       <${CallMark} />${!docked && html`<${Trace} />`}<span class="w">${onLine(f)}</span><span class="said">${f.said || callDoing(f)}</span></button>
     ${!docked && html`<button class="kb" onClick=${returnToCall} tabindex="-1">Return <kbd aria-hidden="true">.</kbd></button>`}
+    ${Call.get().ptt && html`<${TalkButton} small />`}
     <button class="kb end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>
   </footer>`;
 }

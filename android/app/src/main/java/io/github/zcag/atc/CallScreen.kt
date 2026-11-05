@@ -28,6 +28,8 @@ import android.text.style.ForegroundColorSpan
 import android.text.style.RelativeSizeSpan
 import android.text.style.TypefaceSpan
 import android.view.Gravity
+import android.view.HapticFeedbackConstants
+import android.view.MotionEvent
 import android.view.View
 import android.window.OnBackInvokedDispatcher
 import android.widget.Chronometer
@@ -238,7 +240,7 @@ class CallActivity : Activity() {
             Calls.Phase.Calling -> "Calling…"
             Calls.Phase.Ringing -> st.reason.ifEmpty { "Calling you" }
             Calls.Phase.Connecting -> "Connecting…"
-            Calls.Phase.Active -> if (st.held) "On hold, tap to resume" else if (st.muted) "Muted" else "On the call"
+            Calls.Phase.Active -> if (st.held) "On hold, tap to resume" else if (st.talking) "Talking, let go to send" else if (st.muted) "Muted" else "On the call"
             Calls.Phase.Ended -> "Call ended" + if (st.why.isNotEmpty()) ": ${st.why}" else ""
             Calls.Phase.Idle -> ""
         }
@@ -253,6 +255,8 @@ class CallActivity : Activity() {
     private lateinit var incomingRow: LinearLayout
     private lateinit var callRow: LinearLayout
     private lateinit var mute: ImageButton
+    private lateinit var pttToggle: ImageButton
+    private lateinit var talk: TextView
     private lateinit var speaker: ImageButton
     private lateinit var persona: PersonaHost
     private lateinit var transcript: Transcript
@@ -288,7 +292,8 @@ class CallActivity : Activity() {
         persona.view.animate().translationY(if (talked) resources.displayMetrics.heightPixels * -FACE_LIFT else 0f).setDuration(500)
         floor.animate().alpha(if (talked) 1f else 0f).setDuration(500)
         showWho(Calls.state.value, f)
-        if (Calls.state.value.phase == Calls.Phase.Active && !Calls.state.value.held) statusView.text = activity(f)
+        val st = Calls.state.value
+        if (st.phase == Calls.Phase.Active && !st.held && !st.talking) statusView.text = activity(f)
     }
 
     /** Who the call is with; tapping the name moves it. An agent's call shows the assistant's knock under the status. */
@@ -304,8 +309,8 @@ class CallActivity : Activity() {
         "hearing" -> "Hearing you"
         "thinking" -> "Thinking…"
         "tool" -> "Using " + f.tool.substringAfterLast("__").replace('_', ' ').ifEmpty { "a tool" } + "…"
-        "speaking" -> "Speaking · tap to stop"
-        else -> "Listening"
+        "speaking" -> if (Calls.state.value.ptt) "Speaking · hold to cut in" else "Speaking · tap to stop"
+        else -> if (Calls.state.value.ptt) "Hold to talk" else "Listening"
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -358,7 +363,7 @@ class CallActivity : Activity() {
     }
 
     private fun show(st: Calls.State) {
-        statusView.text = if (st.phase == Calls.Phase.Active && !st.muted && !st.held) activity(Calls.face.value) else status(st)
+        statusView.text = if (st.phase == Calls.Phase.Active && !st.muted && !st.held && !st.talking) activity(Calls.face.value) else status(st)
         persona.view.visibility = if (st.phase == Calls.Phase.Active || st.phase == Calls.Phase.Connecting) View.VISIBLE else View.INVISIBLE
         showWho(st, Calls.face.value)
         incomingRow.visibility = if (st.phase == Calls.Phase.Ringing) View.VISIBLE else View.GONE
@@ -373,7 +378,13 @@ class CallActivity : Activity() {
         }
         tint(mute, st.muted)
         tint(speaker, st.speaker)
-        val near = st.phase == Calls.Phase.Active && !st.speaker
+        tint(pttToggle, st.ptt)
+        mute.visibility = if (st.ptt) View.GONE else View.VISIBLE
+        talk.visibility = if (st.ptt && st.phase == Calls.Phase.Active) View.VISIBLE else View.GONE
+        talk.text = if (st.talking) "Talking, let go to send" else "Hold to talk"
+        talk.setTextColor(if (st.talking) 0xff151c27.toInt() else Color.WHITE)
+        (talk.background as GradientDrawable).setColor(if (st.talking) Color.WHITE else 0x33ffffff)
+        val near = st.phase == Calls.Phase.Active && !st.speaker && !st.ptt
         proximity?.let { if (near && !it.isHeld) it.acquire(3 * 60 * 60 * 1000L) else if (!near && it.isHeld) it.release() }
         if (st.phase == Calls.Phase.Ended || st.phase == Calls.Phase.Idle && pending == null && intent.action == null) finishSoon()
     }
@@ -475,6 +486,26 @@ class CallActivity : Activity() {
         b.setColorFilter(if (on) 0xff151c27.toInt() else Color.WHITE)
     }
 
+    /** Held, the microphone is open; letting go or the finger sliding away ends the turn. */
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private fun talkButton() = TextView(this).apply {
+        textSize = 18f
+        gravity = Gravity.CENTER
+        visibility = View.GONE
+        background = GradientDrawable().apply { cornerRadius = dp(20).toFloat() }
+        setOnTouchListener { v, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    v.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    Calls.send(Calls.Cmd.Press)
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> Calls.send(Calls.Cmd.Release)
+            }
+            true
+        }
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(88)).apply { setMargins(dp(24), dp(4), dp(24), dp(16)) }
+    }
+
     private fun row(vararg views: View) = LinearLayout(this).apply {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER
@@ -505,11 +536,17 @@ class CallActivity : Activity() {
         )
         mute = round(R.drawable.ic_mic_off, 0x33ffffff) { Calls.send(Calls.Cmd.Mute) }
         speaker = round(R.drawable.ic_speaker, 0x33ffffff) { Calls.send(Calls.Cmd.Speaker) }
+        pttToggle = round(R.drawable.ic_ptt, 0x33ffffff) { Calls.send(Calls.Cmd.Ptt) }.apply { contentDescription = "Push to talk" }
+        talk = talkButton()
         persona = PersonaHost(this)
         val more = round(R.drawable.ic_more, 0x33ffffff) {}
         more.setOnClickListener { menu(more) }
-        callRow = row(mute, round(R.drawable.ic_call_end, 0xffe5484d.toInt()) { Calls.send(Calls.Cmd.Hangup) }, speaker, more)
-        for (i in 0 until callRow.childCount) (callRow.getChildAt(i).layoutParams as LinearLayout.LayoutParams).setMargins(dp(9), 0, dp(9), 0)
+        callRow = row(pttToggle, mute, round(R.drawable.ic_call_end, 0xffe5484d.toInt()) { Calls.send(Calls.Cmd.Hangup) }, speaker, more)
+        for (i in 0 until callRow.childCount) (callRow.getChildAt(i).layoutParams as LinearLayout.LayoutParams).apply {
+            width = dp(60)
+            height = dp(60)
+            setMargins(dp(6), 0, dp(6), 0)
+        }
         persona.view.setOnClickListener {
             if (Calls.state.value.held) Calls.send(Calls.Cmd.Resume)
             else if (Calls.face.value.state in setOf("speaking", "thinking", "tool")) Calls.send(Calls.Cmd.Interrupt)
@@ -532,6 +569,7 @@ class CallActivity : Activity() {
             addView(reasonView)
             addView(transcript, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT))
             addView(incomingRow)
+            addView(talk)
             addView(callRow)
         }
         floor = View(this).apply {

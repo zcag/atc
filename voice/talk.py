@@ -309,6 +309,7 @@ class Talk:
         self.said_recently, self.echoing = [], False
         self.on_hold = False
         self.first_audio = {}
+        self.pressed = self.released = False
 
     async def off(self, fn, *args):
         """Run the transcribers and smart-turn on one worker thread (they release the GIL), so the event loop keeps
@@ -585,6 +586,26 @@ class Talk:
         self.debug.flush()
         self.vad_max, self.dry_ms, self.slowest = 0, 0.0, 0.0
 
+    def silent(self, ms):
+        """Whether they have been quiet for ms. While they hold the talk button they never has, and letting go is as good as any silence."""
+        return not self.pressed and (self.released or self.silence_ms >= ms)
+
+    async def press(self, down):
+        """The app's hold-to-talk button. Pressing stops what delta is saying. While held, a pause does not end the turn and
+        the first voiced window starts it; letting go ends it at once. Off the button the mic is silent, so the usual
+        silence rules would end a turn anyway if the release were lost."""
+        self.pressed = down
+        self.log(event="press" if down else "release")
+        if down:
+            self.silence_ms = 0
+            if self.talking():
+                self.log(event="interrupted", by="press")
+                self.interrupt()
+            return
+        self.released = True
+        await self.settle()
+        self.released = False
+
     async def on_audio(self, pcm):
         """Turn-taking. The caller's turn stays open until delta's answer is audible: at spec_ms of silence a
         reply starts in the background (STT, LLM, TTS), at end_ms (or when smart-turn says the turn sounds
@@ -601,7 +622,7 @@ class Talk:
                 self.speech_ms += 32
                 self.voiced_ms += 32
                 self.silence_ms = 0
-                if not self.in_speech and self.speech_ms >= self.a.min_speech:
+                if not self.in_speech and (self.pressed or self.speech_ms >= self.a.min_speech):
                     self.in_speech, self.pending = True, False
                     if self.opening or self.holding:
                         self.discard = True
@@ -628,7 +649,10 @@ class Talk:
                     self.reply.cancel()
                     self.pending = False
                     self.log(event="turn-continued")
-                if self.in_speech and self.talking() and not self.paused:
+                if self.in_speech and self.pressed and self.talking():
+                    self.log(event="interrupted", by="press")
+                    self.interrupt()
+                elif self.in_speech and self.talking() and not self.paused:
                     self.barge_ms += 32
                     if self.barge_ms >= self.a.barge and not self.own_voice():
                         self.paused, self.paused_at = True, time.time()
@@ -642,6 +666,11 @@ class Talk:
             self.utt.extend(pcm)
             if self.stt:
                 await self.off(self.stt.feed, pcm)
+        await self.settle()
+        self.preroll = (self.preroll + pcm)[-int(self.a.preroll * RATE) * 2:]
+
+    async def settle(self):
+        """What the silence so far decides about the turn."""
         if self.paused and self.in_speech:
             heard = self.stt.partial(self.lang) if self.stt else ""
             words = [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.BACKCHANNEL and not self.echoed(w)]
@@ -649,13 +678,13 @@ class Talk:
                 self.paused = False
                 self.log(event="interrupted", heard=heard)
                 self.interrupt()
-        if self.discard and self.silence_ms >= self.a.spec_ms:
+        if self.discard and self.silent(self.a.spec_ms):
             self.discard, self.in_speech, self.utt = False, False, bytearray()
             self.log(event="ignored", heard=self.stt.partial(self.lang) if self.stt else "", why="our opening line is on its way")
-        if self.reopening and self.silence_ms >= self.a.spec_ms:
+        if self.reopening and self.silent(self.a.spec_ms):
             self.reopening, self.in_speech = False, False
             self.log(event="ignored", heard=self.stt.partial(self.lang) if self.stt else "")
-        if self.reopened and self.silence_ms >= self.a.spec_ms:
+        if self.reopened and self.silent(self.a.spec_ms):
             self.reopened = False
             heard = (await self.off(self.stt.text)).get(self.lang, "") if self.stt else ""
             new = self.added(heard)
@@ -666,14 +695,14 @@ class Talk:
                 self.in_speech = False
                 self.log(event="kept", heard=heard)
             self.may_speak.set()
-        if self.in_speech and self.silence_ms >= self.a.spec_ms and self.talking():
+        if self.in_speech and self.silent(self.a.spec_ms) and self.talking():
             self.in_speech, self.utt = False, bytearray()
             self.log(event="resumed" if self.paused else "backchannel", heard=self.stt.partial(self.lang) if self.stt else "")
             self.paused = False
-        if self.in_speech and self.silence_ms >= self.a.spec_ms and not self.pending:
+        if self.in_speech and self.silent(self.a.spec_ms) and not self.pending:
             self.pending, done = True, False
             text = await self.off(self.stt.text) if self.stt else None
-            if self.turn:
+            if self.turn and not self.released:
                 prob = await self.off(self.turn, bytes(self.utt))
                 held = bool(self.pack.UNFINISHED.search((text or {}).get(self.lang, "") if isinstance(text, dict) else text or ""))
                 done = prob > self.a.turn_threshold and not held
@@ -683,11 +712,10 @@ class Talk:
             self.reply.add_done_callback(lambda t: t.cancelled() or not t.exception() or self.log(event="error", error=repr(t.exception())))
             if done:
                 self.commit.set()
-        if self.in_speech and self.silence_ms >= self.a.end_ms:
+        if self.in_speech and self.silent(self.a.end_ms):
             self.commit.set()
         if self.commit.is_set() and self.pending:
             self.in_speech = False
-        self.preroll = (self.preroll + pcm)[-int(self.a.preroll * RATE) * 2:]
 
     async def whisper(self, utt, lang, prompt="", timeout=None):
         form = aiohttp.FormData()
@@ -1260,6 +1288,10 @@ async def phone(args):
                 talk.on_hold = bool(event.get("on"))
                 talk.log(event="hold", on=talk.on_hold)
                 continue
+            if event.get("event") == "press":
+                if active:
+                    await talk.press(bool(event.get("down")))
+                continue
             if event.get("event") == "line":
                 talk.ask_line(event.get("to") or ASSISTANT)
                 continue
@@ -1325,8 +1357,11 @@ async def sim(args):
             for at, to in (x.split("=") for x in args.sim_line):
                 asyncio.get_running_loop().call_later(float(at), talk.ask_line, to)
         start = time.monotonic()
+        presses = sorted((float(at), down) for hold in args.sim_press for at, down in zip(hold.split("-"), (True, False)))
         for n, i in enumerate(range(0, len(pcm) + RATE * 2 * args.tail, FRAME)):
-            await talk.on_audio(pcm[i:i + FRAME].ljust(FRAME, b"\0"))
+            while presses and presses[0][0] <= n * 0.02:
+                await talk.press(presses.pop(0)[1])
+            await talk.on_audio(pcm[i:i + FRAME].ljust(FRAME, b"\0") if talk.pressed or not args.sim_press else bytes(FRAME))
             await asyncio.sleep(max(0, start + (n + 1) * 0.02 - time.monotonic()))
         talk.save()
         talk.brain.interrupt()
@@ -1340,6 +1375,7 @@ if __name__ == "__main__":
     p.add_argument("--dial")
     p.add_argument("--sim")
     p.add_argument("--sim-line", action="append", help="sim: SECONDS=NAME moves the line there at that time; repeatable")
+    p.add_argument("--sim-press", action="append", default=[], help="sim: START-END seconds the talk button is held, the mic silent otherwise; repeatable")
     p.add_argument("--sim-guest", help="sim: play the caller as this guest (needs --brain hub)")
     p.add_argument("--out", default=".", help="where each call's folder goes")
     p.add_argument("--loop", action="store_true", help="phone: keep answering calls")

@@ -103,7 +103,10 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
 - **The call screen follows the call.** The talker sends `persona` events over the line (listening,
   hearing with your words as they are recognised, thinking, the tool it uses, speaking with the
   sentence) and the screen shows them as a live transcript and a persona. Tapping the persona while
-  it speaks or thinks stops it (`interrupt`). A persona (`Persona.kt`) gets those states and reads
+  it speaks or thinks stops it (`interrupt`). Push to talk (the PTT button on the call, `t` in a browser; each device remembers
+  it) keeps the microphone closed unless the talk button is held (or space, in a browser). Pressing stops what the voice is saying
+  (`talk-down`), a pause while holding does not end the turn, and letting go sends it at once (`talk-up`).
+  With it on, the app does not turn the screen off at your ear, since you need the button. A persona (`Persona.kt`) gets those states and reads
   both voices' loudness on the phone every frame it draws, so it moves with the sound and not with
   the network; the first one is an orb drawn by a shader.
 - **Persons** bundle what a call shows and speaks with: a name, a character, a background and a voice per

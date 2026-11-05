@@ -10,7 +10,10 @@ class Up extends AudioWorkletProcessor {
     this.frame = new Int16Array(IN_FRAME);
     this.n = 0;
     this.quiet = false;
-    this.port.onmessage = (e) => (this.quiet = e.data.quiet);
+    this.port.onmessage = (e) => {
+      this.quiet = e.data.quiet;
+      if (e.data.ack) this.port.postMessage("closed");
+    };
   }
 
   process(inputs) {

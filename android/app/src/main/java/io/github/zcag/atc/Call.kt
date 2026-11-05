@@ -18,6 +18,7 @@ import android.os.Build
 import android.telecom.CallEndpoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.SendChannel
@@ -44,12 +45,12 @@ object Calls {
     data class State(
         val phase: Phase = Phase.Idle, val incoming: Boolean = false, val reason: String = "",
         val since: Long = 0, val muted: Boolean = false, val speaker: Boolean = false, val why: String = "",
-        val held: Boolean = false,
+        val held: Boolean = false, val ptt: Boolean = false, val talking: Boolean = false,
     ) {
         val live get() = phase != Phase.Idle && phase != Phase.Ended
     }
 
-    enum class Cmd { Answer, Hangup, Mute, Speaker, Hold, Unhold, Resume, Interrupt }
+    enum class Cmd { Answer, Hangup, Mute, Speaker, Hold, Unhold, Resume, Interrupt, Ptt, Press, Release }
 
     /** What the assistant is doing, from the talker: listening, hearing (the user), thinking, tool, speaking. */
     data class Face(
@@ -63,6 +64,7 @@ object Calls {
     data class Turn(val yours: Boolean, val who: String, val parts: List<String>)
 
     private const val KEEP = 200
+    private const val TAIL_MS = 250L
 
     fun extended(log: List<Turn>, yours: Boolean, who: String, text: String): List<Turn> {
         val last = log.lastOrNull()
@@ -135,7 +137,7 @@ object Calls {
         val server = Prefs(app).server ?: return false
         val inbox = Channel<Cmd>(Channel.UNLIMITED)
         cmds = inbox
-        state.value = State(if (incoming) Phase.Ringing else Phase.Calling, incoming, reason)
+        state.value = State(if (incoming) Phase.Ringing else Phase.Calling, incoming, reason, ptt = Prefs(app).callPtt == "1")
         face.value = Face()
         CallNote.show(app, state.value)
         scope.launch {
@@ -151,6 +153,7 @@ object Calls {
     private suspend fun run(app: Context, server: String, incoming: Boolean, inbox: Channel<Cmd>): String {
         val wire = Channel<Wire>(Channel.UNLIMITED)
         val voice = Voice()
+        voice.ptt = state.value.ptt
         this.voice = voice
         val line = Line(app, "$server/api/call/line", voice, wire)
         line.open(if (incoming) "ringing" else "call")
@@ -208,6 +211,14 @@ object Calls {
         }
         var answered = !incoming
         var ended: String? = null
+        var tail: Job? = null
+        fun letGo() {
+            tail?.cancel()
+            tail = null
+            voice.pressed = false
+            update { copy(talking = false) }
+            line.send("talk-up")
+        }
         while (ended == null) {
             val why: String? = select {
                 inbox.onReceive { cmd ->
@@ -227,8 +238,44 @@ object Calls {
                             if (answered) "you hung up" else "declined"
                         }
                         Cmd.Mute -> {
-                            voice.muted = !voice.muted
-                            update { copy(muted = voice.muted) }
+                            if (!state.value.ptt) {
+                                voice.muted = !voice.muted
+                                update { copy(muted = voice.muted) }
+                            }
+                            null
+                        }
+                        Cmd.Ptt -> {
+                            if (state.value.talking) letGo()
+                            val on = !state.value.ptt
+                            voice.ptt = on
+                            voice.muted = false
+                            Prefs(app).callPtt = if (on) "1" else "0"
+                            update { copy(ptt = on, muted = false) }
+                            null
+                        }
+                        Cmd.Press -> {
+                            val st = state.value
+                            if (st.ptt && !st.talking && st.phase == Phase.Active) {
+                                val stillOpen = tail?.isActive == true
+                                tail?.cancel()
+                                tail = null
+                                voice.pressed = true
+                                update { copy(talking = true) }
+                                if (!stillOpen) {
+                                    voice.flush()
+                                    line.send("talk-down")
+                                }
+                            }
+                            null
+                        }
+                        Cmd.Release -> {
+                            if (state.value.talking) {
+                                update { copy(talking = false) }
+                                tail = launch {
+                                    delay(TAIL_MS)
+                                    letGo()
+                                }
+                            }
                             null
                         }
                         Cmd.Speaker -> {
@@ -262,7 +309,7 @@ object Calls {
                                 voice.start(line)
                                 update { copy(phase = Phase.Active, since = SystemClock.elapsedRealtime()) }
                                 CallService.start(app)
-                            }
+                            } else if (state.value.ptt && tail == null) line.send(if (state.value.talking) "talk-down" else "talk-up")
                             null
                         }
                         is Wire.Ended -> w.why
@@ -277,6 +324,7 @@ object Calls {
                 }
                 tele.disconnect(cause)
                 (watchers + timeout).forEach { it.cancel() }
+                tail?.cancel()
                 if (incoming && !answered && why != "declined") CallNote.missed(app, state.value.reason)
                 ended = why
             }
@@ -392,6 +440,8 @@ class Voice {
     @Volatile var muted = false
     @Volatile var systemMuted = false
     @Volatile var held = false
+    @Volatile var ptt = false
+    @Volatile var pressed = false
     @Volatile var you = 0f
     @Volatile var route = ""
     @Volatile private var aec = "off"
@@ -524,7 +574,7 @@ class Voice {
                     if (r < 0) return
                     n += r
                 }
-                val quiet = muted || systemMuted || held
+                val quiet = muted || systemMuted || held || (ptt && !pressed)
                 if (quiet) withheld++ else if (buf.all { it == 0.toByte() }) micZero++
                 micFrames++
                 you = if (quiet) 0f else loudness(buf)
@@ -643,5 +693,5 @@ class Voice {
         .put("hold_ms", hold * 20).put("hold_max_ms", holdMax * 20).put("deepest_ms", deepest * 20)
         .put("route", route).put("aec", aec)
         .put("mic_frames", micFrames).put("mic_zero", micZero).put("withheld", withheld)
-        .put("muted", muted).put("system_muted", systemMuted).put("held", held)
+        .put("muted", muted).put("system_muted", systemMuted).put("held", held).put("ptt", ptt)
 }

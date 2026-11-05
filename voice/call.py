@@ -259,7 +259,8 @@ async def app_command(msg):
 async def ws_app(request):
     """atc's phone app, through atc's /api/call/line: one call at a time, their voice as binary frames
     (s16le, 16 kHz, mono) and these commands: call (they call), ringing (a call to them reached the phone),
-    accept, resume (after a reconnect), hangup, interrupt (they tapped: the talker stops), and stats (its playback
+    accept, resume (after a reconnect), hangup, interrupt (they tapped: the talker stops), talk-down and talk-up (he
+    holds or lets go of the talk button: see Talk.press), and stats (its playback
     counters, kept in the call's log line). The talker's {"cmd": "persona", ...} reach it as {"event": "persona", ...}.
     call and ringing may say out_rate 24000: the talker then speaks at that rate (Higgs' own) instead of 16 kHz.
     It hears active, ended (with why) and the talker's audio.
@@ -340,6 +341,9 @@ async def ws_app(request):
             elif cmd == "interrupt":
                 if phase == "active":
                     await broadcast({"event": "interrupt", "via": "app"}, "app")
+            elif cmd in ("talk-down", "talk-up"):
+                if phase == "active":
+                    await broadcast({"event": "press", "down": cmd == "talk-down", "via": "app"}, "app")
             elif cmd in ("hold", "unhold"):
                 if phase == "active":
                     await broadcast({"event": "hold", "on": cmd == "hold", "via": "app"}, "app")

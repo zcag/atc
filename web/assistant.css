@@ -113,6 +113,15 @@ body.docked .app { margin-right: 380px; }
 .cap .caret { display: inline-block; width: 7px; height: 1em; margin-left: 2px; vertical-align: -2px; background: var(--work); }
 .callp .ctl { flex: none; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--s2); padding: var(--s3) var(--s4); border-top: 1px solid var(--line); margin-top: auto; }
 .callp .ctl .btn { height: 44px; justify-content: center; }
+.callp .ctl.live { display: flex; }
+.callp .ctl.live .btn { flex: 1 1 auto; min-width: 0; padding: 0 var(--s2); }
+.callp .ctalk { flex: none; display: flex; padding: var(--s3) var(--s4) 0; margin-top: auto; }
+.callp .ctalk + .ctl { margin-top: 0; border-top: 0; }
+.btn.talkb { flex: 1; height: 72px; justify-content: center; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; font-weight: 650; box-shadow: inset 0 0 0 1px var(--line-strong); }
+.btn.talkb kbd { font-family: var(--mono); font-size: var(--fs-micro); font-weight: 400; line-height: 14px; padding: 0 4px; margin-left: 6px; box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--dim); }
+.btn.talkb.on { background: var(--ink); color: var(--strip); }
+.btn.talkb.on kbd { color: inherit; box-shadow: inset 0 0 0 1px currentColor; }
+.btn.talkb.small { flex: none; height: 32px; padding: 0 var(--s4); }
 .callp .ctl .btn.prime { grid-column: span 2; }
 .callp .ctl .btn kbd { font-family: var(--mono); font-size: var(--fs-micro); font-weight: 400; line-height: 14px; padding: 0 4px; margin-left: 6px; box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--dim); }
 .callp .ctl .btn.on { background: var(--strip-hi); box-shadow: inset 0 0 0 1px var(--line-strong), inset 0 -2px 0 var(--ink); }
@@ -229,6 +238,8 @@ body.docked .app { margin-right: 380px; }
   .callpill .ctrace { width: 64px; }
   .callpill .w { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .callpill .btn.end { flex: none; height: 36px; padding: 0 var(--s4); }
+  .callpill .btn.talkb.small { height: 36px; }
+  .callpill:has(.talkb) .ctrace { display: none; }
 
   .callp.full { position: fixed; top: 0; left: 0; right: 0; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom)); width: auto; border-left: 0; z-index: 22; padding-top: env(safe-area-inset-top); }
   .callp.full .cph { padding: 0 var(--s1) 0 var(--s4); height: 44px; }
