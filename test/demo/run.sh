@@ -30,6 +30,8 @@ cp -r "$here/pages" "$tmp/.demo-pages"
 cp -r "$here/../../examples/agents" "$tmp/.demo-agents"
 cp "$here/demo-hub.py" "$here/demo-browser.py" "$here/demo-tick.py" "$tmp/.local/bin/"
 cp -r "$here/shop" "$tmp/.demo-shop"
+# Characters are not in the repo: DEMO_PERSONAS names a folder of them (a personas/ as in docs/calls.md) for the call screens.
+if [ -n "${DEMO_PERSONAS:-}" ]; then mkdir -p "$tmp/.local/share/atc/app" && cp -r "$DEMO_PERSONAS" "$tmp/.local/share/atc/app/personas"; fi
 chrome=$(command -v chromium || command -v google-chrome-stable || true)
 
 unshare -Urmu --pid --fork --kill-child --mount-proc /bin/bash -c '

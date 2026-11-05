@@ -6,7 +6,7 @@ out=$(cd "$(dirname "$0")/../.." && pwd)/docs/img
 mkdir -p "$out"
 width() {
 	case "$1" in
-	hero | agents) echo 2400 ;;
+	hero | agents | fleet) echo 2400 ;;
 	phones | call-ring) echo 2000 ;;
 	palette | new | backlog | settings) echo 1400 ;;
 	*) echo 1800 ;;

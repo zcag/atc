@@ -5,7 +5,7 @@ assistant you can call on the phone. All of it on your own machines, from a brow
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/hero-dark.webp">
-  <img src="docs/img/hero-light.webp" alt="atc on a desktop with a lot going on: the board with sixteen sessions waiting and thirteen working across three machines, and in front of it @ops's session on the checkout errors with the page it made, a chart of errors jumping to 8% at the last deploy. In front of those, a phone taking an incoming call from Assistant, Checkout errors jumped to 8% after the last deploy, with Decline and Answer buttons.">
+  <img src="docs/img/hero-light.webp" alt="atc's main screen, one window with three panes. On the left, the sessions of one project with what each did in a line. In the middle, the session Fix the coupon crash: your request, what it did as a short story with one failed test, and the edit as a diff. On the right, the page it made: 8.2% errors at the peak, 231 failed checkouts replayed and all passing, a chart of errors jumping at the deploy and falling at the rollback, and the cause.">
 </picture>
 
 ```sh
@@ -32,7 +32,7 @@ screen widget.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/phones-dark.webp">
-  <img src="docs/img/phones-light.webp" alt="Four phones. The first shows the screen the side key opens: two sessions waiting, one with its question answered by buttons and a text field, one asking to run a git push with Allow once and Deny, and a green call button. The second shows a session's prompt, its steps and a small diff above its result. The third shows a finished report with one-tap replies, Push it and Draft the note for support. The fourth shows the report page that session made, with its figures and a chart.">
+  <img src="docs/img/phones-light.webp" alt="Four phones. The first shows the screen the side key opens: sessions waiting, one with its question answered by buttons and a text field, others asking to run a command with Allow once and Deny, and a green call button. The second shows a session's prompt, its steps and a small diff above its result. The third shows a finished report with one-tap replies, Push it and Draft the note for support. The fourth shows the report page that session made, with its figures and a chart.">
 </picture>
 
 Back at a desk, read what a session did as a transcript: each prompt and reply with the diffs, test results and commits, and search
@@ -70,7 +70,7 @@ atc call --reason "Checkout errors jumped to 8% after the last deploy"
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/call-ring-dark.webp">
-  <img src="docs/img/call-ring-light.webp" alt="Three phones. The first has woken to an incoming call: Assistant, with the reason under the name, Checkout errors jumped to 8% after the last deploy, and a red and a green button. The second is on the call: Assistant, a call timer, what it is saying, and mute, hang up and speaker buttons. The third is the phone's call history, with Assistant listed like any other caller.">
+  <img src="docs/img/call-ring-light.webp" alt="Two phones. The first has woken to an incoming call: Assistant, with the reason under the name, Checkout errors jumped to 8% after the last deploy, and a red and a green button. The second is on the call: Assistant, a call timer, what it is saying, and mute, hang up and speaker buttons.">
 </picture>
 
 You can talk over it, and it hears you. It says what it's doing while it works, starts sessions for anything long, and tells you
@@ -153,6 +153,11 @@ and tells the interrupted ones to continue.
 [Usage and limits](docs/usage.md) · [Resources](docs/resources.md)
 
 ## And a lot more
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/fleet-dark.webp">
+  <img src="docs/img/fleet-light.webp" alt="atc on a desktop with a lot going on: the board with sixteen sessions waiting and thirteen working across three machines, and in front of it @ops's session on the checkout errors with the page it made, a chart of errors jumping to 8% at the last deploy. In front of those, a phone taking an incoming call from Assistant, Checkout errors jumped to 8% after the last deploy, with Decline and Answer buttons.">
+</picture>
 
 <table>
 <tr>

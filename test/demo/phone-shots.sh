@@ -1,10 +1,11 @@
 #!/bin/bash
 # Shoots the real app on android14.sh's device, against run.sh with DEMO_LINE=real and voice-stack.sh: the ring, the call,
 # the app around it. A debug build (assembleDebug -Patc.abi=x86_64 -Patc.secrets=/nonexistent), because only debug builds have
-# the Fake hook that stands in for a push; from Push.handle on it's the release code. The call log needs a dialer app on the
-# device: Fossify Phone, from F-Droid, since redroid has none. Hub on <port> + 1.
-#   phone-shots.sh setup <apk> <port> <dialer apk>    install and point at the demo
+# the Fake hook that stands in for a push; from Push.handle on it's the release code. Hub on <port> + 1.
+# The app takes its theme from the server, so nothing else may change the look while this runs: not shots.js's themes.
+#   phone-shots.sh setup <apk> <port>                 install and point at the demo
 #   phone-shots.sh shoot <port> <out dir> <dark|light>
+#   phone-shots.sh character <port> <out dir> <dark|light> <name>    a call with that character (DEMO_PERSONAS)
 set -eu
 dev=127.0.0.1:${ADB_PORT:-5599}
 adb=("$HOME/Android/sdk/platform-tools/adb" -s "$dev")
@@ -32,11 +33,9 @@ case "${1:-}" in
 setup)
 	port=$3
 	"${adb[@]}" install -r -g "$2" >/dev/null
-	"${adb[@]}" install -r -g "$4" >/dev/null
 	"${adb[@]}" reverse "tcp:$port" "tcp:$port" >/dev/null
 	for p in RECORD_AUDIO POST_NOTIFICATIONS READ_CONTACTS WRITE_CONTACTS READ_CALL_LOG READ_PHONE_STATE; do "${adb[@]}" shell pm grant $pkg android.permission.$p; done
 	"${adb[@]}" shell appops set $pkg USE_FULL_SCREEN_INTENT allow
-	"${adb[@]}" shell cmd role add-role-holder android.app.role.DIALER org.fossify.phone
 	"${adb[@]}" shell cmd role add-role-holder android.app.role.ASSISTANT $pkg
 	"${adb[@]}" shell settings put secure voice_interaction_service $pkg/.AssistService
 	"${adb[@]}" shell settings put secure assistant $pkg/.AssistService
@@ -87,11 +86,34 @@ shoot)
 	open "p/@ops/checkout-errors"
 	sleep 3.5
 	shot phone-page
-	"${adb[@]}" shell am start -W -n org.fossify.phone/.activities.SplashActivity.Green >/dev/null
+	;;
+character)
+	port=$2 out=$3/$4 who=$5
+	mkdir -p "$out"
+	shot() { "${adb[@]}" exec-out screencap -p >"$out/$1.png"; }
+	"${adb[@]}" shell cmd uimode night "$([ "$4" = dark ] && echo yes || echo no)" >/dev/null
+	curl -s -m 3 -X POST "http://127.0.0.1:$((port + 2))/hangup" >/dev/null
+	sleep 1
+	"${adb[@]}" shell am force-stop $pkg
+	"${adb[@]}" shell "run-as $pkg sh -c \"sed -i '/name=.persona/d; s#</map>#<string name=\\\"persona\\\">$who</string></map>#' shared_prefs/atc.xml\""
+	"${adb[@]}" shell am start -W -n $pkg/.MainActivity >/dev/null
+	sleep 4
+	ring
+	sleep 2.2
+	"${adb[@]}" shell input tap 600 200
 	sleep 2
-	"${adb[@]}" shell input tap 900 2180
+	"${adb[@]}" shell input tap 676 2062
+	sleep 4
+	shot "$who-1"
 	sleep 2.5
-	shot recents
+	shot "$who-2"
+	sleep 2.5
+	shot "$who-3"
+	sleep 4
+	shot "$who-4"
+	sleep 4
+	shot "$who-5"
+	curl -s -m 3 -X POST "http://127.0.0.1:$((port + 2))/hangup" >/dev/null
 	;;
 *)
 	sed -n 2,7p "$0"

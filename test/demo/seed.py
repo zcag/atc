@@ -332,6 +332,30 @@ def scheduler():
     s.live("working", "busy", pinned=True)
 
 
+def coupon_fix():
+    """The session of the README's top image: a whole fix, with its page beside it."""
+    s = Session("Fix the coupon crash", SHOP, "fix/coupon-discount", ago=1320)
+    s.user("Checkout errors jumped to 8% with deploy 214 and we rolled back. Find out why the coupon change broke it, fix it, and show me how sure you are.")
+    s.say("I'll start from the stack traces @ops collected, then the change itself.", 20)
+    s.bash("./errors.sh checkout --since deploy-214 --group", "212  TypeError: Cannot read properties of undefined (reading 'percent')\n     at applyCoupon (src/checkout/coupon.ts:14)\n 14  CouponError: code not found\n  5  other")
+    s.grep("discount.percent", "src/checkout/coupon.ts:14:  return Math.round(cents * coupon.discount.percent / 100)")
+    s.read("src/checkout/coupon.ts", "export function applyCoupon(cents: number, coupon: Coupon): number {\n  return Math.round(cents * coupon.discount.percent / 100)\n}")
+    s.say("Older fixed-amount coupons have no `discount` at all, so every one of them throws. A failing test first, then the fix.")
+    s.edit("test/checkout/coupon.test.ts", "describe('applyCoupon', () => {\n", "describe('applyCoupon', () => {\n  it('takes a fixed amount off', () => {\n    expect(applyCoupon(5000, { code: 'TEN', fixedCents: 1000 })).toBe(1000)\n  })\n\n")
+    s.bash("npm test -- test/checkout/coupon.test.ts", "FAIL test/checkout/coupon.test.ts > applyCoupon > takes a fixed amount off\nTypeError: Cannot read properties of undefined (reading 'percent')\n\nTests  1 failed | 8 passed (9)", error=True)
+    s.edit("src/checkout/coupon.ts", "  return Math.round(cents * coupon.discount.percent / 100)", "  if (coupon.percent) return Math.round(cents * coupon.percent / 100)\n  return Math.min(coupon.fixedCents ?? 0, cents)")
+    s.bash("npm test", "Test Files  39 passed (39)\nTests  418 passed (418)\nDuration  6.82s")
+    s.bash("node scripts/replay-checkouts.mjs --failed --since deploy-214", "replayed 231 failed checkouts: 231 pass, 0 fail")
+    s.bash("npm run build", "vite v6.0.7 building for production...\n418 modules transformed.\nbuilt in 3.31s")
+    s.bash('git add -A && git commit -qm "Coupons: fixed amounts have no percent" -v', "[fix/coupon-discount 7c2e91f] Coupons: fixed amounts have no percent\n 2 files changed, 8 insertions(+), 1 deletion(-)")
+    s.bash("atc show out/coupon-crash.html", 'Showing "Coupon crash" (coupon-crash) in atc, live from ~/code/shop/out/coupon-crash.html.')
+    s.say("Found and fixed, on `fix/coupon-discount`. Older fixed-amount coupons have no percent, and the new code read it anyway. The full suite is green (418 tests), and all 231 failed checkouts pass when replayed against the fix.\n\nReady to deploy when you are.")
+    s.done(486000)
+    s.summary("Coupon crash fixed and proven against all 231 failures; ready to deploy.", ["Fixed-amount coupons have no percent; the new code read it anyway."], ["Deploy it", "Draft the note to the 41 customers"])
+    s.live("idle", reports=HUB)
+    page(s.sid, "coupon-crash", "Coupon crash", "Found, fixed, ready to ship", ago=300, of=SHOP)
+
+
 def ops_alert():
     """The alert that raises the call: the error rate reaches anyone only because @ops is told, and it decides to ring."""
     s = Session("Checkout errors after the deploy", SHOP, ago=720)
@@ -424,7 +448,7 @@ def busy(title, cwd, branch, doing, ago=300, model=OPUS, prompt=None):
     s.live("working", "busy")
 
 
-def asking(title, cwd, branch, cmd, ago=240):
+def asking(title, cwd, branch, cmd, ago=3000):
     s = Session(title, cwd, branch, ago=ago)
     s.user(title + ".")
     s.read("README.md", "# " + title)
@@ -550,6 +574,7 @@ def main_box():
     scheduler()
     (CLAUDE).mkdir(parents=True, exist_ok=True)
     ops_alert()
+    coupon_fix()
     team()
     more_sessions()
     past_sessions()

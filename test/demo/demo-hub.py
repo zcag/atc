@@ -81,6 +81,10 @@ for raw in sys.stdin:
     put(type="user", isReplay=True, session_id=sid, message=m["message"])
     if "· you called" in words:
         turn = 0
+    if "(next: orders)" in words:  # charshot.js: the next call turn is the one about the orders
+        turn = 3
+        put(type="result", subtype="success", session_id=sid)
+        continue
     if "my last message was only half" in words:
         turn = max(0, turn - 1)
     if "[talk-mode: phone" in words or "[phone ·" in words or turn:

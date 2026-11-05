@@ -23,7 +23,22 @@ async (page, { base = "http://127.0.0.1:7399", out = "/tmp/atc-shots", modes = [
   const to = async (p, hash, wait = 1500) => { await p.evaluate((h) => { location.hash = h; }, hash); await p.waitForTimeout(wait); };
 
   const shots = {
-    // The hero's window: the session on the checkout errors and its page. The phone in front of it comes from phone-shots.sh.
+    // The top image: sessions, a transcript and a page, at a size that stays readable at the README's width.
+    async hero(mode) {
+      const p = await open(mode, { w: 1280, h: 860 });
+      await to(p, `#/s/${by("Fix the coupon crash").id}/p/coupon-crash`, 3200);
+      await p.getByText("src/checkout/coupon.ts", { exact: true }).last().click();
+      await p.waitForTimeout(900);
+      await p.evaluate(() => {
+        const prompt = [...document.querySelectorAll("*")].find((e) => e.children.length === 0 && e.textContent.startsWith("Checkout errors jumped to 8% with deploy 214"));
+        let box = prompt;
+        while (box && !(box.scrollHeight > box.clientHeight + 4 && /auto|scroll/.test(getComputedStyle(box).overflowY))) box = box.parentElement;
+        if (box) box.scrollTop += prompt.getBoundingClientRect().top - box.getBoundingClientRect().top - 44;
+      });
+      await p.waitForTimeout(500);
+      return [[p, "hero"]];
+    },
+    // The fleet image's front window: @ops's session on the checkout errors and its page.
     async desk(mode) {
       const p = await open(mode, { w: 1760, h: 1000 });
       await to(p, `#/s/${by("Checkout errors").id}/p/checkout-errors`, 3200);

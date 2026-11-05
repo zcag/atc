@@ -1,0 +1,27 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Coupon crash</title><link rel="stylesheet" href="/atc.css"></head>
+<body><main class="pg">
+<header class="head"><h1>Coupon crash: found, fixed, ready to ship</h1>
+<p class="lede">Fixed-amount coupons have no percent, and the new code read it anyway. Replaying the 231 failed checkouts against the fix: all pass.</p>
+<p class="meta"><span>deploy 214</span><span>fix/coupon-discount</span></p></header>
+<div class="stats"><div><b>8.2<small>%</small></b><span>errors at the peak</span></div><div><b>0.3<small>%</small></b><span>after the rollback</span></div><div><b>231</b><span>failures replayed, all pass</span></div><div><b>41</b><span>orders to win back</span></div></div>
+<section id="trend"><h2>Checkout errors <small>last 90 minutes</small></h2>
+<div class="chart"><svg viewBox="0 0 720 200" role="img" aria-label="Errors near zero, up to 8.2 percent at deploy 214, back near zero after the rollback eleven minutes later">
+<line class="grid" x1="40" x2="710" y1="20" y2="20"/><line class="grid" x1="40" x2="710" y1="70" y2="70"/><line class="grid" x1="40" x2="710" y1="120" y2="120"/><line class="grid" x1="40" x2="710" y1="170" y2="170"/>
+<text x="4" y="24">9%</text><text x="4" y="74">6%</text><text x="4" y="124">3%</text><text x="4" y="174">0</text>
+<path class="area" d="M40 166L180 165L290 167L318 166L332 58L362 40L392 36L420 38L436 120L456 164L560 165L710 166L710 170L40 170Z"/>
+<path class="line" d="M40 166L180 165L290 167L318 166L332 58L362 40L392 36L420 38L436 120L456 164L560 165L710 166"/>
+<line class="now" x1="322" x2="322" y1="10" y2="170"/><text x="252" y="14">deploy 214</text>
+<line class="now" x1="432" x2="432" y1="10" y2="170"/><text x="440" y="14">rollback</text>
+<circle class="pt" cx="392" cy="36" r="4"/><text class="k" x="372" y="28">8.2%</text>
+<line class="ax" x1="40" x2="710" y1="170" y2="170"/><text x="40" y="192">90 m ago</text><text x="670" y="192">now</text>
+</svg></div></section>
+<section id="cause"><h2>The cause</h2>
+<pre class="diff"><span class="h">src/checkout/coupon.ts</span>
+<del>  return Math.round(cents * coupon.discount.percent / 100)</del>
+<ins>  if (coupon.percent) return Math.round(cents * coupon.percent / 100)</ins>
+<ins>  return Math.min(coupon.fixedCents ?? 0, cents)</ins></pre></section>
+<section id="checks"><h2>Checked</h2>
+<ul class="checks"><li class="done">New test fails before, passes after</li><li class="done">Full suite: 418 tests</li><li class="done">231 failed checkouts replayed</li><li class="now">Deploy, on your word</li></ul></section>
+</main></body></html>
