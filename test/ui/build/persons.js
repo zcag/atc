@@ -12,10 +12,10 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
   for (const { id } of (await (await fetch(base + '/api/call/persons')).json()).persons) await fetch(`${base}/api/call/persons/${id}`, { method: 'DELETE' });
-  await post('/api/call/persons', { name: 'Elif', character: 'woman', background: 'night.jpg', voices: { tr: 'voice_f' } });
+  await post('/api/call/persons', { name: 'Mira', character: 'woman', background: 'night.jpg', voices: { tr: 'voice_f' } });
   await post('/api/call/persons', { name: 'Hoca', character: 'professor', voices: { tr: 'voice_m', en: 'en_merchant' } });
   await post('/api/call/persons', { name: 'Sessiz', character: 'professor', background: 'evening.jpg', voices: { tr: 'voice_m', en: 'voice_en' } });
-  await post('/api/call/persons/pick', { lang: 'tr', id: 'elif' });
+  await post('/api/call/persons/pick', { lang: 'tr', id: 'mira' });
   await post('/api/call/persons/pick', { lang: 'en', id: 'hoca' });
 
   const b = await chromium.launch({ executablePath: process.env.CHROME_BIN, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
@@ -33,8 +33,8 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
     await p.goto(base + '/#/call');
     await p.waitForSelector('.callp');
     await p.evaluate(() => window.__call.set({ phase: 'active', since: Date.now() }, { state: 'listening', lang: 'tr' }));
-    await p.waitForFunction(() => document.querySelector('.cph .w')?.textContent.includes('Elif'), null, { timeout: 8000 }).catch(() => {});
-    ok(await p.locator('.cph .w').innerText() === 'assistant, Elif', 'Turkish: the name is the Turkish person');
+    await p.waitForFunction(() => document.querySelector('.cph .w')?.textContent.includes('Mira'), null, { timeout: 8000 }).catch(() => {});
+    ok(await p.locator('.cph .w').innerText() === 'assistant, Mira', 'Turkish: the name is the Turkish person');
     await p.waitForTimeout(3000);
     ok(seen('/personas/woman/rig.json') && seen('/_rooms/night.jpg'), 'Turkish: her character and background load');
     await shot('tr');
