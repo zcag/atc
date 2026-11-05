@@ -50,6 +50,7 @@ test("every kind of particle stays in its box and keeps moving the right way", (
     const p = new Particles({ kind, box: [.5, .1, .4, .4], n: 30 }, [1000, 2000]);
     const [x, y, w, h] = p.box, start = p.list[0].y;
     p.list[0].y = y + h / 2;
+    p.list[0].life = 0;
     const before = p.list[0].y;
     p.step(1 / 60, 0);
     assert.equal(p.list[0].y > before, down, kind);
