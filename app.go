@@ -3,6 +3,7 @@ package main
 import (
 	"archive/tar"
 	"bytes"
+	"cmp"
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,10 +19,12 @@ import (
 
 const appReleases = "https://github.com/zcag/atc/releases/latest/download/"
 
-const appHelp = `Usage: atc app update
+const appHelp = `Usage: atc app update | characters
 
-Downloads the latest Android app and call characters from atc's releases into the folder this server offers it from
-(ATC_APP_DIR, by default ~/.local/share/atc/app), so phones can install it from /app/ and update from it.
+update      downloads the latest Android app and call characters from atc's releases into the folder this server
+            offers them from (ATC_APP_DIR, by default ~/.local/share/atc/app), so phones can install it from /app/
+            and update from it.
+characters  downloads only the characters and rooms, about 10 MB.
 `
 
 func defaultAppDir() string {
@@ -29,14 +32,20 @@ func defaultAppDir() string {
 	return filepath.Join(home, ".local", "share", "atc", "app")
 }
 
+func appDir() string { return cmp.Or(os.Getenv("ATC_APP_DIR"), defaultAppDir()) }
+
 func appCmd(args []string) error {
-	if len(args) != 1 || args[0] != "update" {
+	if len(args) != 1 || args[0] != "update" && args[0] != "characters" {
 		fmt.Print(appHelp)
 		os.Exit(2)
 	}
-	dir := os.Getenv("ATC_APP_DIR")
-	if dir == "" {
-		dir = defaultAppDir()
+	dir := appDir()
+	if args[0] == "characters" {
+		if err := fetchCharacters(appReleases, dir); err != nil {
+			return err
+		}
+		fmt.Println("The characters and rooms are ready in", filepath.Join(dir, "personas"))
+		return nil
 	}
 	name, err := fetchApp(appReleases, dir)
 	if err != nil {
@@ -80,6 +89,35 @@ func fetchApp(base, dir string) (string, error) {
 		}
 	}
 	return v.VersionName, os.WriteFile(filepath.Join(dir, "version.json"), info, 0o644)
+}
+
+// fetchCharacters takes the characters and rooms of the latest release without the app, which not everyone wants.
+func fetchCharacters(base, dir string) error {
+	c := &http.Client{Timeout: 5 * time.Minute}
+	info, err := download(c, base+"version.json")
+	if err != nil {
+		return err
+	}
+	var v struct {
+		Personas string `json:"personasSha256"`
+	}
+	if err := json.Unmarshal(info, &v); err != nil || v.Personas == "" {
+		return fmt.Errorf("the release lists no characters: %v", err)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	return fetchPersonas(c, base, dir, v.Personas)
+}
+
+// ensureCharacters fetches them only when this server has none yet: atc app update is what brings them up to date.
+func ensureCharacters() error {
+	dir := appDir()
+	if _, err := os.Stat(filepath.Join(dir, "personas", "index.json")); err == nil {
+		return nil
+	}
+	fmt.Println("Downloading the call characters and rooms, about 10 MB.")
+	return fetchCharacters(appReleases, dir)
 }
 
 func fetchPersonas(c *http.Client, base, dir, want string) error {

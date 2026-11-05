@@ -11,9 +11,12 @@ export const VIEWS = [["character", "Character"], ["line", "Line"], ["bars", "Ba
 
 export const nextView = (v) => VIEWS[(VIEWS.findIndex(([k]) => k === v) + 1) % VIEWS.length][0];
 
-/** Your language first as the call's is, then the rest, whether a language came from the voices or from the persons. */
-export const personLangs = (voices, doc) => [...new Set([...Object.keys(voices || {}), ...Object.keys(doc?.langs || {}), ...(doc?.persons || []).flatMap((p) => Object.keys(p.voices || {}))])]
-  .sort((a, b) => (a === "tr" ? -1 : b === "tr" ? 1 : a.localeCompare(b)));
+/** The languages the line speaks, first the one calls start in; with no voice service, the ones the persons have voices in. */
+export const personLangs = (voices, doc) => {
+  const offered = Object.keys(voices || {});
+  if (offered.length) return offered;
+  return [...new Set([...Object.keys(doc?.langs || {}), ...(doc?.persons || []).flatMap((p) => Object.keys(p.voices || {}))])].sort();
+};
 
 const LANGS = { tr: "Turkish", en: "English" };
 export const langName = (l) => LANGS[l] || l;

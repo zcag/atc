@@ -3,8 +3,20 @@ package server
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/zcag/atc/internal/settings"
 )
+
+func TestCallVoicesWithoutAServiceNameOnlyTheUsersLanguage(t *testing.T) {
+	t.Setenv(settings.LanguageKey, "TR ")
+	rec := httptest.NewRecorder()
+	(&Server{}).callVoices(rec, httptest.NewRequest("GET", "/api/call/voices", nil))
+	if rec.Code != 200 || strings.TrimSpace(rec.Body.String()) != `{"tr":{}}` {
+		t.Fatalf("%d %s", rec.Code, rec.Body)
+	}
+}
 
 func TestCallVoiceSamplePassesThrough(t *testing.T) {
 	var asked string

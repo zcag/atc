@@ -38,6 +38,30 @@ func newPersonsRig(t *testing.T) *personsRig {
 	return rig
 }
 
+func TestSeedPersonsOnlyWhenNobodyWasEverSaved(t *testing.T) {
+	s := &Server{StateDir: filepath.Join(t.TempDir(), "new")}
+	seed := []byte(`{"langs":{"en":"june"},"persons":[{"id":"june","name":"June","character":"woman","voices":{"en":"june"}}],"voices":{"june":{"pocket-en":"vera"}}}`)
+	if err := s.SeedPersons(seed); err != nil {
+		t.Fatal(err)
+	}
+	var d Persons
+	s.loadPref(personsFile, &d)
+	if len(d.Persons) != 1 || d.Persons[0].Name != "June" || d.Langs["en"] != "june" {
+		t.Fatalf("%+v", d)
+	}
+	if err := s.savePref(personsFile, Persons{}.tidy()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SeedPersons(seed); err != nil {
+		t.Fatal(err)
+	}
+	d = Persons{}
+	s.loadPref(personsFile, &d)
+	if len(d.Persons) != 0 {
+		t.Fatalf("deleted persons came back: %+v", d)
+	}
+}
+
 func (rig *personsRig) do(t *testing.T, method, path, body string, want int) Persons {
 	t.Helper()
 	rec := httptest.NewRecorder()

@@ -38,6 +38,16 @@ def first_language(settings_path, packs, fallback):
     return lang if lang in packs else fallback
 
 
+def saved_names(settings_path):
+    """The (assistant, user) names set in atc's Settings."""
+    try:
+        with open(settings_path, encoding="utf-8") as f:
+            saved = json.load(f)
+    except (OSError, ValueError):
+        return None, None
+    return saved.get("assistant") or None, saved.get("user") or None
+
+
 def named(value, names):
     if isinstance(value, str):
         return fill(value, **names)

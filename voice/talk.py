@@ -17,7 +17,7 @@ Every call leaves <out>/talk-<time>/: call.wav (left caller, right voice), turns
 import argparse, asyncio, concurrent.futures, difflib, hashlib, io, json, os, random, re, time, wave
 import aiohttp
 import soxr, numpy as np, onnxruntime
-from langpack import Pack, agreement, fill, first_language, hangup_tags, like
+from langpack import Pack, agreement, fill, first_language, hangup_tags, like, saved_names
 
 RATE, FRAME = 16000, 640
 APP_RATE = 24000
@@ -29,6 +29,7 @@ STATE = os.path.expanduser(os.environ.get("TALK_STATE") or "~/.local/state/atc/v
 VAD_MODEL = f"{MODELS}/silero_vad.onnx"
 TURN_MODEL = f"{MODELS}/smart-turn-v3.2-cpu.onnx"
 VOICES = f"{STATE}/voice.json"
+PERSONS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "persons.json")
 PHRASES = f"{MODELS}/phrases"
 CONFIG = os.environ.get("ATC_CONFIG_DIR") or (os.environ["XDG_CONFIG_HOME"] + "/atc" if os.environ.get("XDG_CONFIG_HOME") else "~/.config/atc")
 GUESTS = os.path.expanduser(f"{CONFIG}/guests")
@@ -276,7 +277,7 @@ class Talk:
         self.brains = {None: self.brain}
         self.who, self.title, self.line_voices, self.line_since = None, ASSISTANT, {}, 0.0
         self.first_line, self.moving, self.leaving, self.knock = None, False, False, ""
-        self.packs, self.lang = args.packs, first_language(SETTINGS, args.packs, args.lang)
+        self.packs, self.names, self.lang = args.packs, saved_names(SETTINGS), first_language(SETTINGS, args.packs, args.lang)
         self.first = self.packs[self.lang]
         self.hangup = hangup_tags(self.packs)
         self.heard, self.unfinished = None, None
@@ -1092,6 +1093,8 @@ class Talk:
                 continue
             voice, engine = voices[lang], self.engine(lang)
             made = [os.stat(f).st_mtime_ns for f in (f"{HIGGS_VOICES}/{voice}.wav", f"{HIGGS_VOICES}/prompt_text") if os.path.exists(f)]
+            if voice in shipped_voices():
+                made.append(os.stat(PERSONS).st_mtime_ns)
             key = hashlib.sha1(f"{voice}|{made}|{engine}|{t}{'' if rate == RATE else f'|{rate}'}".encode()).hexdigest()[:20]
             path = os.path.join(PHRASES, key + ".pcm")
             if os.path.exists(path):
@@ -1116,6 +1119,10 @@ class Talk:
                 return False
 
     def open(self):
+        if (names := saved_names(SETTINGS)) != self.names:
+            self.names, self.greeting = names, b""
+            self.packs.update(language_packs(self.a))
+            self.first = self.packs[self.first.code]
         if (lang := first_language(SETTINGS, self.packs, self.a.lang)) != self.first.code:
             self.lang, self.first, self.greeting = lang, self.packs[lang], b""
         if (picked := self.picked()) != self.voices:
@@ -1189,6 +1196,18 @@ class Talk:
 
 
 ANSWER = [re.sub(r"\D", "", n)[-10:] for n in os.environ.get("TALK_ANSWER", "").split(",") if n.strip()]
+
+
+def language_packs(args):
+    """Each language's pack, named by the service's environment or else by atc's Settings."""
+    assistant, user = saved_names(SETTINGS)
+    return {code: Pack(code, args.assistant or assistant, args.user or user) for code in dict.fromkeys([args.lang, *args.also])}
+
+
+def shipped_voices():
+    """The voices persons.json defines: when one is re-recorded there, its phrases are rendered again."""
+    with open(PERSONS, encoding="utf-8") as f:
+        return json.load(f)["voices"]
 
 
 def voices(args):
@@ -1391,8 +1410,8 @@ if __name__ == "__main__":
     p.add_argument("--hub", default="http://127.0.0.1:8820", help="atc's hub, the assistant's conversation")
     p.add_argument("--lang", default=os.environ.get("TALK_LANG") or "en", help="the call's first language: its pack in lang/, its transcriber, what it says first")
     p.add_argument("--also", action="append", default=(os.environ.get("TALK_ALSO") or "").split(), help="another language the call can switch to with [LANG:xx] (needs --stt stream); repeatable")
-    p.add_argument("--assistant", default=os.environ.get("TALK_ASSISTANT"), help="what the assistant calls itself (default: the pack's neutral name)")
-    p.add_argument("--user", default=os.environ.get("TALK_USER"), help="what the assistant calls the user (default: the pack's neutral name)")
+    p.add_argument("--assistant", default=os.environ.get("TALK_ASSISTANT"), help="what the assistant calls itself (default: Settings, then the pack's neutral name)")
+    p.add_argument("--user", default=os.environ.get("TALK_USER"), help="what the assistant calls the user (default: Settings, then the pack's neutral name)")
     p.add_argument("--ack-ms", type=int, default=2500, help="ms after their turn with nothing from Claude before a thinking phrase (0 = never)")
     p.add_argument("--reopen-ms", type=int, default=700, help="ms of speech that take back a turn already sent to Claude")
     p.add_argument("--barge-words", type=int, default=3, help="words (not hı hı, evet...) that make an overlap a real interruption")
@@ -1421,7 +1440,7 @@ if __name__ == "__main__":
     a = p.parse_args()
     if a.stt == "whisper" and not STT_URL:
         p.error("--stt whisper needs TALK_STT")
-    a.packs = {code: Pack(code, a.assistant, a.user) for code in dict.fromkeys([a.lang, *a.also])}
+    a.packs = language_packs(a)
     while True:
         try:
             asyncio.run(sim(a) if a.sim else phone(a))

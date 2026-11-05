@@ -26,7 +26,7 @@ a shell behind them. [Reach it from other devices](install.md#reach-it-from-othe
   are rate limited by address. A pairing can also carry the server's certificate fingerprint, so the
   new device pins it and refuses anything else. A device token opens the same API as the server
   token, with no scopes: the difference is that it can be revoked.
-- **Tailscale, opt-in:** with `ATC_TRUST_TAILNET=1`, requests from devices of your own Tailscale user
+- **Tailscale, opt-in:** `atc setup` asks, and the answer is no unless you say yes. With `ATC_TRUST_TAILNET=1`, requests from devices of your own Tailscale user
   need no token. atc checks each with `tailscale whois`. That trusts the device, not a person: any
   program or other user on it gets a full login. Revoking a device in Settings does not stop that;
   removing it from your tailnet does. Requests a browser marks as cross-site are refused. The address

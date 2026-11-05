@@ -116,7 +116,7 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc wa [--file F]... [--render F.html]... [--voice TEXT] [--poll Q --option A...] [text...]
                                  send the user files, a rendered page, a voice note, a poll or text on
                                  WhatsApp, from the account atc answers them on; atc wa -h
-  atc app update                 download the latest Android app for phones to install from this server
+  atc app update|characters      download the latest Android app and characters, or only the characters
   atc setup                      guided first run: who you are, limits, tools, reaching atc from other devices
   atc service install|uninstall|status
                                  run atc and the assistant's hub as services of your user
@@ -332,6 +332,10 @@ func serve(args []string) error {
 
 		TrustTailnet:   tailscaleBin(os.Getenv("ATC_TRUST_TAILNET")),
 		TrustedProxies: server.ParseProxies(os.Getenv("ATC_TRUSTED_PROXIES")),
+	}
+	seed, _ := voiceFiles.ReadFile("voice/persons.json")
+	if err := srv.SeedPersons(seed); err != nil {
+		log.Printf("persons: %v", err)
 	}
 	if u := os.Getenv("ATC_OPENCODE"); u != "" {
 		srv.M.OC = opencode.New(u, cmp.Or(os.Getenv("ATC_OPENCODE_BIN"), "opencode"))

@@ -31,14 +31,8 @@ sync-main:
 	elif [ -n "$$(git -C $$main status --porcelain)" ]; then echo "sync-main: $$main has local changes, left alone"; \
 	else git -C $$main merge -q --ff-only origin/master && echo "sync-main: $$main at $$(git -C $$main rev-parse --short HEAD)"; fi
 
-install-opencode:
-	test -e ~/.config/atc/opencode/agent/atc.md || install -Dm644 deploy/opencode/agent/atc.md ~/.config/atc/opencode/agent/atc.md
-	install -m644 deploy/opencode/opencode.json ~/.config/atc/opencode/opencode.json
-	test -e ~/.config/atc/opencode/config.json || ln -s ~/.config/opencode/config.json ~/.config/atc/opencode/config.json
-	install -Dm644 deploy/opencode.service ~/.config/systemd/user/opencode.service
-	systemctl --user daemon-reload
-	systemctl --user enable opencode
-	systemctl --user restart opencode
+install-opencode: build
+	./atc service install --only opencode
 
 install-mac: check build
 	./atc service install --only atc

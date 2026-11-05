@@ -25,17 +25,13 @@ Replies from models not named `claude-*` cost nothing and are left out of the pl
 atc also runs [opencode](https://opencode.ai) sessions next to Claude's, through one headless
 `opencode serve` on the same machine. That server keeps every session alive the way Claude's
 background service does, for every folder at once, so opencode sessions survive atc restarting
-too. Run it as its own service, never under atc. From a source checkout on Linux:
+too. Run it as its own service, never under atc. With opencode installed:
 
 ```sh
-make install-opencode        # deploy/opencode.service, on 127.0.0.1:4096
+atc service install --only opencode    # systemd or launchd, on 127.0.0.1:4096
 ```
 
-then point atc at it in `~/.config/atc/env` and add an engine with `"harness": "opencode"`:
-
-```sh
-ATC_OPENCODE=http://127.0.0.1:4096
-```
+That points atc at it (`ATC_OPENCODE` in `~/.config/atc/env`). Then add an engine with `"harness": "opencode"`:
 
 ```json
 { "name": "opencode", "harness": "opencode", "model": "mlx/mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit-DWQ" }

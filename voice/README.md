@@ -26,18 +26,33 @@ atc app ── atc (/api/call/line) ── call.py :8807 ── talk.py ── a
 | setting | default | |
 |---|---|---|
 | `TALK_LANG`, `TALK_ALSO` | `en`, none | the languages this talker has, models and all: `TALK_LANG` and others (space separated) a call can switch to with `[LANG:xx]`. Calls start in Settings' Language when it is one of these (read at each call, no restart), else in `TALK_LANG` |
-| `TALK_ASSISTANT`, `TALK_USER` | the pack's neutral names | the names in its lines |
+| `TALK_ASSISTANT`, `TALK_USER` | Settings' names (read at each call), then the pack's neutral names | the names in its lines |
 | `TALK_TTS_ENGINE`, `TALK_TTS_VOICE`, `..._<CODE>` | ttsd's first engine, its default voice | per language, for example `TALK_TTS_VOICE_EN` |
 | `TALK_ANSWER` | empty | numbers answered on the device line as the user; the app line always is |
 | `TALK_STT` | empty | a Whisper endpoint for the second reading of short turns; empty skips that reading |
 | `TALK_ARGS`, `TTS_ARGS` | empty | extra flags for `talk.py`, `ttsd.py` |
-| `TTS_ENGINES`, `TTS_PORT`, `TTS_VENV`, `TTS_HF_HOME` | `pocket-en`, `8812`, under the data dir, `~/.cache/atc/voice/hf` | ttsd |
+| `TTS_ENGINES`, `TTS_PORT`, `TTS_VENV`, `TTS_HF_HOME` | each language's default (`pocket-en`, `pocket` for Turkish), `8812`, under the data dir, `~/.cache/atc/voice/hf` | ttsd; atc's voice picker (`ATC_CALL_VOICES`) is on the same port |
 | `ATC_VOICE_DIR` | `~/.local/share/atc/voice` | where the files run from |
 | `ATC_VOICE_UNITS` | `delta-call delta-tts delta-talk-app` | what deploy.sh installs and restarts; add `delta-talk` for a phone, `delta-higgs` for Higgs |
 | `TALK_MODELS`, `HF_HOME` | `~/.cache/atc/voice`, its `hf` | models and the rendered-phrase cache |
 | `TALK_STATE` | `~/.local/state/atc/voice` | `calls/<talk-time>/`, `calls.jsonl`, `voice.json` |
 | `DELTA_CALL_BRIDGE`, `DELTA_CALL_PORT`, `DELTA_CALL_HOST`, `DELTA_CALL_DIAL_ALLOW`, `ANDROID_SERIAL` | `0`, `8807`, `127.0.0.1` (empty is every interface), none, adb's pick | the line |
 | `HIGGS_DIR`, `HIGGS_VOICES`, `HIGGS_URL` | under the data dir, `:8841` | Higgs, on a GPU, set up by hand |
+
+## Built-in voices
+
+`persons.json` holds the people a new install starts with and what each one's voice is on each engine. To change a voice,
+change its line in `voices`:
+
+```json
+"june": {"pocket-en": "june.safetensors", "pocket": "june.wav", "kokoro": "af_heart"},
+```
+
+A value is the engine's own voice name, or a file in `voices/` beside it, which `atc voice install` writes with the rest
+of the stack. An engine with no entry speaks with its default. pocket-en takes a voice exported to `.safetensors` on any
+machine, and a recording only where Kyutai's gated weights are available, so ship the export (without those weights a
+recording falls back to `alba`, with a line in the log). pocket takes a recording. A file in `voices/` is compiled into the
+binary, so keep it small.
 
 ## macOS
 

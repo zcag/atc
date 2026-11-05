@@ -2,13 +2,27 @@ package server
 
 import (
 	"bytes"
+	"cmp"
 	"io"
 	"net/http"
+	"os"
+	"strings"
+
+	"github.com/zcag/atc/internal/settings"
 )
 
 // callVoices passes the call screen's voice picker through to the voice service: GET lists the voices per language with
 // the current pick, POST {"lang", "voice"} picks one (the talker takes it from its next reply on).
-func (s *Server) callVoices(w http.ResponseWriter, r *http.Request) { s.toVoices(w, r, "/api/voices") }
+//
+// With no voice service yet (calls aren't set up) it names only the user's language, so the persons pages don't offer the
+// others that the built-in persons have voices in.
+func (s *Server) callVoices(w http.ResponseWriter, r *http.Request) {
+	if s.CallVoices == "" && r.Method == http.MethodGet {
+		reply(w, map[string]any{cmp.Or(strings.ToLower(strings.TrimSpace(os.Getenv(settings.LanguageKey))), "en"): map[string]any{}})
+		return
+	}
+	s.toVoices(w, r, "/api/voices")
+}
 
 // callVoiceSample plays a voice before picking it: the voice service renders ?lang&voice&text once and keeps the wav, and
 // answers 409 while a call is on and the sample is not rendered yet.

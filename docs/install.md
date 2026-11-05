@@ -88,7 +88,7 @@ To reach it from your other devices:
 - **Plain HTTP at home:** nothing to set up. `atc setup` and `atc pair` give the address. The token travels in clear, so only do this
   on a network you trust. On one you don't (a laptop on public Wi-Fi), `ATC_ADDR=127.0.0.1:7272` keeps atc to this machine.
 - **Tailscale (easiest for HTTPS):** `tailscale serve --bg 7272` serves atc over HTTPS to your own devices. `atc setup`
-  offers this when Tailscale is installed. Don't use `tailscale funnel`, which publishes it to the internet.
+  offers this when Tailscale is installed, saves the address, and asks whether your own devices may skip the token. Don't use `tailscale funnel`, which publishes it to the internet.
 - **A reverse proxy on your own network:** Caddy or similar with a certificate, reachable only from inside, then set
   `ATC_PUBLIC_URL` to the address it answers at. Don't forward a router port to it.
 - **Over ssh, on a server with no private network:** `ssh -L 7272:127.0.0.1:7272 <server>`, then open the link `atc setup` printed.

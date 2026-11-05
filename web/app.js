@@ -1732,7 +1732,7 @@ function CallPicks({ look, onClose }) {
         ${all.map((p) => { const on = doc.langs[lang] === p.id, v = p.voices[lang], k = `${lang}:${v}`; return html`
           <div class="vpick ${on ? "on" : ""}">
             <button class="pick ${on ? "on" : ""}" role="radio" aria-checked=${on} onClick=${() => use(lang, p)}><b>${p.name}</b><span>${voiceName(v)}</span></button>
-            <button class="kb" aria-pressed=${playing === k} disabled=${!voices} onClick=${() => play(lang, v)}>${playing === k ? "Stop" : "Play"}</button>
+            <button class="kb" aria-pressed=${playing === k} disabled=${!voices?.[lang]?.sample} onClick=${() => play(lang, v)}>${playing === k ? "Stop" : "Play"}</button>
           </div>`; })}
       </div>`; })}
     <div class="row"><a class="btn" href="#/settings/persons">${doc.persons.length ? "Edit persons" : "Make a person"}</a></div>

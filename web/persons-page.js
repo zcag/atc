@@ -223,7 +223,7 @@ function Editor({ api, look, voices, rooms, reloadRooms, draft, Preview, onDone 
           <div class="vrow ${cur ? "" : "on"}"><button type="button" role="radio" aria-checked=${!cur} onClick=${() => set({ voices: { ...p.voices, [lang]: "" } })}>Doesn't speak ${langName(lang)}</button></div>
           ${all.map((v) => { const k = `${lang}:${v}`; return html`<div class="vrow ${cur === v ? "on" : ""}" key=${v}>
             <button type="button" role="radio" aria-checked=${cur === v} onClick=${() => set({ voices: { ...p.voices, [lang]: v } })}>${voiceName(v)}</button>
-            ${voices && html`<button type="button" class="kb" aria-pressed=${playing === k} aria-label=${`${playing === k ? "Stop" : "Play"} ${voiceName(v)}`} onClick=${() => play(lang, v)}>${playing === k ? "Stop" : "Play"}</button>`}
+            ${voices?.[lang]?.sample && html`<button type="button" class="kb" aria-pressed=${playing === k} aria-label=${`${playing === k ? "Stop" : "Play"} ${voiceName(v)}`} onClick=${() => play(lang, v)}>${playing === k ? "Stop" : "Play"}</button>`}
           </div>`; })}
         </div>
       </fieldset>`; })}

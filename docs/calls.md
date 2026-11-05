@@ -4,7 +4,7 @@ Calls are an add-on: `atc voice install [--lang en] [--also tr] [--engine pocket
 
 On CPU a call works on 2 cores (first audio about 2.5 to 3.2 s after you stop, most of it Claude's first token; the voice breaks up on 1 core). Streaming speech recognition is the weakest part: it reads some words wrong, which the assistant then has to guess at.
 
-Voice quality depends on the engine. The default, `pocket-en`, runs on CPU with preset voices you choose from (`--voice`, default `alba`), and can sound less natural. Higgs, on a GPU with about 5 GB of memory, sounds much better, and clones a voice from a short clip and its transcript. It is set up by hand (`voice/README.md` lists its settings) and its licence is research and non-commercial, so check those terms before using it for work.
+Voice quality depends on the engine. The default, `pocket-en`, runs on CPU with preset voices you choose from in Settings, Persons, or with `--voice`, and can sound less natural. Higgs, on a GPU with about 5 GB of memory, sounds much better, and clones a voice from a short clip and its transcript. It is set up by hand (`voice/README.md` lists its settings) and its licence is research and non-commercial, so check those terms before using it for work.
 
 atc has no voice mode in a session: to talk, call the assistant. **Call about this** in a session's
 menu or the palette tells it which session you mean. On the call, the assistant can hand the line to [an agent that
@@ -13,12 +13,13 @@ can talk](#talking-to-an-agent); on that agent's own session the same entry is *
 They need three services next to [the hub](assistant.md), each with a row in Settings, all three set up by
 `atc voice install`: the **call line**, which carries a call's audio; a **talker**, which holds the call (hears you,
 knows when you are done, speaks the assistant's words); and a **voice engine**, which turns its words into speech. They
-cost a GPU, or a CPU with slower replies, plus plan tokens. A **voice picker** is optional and is a service of your own:
-without one a call speaks with the voice in `voice.env`.
+cost a GPU, or a CPU with slower replies, plus plan tokens. The voice engine also answers the **voice picker**
+(`ATC_CALL_VOICES`), which lists voices, plays samples and keeps each language's pick. `atc voice install` sets both
+addresses unless you already set them, and fetches the characters. `atc setup` offers all of it.
 
 ```sh
 ATC_CALL_LINE=http://127.0.0.1:8807      # the call line, for atc call and the app
-ATC_CALL_VOICES=http://127.0.0.1:8806    # optional: the voice picker, not part of atc voice install
+ATC_CALL_VOICES=http://127.0.0.1:8812    # the voice picker: the voice engine, or a service of your own with the same /api/voices
 ATC_CALL_NUMBER=+15550100                # optional: the number atc call rings, defaults to the first ATC_WHATSAPP_OWNER
 ATC_CALL_LINE_NUMBER=+15550101           # optional: the assistant's own number, shown in the phone's call log
 ```
@@ -139,7 +140,8 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   With it on, the app does not turn the screen off at your ear, since you need the button. A persona (`Persona.kt`) gets those states and reads
   both voices' loudness on the phone every frame it draws, so it moves with the sound and not with
   the network; the first one is an orb drawn by a shader.
-- **Persons** bundle what a call shows and speaks with: a name, a character, a background and a voice per
+- **Persons** start as June, Arthur and Tom (`voice/persons.json`), saved on the server's first start, so deleting them stays
+  deleted. They bundle what a call shows and speaks with: a name, a character, a background and a voice per
   language, kept on the server in `persons.json` (`GET /api/call/persons`) with which one the assistant is in each
   language. Settings, Persons shows them as portraits: who the assistant is per language, everyone, and which person and background each
   talking agent has (it writes `person` and `background` in that agent's `agent.json`; with no person an agent keeps the assistant's, and a background of its own still applies). Person on the call swaps who the assistant is. The talker sends the call's
@@ -156,7 +158,7 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
 - **Characters** are folders under `$ATC_APP_DIR/personas/<name>/` on the server (`persona.json` with
   `kind` and `files`, plus the files), listed in `personas/index.json` (`{"default", "personas":
   [{"name", "rev"}]}`); the phone downloads one when picked and keeps it until its `rev` changes.
-  atc's binary carries none besides the orb; `atc app update` unpacks the characters and rooms of a release that has them (`make personas`). The kept one starts from the phone with no wait on the server, on the
+  atc's binary carries none besides the orb; `atc setup`, `atc voice install` and `atc app characters` fetch the characters and rooms of the latest release without the app, and `atc app update` brings both up to date (`make personas`). The kept one starts from the phone with no wait on the server, on the
   dark backdrop until its first frame; the orb shows only when it is the choice, or when the character
   is missing or stuck for 6 s. Kinds: `rig` (drawings swapped like cel animation, `web/rig.js`,
   built as in [the rig's notes](persona-rig.md)), `illustration` and `footage` (`web/persona.js`, in the

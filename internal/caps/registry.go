@@ -121,15 +121,15 @@ func All() []Cap {
 			Fix: Fix{Command: "atc voice install", Text: onMac("Installs it with the call line; its log is /tmp/delta-tts.log.", "Installs it with the call line; its log is journalctl --user -u delta-tts."), Guide: "calls"},
 		},
 		{
-			ID: "voices", Title: "Voice picker", Group: Calls, Optional: true, Why: "Lists more voices to choose from on a call and keeps your pick. Without it a call speaks with the voice in voice.env.",
-			Fields: []Field{{Key: "ATC_CALL_VOICES", Label: "Voices address", Hint: "http://127.0.0.1:8806", URL: true}},
+			ID: "voices", Title: "Voice picker", Group: Calls, Optional: true, Why: "Lists the voices to choose from, plays samples and keeps your pick. Without it a person's voice doesn't change the call's, which speaks with the voice in voice.env.",
+			Fields: []Field{{Key: "ATC_CALL_VOICES", Label: "Voices address", Hint: "http://127.0.0.1:8812", URL: true}},
 			Check:  checkVoices,
-			Fix:    Fix{Text: "A service of your own that answers /api/voices: atc voice install doesn't include one. Enter its address here.", Guide: "calls"},
+			Fix:    Fix{Command: "atc voice install", Text: "The voice engine answers it, so this comes with calls. A service of your own that answers /api/voices works too: enter its address here.", Guide: "calls"},
 		},
 		{
 			ID: "persons", Title: "Persons", Group: Calls, Optional: true, Why: "Who the assistant is in each language: a name, a character, a room and a voice.",
 			Check: checkPersons,
-			Fix:   Fix{Text: "Add character folders under personas/ in the app folder, and rooms under personas/_rooms/: a picture, with its settings in a .json beside it if it has any. Persons are made under Settings, Persons.", Guide: "calls"},
+			Fix:   Fix{Command: "atc app characters", Text: "Downloads the built-in characters and rooms. Your own go in the same place, personas/ and personas/_rooms/ in the app folder. Persons are changed under Settings, Persons.", Guide: "calls"},
 		},
 		{
 			ID: "push", Title: "Phone notifications", Group: Phone, Optional: true, Why: "A push when a session waits on you or finishes its turn.",
@@ -165,7 +165,7 @@ func All() []Cap {
 			ID: "opencode", Title: "opencode", Group: Models, Optional: true, Why: "Runs and shows opencode sessions next to Claude's.",
 			Fields: []Field{{Key: "ATC_OPENCODE", Label: "opencode server address", Hint: "http://127.0.0.1:4096", URL: true}},
 			Check:  checkOpenCode,
-			Fix:    Fix{Command: "make install-opencode", Text: "Run the opencode server as a service, then enter its address here.", Guide: "models#opencode"},
+			Fix:    Fix{Command: "atc service install --only opencode", Text: "Runs the opencode server as a service, once opencode is installed, and sets this address.", Guide: "models#opencode"},
 			Cost:   "A paid key or your own GPU, depending on the model.",
 		},
 		{

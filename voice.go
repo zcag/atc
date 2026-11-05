@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/client"
+	"github.com/zcag/atc/internal/server"
 	"github.com/zcag/atc/internal/settings"
 )
 
@@ -39,7 +40,8 @@ engine, and starts the services. Runs again safely; a restart waits for any call
 ~/.config/atc/voice.env, with every other setting (voice/README.md lists them).
 
   --lang, --also   the call's first language, and others it can switch to (voice/lang/)
-  --engine         pocket-en (default, CPU), pocket (Turkish, CPU), piper or kokoro (CPU); higgs needs a GPU and setup by hand.
+  --engine         by default the one for each language: pocket-en (CPU) for English, pocket (CPU) for Turkish. Also
+                   piper or kokoro (English, CPU); higgs needs a GPU and setup by hand.
                    An Intel Mac has no torch for pocket and pocket-en, so piper is its default (docs/calls.md, On a Mac)
   --voice          the engine's voice; empty is its default
   --phone          also run the phone-on-USB line (voice/device/), otherwise only the app line
@@ -163,6 +165,82 @@ func writeVoiceFiles(dir string) (bool, error) {
 	return changed, err
 }
 
+// voiceHostError says why calls can't be installed here, before anything changes.
+func voiceHostError() error {
+	if voiceOnMac() {
+		return nil
+	}
+	if runtime.GOOS != "linux" {
+		return fmt.Errorf("atc voice install runs on Linux and macOS; on %s nothing was changed", runtime.GOOS)
+	}
+	if _, err := exec.LookPath("systemctl"); err != nil {
+		return errors.New("atc voice install needs systemd (no systemctl here)")
+	}
+	return nil
+}
+
+// ensureUV installs uv, which the stack runs on, where the units look for it.
+func ensureUV() error {
+	home, _ := os.UserHomeDir()
+	os.Setenv("PATH", filepath.Join(home, ".local", "bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
+	if _, err := exec.LookPath("uv"); err == nil {
+		return nil
+	}
+	fmt.Println("Installing uv, which the call stack runs on, into ~/.local/bin.")
+	c := exec.Command("sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | UV_NO_MODIFY_PATH=1 sh")
+	c.Stdout, c.Stderr = os.Stdout, os.Stderr
+	if err := c.Run(); err != nil {
+		return fmt.Errorf("uv could not be installed (%w). Install it with:\n  curl -LsSf https://astral.sh/uv/install.sh | sh\nthen run atc voice install again", err)
+	}
+	return nil
+}
+
+// speaks says whether an engine can read a language: higgs and a remote server read whatever they are given.
+func speaks(engine, lang string) bool {
+	switch engine {
+	case "higgs", "remote":
+		return true
+	case "pocket":
+		return lang == "tr"
+	}
+	return lang == "en"
+}
+
+func engineForLang(engines []string, lang string) string {
+	if i := slices.IndexFunc(engines, func(e string) bool { return speaks(e, lang) }); i >= 0 {
+		return engines[i]
+	}
+	return ""
+}
+
+// wantedEngines keeps what is installed and adds the default engine of each language nothing there can speak.
+func wantedEngines(have string, langs []string, goos, goarch string) string {
+	engines := strings.FieldsFunc(have, func(r rune) bool { return r == ',' })
+	for _, l := range langs {
+		if engineForLang(engines, l) == "" {
+			engines = append(engines, defaultEngine(l, goos, goarch))
+		}
+	}
+	return strings.Join(engines, ",")
+}
+
+// voiceEngineKeys is what voice.env needs for each language's engine: TALK_TTS_ENGINE for the first language,
+// TALK_TTS_ENGINE_<CODE> for the others, leaving alone what can already speak it.
+func voiceEngineKeys(env map[string]string, engines string, langs []string) map[string]string {
+	list, set := strings.Split(engines, ","), map[string]string{}
+	for i, l := range langs {
+		key := "TALK_TTS_ENGINE"
+		if i > 0 {
+			key += "_" + strings.ToUpper(l)
+		}
+		if have := env[key]; slices.Contains(list, have) && speaks(have, l) {
+			continue
+		}
+		set[key] = engineForLang(list, l)
+	}
+	return set
+}
+
 // installLanguage is the user's language when there is a pack for it, so a first install can start calls in it.
 func installLanguage() string {
 	l := strings.ToLower(strings.TrimSpace(os.Getenv(settings.LanguageKey)))
@@ -194,16 +272,8 @@ func voiceInstall(args []string) error {
 	user := fs.String("user", "", "")
 	phone := fs.Bool("phone", false, "")
 	fs.Parse(args)
-	if !voiceOnMac() {
-		if runtime.GOOS != "linux" {
-			return fmt.Errorf("atc voice install runs on Linux and macOS; on %s nothing was changed", runtime.GOOS)
-		}
-		if _, err := exec.LookPath("systemctl"); err != nil {
-			return errors.New("atc voice install needs systemd (no systemctl here)")
-		}
-	}
-	if _, err := exec.LookPath("uv"); err != nil {
-		return errors.New("uv is missing, and the call stack runs on it. Install it with:\n  curl -LsSf https://astral.sh/uv/install.sh | sh\nthen run atc voice install again")
+	if err := voiceHostError(); err != nil {
+		return err
 	}
 	if *phone {
 		if _, err := exec.LookPath("adb"); err != nil {
@@ -212,8 +282,17 @@ func voiceInstall(args []string) error {
 	}
 	path := voiceEnvPath()
 	env := readEnvFile(path)
-	engines := cmp.Or(*engine, env["TTS_ENGINES"], defaultEngine(runtime.GOOS, runtime.GOARCH))
+	langs := append([]string{cmp.Or(*lang, env["TALK_LANG"], installLanguage())}, strings.Fields(cmp.Or(*also, env["TALK_ALSO"]))...)
+	engines := cmp.Or(*engine, wantedEngines(env["TTS_ENGINES"], langs, runtime.GOOS, runtime.GOARCH))
 	if err := engineRuns(engines, runtime.GOOS, runtime.GOARCH); err != nil {
+		return err
+	}
+	for _, l := range langs {
+		if engineForLang(strings.Split(engines, ","), l) == "" {
+			return fmt.Errorf("none of %s can speak %s. Nothing was changed. Leave out --engine for the default, or add one that can", engines, l)
+		}
+	}
+	if err := ensureUV(); err != nil {
 		return err
 	}
 	if voiceOnMac() && slices.Contains(strings.Split(engines, ","), "higgs") {
@@ -225,12 +304,14 @@ func voiceInstall(args []string) error {
 			set[key] = v
 		}
 	}
-	first("TALK_LANG", *lang, installLanguage())
+	first("TALK_LANG", langs[0], "")
 	first("TALK_ALSO", *also, "")
 	first("TALK_ASSISTANT", *assistant, "")
 	first("TALK_USER", *user, "")
-	first("TTS_ENGINES", *engine, engines)
-	first("TALK_TTS_ENGINE", strings.Split(*engine, ",")[0], strings.Split(engines, ",")[0])
+	first("TTS_ENGINES", engines, "")
+	for k, v := range voiceEngineKeys(env, engines, langs) {
+		set[k] = v
+	}
 	first("TALK_TTS_VOICE", *voice, "")
 	if *phone {
 		set["DELTA_CALL_BRIDGE"] = "1"
@@ -246,6 +327,9 @@ func voiceInstall(args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := keepAssistantVoices(env, langs); err != nil {
+		return err
+	}
 	if !envChanged && !filesChanged && voiceAllActive(env) {
 		fmt.Println("Nothing changed and every service is up; checking the models.")
 		if err := voiceRun(dir, "uv", "run", "-q", "--script", filepath.Join(dir, "fetch.py")); err != nil {
@@ -254,17 +338,81 @@ func voiceInstall(args []string) error {
 	} else if err := voiceRun(dir, "bash", filepath.Join(dir, "deploy.sh")); err != nil {
 		return err
 	}
-	line := "http://127.0.0.1:" + voicePort(env)
-	atcEnv := filepath.Join(client.ConfigDir(), "env")
-	if readEnvFile(atcEnv)["ATC_CALL_LINE"] == "" {
-		if _, err := setEnvFile(atcEnv, map[string]string{"ATC_CALL_LINE": line}); err != nil {
-			return err
-		}
-		restartForLine()
-		fmt.Println("Set ATC_CALL_LINE in", atcEnv)
+	if err := setUnset(map[string]string{"ATC_CALL_LINE": voiceLine(env), "ATC_CALL_VOICES": voicePicker(env)}, "atc", "hub"); err != nil {
+		return err
+	}
+	if err := ensureCharacters(); err != nil {
+		fmt.Println("The characters could not be downloaded, so calls show the orb until you run atc app characters:", err)
 	}
 	fmt.Println("Installed. Call the assistant from the atc app. atc voice status shows how it stands.")
 	return nil
+}
+
+func voiceLine(env map[string]string) string { return "http://127.0.0.1:" + voicePort(env) }
+
+func voicePicker(env map[string]string) string {
+	return "http://127.0.0.1:" + cmp.Or(env["TTS_PORT"], "8812")
+}
+
+// setUnset writes to atc's env file the settings that have no value yet, by file or by Settings, and restarts what reads them.
+func setUnset(want map[string]string, restart ...string) error {
+	path := filepath.Join(client.ConfigDir(), "env")
+	had := readEnvFile(path)
+	for k := range want {
+		if had[k] != "" || os.Getenv(k) != "" {
+			delete(want, k)
+		}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	if _, err := setEnvFile(path, want); err != nil {
+		return err
+	}
+	restartServices(restart...)
+	for k, v := range want {
+		fmt.Printf("Set %s=%s in %s\n", k, v, path)
+	}
+	return nil
+}
+
+// keepAssistantVoices starts a language off with the voice of the person who is the assistant in it, unless voice.env names
+// one or a pick has been made.
+func keepAssistantVoices(env map[string]string, langs []string) error {
+	var d server.Persons
+	saved, err := os.ReadFile(filepath.Join(client.ConfigDir(), "persons.json"))
+	if err != nil {
+		saved, _ = voiceFiles.ReadFile("voice/persons.json")
+	}
+	if json.Unmarshal(saved, &d) != nil {
+		return nil
+	}
+	home, _ := os.UserHomeDir()
+	path := filepath.Join(cmp.Or(env["TALK_STATE"], filepath.Join(home, ".local/state/atc/voice")), "voice.json")
+	picks := map[string]string{}
+	if b, err := os.ReadFile(path); err == nil {
+		json.Unmarshal(b, &picks)
+	}
+	changed := false
+	for i, l := range langs {
+		named := env["TALK_TTS_VOICE_"+strings.ToUpper(l)]
+		if i == 0 {
+			named = cmp.Or(named, env["TALK_TTS_VOICE"])
+		}
+		for _, p := range d.Persons {
+			if p.ID == d.Langs[l] && p.Voices[l] != "" && picks[l] == "" && named == "" {
+				picks[l], changed = p.Voices[l], true
+			}
+		}
+	}
+	if !changed {
+		return nil
+	}
+	b, _ := json.Marshal(picks)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, b, 0o644)
 }
 
 func voiceRun(dir, name string, args ...string) error {
@@ -278,8 +426,12 @@ func voiceRun(dir, name string, args ...string) error {
 
 func voiceOnMac() bool { return runtime.GOOS == "darwin" }
 
-// defaultEngine is pocket-en wherever torch ships for the machine, and piper on an Intel Mac, where it does not.
-func defaultEngine(goos, goarch string) string {
+// defaultEngine is pocket for Turkish, and for English pocket-en wherever torch ships for the machine, and piper on an Intel
+// Mac, where it does not.
+func defaultEngine(lang, goos, goarch string) string {
+	if lang == "tr" {
+		return "pocket"
+	}
 	if goos == "darwin" && goarch == "amd64" {
 		return "piper"
 	}
@@ -295,16 +447,16 @@ func engineRuns(engines, goos, goarch string) error {
 	return nil
 }
 
-// restartForLine has the services read the ATC_CALL_LINE just written. Only jobs of this home: launchd's labels are per
-// user, not per home, so a scratch HOME would otherwise restart the real atc.
-func restartForLine() {
-	if !voiceOnMac() {
-		exec.Command("systemctl", "--user", "try-restart", "atc", "atc-hub").Run()
-		return
-	}
-	for _, s := range services("") {
-		if _, err := os.Stat(macPlist(s)); err == nil {
-			exec.Command("launchctl", "kickstart", "-k", macDomain()+"/"+macName(s)).Run()
+// restartServices has running services read what was just written to their env file, by service name. Only jobs of this
+// home: launchd's labels are per user, not per home, so a scratch HOME would otherwise restart the real atc.
+func restartServices(names ...string) {
+	for _, n := range names {
+		for _, s := range services(n) {
+			if !voiceOnMac() {
+				exec.Command("systemctl", "--user", "try-restart", s.unit).Run()
+			} else if _, err := os.Stat(macPlist(s)); err == nil {
+				exec.Command("launchctl", "kickstart", "-k", macDomain()+"/"+macName(s)).Run()
+			}
 		}
 	}
 }
@@ -486,11 +638,14 @@ func voiceUninstall(args []string) error {
 		os.Remove(d)
 	}
 	atcEnv := filepath.Join(client.ConfigDir(), "env")
-	if readEnvFile(atcEnv)["ATC_CALL_LINE"] == "http://127.0.0.1:"+voicePort(env) {
-		if b, err := os.ReadFile(atcEnv); err == nil {
-			kept := slices.DeleteFunc(strings.Split(string(b), "\n"), func(l string) bool { return strings.HasPrefix(l, "ATC_CALL_LINE=") })
-			os.WriteFile(atcEnv, []byte(strings.Join(kept, "\n")), 0o644)
-		}
+	ours := map[string]string{"ATC_CALL_LINE": voiceLine(env), "ATC_CALL_VOICES": voicePicker(env)}
+	had := readEnvFile(atcEnv)
+	if b, err := os.ReadFile(atcEnv); err == nil {
+		kept := slices.DeleteFunc(strings.Split(string(b), "\n"), func(l string) bool {
+			k, _, _ := strings.Cut(l, "=")
+			return ours[k] != "" && had[k] == ours[k]
+		})
+		os.WriteFile(atcEnv, []byte(strings.Join(kept, "\n")), 0o644)
 	}
 	if *purge {
 		for _, p := range []string{

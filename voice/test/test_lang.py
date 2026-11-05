@@ -5,7 +5,7 @@ import json, os, re, sys, tempfile, unittest
 
 VOICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, VOICE)
-from langpack import Pack, agreement, fill, first_language, hangup_tags
+from langpack import Pack, agreement, fill, first_language, hangup_tags, saved_names
 
 
 
@@ -132,6 +132,26 @@ class FirstLanguage(unittest.TestCase):
     def test_otherwise_what_the_talker_was_installed_with(self):
         for content in (None, "{", "{}", '{"language": ""}', '{"language": "de"}'):
             self.assertEqual(self.pick(content), "tr", content)
+
+
+class SavedNames(unittest.TestCase):
+    def names(self, content):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "settings.json")
+            if content is not None:
+                with open(path, "w") as f:
+                    f.write(content)
+            return saved_names(path)
+
+    def test_settings_name_the_call(self):
+        assistant, user = self.names('{"assistant": "Max", "user": "Ada"}')
+        self.assertEqual((assistant, user), ("Max", "Ada"))
+        self.assertEqual(Pack("en", assistant, user).GREETING, "Hello, this is Max.")
+
+    def test_without_settings_the_pack_stays_neutral(self):
+        for content in (None, "{", "{}", '{"assistant": ""}'):
+            self.assertEqual(self.names(content), (None, None), content)
+        self.assertEqual(Pack("en", *self.names(None)).GREETING, "Hello, this is your assistant.")
 
 
 class Agreement(unittest.TestCase):

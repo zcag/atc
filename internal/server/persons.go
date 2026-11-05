@@ -72,6 +72,27 @@ func (d Persons) tidy() Persons {
 	return d
 }
 
+// SeedPersons saves the built-in persons when nobody has ever been saved. Deleting them all later leaves an empty list,
+// which stays.
+func (s *Server) SeedPersons(seed []byte) error {
+	if s.StateDir == "" {
+		return nil
+	}
+	s.prefMu.Lock()
+	defer s.prefMu.Unlock()
+	if _, err := os.Stat(filepath.Join(s.StateDir, personsFile)); !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	var d Persons
+	if err := json.Unmarshal(seed, &d); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(s.StateDir, 0o755); err != nil {
+		return err
+	}
+	return s.savePref(personsFile, d.tidy())
+}
+
 func (s *Server) callPersons(w http.ResponseWriter, r *http.Request) {
 	var d Persons
 	s.loadPref(personsFile, &d)

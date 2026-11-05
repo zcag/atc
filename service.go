@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"embed"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -22,10 +23,10 @@ import (
 	"github.com/zcag/atc/internal/client"
 )
 
-//go:embed deploy/atc.service deploy/atc-hub.service deploy/claude.slice deploy/atc.plist
+//go:embed deploy/atc.service deploy/atc-hub.service deploy/claude.slice deploy/atc.plist deploy/opencode.service deploy/opencode/opencode.json deploy/opencode/agent/atc.md
 var units embed.FS
 
-const serviceHelp = `Usage: atc service <install|uninstall|status> [--only atc|hub]
+const serviceHelp = `Usage: atc service <install|uninstall|status> [--only atc|hub|opencode]
 
   install     copy this binary to ~/.local/bin and run atc (and the assistant's hub) as services
               of your user: systemd on Linux, launchd on macOS. Safe to run again to upgrade:
@@ -33,7 +34,8 @@ const serviceHelp = `Usage: atc service <install|uninstall|status> [--only atc|h
   uninstall   stop and remove the services; your settings and sessions stay
   status      whether each one runs
 
-  --only      one of them; by default both
+  --only      one of them; by default both. opencode is only ever on request: a headless opencode server on
+              127.0.0.1:4096 with its own config folder, for opencode sessions next to Claude's
 `
 
 const macLabel = "io.github.zcag.atc"
@@ -54,10 +56,13 @@ func serviceCmd(args []string) error {
 	fs.Usage = func() { fmt.Print(serviceHelp) }
 	only := fs.String("only", "", "")
 	fs.Parse(args[1:])
-	if *only != "" && *only != "atc" && *only != "hub" {
-		return fmt.Errorf("--only takes atc or hub")
+	if *only != "" && *only != "atc" && *only != "hub" && *only != "opencode" {
+		return fmt.Errorf("--only takes atc, hub or opencode")
 	}
 	mac := runtime.GOOS == "darwin"
+	if *only == "opencode" {
+		return opencodeService(args[0], mac)
+	}
 	if !mac {
 		if _, err := exec.LookPath("systemctl"); err != nil || exec.Command("systemctl", "--user", "show-environment").Run() != nil {
 			fmt.Println("No systemd for your user here, so atc can't run as a service. Start it yourself with: atc serve")
@@ -95,6 +100,103 @@ func serviceCmd(args []string) error {
 	fmt.Print(serviceHelp)
 	os.Exit(2)
 	return nil
+}
+
+var opencodeUnit = service{name: "opencode", bin: "opencode", unit: "opencode"}
+
+// opencodeBin looks where opencode's installer puts it too, since that folder may not be on this shell's PATH yet.
+func opencodeBin() (string, bool) {
+	if p, err := exec.LookPath("opencode"); err == nil {
+		return p, true
+	}
+	home, _ := os.UserHomeDir()
+	for _, p := range []string{".local/bin/opencode", ".opencode/bin/opencode"} {
+		if _, err := os.Stat(filepath.Join(home, p)); err == nil {
+			return filepath.Join(home, p), true
+		}
+	}
+	return "", false
+}
+
+func opencodeService(action string, mac bool) error {
+	switch action {
+	case "install":
+		return opencodeInstall(mac)
+	case "uninstall":
+		if mac {
+			macUnload(opencodeUnit)
+			os.Remove(macPlist(opencodeUnit))
+		} else {
+			run("systemctl", "--user", "disable", "--now", "opencode")
+			os.Remove(systemdUnit("opencode.service"))
+			run("systemctl", "--user", "daemon-reload")
+		}
+		fmt.Println("removed opencode")
+		return nil
+	case "status":
+		fmt.Println("opencode", serviceState(opencodeUnit, mac))
+		return nil
+	}
+	fmt.Print(serviceHelp)
+	os.Exit(2)
+	return nil
+}
+
+func opencodeInstall(mac bool) error {
+	bin, ok := opencodeBin()
+	if !ok {
+		return errors.New("opencode is not installed. Install it, then run this again:\n  curl -fsSL https://opencode.ai/install | bash")
+	}
+	home, _ := os.UserHomeDir()
+	config := filepath.Join(client.ConfigDir(), "opencode")
+	if err := os.MkdirAll(filepath.Join(config, "agent"), 0o755); err != nil {
+		return err
+	}
+	agent := filepath.Join(config, "agent", "atc.md")
+	if _, err := os.Stat(agent); err != nil {
+		b, _ := units.ReadFile("deploy/opencode/agent/atc.md")
+		if err := os.WriteFile(agent, b, 0o644); err != nil {
+			return err
+		}
+	}
+	b, _ := units.ReadFile("deploy/opencode/opencode.json")
+	if err := os.WriteFile(filepath.Join(config, "opencode.json"), b, 0o644); err != nil {
+		return err
+	}
+	if link := filepath.Join(config, "config.json"); !exists(link) {
+		os.Symlink(filepath.Join(home, ".config", "opencode", "config.json"), link)
+	}
+	b, _ = units.ReadFile("deploy/opencode.service")
+	unit := strings.ReplaceAll(string(b), "%h/.local/bin/opencode", bin)
+	if mac {
+		tpl, err := units.ReadFile("deploy/atc.plist")
+		if err != nil {
+			return err
+		}
+		if err := macLoad(opencodeUnit, voicePlist(tpl, opencodeUnit, unitCommand(unit, home))); err != nil {
+			return err
+		}
+	} else {
+		if err := os.MkdirAll(filepath.Dir(systemdUnit("x")), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(systemdUnit("opencode.service"), []byte(unit), 0o644); err != nil {
+			return err
+		}
+		if err := run("systemctl", "--user", "daemon-reload"); err != nil {
+			return err
+		}
+		if err := systemdStart(opencodeUnit); err != nil {
+			return err
+		}
+	}
+	fmt.Println("opencode:", serviceState(opencodeUnit, mac))
+	return setUnset(map[string]string{"ATC_OPENCODE": "http://127.0.0.1:4096", "ATC_OPENCODE_BIN": bin}, "atc")
+}
+
+func exists(path string) bool {
+	_, err := os.Lstat(path)
+	return err == nil
 }
 
 func installOnly(list []service) error {

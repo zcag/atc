@@ -29,8 +29,9 @@ test("the view goes round, and an unknown one starts over", () => {
   assert.equal(nextView("gone"), "character");
 });
 
-test("languages come from voices and persons, Turkish first", () => {
-  assert.deepEqual(personLangs({ en: {}, de: {} }, doc), ["tr", "de", "en"]);
+test("languages are what the line speaks, in its order, and else what the persons have", () => {
+  assert.deepEqual(personLangs({ de: {}, en: {} }, doc), ["de", "en"]);
+  assert.deepEqual(personLangs(null, doc), [...new Set([...Object.keys(doc.langs), ...doc.persons.flatMap((p) => Object.keys(p.voices))])].sort());
   assert.deepEqual(personLangs(null, null), []);
 });
 

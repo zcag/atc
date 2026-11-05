@@ -66,7 +66,7 @@ The one thing it can't do is answer a session's permission prompt. Those still t
 It runs on your machine on 2 CPU cores: about 3 seconds from when you stop talking to its first word, most of that Claude's first
 token. Streaming speech recognition is the weakest part, so it sometimes has to guess at a word.
 
-Voice quality depends on the engine. The default runs on CPU with preset voices you choose from (`atc voice install --voice`), and can sound less
+Voice quality depends on the engine. The default runs on CPU with preset voices you choose from in Settings, Persons, and can sound less
 natural. Higgs, on a GPU, sounds much better, but it is set up by hand and its licence is research and non-commercial. [Calls](docs/calls.md)
 
 <picture>
@@ -321,7 +321,8 @@ atc service install
 Then:
 
 1. `atc setup` asks who you are, sets the status line for plan limits, adds atc's tools for your
-   sessions and says how to reach atc from other devices. It prints a link to open.
+   sessions, says how to reach atc from other devices, fetches the call characters and offers to set up
+   calls. It prints a link to open.
 2. `atc doctor` lists what each feature needs, how it stands and the fix.
 3. **Settings** in the page (`,`) shows the same list, with a field for each setting.
 
