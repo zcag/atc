@@ -47,6 +47,25 @@ func (c *Client) Limits() (l usage.Limits, err error) {
 	return l, c.do("GET", "/api/usage/limits", nil, &l)
 }
 
+func (c *Client) WeekRate() float64 {
+	var r struct {
+		Windows []struct {
+			Key     string  `json:"key"`
+			Percent float64 `json:"percent"`
+			Cost    float64 `json:"cost"`
+		} `json:"windows"`
+	}
+	if c.do("GET", "/api/usage/windows", nil, &r) != nil {
+		return 0
+	}
+	for _, w := range r.Windows {
+		if w.Key == "weekly_all" && w.Percent >= 1 {
+			return w.Cost / w.Percent
+		}
+	}
+	return 0
+}
+
 func (c *Client) Days(n int) ([]usage.Day, error) {
 	var r struct{ Days []usage.Day }
 	return r.Days, c.do("GET", fmt.Sprintf("/api/usage/report?days=%d", n), nil, &r)

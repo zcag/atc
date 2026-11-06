@@ -157,14 +157,42 @@ func plural(n int, one, many string) string {
 	return fmt.Sprintf("%d %s", n, many)
 }
 
-func dayLine(d usage.Day) string {
+func Week(cost, perPct float64) string {
+	if perPct <= 0 || cost <= 0 {
+		return ""
+	}
+	switch p := cost / perPct; {
+	case p < 0.1:
+		return "<0.1% wk"
+	case p < 10:
+		return fmt.Sprintf("%.1f%% wk", p)
+	default:
+		return Pct(p) + " wk"
+	}
+}
+
+func withWeek(cost, perPct float64) string {
+	if w := Week(cost, perPct); w != "" {
+		return "~" + Dollars(cost) + " (" + w + ")"
+	}
+	return "~" + Dollars(cost)
+}
+
+func dayLine(d usage.Day, perPct float64) string {
 	if d.Total == 0 {
 		return "no usage"
 	}
-	return fmt.Sprintf("%6s tokens  ~%-9s %s", Tokens(d.Total), Dollars(d.Cost), plural(d.Sessions, "session", "sessions"))
+	return fmt.Sprintf("%6s tokens  %-20s %s", Tokens(d.Total), withWeek(d.Cost, perPct), plural(d.Sessions, "session", "sessions"))
 }
 
-func Plan(l usage.Limits, days []usage.Day, now time.Time) []string {
+func weekScale(perPct float64) string {
+	if perPct <= 0 {
+		return ""
+	}
+	return "100% wk is one week of your plan's limit, about " + Dollars(perPct*100) + " at this week's rate, whichever weeks it was spent in. "
+}
+
+func Plan(l usage.Limits, days []usage.Day, perPct float64, now time.Time) []string {
 	var out []string
 	if l.Plan != "" {
 		out = append(out, l.Plan+" plan", "")
@@ -192,9 +220,9 @@ func Plan(l usage.Limits, days []usage.Day, now time.Time) []string {
 		if d.Day == today {
 			label = "Today     "
 		}
-		out = append(out, "  "+label+"  "+dayLine(d))
+		out = append(out, "  "+label+"  "+dayLine(d, perPct))
 	}
-	out = append(out, fmt.Sprintf("  Total       %6s tokens  ~%s", Tokens(sum.Total), Dollars(sum.Cost)), "", Estimate(""))
+	out = append(out, fmt.Sprintf("  Total       %6s tokens  %s", Tokens(sum.Total), withWeek(sum.Cost, perPct)), "", weekScale(perPct)+Estimate(""))
 	return out
 }
 
@@ -228,17 +256,17 @@ func facts(rows [][2]string) []string {
 	return out
 }
 
-func Session(st usage.Stats) []string {
+func Session(st usage.Stats, perPct float64) []string {
 	sub := "none"
 	if st.Subagents.Count > 0 {
-		sub = fmt.Sprintf("%d · %s tokens · ~%s", st.Subagents.Count, Tokens(st.Subagents.Total), Dollars(st.Subagents.Cost))
+		sub = fmt.Sprintf("%d · %s tokens · %s", st.Subagents.Count, Tokens(st.Subagents.Total), withWeek(st.Subagents.Cost, perPct))
 	}
 	wall := "n/a"
 	if !st.Start.IsZero() {
 		wall = Span(time.Duration(st.Wall)*time.Second) + ", since " + st.Start.Local().Format("Jan 2 15:04")
 	}
-	out := []string{fmt.Sprintf("%s tokens · ~%s at API prices (estimate) · %s Claude working",
-		Tokens(st.Total), Dollars(st.Cost), Span(time.Duration(st.Active)*time.Second)), ""}
+	out := []string{fmt.Sprintf("%s tokens · %s at API prices (estimate) · %s Claude working",
+		Tokens(st.Total), withWeek(st.Cost, perPct), Span(time.Duration(st.Active)*time.Second)), ""}
 	out = append(out, facts([][2]string{
 		{"Input", Tokens(st.Input)}, {"Output", Tokens(st.Output)}, {"Cache reads", Tokens(st.CacheRead)},
 		{"Cache writes", Tokens(st.CacheWrite)}, {"Turns", strconv.Itoa(st.Turns)}, {"Tool calls", strconv.Itoa(st.ToolCalls)},
@@ -248,11 +276,11 @@ func Session(st usage.Stats) []string {
 		out = append(out, "", "Models")
 		rows := make([][2]string, len(st.Models))
 		for i, m := range st.Models {
-			rows[i] = [2]string{ModelName(m.Model), fmt.Sprintf("%s tokens · ~%s · %s", Tokens(m.Total), Dollars(m.Cost), plural(m.Messages, "reply", "replies"))}
+			rows[i] = [2]string{ModelName(m.Model), fmt.Sprintf("%s tokens · %s · %s", Tokens(m.Total), withWeek(m.Cost, perPct), plural(m.Messages, "reply", "replies"))}
 		}
 		out = append(out, facts(rows)...)
 	}
-	note := Estimate(st.PricesAt)
+	note := weekScale(perPct) + Estimate(st.PricesAt)
 	if len(st.Unpriced) > 0 {
 		note += " No price known for " + strings.Join(st.Unpriced, ", ") + ", so it counts as $0."
 	}

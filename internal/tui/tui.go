@@ -423,7 +423,7 @@ func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if ok {
 			return m.openPanel("u"+s.SessionID, "Usage: "+s.Title, func() ([]string, error) {
 				st, err := m.c.SessionUsage(s.SessionID)
-				return report.Session(st), err
+				return report.Session(st, m.c.WeekRate()), err
 			})
 		}
 	case "U":
@@ -433,7 +433,7 @@ func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				return nil, err
 			}
 			days, err := m.c.Days(14)
-			return report.Plan(l, days, time.Now()), err
+			return report.Plan(l, days, m.c.WeekRate(), time.Now()), err
 		})
 	case "o":
 		if ok {

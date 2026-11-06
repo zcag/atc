@@ -6,8 +6,10 @@ your sessions and machines: every limit with how far through its window you are,
 reset time; then spend over the last 24 hours, 7, 30 or 90 days or all time, per day (per hour for
 24 hours) by model; which hours you use it; where the cost goes (output, cache reads and writes);
 and the bays, models, hosts and sessions that spent it. Pick a bar, bay, model or host and everything
-else narrows to it, so a day's bar lists that day's biggest sessions. A percent beside a dollar
-figure is its share of the range you picked, and each section heading says of how much. All time reaches as far back as
+else narrows to it, so a day's bar lists that day's biggest sessions. Every dollar figure
+comes with `% wk`, its size in weeks of your plan's limit: 100% wk is one full week, worked out from
+what this week has spent so far divided by its percentage. That one rate is used for every amount,
+whichever weeks it was spent in, so $8,000 over a month reads as, say, 270% wk. All time reaches as far back as
 the transcripts on disk: Claude Code deletes old ones (`cleanupPeriodDays` in its settings).
 
 ## Where the limits come from
@@ -28,8 +30,7 @@ running atc shows the last reading it has.
 
 Each session's header shows its tokens and an estimated cost; **Usage** in its menu breaks that
 down: input, output and cache tokens, models, turns, tool calls, subagents (which Claude Code keeps
-in their own transcripts), wall time and how long Claude was working. Percents on its rows are
-shares of that session's total; only the week and 5-hour tiles are shares of a limit, and they count
-only what the session spent since that window opened. The cost is what the same
+in their own transcripts), wall time and how long Claude was working. Its amounts carry `% wk` too. The
+week and 5-hour tiles count only what the session spent since that window opened. The cost is what the same
 tokens would cost at Claude API list prices, an estimate for comparison, since a subscription is
 not billed per token.

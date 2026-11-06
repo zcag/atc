@@ -67,8 +67,26 @@ func TestLimits(t *testing.T) {
 func TestPlanTotals(t *testing.T) {
 	now := time.Date(2026, 10, 23, 9, 0, 0, 0, time.Local)
 	days := []usage.Day{{Day: "2026-10-22", Part: usage.Part{Total: 1_000_000, Cost: 1.5}, Sessions: 2}, {Day: "2026-10-23", Part: usage.Part{Total: 500_000, Cost: 0.5}, Sessions: 1}}
-	out := strings.Join(Plan(usage.Limits{}, days, now), "\n")
+	out := strings.Join(Plan(usage.Limits{}, days, 0, now), "\n")
 	for _, want := range []string{"Thu Oct 22", "Today", "1 session\n", "2 sessions", "Total", "1.5M tokens  ~$2.00", "Estimated"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("plan lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestWeekUnits(t *testing.T) {
+	for _, c := range []struct {
+		cost, perPct float64
+		want         string
+	}{{1298, 29.7, "44% wk"}, {8288, 29.7, "279% wk"}, {60, 29.7, "2.0% wk"}, {0.01, 29.7, "<0.1% wk"}, {0, 29.7, ""}, {100, 0, ""}} {
+		if got := Week(c.cost, c.perPct); got != c.want {
+			t.Errorf("Week(%v, %v) = %q, want %q", c.cost, c.perPct, got, c.want)
+		}
+	}
+	now := time.Date(2026, 10, 23, 9, 0, 0, 0, time.Local)
+	out := strings.Join(Plan(usage.Limits{}, []usage.Day{{Day: "2026-10-23", Part: usage.Part{Total: 1, Cost: 297}, Sessions: 1}}, 29.7, now), "\n")
+	for _, want := range []string{"~$297 (10% wk)", "100% wk is one week", "about $2,970"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("plan lacks %q:\n%s", want, out)
 		}
@@ -112,7 +130,7 @@ Code it touched
 func TestSession(t *testing.T) {
 	st := usage.Stats{Part: usage.Part{Total: 2_400_000, Cost: 1.82}, Turns: 3, Active: 300, PricesAt: "October 2026",
 		Models: []usage.ModelPart{{Model: "claude-opus-5-5", Part: usage.Part{Total: 2_400_000, Cost: 1.82, Messages: 1}}}}
-	out := strings.Join(Session(st), "\n")
+	out := strings.Join(Session(st, 0), "\n")
 	for _, want := range []string{"2.4M tokens · ~$1.82 at API prices (estimate) · 5m Claude working", "Turns         3", "Opus 5.5  2.4M tokens · ~$1.82 · 1 reply", "(October 2026)", "Wall time     n/a"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("session lacks %q:\n%s", want, out)

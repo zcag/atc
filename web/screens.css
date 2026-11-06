@@ -268,7 +268,8 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
 .upick .nm { min-width: 0; display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; overflow: hidden; overflow-wrap: anywhere; }
 .upick .nm small { font-size: var(--fs-small); color: var(--faint); }
 .upick .v { flex: none; font-family: var(--mono); font-size: var(--fs-ui); white-space: nowrap; }
-.upick .v small { display: inline-block; width: 3.5ch; margin-left: 6px; text-align: right; font-size: var(--fs-small); color: var(--faint); }
+.ubody td.n .wk { margin-left: 6px; font-size: var(--fs-small); color: var(--faint); }
+.upick .v small { display: inline-block; width: 8ch; margin-left: 6px; text-align: right; font-size: var(--fs-small); color: var(--faint); }
 .upick .b { position: absolute; left: var(--s1); bottom: 4px; height: 3px; max-width: calc(100% - var(--s1) * 2); background: var(--faint); }
 .upicks .clr { margin-top: var(--s2); }
 .uempty { grid-column: span 12; max-width: 620px; padding: var(--s4) 0; }

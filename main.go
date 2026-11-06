@@ -716,7 +716,7 @@ func showUsage(args []string) error {
 		if *asJSON {
 			return printJSON(st)
 		}
-		printLines(append([]string{s.Title, ""}, report.Session(st)...))
+		printLines(append([]string{s.Title, ""}, report.Session(st, c.WeekRate())...))
 		return nil
 	}
 	l, err := c.Limits()
@@ -730,7 +730,7 @@ func showUsage(args []string) error {
 	if *asJSON {
 		return printJSON(map[string]any{"limits": l, "days": days})
 	}
-	printLines(report.Plan(l, days, time.Now()))
+	printLines(report.Plan(l, days, c.WeekRate(), time.Now()))
 	return nil
 }
 
