@@ -57,7 +57,7 @@ func TestAgentLineFollowsTheLevel(t *testing.T) {
 }
 
 func TestAgentFolderBehindALink(t *testing.T) {
-	root := t.TempDir()
+	root, _ := filepath.EvalSymlinks(t.TempDir())
 	real := filepath.Join(root, "real")
 	os.MkdirAll(real, 0o755)
 	link := filepath.Join(root, "link")
