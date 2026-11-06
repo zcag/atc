@@ -5,6 +5,7 @@
 #   voice-stack.sh fetch          download the models and the voice's venv (about 2 GB)
 #   voice-stack.sh run <port>     run on <port> + 2 (line) and + 6 (voice), <port> being what run.sh was given
 #   voice-stack.sh say <voice> <out.wav> <text>   render a line, for the demo's made-up caller
+#   voice-stack.sh clips <dir> [voice]            render the caller's lines in beats.json: 1.wav for film.py, 1.pcm for callfilm.py, ...
 set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 voice=$here/../../voice
@@ -16,7 +17,7 @@ stack() {
 		TTS_HF_HOME="$dir/hf" HF_HOME="$dir/hf" ATC_CONFIG_DIR="$dir/home/atc" "$@"
 }
 case "${1:-}" in
-fetch) stack uv run --script "$voice/fetch.py" ;;
+fetch) stack TTS_ENGINES=pocket-en,kokoro uv run --script "$voice/fetch.py" ;;
 run)
 	p=$2
 	trap 'kill 0' EXIT
@@ -33,8 +34,16 @@ json.dump({"en": next(p["voices"]["en"] for p in d["persons"] if p["id"] == d["l
 say)
 	stack "$dir/tts-venv/bin/python" -I "$here/say.py" "$2" "$3" "$4"
 	;;
+clips)
+	n=0
+	python3 -c 'import json, sys; [print(b["you"]) for b in json.load(open(sys.argv[1])) if "you" in b]' "$here/beats.json" | while read -r line; do
+		n=$((n + 1))
+		stack "$dir/tts-venv/bin/python" -I "$here/say.py" "${3:-am_puck}" "$2/$n.wav" "$line" </dev/null
+		ffmpeg -y -v error -i "$2/$n.wav" -ar 16000 -ac 1 -f s16le "$2/$n.pcm" </dev/null
+	done
+	;;
 *)
-	sed -n 2,7p "$0"
+	sed -n 2,8p "$0"
 	exit 2
 	;;
 esac

@@ -36,7 +36,7 @@ async (page, { beats = "http://127.0.0.1:7440/film/beats.json", out = "/tmp/atc-
   for (let i = 0; i < list.length; i++) {
     const b = list[i];
     let body;
-    if (b.ring) body = `<div class="ring"><em>Your phone rings</em><b>Assistant</b><span>${b.ring}</span><em>@ops looked into an alert and decided this can't wait.</em></div>`;
+    if (b.ring) body = `<div class="ring"><em>${b.answered ? "You answer" : "Your phone rings"}</em><b>Assistant</b><span>${b.ring}</span><em>@ops looked into an alert and decided this can't wait.</em></div>`;
     else if (b.end) body = `<div class="endc"><b>${b.end}</b><span>${b.sub || ""}</span></div>`;
     else {
       if (b.cut) [...seen].reverse().find((l) => l.it).cut = true;

@@ -38,7 +38,7 @@ atc is an independent project. It is not affiliated with or endorsed by Anthropi
 Call it from the app or a browser, with no phone number needed, or let anything that can't wait ring you. The assistant is one long
 conversation, shared with the atc page and WhatsApp, and it already knows the state of every session and machine when you say hello.
 
-https://github.com/user-attachments/assets/5b49e1b0-ff28-48ad-8ca0-a2eff262bb5a
+https://github.com/user-attachments/assets/f72b6ba9-521d-4672-b10c-250d0a0d8829
 
 *A recorded call on the real call stack, with the transcript and notes beside the phone. The incident and Claude's lines are written for the demo.*
 
