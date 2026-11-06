@@ -1,4 +1,4 @@
-/* The transcript: a document read in its own column, your messages tinted, the work folded to one line */
+/* The transcript: a document read in its own column, your messages framed, the work folded to one line */
 .tx-wrap {
   --g: 0px; --pad: var(--s5); --tw: 0px;
   --rf: var(--text); --rs: var(--fs-text); --rl: 1.5; --rw: var(--read-w);
@@ -43,26 +43,28 @@
 .tx-wrap .chev { flex: none; width: 6px; height: 6px; border-right: 1.5px solid var(--faint); border-bottom: 1.5px solid var(--faint); transform: rotate(-45deg); margin: 0 3px; }
 .tx-wrap [aria-expanded="true"] > .chev { transform: rotate(45deg); }
 
-/* your messages: a tinted block, so a scroll down the page shows who said what */
+/* your messages: an outline with who and when set into its top edge, so a scroll down the page shows who said what */
 .tx .sec { padding-top: var(--s5); }
-.tx .sec.first { padding-top: 0; }
-.tx .lead-at { font-size: var(--fs-small); color: var(--dim); font-family: var(--mono); margin-bottom: 4px; }
-.tx .lead { margin-bottom: var(--s5); padding: var(--s3) var(--s4); background: color-mix(in srgb, var(--ink) 11%, var(--strip)); border-radius: var(--r-sm); }
-.tx .lead p { margin: 0; font-family: var(--sans); font-variation-settings: var(--v-you); font-size: var(--fs-title); line-height: 1.5; font-weight: 500; color: var(--ink); text-wrap: pretty; white-space: pre-wrap; overflow-wrap: anywhere; }
-.tx .lead p.clamp, .tx .queued .qt.clamp { display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; }
+.tx .sec.first { padding-top: var(--s2); }
+.tx .tb[data-k="note"] { padding-top: var(--s5); }
+.tx .lead-at { font-size: var(--fs-small); color: var(--dim); font-family: var(--mono); }
+.tx :is(.lead, .fold) .lead-at { position: absolute; top: -0.72em; left: var(--s3); padding: 0 6px; background: var(--strip); line-height: 1.4; }
+.tx .lead { position: relative; margin-bottom: var(--s5); padding: var(--s4) var(--s4) var(--s3); box-shadow: inset 0 0 0 1px var(--line-strong); border-radius: var(--r-md); }
+.tx .queued .qt.clamp { display: -webkit-box; -webkit-line-clamp: 8; -webkit-box-orient: vertical; overflow: hidden; }
 .tx .lead .more { margin-top: 4px; padding: 0; height: 24px; }
 .tx .lead .attl { display: block; margin-top: 6px; font-size: var(--fs-small); color: var(--faint); font-family: var(--mono); }
 .tx .lead .imgs { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
 .tx .lead img { max-height: 200px; max-width: 100%; box-shadow: 0 0 0 1px var(--line); }
-.tx .fold { display: block; width: 100%; margin-bottom: var(--s3); border-radius: var(--r-sm); }
-.tx .fold .fy { display: block; padding: var(--s2) var(--s4); background: color-mix(in srgb, var(--ink) 11%, var(--strip)); border-radius: var(--r-sm); }
+.tx .fold { display: block; width: 100%; margin: var(--s2) 0 var(--s3); border-radius: var(--r-md); scroll-margin-top: var(--s4); }
+.tx .fold .fy { position: relative; display: block; padding: var(--s3) var(--s4) var(--s2); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r-md); }
+.tx .fold:not(.ntc):hover .fy { box-shadow: inset 0 0 0 1px var(--line-strong); }
 .tx .fold:hover .fq { color: var(--ink); }
-.tx .fold .lead-at { display: block; margin-bottom: 2px; }
-.tx .fold .fq { display: block; font-variation-settings: var(--v-you); font-size: var(--fs-body); font-weight: 500; color: var(--dim); line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tx .fold .g { font-size: var(--fs-small); color: var(--dim); line-height: 1.45; margin-top: 4px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tx .fold .fq { display: block; font-family: var(--text); font-size: var(--fs-body); color: var(--dim); line-height: 1.45; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx .fold .g { font-size: var(--fs-small); color: var(--dim); line-height: 1.45; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .tx .fold .g b { font-weight: 400; color: var(--faint); }
-.tx .fold.ntc .fy { padding: 0; background: none; }
-.tx .fold.ntc .fq { font-variation-settings: normal; font-weight: 400; font-family: var(--mono); font-size: var(--fs-small); }
+.tx .fold.ntc .fy { padding: 0; box-shadow: none; }
+.tx .fold.ntc .lead-at { position: static; display: block; padding: 0; margin-bottom: 2px; background: none; }
+.tx .fold.ntc .fq { font-family: var(--mono); font-size: var(--fs-small); }
 .tx .evt { margin: 0 0 var(--s5); padding: 6px 0 6px var(--s3); box-shadow: inset 2px 0 0 var(--line-strong); font-size: var(--fs-ui); line-height: 1.45; color: var(--dim); overflow-wrap: anywhere; }
 .tx .evt b { color: var(--ink); font-weight: 620; }
 .tx .evt.fail { box-shadow: inset 3px 0 0 var(--fail); padding: var(--s3) var(--s4); background: var(--board); color: var(--ink); }
@@ -231,14 +233,14 @@ body.zen .tx-wrap .prose blockquote.callout.warn { box-shadow: inset 2px 0 0 var
 .tx-wrap .tcut { display: block; margin: var(--s1) 0; padding: 2px 0; font-family: var(--text); color: var(--faint); border-block: 1px dashed var(--line); }
 .tx-wrap .tclip .more-lines { text-align: left; }
 
-/* your own words, drawn like a reply but in your type */
-.tx .lead .prose.ptxt { font: inherit; font-family: var(--sans); font-variation-settings: var(--v-you); font-size: var(--fs-title); line-height: 1.5; font-weight: 500; color: var(--ink); max-width: none; }
+/* your own words, drawn like a reply */
+.tx .lead .prose.ptxt { font: inherit; font-family: var(--text); font-size: var(--fs-text); line-height: 1.5; color: var(--ink); max-width: none; }
 .tx .lead .ptxt > :last-child { margin-bottom: 0; }
-.tx .lead .ptxt p { margin: 0 0 0.5em; font-size: inherit; }
+.tx .lead .ptxt p { margin: 0 0 0.5em; font-size: inherit; white-space: pre-wrap; overflow-wrap: anywhere; }
 .tx .lead .ptxt :is(ul, ol) { margin-bottom: 0.5em; }
 .tx .lead .ptxt :is(h1, h2, h3, h4) { margin: 0.4em 0 0.2em; padding: 0; border: 0; font-size: 1em; }
 .tx .lead .ptxt.clamp { max-height: 12em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 76%, transparent); mask-image: linear-gradient(#000 76%, transparent); }
-body.zen .tx .lead .prose.ptxt { font-size: 0.9em; font-weight: 400; color: var(--dim); }
+body.zen .tx .lead .prose.ptxt { font-family: var(--sans); font-variation-settings: var(--v-you); font-size: 0.9em; font-weight: 400; color: var(--dim); }
 
 /* following a reference without leaving: an issue's title, a link to one spot */
 .ipop { position: fixed; z-index: 27; padding: var(--s2) var(--s3); background: var(--strip); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--r-md); box-shadow: 0 6px 22px rgb(0 0 0 / .28); font-family: var(--text); font-size: var(--fs-ui); line-height: 1.4; }
@@ -421,7 +423,7 @@ pre.mdiff:not(.num) .gap { padding-left: var(--s3); }
 .tx .queued .qh { display: flex; align-items: center; gap: var(--s2); font-size: var(--fs-small); color: var(--dim); }
 .tx .queued .qh b { color: var(--ink); font-weight: 650; }
 .tx .queued .qh .acts { margin-left: auto; gap: 4px; }
-.tx .queued .qt { margin: 6px 0 0; font-variation-settings: var(--v-you); font-size: var(--fs-body); line-height: 1.5; color: var(--ink); white-space: pre-wrap; }
+.tx .queued .qt { margin: 6px 0 0; font-family: var(--text); font-size: var(--fs-body); line-height: 1.5; color: var(--ink); white-space: pre-wrap; }
 .tx .queued .qa { margin: 4px 0 0; font-size: var(--fs-small); color: var(--faint); font-family: var(--mono); }
 .tx .queued.gone { display: flex; align-items: center; gap: var(--s3); font-size: var(--fs-ui); color: var(--dim); }
 
@@ -565,7 +567,7 @@ pre.mdiff:not(.num) .gap { padding-left: var(--s3); }
   .tx-wrap { --btn-h: 44px; }
   .tx-wrap .prose { font-size: calc(var(--rs) - 0.5px); }
   .tx-wrap kbd { display: none; }
-  .tx .prose pre, .tx .edits, .tx .pref, .tx .ask.rows, .tx .snc, .tx .queued, .tx .evt.fail, .tx .lead, .tx .fold { margin-left: calc(-1 * var(--s4)); margin-right: calc(-1 * var(--s4)); }
+  .tx .prose pre, .tx .edits, .tx .pref, .tx .ask.rows, .tx .snc, .tx .queued, .tx .evt.fail { margin-left: calc(-1 * var(--s4)); margin-right: calc(-1 * var(--s4)); }
   .tx .edits .eh, .tx .ef > li > button { padding-left: var(--s4); padding-right: var(--s4); }
   .tx .ef > li > button { min-height: 44px; }
   .tx .prose pre { box-shadow: none; }
@@ -587,9 +589,7 @@ pre.mdiff:not(.num) .gap { padding-left: var(--s3); }
   :is(.tx .ask, .ask.rows) .who2 .kb { height: 44px; }
   :is(.tx .ask, .ask.rows) .opt.type input { height: 44px; }
   .tx .adl, .tx .fold, .tx .inl-steps { min-height: 44px; }
-  .tx .lead, .tx .fold .fy { border-radius: 0; }
-  .tx .fold { width: calc(100% + 2 * var(--s4)); }
-  .tx .fold .g { padding: 0 var(--s4); }
+  .tx .lead .prose.ptxt { font-size: calc(var(--rs) - 0.5px); }
   .tx .lead .more { height: 44px; }
   .tx-wrap .step .line { min-height: 44px; align-items: center; }
   .tx .queued .qh { flex-wrap: wrap; } .tx .queued .qh .acts { margin-left: 0; width: 100%; }
