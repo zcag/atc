@@ -40,7 +40,7 @@ conversation, shared with the atc page and WhatsApp, and it already knows the st
 
 https://github.com/user-attachments/assets/f72b6ba9-521d-4672-b10c-250d0a0d8829
 
-*A recorded call on the real call stack, with the transcript and notes beside the phone. The incident and Claude's lines are written for the demo.*
+*A recorded call on the real call stack, with the transcript and notes beside the phone. The incident and Claude's lines are written for the demo. The voice is the default CPU preset; [plug in your own voice server](docs/calls.md#your-own-voice-server), such as Higgs on a GPU, for a much better one.*
 
 **What you can get done on a call**
 
