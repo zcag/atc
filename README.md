@@ -7,9 +7,12 @@ Past a few parallel sessions, the hard part stops being the work. Which one is w
 Which machine was it on? Ask out loud, or see it at a glance on atc's board, at your desk and on your phone. Agents look after
 things like your mail, alerts and invoices. It all runs on your own machines, on your own Claude plan.
 
-<img src="docs/img/call-demo.webp" alt="A recorded call on the real call stack. The phone rings with the reason, Checkout errors jumped to 8% after the last deploy. On the call, June says what happened and is cut off mid-sentence by Wait, was that the only thing in the deploy? She plays a thinking phrase, reads what @ops found and answers. Told to roll it back and have someone find out why, she hands the rollback to one session and starts another on the cause. Asked how many orders were lost, she says about forty and puts the chart on the phone's screen. A panel beside the phone names each thing as it happens.">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/img/hero-dark.webp">
+  <img src="docs/img/hero-light.webp" alt="atc's main screen, one window with three panes. On the left, the sessions of one project with what each did in a line. In the middle, the session Fix the coupon crash: your request, what it did as a short story with one failed test, and the edit as a diff. On the right, the page it made: 8.2% errors at the peak, 231 failed checkouts replayed and all passing, a chart of errors jumping at the deploy and falling at the rollback, and the cause.">
+</picture>
 
-*A recorded call on the real call stack, with the transcript and notes beside the phone. The incident and Claude's lines are written for the demo. [Watch it with sound](#an-assistant-you-talk-to-on-the-phone).*
+*One project's sessions, what the selected one did, and the page it made. Each session's key and state are on its row.*
 
 - **[An assistant you talk to on the phone](#an-assistant-you-talk-to-on-the-phone).** A natural conversation that can run your sessions, your agents and whatever else you connect it to.
 - **[Control of every session](#control-of-every-session).** Dozens running on several machines, and you still know what each one needs and did, from any screen.
@@ -36,6 +39,8 @@ Call it from the app or a browser, with no phone number needed, or let anything 
 conversation, shared with the atc page and WhatsApp, and it already knows the state of every session and machine when you say hello.
 
 https://github.com/user-attachments/assets/5b49e1b0-ff28-48ad-8ca0-a2eff262bb5a
+
+*A recorded call on the real call stack, with the transcript and notes beside the phone. The incident and Claude's lines are written for the demo.*
 
 **What you can get done on a call**
 
@@ -86,13 +91,6 @@ The character moves with both voices as it listens, thinks and speaks. Pick who 
 
 Sessions from all your machines share one board, sorted by who needs you: what is asking you something, then what has finished,
 then what is working. Each finished turn gets a one-line result, so you can tell what happened without opening anything.
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/img/hero-dark.webp">
-  <img src="docs/img/hero-light.webp" alt="atc's main screen, one window with three panes. On the left, the sessions of one project with what each did in a line. In the middle, the session Fix the coupon crash: your request, what it did as a short story with one failed test, and the edit as a diff. On the right, the page it made: 8.2% errors at the peak, 231 failed checkouts replayed and all passing, a chart of errors jumping at the deploy and falling at the rollback, and the cause.">
-</picture>
-
-*One project's sessions, what the selected one did, and the page it made. Each session's key and state are on its row.*
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/board-dark.webp">
