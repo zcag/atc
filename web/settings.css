@@ -46,7 +46,7 @@
 .setpage .rsample { margin: var(--s4) 0 0; padding: var(--s4); border-radius: var(--r-md); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); text-wrap: pretty; box-sizing: content-box; }
 
 .setpage .capsum { margin: 0 0 var(--s4); padding: var(--s2) var(--s3); border-radius: var(--r-md); background: var(--needs-wash); box-shadow: inset 0 0 0 1px var(--needs); color: var(--ink); font-size: var(--fs-ui); }
-.setpage .capsum a, .setpage .capneeds a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.setpage .capsum a, .setpage .capneeds a, .setpage .set p a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .setpage .capmachines { margin-top: var(--s6); }
 .setpage .caprestart { margin-top: var(--s4); padding: var(--s3); border-radius: var(--r-md); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line); }
 .setpage .caprestart p { margin: 0 0 var(--s2); font-size: var(--fs-ui); color: var(--ink); }

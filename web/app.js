@@ -926,8 +926,15 @@ function bayLists(live, hist, only) {
   return by;
 }
 
-const LONG_CARDS = (() => { try { return localStorage.getItem("atc.cards") === "long"; } catch { return false; } })();
-const CardGist = ({ s }) => LONG_CARDS && waiting(s) && s.summary?.gist?.length > 0 && html`<span class="gl">${s.summary.gist.map((x) => html`<span>${x}</span>`)}</span>`;
+function CardGist({ s }) {
+  const [length, setLength] = useState(() => txPrefs.get().cards);
+  useEffect(() => {
+    const f = (e) => setLength(e.detail.cards);
+    addEventListener("atc-txprefs", f);
+    return () => removeEventListener("atc-txprefs", f);
+  }, []);
+  return length === "long" && waiting(s) && s.summary?.gist?.length > 0 && html`<span class="gl">${s.summary.gist.map((x) => html`<span>${x}</span>`)}</span>`;
+}
 
 function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   const tap = rail ? null : () => toggle(s.sessionId);
@@ -5204,7 +5211,7 @@ const txStore = {
 const txPrefs = {
   get: () => {
     const p = txStore.get("prefs", {});
-    return { size: 1, width: 1, space: 1, paper: "", ...p, face: !p.face || (p.face === "lit" && !p.chose) ? "text" : p.face };
+    return { size: 1, width: 1, space: 1, paper: "", cards: "long", ...p, face: !p.face || (p.face === "lit" && !p.chose) ? "text" : p.face };
   },
   set(p) {
     const v = { ...txPrefs.get(), ...p, chose: p.face ? true : txStore.get("prefs", {}).chose };
@@ -5620,6 +5627,15 @@ function SettingsPage({ me, say, onClose }) {
                 <${ThemePreview} colors=${colors?.[t || "atc"]} on=${on} />
                 <span class="meta"><b>${name}</b>${look.theme === t && html`<span class="cur">In use</span>`}<span class="d">${THEME_NOTES[t] || ""}</span></span>
               </button>`)}
+          </div>
+        </section>
+        <section id="cards">
+          <h2>Session list <span class="n">on this device</span></h2>
+          <div class="set">
+            <b>Summaries</b>
+            <p>What a session waiting on you shows under its status. Longer adds the bullets from its <a href=${`${SETTINGS}#summary`}>summary</a>.</p>
+            <div class="ctl"><${Seg} label="Session summaries" value=${prefs.cards} set=${(v) => txPrefs.set({ cards: v })}
+              options=${[["long", "Longer"], ["line", "One line"]]} /></div>
           </div>
         </section>
         <section id="reading">

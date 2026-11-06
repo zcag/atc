@@ -19,6 +19,10 @@ summary is of that one message: once the session moves on, it goes away until th
 A notification for a finished turn waits up to 25 seconds for the summary, then goes out with the
 start of the reply instead.
 
+In the session list and on the board, a session waiting on you shows its status with the gist's
+bullets under it. **Settings, Appearance, Session list** turns that down to the status line alone,
+per device.
+
 ## What it costs, and how to change it
 
 Summaries come from `claude -p` with haiku and a fixed prompt, with no tools, no CLAUDE.md and no
