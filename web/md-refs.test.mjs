@@ -24,7 +24,7 @@ test("long URLs read as what they point at", () => {
   assert.equal(shortURL("https://github.com/o/r/blob/main/src/a.go"), "o/r/src/a.go");
   assert.equal(shortURL("https://github.com/o/r"), "o/r");
   assert.equal(shortURL("https://www.example.com/docs"), "example.com/docs");
-  assert.equal(shortURL("http://marko:8799/x?a=1"), "marko:8799/x?a=1");
+  assert.equal(shortURL("http://box:8799/x?a=1"), "box:8799/x?a=1");
   const long = shortURL("https://docs.example.com/a/very/long/path/that/goes/on/and/on/for/a/while/final-page");
   assert.ok(long.length <= 52 && long.includes("…") && long.endsWith("final-page"), long);
   assert.equal(shortURL("not a url"), "not a url");
