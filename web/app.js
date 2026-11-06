@@ -926,6 +926,9 @@ function bayLists(live, hist, only) {
   return by;
 }
 
+const LONG_CARDS = (() => { try { return localStorage.getItem("atc.cards") === "long"; } catch { return false; } })();
+const CardGist = ({ s }) => LONG_CARDS && waiting(s) && s.summary?.gist?.length > 0 && html`<span class="gl">${s.summary.gist.map((x) => html`<span>${x}</span>`)}</span>`;
+
 function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   const tap = rail ? null : () => toggle(s.sessionId);
   const { events } = useRowEvents(s, tap, !rail && s.state !== "past" && s.state !== "stopped");
@@ -939,7 +942,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   if (rail) return html`
     <button class=${cls} data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
       <${StateBlock} s=${s} />
-      <span class="c">${title}<span class="s">${status}</span>${s.state === "working" && html`<span class="s2 mono">${doing(s)}</span>`}</span>
+      <span class="c">${title}<span class="s">${status}</span><${CardGist} s=${s} />${s.state === "working" && html`<span class="s2 mono">${doing(s)}</span>`}</span>
       <span class="e"><span class="ago">${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}<${LoadTag} s=${s} /></span>
     </button>`;
   return html`
@@ -948,7 +951,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
         onDblClick=${() => go(keyOf(s))} onKeyDown=${(e) => e.target === e.currentTarget && (e.key === "Enter" ? go(keyOf(s)) : e.key === " " && (e.preventDefault(), toggle(s.sessionId)))}>
         <${StateBlock} s=${s} />
         <span class="ses"><a class="t" href=${`#/s/${keyOf(s)}`} onClick=${(e) => e.stopPropagation()}>${s.title || "Untitled"}</a>${where && html`<span class="w">${where}</span>`}</span>
-        <span class="st"><span class="l1">${status}</span>${second && html`<span class="l2 ${s.state === "working" ? "mono" : ""}">${second}</span>`}</span>
+        <span class="st"><span class="l1">${status}</span>${!open && html`<${CardGist} s=${s} />`}${second && html`<span class="l2 ${s.state === "working" ? "mono" : ""}">${second}</span>`}</span>
         <span class="ctx">${s.context > 0 && html`<${CtxMeter} n=${s.context} /><span>${Math.round(s.context / 1000)}k</span>`}<${LoadTag} s=${s} /></span>
         <span class="stp">${s.steps > 0 && s.steps}${s.failed > 0 && html`<span class="f">${s.failed} failed</span>`}</span>
         <span class="mk">${run.length > 0 && html`<span class="run">${run.join(" ")}</span>`}${made.length > 0 && html`<span>${made.join(" ")}</span>`}<${LoadTag} s=${s} /></span>

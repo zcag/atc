@@ -44,6 +44,9 @@
 .brow .st { display: flex; flex-direction: column; min-width: 0; }
 .brow .st .l1 { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brow .st .l2 { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brow .gl { display: flex; flex-direction: column; gap: 2px; margin-top: 4px; font-size: var(--fs-small); line-height: 1.4; color: var(--dim); white-space: normal; }
+.brow .gl > span { padding-left: 1em; text-indent: -1em; }
+.brow .gl > span::before { content: "- "; color: var(--faint); }
 .brow .mono, .rail .mono { font-family: var(--mono); font-size: var(--fs-small); }
 .brow .ctx { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-family: var(--mono); font-size: var(--fs-small); color: var(--dim); padding-top: 4px; }
 .brow .meter, .bview .meter { display: inline-block; width: 44px; height: 6px; box-shadow: inset 0 0 0 1px var(--line-strong); position: relative; }
