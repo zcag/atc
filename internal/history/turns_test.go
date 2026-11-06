@@ -26,6 +26,8 @@ func TestClassifyCommands(t *testing.T) {
 		{bash("git push -q origin HEAD:master", "To github.com:zcag/atc.git\n   fc204dd..1ca5dce  HEAD -> master", false), "push", true, "Pushed to master", false},
 		{bash("go test ./...", "ok  \tgithub.com/zcag/atc/internal/history\t0.004s", false), "test", true, "Tests passed", false},
 		{bash("go test ./internal/history", "--- FAIL: TestReadPage (0.00s)\nFAIL", true), "test", false, "Tests failed", false},
+		{bash("go test ./... | tail -3", "\x1b[32mok\x1b[0m  \ta\t0.4s\n\x1b[31mFAIL\x1b[0m\tb\t0.1s", false), "test", false, "Tests failed", false},
+		{bash("go test ./... | tail -2", "--- FAIL: TestRoute (0.00s)\n    route_test.go:41: got 500", false), "test", false, "Tests failed", false},
 		{bash("make install 2>&1 | tail -4", "", false), "deploy", true, "Deployed", false},
 		{bash("atc show out/handover.html --note 'look at the screens'", "Showing \"PR handover\" (handover) in atc, live from ~/out/handover.html.\n", false), "show", true, "PR handover", false},
 		{bash("grep -n foo internal/*.go | head; sed -n 1,20p main.go", "", false), "", false, "", true},

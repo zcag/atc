@@ -35,6 +35,8 @@ var (
 	readOnlyGit = map[string]bool{"log": true, "status": true, "diff": true, "show": true, "blame": true, "branch": true, "rev-parse": true, "remote": true, "ls-files": true, "grep": true, "describe": true}
 )
 
+var terminalEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
+
 func classify(m Message) (*Badge, bool) {
 	switch m.Tool {
 	case "Read", "Grep", "Glob", "LS":
@@ -48,7 +50,7 @@ func classify(m Message) (*Badge, bool) {
 	cmd, out := in.Command, ""
 	failed := m.Out != nil && m.Out.Error
 	if m.Out != nil {
-		out = m.Out.Text
+		out = terminalEscape.ReplaceAllString(m.Out.Text, "")
 	}
 	switch {
 	case strings.Contains(cmd, "git commit"):
@@ -64,7 +66,7 @@ func classify(m Message) (*Badge, bool) {
 		}
 		return &Badge{Kind: "push", OK: true, Text: "Pushed"}, false
 	case testCmd.MatchString(cmd):
-		b := &Badge{Kind: "test", OK: !failed && !strings.Contains(out, "\nFAIL") && !strings.HasPrefix(out, "FAIL"), Text: "Tests passed"}
+		b := &Badge{Kind: "test", OK: !failed && !strings.Contains(out, "\nFAIL") && !strings.HasPrefix(out, "FAIL") && !strings.Contains(out, "--- FAIL"), Text: "Tests passed"}
 		if !b.OK {
 			b.Text = "Tests failed"
 			if sm := failTest.FindStringSubmatch(out); sm != nil {
