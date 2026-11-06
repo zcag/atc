@@ -140,6 +140,12 @@ async function desktop(b) {
     ok(await p.locator('.ar').count() > 0, 'agents: listed');
     ok(await p.isVisible('.agv .hd h1, .agd .hd h1'), 'agents: the chosen agent beside the list');
     ok(await p.locator('.agv .hd h1').count() === 1, 'agents: its conversation, not its details');
+    await p.keyboard.press('z');
+    await wait(p, 300);
+    ok(!await p.isVisible('.agl') && (await p.locator('.agv').boundingBox()).x === 0, 'agents: zen hides the list and gives the conversation the width');
+    await p.keyboard.press('z');
+    await wait(p, 300);
+    ok(await p.isVisible('.agl'), 'agents: leaving zen brings the list back');
     await p.keyboard.press('j');
     await wait(p, 300);
     ok(/#\/agents\//.test(await p.evaluate(() => location.hash)), 'agents: j moves to the next agent');

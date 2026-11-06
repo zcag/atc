@@ -1,7 +1,7 @@
 /* zen: the words and nothing around them */
-body.zen :is(.app > .bays, .app > .console, .app > .tabbar, .side, .sstrip, .hd, .ahd, .aleft, .statep, .pggrip, .pgsplit > :not(.pgchat), .composer, .endbar) { display: none; }
+body.zen :is(.app > .bays, .app > .console, .app > .tabbar, .side, .sstrip, .hd, .ahd, .aleft, .agl, .statep, .pggrip, .pgsplit > :not(.pgchat), .composer, .endbar) { display: none; }
 body.zen .app, body.zen .app.assisting, body.zen .app:has(> .callpill) { grid-template-rows: minmax(0, 1fr) auto; padding-top: env(safe-area-inset-top); }
-body.zen :is(.shell.open, .shell.assistv, .sbody, .pgsplit) { grid-template-columns: minmax(0, 1fr); }
+body.zen :is(.shell.open, .shell.assistv, .sbody, .pgsplit, .scrpane.agentsv) { grid-template-columns: minmax(0, 1fr); }
 body.zen .pgchat { border-right: 0; }
 body.zen .tx { scrollbar-width: thin; }
 body.zen .tx:focus-visible { box-shadow: none; }
