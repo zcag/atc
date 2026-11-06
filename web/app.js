@@ -3106,15 +3106,18 @@ function Sheet({ cls, title, sub, onClose, children }) {
 const ESTIMATE = (asOf) => `Dollar figures are estimated from the transcripts at Claude API list prices${asOf ? ` (${asOf})` : ""}. A Claude subscription is not billed per token; this is what the same work would cost on the API.`;
 const RATE = "Dollars and percent convert at each window's own rate: what was spent in it so far divided by its percentage. Anthropic reports whole percents, so the rate is rough while a window is in single digits.";
 
-const ShareRows = ({ rows, total, w, onPick }) => html`
+const ShareRows = ({ rows, onPick }) => {
+  const sum = rows.reduce((a, r) => a + r.cost, 0), top = Math.max(...rows.map((r) => r.cost));
+  return html`
   <div class="shares">
     ${rows.map((r) => html`
       <button class="srow ${onPick ? "" : "flat"}" disabled=${!onPick} onClick=${() => onPick?.(r)} title=${r.hint || r.label}>
         <span class="sl">${r.label}${r.sub && html`<small>${r.sub}</small>`}</span>
-        <span class="sv">${usd(r.cost)}${asPct(r.cost, w) != null && html`<small>${approx(asPct(r.cost, w))}</small>`}</span>
-        <i style=${`width: ${total > 0 ? Math.max(1, (r.cost / total) * 100) : 0}%`}></i>
+        <span class="sv">${usd(r.cost)}${sum > 0 && html`<small>${pct((r.cost / sum) * 100)}</small>`}</span>
+        <i style=${`width: ${top > 0 ? Math.max(1, (r.cost / top) * 100) : 0}%`}></i>
       </button>`)}
   </div>`;
+};
 
 const dayOf = (d, o) => new Date(d + "T12:00").toLocaleDateString([], o);
 
@@ -3209,17 +3212,19 @@ const bucketName = (k) => k.length > 10
 const bucketTick = (k, n) => k.length > 10 ? `${k.slice(11)}` : n <= 7 ? dayOf(k, { weekday: "short" }) : dayOf(k, { day: "numeric", month: "short" });
 const tickEvery = (hourly, n) => (hourly ? 6 : n <= 7 ? 1 : n <= 16 ? 2 : n <= 40 ? 7 : 14);
 
-function PickRows({ rows, total, on, onPick, name = (r) => r.name, sub, color }) {
+function PickSection({ title, rows, on, onPick, name = (r) => r.name, sub, color }) {
   const [all, setAll] = useState(false);
   const top = all ? rows : rows.slice(0, 8);
+  const total = rows.reduce((a, r) => a + r.cost, 0);
   return html`
+    <section class="sec"><div class="sh"><h2>${title}</h2><span class="n">share of ${dollars(total)}</span></div>
     <div class="upicks">
       ${top.map((r) => html`<button class="upick" aria-pressed=${on === r.name} onClick=${() => onPick(on === r.name ? null : r.name)}>
         <span class="nm">${color && html`<i class="umsw" style=${`background:${color(r.name)}`}></i>`}${name(r)}${sub && html`<small>${sub(r)}</small>`}</span>
         <span class="v">${dollars(r.cost)}<small>${Math.round((r.cost / (total || 1)) * 100)}%</small></span>
         <i class="b" style=${`width:${total > 0 ? Math.max(0.5, (r.cost / total) * 100) : 0}%`}></i></button>`)}
       ${rows.length > 8 && html`<button class="clr" onClick=${() => setAll(!all)}>${all ? "Show fewer" : `Show all ${rows.length}`}</button>`}
-    </div>`;
+    </div></section>`;
 }
 
 function SpendBars({ days, data, models, sel, hourly, onPick, onPickModel, partial }) {
@@ -3792,13 +3797,10 @@ function UsagePage({ limits, live, down, onOpen }) {
                 ${matched.length > SHOWN_ROWS && html`<button class="btn umore" onClick=${() => setMore(!more)}>${more ? "Show fewer" : `Show all ${matched.length}`}</button>`}
               </section>
               <div class="ubreak">
-                <section class="sec"><div class="sh"><h2>Per bay</h2></div>
-                  <${PickRows} rows=${data.bays} total=${data.bays.reduce((a, b) => a + b.cost, 0)} on=${sel.bay} onPick=${(b) => pickThenShow({ bay: b })} sub=${(r) => plural(r.sessions, "session")} /></section>
-                <section class="sec"><div class="sh"><h2>Per model</h2></div>
-                  <${PickRows} rows=${data.models} total=${data.models.reduce((a, b) => a + b.cost, 0)} on=${sel.model} onPick=${(m) => pickThenShow({ model: m })} name=${(r) => modelName(r.name)} color=${modelColor} /></section>
-                ${data.hosts.length > 1 || sel.host ? html`<section class="sec"><div class="sh"><h2>Per host</h2></div>
-                  <${PickRows} rows=${data.hosts} total=${data.hosts.reduce((a, b) => a + b.cost, 0)} on=${sel.host} onPick=${(h) => pickThenShow({ host: h })} sub=${(r) => plural(r.sessions, "session")} /></section>` : ""}
-                <section class="sec"><div class="sh"><h2>What it paid for</h2></div>
+                <${PickSection} title="Per bay" rows=${data.bays} on=${sel.bay} onPick=${(b) => pickThenShow({ bay: b })} sub=${(r) => plural(r.sessions, "session")} />
+                <${PickSection} title="Per model" rows=${data.models} on=${sel.model} onPick=${(m) => pickThenShow({ model: m })} name=${(r) => modelName(r.name)} color=${modelColor} />
+                ${(data.hosts.length > 1 || sel.host) && html`<${PickSection} title="Per host" rows=${data.hosts} on=${sel.host} onPick=${(h) => pickThenShow({ host: h })} sub=${(r) => plural(r.sessions, "session")} />`}
+                <section class="sec"><div class="sh"><h2>What it paid for</h2><span class="n">share of ${dollars(data.total)}</span></div>
                   <div class="upicks">${KINDS.map((k, i) => [k, data.kinds[i]]).sort((a, b) => b[1] - a[1]).map(([k, c]) => html`<div class="upick flat">
                     <span class="nm">${k}</span><span class="v">${dollars(c)}<small>${Math.round((c / (data.total || 1)) * 100)}%</small></span>
                     <i class="b" style=${`width:${data.total > 0 ? Math.max(0.5, (c / data.total) * 100) : 0}%`}></i></div>`)}</div></section>
@@ -3819,7 +3821,6 @@ function SessionUsage({ s, use, onClose, agent }) {
   const what = agent ? "agent" : "session";
   const day = (t) => new Date(t).toLocaleDateString([], { month: "short", day: "numeric" });
   const sh = shares(use);
-  const week = winOf(use?.wins, "weekly_all");
   const cin = use ? use.input + use.cacheRead + use.cacheWrite : 0;
   const kinds = use && !use.failed && use.costs && [
     ["Output", use.output, use.costs.output, "What Claude wrote, thinking included"],
@@ -3838,7 +3839,7 @@ function SessionUsage({ s, use, onClose, agent }) {
   return html`
     <${Sheet} cls="usage" title="Usage" sub=${s.title} onClose=${onClose}>
       ${!use ? html`<p class="note">Reading the transcript${agent ? "s" : ""}…</p>` : use.failed ? html`<p class="note">Couldn't read this ${what}'s usage.</p>` : html`
-        <div class="htiles">
+        <div class="tiles">
           ${sh.map((x) => html`<div>
             <span class="n">${x.p != null ? approx(x.p) : `${usd(x.cost)}`}</span>
             <span class="l">of this ${x.name}${x.p != null ? ` · ${usd(x.cost)}` : ""}</span>
@@ -3846,7 +3847,7 @@ function SessionUsage({ s, use, onClose, agent }) {
           </div>`)}
           <div>
             <span class="n">${usd(use.cost)}</span>
-            <span class="l">${agent ? `all ${convs.length} conversation${convs.length === 1 ? "" : "s"}` : "whole session"}${asPct(use.cost, week) != null ? `, ${approx(asPct(use.cost, week))} of a week` : ""}</span>
+            <span class="l">${agent ? `all ${convs.length} conversation${convs.length === 1 ? "" : "s"}` : "whole session"}</span>
             <span class="l faint">${tokens(use.total)} tokens</span>
           </div>
           <div>
@@ -3858,20 +3859,20 @@ function SessionUsage({ s, use, onClose, agent }) {
         ${use.local?.length > 0 && html`<p class="quiet">${use.local.join(", ")} is not Claude: its part costs nothing and doesn't count toward your plan.</p>`}
         ${convs.length > 1 && html`
           <h4>Conversations</h4>
-          <${ShareRows} w=${week} total=${Math.max(...convs.map((c) => c.cost))} onPick=${(r) => { onClose(); go(r.id); }}
+          <${ShareRows} onPick=${(r) => { onClose(); go(r.id); }}
             rows=${convs.map((c) => ({ id: c.sessionId, label: c.title || "Untitled", cost: c.cost,
               sub: [c.start && (c.end && day(c.end) !== day(c.start) ? `${day(c.start)} to ${day(c.end)}` : day(c.start)), `${c.turns} turns`, `${tokens(c.total)} tokens`].filter(Boolean).join(" · ") }))} />`}
         ${kinds && use.cost > 0 && html`
           <h4>Where the cost goes</h4>
-          <${ShareRows} w=${week} total=${Math.max(...kinds.map((k) => k.cost))} rows=${kinds} />`}
+          <${ShareRows} rows=${kinds} />`}
         ${use.models?.length > 0 && html`
           <h4>Models</h4>
-          <${ShareRows} w=${week} total=${use.models[0].cost}
+          <${ShareRows}
             rows=${use.models.map((m) => ({ label: modelName(m.model), sub: `${tokens(m.total)} tokens · ${m.messages} replies`, cost: m.cost }))} />`}
         <h4>Activity</h4>
         <dl class="facts">${rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
         ${!agent && s.agent && AGENT_INFO[s.agent] && html`<button class="btn" onClick=${() => { onClose(); openAgent(s.agent, "usage"); }}>All of ${agentLabel(AGENT_INFO[s.agent])}'s conversations</button>`}
-        <p class="note">The share of a limit counts this ${what}'s spend since that window opened. ${RATE} ${ESTIMATE(use.pricesAsOf)}${use.unpriced?.length ? ` No price known for ${use.unpriced.join(", ")}, so it counts as $0.` : ""} Working time adds up the gaps between messages in each turn, at most 10 minutes per gap.</p>`}
+        <p class="note">A row's percent is its share of this ${what}'s total. The share of a limit counts only this ${what}'s spend since that window opened. ${RATE} ${ESTIMATE(use.pricesAsOf)}${use.unpriced?.length ? ` No price known for ${use.unpriced.join(", ")}, so it counts as $0.` : ""} Working time adds up the gaps between messages in each turn, at most 10 minutes per gap.</p>`}
     <//>`;
 }
 
