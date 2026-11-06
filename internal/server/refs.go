@@ -327,7 +327,7 @@ func issueOf(ctx context.Context, repo, n string) (issueInfo, bool) {
 
 func (s *Server) refIssue(w http.ResponseWriter, r *http.Request) {
 	repo, n := r.URL.Query().Get("repo"), r.URL.Query().Get("n")
-	if !issueRepo.MatchString(repo) || !issueNumber.MatchString(n) {
+	if !issueRepo.MatchString(repo) || strings.Contains(repo, "..") || !issueNumber.MatchString(n) {
 		http.Error(w, "not an issue", http.StatusBadRequest)
 		return
 	}
