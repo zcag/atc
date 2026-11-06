@@ -30,6 +30,7 @@ type Transcript struct {
 	PromptAt       time.Time `json:"promptAt,omitzero"`
 	Activity       string    `json:"activity,omitempty"`
 	LastReply      string    `json:"lastReply,omitempty"`
+	Preview        string    `json:"preview,omitempty"`
 	ReplyID        string    `json:"replyId,omitempty"`
 	Pending        string    `json:"pending,omitempty"`
 	pendingID      string
@@ -221,6 +222,7 @@ func apply(t *Transcript, e *entry, custom *string) {
 					t.Pending, t.pendingID = t.Activity, b.ID
 				case b.Type == "text" && strings.TrimSpace(b.Text) != "":
 					t.Activity, t.LastReply, t.ReplyID = "", clip(strings.Join(strings.Fields(b.Text), " "), 300), e.UUID
+					t.Preview = replyPreview(b.Text)
 				}
 			}
 		}
@@ -237,6 +239,38 @@ func apply(t *Transcript, e *entry, custom *string) {
 	if e.GitBranch != "" {
 		t.Branch = e.GitBranch
 	}
+}
+
+// replyPreview is a reply as one line of prose for a list: code, tables and rules say nothing there, so they go. LastReply
+// stays the reply's own words, since it is matched against the reply itself.
+func replyPreview(text string) string {
+	var kept []string
+	fence := ""
+	for _, line := range strings.Split(text, "\n") {
+		t := strings.TrimSpace(line)
+		if fence != "" {
+			if strings.HasPrefix(t, fence) {
+				fence = ""
+			}
+			continue
+		}
+		switch {
+		case strings.HasPrefix(t, "```"):
+			fence = "```"
+		case strings.HasPrefix(t, "~~~"):
+			fence = "~~~"
+		case strings.HasPrefix(t, "|"), strings.Trim(t, "-*_ ") == "" && t != "":
+		case strings.HasPrefix(t, "#"):
+			head := strings.TrimLeft(t, "# ")
+			if !strings.HasSuffix(head, ":") && !strings.HasSuffix(head, ".") {
+				head += ":"
+			}
+			kept = append(kept, head)
+		default:
+			kept = append(kept, strings.TrimLeft(t, "> "))
+		}
+	}
+	return clip(strings.Join(strings.Fields(strings.Join(kept, " ")), " "), 300)
 }
 
 func clip(s string, n int) string {

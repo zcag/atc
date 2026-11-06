@@ -59,6 +59,7 @@ type Session struct {
 	Failed         int              `json:"failed,omitempty"`
 	Files          int              `json:"files,omitempty"`
 	LastReply      string           `json:"lastReply,omitempty"`
+	Preview        string           `json:"preview,omitempty"`
 	Summary        *summary.Summary `json:"summary,omitempty"`
 	Summarizing    bool             `json:"summarizing,omitempty"`
 	StartedAt      time.Time        `json:"startedAt,omitzero"`
@@ -238,7 +239,7 @@ func (m *Manager) build(t history.Transcript) Session {
 		Title: title(meta.Name, t), Name: t.AgentName,
 		Cwd: t.Cwd, StartCwd: t.StartCwd, Branch: t.Branch, Model: t.Model,
 		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, Context: t.Context, PromptAt: t.PromptAt,
-		Activity: t.Activity, LastReply: t.LastReply, Summary: m.Summary.Get(t),
+		Activity: t.Activity, LastReply: t.LastReply, Preview: t.Preview, Summary: m.Summary.Get(t),
 		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine, Harness: t.Harness, Agent: meta.Agent,
 		Retired: RetiredHub(meta.Name),
 	}

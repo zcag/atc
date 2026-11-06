@@ -11,6 +11,8 @@ type Badge struct {
 	OK   bool   `json:"ok"`
 	Text string `json:"text"`
 	Ref  string `json:"ref,omitempty"`
+	// Range is what a push moved its branch across, old..new.
+	Range string `json:"range,omitempty"`
 }
 
 var (
@@ -21,6 +23,7 @@ var (
 	showLine   = regexp.MustCompile(`(?m)^(?:Showing|Updated) "(.*)" \(([^)]+)\) in atc`)
 	commitLine = regexp.MustCompile(`(?m)^\[([^\s\]]+)(?: \(root-commit\))? ([0-9a-f]{7,40})\] (.+)$`)
 	pushLine   = regexp.MustCompile(`(?m)^\s+(?:[0-9a-f]+\.\.[0-9a-f]+|\* \[new branch\]|\+ [0-9a-f]+\.\.\.[0-9a-f]+)\s+(\S+) -> (\S+)`)
+	pushRange  = regexp.MustCompile(`(?m)^\s+\+?\s*([0-9a-f]{7,40}\.\.\.?[0-9a-f]{7,40})\s+\S+ -> \S+`)
 	failTest   = regexp.MustCompile(`(?m)^\s*--- FAIL: (\S+)|^FAILED (\S+)|^\s*✗ (.+)$`)
 	firstURL   = regexp.MustCompile(`https?://\S+`)
 	segments   = regexp.MustCompile(`\s*(?:&&|\|\||;|\|)\s*`)
@@ -62,7 +65,11 @@ func classify(m Message) (*Badge, bool) {
 			return &Badge{Kind: "push", Text: "Push failed"}, false
 		}
 		if sm := pushLine.FindStringSubmatch(out); sm != nil {
-			return &Badge{Kind: "push", OK: true, Text: "Pushed to " + sm[2]}, false
+			b := &Badge{Kind: "push", OK: true, Text: "Pushed to " + sm[2]}
+			if r := pushRange.FindStringSubmatch(out); r != nil {
+				b.Range = r[1]
+			}
+			return b, false
 		}
 		return &Badge{Kind: "push", OK: true, Text: "Pushed"}, false
 	case testCmd.MatchString(cmd):

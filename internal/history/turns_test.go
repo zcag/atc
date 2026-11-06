@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -27,6 +28,7 @@ func TestClassifyCommands(t *testing.T) {
 		{bash("go test ./...", "ok  \tgithub.com/zcag/atc/internal/history\t0.004s", false), "test", true, "Tests passed", false},
 		{bash("go test ./internal/history", "--- FAIL: TestReadPage (0.00s)\nFAIL", true), "test", false, "Tests failed", false},
 		{bash("go test ./... | tail -3", "\x1b[32mok\x1b[0m  \ta\t0.4s\n\x1b[31mFAIL\x1b[0m\tb\t0.1s", false), "test", false, "Tests failed", false},
+		{bash("git push", "To github.com:o/r.git\n   ca90a02..018be18  main -> main", false), "push", true, "Pushed to main", false},
 		{bash("go test ./... | tail -2", "--- FAIL: TestRoute (0.00s)\n    route_test.go:41: got 500", false), "test", false, "Tests failed", false},
 		{bash("make install 2>&1 | tail -4", "", false), "deploy", true, "Deployed", false},
 		{bash("atc show out/handover.html --note 'look at the screens'", "Showing \"PR handover\" (handover) in atc, live from ~/out/handover.html.\n", false), "show", true, "PR handover", false},
@@ -183,5 +185,59 @@ func TestCompactionSummaryIsNotTheUsersMessage(t *testing.T) {
 	turns, _, _ := New(dir).Turns(path)
 	if len(turns) != 1 || !turns[0].Notice || strings.Contains(turns[0].Prompt, "Summary follows") {
 		t.Fatalf("a compaction summary should read as a notice: %+v", turns)
+	}
+}
+
+func TestPushRange(t *testing.T) {
+	for out, want := range map[string]string{
+		"To x\n   ca90a02..018be18  main -> main":                 "ca90a02..018be18",
+		"To x\n + ca90a02...018be18 main -> main (forced update)": "ca90a02...018be18",
+		"To x\n * [new branch]      topic -> topic":               "",
+	} {
+		b, _ := classify(bash("git push", out, false))
+		if b == nil || b.Range != want {
+			t.Errorf("%q gave %+v", out, b)
+		}
+	}
+}
+
+func TestClipOutputKeepsBothEnds(t *testing.T) {
+	var lines []string
+	for i := 1; i <= 200; i++ {
+		lines = append(lines, strconv.Itoa(i))
+	}
+	kept, more, tail := clipOutput(strings.Join(lines, "\n"), 80)
+	got := strings.Split(kept, "\n")
+	if len(got) != 80 || more != 120 || tail != 40 || got[39] != "40" || got[40] != "161" || got[79] != "200" {
+		t.Fatalf("%d lines, more %d, tail %d: %v", len(got), more, tail, got[38:42])
+	}
+	if kept, more, tail := clipOutput("a\nb", 80); kept != "a\nb" || more != 0 || tail != 0 {
+		t.Errorf("short output changed: %q %d %d", kept, more, tail)
+	}
+}
+
+func TestFailureLateInLongOutputIsSeen(t *testing.T) {
+	var b strings.Builder
+	for range 300 {
+		b.WriteString("ok\n")
+	}
+	b.WriteString("--- FAIL: TestLate (0.00s)\nFAIL\n")
+	text, _, _ := clipOutput(b.String(), maxOutLines)
+	got, _ := classify(bash("go test ./...", text, false))
+	if got == nil || got.OK || got.Ref != "TestLate" {
+		t.Errorf("%+v", got)
+	}
+}
+
+func TestReplyPreview(t *testing.T) {
+	for reply, want := range map[string]string{
+		"## A draft\n\nHere is the body:\n\n```markdown\n## Summary\n```\n\nSay go.": "A draft: Here is the body: Say go.",
+		"| a | b |\n|---|---|\n| 1 | 2 |\n\nDone.":                                   "Done.",
+		"> **Note:** careful\n\n---\n\nnext":                                         "**Note:** careful next",
+		"```\nunclosed":                                                              "",
+	} {
+		if got := replyPreview(reply); got != want {
+			t.Errorf("%q gave %q", reply, got)
+		}
 	}
 }

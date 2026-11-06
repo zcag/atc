@@ -34,6 +34,7 @@ type Message struct {
 type Output struct {
 	Text   string         `json:"text,omitempty"`
 	More   int            `json:"more,omitempty"`
+	Tail   int            `json:"tail,omitempty"`
 	Error  bool           `json:"error,omitempty"`
 	Images []string       `json:"images,omitempty"`
 	Meta   map[string]any `json:"meta,omitempty"`
@@ -307,7 +308,7 @@ func output(b block, result json.RawMessage) *Output {
 			}
 		}
 	}
-	o.Text, o.More = clipLines(strings.TrimRight(strings.Join(texts, "\n"), "\n"), maxOutLines)
+	o.Text, o.More, o.Tail = clipOutput(strings.TrimRight(strings.Join(texts, "\n"), "\n"), maxOutLines)
 	o.Meta = meta(result)
 	return o
 }
@@ -368,6 +369,17 @@ func clipLines(s string, n int) (string, int) {
 		return s, 0
 	}
 	return strings.Join(lines[:n], "\n"), len(lines) - n
+}
+
+// clipOutput keeps both ends of a long output: what a command says last is usually why it failed. tail is how many of
+// the kept lines come after the more that were dropped.
+func clipOutput(s string, n int) (kept string, more, tail int) {
+	lines := strings.Split(s, "\n")
+	if len(lines) <= n {
+		return s, 0, 0
+	}
+	tail = n / 2
+	return strings.Join(append(lines[:n-tail:n-tail], lines[len(lines)-tail:]...), "\n"), len(lines) - n, tail
 }
 
 func clipInput(raw json.RawMessage) json.RawMessage {
