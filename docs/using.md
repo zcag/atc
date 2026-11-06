@@ -26,6 +26,10 @@
     Leave zen ends it, and Enter ends it and goes to the box. **Aa** (`a`) sets the size (also `-` and
     `=`), typeface, line length, line spacing and colours: the theme, or warm Paper, Sepia, Dusk or
     Night, which apply only in zen. They are kept per device.
+  - **Zen on a page**: with a page open, **Zen** on its bar (More on the phone), or `z` while you are in
+    the page, leaves only the page. With the transcript beside it, `z` follows where you last clicked:
+    in the page it maximizes the page, anywhere else it is the transcript's zen. `z`, `esc`, the back
+    button or Leave zen brings everything back as it was.
   - **Find** (`f`) searches the whole session (prompts, replies, commands, file names) and filters
     to the turns with failures, commits, changed files, deploys or questions.
   - **What this session produced** lists the files it changed (open one for all its edits as one

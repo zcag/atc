@@ -1,10 +1,12 @@
 package server
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -177,5 +179,14 @@ func (s *Server) outputFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Security-Policy", "sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Cache-Control", "private, no-cache")
+	if ext := strings.ToLower(filepath.Ext(path)); ext == ".html" || ext == ".htm" {
+		if b, err := io.ReadAll(f); err == nil && !bytes.Contains(b, []byte("/atc.js")) {
+			http.ServeContent(w, r, st.Name(), time.Time{}, bytes.NewReader(append(b, zenKeysScript...)))
+			return
+		}
+		f.Seek(0, io.SeekStart)
+	}
 	http.ServeContent(w, r, st.Name(), st.ModTime(), f)
 }
+
+const zenKeysScript = `<script>parent!==window&&addEventListener("keydown",e=>{const t=e.target;if(!e.defaultPrevented&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&(e.key==="z"||e.key==="Escape")&&!t.isContentEditable&&!/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName||""))parent.postMessage({atc:1,op:"key",arg:{key:e.key,code:e.code,shiftKey:e.shiftKey}},"*")})</script>`

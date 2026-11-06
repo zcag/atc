@@ -234,6 +234,18 @@ function useKeyLayer(fn, on = true) {
     return () => KEYLAYERS.splice(KEYLAYERS.indexOf(f), 1);
   }, [on]);
 }
+function zenHistory(on) {
+  if (on) history.pushState({ ...history.state, atcZen: true }, "");
+  else if (history.state?.atcZen) history.back();
+}
+function useZenBack(on, leave) {
+  useEffect(() => {
+    if (!on) return;
+    const back = () => !history.state?.atcZen && leave();
+    addEventListener("popstate", back);
+    return () => removeEventListener("popstate", back);
+  }, [on]);
+}
 const typingIn = (t) => t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable;
 let appSent = "";
 const FEED_STATES = ["needs-you", "your-turn", "working"];
@@ -511,7 +523,7 @@ function App() {
         },
         "[": () => (k.route ? k.togglePane("rail") : k.pages && k.togglePane("pgindex")),
         "]": () => !k.route && k.list && k.togglePane("index"),
-        z: () => (k.toast?.undo ? k.undo() : !document.querySelector(".pghome, .palone, .sheet") && TX_API?.zen()),
+        z: () => (k.toast?.undo ? k.undo() : !document.querySelector(".pghome, .palone, .sheet") && (SESSION_API?.zen || TX_API?.zen)?.()),
         ",": () => (inSettings() ? closeSettings() : (location.hash = SETTINGS)),
         "/": () => setPalette(true),
         "?": () => setHelp((h) => !h),
@@ -851,7 +863,7 @@ const KEYMAP = [
   ["Sessions", [["q w e .. p", "The 1st to 10th session in the list, at once"], ["j k", "Next, previous session (on the board: the selection)"], ["enter", "On the board: open the selected session"], ["alt j k", "Next, previous session, even from a terminal"]]],
   ["Panes", [["[", "Sessions beside the transcript"], ["]", "Its page beside the transcript (board: the page index)"], ["\\", "State: now, running, made, the session's facts"]]],
   ["Session", [["enter", "Write to the session (on a stopped one: Resume)"], ["`", "Terminal, and back to the transcript"], ["x", "Session menu: park, stop, rename, delete"]]],
-  ["Reading", [["J K", "Next, previous turn: your prompts and its replies"], ["space", "A screen down; with shift, up"], ["home end", "Top, end of the transcript"], ["N", "Next thing you have not seen here: the divider, then the question"], ["c", "Contents: every turn and heading"], ["l", "Outline, story, everything, in turn"], ["f", "Find in the session"], ["z", "Zen: only the words, nothing around them; z or esc to leave"], ["j k ↓ ↑", "In zen: scroll smoothly, tap for a few lines or hold to glide"], ["a", "In zen: size, typeface, spacing, colours"], ["- =", "In zen: smaller, larger"]]],
+  ["Reading", [["J K", "Next, previous turn: your prompts and its replies"], ["space", "A screen down; with shift, up"], ["home end", "Top, end of the transcript"], ["N", "Next thing you have not seen here: the divider, then the question"], ["c", "Contents: every turn and heading"], ["l", "Outline, story, everything, in turn"], ["f", "Find in the session"], ["z", "Zen: only the words, nothing around them; on a page you are in, only the page; z or esc to leave"], ["j k ↓ ↑", "In zen: scroll smoothly, tap for a few lines or hold to glide"], ["a", "In zen: size, typeface, spacing, colours"], ["- =", "In zen: smaller, larger"]]],
   ["Assistant", [[".", "Call it"], ["[", "Touched today and the agents"], ["esc", "Close the assistant"]]],
   ["Call", [["m", "Mute, unmute"], ["E", "End the call (shift e)"], [".", "Back to the call, from anywhere"], ["esc", "Minimize the call to the console line"]]],
   ["Answer", [["1..9", "With the question focused (click it, tab into it, or N): that option"]]],
@@ -2105,6 +2117,23 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
   const setSplit = (v) => { setSplitRaw(v); store(PAGE_SPLIT, v); };
   const wideNow = useWide();
   const sideBySide = mode === "page" && split && wideNow && shown.length > 0;
+  const onPage = mode === "page" && shown.length > 0;
+  const [pageZenWanted, setPageZenRaw] = useState(false);
+  const pageZen = pageZenWanted && onPage;
+  const setPageZen = (on) => { setPageZenRaw(on); zenHistory(on); };
+  const zen = onPage ? () => (!sideBySide || document.activeElement?.closest?.(".ppane") ? setPageZen(true) : TX_API?.zen()) : null;
+  useZenBack(pageZenWanted, () => setPageZenRaw(false));
+  useEffect(() => { if (pageZenWanted && !onPage) setPageZen(false); }, [pageZenWanted, onPage]);
+  useLayoutEffect(() => {
+    document.body.classList.toggle("pagezen", pageZen);
+    if (pageZen) document.querySelector(".ppane iframe:not(.next)")?.focus();
+    return () => document.body.classList.remove("pagezen");
+  }, [pageZen]);
+  useKeyLayer((e) => {
+    if (typingIn(e.target)) return false;
+    if (e.key === "z" || e.key === "Escape") return setPageZen(false), true;
+    return e.key.length === 1 && e.key !== " ";
+  }, pageZen);
   const base = () => location.hash.replace(/\/p\/.*$/, "");
   const keep = (name) => {
     const m = stored(SESSION_PAGE, {});
@@ -2156,7 +2185,7 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
   const outs = useOutputs(s, mode === "out" ? 10000 : 60000);
   const [showUse, setShowUse] = useState(false);
   useEffect(() => {
-    SESSION_API = { s, canAttach, mode: choose, page: openPage, pages: shown, usage: () => setShowUse(true), rename: () => setRenaming(true) };
+    SESSION_API = { s, canAttach, mode: choose, page: openPage, pages: shown, zen, usage: () => setShowUse(true), rename: () => setRenaming(true) };
     return () => { SESSION_API = null; };
   });
   const use = useSessionUsage(s, showUse || s.state === "working" ? 15000 : 90000);
@@ -2231,6 +2260,7 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
             items=${[
               ...(phoneNow && hasTerm ? [{ label: mode === "term" ? "Transcript" : "Terminal", run: () => choose(mode === "term" ? "chat" : "term") }] : []),
               callSession(s, say),
+              ...(onPage && !sideBySide ? [{ label: "Zen", run: () => setPageZen(true) }] : []),
               ...(mode === "chat" || sideBySide ? [{ label: "Zen", run: () => TX_API?.zen() }, { label: "Find in the transcript", run: () => TX_API?.find() }, { label: "Contents", run: () => TX_API?.contents() }, { label: "Outline, story or everything", run: () => TX_API?.level() }, { label: "Files, commits and deploys", run: () => TX_API?.results() }] : []),
               ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "State and outputs", run: openState }, { label: "Usage", run: () => setShowUse(true) }, ...(s.agent ? [{ label: "Agent details", run: () => openAgent(s.agent, "details") }] : [])]} /></div>
         </span>
@@ -2245,11 +2275,11 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
     </header>
     <div class="sbody ${panes?.state && !phoneNow ? "withstate" : ""}">
     <div class="smain">
-    ${mode !== "chat" && !sideBySide && s.asks?.length > 0 && html`<div class="askstrip"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}
-    ${mode !== "chat" && !sideBySide && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
+    ${mode !== "chat" && !sideBySide && !pageZen && s.asks?.length > 0 && html`<div class="askstrip"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}
+    ${mode !== "chat" && !sideBySide && !pageZen && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
     ${mode === "page" && shown.length > 0
       ? (() => {
-          const pane = html`<${PagePane} s=${s} list=${shown} cur=${pg} at=${at} pick=${openPage} split=${sideBySide} setSplit=${wideNow ? setSplit : null} say=${say}
+          const pane = html`<${PagePane} s=${s} list=${shown} cur=${pg} at=${at} pick=${openPage} split=${sideBySide} setSplit=${wideNow ? setSplit : null} say=${say} onZen=${() => setPageZen(true)}
             onClose=${() => leavePage(paneFor(s))} />`;
           return sideBySide
             ? html`<${PageSplit}><${Transcript} s=${s} say=${say} resume=${() => resume("chat")} busy=${busy} />${pane}<//>`
@@ -2263,6 +2293,7 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
     </div>
     ${panes?.state && !phoneNow && html`<aside class="statep" aria-label="State">${statePane}</aside>`}
     </div>
+    ${pageZen && html`<button class="kb pzenout" onClick=${() => setPageZen(false)}>Leave zen <kbd aria-hidden="true">z</kbd></button>`}
     ${stateSheet && html`<${Sheet} cls="statesheet" title="State" onClose=${() => setStateSheet(false)}>${statePane}<//>`}
     ${showUse && html`<${SessionUsage} s=${s} use=${use} onClose=${() => setShowUse(false)} />`}
   `;
@@ -4334,7 +4365,7 @@ async function deliver(s, text) {
   }
 }
 
-function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, say, alone }) {
+function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, onZen, say, alone }) {
   useNow(15000);
   useSeenTick();
   const p = list.find((x) => x.name === cur) || list[0];
@@ -4358,7 +4389,7 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, say, alone
   const full = () => APP ? (location.hash = aloneLink(ownerRef(p, s), p.name)) : openOut(`/${aloneLink(ownerRef(p, s), p.name)}`);
   const bay = bayOf(s) || (s.cwd && project(s.cwd).name) || null;
   return html`
-    <div class="ppane">
+    <div class="ppane" tabindex="-1">
       <div class="pbar">
         ${list.length > 1
           ? html`<div class="pgtabs" role="tablist" ref=${tabs}>
@@ -4367,6 +4398,7 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, say, alone
             </div>`
           : html`<span class="pgone"><span class="kind">${(KIND_LABEL[p.kind] || "Page").toLowerCase()}</span><b title=${pageTitle(p)}>${pageTitle(p)}</b></span>`}
         <span class="pupd" title=${tilde(p.path)}>${p.gone ? "gone" : clockAt(pageAt(p))}</span>
+        ${onZen && html`<button class="kb pzen" aria-keyshortcuts="z" title="Only this page, nothing around it" onClick=${onZen}>Zen</button>`}
         ${setSplit && html`<button class="kb" onClick=${() => setSplit(!split)}>${split ? "Page only" : "Side by side"}</button>`}
         ${p.kind !== "browser" && html`<button class="kb" onClick=${() => (location.hash = pagesHash(bay, p.session, p.name))} title="This page in the Pages view">In Pages</button>
         <${Menu} cls="kb" label="More" aria="Page actions" items=${[
@@ -6208,8 +6240,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     notePlace();
     if (!on) setPop((x) => (x === "look" ? null : x));
     setZenRaw(on);
-    if (on) history.pushState({ ...history.state, atcZen: true }, "");
-    else if (history.state?.atcZen) history.back();
+    zenHistory(on);
   };
   focusInput.current = () => {
     if (!zen) return composerFocus.current();
@@ -6225,12 +6256,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     if (zen && prefs.paper) document.body.dataset.paper = prefs.paper;
     return () => { delete document.body.dataset.paper; };
   }, [zen, prefs.paper]);
-  useEffect(() => {
-    if (!zen) return;
-    const back = () => !history.state?.atcZen && setZen(false);
-    addEventListener("popstate", back);
-    return () => removeEventListener("popstate", back);
-  }, [zen]);
+  useZenBack(zen, () => setZen(false));
   const glide = useRef(null);
   useEffect(() => {
     if (!zen || !box.current) return;
@@ -7107,7 +7133,7 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
     if (cur.canAttach) act("Terminal", () => cur.mode("term"), "shell attach", "t");
     act("Transcript", () => cur.mode("chat"), "read conversation");
     act("Outputs", () => cur.mode("out"), "files servers links");
-    if (TX_API) act("Zen", () => TX_API?.zen(), "read focus text", "z");
+    if (cur.zen || TX_API) act("Zen", () => (cur.zen || TX_API?.zen)?.(), "read focus text", "z");
     act("Sessions pane", () => actions.pane("rail"), "rail list", "[");
     act("State pane", () => actions.pane("state"), "summary facts", "]");
     for (const p of cur.pages || []) act(`Page: ${pageTitle(p)}`, () => cur.page(p.name), `show ${p.name}`);

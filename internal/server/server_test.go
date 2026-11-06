@@ -402,11 +402,16 @@ func TestOutputFileLinks(t *testing.T) {
 	link := s.fileURL("sid1", filepath.Join(dir, "index.html"), time.Now().Add(time.Hour).Unix())
 
 	res, body := get(t, ts.URL+link, "")
-	if res.StatusCode != 200 || body != "<h1>hi</h1>" || !strings.Contains(res.Header.Get("Content-Security-Policy"), "sandbox") {
+	if res.StatusCode != 200 || body != "<h1>hi</h1>"+zenKeysScript || !strings.Contains(res.Header.Get("Content-Security-Policy"), "sandbox") {
 		t.Fatalf("page: %d %q %v", res.StatusCode, body, res.Header)
 	}
-	if res, _ := get(t, ts.URL+strings.Replace(link, "index.html", "css/a.css", 1), ""); res.StatusCode != 200 {
-		t.Errorf("a file next to it should load: %d", res.StatusCode)
+	if res, body := get(t, ts.URL+strings.Replace(link, "index.html", "css/a.css", 1), ""); res.StatusCode != 200 || body != "h1{}" {
+		t.Errorf("a file next to it should load untouched: %d %q", res.StatusCode, body)
+	}
+	withHelper := filepath.Join(dir, "helper.html")
+	os.WriteFile(withHelper, []byte(`<script src="/atc.js"></script>`), 0o644)
+	if _, body := get(t, ts.URL+s.fileURL("sid1", withHelper, time.Now().Add(time.Hour).Unix()), ""); body != `<script src="/atc.js"></script>` {
+		t.Errorf("a page with atc.js already forwards its keys: %q", body)
 	}
 	if res, _ := get(t, ts.URL+strings.Replace(link, "my%20site/index.html", "secret.txt", 1), ""); res.StatusCode != 404 {
 		t.Errorf("a file outside its folder must not load: %d", res.StatusCode)
