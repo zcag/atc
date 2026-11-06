@@ -96,11 +96,13 @@ assistant has its own:
 | Level | On a call it may |
 |---|---|
 | `limited` | use atc's tools, show you pages and reach you (`atc show`, `atc open`, `atc wa`, `atc call`, `atc notify`) |
-| `daily`, the default | also read your files, search the web, edit files in its folder and run `atc guest` |
+| `daily`, the default | also read your files, search the web and edit files in its folder |
 | `full` | do anything Claude can, with no checks |
 
 - **Its `settings.json` decides first.** A deny there wins at every level, `full` included: a denied atc tool is not even
   offered to it. Its allow rules add to the level.
+- **Guests aren't its to add.** The assistant's `daily` also has `atc guest`; an agent's doesn't, since a guest gets a channel to you and
+  only the assistant's brief says to add one only when you ask. `full`, or `--dangerously-skip-permissions` in `ATC_CLAUDE_ARGS`, has no such limit.
 - **What it can't change.** At `limited` and `daily` it may not edit what decides what it may do next time it starts: `agent.json`,
   `brief.md`, `settings.json`, `mcp.json`, `CLAUDE.md`, `.claude/` and the script its `check` runs.
 - **Off the call** nothing carries over: it goes back to the background with its usual permissions, and asks you there.

@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/zcag/atc/internal/settings"
 )
 
 type personsRig struct {
@@ -53,6 +55,10 @@ func TestAutonomyArgs(t *testing.T) {
 	}
 	if full := autonomyArgs("full", "/d"); !has(full, "--dangerously-skip-permissions") || has(full, "allowedTools") {
 		t.Fatal(full)
+	}
+	t.Setenv(settings.AutonomyKey, "")
+	if !has(HubArgs("/d"), "Bash(atc guest *)") {
+		t.Fatal("the assistant at daily runs atc guest")
 	}
 	guests := GuestsArgs("/home/x/guests")
 	if !has(guests, "Bash(atc wa --to *)") || !has(guests, "Edit(//home/x/guests/**)") || has(guests, "dangerously") || has(guests, "Read,") {

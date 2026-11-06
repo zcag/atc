@@ -65,6 +65,9 @@ func TestAgentFolderBehindALink(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.Join(Agent{Folder: link}.autonomyOnLine(""), " ")
+	if strings.Contains(got, "atc guest") {
+		t.Errorf("an agent on a call may not add guests: %s", got)
+	}
 	for _, d := range []string{link, real} {
 		if !strings.Contains(got, "Edit(/"+d+"/**)") || !strings.Contains(got, "Edit(/"+d+"/settings.json)") {
 			t.Errorf("no rules for %s: %s", d, got)
