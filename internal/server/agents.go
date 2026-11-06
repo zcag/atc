@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -169,6 +170,53 @@ func (a Agent) standing() string {
 func exists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+// SeedAgents writes the starter agents when this machine has no agents folder yet, each on this machine and with no
+// schedule, so they spend nothing until the user wakes one or gives it one. A folder that exists stays as it is.
+func (s *Server) SeedAgents(starter fs.FS) error {
+	if s.AgentsDir == "" {
+		return nil
+	}
+	root, err := expand(s.AgentsDir)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(root); !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return fs.WalkDir(starter, ".", func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		dst := filepath.Join(root, p)
+		if d.IsDir() {
+			return os.MkdirAll(dst, 0o755)
+		}
+		b, err := fs.ReadFile(starter, p)
+		if err != nil {
+			return err
+		}
+		if d.Name() == "agent.json" {
+			var fields map[string]any
+			if err := json.Unmarshal(b, &fields); err != nil {
+				return err
+			}
+			delete(fields, "every")
+			delete(fields, "from")
+			delete(fields, "check")
+			fields["host"] = s.Host
+			if b, err = json.MarshalIndent(fields, "", "  "); err != nil {
+				return err
+			}
+			b = append(b, '\n')
+		}
+		mode := fs.FileMode(0o644)
+		if strings.HasSuffix(p, ".sh") {
+			mode = 0o755
+		}
+		return os.WriteFile(dst, b, mode)
+	})
 }
 
 func (s *Server) agentList() []Agent { return loadAgents(s.AgentsDir) }

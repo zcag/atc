@@ -600,12 +600,12 @@ func checkAgentFolders(_ context.Context, env Env) Result {
 	trusted := claude.Trust()
 	var bad []string
 	for _, a := range env.Agents {
-		if !trusted(a.Dir) {
+		if a.Scheduled && !trusted(a.Dir) {
 			bad = append(bad, "@"+a.Name)
 		}
 	}
 	if len(bad) > 0 {
 		return Result{Broken, "Not trusted by Claude Code yet, so they can't wake: " + strings.Join(bad, ", ") + "."}
 	}
-	return Result{OK, fmt.Sprintf("All %d trusted by Claude Code.", len(env.Agents))}
+	return Result{OK, fmt.Sprintf("%d agents, and none with a schedule waits on Claude Code's trust. One you wake yourself asks then.", len(env.Agents))}
 }

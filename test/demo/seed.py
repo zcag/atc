@@ -415,7 +415,7 @@ TEAM = [
 
 
 def team():
-    """The agents from test/demo/agents, each after its last wake-up, with its own page."""
+    """The agents from starter/agents, each after its last wake-up, with its own page."""
     for name, prompt, steps, said, status, ago, pg, title, note, state in TEAM:
         s = Session({"shopping": "Morning look at the list", "email": "Read my mail", "reviewer": "Review open pull requests", 
                      "invoice": "Invoice 2026-23", "tracker": "Sweep: what's open"}[name], ASSIST, ago=ago)

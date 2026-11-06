@@ -337,6 +337,11 @@ func serve(args []string) error {
 	if err := srv.SeedPersons(seed); err != nil {
 		log.Printf("persons: %v", err)
 	}
+	if os.Getenv("ATC_AGENTS") == "" {
+		if err := srv.SeedAgents(starterAgents); err != nil {
+			log.Printf("starter agents: %v", err)
+		}
+	}
 	if u := os.Getenv("ATC_OPENCODE"); u != "" {
 		srv.M.OC = opencode.New(u, cmp.Or(os.Getenv("ATC_OPENCODE_BIN"), "opencode"))
 		if sum != nil {

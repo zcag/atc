@@ -252,6 +252,12 @@ func setupCalls(a asker, given bool) {
 	}
 	if _, err := os.Stat(voiceEnvPath()); err == nil {
 		fmt.Println("  Already set up: atc voice status shows how it stands.")
+		if voiceEnginesBehind(readEnvFile(voiceEnvPath())) {
+			fmt.Println("  Your language has a new voice engine, so this installs it. A restart waits for any call to end.")
+			if err := voiceInstall(nil); err != nil {
+				fmt.Println("  That failed; to retry: atc voice install (" + err.Error() + ")")
+			}
+		}
 		return
 	}
 	if !a.consent("  Set them up now? It downloads about 2 GB.", "--calls", given, true) {

@@ -333,7 +333,7 @@ func TestAgentFolders(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("CLAUDE_CONFIG_DIR", "")
 	dir, _ = filepath.EvalSymlinks(dir)
-	env := Env{Agents: []AgentFolder{{Name: "mail", Dir: filepath.Join(dir, "mail")}}}
+	env := Env{Agents: []AgentFolder{{Name: "mail", Dir: filepath.Join(dir, "mail"), Scheduled: true}, {Name: "idle", Dir: filepath.Join(dir, "nowhere", "idle")}}}
 	if r := checkAgentFolders(context.Background(), Env{}); r.Status != Missing {
 		t.Errorf("no agents: %+v", r)
 	}

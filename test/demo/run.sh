@@ -27,7 +27,7 @@ install -m755 "$here/claude" "$tmp/.local/bin/claude"
 ln -s /bin/cat "$tmp/.local/bin/cat"
 cp "$here/seed.py" "$tmp/.seed.py"
 cp -r "$here/pages" "$tmp/.demo-pages"
-cp -r "$here/agents" "$tmp/.demo-agents"
+cp -r "$here/../../starter/agents" "$tmp/.demo-agents"
 cp "$here/demo-hub.py" "$here/demo-browser.py" "$here/demo-tick.py" "$tmp/.local/bin/"
 cp -r "$here/shop" "$tmp/.demo-shop"
 # Characters come with a release (atc app update), not the repo: DEMO_PERSONAS names a folder of them (a personas/ as in docs/calls.md) for the call screens.

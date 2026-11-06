@@ -89,6 +89,9 @@ func TestEnginesFollowTheLanguages(t *testing.T) {
 		{"pocket-en", []string{"tr"}, "pocket-en,pocket,ahenk", map[string]string{"TALK_TTS_ENGINE": "pocket-en"}, map[string]string{"TALK_TTS_ENGINE": "pocket"}},
 		{"higgs", []string{"tr", "en"}, "higgs", map[string]string{"TALK_TTS_ENGINE": "higgs", "TALK_TTS_ENGINE_EN": "higgs"}, map[string]string{}},
 		{"kokoro", []string{"en"}, "kokoro", map[string]string{"TALK_TTS_ENGINE": "kokoro"}, map[string]string{}},
+		{"pocket", []string{"tr"}, "pocket,ahenk", map[string]string{"TALK_TTS_ENGINE": "pocket"}, map[string]string{}},
+		{"pocket,higgs", []string{"tr", "en"}, "pocket,higgs", map[string]string{"TALK_TTS_ENGINE": "pocket", "TALK_TTS_ENGINE_EN": "higgs"}, map[string]string{}},
+		{"pocket,remote", []string{"tr"}, "pocket,remote", map[string]string{"TALK_TTS_ENGINE": "pocket"}, map[string]string{}},
 	} {
 		got := wantedEngines(c.have, c.langs, "linux", "amd64")
 		if got != c.want {
@@ -97,6 +100,59 @@ func TestEnginesFollowTheLanguages(t *testing.T) {
 		if keys := voiceEngineKeys(c.keep, got, c.langs); !maps.Equal(keys, c.wants) {
 			t.Errorf("%q %v: keys %v, want %v", c.have, c.langs, keys, c.wants)
 		}
+	}
+}
+
+func TestVoiceEnginesBehind(t *testing.T) {
+	for _, c := range []struct {
+		env  map[string]string
+		want bool
+	}{
+		{map[string]string{"TALK_LANG": "tr", "TTS_ENGINES": "pocket"}, true},
+		{map[string]string{"TALK_LANG": "tr", "TTS_ENGINES": "pocket,ahenk"}, false},
+		{map[string]string{"TALK_LANG": "tr", "TTS_ENGINES": "pocket,higgs"}, false},
+		{map[string]string{"TALK_LANG": "en", "TALK_ALSO": "tr", "TTS_ENGINES": "pocket-en,pocket"}, true},
+		{map[string]string{"TALK_LANG": "en", "TTS_ENGINES": "pocket-en"}, false},
+	} {
+		if got := voiceEnginesBehind(c.env); got != c.want {
+			t.Errorf("%v: %v", c.env, got)
+		}
+	}
+}
+
+func TestStarterAgentsStartWithNoSchedule(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "agents.d")
+	s := &server.Server{AgentsDir: dir, Host: "box"}
+	if err := s.SeedAgents(starterAgents); err != nil {
+		t.Fatal(err)
+	}
+	names, _ := os.ReadDir(dir)
+	if len(names) != 6 {
+		t.Fatalf("%d agents", len(names))
+	}
+	for _, n := range names {
+		b, err := os.ReadFile(filepath.Join(dir, n.Name(), "agent.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var a map[string]any
+		json.Unmarshal(b, &a)
+		if a["host"] != "box" || a["every"] != nil || a["from"] != nil || a["check"] != nil || a["prompt"] == "" {
+			t.Errorf("%s: %s", n.Name(), b)
+		}
+		if _, err := os.Stat(filepath.Join(dir, n.Name(), "brief.md")); err != nil {
+			t.Error(err)
+		}
+	}
+	if st, err := os.Stat(filepath.Join(dir, "ops", "unresolved-alerts.sh")); err != nil || st.Mode()&0o100 == 0 {
+		t.Errorf("the check script can't run: %v %v", st, err)
+	}
+	os.RemoveAll(filepath.Join(dir, "ops"))
+	if err := s.SeedAgents(starterAgents); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "ops")); err == nil {
+		t.Fatal("a deleted agent came back")
 	}
 }
 

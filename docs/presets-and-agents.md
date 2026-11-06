@@ -21,6 +21,22 @@ starts it in its own git worktree.
 A preset is a template you start by hand. For something that runs on its own and keeps one
 conversation, make an [agent](#agents).
 
+
+## Starter agents
+
+A machine with no agents folder gets six to start from (`starter/agents` in the source), with **no schedule**, so they spend
+nothing until you wake one or give it one. Delete any you don't want: they don't come back. To switch one on, add the
+line from this table to its `agent.json`. Each needs what its brief says: a mail tool, your repositories, your alerts.
+
+| Agent | What it does | Suggested |
+|---|---|---|
+| Email | reads your mail onto a page, and never sends | none: you wake it |
+| Tracker | keeps one list of everything open | `"every": "3h"` |
+| Shopping | researches your list, rechecks price and stock | `"every": "1d"` |
+| Invoice | prepares each period's invoice | `"every": "2w", "from": "<first date>T09:00"` |
+| Reviewer | reads pull requests with no review | `"every": "15m", "check": "./prs-without-review.sh"` |
+| Ops | looks into firing alerts | `"every": "2m", "check": "./unresolved-alerts.sh"` |
+
 ## Agents
 
 An agent is one standing conversation under one name, for something you come back to: your mail,

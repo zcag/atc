@@ -28,6 +28,11 @@ import (
 //go:embed voice
 var voiceFiles embed.FS
 
+//go:embed starter/agents
+var starterEmbed embed.FS
+
+var starterAgents, _ = fs.Sub(starterEmbed, "starter/agents")
+
 const voiceHelp = `atc voice: calls with the assistant, on this machine. Add-on: the app calls it over atc, no phone needed.
 
   atc voice install [--lang en] [--also tr] [--engine pocket-en] [--tts-url URL] [--voice alba]
@@ -215,7 +220,9 @@ func engineForLang(engines []string, lang string) string {
 	return ""
 }
 
-// wantedEngines keeps what is installed and adds the default engine of each language nothing there can speak.
+// wantedEngines keeps what is installed and adds the default engines of each language nothing there can speak. A Turkish
+// install from before ahenk gains it, since a built-in person's Turkish voice is on it; one on a server of the user's is
+// their own arrangement and is left alone.
 func wantedEngines(have string, langs []string, goos, goarch string) string {
 	engines := strings.FieldsFunc(have, func(r rune) bool { return r == ',' })
 	for _, l := range langs {
@@ -223,7 +230,17 @@ func wantedEngines(have string, langs []string, goos, goarch string) string {
 			engines = append(engines, strings.Split(defaultEngine(l, goos, goarch), ",")...)
 		}
 	}
+	own := slices.Contains(engines, "higgs") || slices.Contains(engines, "remote")
+	if slices.Contains(engines, "pocket") && !slices.Contains(engines, "ahenk") && !own {
+		engines = append(engines, "ahenk")
+	}
 	return strings.Join(engines, ",")
+}
+
+// voiceEnginesBehind says a rerun of the install would add an engine to what voice.env lists.
+func voiceEnginesBehind(env map[string]string) bool {
+	langs := append([]string{cmp.Or(env["TALK_LANG"], "en")}, strings.Fields(env["TALK_ALSO"])...)
+	return wantedEngines(env["TTS_ENGINES"], langs, runtime.GOOS, runtime.GOARCH) != env["TTS_ENGINES"]
 }
 
 // voiceEngineKeys is what voice.env needs for each language's engine: TALK_TTS_ENGINE for the first language,

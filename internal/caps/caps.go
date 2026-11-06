@@ -72,7 +72,10 @@ type Env struct {
 
 type Peer struct{ Name, URL, Token string }
 type Engine struct{ Name, URL string }
-type AgentFolder struct{ Name, Dir string }
+type AgentFolder struct {
+	Name, Dir string
+	Scheduled bool
+}
 
 type Need struct {
 	ID     string `json:"id"`
