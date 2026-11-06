@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -20,6 +21,46 @@ import (
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/whatsapp"
 )
+
+func TestWaPromptMarksForwards(t *testing.T) {
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	stt := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"text":"spoken words","language":"en"}`))
+	}))
+	defer stt.Close()
+	s := &Server{}
+	s.Voice.STT = stt.URL
+	media := func(mime, name string) string {
+		return `"media":{"mimetype":"` + mime + `","filename":"` + name + `","data":"AAAA"}`
+	}
+	for _, c := range []struct{ name, fields, content string }{
+		{"text", `"type":"text","body":"some words"`, "some words"},
+		{"image", `"type":"image","body":"a caption",` + media("image/jpeg", ""), "a caption"},
+		{"document", `"type":"document","body":"",` + media("application/pdf", "a.pdf"), "a.pdf]"},
+		{"voice", `"type":"voice","body":"",` + media("audio/ogg", ""), "[voice note, spoken in"},
+	} {
+		for _, forwarded := range []bool{true, false} {
+			flag := ""
+			if forwarded {
+				flag = `"isForwarded":true,"forwardingScore":1,`
+			}
+			var d whatsapp.Message
+			if err := json.Unmarshal([]byte(`{"id":"m","from":"1@lid","chatId":"1@lid",`+flag+c.fields+`}`), &d); err != nil {
+				t.Fatal(err)
+			}
+			got, _, err := s.waPrompt(t.Context(), d)
+			if err != nil {
+				t.Fatalf("%s: %v", c.name, err)
+			}
+			if first, _, _ := strings.Cut(got, "\n"); (first == "[forwarded]") != forwarded {
+				t.Errorf("%s forwarded=%v: %q", c.name, forwarded, got)
+			}
+			if !strings.Contains(got, c.content) {
+				t.Errorf("%s lost its content: %q", c.name, got)
+			}
+		}
+	}
+}
 
 func TestWhatsAppHook(t *testing.T) {
 	var mu sync.Mutex

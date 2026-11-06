@@ -328,6 +328,7 @@ type Message struct {
 	IsGroup     bool   `json:"isGroup"`
 	FromMe      bool   `json:"fromMe"`
 	SenderPhone string `json:"senderPhone"`
+	IsForwarded bool   `json:"isForwarded"`
 	Media       *struct {
 		Mimetype string `json:"mimetype"`
 		Filename string `json:"filename"`

@@ -387,6 +387,9 @@ func quoted(text string, n int) string {
 // was a voice note, so the spoken reply comes back in it.
 func (s *Server) waPrompt(ctx context.Context, d whatsapp.Message) (string, string, error) {
 	var b strings.Builder
+	if d.IsForwarded {
+		b.WriteString("[forwarded]\n")
+	}
 	if q := d.Quoted; q != nil && strings.TrimSpace(q.Body) != "" {
 		b.WriteString(quoted(q.Body, 600) + "\n")
 	}
