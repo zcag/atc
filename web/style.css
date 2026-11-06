@@ -119,8 +119,8 @@ button { cursor: pointer; }
 .keys.show { display: flex; }
 
 
-pre .copy { position: absolute; top: 8px; right: 8px; padding: var(--sp-2) var(--sp-5); border: 0; border-radius: var(--r-md); font: 500 var(--fs-2xs) var(--sans); color: var(--dim); background: var(--strip-hi); box-shadow: 0 0 0 1px var(--line); opacity: 0; transition: opacity var(--t); }
-pre:hover .copy, pre .copy:focus-visible { opacity: 1; }
+:is(pre, .tbl) .copy { position: absolute; top: 8px; right: 8px; padding: var(--sp-2) var(--sp-5); border: 0; border-radius: var(--r-md); font: 500 var(--fs-2xs) var(--sans); color: var(--dim); background: var(--strip-hi); box-shadow: 0 0 0 1px var(--line); opacity: 0; transition: opacity var(--t); }
+pre:hover > .copy, pre > .copy:focus-visible { opacity: 1; }
 @media (hover: none) { pre .copy { opacity: .8; } }
 
 .blank { flex: 1; display: grid; place-items: center; color: var(--dim); padding: var(--sp-11); text-align: center; }

@@ -191,6 +191,14 @@ func urlCheck(key, off string) func(context.Context, Env) Result {
 	}
 }
 
+func checkGit(ctx context.Context, env Env) Result {
+	out, err := exec.CommandContext(ctx, "git", "--version").Output()
+	if err != nil {
+		return Result{Missing, "git was not found on this machine's PATH."}
+	}
+	return Result{OK, strings.TrimSpace(string(out)) + "."}
+}
+
 func checkServer(ctx context.Context, env Env) Result {
 	if env.Self == "" {
 		return Result{OK, "Running."}

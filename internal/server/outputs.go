@@ -120,11 +120,15 @@ func (s *Server) sign(sid, dir string, exp int64) string {
 }
 
 func (s *Server) fileURL(sid, path string, exp int64) string {
+	return s.signedURL(sid, linkScope(path), path, exp)
+}
+
+func (s *Server) signedURL(sid, scope, path string, exp int64) string {
 	segs := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	for i, p := range segs {
 		segs[i] = url.PathEscape(p)
 	}
-	return "/api/sessions/" + url.PathEscape(sid) + "/o/" + s.sign(sid, linkScope(path), exp) + "/" + strings.Join(segs, "/")
+	return "/api/sessions/" + url.PathEscape(sid) + "/o/" + s.sign(sid, scope, exp) + "/" + strings.Join(segs, "/")
 }
 
 // linkScope is what a link opens without a login: the file's folder, so a page's relative images load, but only the

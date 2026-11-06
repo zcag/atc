@@ -75,6 +75,12 @@ func All() []Cap {
 			Fix:   Fix{Command: "atc service install", Text: "Run it as a service, or start it by hand with `atc serve`.", Guide: "install#run-it-as-a-service"},
 		},
 		{
+			ID: "git", Title: "git", Group: Core, Optional: true, Why: "Lets the transcript open the commits, files and issues a session mentions.",
+			Check: checkGit,
+			Fix:   Fix{Text: "Install git from your package manager, so that `git` is on the PATH of the user atc runs as. Without it, files named by their full path still open."},
+			Cost:  "Free.",
+		},
+		{
 			ID: "reach", Title: "HTTPS address", Group: Core, Optional: true, Why: "The address you reach atc at from other devices. Browsers only give a page the microphone over HTTPS.",
 			Fields: []Field{{Key: "ATC_PUBLIC_URL", Label: "Address", Hint: "https://atc.example.com", URL: true}},
 			Check:  checkReach,

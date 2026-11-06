@@ -11,6 +11,7 @@ export function wordMarks(a, b, side) {
 const GIT_META = /^(index [0-9a-f]+\.\.|new file mode|deleted file mode|old mode|new mode|similarity index|dissimilarity index|rename (from|to) |copy (from|to) |Binary files )/;
 const HUNK = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@ ?(.*)/;
 const MOST_PAIRED_LINES = 40;
+const LONG_DIFF_ROWS = 40;
 
 const headerPath = (l) => l.slice(4).split("\t")[0].replace(/^[ab]\//, "");
 
@@ -76,5 +77,7 @@ export function diffBlock(lang, code) {
     : r.blank ? `<div class="blank"></div>`
     : `<div class="l ${r.c}">${gutter(r)}<span class="c">${r.marks || esc(r.t) || " "}</span></div>`;
   const tally = [adds && `<span class="plus">+${adds}</span>`, dels && `<span class="minus">-${dels}</span>`].filter(Boolean).join(" ");
-  return `<pre class="mdiff ${numbered ? "num" : ""}"><button class="copy" data-copy data-src="${esc(code)}">Copy</button><div class="dh">${tally}</div>${rows.map(row).join("")}</pre>`;
+  const long = rows.length > LONG_DIFF_ROWS;
+  const cls = ["mdiff", numbered && "num", long && "long"].filter(Boolean).join(" ");
+  return `<pre class="${cls}"><button class="copy" data-copy data-src="${esc(code)}">Copy</button><div class="dh">${tally}</div><div class="rows">${rows.map(row).join("")}</div>${long ? `<button class="cbmore" data-more>Show all ${rows.length} lines</button>` : ""}</pre>`;
 }

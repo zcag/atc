@@ -140,11 +140,100 @@
 :is(.tx-wrap .code, pre.mdiff) .del mark { background: var(--del-word); text-decoration: line-through; text-decoration-color: var(--del); text-decoration-thickness: 1px; }
 :is(.tx-wrap .code, pre.mdiff) .gap { display: flex; align-items: center; gap: var(--s3); padding: 3px 0 3px 12.5ch; color: var(--faint); font-family: var(--sans); font-size: var(--fs-small); background: var(--code); }
 :is(.tx-wrap .code, pre.mdiff) .gap::after { content: ""; flex: 1; border-top: 1px dashed var(--line-strong); margin-right: var(--s3); }
+/* a code block: language and size on top, long ones folded */
+.tx-wrap .prose pre > code { display: block; padding-right: 54px; }
+.tx-wrap .prose pre.named > code { padding-right: 0; }
+.tx-wrap .prose pre .cbh { display: flex; gap: var(--s3); margin: calc(-1 * var(--s1)) 0 var(--s2); min-height: 22px; align-items: center; font-family: var(--text); font-size: var(--fs-small); color: var(--faint); }
+pre.long:not(.open) > :is(code, .rows) { display: block; max-height: 32em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 78%, transparent); mask-image: linear-gradient(#000 78%, transparent); }
+:where(.tx-wrap) .cbmore { display: block; width: 100%; padding: var(--s2) 0 var(--s1); font-family: var(--text); font-size: var(--fs-small); color: var(--dim); text-align: center; }
+.cbmore:hover { color: var(--ink); }
+pre.mdiff .cbmore { padding: var(--s2) var(--s3) var(--s1); }
+
+/* a markdown draft reads as it will look; Source shows what gets copied */
+.tx-wrap .prose .mddraft { margin: 0 0 1.1em; box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r-md); overflow: hidden; }
+.mddraft .mdh { display: flex; align-items: center; gap: var(--s3); padding: var(--s1) var(--s2) var(--s1) var(--s4); min-height: 34px; background: var(--code); }
+.mddraft .lbl { flex: 1; font-family: var(--text); font-size: var(--fs-small); color: var(--faint); }
+.mddraft.source .lbl { visibility: hidden; }
+.mddraft .mdt, .mddraft .copy { position: static; opacity: 1; padding: 3px var(--s3); border-radius: var(--r-md); font-family: var(--text); font-size: var(--fs-small); color: var(--dim); }
+.mddraft .mdt:hover, .mddraft .copy:hover { color: var(--ink); background: var(--strip-hi); }
+.tx-wrap .prose .mddraft .mdr { padding: var(--s4) var(--s4) var(--s1); font-size: 0.95em; }
+.tx-wrap .prose .mddraft .mds { display: none; margin: 0; box-shadow: none; border-radius: 0; }
+.tx-wrap .prose .mddraft.source .mds { display: block; }
+.mddraft.source .mdr { display: none; }
+.tx-wrap .prose .mddraft :is(h1, h2, h3, h4) { margin-top: 0.9em; padding-top: 0; border-top: 0; font-size: 1.02em; }
+.tx-wrap .prose .mddraft .mdr > :first-child { margin-top: 0; }
+.tx-wrap .prose .mdr .tbl .copy { display: none; }
+
+/* references you can follow */
+.tx-wrap .prose :is(code.path, code.sha) { cursor: pointer; text-decoration: underline dotted; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.tx-wrap .prose :is(code.path, code.sha):hover { color: var(--ink); text-decoration-style: solid; text-decoration-color: var(--ink); }
+.tx-wrap .prose :is(code.path, code.sha):focus-visible, .tx-wrap .prose a.fileref:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-radius: 2px; }
+.tx-wrap .prose a.fileref { cursor: pointer; }
+.tx-wrap .prose .cite :is(code.path, code.sha):hover { color: var(--dim); }
+.tx-wrap .prose code.sha { color: var(--dim); }
+.tx-wrap[data-repo] .prose span.ref { cursor: pointer; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.tx-wrap[data-repo] .prose span.ref:hover { text-decoration-color: var(--ink); }
+.tx-wrap .prose a.auto { overflow-wrap: anywhere; }
+
+/* tasks, callouts and tables */
+.tx-wrap .prose li:has(> input[type="checkbox"]) { list-style: none; margin-left: -1.2em; padding-left: 1.5em; position: relative; }
+.tx-wrap .prose li:has(> input:checked) { color: var(--dim); }
+.tx-wrap .prose li > input[type="checkbox"] { appearance: none; position: absolute; left: 0; top: 0.28em; width: 1em; height: 1em; margin: 0; border: 1.5px solid var(--line-strong); border-radius: 3px; }
+.tx-wrap .prose li > input[type="checkbox"]:checked { background: var(--add); border-color: var(--add); }
+.tx-wrap .prose li > input[type="checkbox"]:checked::after { content: ""; position: absolute; left: 28%; top: 6%; width: 28%; height: 56%; border: solid var(--strip); border-width: 0 2px 2px 0; transform: rotate(42deg); }
+.tx-wrap .prose blockquote.callout { padding: var(--s2) var(--s4); color: inherit; background: var(--code); box-shadow: inset 2px 0 0 var(--work); }
+.tx-wrap .prose blockquote.callout.warn { box-shadow: inset 2px 0 0 var(--needs); }
+.tx-wrap .prose blockquote.callout .ct { display: block; font-family: var(--text); font-size: var(--fs-small); font-weight: 620; color: var(--dim); }
+.tx-wrap .prose blockquote.callout > :last-child { margin-bottom: 0; }
+body.zen .tx-wrap .prose blockquote.callout { padding: var(--s2) var(--s4); box-shadow: inset 2px 0 0 var(--work); }
+body.zen .tx-wrap .prose blockquote.callout.warn { box-shadow: inset 2px 0 0 var(--needs); }
+.tx-wrap .prose .tbl { position: relative; overflow: visible; }
+.tx-wrap .prose .tsc { overflow-x: auto; }
+.tx-wrap .prose .tbl .copy { position: absolute; right: 0; top: -2px; z-index: 2; opacity: 0; }
+.tx-wrap .prose .tbl:hover .copy, .tx-wrap .prose .tbl .copy:focus-visible { opacity: 1; }
+.tx-wrap .prose th { white-space: nowrap; }
+.tx-wrap .prose tbody tr:hover { background: var(--strip-hi); }
+@media (hover: none) { .tx-wrap .prose .tbl .copy { position: static; display: block; margin: var(--s1) 0 0 auto; opacity: 0.8; } }
+@media (max-width: 899px) {
+  .tx-wrap .prose table { width: auto; min-width: 100%; }
+  .tx-wrap .prose td.long { min-width: 30ch; max-width: 46ch; }
+  .tx-wrap .prose :is(td, th):first-child { position: sticky; left: 0; background: var(--strip); box-shadow: 1px 0 0 var(--hair); padding-left: 0; }
+  .tx-wrap .prose :is(td, th):not(:first-child) { padding-left: var(--s2); }
+}
+
+/* the whole reply, as markdown */
+.tx-wrap .mcopy { display: block; margin: calc(-1 * var(--s2)) 0 var(--s2); padding: 2px 0; font-size: var(--fs-small); color: var(--faint); opacity: 0; }
+[data-stop]:hover .mcopy, .tx-wrap .mcopy:focus-visible { opacity: 1; }
+.tx-wrap .mcopy:hover { color: var(--ink); }
+[data-said]:not([data-stop]) .mcopy { display: none; }
+@media (hover: none) { [data-stop] .mcopy { opacity: 1; } }
+
+/* colours in code, and in a command's output */
+.hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-meta .hljs-keyword { color: var(--hl-keyword); }
+.hljs-string, .hljs-regexp, .hljs-addition, .hljs-symbol { color: var(--hl-string); }
+.hljs-number, .hljs-literal, .hljs-bullet { color: var(--hl-number); }
+.hljs-title, .hljs-section, .hljs-name { color: var(--hl-title); }
+.hljs-type, .hljs-class .hljs-title, .hljs-attr, .hljs-attribute, .hljs-property { color: var(--hl-type); }
+.hljs-variable, .hljs-template-variable, .hljs-params, .hljs-subst { color: inherit; }
+.hljs-meta, .hljs-deletion { color: var(--hl-comment); }
+.ansi-r { color: var(--del); } .ansi-g { color: var(--add); } .ansi-y { color: var(--hl-number); } .ansi-b, .ansi-c { color: var(--hl-title); } .ansi-m { color: var(--hl-keyword); } .ansi-k { color: var(--faint); } .ansi-bold { font-weight: 650; }
+
+/* a file opened from a reference */
+.fcode { --fl: 1.55em; display: flex; width: max-content; min-width: 100%; font: var(--fs-sm)/var(--fl) var(--mono); padding: var(--sp-5) 0 60px; }
+.fcode .gut { position: sticky; left: 0; z-index: 1; flex: none; padding: 0 var(--sp-5) 0 var(--sp-5); text-align: right; white-space: pre; color: var(--faint); background: var(--board); user-select: none; }
+.fcode .src { position: relative; flex: 1; padding-right: var(--sp-8); }
+.fcode pre { margin: 0; font: inherit; white-space: pre; tab-size: 4; color: var(--ink); position: relative; }
+.fcode .hit { position: absolute; left: 0; right: 0; background: color-mix(in srgb, var(--focus) 20%, transparent); box-shadow: inset 2px 0 0 var(--focus); }
+.commitv .fbody { overflow: auto; }
+.commitv .md { max-width: 980px; margin: 0 auto; padding: var(--sp-7) var(--sp-5) 60px; }
+.commitv .cbody { white-space: pre-wrap; margin: 0 0 var(--sp-7); color: var(--dim); }
+
 .tx-wrap .prose pre.mdiff, body.zen .tx-wrap .prose pre.mdiff, .fbody .md pre.mdiff { position: relative; padding: 0 0 var(--s2); overflow: hidden; border-top: 0; font-family: var(--mono); white-space: normal; }
 pre.mdiff .dh { min-height: 34px; display: flex; align-items: center; gap: 1ch; padding: var(--s1) 72px var(--s1) var(--s3); font-size: var(--fs-small); }
 pre.mdiff .fh { padding: 6px var(--s3); font-weight: 600; font-size: var(--fs-small); color: var(--ink); overflow-wrap: anywhere; border-top: 1px solid var(--hair); }
 pre.mdiff .lab { padding: var(--s3) var(--s3) var(--s1); font-family: var(--text); font-weight: 620; font-size: var(--fs-small); color: var(--dim); border-top: 1px solid var(--hair); }
-pre.mdiff .dh + :is(.lab, .fh) { border-top: 0; padding-top: 0; }
+pre.mdiff .rows > :is(.lab, .fh):first-child { border-top: 0; padding-top: 0; }
 pre.mdiff .blank { height: var(--s2); }
 pre.mdiff:not(.num) .l { grid-template-columns: 3ch minmax(0, 1fr); }
 pre.mdiff .l .c { padding-left: 0; text-indent: 0; white-space: pre-wrap; }

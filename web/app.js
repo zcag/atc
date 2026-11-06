@@ -10,6 +10,7 @@ import { cube, niceMax } from "./usage-cube.js";
 import { partsOf } from "./res-parts.js";
 import { numberedLists } from "./md-lists.js";
 import { diffBlock, esc, wordMarks } from "./md-diff.js";
+import { ansiParts, fileRef, isSha, issueRefs, shortURL } from "./md-refs.js";
 import { glider, GLIDE_KEYS } from "./glide.js";
 import { personOf, speakers, VIEWS, nextView, personLangs, langName, voiceName } from "./persons.js";
 import { PersonsPage, useSample, ROOMS } from "./persons-page.js";
@@ -4025,8 +4026,8 @@ function Viewer({ list, at, setAt, onClose }) {
       <header>
         <button class="icon" onClick=${onClose} aria-label="Close">✕</button>
         <div class="who"><div class="n">${baseName(f.path)}</div><div class="d">${dirName(f.path)}</div></div>
-        <button class="icon" disabled=${at === 0} onClick=${() => setAt(at - 1)} aria-label="Previous">‹</button>
-        <button class="icon" disabled=${at === list.length - 1} onClick=${() => setAt(at + 1)} aria-label="Next">›</button>
+        ${list.length > 1 && html`<button class="icon" disabled=${at === 0} onClick=${() => setAt(at - 1)} aria-label="Previous">‹</button>
+        <button class="icon" disabled=${at === list.length - 1} onClick=${() => setAt(at + 1)} aria-label="Next">›</button>`}
         <button class="btn" onClick=${() => openOut(f.url)}>${APP ? "Open outside" : "New tab"}</button>
       </header>
       <${FileBody} f=${f} />
@@ -4058,8 +4059,50 @@ function FileBody({ f, frame }) {
         : text.err ? html`<p class="empty">${text.err}</p>`
         : f.kind === "markdown" ? html`<article class="md" dangerouslySetInnerHTML=${{ __html: md(text.t) }}></article>`
         : f.kind === "table" ? html`<${Table} text=${text.t} tsv=${f.path.endsWith(".tsv")} />`
-        : html`<pre class="code">${text.t}</pre>`}
+        : html`<${CodeFile} text=${text.t} path=${f.path} line=${f.line} end=${f.end} />`}
     </div>`;
+}
+
+const MOST_HIGHLIGHTED = 300 << 10;
+function CodeFile({ text, path, line, end }) {
+  const box = useRef(null), lines = useMemo(() => text.replace(/\n$/, "").split("\n").length, [text]);
+  const body = useMemo(() => {
+    const lang = baseName(path).split(".").pop().toLowerCase();
+    return text.length < MOST_HIGHLIGHTED && hljs.getLanguage(lang) ? hljs.highlight(text, { language: lang, ignoreIllegals: true }).value : esc(text);
+  }, [text, path]);
+  useEffect(() => {
+    const el = box.current?.querySelector(".hit");
+    if (el) el.scrollIntoView({ block: "center" });
+  }, [body, line]);
+  const span = line ? Math.max(1, (end || line) - line + 1) : 0;
+  return html`<div class="fcode" ref=${box}>
+    <div class="gut" aria-hidden="true">${Array.from({ length: lines }, (_, i) => `${i + 1}\n`).join("")}</div>
+    <div class="src">${span > 0 && html`<i class="hit" style=${`top: calc(${line - 1} * var(--fl)); height: calc(${span} * var(--fl))`}></i>`}<pre dangerouslySetInnerHTML=${{ __html: body }}></pre></div>
+  </div>`;
+}
+
+function CommitView({ s, sha, repo, say, onClose }) {
+  const [c, setC] = useState(null);
+  useEffect(() => {
+    let on = true;
+    api(`/api/sessions/${s.sessionId}/ref/commit?sha=${sha}`).then((x) => on && setC(x), (e) => { if (on) { say(e.message); onClose(); } });
+    const k = (e) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } };
+    addEventListener("keydown", k, true);
+    return () => { on = false; removeEventListener("keydown", k, true); };
+  }, [sha]);
+  const patch = useMemo(() => (c?.patch ? (diffBlock("diff", c.patch) || `<pre><code>${esc(c.patch)}</code></pre>`).replace('class="mdiff', 'class="open mdiff') : ""), [c]);
+  return html`<div class="viewer commitv" role="dialog" aria-label=${c ? c.subject : "Commit"}>
+    <header>
+      <button class="icon" onClick=${onClose} aria-label="Close">✕</button>
+      <div class="who"><div class="n">${c ? c.subject : sha}</div><div class="d">${c ? `${sha}, ${c.author}, ${new Date(c.date).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}` : "Reading the commit"}</div></div>
+      ${repo && html`<button class="btn" onClick=${() => openOut(`${repo}/commit/${c?.sha || sha}`)}>GitHub</button>`}
+    </header>
+    <div class="fbody"><article class="md">
+      ${c?.body && html`<p class="cbody">${c.body}</p>`}
+      ${patch ? html`<div dangerouslySetInnerHTML=${{ __html: patch }}></div>` : c && html`<p class="empty">This commit changes no files.</p>`}
+      ${c?.truncated && html`<p class="empty">The rest of this commit is too long to show here.</p>`}
+    </article></div>
+  </div>`;
 }
 
 const PSEEN_KEY = "atc.pages.seen";
@@ -5284,7 +5327,7 @@ function Clip({ out, bad, n = 8 }) {
   if (!out?.text) return null;
   const lines = out.text.split("\n");
   const hidden = (all ? 0 : Math.max(0, lines.length - n)) + (out.more || 0);
-  return html`<pre class="tpre out ${bad ? "bad" : ""}">${all ? out.text : lines.slice(0, n).join("\n")}</pre>${hidden > 0 && !all && html`<button class="more-lines" onClick=${() => setAll(true)}>Show ${hidden} more line${hidden > 1 ? "s" : ""}</button>`}${all && out.more > 0 && html`<p class="more-lines">${out.more} more lines were not kept</p>`}`;
+  return html`<pre class="tpre out ${bad ? "bad" : ""}">${ansiParts(all ? out.text : lines.slice(0, n).join("\n")).map((p) => (p.cls ? html`<span class=${p.cls}>${p.text}</span>` : p.text))}</pre>${hidden > 0 && !all && html`<button class="more-lines" onClick=${() => setAll(true)}>Show ${hidden} more line${hidden > 1 ? "s" : ""}</button>`}${all && out.more > 0 && html`<p class="more-lines">${out.more} more lines were not kept</p>`}`;
 }
 
 function diffRows(e) {
@@ -6131,12 +6174,12 @@ function Lead({ text, images, files, at }) {
     ${(images || []).length > 0 && html`<span class="imgs">${images.map((src) => html`<img src=${src} alt="Image you attached" />`)}</span>`}</div>`;
 }
 
-const PATH_CODE = '<code class="path[^"]*">[^<]+</code>';
+const PATH_CODE = '<code class="path[^"]*"[^>]*>[^<]+</code>';
 const CITATION = new RegExp(`\\(${PATH_CODE}(?:,\\s*${PATH_CODE})*\\)`, "g");
 const quietCitations = (h) => h.replace(CITATION, '<span class="cite">$&</span>');
 function Prose({ text, id }) {
   const h = useMemo(() => { let j = 0; return quietCitations(md(text)).replace(/<h([1-4])>/g, (_, n) => `<h${n} id="${id}h${j++}">`); }, [text]);
-  return html`<div class="prose" dangerouslySetInnerHTML=${{ __html: h }}></div>`;
+  return html`<div class="prose" dangerouslySetInnerHTML=${{ __html: h }}></div><button class="mcopy" data-copy data-src=${text}>Copy</button>`;
 }
 
 function LiveRow({ s, step, since, steps }) {
@@ -6182,13 +6225,37 @@ function SentState({ p, host, retry, edit }) {
   if (p.state === "failed") return html`<div class="mst failed" role="alert"><b>Not sent.</b> <span>${p.err}</span><span class="acts"><button class="btn" onClick=${retry}>Retry</button><button class="btn" onClick=${edit}>Edit</button></span></div>`;
   return html`<div class="mst" role="status"><b>Sent ${txClock(new Date(p.sent || p.at).toISOString())}.</b> ${p.queued ? "Claude reads it after its current step." : "It has it."}</div>`;
 }
-const headsOf = (src) => [...(src || "").matchAll(/^#{1,4}\s+(.+)$/gm)].map((m) => plain(m[1]));
+const HEADS = new Map();
+const headsOf = (src) => {
+  if (!src) return [];
+  if (HEADS.has(src)) return HEADS.get(src);
+  const heads = [];
+  Marked.walkTokens(Marked.lexer(src), (t) => { if (t.type === "heading" && t.depth <= 4) heads.push(plain(t.text)); });
+  if (HEADS.size > 500) HEADS.clear();
+  HEADS.set(src, heads);
+  return heads;
+};
 
 let TX_API = null;
 const shortDay = (ts) => new Date(ts).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
 const msOf = (at) => (at ? Date.parse(at) || 0 : 0);
 
 function Transcript({ s, say, resume, busy, cmp = {} }) {
+  const [ref, setRef] = useState(null), [repo, setRepo] = useState("");
+  useEffect(() => {
+    setRef(null); setRepo("");
+    let on = true;
+    api(`/api/sessions/${s.sessionId}/ref/repo`).then((r) => on && setRepo(r.repo || ""), () => {});
+    return () => { on = false; };
+  }, [s.sessionId]);
+  const openFileRef = async (text) => {
+    const r = fileRef(text);
+    if (!r) return;
+    try {
+      const f = await api(`/api/sessions/${s.sessionId}/ref/file?path=${encodeURIComponent(r.path)}`);
+      setRef({ file: { ...f, line: r.line, end: r.end, kind: r.line && f.kind === "markdown" ? "text" : f.kind } });
+    } catch (e) { say(e.message); }
+  };
   useSync();
   const sid = s.sessionId;
   const [idx, setIdx] = useState(null);
@@ -6631,7 +6698,21 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   };
 
   const dropIn = (e) => { if (live && e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); setDrop(true); } };
-  return html`<div class="tx-wrap ${contents ? "with-toc" : ""}" onDragEnter=${dropIn} onDragOver=${dropIn}
+  const refAct = (e) => {
+    const t = e.target;
+    if (!t.closest || !getSelection().isCollapsed) return;
+    const f = t.closest("[data-file]"), c = t.closest("[data-sha]"), i = t.closest("[data-issue]"), more = t.closest("[data-more]"), src = t.closest("[data-draft-source]");
+    if (f) openFileRef(f.dataset.file);
+    else if (c) setRef({ sha: c.dataset.sha });
+    else if (i && repo) openOut(`${repo}/issues/${i.dataset.issue}`);
+    else if (more) { const open = more.parentElement.classList.toggle("open"); more.dataset.was ??= more.textContent; more.textContent = open ? "Show less" : more.dataset.was; }
+    else if (src) src.textContent = src.closest(".mddraft").classList.toggle("source") ? "Rendered" : "Source";
+    else return;
+    e.preventDefault();
+  };
+  return html`${ref?.file && html`<${Viewer} list=${[ref.file]} at=${0} setAt=${() => {}} onClose=${() => setRef(null)} />`}
+  ${ref?.sha && html`<${CommitView} s=${s} sha=${ref.sha} repo=${repo} say=${say} onClose=${() => setRef(null)} />`}
+  <div class="tx-wrap ${contents ? "with-toc" : ""}" data-repo=${repo || null} onClick=${refAct} onKeyDown=${(e) => { if (e.key === "Enter" && e.target.closest?.("[data-file], [data-sha]")) { refAct(e); e.stopPropagation(); } }} onDragEnter=${dropIn} onDragOver=${dropIn}
     onDragLeave=${(e) => !e.currentTarget.contains(e.relatedTarget) && setDrop(false)}
     onDrop=${(e) => { if (!drop) return; e.preventDefault(); setDrop(false); uploadRef.current?.([...e.dataTransfer.files]); }}>
     ${zen && html`<div class="zenbar"><span class="t">${s.title || "Untitled"}</span><button class="kb zenaa" aria-expanded=${pop === "look"} aria-keyshortcuts="a" title="How the text looks" onClick=${() => setPop(pop === "look" ? null : "look")}>Aa <kbd aria-hidden="true">a</kbd></button><button class="kb" onClick=${() => setZen(false)}>Leave zen <kbd aria-hidden="true">z</kbd></button></div>`}
@@ -6711,23 +6792,54 @@ function useHubStream(s, landed) {
 }
 
 
-const TX_FILE = /^(~?[\w.\-]+\/)*[\w.\-]+\.(go|js|mjs|ts|tsx|py|md|json|kt|css|html|xml|sh|yml|yaml|toml|rb|sql|txt|service|plist)(:\d+(-\d+)?)?$/;
 const safeURL = (u) => /^(https?:|mailto:|\/|#|\.)/i.test(u || "") ? u : null;
+const LONG_CODE_LINES = 26, LONG_CELL = 40;
 const mdRender = new Marked.Renderer();
 mdRender.code = (code, lang) => {
   const l = (lang || "").split(/\s/)[0];
   const diff = diffBlock(l, code);
   if (diff) return diff;
+  if (/^(markdown|md)$/.test(l)) return draftBlock(code);
   const body = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : esc(code);
-  return `<pre><button class="copy" data-copy>Copy</button><code>${body}</code></pre>`;
+  const n = code.split("\n").length, long = n > LONG_CODE_LINES, named = l && l !== "text" && n > 2;
+  const cls = [named && "named", long && "long"].filter(Boolean).join(" ");
+  return `<pre${cls ? ` class="${cls}"` : ""}><button class="copy" data-copy>Copy</button>${named ? `<div class="cbh"><span>${esc(l)}</span><span>${n} lines</span></div>` : ""}<code>${body}</code>${long ? `<button class="cbmore" data-more>Show all ${n} lines</button>` : ""}</pre>`;
 };
-mdRender.codespan = (t) => `<code class="${TX_FILE.test(t.replace(/&amp;/g, "&")) ? "path" : ""} ${t.length < 28 ? "nowrap" : ""}">${t}</code>`;
-mdRender.table = (header, body) => `<div class="tbl"><table><thead>${header}</thead><tbody>${body}</tbody></table></div>`;
-mdRender.link = (href, title, text) => safeURL(href) ? `<a href="${esc(href)}" data-out>${text}</a>` : text;
-mdRender.image = (href, title, text) => safeURL(href) ? `<a href="${esc(href)}" data-out>${esc(text || href)}</a>` : esc(text || "");
+function draftBlock(code) {
+  const rendered = Marked.parse(code).replace(/<h([1-6])>/g, '<h$1 data-draft>');
+  return `<div class="mddraft"><div class="mdh"><span class="lbl">Markdown</span><button class="mdt" data-draft-source>Source</button><button class="copy" data-copy data-src="${esc(code)}">Copy</button></div><div class="mdr">${rendered}</div><pre class="mds"><code>${esc(code)}</code></pre></div>`;
+}
+mdRender.codespan = (t) => {
+  const raw = t.replace(/&amp;/g, "&"), wrap = t.length < 28 ? "nowrap" : "";
+  if (fileRef(raw)) return `<code class="path ${wrap}" data-file="${t}" tabindex="0" role="link">${t}</code>`;
+  if (isSha(raw)) return `<code class="sha ${wrap}" data-sha="${t}" tabindex="0" role="link">${t}</code>`;
+  return `<code class=" ${wrap}">${t}</code>`;
+};
+mdRender.table = (header, body) => `<div class="tbl"><button class="copy" data-copy-table>Copy</button><div class="tsc"><table><thead>${header}</thead><tbody>${body}</tbody></table></div></div>`;
+mdRender.tablecell = (content, { header, align }) => {
+  const tag = header ? "th" : "td", plainLen = content.replace(/<[^>]+>/g, "").length;
+  return `<${tag}${align ? ` align="${align}"` : ""}${plainLen > LONG_CELL ? ' class="long"' : ""}>${content}</${tag}>\n`;
+};
+const fileLink = (href, inner) => fileRef(href.replace(/^file:\/\//, "")) ? `<a class="fileref" data-file="${esc(href.replace(/^file:\/\//, ""))}" tabindex="0" role="link">${inner}</a>` : null;
+mdRender.link = (href, title, text) => {
+  const file = fileLink(href, text);
+  if (file) return file;
+  if (!safeURL(href)) return text;
+  const auto = text === esc(href) || text === href;
+  return `<a href="${esc(href)}" data-out${auto ? ` class="auto" title="${esc(href)}"` : ""}>${auto ? esc(shortURL(href)) : text}</a>`;
+};
+mdRender.image = (href, title, text) => fileLink(href, esc(text || href)) || (safeURL(href) ? `<a href="${esc(href)}" data-out>${esc(text || href)}</a>` : esc(text || ""));
+const CALLOUTS = { note: "note", tip: "note", info: "note", important: "warn", warning: "warn", caution: "warn" };
+mdRender.blockquote = (quote) => {
+  const m = /^<p>(?:\[!(\w+)\]\s*|<strong>(\w+):?<\/strong>:?\s*)/i.exec(quote);
+  const kind = m && CALLOUTS[(m[1] || m[2]).toLowerCase()];
+  if (!kind) return `<blockquote>\n${quote}</blockquote>\n`;
+  const name = (m[1] || m[2]).replace(/^./, (c) => c.toUpperCase()).replace(/(?<=^.)\w+/, (w) => w.toLowerCase());
+  return `<blockquote class="callout ${kind}"><span class="ct">${name}</span>${quote.replace(m[0], "<p>").replace(/^<p>\s*<\/p>\s*/, "")}</blockquote>\n`;
+};
 mdRender.html = (h) => esc(h);
 Marked.use({
-  renderer: mdRender, gfm: true, breaks: false,
+  renderer: mdRender, gfm: true, breaks: false, extensions: [issueRefs],
   tokenizer: {
     del(src) {
       const m = /^~~(?=\S)([\s\S]*?\S)~~(?!~)/.exec(src);
@@ -6741,6 +6853,8 @@ Marked.use(numberedLists);
 const md = (src) => Marked.parse(src || "");
 
 document.addEventListener("click", (e) => {
+  const tc = e.target.closest?.("[data-copy-table]");
+  if (tc) { copyText([...tc.parentElement.querySelectorAll("tr")].map((r) => [...r.cells].map((x) => x.innerText.trim()).join("\t")).join("\n")); tc.textContent = "Copied"; setTimeout(() => (tc.textContent = "Copy"), 1200); return; }
   const c = e.target.closest?.("[data-copy]");
   if (c) { copyText(c.dataset.src ?? c.parentElement.querySelector("code").innerText); c.textContent = "Copied"; setTimeout(() => (c.textContent = "Copy"), 1200); return; }
   const a = e.target.closest?.("a[data-out]");
