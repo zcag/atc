@@ -8,6 +8,7 @@ import { persona } from "./persona.js";
 import { minimal } from "./minimal.js";
 import { cube, niceMax } from "./usage-cube.js";
 import { partsOf } from "./res-parts.js";
+import { numberedLists } from "./md-lists.js";
 import { glider, GLIDE_KEYS } from "./glide.js";
 import { personOf, speakers, VIEWS, nextView, personLangs, langName, voiceName } from "./persons.js";
 import { PersonsPage, useSample, ROOMS } from "./persons-page.js";
@@ -6739,6 +6740,7 @@ Marked.use({
     },
   },
 });
+Marked.use(numberedLists);
 const md = (src) => Marked.parse(src || "");
 
 document.addEventListener("click", (e) => {
