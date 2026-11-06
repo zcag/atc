@@ -1,7 +1,7 @@
 import { html, render, useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from "./vendor/preact-htm.js";
 import { marked as Marked } from "./vendor/marked.esm.js";
 import hljs from "./vendor/highlight.min.js";
-import { diffLines, diffWords } from "./vendor/diff.mjs";
+import { diffLines } from "./vendor/diff.mjs";
 import { Call } from "./call.js";
 import { extended, onLine } from "./call-log.js";
 import { persona } from "./persona.js";
@@ -9,6 +9,7 @@ import { minimal } from "./minimal.js";
 import { cube, niceMax } from "./usage-cube.js";
 import { partsOf } from "./res-parts.js";
 import { numberedLists } from "./md-lists.js";
+import { diffBlock, esc, wordMarks } from "./md-diff.js";
 import { glider, GLIDE_KEYS } from "./glide.js";
 import { personOf, speakers, VIEWS, nextView, personLangs, langName, voiceName } from "./persons.js";
 import { PersonsPage, useSample, ROOMS } from "./persons-page.js";
@@ -5286,11 +5287,6 @@ function Clip({ out, bad, n = 8 }) {
   return html`<pre class="tpre out ${bad ? "bad" : ""}">${all ? out.text : lines.slice(0, n).join("\n")}</pre>${hidden > 0 && !all && html`<button class="more-lines" onClick=${() => setAll(true)}>Show ${hidden} more line${hidden > 1 ? "s" : ""}</button>`}${all && out.more > 0 && html`<p class="more-lines">${out.more} more lines were not kept</p>`}`;
 }
 
-function wordMarks(a, b, side) {
-  const parts = diffWords(a, b), changed = parts.filter((p) => p.added || p.removed).reduce((n, p) => n + p.value.length, 0);
-  if (changed > 0.6 * Math.max(a.length, b.length, 1)) return null;
-  return parts.filter((p) => (side === "del" ? !p.added : !p.removed)).map((p) => (p.added || p.removed ? `<mark>${esc(p.value)}</mark>` : esc(p.value))).join("");
-}
 function diffRows(e) {
   const rows = [], known = e.line > 0, parts = diffLines(e.old, e.new);
   let o = e.line, n = e.line;
@@ -6715,12 +6711,13 @@ function useHubStream(s, landed) {
 }
 
 
-const esc = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 const TX_FILE = /^(~?[\w.\-]+\/)*[\w.\-]+\.(go|js|mjs|ts|tsx|py|md|json|kt|css|html|xml|sh|yml|yaml|toml|rb|sql|txt|service|plist)(:\d+(-\d+)?)?$/;
 const safeURL = (u) => /^(https?:|mailto:|\/|#|\.)/i.test(u || "") ? u : null;
 const mdRender = new Marked.Renderer();
 mdRender.code = (code, lang) => {
   const l = (lang || "").split(/\s/)[0];
+  const diff = diffBlock(l, code);
+  if (diff) return diff;
   const body = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : esc(code);
   return `<pre><button class="copy" data-copy>Copy</button><code>${body}</code></pre>`;
 };
@@ -6745,7 +6742,7 @@ const md = (src) => Marked.parse(src || "");
 
 document.addEventListener("click", (e) => {
   const c = e.target.closest?.("[data-copy]");
-  if (c) { copyText(c.parentElement.querySelector("code").innerText); c.textContent = "Copied"; setTimeout(() => (c.textContent = "Copy"), 1200); return; }
+  if (c) { copyText(c.dataset.src ?? c.parentElement.querySelector("code").innerText); c.textContent = "Copied"; setTimeout(() => (c.textContent = "Copy"), 1200); return; }
   const a = e.target.closest?.("a[data-out]");
   if (!a) return;
   const h = atcRoute(a.getAttribute("href"));
