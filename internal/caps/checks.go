@@ -251,6 +251,14 @@ func checkHub(ctx context.Context, env Env) Result {
 }
 
 func checkAutonomy(_ context.Context, env Env) Result {
+	r := autonomyResult(env)
+	if strings.Contains(env.Get("ATC_CLAUDE_ARGS"), "dangerously-skip-permissions") {
+		r.Detail += " Agents on a call have no checks: ATC_CLAUDE_ARGS turns permissions off for them."
+	}
+	return r
+}
+
+func autonomyResult(env Env) Result {
 	if strings.Contains(env.Get("ATC_HUB_CLAUDE_ARGS"), "dangerously-skip-permissions") {
 		return Result{OK, "Anything, with no checks: ATC_HUB_CLAUDE_ARGS turns permissions off, whatever is chosen here."}
 	}

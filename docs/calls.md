@@ -100,10 +100,12 @@ that same call, and hand it back.
   and avatar. The app shows its name.
 - **Busy or asleep.** An agent in the middle of a turn, or waiting on a permission prompt, can't take the line: it
   stays where it is, and the one you are talking to says so and offers to pass a message. One that is stopped or
-  has no conversation yet starts in about 2 seconds.
+  has no conversation yet starts in a few seconds.
 - **What you miss.** While you talk to an agent, reports still reach the assistant, who is told you are elsewhere,
   and the next time you are back it tells you what you need to hear. `atc call` from anything rings on the line
   instead (outcome `knocked`): two notes and one sentence in the assistant's voice at the next pause.
+- **What it may do.** Nobody can approve a tool on a call, so it follows [the assistant's level](presets-and-agents.md#on-a-call)
+  with its own folder, and a deny in its `settings.json` still wins. When a tool is refused it tells you, and can start a session for that work.
 - **What it costs the agent.** Nothing lasting. While on the line its conversation runs in the hub as a stream-json
   process on its own session, so its words stream to the voice; messages to it (`atc send`, wake-ups) go through the
   hub, and its reply to those isn't spoken. The way it talks comes from one talk-mode message at the start of the

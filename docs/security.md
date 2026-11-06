@@ -81,6 +81,11 @@ and the sender uses atc's client; the rest are what a login means.
 - **The assistant acts without a tap.** Nobody can approve a tool on a call or on WhatsApp, so what it may do is set up front:
   [its level](assistant.md#what-it-may-do-alone), `daily` by default. At `daily` it reads your files and the web, so a page that
   talks it into something has more to work with than at `limited`; at `full` there are no checks at all.
+- **So does an agent on a call,** [at the same level](presets-and-agents.md#on-a-call), with its own folder in place of the
+  assistant's. A deny in its `settings.json` wins over every level, since Claude Code checks denies before allow rules and before
+  `--dangerously-skip-permissions`. Those denies are a list of patterns, not a sandbox: `Bash(*send*)` doesn't cover an atc tool or a
+  script that sends. At `daily` it reads your files and the web like the assistant, and it can add a guest with `atc guest`, which
+  the assistant's brief limits to when you ask and an agent's doesn't. It can't pass on your approval: `approved` is only for the assistant.
 - **Guest isolation is the same kind of thing.** The guests' conversation is kept apart by its brief,
   `--strict-mcp-config` (no MCP servers but atc's) and the name check in `atc wa`. It runs as your user,
   so a shell that Claude Code's permissions allow it reaches your files and your atc login. A guest's

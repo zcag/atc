@@ -5,10 +5,72 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/zcag/atc/internal/settings"
 	"github.com/zcag/atc/internal/store"
 )
+
+func TestAgentLineFollowsTheLevel(t *testing.T) {
+	s, ts, _, _ := agentServer(t)
+	writeAgent(t, s.AgentsDir, "talker", `{"host":"here","talk":true,"check":"./due.sh"}`, "settings.json")
+	folder := filepath.Join(s.AgentsDir, "talker")
+	args := func() string {
+		res, b := do(t, "POST", ts.URL+"/api/agents/talker/line", "tok", "")
+		if res.StatusCode != 200 {
+			t.Fatalf("line: %d %s", res.StatusCode, b)
+		}
+		var spec struct{ Args []string }
+		json.Unmarshal([]byte(b), &spec)
+		return strings.Join(spec.Args, " ")
+	}
+	for _, c := range []struct {
+		level string
+		has   []string
+		not   []string
+	}{
+		{"", []string{"--mcp-config", "mcp__atc", "--allowedTools", "Read,", "Edit(/" + folder + "/**)", "--settings " + folder + "/settings.json",
+			"Edit(/" + folder + "/settings.json)", "Edit(/" + folder + "/agent.json)", "Edit(/" + folder + "/due.sh)"}, []string{skipPermissions}},
+		{"limited", []string{"--mcp-config", "mcp__atc", "Bash(atc show *)", "--settings " + folder + "/settings.json"}, []string{skipPermissions, "Read,", "Edit(/" + folder + "/**)"}},
+		{"full", []string{"--mcp-config", skipPermissions, "--settings " + folder + "/settings.json"}, []string{"--allowedTools", "Edit("}},
+	} {
+		t.Setenv(settings.AutonomyKey, c.level)
+		got := args()
+		for _, w := range c.has {
+			if !strings.Contains(got, w) {
+				t.Errorf("%q: no %q in %s", c.level, w, got)
+			}
+		}
+		for _, w := range c.not {
+			if strings.Contains(got, w) {
+				t.Errorf("%q: %q in %s", c.level, w, got)
+			}
+		}
+	}
+
+	s.M.CLI.Args = []string{skipPermissions}
+	t.Setenv(settings.AutonomyKey, "limited")
+	if got := args(); strings.Contains(got, "--allowedTools") || strings.Contains(got, "--mcp-config") {
+		t.Errorf("ATC_CLAUDE_ARGS turning permissions off leaves the flags as they were: %s", got)
+	}
+}
+
+func TestAgentFolderBehindALink(t *testing.T) {
+	root := t.TempDir()
+	real := filepath.Join(root, "real")
+	os.MkdirAll(real, 0o755)
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Join(Agent{Folder: link}.autonomyOnLine(""), " ")
+	for _, d := range []string{link, real} {
+		if !strings.Contains(got, "Edit(/"+d+"/**)") || !strings.Contains(got, "Edit(/"+d+"/settings.json)") {
+			t.Errorf("no rules for %s: %s", d, got)
+		}
+	}
+}
 
 func TestAgentLine(t *testing.T) {
 	s, ts, bin, st := agentServer(t)

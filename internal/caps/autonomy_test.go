@@ -8,6 +8,18 @@ import (
 	"github.com/zcag/atc/internal/settings"
 )
 
+func TestCheckAutonomySaysWhenAgentsOnACallSkipIt(t *testing.T) {
+	env := Env{Get: func(k string) string {
+		if k == "ATC_CLAUDE_ARGS" {
+			return "--dangerously-skip-permissions"
+		}
+		return ""
+	}}
+	if r := checkAutonomy(context.Background(), env); !strings.Contains(r.Detail, "Daily") || !strings.Contains(r.Detail, "ATC_CLAUDE_ARGS") {
+		t.Errorf("%+v", r)
+	}
+}
+
 func TestCheckAutonomy(t *testing.T) {
 	for _, c := range []struct {
 		level, args string

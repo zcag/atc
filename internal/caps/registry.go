@@ -88,7 +88,7 @@ func All() []Cap {
 			Cost:  "Plan tokens for what you ask it.",
 		},
 		{
-			ID: "autonomy", Title: "What the assistant may do alone", Group: Assistant, Optional: true, Why: "On a call or on WhatsApp nobody can tap Allow, so what isn't allowed here is refused, and it hands that work to a session, which asks you as usual.",
+			ID: "autonomy", Title: "What the assistant may do alone", Group: Assistant, Optional: true, Why: "On a call or on WhatsApp nobody can tap Allow, so what isn't allowed here is refused, and it hands that work to a session, which asks you as usual. An agent with \"talk\": true follows the same level while it is on a call, with its own folder.",
 			Needs:  []string{"hub"},
 			Fields: []Field{{Key: settings.AutonomyKey, Label: "limited: atc's tools and messaging you. daily: also reads your files, searches the web and keeps notes in its folder. full: anything, with no checks", Hub: true, Options: []string{settings.AutonomyDaily, settings.AutonomyLimited, settings.AutonomyFull}}},
 			Check:  checkAutonomy,

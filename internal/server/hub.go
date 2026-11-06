@@ -40,13 +40,43 @@ func GuestsArgs(dir string) []string {
 // here is refused. The user's own allow rules in Claude Code's settings still apply on top.
 func autonomyArgs(level, dir string) []string {
 	if level == settings.AutonomyFull {
-		return []string{"--dangerously-skip-permissions"}
+		return []string{skipPermissions}
 	}
 	allow := []string{"mcp__atc", "Bash(atc show *)", "Bash(atc open *)", "Bash(atc wa *)", "Bash(atc call *)", "Bash(atc notify *)"}
 	if level != settings.AutonomyLimited {
-		allow = append(allow, "Read", "Glob", "Grep", "WebSearch", "WebFetch", "Edit(/"+dir+"/**)", "Bash(atc guest *)")
+		allow = append(allow, "Read", "Glob", "Grep", "WebSearch", "WebFetch", "Bash(atc guest *)")
+		for _, d := range places(dir) {
+			allow = append(allow, "Edit(/"+d+"/**)")
+		}
 	}
 	return []string{"--allowedTools", strings.Join(allow, ",")}
+}
+
+const skipPermissions = "--dangerously-skip-permissions"
+
+// places is a folder's path and, when a link leads there, its real one: Claude Code's edit rule has to match both.
+func places(dir string) []string {
+	if real, err := filepath.EvalSymlinks(dir); err == nil && real != dir {
+		return []string{dir, real}
+	}
+	return []string{dir}
+}
+
+// autonomyOnLine is autonomyArgs for an agent on a call, where nobody can approve a tool either, in its own folder.
+// Its folder also holds what decides what it may do next time it starts, so editing that stays refused. Denies in its
+// settings.json win over all of this, also at full.
+func (a Agent) autonomyOnLine(level string) []string {
+	args := append(atcTools(), autonomyArgs(level, a.Folder)...)
+	if level == settings.AutonomyFull {
+		return args
+	}
+	var deny []string
+	for _, folder := range places(a.Folder) {
+		for _, p := range a.controlFiles(folder) {
+			deny = append(deny, "Edit(/"+p+")")
+		}
+	}
+	return append(args, "--disallowedTools", strings.Join(deny, ","))
 }
 
 // HubArgs are the flags for the hub's Claude: the same tools and switchboard as atc's standing

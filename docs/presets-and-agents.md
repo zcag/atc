@@ -69,7 +69,7 @@ email/
   conversation from atc.
 - `reset`: when its conversation starts over (below).
 - `talk`: `true` lets the user talk to it directly on a call ([Talking to an agent](calls.md#talking-to-an-agent)), off
-  by default. `person` names who it sounds and looks like there, and `background` a background of its own over theirs. Settings, Persons sets both.
+  by default, and [what it may do there](#on-a-call) follows the assistant's level. `person` names who it sounds and looks like there, and `background` a background of its own over theirs. Settings, Persons sets both.
 - `share`: `{"page": "items", "about": "what it holds"}` names the page whose state other sessions
   read with the `state` tool, so the assistant answers "what's open?" from it instead of asking the
   agent. Give that state a `headline` and `badge` and keep its keys small and named (`counts`
@@ -86,6 +86,26 @@ when it has none. A message that arrives mid-turn waits for the turn to end (Cla
 Its pages belong to the agent (`@name`), not to one conversation, so they and their state carry
 across. Its sessions carry its title, and `@name` names its current conversation anywhere a session
 is named: `atc send @email`, `atc attach @email`, `atc state @email inbox`, and the MCP tools.
+
+### On a call
+
+Nobody can tap Allow on a call, so while an agent with `"talk": true` is on the line it may do what
+[the assistant's level](assistant.md#what-it-may-do-alone) allows (`ATC_ASSISTANT_AUTONOMY`), with its own folder where the
+assistant has its own:
+
+| Level | On a call it may |
+|---|---|
+| `limited` | use atc's tools, show you pages and reach you (`atc show`, `atc open`, `atc wa`, `atc call`, `atc notify`) |
+| `daily`, the default | also read your files, search the web, edit files in its folder and run `atc guest` |
+| `full` | do anything Claude can, with no checks |
+
+- **Its `settings.json` decides first.** A deny there wins at every level, `full` included: a denied atc tool is not even
+  offered to it. Its allow rules add to the level.
+- **What it can't change.** At `limited` and `daily` it may not edit what decides what it may do next time it starts: `agent.json`,
+  `brief.md`, `settings.json`, `mcp.json`, `CLAUDE.md`, `.claude/` and the script its `check` runs.
+- **Off the call** nothing carries over: it goes back to the background with its usual permissions, and asks you there.
+- **`ATC_CLAUDE_ARGS` with `--dangerously-skip-permissions`** already turns permissions off for every session atc starts, so the
+  level adds nothing to a line then. Denies still win.
 
 ### Waking it
 

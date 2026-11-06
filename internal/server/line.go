@@ -16,6 +16,7 @@ import (
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/sessions"
+	"github.com/zcag/atc/internal/settings"
 	"github.com/zcag/atc/internal/store"
 )
 
@@ -162,6 +163,9 @@ func (s *Server) agentLine(w http.ResponseWriter, r *http.Request) {
 		args = append(args, "--effort", "medium")
 	}
 	args = append(args, "--disallowedTools", "AskUserQuestion,EnterPlanMode")
+	if !slices.Contains(args, skipPermissions) {
+		args = append(args, a.autonomyOnLine(os.Getenv(settings.AutonomyKey))...)
+	}
 	home, _ := os.UserHomeDir()
 	s.refresh()
 	reply(w, map[string]any{"session": sid, "dir": existingDir(a.dir(), home), "args": args,

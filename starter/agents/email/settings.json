@@ -2,7 +2,9 @@
   "permissions": {
     "deny": [
       "Bash(*send*)",
-      "Bash(*draft*)"
+      "Bash(*draft*)",
+      "mcp__atc__start",
+      "mcp__atc__send"
     ]
   }
 }

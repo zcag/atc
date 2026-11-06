@@ -30,7 +30,8 @@ work to a session, which asks you as usual. You choose how much in `atc setup` o
 `daily` can read anything your user can, atc's token included, and can reach the web, so something it reads could talk it
 into sending what it read somewhere: [Security](security.md) says more. For more than `daily` without going to `full`, add
 allow rules to Claude Code's own settings, which still apply. `ATC_HUB_CLAUDE_ARGS` is added last. The guests' conversation
-is not affected by this: it may only use atc's tools, answer a guest, use the guests' folder and look things up.
+is not affected by this: it may only use atc's tools, answer a guest, use the guests' folder and look things up. An agent on a
+call [follows the same level](presets-and-agents.md#on-a-call), with its own folder.
 
 ## How it reaches you
 

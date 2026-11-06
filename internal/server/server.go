@@ -1520,12 +1520,16 @@ func standing(name string) ([]string, bool) {
 }
 
 func standingArgs(prompt string) []string {
-	extra := []string{"--append-system-prompt", prompt}
-	if exe, err := os.Executable(); err == nil {
-		cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"atc": map[string]any{"command": exe, "args": []string{"mcp"}, "alwaysLoad": true}}})
-		extra = append(extra, "--mcp-config", string(cfg))
+	return append([]string{"--append-system-prompt", prompt}, atcTools()...)
+}
+
+func atcTools() []string {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil
 	}
-	return extra
+	cfg, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"atc": map[string]any{"command": exe, "args": []string{"mcp"}, "alwaysLoad": true}}})
+	return []string{"--mcp-config", string(cfg)}
 }
 
 func (s *Server) relaunch(ctx context.Context, name, dir, sid string) (string, error) {

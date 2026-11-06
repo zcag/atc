@@ -158,6 +158,23 @@ func (a Agent) args() ([]string, error) {
 	return extra, nil
 }
 
+// controlFiles are the files in its folder that say what it is and may do, read fresh each time it starts, and what
+// its check runs on a schedule, outside any conversation.
+func (a Agent) controlFiles(folder string) []string {
+	out := []string{}
+	for _, f := range []string{"agent.json", "brief.md", "settings.json", "mcp.json", "CLAUDE.md", ".claude/**"} {
+		out = append(out, filepath.Join(folder, f))
+	}
+	if words := strings.Fields(a.Check); len(words) > 0 {
+		script := words[0]
+		if !filepath.IsAbs(script) {
+			script = filepath.Join(folder, script)
+		}
+		out = append(out, filepath.Clean(script))
+	}
+	return out
+}
+
 func (a Agent) standing() string {
 	return fmt.Sprintf(`You are the %s agent (%s%s in atc): one standing conversation the user comes back to. Your folder is %s.
 
