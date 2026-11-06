@@ -81,6 +81,12 @@ func All() []Cap {
 			Cost:  "Free.",
 		},
 		{
+			ID: "gh", Title: "GitHub CLI", Group: Core, Optional: true, Why: "Shows the title and state of an issue or PR a session mentions. The link itself works without it.",
+			Check: checkGH,
+			Fix:   Fix{Command: "gh auth login", Text: "Install gh, then sign in as the user atc runs as. Each machine shows what its own gh can read."},
+			Cost:  "Free.",
+		},
+		{
 			ID: "reach", Title: "HTTPS address", Group: Core, Optional: true, Why: "The address you reach atc at from other devices. Browsers only give a page the microphone over HTTPS.",
 			Fields: []Field{{Key: "ATC_PUBLIC_URL", Label: "Address", Hint: "https://atc.example.com", URL: true}},
 			Check:  checkReach,

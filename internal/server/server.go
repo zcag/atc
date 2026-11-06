@@ -218,6 +218,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sessions/{sid}/ref/file", s.refFile)
 	mux.HandleFunc("GET /api/sessions/{sid}/ref/commit", s.refCommit)
 	mux.HandleFunc("GET /api/sessions/{sid}/ref/repo", s.refRepo)
+	mux.HandleFunc("GET /api/sessions/{sid}/ref/range", s.refRange)
+	mux.HandleFunc("GET /api/sessions/{sid}/ref/issue", s.refIssue)
 	mux.HandleFunc("GET /api/usage/limits", s.usageLimits)
 	mux.HandleFunc("GET /api/usage/windows", s.usageWindows)
 	mux.HandleFunc("GET /api/usage/spend", s.usageSpend)

@@ -2,12 +2,14 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zcag/atc/internal/outputs"
@@ -16,8 +18,11 @@ import (
 const mostCommitBytes = 600 << 10
 
 var (
-	shaRef     = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
-	githubRepo = regexp.MustCompile(`^(?:git@github\.com:|ssh://git@github\.com/|https?://(?:[^@/]+@)?github\.com/)([\w.-]+/[\w.-]+?)(?:\.git)?/?$`)
+	shaRef      = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
+	rangeRef    = regexp.MustCompile(`^[0-9a-f]{7,40}\.\.\.?[0-9a-f]{7,40}$`)
+	issueRepo   = regexp.MustCompile(`^[\w.-]+/[\w.-]+$`)
+	issueNumber = regexp.MustCompile(`^[0-9]{1,7}$`)
+	githubRepo  = regexp.MustCompile(`^(?:git@github\.com:|ssh://git@github\.com/|https?://(?:[^@/]+@)?github\.com/)([\w.-]+/[\w.-]+?)(?:\.git)?/?$`)
 )
 
 func gitIn(ctx context.Context, dir string, args ...string) (string, error) {
@@ -200,6 +205,138 @@ func (s *Server) refCommit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.Error(w, "This session's repo doesn't have that commit.", http.StatusNotFound)
+}
+
+type rangeCommit struct {
+	SHA     string `json:"sha"`
+	Author  string `json:"author"`
+	Date    string `json:"date"`
+	Subject string `json:"subject"`
+}
+
+type commitRange struct {
+	Commits   []rangeCommit `json:"commits"`
+	Patch     string        `json:"patch"`
+	Truncated bool          `json:"truncated,omitempty"`
+}
+
+// rangeIn reads what a push moved a branch across. A force push's old and new share no straight line, so the list is what
+// is new and the diff is end to end.
+func rangeIn(ctx context.Context, root, r string) (commitRange, bool) {
+	from, to, _ := strings.Cut(strings.Replace(r, "...", "..", 1), "..")
+	out, err := gitIn(ctx, root, "log", "--max-count=100", "--format=%h%x00%an%x00%aI%x00%s", from+".."+to)
+	if err != nil {
+		return commitRange{}, false
+	}
+	c := commitRange{Commits: []rangeCommit{}}
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if p := strings.SplitN(line, "\x00", 4); len(p) == 4 {
+			c.Commits = append(c.Commits, rangeCommit{p[0], p[1], p[2], p[3]})
+		}
+	}
+	if c.Patch, err = gitIn(ctx, root, "diff", "--no-color", "--no-ext-diff", from, to); err != nil {
+		return commitRange{}, false
+	}
+	if len(c.Patch) > mostCommitBytes {
+		c.Patch, c.Truncated = c.Patch[:strings.LastIndexByte(c.Patch[:mostCommitBytes], '\n')+1], true
+	}
+	return c, true
+}
+
+func (s *Server) refRange(w http.ResponseWriter, r *http.Request) {
+	span := r.URL.Query().Get("range")
+	if !rangeRef.MatchString(span) {
+		http.Error(w, "not a range", http.StatusBadRequest)
+		return
+	}
+	for _, root := range s.sessionRoots(r.Context(), r.PathValue("sid")) {
+		if c, ok := rangeIn(r.Context(), root, span); ok {
+			reply(w, c)
+			return
+		}
+	}
+	http.Error(w, "This session's repo doesn't have those commits.", http.StatusNotFound)
+}
+
+type issueInfo struct {
+	Title string `json:"title"`
+	State string `json:"state"`
+	Kind  string `json:"kind"`
+}
+
+type issueHit struct {
+	info issueInfo
+	ok   bool
+	at   time.Time
+}
+
+var (
+	issueCache   = map[string]issueHit{}
+	issueCacheMu sync.Mutex
+)
+
+func parseIssue(b []byte) (issueInfo, bool) {
+	var x struct {
+		Title string `json:"title"`
+		State string `json:"state"`
+		Draft bool   `json:"draft"`
+		PR    *struct {
+			MergedAt *string `json:"merged_at"`
+		} `json:"pull_request"`
+	}
+	if json.Unmarshal(b, &x) != nil || x.Title == "" {
+		return issueInfo{}, false
+	}
+	info := issueInfo{Title: x.Title, State: x.State, Kind: "issue"}
+	if x.PR != nil {
+		info.Kind = "pr"
+		if x.PR.MergedAt != nil {
+			info.State = "merged"
+		} else if x.Draft && x.State == "open" {
+			info.State = "draft"
+		}
+	}
+	return info, true
+}
+
+// issueOf asks gh once per few minutes. A failure is remembered too, so hovering a list of references to a repo gh can't
+// see doesn't start a process for each.
+func issueOf(ctx context.Context, repo, n string) (issueInfo, bool) {
+	key := repo + "#" + n
+	issueCacheMu.Lock()
+	hit, have := issueCache[key]
+	issueCacheMu.Unlock()
+	if have && time.Since(hit.at) < 5*time.Minute {
+		return hit.info, hit.ok
+	}
+	ctx, stop := context.WithTimeout(ctx, 8*time.Second)
+	defer stop()
+	out, err := exec.CommandContext(ctx, "gh", "api", "repos/"+repo+"/issues/"+n).Output()
+	hit = issueHit{at: time.Now()}
+	if err == nil {
+		hit.info, hit.ok = parseIssue(out)
+	}
+	issueCacheMu.Lock()
+	if len(issueCache) > 2000 {
+		clear(issueCache)
+	}
+	issueCache[key] = hit
+	issueCacheMu.Unlock()
+	return hit.info, hit.ok
+}
+
+func (s *Server) refIssue(w http.ResponseWriter, r *http.Request) {
+	repo, n := r.URL.Query().Get("repo"), r.URL.Query().Get("n")
+	if !issueRepo.MatchString(repo) || !issueNumber.MatchString(n) {
+		http.Error(w, "not an issue", http.StatusBadRequest)
+		return
+	}
+	info, ok := issueOf(r.Context(), repo, n)
+	if !ok {
+		http.Error(w, "gh can't read that issue", http.StatusNotFound)
+		return
+	}
+	reply(w, info)
 }
 
 func repoURL(remote string) string {

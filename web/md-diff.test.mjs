@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { diffBlock } from "./md-diff.js";
+import { diffBlock, marksOver, wordMarks, wordRanges } from "./md-diff.js";
 
 const rowsOf = (html, c) => [...html.matchAll(new RegExp(`<div class="l ${c}">.*?<span class="c">(.*?)</span></div>`, "g"))].map((m) => m[1]);
 
@@ -56,4 +56,28 @@ test("content is escaped and copy keeps the source", () => {
   const h = diffBlock("diff", src);
   assert.doesNotMatch(h, /<b>|<i>/);
   assert.ok(h.includes(`data-src="- &lt;b&gt;&quot;x&quot;&lt;/b&gt;\n+ &lt;i&gt;&amp;&lt;/i&gt;"`));
+});
+
+test("marks land on the same characters through colours and entities", () => {
+  assert.equal(marksOver("a &lt; b", [[2, 3]]), "a <mark>&lt;</mark> b");
+  assert.equal(marksOver('<span class="k">func</span> go', [[2, 6]]), '<span class="k">fu<mark>nc</mark></span><mark> g</mark>o');
+  assert.equal(marksOver("abc", []), "abc");
+  assert.equal(marksOver("abc", [[1, 3]]), "a<mark>bc</mark>");
+  assert.equal(marksOver("abcd", [[0, 1], [2, 3]]), "<mark>a</mark>b<mark>c</mark>d");
+});
+
+test("word ranges join across a short token and word marks still read the same", () => {
+  assert.deepEqual(wordRanges("rate 3.5% now", "rate 5.1% now", "del"), [[5, 8]]);
+  assert.deepEqual(wordRanges("rate 3.5% now", "rate 5.1% now", "add"), [[5, 8]]);
+  assert.equal(wordMarks("rate 3.5% now", "rate 5.1% now", "add"), "rate <mark>5.1</mark>% now");
+  assert.equal(wordRanges("one two", "completely different words here", "del"), null);
+});
+
+test("a highlighter colours lines by the file they belong to", () => {
+  const seen = [];
+  const hl = (t, path) => { seen.push(path); return `<span class="hljs-keyword">${t}</span>`; };
+  const h = diffBlock("diff", "--- a/x.go\n+++ b/x.go\n@@ -1 +1 @@\n-the old word stays here\n+the new word stays here", hl);
+  assert.deepEqual([...new Set(seen)], ["x.go"]);
+  assert.ok(h.includes('<span class="hljs-keyword">the <mark>old</mark> word stays here</span>'), h);
+  assert.doesNotMatch(diffBlock("diff", "- old\n+ new", hl), /hljs-keyword/);
 });

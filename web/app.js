@@ -9,8 +9,8 @@ import { minimal } from "./minimal.js";
 import { cube, niceMax } from "./usage-cube.js";
 import { partsOf } from "./res-parts.js";
 import { numberedLists } from "./md-lists.js";
-import { diffBlock, esc, wordMarks } from "./md-diff.js";
-import { ansiParts, fileRef, isSha, issueRefs, shortURL } from "./md-refs.js";
+import { diffBlock, esc, marksOver, wordRanges } from "./md-diff.js";
+import { ansiParts, clipView, fileRef, githubIssue, isSha, issueRefs, shortURL, slug as headingSlug, spotLink, spotOf, stripAnsi } from "./md-refs.js";
 import { glider, GLIDE_KEYS } from "./glide.js";
 import { personOf, speakers, VIEWS, nextView, personLangs, langName, voiceName } from "./persons.js";
 import { PersonsPage, useSample, ROOMS } from "./persons-page.js";
@@ -429,7 +429,7 @@ function App() {
         summary: (s.state !== "working" && s.summary?.status) || undefined, bay: bayOf(s) || undefined, ask: s.state === "needs-you" ? feedAsk(s) : undefined,
       }));
       const hub = (live || []).find((s) => s.kind === "hub");
-      const said = hub && oneLine(hub.lastReply || hub.summary?.status);
+      const said = hub && oneLine(hub.preview || hub.lastReply || hub.summary?.status);
       const assistant = said ? { text: said, at: hub.updated || undefined } : undefined;
       const key = JSON.stringify([rows.map(({ since, ...r }) => r), said]);
       if (key !== appSent) { appSent = key; APP.setSessions(JSON.stringify({ type: "sessions", at: new Date().toISOString(), sessions: rows, assistant })); }
@@ -821,7 +821,7 @@ const hubLine = (hub) => {
   if (!hub) return "Ask about or drive your sessions.";
   if (hub.state === "needs-you") return `Needs you${hub.activity ? `: ${oneLine(hub.activity)}` : ""}`;
   if (hub.state === "working") return oneLine(hub.activity) || "Working";
-  return oneLine(hub.summary?.status) || oneLine(hub.lastReply) || "Waiting for you.";
+  return oneLine(hub.summary?.status) || oneLine(hub.preview || hub.lastReply) || "Waiting for you.";
 };
 
 function ConsoleAgents({ agents, runs }) {
@@ -931,7 +931,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   const { events } = useRowEvents(s, tap, !rail && s.state !== "past" && s.state !== "stopped");
   const on = sel?.sessionId === s.sessionId, run = runningOf(s), made = madeOf(s), g = s.pinned && waiting(s) ? "pinned waiting" : groupOf(s);
   const where = [MULTI && s.host, s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch].filter(Boolean).join(" ");
-  const status = (s.state === "needs-you" ? oneLine(s.summary?.status) || oneLine(s.lastReply) || "Needs you" : headline(s)) || WORD[s.state] || "";
+  const status = (s.state === "needs-you" ? oneLine(s.summary?.status) || oneLine(s.preview || s.lastReply) || "Needs you" : headline(s)) || WORD[s.state] || "";
   const second = doingLine(s);
   const fresh = unread(s);
   const cls = `brow ${g} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""} ${open ? "open" : ""} ${fresh ? "fresh" : ""}`;
@@ -1223,7 +1223,7 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
     <h3 class="grp"><b>Agents</b><span class="c">${shown.length}</span></h3>
     ${shown.map((a) => { const r = runOf(a); return html`<a class="tr ag" href=${`${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`} onClick=${() => setSheet(false)}>
       <b>@${a.name}</b><span class="ago">${r?.updated ? txClock(r.updated) : ""}</span>
-      <span class="l">${oneLine(r?.summary?.status) || oneLine(r?.lastReply) || a.title || ""}</span></a>`; })}
+      <span class="l">${oneLine(r?.summary?.status) || oneLine(r?.preview || r?.lastReply) || a.title || ""}</span></a>`; })}
   </aside>`;
 
   const busy = touched.filter((s) => s.state === "working" || s.state === "needs-you").slice(0, 3);
@@ -1906,7 +1906,7 @@ function doing(s) {
 
 const headline = (s) => {
   if (s.state === "needs-you" && s.activity) return `Waiting on you: ${oneLine(s.activity).replace(/^AskUserQuestion\s+/, "")}`;
-  const t = s.summary?.status?.replace(/^[A-Z][a-z]+:\s+/, "") || oneLine(s.lastReply) || oneLine(s.lastPrompt);
+  const t = s.summary?.status?.replace(/^[A-Z][a-z]+:\s+/, "") || oneLine(s.preview || s.lastReply) || oneLine(s.lastPrompt);
   return t ? t[0].toUpperCase() + t.slice(1) : "";
 };
 const replyable = (s) => s.attachable && s.state === "your-turn" && !s.asks?.length && s.summary?.replies?.length > 0;
@@ -4081,24 +4081,29 @@ function CodeFile({ text, path, line, end }) {
   </div>`;
 }
 
-function CommitView({ s, sha, repo, say, onClose }) {
+const WHEN = new Intl.DateTimeFormat([], { dateStyle: "medium", timeStyle: "short" });
+function CommitView({ s, sha, span, repo, say, open, onClose }) {
   const [c, setC] = useState(null);
   useEffect(() => {
     let on = true;
-    api(`/api/sessions/${s.sessionId}/ref/commit?sha=${sha}`).then((x) => on && setC(x), (e) => { if (on) { say(e.message); onClose(); } });
+    api(span ? `/api/sessions/${s.sessionId}/ref/range?range=${span}` : `/api/sessions/${s.sessionId}/ref/commit?sha=${sha}`).then((x) => on && setC(x), (e) => { if (on) { say(e.message); onClose(); } });
     const k = (e) => { if (e.key === "Escape") { e.preventDefault(); onClose(); } };
     addEventListener("keydown", k, true);
     return () => { on = false; removeEventListener("keydown", k, true); };
-  }, [sha]);
-  const patch = useMemo(() => (c?.patch ? (diffBlock("diff", c.patch) || `<pre><code>${esc(c.patch)}</code></pre>`).replace('class="mdiff', 'class="open mdiff') : ""), [c]);
-  return html`<div class="viewer commitv" role="dialog" aria-label=${c ? c.subject : "Commit"}>
+  }, [sha, span]);
+  const patch = useMemo(() => (c?.patch ? (diffBlock("diff", c.patch, paintLine) || `<pre><code>${esc(c.patch)}</code></pre>`).replace('class="mdiff', 'class="open mdiff') : ""), [c]);
+  const list = c?.commits, title = span ? (list ? `${plural(list.length, "commit")} pushed` : span) : c ? c.subject : sha;
+  const sub = span ? (list?.length ? span : c ? "No new commits, only a move" : "Reading the push") : c ? `${sha}, ${c.author}, ${WHEN.format(new Date(c.date))}` : "Reading the commit";
+  const web = repo && (span ? `${repo}/compare/${span.replace("...", "..").replace("..", "...")}` : `${repo}/commit/${c?.sha || sha}`);
+  return html`<div class="viewer commitv" role="dialog" aria-label=${title}>
     <header>
       <button class="icon" onClick=${onClose} aria-label="Close">✕</button>
-      <div class="who"><div class="n">${c ? c.subject : sha}</div><div class="d">${c ? `${sha}, ${c.author}, ${new Date(c.date).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}` : "Reading the commit"}</div></div>
-      ${repo && html`<button class="btn" onClick=${() => openOut(`${repo}/commit/${c?.sha || sha}`)}>GitHub</button>`}
+      <div class="who"><div class="n">${title}</div><div class="d">${sub}</div></div>
+      ${web && html`<button class="btn" onClick=${() => openOut(web)}>GitHub</button>`}
     </header>
     <div class="fbody"><article class="md">
       ${c?.body && html`<p class="cbody">${c.body}</p>`}
+      ${list?.length > 0 && html`<ul class="clist">${list.map((x) => html`<li><button onClick=${() => open(x.sha)}><code>${x.sha}</code><span class="l">${x.subject}</span><span class="w">${x.author}</span></button></li>`)}</ul>`}
       ${patch ? html`<div dangerouslySetInnerHTML=${{ __html: patch }}></div>` : c && html`<p class="empty">This commit changes no files.</p>`}
       ${c?.truncated && html`<p class="empty">The rest of this commit is too long to show here.</p>`}
     </article></div>
@@ -5025,7 +5030,7 @@ function AgentDetail({ a, live, say, reload, sheet, onClose }) {
   };
   const conv = x || a.sessionId ? () => { onClose?.(); go(x ? keyOf(x) : a.sessionId); } : act(() => startTrusting(a.host, () => agentApi(a.name, "message")), (r) => { onClose?.(); go(r.id); });
   const keeps = agentKeeps(a);
-  const said = oneLine(x?.summary?.status || x?.lastReply);
+  const said = oneLine(x?.summary?.status || x?.preview || x?.lastReply);
   const rule = a.rule && `${spanOf(a.rule.Quiet)} quiet past ${ktok(a.rule.Small)} tokens, or ${spanOf(a.rule.CapQuiet)} quiet past ${ktok(a.rule.Cap)}`;
   const status = a.error ? `Can't start: ${a.error}` : a.trust ? (a.trust.state === "home" ? "Can't start: Claude Code won't run a background session in your home folder. Give it a dir in agent.json." : "Waiting for you: Claude Code doesn't trust its folder yet") : x ? `${WORD[x.state] || x.state}${x.parked ? ", parked" : ""}${x.state === "working" && x.activity ? `: ${oneLine(x.activity)}` : ""}` : "No conversation running";
   const right = html`
@@ -5240,8 +5245,9 @@ const TX_NOISE = /^(ToolSearch|EnterWorktree|ExitWorktree|TaskCreate|TaskUpdate|
 const txSteps = (items) => items.filter((i) => i.t === "step");
 const txSpan = (ms) => { const s = Math.round(ms / 1000); return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`; };
 const txDur = (t) => { const ms = Math.max(t.ms || 0, t.end && t.at ? new Date(t.end) - new Date(t.at) : 0); return ms >= 1000 ? txSpan(ms) : ""; };
-const txClock = (ts) => ts ? new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false }) : "";
-const txDay = (ts) => ts ? new Date(ts).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" }) : "";
+const TX_TIME = new Intl.DateTimeFormat([], { hour: "2-digit", minute: "2-digit", hour12: false }), TX_DATE = new Intl.DateTimeFormat([], { weekday: "long", day: "numeric", month: "long" });
+const txClock = (ts) => ts ? TX_TIME.format(new Date(ts)) : "";
+const txDay = (ts) => ts ? TX_DATE.format(new Date(ts)) : "";
 const txUsd = (n) => n >= 1 ? `$${n.toFixed(2)}` : n >= 0.005 ? `${Math.round(n * 100)}¢` : "";
 const plain = (t) => (t || "").replace(/```[\s\S]*?```/g, " ").replace(/^#+\s*/gm, "").replace(/^\s*>\s?/gm, "").replace(/[*`|]/g, "").replace(/(^|\s)_([^_]+)_(?=\s|$)/g, "$1$2").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
 const firstSentence = (t) => { const p = plain(t); const m = p.match(/^.{12,220}?[.!?:](\s|$)/); return m ? m[0].trim().replace(/:$/, "") : p.slice(0, 200) + (p.length > 200 ? "…" : ""); };
@@ -5319,15 +5325,22 @@ const badgeLabel = (b) => b.kind === "deploy" ? (b.ok ? `Deployed ${b.ref}` : b.
 function BadgeChip({ b }) {
   const chip = html`<span class="badge ${b.ok ? "ok" : "bad"}" title=${b.ref || badgeLabel(b)}>${b.kind === "commit" && html`<code>${b.ref}</code>`}<span class="l">${badgeLabel(b)}</span></span>`;
   if (b.kind === "show") return html`<span class="chiplink" role="link" onClick=${(e) => { e.stopPropagation(); SESSION_API?.page(b.ref); }}>${chip}</span>`;
+  if (b.kind === "commit" && b.ref) return html`<span class="chiplink" role="link" tabindex="0" title="Open this commit" data-sha=${b.ref}>${chip}</span>`;
+  if (b.kind === "push" && b.range) return html`<span class="chiplink" role="link" tabindex="0" title="See what this pushed" data-range=${b.range}>${chip}</span>`;
   return chip;
 }
 
-function Clip({ out, bad, n = 8 }) {
+const ansiNodes = (t) => ansiParts(t).map((p) => (p.cls ? html`<span class=${p.cls}>${p.text}</span>` : p.text));
+function Clip({ out, bad, n = 8, tailFirst = false }) {
   const [all, setAll] = useState(false);
   if (!out?.text) return null;
-  const lines = out.text.split("\n");
-  const hidden = (all ? 0 : Math.max(0, lines.length - n)) + (out.more || 0);
-  return html`<pre class="tpre out ${bad ? "bad" : ""}">${ansiParts(all ? out.text : lines.slice(0, n).join("\n")).map((p) => (p.cls ? html`<span class=${p.cls}>${p.text}</span>` : p.text))}</pre>${hidden > 0 && !all && html`<button class="more-lines" onClick=${() => setAll(true)}>Show ${hidden} more line${hidden > 1 ? "s" : ""}</button>`}${all && out.more > 0 && html`<p class="more-lines">${out.more} more lines were not kept</p>`}`;
+  const lines = out.text.split("\n"), v = clipView(lines, { n, bad: tailFirst }), more = out.more || 0, cut = out.tail ? lines.length - out.tail : -1;
+  const folded = !all && (v.before > 0 || v.after > 0), count = v.before + v.after + more;
+  const body = folded ? ansiNodes(v.shown.join("\n"))
+    : cut >= 0 ? html`${ansiNodes(lines.slice(0, cut).join("\n"))}<span class="tcut">${more} lines were not kept</span>${ansiNodes(lines.slice(cut).join("\n"))}`
+    : ansiNodes(out.text);
+  const show = folded && html`<button class="more-lines" onClick=${() => setAll(true)}>Show ${count} ${tailFirst ? "earlier " : "more "}line${count > 1 ? "s" : ""}</button>`;
+  return html`${tailFirst && show}<pre class="tpre out ${bad ? "bad" : ""}"><button class="copy" data-copy data-src=${stripAnsi(out.text)}>Copy</button>${body}</pre>${!tailFirst && show}`;
 }
 
 function diffRows(e) {
@@ -5354,16 +5367,20 @@ function diffRows(e) {
   }
   return rows;
 }
-function Diff({ edits, cap = 400 }) {
-  const all = edits.flatMap((e, i) => [...(i ? [{ gap: e.line ? `line ${e.line}` : "elsewhere in the file" }] : []), ...diffRows(e)]), rows = all.slice(0, cap);
+function paintLine(text, path) {
+  const lang = baseName(path || "").split(".").pop().toLowerCase();
+  return lang && text.length < 2000 && hljs.getLanguage(lang) ? hljs.highlight(text, { language: lang, ignoreIllegals: true }).value : null;
+}
+function Diff({ edits, cap = 400, path }) {
+  const all = useMemo(() => edits.flatMap((e, i) => [...(i ? [{ gap: e.line ? `line ${e.line}` : "elsewhere in the file" }] : []), ...diffRows(e)]), [edits]), rows = all.slice(0, cap);
   const tidy = (l) => l.replace(/\t/g, "  ");
   const ind = Math.min(...rows.filter((r) => !r.gap && tidy(r.l).trim()).map((r) => tidy(r.l).match(/^ */)[0].length));
   const cut = (l) => (isFinite(ind) ? tidy(l).slice(ind) : tidy(l));
   return html`<div class="code">${rows.map((r) => {
     if (r.gap) return html`<div class="gap">${r.gap}</div>`;
     const a = cut(r.l), b = r.other != null ? cut(r.other) : null;
-    const w = b != null && wordMarks(r.c === "del" ? a : b, r.c === "del" ? b : a, r.c);
-    return html`<div class="l ${r.c}"><span class="ln o">${r.o}</span><span class="ln">${r.n}</span><span class="s">${r.c === "add" ? "+" : r.c === "del" ? "-" : ""}</span><span class="c" dangerouslySetInnerHTML=${{ __html: w || esc(a) || " " }}></span></div>`;
+    const ranges = b != null && wordRanges(r.c === "del" ? a : b, r.c === "del" ? b : a, r.c), body = paintLine(a, path) || esc(a);
+    return html`<div class="l ${r.c}"><span class="ln o">${r.o}</span><span class="ln">${r.n}</span><span class="s">${r.c === "add" ? "+" : r.c === "del" ? "-" : ""}</span><span class="c" dangerouslySetInnerHTML=${{ __html: (ranges ? marksOver(body, ranges) : body) || " " }}></span></div>`;
   })}${all.length > cap && html`<div class="gap">${all.length - cap} more lines not shown; the file has them</div>`}</div>`;
 }
 
@@ -5424,11 +5441,13 @@ function PageRef({ b, s }) {
     <span class="go kb">Open</span></button>`;
 }
 
+const FileArg = ({ path, line, end, children }) => html`<span class="arg farg" data-file=${path} data-exact data-line=${line || null} data-end=${end || null} tabindex="0" role="link" title="Open this file">${children}</span>`;
+
 function Step({ st, s, zoom, pin }) {
-  const k = txKind(st), i = st.input, bad = st.out?.error;
-  const [opened, setOpen] = useState(!!bad || (st.out?.images || []).length > 0);
+  const k = txKind(st), i = st.input, bad = st.out?.error, failing = bad || (st.badge?.kind === "test" && !st.badge.ok) || (st.badge?.kind === "build" && !st.badge.ok);
+  const [opened, setOpen] = useState(!!failing || (st.out?.images || []).length > 0);
   const open = opened || pin;
-  const toggle = () => setOpen(!open);
+  const toggle = (e) => { if (!e?.target?.closest?.("[data-file], [data-sha], [data-range]")) setOpen(!open); };
   const cls = `step ${st.tool === "Write" ? "write" : k} ${bad ? "bad" : ""}`;
   const running = pin && !st.out && html`<${Running} st=${st} />`;
   if (k === "ask") return html`<div class=${cls}><${AskedStep} st=${st} s=${s} /></div>`;
@@ -5443,19 +5462,19 @@ function Step({ st, s, zoom, pin }) {
         ${b && i.description && html`<span class="arg sans">${i.description}</span>`}
         <${Failed} st=${b ? {} : st} />${running}
       </button>
-      ${open && html`<div class="tbox"><pre class="tpre"><span class="ps">$ </span>${cmd}</pre><${Clip} out=${st.out} bad=${bad} /></div>`}
+      ${open && html`<div class="tbox"><pre class="tpre"><span class="ps">$ </span>${cmd}</pre><${Clip} out=${st.out} bad=${bad} tailFirst=${!!failing} n=${failing ? 14 : 8} /></div>`}
     </div>`;
   }
   if (k === "edit") {
-    const d = diffStat(st), path = relPath(i.file_path || st.detail, s);
+    const d = diffStat(st), path = relPath(i.file_path || st.detail, s), edits = st.tool === "Write" ? [{ old: "", new: i.content || "", line: 1 }] : st.edits || txEdits(st);
     return html`<div class=${cls}>
-      <button class="line" aria-expanded=${open} onClick=${toggle}><b>${st.tool === "Write" ? "Wrote" : st.n > 1 ? `Edited ${st.n} times` : "Edited"}</b><span class="arg">${path}</span><span class="end"><span class="plus">+${d.add}</span>${d.del > 0 && html` <span class="minus">-${d.del}</span>`}</span>${running}</button>
-      ${open && html`<div class="tbox"><${Diff} edits=${st.tool === "Write" ? [{ old: "", new: i.content || "", line: 1 }] : st.edits || txEdits(st)} cap=${120} /></div>`}
+      <button class="line" aria-expanded=${open} onClick=${toggle}><b>${st.tool === "Write" ? "Wrote" : st.n > 1 ? `Edited ${st.n} times` : "Edited"}</b>${TOUCH ? html`<span class="arg">${path}</span>` : html`<${FileArg} path=${i.file_path || st.detail} line=${st.tool === "Write" ? 0 : edits[0]?.line}>${path}</${FileArg}>`}<span class="end"><span class="plus">+${d.add}</span>${d.del > 0 && html` <span class="minus">-${d.del}</span>`}</span>${running}</button>
+      ${open && html`<div class="tbox">${TOUCH && html`<button class="more-lines" data-file=${i.file_path || st.detail} data-exact data-line=${st.tool === "Write" ? null : edits[0]?.line || null}>Open file</button>`}<${Diff} edits=${edits} cap=${120} path=${i.file_path || st.detail} /></div>`}
     </div>`;
   }
   if (st.tool === "Read") {
     const from = i.offset, to = i.offset && i.limit ? i.offset + i.limit : null;
-    return html`<div class=${cls}><div class="line"><b>Read</b><span class="arg">${relPath(i.file_path || st.detail, s)}${from ? `:${from}${to ? `-${to}` : ""}` : ""}</span><${Failed} st=${st} />${running}</div><${Shots} st=${st} zoom=${zoom} /></div>`;
+    return html`<div class=${cls}><div class="line"><b>Read</b><${FileArg} path=${i.file_path || st.detail} line=${from} end=${to ? to - 1 : 0}>${relPath(i.file_path || st.detail, s)}${from ? `:${from}${to ? `-${to}` : ""}` : ""}</${FileArg}><${Failed} st=${st} />${running}</div><${Shots} st=${st} zoom=${zoom} /></div>`;
   }
   if (st.tool === "Grep" || st.tool === "Glob") return html`<div class=${cls}><div class="line"><b>Searched</b><span class="arg">${i.pattern || st.detail}${i.path ? `  in ${relPath(i.path, s)}` : ""}</span>${running}</div></div>`;
   if (st.tool === "WebSearch") {
@@ -6168,7 +6187,8 @@ const cleanPrompt = (t) => unesc(t || "").replace(/\[Image #\d+\]\s*/g, "");
 function Lead({ text, images, files, at }) {
   const [all, setAll] = useState(false);
   const long = text.length > 600 || text.split("\n").length > 8;
-  return html`<div class="lead"><div class="lead-at">you ${at}</div><p class=${long && !all ? "clamp" : ""}>${text}</p>
+  const body = useMemo(() => Marked.parse(text, { breaks: true }), [text]);
+  return html`<div class="lead"><div class="lead-at">you ${at}</div><div class="prose ptxt ${long && !all ? "clamp" : ""}" dangerouslySetInnerHTML=${{ __html: body }}></div>
     ${long && html`<button class="kb more" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}
     ${files > 0 && html`<span class="attl">${plural(files, "attachment")}</span>`}
     ${(images || []).length > 0 && html`<span class="imgs">${images.map((src) => html`<img src=${src} alt="Image you attached" />`)}</span>`}</div>`;
@@ -6178,8 +6198,8 @@ const PATH_CODE = '<code class="path[^"]*"[^>]*>[^<]+</code>';
 const CITATION = new RegExp(`\\(${PATH_CODE}(?:,\\s*${PATH_CODE})*\\)`, "g");
 const quietCitations = (h) => h.replace(CITATION, '<span class="cite">$&</span>');
 function Prose({ text, id }) {
-  const h = useMemo(() => { let j = 0; return quietCitations(md(text)).replace(/<h([1-4])>/g, (_, n) => `<h${n} id="${id}h${j++}">`); }, [text]);
-  return html`<div class="prose" dangerouslySetInnerHTML=${{ __html: h }}></div><button class="mcopy" data-copy data-src=${text}>Copy</button>`;
+  const h = useMemo(() => { let j = 0; return quietCitations(md(text)).replace(/<h([1-4])>(.*?)<\/h\1>/gs, (_, n, inner) => `<h${n} id="${id}h${j++}">${inner}<button class="hlink" data-link aria-label="Copy a link to this heading" title="Copy a link to this heading">#</button></h${n}>`); }, [text]);
+  return html`<div class="prose" dangerouslySetInnerHTML=${{ __html: h }}></div><div class="mbar"><button class="mcopy" data-copy data-src=${text}>Copy</button><button class="mcopy" data-link title="Copy a link to this reply">Link</button></div>`;
 }
 
 function LiveRow({ s, step, since, steps }) {
@@ -6240,16 +6260,37 @@ let TX_API = null;
 const shortDay = (ts) => new Date(ts).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
 const msOf = (at) => (at ? Date.parse(at) || 0 : 0);
 
+const TOUCH = matchMedia("(hover: none)").matches;
+const ISSUE_WORD = { open: "Open", closed: "Closed", merged: "Merged", draft: "Draft" };
+function IssuePop({ pop, keep, leave, close }) {
+  useEffect(() => {
+    const k = (e) => { if (e.key === "Escape") close(); };
+    const away = (e) => { if (!e.target.closest?.(".ipop")) close(); };
+    addEventListener("keydown", k, true);
+    addEventListener("scroll", close, true);
+    if (pop.stay) setTimeout(() => addEventListener("pointerdown", away, true));
+    return () => { removeEventListener("keydown", k, true); removeEventListener("scroll", close, true); removeEventListener("pointerdown", away, true); };
+  }, []);
+  const i = pop.info, width = Math.min(340, innerWidth - 24), left = Math.max(12, Math.min(pop.at.left, innerWidth - width - 12));
+  const below = pop.at.bottom + 160 < innerHeight, place = below ? `top: ${pop.at.bottom + 6}px` : `bottom: ${innerHeight - pop.at.top + 6}px`;
+  if (!i && !pop.stay) return null;
+  return html`<div class="ipop" role="tooltip" style=${`left: ${left}px; width: ${width}px; ${place}`} onPointerEnter=${keep} onPointerLeave=${leave}>
+    <div class="h"><span>${pop.name}</span>${i && html`<span class="st ${i.state}">${ISSUE_WORD[i.state] || i.state}${i.kind === "pr" ? " PR" : ""}</span>`}</div>
+    ${i ? html`<div class="t">${i.title}</div>` : !pop.none && html`<div class="t dim">Reading…</div>`}
+    ${pop.stay && html`<button class="btn" onClick=${() => { openOut(pop.url); close(); }}>Open on GitHub</button>`}
+  </div>`;
+}
+
 function Transcript({ s, say, resume, busy, cmp = {} }) {
-  const [ref, setRef] = useState(null), [repo, setRepo] = useState("");
+  const [ref, setRef] = useState(null), [repo, setRepo] = useState(""), [issuePop, setIssuePop] = useState(null), popTimer = useRef(null);
   useEffect(() => {
     setRef(null); setRepo("");
     let on = true;
     api(`/api/sessions/${s.sessionId}/ref/repo`).then((r) => on && setRepo(r.repo || ""), () => {});
     return () => { on = false; };
   }, [s.sessionId]);
-  const openFileRef = async (text) => {
-    const r = fileRef(text);
+  const openFileRef = async (text, opts = {}) => {
+    const r = opts.exact !== undefined ? { path: text, line: +opts.line || 0, end: +opts.end || 0 } : fileRef(text);
     if (!r) return;
     try {
       const f = await api(`/api/sessions/${s.sessionId}/ref/file?path=${encodeURIComponent(r.path)}`);
@@ -6553,6 +6594,22 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     });
     jump();
   };
+  const spotDone = useRef("");
+  const goSpot = () => {
+    const spot = spotOf(location.hash);
+    if (!spot || spot.sid !== s.sessionId || !turns[spot.turn] || spotDone.current === location.hash) return;
+    spotDone.current = location.hash;
+    go(spot.turn, true);
+    if (!spot.heading) return;
+    const find = (n = 0) => {
+      const start = box.current?.querySelector(`#tx${spot.turn}`), end = box.current?.querySelector(`#tx${spot.turn + 1}`);
+      const el = start && [...box.current.querySelectorAll(".prose :is(h1, h2, h3, h4)")].find((h) => (start.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING) && (!end || end.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_PRECEDING) && headingSlug([...h.childNodes].filter((x) => !x.classList?.contains("hlink")).map((x) => x.textContent).join("")) === spot.heading);
+      if (el) { scrollTo(el, false); el.classList.add("spot"); setTimeout(() => el.classList.remove("spot"), 1800); }
+      else if (n < 30) setTimeout(() => find(n + 1), 150);
+    };
+    find();
+  };
+  useEffect(() => { goSpot(); addEventListener("hashchange", goSpot); return () => removeEventListener("hashchange", goSpot); });
   TX_API = { level: () => setLevel((level % 3) + 1), find: () => { findQ.current = ""; setPop("find"); }, results: () => setPop("results"), contents: () => setContents(!contents), zen: () => setZen(!zen) };
   useEffect(() => () => { TX_API = null; }, []);
 
@@ -6698,21 +6755,53 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   };
 
   const dropIn = (e) => { if (live && e.dataTransfer?.types?.includes("Files")) { e.preventDefault(); setDrop(true); } };
+  const repoName = repo.replace(/^https:\/\/github\.com\//, "");
+  const showIssue = (el, stay) => {
+    const name = el.dataset.iss || `${repoName}#${el.dataset.issue}`, [r, n] = name.split("#");
+    const url = el.getAttribute("href") || `https://github.com/${r}/issues/${n}`, at = el.getBoundingClientRect();
+    clearTimeout(popTimer.current);
+    setIssuePop({ name, url, at: { left: at.left, top: at.top, bottom: at.bottom }, info: null, stay });
+    api(`/api/sessions/${s.sessionId}/ref/issue?repo=${encodeURIComponent(r)}&n=${n}`).then(
+      (info) => setIssuePop((p) => (p?.name === name ? { ...p, info } : p)),
+      () => setIssuePop((p) => (p?.name === name && !p.stay ? null : p ? { ...p, none: p.name === name } : p)),
+    );
+  };
+  const hideIssue = () => { clearTimeout(popTimer.current); popTimer.current = setTimeout(() => setIssuePop((p) => (p?.stay ? p : null)), 160); };
+  const issueOver = (e) => {
+    if (TOUCH) return;
+    const el = e.target.closest?.("[data-iss], [data-issue]");
+    if (!el || (el.dataset.issue && !repo)) return;
+    clearTimeout(popTimer.current);
+    popTimer.current = setTimeout(() => showIssue(el), 220);
+  };
+  const issueOut = (e) => { if (e.target.closest?.("[data-iss], [data-issue]")) hideIssue(); };
+  const copySpot = (btn) => {
+    const heading = btn.closest("h1, h2, h3, h4");
+    const turn = [...box.current.querySelectorAll("[id^=tx]")].filter((x) => /^tx\d+$/.test(x.id) && x.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_FOLLOWING).pop();
+    if (!turn) return;
+    const text = heading ? [...heading.childNodes].filter((x) => !x.classList?.contains("hlink")).map((x) => x.textContent).join("") : "";
+    copyText(spotLink(location.origin, s.sessionId, +turn.id.slice(2), text));
+    say("Link copied");
+  };
   const refAct = (e) => {
     const t = e.target;
     if (!t.closest || !getSelection().isCollapsed) return;
-    const f = t.closest("[data-file]"), c = t.closest("[data-sha]"), i = t.closest("[data-issue]"), more = t.closest("[data-more]"), src = t.closest("[data-draft-source]");
-    if (f) openFileRef(f.dataset.file);
+    const f = t.closest("[data-file]"), c = t.closest("[data-sha]"), span = t.closest("[data-range]"), i = t.closest("[data-issue]"), iss = t.closest("[data-iss]"), more = t.closest("[data-more]"), src = t.closest("[data-draft-source]"), link = t.closest("[data-link]");
+    if (TOUCH && (iss || (i && repo))) { showIssue(iss || i, true); e.stopPropagation(); }
+    else if (f) openFileRef(f.dataset.file, f.dataset);
     else if (c) setRef({ sha: c.dataset.sha });
+    else if (span) setRef({ range: span.dataset.range });
     else if (i && repo) openOut(`${repo}/issues/${i.dataset.issue}`);
+    else if (link) copySpot(link);
     else if (more) { const open = more.parentElement.classList.toggle("open"); more.dataset.was ??= more.textContent; more.textContent = open ? "Show less" : more.dataset.was; }
     else if (src) src.textContent = src.closest(".mddraft").classList.toggle("source") ? "Rendered" : "Source";
     else return;
     e.preventDefault();
   };
   return html`${ref?.file && html`<${Viewer} list=${[ref.file]} at=${0} setAt=${() => {}} onClose=${() => setRef(null)} />`}
-  ${ref?.sha && html`<${CommitView} s=${s} sha=${ref.sha} repo=${repo} say=${say} onClose=${() => setRef(null)} />`}
-  <div class="tx-wrap ${contents ? "with-toc" : ""}" data-repo=${repo || null} onClick=${refAct} onKeyDown=${(e) => { if (e.key === "Enter" && e.target.closest?.("[data-file], [data-sha]")) { refAct(e); e.stopPropagation(); } }} onDragEnter=${dropIn} onDragOver=${dropIn}
+  ${(ref?.sha || ref?.range) && html`<${CommitView} key=${ref.sha || ref.range} s=${s} sha=${ref.sha} span=${ref.range} repo=${repo} say=${say} open=${(sha) => setRef({ sha })} onClose=${() => setRef(null)} />`}
+  ${issuePop && html`<${IssuePop} pop=${issuePop} keep=${() => clearTimeout(popTimer.current)} leave=${hideIssue} close=${() => setIssuePop(null)} />`}
+  <div class="tx-wrap ${contents ? "with-toc" : ""}" data-repo=${repo || null} onClick=${refAct} onPointerOver=${issueOver} onPointerOut=${issueOut} onKeyDown=${(e) => { if (e.key === "Enter" && e.target.closest?.("[data-file], [data-sha], [data-range]")) { refAct(e); e.stopPropagation(); } }} onDragEnter=${dropIn} onDragOver=${dropIn}
     onDragLeave=${(e) => !e.currentTarget.contains(e.relatedTarget) && setDrop(false)}
     onDrop=${(e) => { if (!drop) return; e.preventDefault(); setDrop(false); uploadRef.current?.([...e.dataTransfer.files]); }}>
     ${zen && html`<div class="zenbar"><span class="t">${s.title || "Untitled"}</span><button class="kb zenaa" aria-expanded=${pop === "look"} aria-keyshortcuts="a" title="How the text looks" onClick=${() => setPop(pop === "look" ? null : "look")}>Aa <kbd aria-hidden="true">a</kbd></button><button class="kb" onClick=${() => setZen(false)}>Leave zen <kbd aria-hidden="true">z</kbd></button></div>`}
@@ -6797,7 +6886,7 @@ const LONG_CODE_LINES = 26, LONG_CELL = 40;
 const mdRender = new Marked.Renderer();
 mdRender.code = (code, lang) => {
   const l = (lang || "").split(/\s/)[0];
-  const diff = diffBlock(l, code);
+  const diff = diffBlock(l, code, paintLine);
   if (diff) return diff;
   if (/^(markdown|md)$/.test(l)) return draftBlock(code);
   const body = l && hljs.getLanguage(l) ? hljs.highlight(code, { language: l, ignoreIllegals: true }).value : esc(code);
@@ -6825,8 +6914,8 @@ mdRender.link = (href, title, text) => {
   const file = fileLink(href, text);
   if (file) return file;
   if (!safeURL(href)) return text;
-  const auto = text === esc(href) || text === href;
-  return `<a href="${esc(href)}" data-out${auto ? ` class="auto" title="${esc(href)}"` : ""}>${auto ? esc(shortURL(href)) : text}</a>`;
+  const auto = text === esc(href) || text === href, iss = githubIssue(href);
+  return `<a href="${esc(href)}" data-out${iss ? ` data-iss="${iss}"` : ""}${auto ? ` class="auto"${iss ? "" : ` title="${esc(href)}"`}` : ""}>${auto ? esc(shortURL(href)) : text}</a>`;
 };
 mdRender.image = (href, title, text) => fileLink(href, esc(text || href)) || (safeURL(href) ? `<a href="${esc(href)}" data-out>${esc(text || href)}</a>` : esc(text || ""));
 const CALLOUTS = { note: "note", tip: "note", info: "note", important: "warn", warning: "warn", caution: "warn" };
@@ -7264,7 +7353,7 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
     act("Put on the backlog", () => putAside(s, say), "later aside backlog");
   }
   for (const s of live) add("Sessions", s.title || "Untitled", { key: `s:${s.sessionId}`, s, extra: bayOf(s) || project(s.cwd).name, boost: STATE_BOOST[s.state] || 0,
-    sub: s.state === "working" ? doing(s) : oneLine(s.summary?.status || s.lastReply), bay: bayOf(s) || project(s.cwd).name, ago: ago(s),
+    sub: s.state === "working" ? doing(s) : oneLine(s.summary?.status || s.preview || s.lastReply), bay: bayOf(s) || project(s.cwd).name, ago: ago(s),
     to: `#/s/${keyOf(s)}`, run: run(`s:${s.sessionId}`, () => go(keyOf(s))) });
   const liveIDs = new Set(live.map((s) => s.sessionId));
   for (const s of past.filter((s) => !liveIDs.has(s.sessionId))) add("Earlier", s.title || "Untitled", { s, extra: project(s.cwd).name, bay: project(s.cwd).name, ago: ago(s), sub: oneLine(s.lastPrompt), to: `#/s/${s.sessionId}`, run: run(null, () => go(s.sessionId)) });

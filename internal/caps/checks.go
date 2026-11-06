@@ -199,6 +199,16 @@ func checkGit(ctx context.Context, env Env) Result {
 	return Result{OK, strings.TrimSpace(string(out)) + "."}
 }
 
+func checkGH(ctx context.Context, env Env) Result {
+	if _, err := exec.LookPath("gh"); err != nil {
+		return Result{Missing, "gh was not found on this machine's PATH."}
+	}
+	if exec.CommandContext(ctx, "gh", "auth", "status").Run() != nil {
+		return Result{Missing, "gh is not signed in."}
+	}
+	return Result{OK, "Signed in."}
+}
+
 func checkServer(ctx context.Context, env Env) Result {
 	if env.Self == "" {
 		return Result{OK, "Running."}

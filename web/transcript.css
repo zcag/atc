@@ -219,6 +219,52 @@ body.zen .tx-wrap .prose blockquote.callout.warn { box-shadow: inset 2px 0 0 var
 .hljs-meta, .hljs-deletion { color: var(--hl-comment); }
 .ansi-r { color: var(--del); } .ansi-g { color: var(--add); } .ansi-y { color: var(--hl-number); } .ansi-b, .ansi-c { color: var(--hl-title); } .ansi-m { color: var(--hl-keyword); } .ansi-k { color: var(--faint); } .ansi-bold { font-weight: 650; }
 
+/* a step's file, a commit in a row, what a failure said last */
+.tx-wrap .step .farg { cursor: pointer; }
+.tx-wrap .step .farg:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.tx-wrap .step :is(.farg, .chiplink):focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-radius: 2px; }
+.tx-wrap .chiplink[data-sha], .tx-wrap .chiplink[data-range] { cursor: pointer; }
+.tx-wrap .chiplink[data-sha]:hover .l, .tx-wrap .chiplink[data-range]:hover .l { text-decoration: underline; text-underline-offset: 3px; }
+.tx-wrap .tpre.out { position: relative; }
+.tx-wrap .tpre .copy { font-family: var(--text); }
+.tx-wrap .tpre:hover > .copy { opacity: 1; }
+.tx-wrap .tcut { display: block; margin: var(--s1) 0; padding: 2px 0; font-family: var(--text); color: var(--faint); border-block: 1px dashed var(--line); }
+.tx-wrap .tclip .more-lines { text-align: left; }
+
+/* your own words, drawn like a reply but in your type */
+.tx .lead .prose.ptxt { font: inherit; font-family: var(--sans); font-variation-settings: var(--v-you); font-size: var(--fs-title); line-height: 1.5; font-weight: 500; color: var(--ink); max-width: none; }
+.tx .lead .ptxt > :last-child { margin-bottom: 0; }
+.tx .lead .ptxt p { margin: 0 0 0.5em; font-size: inherit; }
+.tx .lead .ptxt :is(ul, ol) { margin-bottom: 0.5em; }
+.tx .lead .ptxt :is(h1, h2, h3, h4) { margin: 0.4em 0 0.2em; padding: 0; border: 0; font-size: 1em; }
+.tx .lead .ptxt.clamp { max-height: 12em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 76%, transparent); mask-image: linear-gradient(#000 76%, transparent); }
+body.zen .tx .lead .prose.ptxt { font-size: 0.9em; font-weight: 400; color: var(--dim); }
+
+/* following a reference without leaving: an issue's title, a link to one spot */
+.ipop { position: fixed; z-index: 27; padding: var(--s2) var(--s3); background: var(--strip); color: var(--ink); border: 1px solid var(--line-strong); border-radius: var(--r-md); box-shadow: 0 6px 22px rgb(0 0 0 / .28); font-family: var(--text); font-size: var(--fs-ui); line-height: 1.4; }
+.ipop .h { display: flex; justify-content: space-between; gap: var(--s3); font-size: var(--fs-small); color: var(--faint); }
+.ipop .st { font-weight: 620; color: var(--dim); }
+.ipop .st.open { color: var(--add); } .ipop .st.merged { color: var(--hl-keyword); } .ipop .st.closed { color: var(--del); }
+.ipop .t { margin-top: 2px; overflow-wrap: anywhere; }
+.ipop .t.dim { color: var(--faint); }
+.ipop .btn { display: block; width: 100%; margin-top: var(--s2); min-height: 40px; }
+.tx-wrap .prose .hlink { display: inline-block; margin-left: 0.4em; color: var(--faint); font-weight: 400; opacity: 0; user-select: none; }
+.tx-wrap .prose :is(h1, h2, h3, h4):hover > .hlink, .tx-wrap .prose .hlink:focus-visible { opacity: 1; }
+.tx-wrap .prose .hlink:hover { color: var(--ink); }
+.tx-wrap .prose .spot { background: color-mix(in srgb, var(--focus) 22%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--focus) 22%, transparent); transition: background 0.6s, box-shadow 0.6s; }
+.tx-wrap .mbar { display: flex; gap: var(--s3); margin: calc(-1 * var(--s2)) 0 var(--s2); }
+.tx-wrap .mbar .mcopy { margin: 0; }
+[data-said]:not([data-stop]) .mbar { display: none; }
+@media (hover: none) { .tx-wrap .prose .hlink { display: none; } }
+.commitv .clist { list-style: none; margin: 0 0 var(--sp-7); padding: 0; border: 1px solid var(--line); border-radius: var(--r-md); }
+.commitv .clist li + li { border-top: 1px solid var(--hair); }
+.commitv .clist button { display: flex; align-items: baseline; gap: var(--sp-5); width: 100%; min-height: 40px; padding: var(--sp-4) var(--sp-5); background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.commitv .clist button:hover { background: var(--strip-hi); }
+.commitv .clist code { flex: none; color: var(--dim); }
+.commitv .clist .l { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.commitv .clist .w { flex: none; color: var(--faint); font-size: var(--fs-small); }
+@media (max-width: 899px) { .commitv .clist .w { display: none; } }
+
 /* a file opened from a reference */
 .fcode { --fl: 1.55em; display: flex; width: max-content; min-width: 100%; font: var(--fs-sm)/var(--fl) var(--mono); padding: var(--sp-5) 0 60px; }
 .fcode .gut { position: sticky; left: 0; z-index: 1; flex: none; padding: 0 var(--sp-5) 0 var(--sp-5); text-align: right; white-space: pre; color: var(--faint); background: var(--board); user-select: none; }

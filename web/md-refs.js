@@ -40,7 +40,7 @@ export const issueRefs = {
     if (m) return { type: "issue", raw: m[0], repo: m[1] || "", n: m[2] };
   },
   renderer: (t) => t.repo
-    ? `<a class="ref" href="https://github.com/${t.repo}/issues/${t.n}" data-out>${t.raw}</a>`
+    ? `<a class="ref" href="https://github.com/${t.repo}/issues/${t.n}" data-out data-iss="${t.repo}#${t.n}">${t.raw}</a>`
     : `<span class="ref" data-issue="${t.n}">${t.raw}</span>`,
 };
 
@@ -66,4 +66,27 @@ export function ansiParts(text) {
   }
   push(text.slice(at));
   return out;
+}
+
+export function githubIssue(url) {
+  const m = /^https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/(?:pull|issues)\/(\d+)(?:[/?#]|$)/.exec(url);
+  return m ? `${m[1]}#${m[2]}` : "";
+}
+
+export const slug = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "");
+
+export const spotLink = (origin, sid, turn, heading) => `${origin}/#/s/${sid}/t/${turn}${heading ? `/h/${encodeURIComponent(slug(heading))}` : ""}`;
+
+export function spotOf(hash) {
+  const m = /^#\/s\/([^/]+)\/t\/(\d+)(?:\/h\/(.+))?$/.exec(hash);
+  return m ? { sid: m[1], turn: +m[2], heading: m[3] ? decodeURIComponent(m[3]) : "" } : null;
+}
+
+export const stripAnsi = (t) => t.replace(ANSI, "");
+
+// Which lines of a clipped output to show folded: the start usually, the end when it failed, since that is why.
+export function clipView(lines, { n, bad }) {
+  const kept = lines.length;
+  if (kept <= n) return { shown: lines, before: 0, after: 0 };
+  return bad ? { shown: lines.slice(-n), before: kept - n, after: 0 } : { shown: lines.slice(0, n), before: 0, after: kept - n };
 }

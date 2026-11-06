@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Marked } from "./vendor/marked.esm.js";
-import { ansiParts, fileRef, isSha, issueRefs, shortURL } from "./md-refs.js";
+import { ansiParts, clipView, fileRef, githubIssue, isSha, issueRefs, shortURL, slug, spotLink, spotOf, stripAnsi } from "./md-refs.js";
 
 test("file references, with and without a line", () => {
   assert.deepEqual(fileRef("web/app.js:12"), { path: "web/app.js", line: 12, end: 0 });
@@ -34,7 +34,7 @@ const md = (s) => new Marked({ gfm: true }).use({ extensions: [issueRefs] }).par
 
 test("issue references become links only where they are references", () => {
   assert.match(md("fixes #4182 and (#90)."), /fixes <span class="ref" data-issue="4182">#4182<\/span> and \(<span class="ref" data-issue="90">#90<\/span>\)/);
-  assert.match(md("see o/r#77"), /<a class="ref" href="https:\/\/github.com\/o\/r\/issues\/77" data-out>o\/r#77<\/a>/);
+  assert.match(md("see o/r#77"), /<a class="ref" href="https:\/\/github.com\/o\/r\/issues\/77" data-out data-iss="o\/r#77">o\/r#77<\/a>/);
   for (const s of ["the #1 priority", "colour #112233", "a#12", "`#123`", "[#123](https://x.io)", "```\n#123\n```", "https://x.io/a#123", "it&#39;s"]) assert.doesNotMatch(md(s), /class="ref"/, s);
 });
 
@@ -43,4 +43,35 @@ test("ansi colours become parts and other escapes vanish", () => {
   assert.deepEqual(ansiParts("\x1b[32mok\x1b[0m done"), [{ text: "ok", cls: "ansi-g" }, { text: " done", cls: "" }]);
   assert.deepEqual(ansiParts("\x1b[1;31mFAIL\x1b[m"), [{ text: "FAIL", cls: "ansi-r ansi-bold" }]);
   assert.deepEqual(ansiParts("a\x1b[2Kb"), [{ text: "a", cls: "" }, { text: "b", cls: "" }]);
+});
+
+test("a github URL says which issue it is", () => {
+  assert.equal(githubIssue("https://github.com/o/r/pull/12"), "o/r#12");
+  assert.equal(githubIssue("https://github.com/o/r/issues/12#issuecomment-5"), "o/r#12");
+  assert.equal(githubIssue("https://github.com/o/r/pull/12/files"), "o/r#12");
+  assert.equal(githubIssue("https://github.com/o/r/commit/abc"), "");
+  assert.equal(githubIssue("https://github.com.evil.io/o/r/pull/12"), "");
+});
+
+test("a link to a spot round-trips", () => {
+  const l = spotLink("https://x", "abc", 3, "A Draft: to send!");
+  assert.equal(l, "https://x/#/s/abc/t/3/h/a-draft-to-send");
+  assert.deepEqual(spotOf(new URL(l).hash), { sid: "abc", turn: 3, heading: "a-draft-to-send" });
+  assert.deepEqual(spotOf("#/s/abc/t/3"), { sid: "abc", turn: 3, heading: "" });
+  assert.equal(spotOf("#/s/abc"), null);
+  assert.equal(spotOf("#/s/abc/p/page"), null);
+  assert.equal(slug("Türkçe başlık 2"), "türkçe-başlık-2");
+});
+
+test("a failure folds to its end, anything else to its start", () => {
+  const lines = Array.from({ length: 20 }, (_, i) => String(i + 1));
+  assert.deepEqual(clipView(lines, { n: 3, bad: false }).shown, ["1", "2", "3"]);
+  assert.equal(clipView(lines, { n: 3, bad: false }).after, 17);
+  assert.deepEqual(clipView(lines, { n: 3, bad: true }).shown, ["18", "19", "20"]);
+  assert.equal(clipView(lines, { n: 3, bad: true }).before, 17);
+  assert.deepEqual(clipView(["a"], { n: 3, bad: true }), { shown: ["a"], before: 0, after: 0 });
+});
+
+test("stripping removes every terminal escape", () => {
+  assert.equal(stripAnsi("\x1b[32mok\x1b[0m\x1b[2K!"), "ok!");
 });

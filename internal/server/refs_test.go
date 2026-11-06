@@ -139,3 +139,44 @@ func TestRepoURL(t *testing.T) {
 		}
 	}
 }
+
+func TestRangeIn(t *testing.T) {
+	repo := gitRepo(t)
+	ctx := context.Background()
+	from, _ := gitIn(ctx, repo, "rev-parse", "--short=10", "HEAD")
+	write(t, filepath.Join(repo, "b.txt"), "b\n")
+	for _, args := range [][]string{{"add", "."}, {"-c", "user.name=A", "-c", "user.email=a@example.com", "commit", "-qm", "Second"}} {
+		if out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("%s", out)
+		}
+	}
+	to, _ := gitIn(ctx, repo, "rev-parse", "--short=10", "HEAD")
+	span := strings.TrimSpace(from) + ".." + strings.TrimSpace(to)
+	for _, r := range []string{span, strings.Replace(span, "..", "...", 1)} {
+		c, ok := rangeIn(ctx, repo, r)
+		if !ok || len(c.Commits) != 1 || c.Commits[0].Subject != "Second" || !strings.Contains(c.Patch, "+b") {
+			t.Errorf("%s: %+v %v", r, c, ok)
+		}
+	}
+	if _, ok := rangeIn(ctx, repo, "deadbeef00..deadbeef01"); ok {
+		t.Error("an unknown range was found")
+	}
+}
+
+func TestParseIssue(t *testing.T) {
+	for body, want := range map[string]issueInfo{
+		`{"title":"T","state":"open"}`:                                                       {"T", "open", "issue"},
+		`{"title":"T","state":"closed"}`:                                                     {"T", "closed", "issue"},
+		`{"title":"T","state":"open","pull_request":{"merged_at":null}}`:                     {"T", "open", "pr"},
+		`{"title":"T","state":"open","draft":true,"pull_request":{"merged_at":null}}`:        {"T", "draft", "pr"},
+		`{"title":"T","state":"closed","pull_request":{"merged_at":"2026-01-01T00:00:00Z"}}`: {"T", "merged", "pr"},
+		`{"title":"T","state":"closed","pull_request":{"merged_at":null}}`:                   {"T", "closed", "pr"},
+	} {
+		if got, ok := parseIssue([]byte(body)); !ok || got != want {
+			t.Errorf("%s gave %+v", body, got)
+		}
+	}
+	if _, ok := parseIssue([]byte(`{"message":"Not Found"}`)); ok {
+		t.Error("an error body parsed")
+	}
+}
