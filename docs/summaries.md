@@ -19,9 +19,8 @@ summary is of that one message: once the session moves on, it goes away until th
 A notification for a finished turn waits up to 25 seconds for the summary, then goes out with the
 start of the reply instead.
 
-In the session list and on the board, a session waiting on you shows its status with the gist's
-bullets under it. **Settings, Appearance, Session list** turns that down to the status line alone,
-per device.
+In the session list and on the board, a session shows its status line. **Settings, Appearance,
+Session list** adds the gist's bullets under it for sessions waiting on you, per device.
 
 ## What it costs, and how to change it
 

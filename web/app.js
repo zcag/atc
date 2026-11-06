@@ -5211,7 +5211,7 @@ const txStore = {
 const txPrefs = {
   get: () => {
     const p = txStore.get("prefs", {});
-    return { size: 1, width: 1, space: 1, paper: "", cards: "long", ...p, face: !p.face || (p.face === "lit" && !p.chose) ? "text" : p.face };
+    return { size: 1, width: 1, space: 1, paper: "", cards: "line", ...p, face: !p.face || (p.face === "lit" && !p.chose) ? "text" : p.face };
   },
   set(p) {
     const v = { ...txPrefs.get(), ...p, chose: p.face ? true : txStore.get("prefs", {}).chose };
