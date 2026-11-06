@@ -78,6 +78,6 @@ own copies of them in `~/.config/atc/modes`.
 
 ## Testing without a phone
 
-`talk.py --sim caller.wav --hub http://127.0.0.1:<port> --lang en --smart-turn --end-ms 1500` plays a WAV as the caller through the
+`talk.py --sim caller.wav --hub http://127.0.0.1:<port> --lang en --end-ms 700` plays a WAV as the caller through the
 whole pipeline and leaves `call.wav`, `turns.jsonl` and `debug.jsonl` in its `--out`. `DELTA_CALL_BRIDGE=0
 DELTA_CALL_PORT=8817 call.py` is a line with no phone; `ATC_CALL_TEST_LINE` sends test app calls to it.

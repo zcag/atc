@@ -11,7 +11,7 @@ Environment=TALK_STATE=%h/.local/state/atc/voice
 Environment=TALK_MODELS=%h/.cache/atc/voice
 Environment=HF_HOME=%h/.cache/atc/voice/hf
 EnvironmentFile=-%h/.config/atc/voice.env
-ExecStart=/usr/bin/env uv run --script ${ATC_VOICE_DIR}/talk.py --loop --smart-turn --end-ms 1500 --stt stream --brain hub --line app --out ${TALK_STATE}/calls $TALK_ARGS
+ExecStart=/usr/bin/env uv run --script ${ATC_VOICE_DIR}/talk.py --loop --end-ms 700 --stt stream --brain hub --line app --out ${TALK_STATE}/calls $TALK_ARGS
 Restart=always
 RestartSec=5
 

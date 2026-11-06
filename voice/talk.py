@@ -301,7 +301,7 @@ class Talk:
         self.opening = self.discard = self.holding = False
         self.dry_ms, self.slowest = 0.0, 0.0
         self.tools_open, self.last_voice = 0, time.monotonic()
-        self.last_ack, self.canned_at = None, 0.0
+        self.last_heard, self.last_ack, self.canned_at = 0.0, None, 0.0
         self.t0 = self.speaking_task = None
         self.track = {"in": bytearray(), "out": bytearray()}
         self.rate, self.down = RATE, None
@@ -623,6 +623,7 @@ class Talk:
                 self.speech_ms += 32
                 self.voiced_ms += 32
                 self.silence_ms = 0
+                self.last_heard = time.monotonic()
                 if not self.in_speech and (self.pressed or self.speech_ms >= self.a.min_speech):
                     self.in_speech, self.pending = True, False
                     if self.opening or self.holding:
@@ -1030,7 +1031,7 @@ class Talk:
         while said < self.a.progress_max:
             await asyncio.sleep(0.1)
             now = time.monotonic()
-            if self.tools_open and not self.speaking and not self.in_speech and now - self.last_voice >= self.a.progress_ms / 1000 \
+            if self.tools_open and not self.speaking and not self.in_speech and now - max(self.last_voice, self.last_heard) >= self.a.progress_ms / 1000 \
                     and now - last >= self.a.progress_every_ms / 1000:
                 line = random.choice([h for h in self.pack.HOLD if h != getattr(self, "last_hold", None)])
                 self.last_hold, said, last, self.canned_at = line, said + 1, now, now
