@@ -36,8 +36,9 @@ interface Persona {
 /** The call screen's persona slot. It draws the view picked on this phone: line or bars, built in and the same for anyone,
  *  or the character of whoever is on the line. That is the person the assistant is in the language the call is in (GET
  *  /api/call/persons; before a call says, the language the last one opened in, or on a first call any language with someone picked), with their background, so a change of
- *  language swaps it; with nobody picked for the language, the character kept on this phone. The orb shows only when it
- *  is the choice or when the character can't be had; a character already on the phone starts from there without asking
+ *  language swaps it; with nobody picked for the language, the character kept on this phone. The name changes with the
+ *  face: the old pair stays until the new character's first frame, or for [STUCK_MS] at most, when the orb takes over under
+ *  the new name. The orb shows only when it is the choice or when the character can't be had; a character already on the phone starts from there without asking
  *  the server, and until its first frame the slot is the dark backdrop.
  *  Characters are folders on the server under /app/personas/<name>/ (persona.json with "kind" and "files", plus
  *  those files), listed in /app/personas/index.json ({"default": name, "personas": [{"name", "rev"}]}), and
@@ -46,6 +47,8 @@ interface Persona {
 class PersonaHost(c: Context) : FrameLayout(c), Persona {
     override val view get() = this
     private var current: Persona? = null
+    private var orbUnderneath: Orb? = null
+    private var arriving = false
     private var face = Calls.Face()
     private val ui = Handler(Looper.getMainLooper())
     private var latest = 0
@@ -100,11 +103,22 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
     private fun wanted() = person?.let { it.optString("character") to face.background.ifEmpty { it.optString("background") } } ?: (Prefs(context).persona.orEmpty().takeIf { it !in MARKS }.orEmpty() to face.background)
 
     private fun refresh() {
-        onPerson(person?.optString("name"))
         val now = wanted()
-        if (now == look) return
-        look = now
-        if (mode == CHARACTER) load(now.first.ifEmpty { null }, now.second)
+        if (now != look) {
+            look = now
+            if (mode == CHARACTER) load(now.first.ifEmpty { null }, now.second)
+        }
+        if (!arriving) onPerson(person?.optString("name"))
+    }
+
+    private fun expect(mine: Int) {
+        arriving = true
+        postDelayed({ orbIfStuck(mine) }, STUCK_MS)
+    }
+
+    private fun arrived() {
+        arriving = false
+        onPerson(person?.optString("name"))
     }
 
     private fun adopt(said: String) {
@@ -145,7 +159,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
 
     private fun showMode() {
         if (mode == CHARACTER) return load(look.first.ifEmpty { null }, look.second)
-        latest++
+        expect(++latest)
         enter(runCatching { WebPersona(context, context.filesDir, Prefs(context).server.orEmpty().trimEnd('/'), mark = mode) as Persona }.getOrElse { Orb(context) })
     }
 
@@ -153,6 +167,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
         val moved = f.person != face.person || f.background != face.background
         face = f
         current?.face(f)
+        orbUnderneath?.face(f)
         if (f.lang.isNotEmpty() && f.lang != lang) {
             if (lang.isEmpty()) Prefs(context).callLang = f.lang
             lang = f.lang
@@ -162,6 +177,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
 
     private fun load(chosen: String?, background: String) {
         val mine = ++latest
+        expect(mine)
         /* View.post holds the call until the view is attached: read from the phone, a character can be ready before that. */
         fun present(made: Pair<File, JSONObject>?) = ui.post { post { if (mine == latest) show(made, background) } }
         thread {
@@ -217,7 +233,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
 
     private fun show(made: Pair<File, JSONObject>?, background: String) {
         if (!isAttachedToWindow) return
-        if (made == null && current is Orb) return
+        if (made == null && current is Orb) return arrived()
         enter(runCatching {
             when (made?.second?.optString("kind")) {
                 "head3d" -> Head3D(context, made.first, made.second)
@@ -230,20 +246,43 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
     private fun enter(next: Persona) {
         current = next
         next.face(face)
+        val mine = latest
         val fades = next.drawn {
-            if (current === next) next.view.animate().alpha(1f).setDuration(400).withEndAction { keepOnly(next.view) }
+            if (current === next && mine == latest) {
+                next.view.animate().alpha(1f).setDuration(FADE_MS).withEndAction { if (current === next) keepOnly(next.view) }
+                postDelayed({ if (current === next && mine == latest) arrived() }, FADE_MS / 2)
+            }
         }
-        if (fades) next.view.alpha = UNSEEN else removeAllViews()
+        if (fades) next.view.alpha = UNSEEN
+        else {
+            removeAllViews()
+            orbUnderneath = null
+            arrived()
+        }
         addView(next.view, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        if (fades) postDelayed({ orbIfStuck(next) }, STUCK_MS)
     }
 
-    private fun orbIfStuck(next: Persona) {
-        if (current === next && next.view.alpha == UNSEEN && childCount == 1 && isShown) addView(Orb(context), 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+    /** A character still unseen stays above the orb, so one that is only slow can fade in over it. */
+    private fun orbIfStuck(mine: Int) {
+        if (mine != latest || !arriving) return
+        val late = current?.view?.takeIf { it.alpha == UNSEEN }
+        when {
+            late != null -> {
+                keepOnly(late)
+                orbUnderneath = Orb(context).also {
+                    it.face(face)
+                    addView(it, 0, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+                }
+                arrived()
+            }
+            current is Orb -> arrived()
+            else -> enter(Orb(context))
+        }
     }
 
     private fun keepOnly(v: View) {
         for (i in childCount - 1 downTo 0) if (getChildAt(i) !== v) removeViewAt(i)
+        orbUnderneath = null
     }
 
     companion object {
@@ -251,6 +290,7 @@ class PersonaHost(c: Context) : FrameLayout(c), Persona {
          *  surface once it is drawn. */
         private const val UNSEEN = .01f
         private const val STUCK_MS = 6000L
+        private const val FADE_MS = 400L
         const val CHARACTER = "character"
         val MARKS = listOf("line", "bars")
         val VIEWS = listOf(CHARACTER) + MARKS

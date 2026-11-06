@@ -161,7 +161,7 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   language. Settings, Persons shows them as portraits: who the assistant is per language, everyone, and which person and background each
   talking agent has (it writes `person` and `background` in that agent's `agent.json`; with no person an agent keeps the assistant's, and a background of its own still applies). Person on the call swaps who the assistant is. The talker sends the call's
   language with every `persona` event, so when the language changes the call screen swaps character, background and
-  name at once while the voice changes with it. A pick tells the voice service, so the phone line speaks with it too.
+  name while the voice changes with it. In the app the name changes with the face, on the new character's first frame, or to the orb after 6 seconds if that frame hasn't come. A pick tells the voice service, so the phone line speaks with it too.
   With nobody picked for a language, the character kept on that device shows, and the voice service's voice speaks. A
   person holds nothing about how the assistant behaves, and nothing in it is tied to the assistant, so an agent can name one too.
 - **Rooms** are in `$ATC_APP_DIR/personas/_rooms/`: a picture, best at a character's 768x1344, and optionally its light, glows, particles and moods in a `.json` of the same name ([the format](persona-rig.md#rooms)). A person's editor adds and removes pictures. One replaces a `rig`
