@@ -8,7 +8,7 @@ check:
 	go vet ./...
 	go test ./...
 	go run . prompts --check
-	@if [ -f ~/.config/atc/private-words ]; then ! git grep -nIEf ~/.config/atc/private-words -- . ':!LICENSE' ; fi
+	@if [ -f ~/.config/atc/private-words ]; then ! git grep --untracked -nIEf ~/.config/atc/private-words -- . ':!LICENSE' ; fi
 	if command -v node >/dev/null; then node --test web/*.test.mjs; fi
 	if command -v python3 >/dev/null; then python3 voice/test/test_lang.py && python3 voice/test/test_press.py; fi
 	if command -v uv >/dev/null; then uv run -q --script voice/test/test_remote.py; fi
