@@ -452,13 +452,13 @@ func TestStartFromPreset(t *testing.T) {
 		t.Errorf("presets: %s", body)
 	}
 
-	s.Engines = []Engine{{Name: "qwen", Model: "qwen3", URL: "http://gpubox:11439", Token: "secret"}}
+	s.Engines = []Engine{{Name: "qwen", Model: "qwen3", URL: "http://gpubox:11439", Token: "secret", Args: []string{"--extra-flag"}}}
 	os.WriteFile(filepath.Join(filepath.Dir(bin), "agents.json"), []byte(`[{"id":"abcd1234","sessionId":"s9","kind":"background"}]`), 0o644)
 	if res, body := do(t, "POST", ts.URL+"/api/sessions", "tok", `{"preset":"helper","engine":"qwen"}`); res.StatusCode != 200 {
 		t.Fatalf("start with engine: %d %s", res.StatusCode, body)
 	}
 	args, _ = os.ReadFile(filepath.Join(filepath.Dir(bin), "started"))
-	if !strings.Contains(string(args), `"ANTHROPIC_BASE_URL":"http://gpubox:11439"`) || !strings.Contains(string(args), "--model qwen3") {
+	if !strings.Contains(string(args), `"ANTHROPIC_BASE_URL":"http://gpubox:11439"`) || !strings.Contains(string(args), "--model qwen3") || !strings.Contains(string(args), "--extra-flag") {
 		t.Errorf("engine args: %s", args)
 	}
 	if e, ok := s.engineOf("s9"); !ok || e.Name != "qwen" {

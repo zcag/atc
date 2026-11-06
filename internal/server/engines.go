@@ -20,6 +20,7 @@ type Engine struct {
 	URL     string            `json:"url,omitempty"`
 	Token   string            `json:"token,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
+	Args    []string          `json:"args,omitempty"`
 	Host    string            `json:"host,omitempty"`
 }
 
@@ -39,7 +40,7 @@ func (e Engine) args() []string {
 	}
 	maps.Copy(env, e.Env)
 	b, _ := json.Marshal(map[string]any{"env": env})
-	return []string{"--settings", string(b), "--model", e.Model}
+	return append([]string{"--settings", string(b), "--model", e.Model}, e.Args...)
 }
 
 func (s *Server) engine(name string) (Engine, bool) {

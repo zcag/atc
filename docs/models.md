@@ -14,7 +14,9 @@ New session then shows a Model line (Claude stays the default), and those sessio
 engine's name on their strip. atc remembers each session's engine and resumes it there; a session
 started elsewhere is resumed on the engine whose `model` matches the model in its transcript. Each
 engine sets `ANTHROPIC_BASE_URL`, an auth token (`token`, default `local`) and every model alias to
-`model`, through `--settings`; `env` adds or overrides variables. It also turns off Claude Code's
+`model`, through `--settings`; `env` adds or overrides variables, and `args` adds Claude flags (for a
+local server, `--exclude-dynamic-system-prompt-sections` moves the folder-specific text out of the start
+of the prompt, so a new folder reuses most of the cache). It also turns off Claude Code's
 attribution header (`CLAUDE_CODE_ATTRIBUTION_HEADER=0`): it sits at the start of every prompt and
 differs per session, so a local server's prompt cache never matched and each new session re-read
 ~30k tokens. On an MLX Qwen server a new session's first turn went from 62-73 s to 2.7 s with it off.
