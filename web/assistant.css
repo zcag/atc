@@ -58,6 +58,12 @@
 .kb.end, .btn.end { background: var(--end); color: var(--end-ink); font-weight: 650; box-shadow: none; }
 .kb.end:hover, .btn.end:hover { background: var(--end); color: var(--end-ink); filter: brightness(1.08); }
 .kb.end kbd { color: inherit; box-shadow: inset 0 0 0 1px currentColor; }
+.kb.answer, .btn.answer { background: var(--answer); color: var(--end-ink); font-weight: 650; box-shadow: none; }
+.kb.answer:hover, .btn.answer:hover { background: var(--answer); color: var(--end-ink); filter: brightness(1.08); }
+.callp .ctl .btn.answer kbd { color: inherit; box-shadow: inset 0 0 0 1px currentColor; }
+.oncall.ring::before { background: var(--answer); animation: ringdot 1s ease-in-out infinite alternate; }
+@keyframes ringdot { to { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .oncall.ring::before { animation: none; } }
 
 /* the call: docked 380px on the right on desktop, the whole screen on the phone */
 body.docked .app { margin-right: 380px; }
@@ -237,7 +243,7 @@ body.docked .app { margin-right: 380px; }
   .callpill .back { flex: 1; min-width: 0; align-self: stretch; display: flex; align-items: center; gap: var(--s3); padding: 0 var(--s2) 0 var(--s4); border: 0; background: none; color: var(--ink); font: inherit; text-align: left; }
   .callpill .ctrace { width: 64px; }
   .callpill .w { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .callpill .btn.end { flex: none; height: 36px; padding: 0 var(--s4); }
+  .callpill .btn.end, .callpill .btn.answer { flex: none; height: 36px; padding: 0 var(--s4); }
   .callpill .btn.talkb.small { height: 36px; }
   .callpill:has(.talkb) .ctrace { display: none; }
 

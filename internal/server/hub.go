@@ -238,6 +238,8 @@ func (s *Server) hubEvent(e hub.Event) {
 	case "session":
 		go s.hubClaim(e.Text)
 	case "ring":
+		b, _ := json.Marshal(map[string]any{"reason": e.Text, "at": time.Now().Unix()})
+		s.broadcast("ring", b)
 		if s.Push != nil {
 			go s.Push.Ring(e.Text)
 		}

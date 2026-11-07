@@ -183,6 +183,8 @@ async def wa_ring(event):
 
 
 app: dict = {}
+also: dict = {}
+ELSEWHERE = "answered on another device"
 
 
 async def app_send(msg):
@@ -208,6 +210,27 @@ async def app_active():
     await app_event("precise", call="offhook", precise="active", audio=True)
 
 
+async def tell_also(msg):
+    for ws in list(also):
+        try:
+            await ws.send_str(json.dumps(msg))
+        except ConnectionError:
+            pass
+    also.clear()
+
+
+async def app_answered_by(ws):
+    """The first device to answer takes the call; the others ringing it are told it was answered elsewhere."""
+    old, rate = app.get("ws"), also.pop(ws, None)
+    if old is not ws:
+        await app_send({"event": "ended", "why": ELSEWHERE})
+        app["ws"] = ws
+        if rate in (16000, 24000):
+            app["out_rate"] = rate
+    await tell_also({"event": "ended", "why": ELSEWHERE})
+    await app_active()
+
+
 async def app_end(why):
     """A call still being dialed was never announced to the clients (the app had not rung yet), so it ends quietly."""
     phase = app.pop("phase", None)
@@ -215,6 +238,7 @@ async def app_end(why):
         return
     app.pop("out_rate", None)
     await app_send({"event": "ended", "why": why})
+    await tell_also({"event": "ended", "why": why})
     app["ws"] = None
     if phase == "dialing":
         app_status.update(call="idle", precise="idle", number=None, audio=False)
@@ -259,7 +283,8 @@ async def app_command(msg):
 async def ws_app(request):
     """atc's phone app, through atc's /api/call/line: one call at a time, their voice as binary frames
     (s16le, 16 kHz, mono) and these commands: call (they call), ringing (a call to them reached the phone),
-    accept, resume (after a reconnect), hangup, interrupt (they tapped: the talker stops), talk-down and talk-up (he
+    accept, resume (after a reconnect), ring-here (a browser rings the call too, without counting as the phone
+    having rung: any of them may accept, and a hangup from any declines it), hangup, interrupt (they tapped: the talker stops), talk-down and talk-up (he
     holds or lets go of the talk button: see Talk.press), and stats (its playback
     counters, kept in the call's log line). The talker's {"cmd": "persona", ...} reach it as {"event": "persona", ...}.
     call and ringing may say out_rate 24000: the talker then speaks at that rate (Higgs' own) instead of 16 kHz.
@@ -326,6 +351,16 @@ async def ws_app(request):
                     await app_event("precise", precise="alerting")
                 elif not (owner() and phase == "alerting"):
                     await reply({"event": "ended", "why": "gone"})
+            elif cmd == "ring-here":
+                if phase in ("dialing", "alerting") and not owner():
+                    also[ws] = m.get("out_rate")
+                else:
+                    await reply({"event": "ended", "why": "gone"})
+            elif ws in also:
+                if cmd == "accept" and phase in ("dialing", "alerting"):
+                    await app_answered_by(ws)
+                elif cmd == "hangup":
+                    await app_end("hangup")
             elif cmd == "resume":
                 if phase == "active" and (owner() or free()):
                     app["ws"] = ws
@@ -335,7 +370,7 @@ async def ws_app(request):
             elif not owner():
                 continue
             elif cmd == "accept" and phase in ("dialing", "alerting"):
-                await app_active()
+                await app_answered_by(ws)
             elif cmd == "line":
                 await move_line(m.get("to") or "")
             elif cmd == "interrupt":
@@ -350,6 +385,7 @@ async def ws_app(request):
             elif cmd == "hangup":
                 await app_end("hangup")
     finally:
+        also.pop(ws, None)
         if owner():
             app["ws"] = None
             if app.get("phase") in ("ringing", "alerting", "active"):

@@ -229,3 +229,17 @@ func TestWhatsAppThroughTheHub(t *testing.T) {
 	eventually(t, "reply sent", func() bool { return seen("Hi there") })
 	eventually(t, "ticked", func() bool { return seen("✅") })
 }
+
+func TestRingReachesOpenPages(t *testing.T) {
+	s, _, _, _ := agentServer(t)
+	ch := listen(s)
+	s.hubEvent(hub.Event{Type: "ring", Text: "checkout errors"})
+	var got struct {
+		Reason string `json:"reason"`
+		At     int64  `json:"at"`
+	}
+	json.Unmarshal([]byte(next(t, ch, "ring")), &got)
+	if got.Reason != "checkout errors" || time.Now().Unix()-got.At > 5 {
+		t.Fatalf("ring = %+v", got)
+	}
+}

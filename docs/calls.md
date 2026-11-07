@@ -193,6 +193,13 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   event; atc pushes `{"ring": {"reason", "at"}}` through UnifiedPush. The app takes rings younger than
   60 s, opens the line and sends `ringing`; only then does the call line announce the call, so the
   talker starts the opening. Answering sends `accept`.
+- **It rings in the browser too.** atc also sends the ring to every open page (a `ring` event on
+  `/api/events`), and a page outside the app rings it beside the phone: it opens the line with
+  `ring-here`, plays a ring and shows Answer and Decline (`A` and `E`). `ring-here` doesn't count as
+  the phone ringing, so with the app unreachable the hub still falls back to the SIM line after 8 s
+  and the page stops ringing. Whichever device sends `accept` first has the call; the others are told
+  it was answered on another device. Decline on any of them declines it; closing the tab only stops
+  that page ringing.
 - **One device per call.** A call belongs to the connection that placed or took it; another device
   is told busy (call) or gone (ringing, resume) and can't take it over.
 - **Testing:** calls from the addresses in `ATC_CALL_TEST_FROM` (a machine running an emulator, say)
@@ -204,7 +211,7 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   the same jitter buffer as the app, the orb ported to WebGL, and the same `stats` with `"client":
   "web"`. Playback goes through a MediaStream into an `<audio>` element, which every engine's echo
   canceller hears (Chromium 155 on Linux cancels plain Web Audio as well, measured on a loopback
-  sink). It can only place calls, not take a ring, and it lasts as long as the tab: closing it hangs
+  sink). It places calls and takes rings (above), and it lasts as long as the tab: closing it hangs
   up. `/api/me` says `call: true` when atc has a call line.
 - **A dropped line** (the phone changed networks) reconnects with `resume` within 8 s; after
   that the call ends.

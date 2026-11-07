@@ -50,6 +50,7 @@
   --focus: light-dark(oklch(50% 0.15 255), oklch(72% 0.12 255));
   --end: light-dark(oklch(46% 0.16 25), oklch(52% 0.16 25));
   --end-ink: oklch(98.5% 0.005 25);
+  --answer: light-dark(oklch(48% 0.13 150), oklch(54% 0.13 150));
 
   --primary: var(--ink);
   --on-primary: var(--strip);

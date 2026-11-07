@@ -209,6 +209,12 @@ const callAssistant = () => {
   Call.dial();
   if (isPhone() && location.hash !== CALL) location.hash = CALL;
 };
+/** The native app rings calls itself; a browser rings one only while it is fresh. */
+const ringHere = ({ reason, at }) => {
+  if (APP || !CAN_CALL || Date.now() / 1000 - at > 60 || !Call.ring(reason)) return;
+  CALLDOCK.set(true);
+  if (isPhone() && location.hash !== CALL) location.hash = CALL;
+};
 const callOrSetup = () => (CAN_CALL ? callAssistant() : (location.hash = CALLS_ROW));
 const callAbout = (s, say) => {
   if (!CAN_CALL) return void (location.hash = CALLS_ROW);
@@ -322,6 +328,7 @@ function App() {
     es.addEventListener("seen", (e) => syncEvent("seen", JSON.parse(e.data)));
     es.addEventListener("drafts", (e) => syncEvent("drafts", JSON.parse(e.data)));
     es.addEventListener("bays", (e) => adoptBays(JSON.parse(e.data)));
+    es.addEventListener("ring", (e) => ringHere(JSON.parse(e.data)));
     loadBays();
     es.onerror = () => {
       setUp(false);
@@ -1285,7 +1292,8 @@ const callDoing = (f) => ({
   tool: `Using ${(f.tool.split("__").pop() || "a tool").replace(/_/g, " ")}`,
   speaking: "Speaking",
 })[f.state] || "Listening";
-const callWord = (st, f) => st.phase === "calling" ? "calling"
+const callWord = (st, f) => st.phase === "ringing" ? st.reason || "calling you"
+  : st.phase === "calling" ? "calling"
   : st.phase === "ended" ? `call ended${st.why ? `: ${st.why}` : ""}`
   : st.phase !== "active" ? (CAN_CALL ? "not on a call" : "calls need atc's call line and a microphone")
   : f.moving ? `connecting to ${onLine(f)}`
@@ -1305,6 +1313,7 @@ function Trace() {
 function CallMark() {
   useNow(1000);
   const st = Call.get();
+  if (st.phase === "ringing") return html`<span class="oncall ring"><b>Calling you</b></span>`;
   return html`<span class="oncall"><b>On a call</b><span class="tm">${st.phase === "active" ? clock(Date.now() - st.since) : "ringing"}</span></span>`;
 }
 
@@ -1315,6 +1324,7 @@ function useCallKeys(onEsc, esc) {
     if (e.key === "t") return Call.togglePtt(), true;
     if (e.key === " " && Call.get().ptt) return Call.press(), true;
     if (e.key === "E") return Call.hangup(), true;
+    if (e.key === "A") return Call.answer(), true;
     if (e.key === ".") return returnToCall(), true;
     if (e.key === "Escape" && esc) return onEsc(), true;
     return false;
@@ -1408,7 +1418,7 @@ function CallPanel({ hub, live, captions, full, onMin }) {
     ${captions && on && !opts && html`<${CallLog} f=${f} />`}
     ${on && st.ptt && html`<div class="ctalk"><${TalkButton} /></div>`}
     <div class="ctl ${on ? "live" : ""}">
-      ${on ? html`
+      ${st.phase === "ringing" ? html`<${RingButtons} />` : on ? html`
         <button class="btn ${st.ptt ? "on" : ""}" aria-pressed=${st.ptt} aria-label="Push to talk" onClick=${Call.togglePtt} aria-keyshortcuts="t" title="Push to talk: the microphone stays closed unless you hold the talk button">PTT <kbd aria-hidden="true">t</kbd></button>
         ${!st.ptt && html`<button class="btn ${st.muted ? "on" : ""}" aria-pressed=${st.muted} onClick=${Call.mute} aria-keyshortcuts="m">${st.muted ? "Unmute" : "Mute"} <kbd aria-hidden="true">m</kbd></button>`}
         <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)} title="Who the assistant is in each language: character, room and voice">Person</button>
@@ -1417,6 +1427,12 @@ function CallPanel({ hub, live, captions, full, onMin }) {
         <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)}>Person</button>`}
     </div>
   </aside>`;
+}
+
+function RingButtons({ small }) {
+  const cls = small ? "kb" : "btn";
+  return html`<button class="${cls} end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">Decline${!small && html` <kbd aria-hidden="true">E</kbd>`}</button>
+    <button class="${cls} answer" onClick=${Call.answer} aria-keyshortcuts="Shift+A">Answer${!small && html` <kbd aria-hidden="true">A</kbd>`}</button>`;
 }
 
 /** Desktop: the call docked on the right of whatever is open. Minimized, the console line carries it. */
@@ -1457,20 +1473,20 @@ function CallPill() {
   if (!phone || !Call.live()) return null;
   return html`<div class="callpill" role="group" aria-label="Call">
     <button class="back" onClick=${returnToCall} aria-label="Back to the call"><${CallMark} /><${Trace} /><span class="w">${onLine(Call.face())}</span></button>
-    ${Call.get().ptt && html`<${TalkButton} small />`}
-    <button class="btn end" onClick=${Call.hangup}>End</button>
+    ${Call.get().phase === "ringing" ? html`<button class="btn end" onClick=${Call.hangup}>Decline</button><button class="btn answer" onClick=${Call.answer}>Answer</button>`
+      : html`${Call.get().ptt && html`<${TalkButton} small />`}<button class="btn end" onClick=${Call.hangup}>End</button>`}
   </div>`;
 }
 
 /** Desktop: the console line while on a call. The line moves only when the panel is minimized, since the persona moves otherwise. */
 function CallLine({ docked }) {
-  const f = Call.face();
+  const f = Call.face(), st = Call.get();
   return html`<footer class="console callline" aria-label="Call">
     <button class="back" onClick=${returnToCall} aria-keyshortcuts="." title=${docked ? "The call" : "Back to the call"}>
-      <${CallMark} />${!docked && html`<${Trace} />`}<span class="w">${onLine(f)}</span><span class="said">${f.said || callDoing(f)}</span></button>
+      <${CallMark} />${!docked && html`<${Trace} />`}<span class="w">${onLine(f)}</span><span class="said">${st.phase === "ringing" ? st.reason : f.said || callDoing(f)}</span></button>
     ${!docked && html`<button class="kb" onClick=${returnToCall} tabindex="-1">Return <kbd aria-hidden="true">.</kbd></button>`}
-    ${Call.get().ptt && html`<${TalkButton} small />`}
-    <button class="kb end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>
+    ${st.phase === "ringing" ? html`<${RingButtons} small />` : html`${st.ptt && html`<${TalkButton} small />`}
+    <button class="kb end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>`}
   </footer>`;
 }
 

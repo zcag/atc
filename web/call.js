@@ -8,12 +8,13 @@ const WHY = { busy: "the line is busy", nobody: "nobody is there to answer", gon
 
 const remembered = () => { try { return localStorage.getItem("atc.callPtt") === "1"; } catch { return false; } };
 
-let st = { phase: "idle", since: 0, muted: false, why: "", ptt: remembered(), talking: false };
+let st = { phase: "idle", since: 0, muted: false, why: "", ptt: remembered(), talking: false, reason: "" };
 let face = FACE;
 const subs = new Set();
 const emit = () => subs.forEach((f) => f());
 const set = (p) => { st = { ...st, ...p }; emit(); };
 
+let bell = null;
 let ctx, mic, up, down, ears, mouth, low, high, ws, live = false, lostAt = 0, closed = true, stats = {}, timers = [], lock = null, sink = null, tail = 0;
 const closedMic = () => st.muted || (st.ptt && !st.talking && !tail);
 const applyMic = () => up?.port.postMessage({ quiet: closedMic() });
@@ -30,7 +31,7 @@ const scratch = new Float32Array(512);
 export const Call = {
   get: () => st,
   face: () => face,
-  live: () => st.phase === "calling" || st.phase === "active",
+  live: () => st.phase === "ringing" || st.phase === "calling" || st.phase === "active",
   subscribe(f) { subs.add(f); return () => subs.delete(f); },
   levels: () => [closedMic() ? 0 : rms(ears, scratch), rms(mouth, scratch)],
   speech: () => [rms(mouth, scratch, SPEECH_GAIN), rms(low, scratch, SPEECH_GAIN), rms(high, scratch, SPEECH_GAIN)],
@@ -38,45 +39,31 @@ export const Call = {
 
   async dial() {
     if (Call.live()) return;
-    face = FACE;
-    set({ phase: "calling", since: 0, muted: false, why: "", talking: false });
-    closed = false;
-    live = false;
-    lostAt = 0;
-    try {
-      ctx = new AudioContext({ latencyHint: "interactive" });
-      ctx.resume();
-      mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
-      await ctx.audioWorklet.addModule("call-worklet.js");
-      if (closed) return teardown();
-      const src = ctx.createMediaStreamSource(mic);
-      up = new AudioWorkletNode(ctx, "call-up", { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: "explicit" });
-      up.port.onmessage = (e) => {
-        if (e.data === "closed") return st.talking || send({ cmd: "talk-up" });
-        if (live && ws?.readyState === 1) ws.send(e.data);
-      };
-      applyMic();
-      ears = new AnalyserNode(ctx, { fftSize: 1024 });
-      src.connect(new BiquadFilterNode(ctx, { type: "lowpass", frequency: 7000 })).connect(up).connect(ctx.destination);
-      src.connect(ears);
-      down = new AudioWorkletNode(ctx, "call-down", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
-      down.port.onmessage = (e) => (stats = e.data);
-      mouth = new AnalyserNode(ctx, { fftSize: 1024 });
-      down.connect(mouth);
-      low = new AnalyserNode(ctx, { fftSize: 1024 });
-      high = new AnalyserNode(ctx, { fftSize: 1024 });
-      down.connect(new BiquadFilterNode(ctx, { type: "lowpass", frequency: 700, Q: .5 })).connect(low);
-      down.connect(new BiquadFilterNode(ctx, { type: "highpass", frequency: 3000, Q: .5 })).connect(high);
-    } catch (e) {
-      return end({ NotAllowedError: "no microphone permission", NotFoundError: "no microphone found" }[e.name] || e.message || String(e));
-    }
-    play(down);
+    begin("calling");
+    if (!(await connect())) return;
     open("call");
     timers.push(setTimeout(() => st.phase === "calling" && hangup("no answer"), 20000));
-    timers.push(setInterval(report, 10000));
   },
 
-  hangup: () => hangup("you hung up"),
+  /** A call to the user: this page rings it beside the phone, and whichever answers first has it. */
+  ring(reason) {
+    if (Call.live() || !Call.supported()) return false;
+    begin("ringing", reason);
+    open("ring-here");
+    ringBell();
+    timers.push(setTimeout(() => st.phase === "ringing" && end("missed"), 60000));
+    return true;
+  },
+
+  async answer() {
+    if (st.phase !== "ringing") return;
+    silence();
+    set({ phase: "calling" });
+    if (await connect()) send({ cmd: "accept" });
+  },
+
+  hangup: () => hangup(st.phase === "ringing" ? "declined" : "you hung up"),
+
 
   mute() {
     if (st.ptt) return;
@@ -115,6 +102,69 @@ export const Call = {
     down?.port.postMessage("flush");
   },
 };
+
+function begin(phase, reason = "") {
+  face = FACE;
+  set({ phase, since: 0, muted: false, why: "", talking: false, reason });
+  closed = false;
+  live = false;
+  lostAt = 0;
+}
+
+async function connect() {
+  try {
+    ctx = new AudioContext({ latencyHint: "interactive" });
+    ctx.resume();
+    mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+    await ctx.audioWorklet.addModule("call-worklet.js");
+    if (closed) return teardown();
+    const src = ctx.createMediaStreamSource(mic);
+    up = new AudioWorkletNode(ctx, "call-up", { numberOfInputs: 1, numberOfOutputs: 1, channelCount: 1, channelCountMode: "explicit" });
+    up.port.onmessage = (e) => {
+      if (e.data === "closed") return st.talking || send({ cmd: "talk-up" });
+      if (live && ws?.readyState === 1) ws.send(e.data);
+    };
+    applyMic();
+    ears = new AnalyserNode(ctx, { fftSize: 1024 });
+    src.connect(new BiquadFilterNode(ctx, { type: "lowpass", frequency: 7000 })).connect(up).connect(ctx.destination);
+    src.connect(ears);
+    down = new AudioWorkletNode(ctx, "call-down", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
+    down.port.onmessage = (e) => (stats = e.data);
+    mouth = new AnalyserNode(ctx, { fftSize: 1024 });
+    down.connect(mouth);
+    low = new AnalyserNode(ctx, { fftSize: 1024 });
+    high = new AnalyserNode(ctx, { fftSize: 1024 });
+    down.connect(new BiquadFilterNode(ctx, { type: "lowpass", frequency: 700, Q: .5 })).connect(low);
+    down.connect(new BiquadFilterNode(ctx, { type: "highpass", frequency: 3000, Q: .5 })).connect(high);
+  } catch (e) {
+    return end({ NotAllowedError: "no microphone permission", NotFoundError: "no microphone found" }[e.name] || e.message || String(e)), false;
+  }
+  play(down);
+  timers.push(setInterval(report, 10000));
+  return true;
+}
+
+function ringBell() {
+  try {
+    bell = new AudioContext();
+    for (let t = bell.currentTime + .05, stop = t + 60; t < stop; t += 1.5)
+      for (const [at, frequency] of [[0, 587.33], [.34, 440]]) {
+        const g = new GainNode(bell, { gain: 0 });
+        g.gain.setTargetAtTime(.08, t + at, .004);
+        g.gain.setTargetAtTime(0, t + at + .012, .38);
+        g.connect(bell.destination);
+        const o = new OscillatorNode(bell, { frequency });
+        o.connect(g);
+        o.start(t + at);
+        o.stop(t + at + 1.6);
+      }
+  } catch {}
+}
+
+function silence() {
+  bell?.close().catch(() => {});
+  bell = null;
+}
 
 function letGo() {
   clearTimeout(tail);
@@ -207,6 +257,7 @@ function end(why) {
 }
 
 function teardown() {
+  silence();
   closed = true;
   live = false;
   timers.forEach((t) => (clearTimeout(t), clearInterval(t)));
@@ -232,4 +283,4 @@ async function wake() {
 document.addEventListener("visibilitychange", () => st.phase === "active" && (!lock || lock.released) && wake());
 addEventListener("keyup", (e) => e.key === " " && Call.release());
 addEventListener("blur", () => Call.release());
-addEventListener("pagehide", () => Call.live() && hangup("you left"));
+addEventListener("pagehide", () => st.phase === "ringing" ? teardown() : Call.live() && hangup("you left"));
