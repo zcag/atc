@@ -78,3 +78,31 @@ func TestGuests(t *testing.T) {
 		t.Fatalf("sent %v", sent)
 	}
 }
+
+func TestGuestCalled(t *testing.T) {
+	g := &Guests{Path: filepath.Join(t.TempDir(), "guests")}
+	if err := g.Add("pat", "12025550121"); err != nil {
+		t.Fatal(err)
+	}
+	if g.Call("sam", "Sam") == nil {
+		t.Error("named someone who is not a guest")
+	}
+	if err := g.Call("pat", "  Pat  Lee "); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Add("sam", "12025550122"); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.Remove("sam"); err != nil {
+		t.Fatal(err)
+	}
+	if c := g.Called()["pat"]; c != "Pat Lee" {
+		t.Errorf("an add and a remove of someone else lost what pat is called: %q", c)
+	}
+	if g.List()["pat"] != "12025550121" {
+		t.Errorf("the number moved: %v", g.List())
+	}
+	if err := g.Call("pat", ""); err != nil || g.Called()["pat"] != "" {
+		t.Errorf("clearing kept %q (%v)", g.Called()["pat"], err)
+	}
+}

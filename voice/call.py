@@ -44,12 +44,12 @@ async def adb(*args):
 
 
 def guest_number(name, digits):
-    """Whether atc's guest list (`name number` per line) gives this guest this number."""
+    """Whether atc's guest list (`name number [called]` per line) gives this guest this number."""
     try:
         lines = open(GUESTS).read().splitlines()
     except OSError:
         return False
-    return any(len(p) >= 2 and " ".join(p[:-1]) == name and re.sub(r"\D", "", p[-1])[-10:] == digits[-10:]
+    return any(len(p) >= 2 and p[0] == name and re.sub(r"\D", "", p[1])[-10:] == digits[-10:]
                for p in (line.split("#")[0].split() for line in lines))
 
 

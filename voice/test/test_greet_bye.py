@@ -34,8 +34,19 @@ class BackGreeting(unittest.TestCase):
 
     def test_guests_and_off_get_the_full_one(self):
         out = tempfile.mkdtemp()
-        self.assertIsNone(caller(out, 60, guest="baba").back_greeting())
+        talk.GUESTS = os.path.join(out, "guests")
+        self.assertIsNone(caller(out, 60, guest="pat").back_greeting())
         self.assertIsNone(caller(out, 60, back_min=0).back_greeting())
+
+    def test_a_guest_with_a_name_is_greeted_by_it(self):
+        out = tempfile.mkdtemp()
+        talk.GUESTS = os.path.join(out, "guests")
+        with open(talk.GUESTS, "w") as f:
+            f.write("# atc's WhatsApp guests\npat 12025550121 Pat Lee\nsam 12025550122\n")
+        self.assertEqual(talk.guest_of("+1 202 555 0121"), "pat")
+        self.assertEqual(talk.guest_of("12025550122"), "sam")
+        self.assertEqual(caller(out, guest="pat").back_greeting(), "Alo, merhaba Pat Lee, ben delta.")
+        self.assertIsNone(caller(out, guest="sam").back_greeting())
 
 
 def leaving(wait_ms):

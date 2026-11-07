@@ -442,6 +442,10 @@ func (c *Client) GuestEdit(op, name, number string) error {
 	return c.do("POST", "/api/whatsapp/guests", map[string]string{"op": op, "name": name, "number": number}, nil)
 }
 
+func (c *Client) GuestCall(name, called string) error {
+	return c.do("POST", "/api/whatsapp/guests", map[string]string{"op": "call", "name": name, "called": called}, nil)
+}
+
 func (c *Client) WhatsApp(req map[string]any) ([]string, error) {
 	var r struct{ Sent []string }
 	return r.Sent, c.do("POST", "/api/whatsapp/send", req, &r)

@@ -337,7 +337,7 @@ class Talk:
     def stop_heard(self, heard):
         """--stop-words: a stop word of theirs (STOP_WORDS: «durdur», «bir saniye», «kapat», «tamam tamam»...) counts
         even when delta has just said a word like it: its own lines are «Dur bakayım.» and «Bir saniye, bakayım.», and
-        the echo filter threw out «bir saniye dur» and «dur» on 8 of his calls' real stops. Only a run of delta's own
+        so the echo filter threw out a real «bir saniye dur» or «dur». Only a run of delta's own
         words in its order is echo («dur bakayım»). A line marked echoing keeps the stricter rule."""
         if not self.a.stop_words or self.echoing or not self.pack.STOP_WORDS.search(heard):
             return False
@@ -393,7 +393,7 @@ class Talk:
     def echo(self, text):
         """A turn that is delta's own voice coming back. --echo-order: only one that began while delta was audible and
         repeats its words in its order; a Turkish answer repeats the question's verb («Kalsınlar mı?» «Kalsınlar.»),
-        and the any-order rule took 17 of his turns for echo out of 19 it dropped on his calls (1-7 Nov)."""
+        and the any-order rule took most such answers for echo."""
         words = re.findall(r"\w+", text.lower())
         if not self.a.echo_order:
             return bool(words) and sum(map(self.echoed, words)) / len(words) >= .7
@@ -1005,8 +1005,8 @@ class Talk:
 
     async def bye_wait(self):
         """--bye-wait-ms: after delta's goodbye, room for theirs: hang up once they have said it (0.5 s after they stop),
-        or after bye_wait_ms if they say nothing, 5 s at most. delta used to hang up 1 s after its last word, and on 69
-        calls their goodbye got in on 5. Words that are more than a goodbye («Bi de şunu...») keep the call (more_than_bye)."""
+        or after bye_wait_ms if they say nothing, 5 s at most. Hanging up 0.5 s after its own last word left their
+        goodbye unsaid on most calls. Words that are more than a goodbye («Bi de şunu...») keep the call (more_than_bye)."""
         if not self.a.bye_wait_ms:
             await asyncio.sleep(0.5)
             return
@@ -1185,8 +1185,12 @@ class Talk:
     def back_greeting(self):
         """--back-min: the user is greeted like someone delta talks to all day, not introduced to: within that many
         minutes of their last call a short line (GREETING_BACK), otherwise a casual one (GREETING_HIM), each list in turn,
-        none again until all have played. Guests get GREETING, which says who is answering."""
-        if not self.a.back_min or self.guest:
+        none again until all have played. A guest is greeted by what the guest list says they are called
+        (GREETING_GUEST, which still says who is answering), or with GREETING."""
+        if self.guest:
+            called = guest_called(self.guest)
+            return fill(self.first.GREETING_GUEST, guest=called) if called else None
+        if not self.a.back_min:
             return None
         try:
             with open(os.path.join(self.a.out, "last-call.json")) as f:
@@ -1391,18 +1395,24 @@ def allowed(number):
     return bool(number) and re.sub(r"\D", "", number)[-10:] in ANSWER
 
 
-def guest_of(number):
-    """The guest's name if this number is in atc's guest list (read fresh, so `atc guest add` applies at once)."""
-    tail = re.sub(r"\D", "", number or "")[-10:]
+def guests():
+    """atc's guest list, read fresh so `atc guest add` applies at once: (name, number, what they are called) per guest,
+    from `name number [called]` lines."""
     try:
         lines = open(GUESTS).read().splitlines()
     except OSError:
-        return None
-    for line in lines:
-        parts = line.split("#")[0].split()
-        if len(parts) >= 2 and tail and re.sub(r"\D", "", parts[-1])[-10:] == tail:
-            return " ".join(parts[:-1])
-    return None
+        return []
+    return [(p[0], p[1], " ".join(p[2:])) for p in (line.split("#")[0].split() for line in lines) if len(p) >= 2]
+
+
+def guest_of(number):
+    """The guest's name if this number is in atc's guest list."""
+    tail = re.sub(r"\D", "", number or "")[-10:]
+    return next((name for name, num, _ in guests() if tail and re.sub(r"\D", "", num)[-10:] == tail), None)
+
+
+def guest_called(name):
+    return next((called for n, _, called in guests() if n == name and called), None)
 
 
 async def be_guest(talk, name):

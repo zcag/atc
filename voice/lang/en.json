@@ -3,6 +3,7 @@
   "DEFAULTS": {"assistant": "your assistant", "user": "the user"},
   "STT": {"base": "https://huggingface.co/csukuangfj/sherpa-onnx-streaming-zipformer-en-kroko-2025-08-06/resolve/main", "dir": "sherpa-onnx-streaming-zipformer-en-kroko-2025-08-06", "tokens": "tokens.txt", "encoder": "encoder.onnx", "decoder": "decoder.onnx", "joiner": "joiner.onnx", "flush": 1.2},
   "GREETING": "Hello, this is {assistant}.",
+  "GREETING_GUEST": "Hello {guest}, this is {assistant}.",
   "LINE_OK": "I'm here, I can hear you.",
   "UNCLEAR": "(said something short, but it could not be made out)",
   "OUTBOUND": "[You are calling {user} and the phone is ringing. They hear this reply first, once they pick up and say hello: greet them briefly, say you are {assistant} and why you are calling.]",

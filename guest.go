@@ -15,6 +15,7 @@ const guestHelp = `atc guest: the people besides the user who may write to atc's
   atc guest                    list them
   atc guest add NAME NUMBER    let NAME write in (NUMBER in full, with country code)
   atc guest rm NAME            stop listening to NAME
+  atc guest call NAME [WHAT]   what a call greets NAME by, a first name ("Ayla"); none to clear
 
 A guest's message reaches the assistant on its guest channel, which answers with
 atc wa --to NAME. Add someone only when the user asks for it in their own words.
@@ -54,6 +55,17 @@ func guest(args []string) error {
 			return err
 		}
 		fmt.Printf("%s can write in now. Introduce yourself with: atc wa --to %s TEXT\n", args[1], args[1])
+		return nil
+	case args[0] == "call" && len(args) >= 2:
+		called := strings.Join(args[2:], " ")
+		if err := c.GuestCall(args[1], called); err != nil {
+			return err
+		}
+		if called == "" {
+			fmt.Printf("Calls greet %s without a name.\n", args[1])
+		} else {
+			fmt.Printf("Calls greet %s as %s.\n", args[1], called)
+		}
 		return nil
 	case (args[0] == "rm" || args[0] == "remove") && len(args) == 2:
 		if err := c.GuestEdit("rm", args[1], ""); err != nil {

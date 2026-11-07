@@ -198,7 +198,8 @@ type waOut struct {
 	} `json:"poll"`
 }
 
-// waGuests lists the guests, or adds ({op: add, name, number}) or removes ({op: rm, name}) one.
+// waGuests lists the guests, or adds ({op: add, name, number}), removes ({op: rm, name}) or names
+// ({op: call, name, called}) one.
 func (s *Server) waGuests(w http.ResponseWriter, r *http.Request) {
 	if s.WhatsApp == nil || s.WhatsApp.Guests == nil {
 		http.Error(w, "WhatsApp is not set up on "+s.Host, http.StatusNotImplemented)
@@ -206,17 +207,19 @@ func (s *Server) waGuests(w http.ResponseWriter, r *http.Request) {
 	}
 	g := s.WhatsApp.Guests
 	if r.Method == "POST" {
-		var in struct{ Op, Name, Number string }
+		var in struct{ Op, Name, Number, Called string }
 		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		err := fmt.Errorf("op is add or rm, not %q", in.Op)
+		err := fmt.Errorf("op is add, rm or call, not %q", in.Op)
 		switch in.Op {
 		case "add":
 			err = g.Add(in.Name, in.Number)
 		case "rm":
 			err = g.Remove(in.Name)
+		case "call":
+			err = g.Call(in.Name, in.Called)
 		}
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

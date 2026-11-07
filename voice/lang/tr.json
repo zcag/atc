@@ -3,6 +3,7 @@
   "DEFAULTS": {"assistant": "asistanın", "user": "kullanıcı"},
   "STT": {"hf": "mihuai/turkish-stt-66m-v2", "tokens": "tokens.txt", "encoder": "encoder.int8.onnx", "decoder": "decoder.int8.onnx", "joiner": "joiner.int8.onnx"},
   "GREETING": "Alo, merhaba, ben {assistant}.",
+  "GREETING_GUEST": "Alo, merhaba {guest}, ben {assistant}.",
   "LINE_OK": "Buradayım, sesin geliyor.",
   "UNCLEAR": "(kısa bir şey söyledi ama anlaşılmadı)",
   "OUTBOUND": "[{user}'ı arıyorsun, telefon çalıyor. Açıp «Alo» deyince ilk bu cevabını duyacak: kısaca selam ver, ben {assistant} de ve neden aradığını söyle.]",

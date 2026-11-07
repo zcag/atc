@@ -13,7 +13,8 @@ import (
 )
 
 // Guests is the list of other people atc listens to, one "name number" per line in a file read
-// fresh on every look, so adding someone takes effect at once.
+// fresh on every look, so adding someone takes effect at once. A line may end with what the guest is
+// called ("anne 90555... Ayla"), which the call greets them by; name stays the label everything else uses.
 type Guests struct {
 	Path string
 	mu   sync.Mutex
@@ -26,17 +27,48 @@ var (
 
 // List is every guest by name, with their number (no +).
 func (g *Guests) List() map[string]string {
-	out := map[string]string{}
+	nums, _ := g.read()
+	return nums
+}
+
+// Called is what each guest who has one is called, by name.
+func (g *Guests) Called() map[string]string {
+	_, called := g.read()
+	return called
+}
+
+func (g *Guests) read() (nums, called map[string]string) {
+	nums, called = map[string]string{}, map[string]string{}
 	if g == nil || g.Path == "" {
-		return out
+		return
 	}
 	b, _ := os.ReadFile(g.Path)
 	for _, l := range strings.Split(string(b), "\n") {
 		if f := strings.Fields(l); len(f) >= 2 && !strings.HasPrefix(f[0], "#") {
-			out[strings.ToLower(f[0])] = strings.TrimPrefix(f[1], "+")
+			name := strings.ToLower(f[0])
+			nums[name] = strings.TrimPrefix(f[1], "+")
+			if len(f) > 2 {
+				called[name] = strings.Join(f[2:], " ")
+			}
 		}
 	}
-	return out
+	return
+}
+
+// Call sets what a guest is called; empty clears it.
+func (g *Guests) Call(name, called string) error {
+	name, called = strings.ToLower(strings.TrimSpace(name)), strings.Join(strings.Fields(called), " ")
+	return g.editAll(func(nums, cs map[string]string) error {
+		if _, ok := nums[name]; !ok {
+			return fmt.Errorf("%s is not a guest", name)
+		}
+		if called == "" {
+			delete(cs, name)
+		} else {
+			cs[name] = called
+		}
+		return nil
+	})
 }
 
 func (g *Guests) Add(name, num string) error {
@@ -69,13 +101,17 @@ func (g *Guests) Remove(name string) error {
 }
 
 func (g *Guests) edit(f func(map[string]string) error) error {
+	return g.editAll(func(nums, _ map[string]string) error { return f(nums) })
+}
+
+func (g *Guests) editAll(f func(nums, called map[string]string) error) error {
 	if g == nil || g.Path == "" {
 		return errors.New("no guest list on this machine")
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	m := g.List()
-	if err := f(m); err != nil {
+	m, called := g.read()
+	if err := f(m, called); err != nil {
 		return err
 	}
 	names := make([]string, 0, len(m))
@@ -84,9 +120,13 @@ func (g *Guests) edit(f func(map[string]string) error) error {
 	}
 	slices.Sort(names)
 	var b strings.Builder
-	b.WriteString("# atc's WhatsApp guests: name number (atc guest add|rm)\n")
+	b.WriteString("# atc's WhatsApp guests: name number [what they are called] (atc guest add|rm|call)\n")
 	for _, n := range names {
-		fmt.Fprintf(&b, "%s %s\n", n, m[n])
+		if c := called[n]; c != "" {
+			fmt.Fprintf(&b, "%s %s %s\n", n, m[n], c)
+		} else {
+			fmt.Fprintf(&b, "%s %s\n", n, m[n])
+		}
 	}
 	os.MkdirAll(filepath.Dir(g.Path), 0o755)
 	tmp := g.Path + ".tmp"
