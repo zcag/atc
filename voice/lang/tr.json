@@ -28,7 +28,7 @@
   "ALSO_HEARD": " (Turkish transcriber heard: «{heard}»)",
   "CALL_ENDED": "[görüşme bitti] ",
   "CALL_OVER": "(Görüşme kapandı. Yarım kalan bir iş varsa bitir, sonucunu `atc notify` ile kısaca bildir.)",
-  "CALL_OVER_GUEST": "({guest} ile görüşme kapandı. {user}'ın bilmesi ya da karar vermesi gereken bir şey çıktıysa report ile asistana bildir; ona söz verdiğin bir şey varsa onu da takip et.)",
+  "CALL_OVER_GUEST": "({guest} ile görüşme kapandı. {user}'ın bilmesi ya da karar vermesi gereken bir şey çıktıysa report ile asistana bildir; ona söz verdiğin bir şey varsa onu da takip et. Ne için aradığını söyleyemeden kapandıysa ya da {user}'ı istediyse bunu her zaman bildir.)",
   "NOT_PICKED_UP": "(Açmadı: telefon çaldı ama açmadı, hazırladığın açılış duyulmadı.)",
   "LINE_BACK": "\\basistan\\w*\\s+(geri\\s+)?(dön\\w*|geç\\w*|bağla\\w*|ver\\w*|aç\\w*)|\\b{assistant}\\W?\\s?(y?[aeıiuü])?\\s+(geri\\s+)?(dön\\w*|geç\\w*|bağla\\w*)|\\b(geri\\s+dön|dön)\\w*\\s+(asistan|{assistant})\\w*|\\bback to (the )?assistant\\b",
   "LINE_TO": "[Hat az önce sana geçti: {user} seni istedi, şu an seni duyuyor. Hemen öncesinde {was} ile: {said}. Sana bir şey sorduysa cevapla, sormadıysa kısaca hatta olduğunu söyle.]",

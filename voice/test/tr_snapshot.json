@@ -166,7 +166,7 @@
  "NO_REASON": "belirtilmedi",
  "CALL_ENDED": "[görüşme bitti] ",
  "CALL_OVER": "(Görüşme kapandı. Yarım kalan bir iş varsa bitir, sonucunu `atc notify` ile kısaca bildir.)",
- "CALL_OVER_GUEST": "({guest} ile görüşme kapandı. Ada'ın bilmesi ya da karar vermesi gereken bir şey çıktıysa report ile asistana bildir; ona söz verdiğin bir şey varsa onu da takip et.)",
+ "CALL_OVER_GUEST": "({guest} ile görüşme kapandı. Ada'ın bilmesi ya da karar vermesi gereken bir şey çıktıysa report ile asistana bildir; ona söz verdiğin bir şey varsa onu da takip et. Ne için aradığını söyleyemeden kapandıysa ya da Ada'ı istediyse bunu her zaman bildir.)",
  "NOT_PICKED_UP": "(Açmadı: telefon çaldı ama açmadı, hazırladığın açılış duyulmadı.)",
  "SIM_OVER": "(Görüşme kapandı, bu bir testti; bir şey yapma.)",
  "STT": {
