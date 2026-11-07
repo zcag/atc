@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Character studio</title>
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="studio.css">
+</head>
+<body>
+<header>
+  <a class="home" href="/">atc</a>
+  <h1>Character studio</h1>
+  <label>Character <select id="char"></select></label>
+  <label>Room <select id="room"></select></label>
+</header>
+<main>
+  <section id="stage">
+    <div class="frame"><canvas id="live"></canvas></div>
+    <div class="states" role="group" aria-label="Call state"></div>
+    <div class="row">
+      <button id="cycle" class="ghost">Run through the states</button>
+      <button id="release" class="ghost" hidden>Back to acting</button>
+    </div>
+    <table class="now"><tbody></tbody></table>
+  </section>
+  <section id="detail">
+    <nav class="tabs" role="tablist"></nav>
+    <div id="pane"></div>
+  </section>
+</main>
+<script type="module" src="studio.js"></script>
+</body>
+</html>

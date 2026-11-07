@@ -126,7 +126,7 @@ function Gallery({ api, look, agents, rooms, reloadAgents, voices }) {
   const langs = personLangs(voices, doc);
   return html`
     <h1>Persons</h1>
-    <p class="capintro">Who you hear and see on a call: a name, a character, a room and a voice for each language.</p>
+    <p class="capintro">Who you hear and see on a call: a name, a character, a room and a voice for each language. Every drawing of each character is in the <a href="/studio.html">character studio</a>.</p>
     ${doc.persons.length === 0 ? html`
       <a class="personcard new first" href="#/settings/persons/new"><span class="face plus" aria-hidden="true"></span><b>Make the first person</b><span class="d">The assistant becomes them in every language they speak.</span></a>`
     : html`

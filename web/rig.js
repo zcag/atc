@@ -105,7 +105,7 @@ export function pose(rig, params) {
 }
 
 /** How much of the image a w x h view shows (it covers the view) and where: [cx, cy, sx, sy] for the shader. */
-function framing(rig, w, h) {
+export function framing(rig, w, h) {
   const [W, H] = rig.size, v = rig.view || {}, zoom = v.zoom || 1, [fx, fy] = v.focus || [.5, .4];
   let sx = 1, sy = (h * W) / (w * H);
   if (sy > 1) { sx = 1 / sy; sy = 1; }

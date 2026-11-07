@@ -104,6 +104,8 @@ the prompt, model and seed to `source.json` in the character's folder.
 
 ## Checking it
 
+atc's `/studio.html` shows a published character through `web/rig.js` itself: every drawing at every angle (and what each one changes against its angle's neutral head), the poses, the head angles, `verify.json`, the source and manner, and the character acting live in each call state, in any room. Tap a drawing to hold the live view on it. A drawing the Director never asks for is marked as such.
+
 `verify.py` measures each fault the first two characters had: the record of the prompt, every drawing the director can
 ask for, a room of its own, measured morphs, a body in one piece, a jaw line that holds while talking, blinks that touch
 only the lid, knit brows that show but don't look worried, a thinking hand that reaches the chin, poses that don't pop,
