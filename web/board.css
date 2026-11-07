@@ -105,7 +105,8 @@
   .bview, .bview.withindex { grid-template-columns: minmax(0, 1fr); }
   .pindex, .bcols { display: none; }
   .bhead { padding: var(--s3) var(--s4) var(--s2); }
-  .bhead .r .kb { display: none; }
+  .bhead .r .kb:not(.parkall) { display: none; }
+  .bhead .r .parkall { min-height: 44px; }
   .earlierh button { min-height: 44px; }
   .brow { grid-template-columns: 20px minmax(0, 1fr) auto; grid-template-areas: "b s n" "b t t" "b m m"; row-gap: 2px; padding: 10px var(--s4); }
   .brow > .sb { grid-area: b; }

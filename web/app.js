@@ -1004,6 +1004,12 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
   const pinnedIn = { waiting: by.pinned.filter(waiting).length, working: by.pinned.filter((s) => s.state === "working").length };
   const counts = GROUPS.filter(([k]) => k in letter).map(([k]) => [k, by[k].length + (pinnedIn[k] || 0)]).filter(([, n]) => n > 0);
   const path = only && (live || []).find((s) => bayOf(s) === only);
+  const parkable = only ? (live || []).filter((s) => bayOf(s) === only && !s.parked && s.kind !== "hub" && s.state !== "stopped" && s.state !== "past") : [];
+  const parkAll = async () => {
+    const r = await Promise.allSettled(parkable.map((s) => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { parked: true } })));
+    const bad = r.filter((x) => x.status === "rejected").length;
+    say(bad ? `Couldn't park ${bad} of ${r.length} in ${only}.` : `Parked ${r.length} in ${only}.`);
+  };
   const [earlierAll, setEarlierAll] = useState(false);
   const [earlierOpen, flipEarlier] = useEarlierOpen();
   const shownEarlier = earlierAll ? by.earlier : by.earlier.filter((s) => Date.now() - (Date.parse(s.updated || s.startedAt || 0) || 0) < 2 * 86400000).slice(0, 12);
@@ -1014,7 +1020,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
       <div class="bmain" id="bscroll">
         <div class="bhead">
           <div class="b1"><h1>${only || "Every bay"}</h1>${path && html`<span class="w">${tilde(baseDir(path.cwd))}</span>`}
-            <span class="r"><${BacklogLine} only=${only} /><button class="kb" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts="/">Search <kbd aria-hidden="true">/</kbd></button></span></div>
+            <span class="r">${parkable.length > 0 && html`<button class="kb parkall" onClick=${parkAll} title=${`Park every session in ${only}; each comes back when it needs you`}>Park all</button>`}<${BacklogLine} only=${only} /><button class="kb" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts="/">Search <kbd aria-hidden="true">/</kbd></button></span></div>
           <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${{ waiting: html`waiting<span class="wide"> on you</span>`, working: "working", parked: "parked" }[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}${innerWidth < 900 && html`<${ResourceChip} />`}</div>
         </div>
         <div class="bcols" aria-hidden="true"><span></span><span>Session</span><span>Status, and what it last said or is doing</span><span>Context</span><span>Steps</span><span>Running, made</span><span>Since</span><span></span></div>
