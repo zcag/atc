@@ -15,6 +15,7 @@
   "HALLUCINATIONS": "thanks for watching|subscribe to|^\\W*$",
   "WHISPER_JUNK": "thanks for watching|thank you|subscribe|gracias|grazie|danke|merci|obrigad|^\\W*$",
   "STOP": "\\b(wait|hold on|hang on|stop|stop it|no|nope|one sec|one second|just a sec|excuse me)\\b",
+  "STOP_WORDS": "\\b(wait|hold on|hang on|stop|stop it|no|nope|one sec|one second|just a sec|excuse me|hang up|enough|okay okay)\\b",
   "BACKCHANNEL": ["yeah", "yes", "yep", "yup", "uh", "huh", "mhm", "mm", "hm", "hmm", "okay", "ok", "right", "sure", "got", "it", "i", "see", "oh", "ah", "cool", "nice"],
   "LINE_CHECK": ["hello", "hi", "hey", "can", "you", "hear", "me", "are", "there", "is", "anyone", "anybody", "still", "on", "the", "line", "my", "voice", "audio", "sound"],
   "LINE_CORE": ["hello", "hear", "there", "anyone", "anybody", "audio", "sound"],
