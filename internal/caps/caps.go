@@ -65,6 +65,7 @@ type Env struct {
 	Bin     string
 	Self    string
 	Devices []string
+	Deaf    []string
 	Peers   []Peer
 	Engines []Engine
 	Agents  []AgentFolder

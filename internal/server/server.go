@@ -171,6 +171,9 @@ func (s *Server) Handler() http.Handler {
 	s.watchOpenCode()
 	go s.schedule()
 	go s.watchAgents()
+	if s.Push != nil {
+		go s.watchPushes()
+	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
@@ -285,6 +288,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/devices/{id}", s.deviceRevoke)
 	mux.HandleFunc("POST /api/push/register", s.pushRegister)
 	mux.HandleFunc("POST /api/push/unregister", s.pushUnregister)
+	mux.HandleFunc("POST /api/push/heard", s.pushHeard)
 	mux.HandleFunc("GET /api/push/devices", func(w http.ResponseWriter, r *http.Request) { reply(w, s.Push.Devices()) })
 	mux.HandleFunc("POST /api/assist", s.assist)
 	mux.HandleFunc("POST /api/whatsapp/hook", s.waHook)

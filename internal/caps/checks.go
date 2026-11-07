@@ -435,6 +435,9 @@ func checkPush(ctx context.Context, env Env) Result {
 		slices.Sort(bad)
 		return Result{Broken, fmt.Sprintf("%d registered, but its push service is down (%s).", len(env.Devices), strings.Join(bad, "; "))}
 	}
+	if len(env.Deaf) > 0 {
+		return Result{Broken, fmt.Sprintf("Pushes are sent but not getting through: no word from %s. Check that the phone is online and its push app is connected.", strings.Join(env.Deaf, ", "))}
+	}
 	return Result{OK, fmt.Sprintf("%d registered, and the push service answers.", len(env.Devices))}
 }
 

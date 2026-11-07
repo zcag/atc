@@ -2,6 +2,7 @@ package push
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -37,10 +38,13 @@ type Ask struct {
 	Options []string `json:"options,omitempty"`
 }
 
+// Device is a phone registered for pushes. Confirms is set once it has said it got one (POST
+// /api/push/heard): only such a device can be told apart from one that stopped hearing them.
 type Device struct {
 	Endpoint string    `json:"endpoint"`
 	Name     string    `json:"name,omitempty"`
 	Widget   bool      `json:"widget,omitempty"`
+	Confirms bool      `json:"confirms,omitempty"`
 	Added    time.Time `json:"added"`
 }
 
@@ -49,10 +53,19 @@ type Pusher struct {
 	client  *http.Client
 	mu      sync.Mutex
 	devices []Device
+	unheard map[string]time.Time
+	heard   map[string]time.Time
+}
+
+// Deaf is a device that has not confirmed a push for a while: Since is the last one it confirmed,
+// or when the first unconfirmed one was sent.
+type Deaf struct {
+	Name, Endpoint string
+	Since          time.Time
 }
 
 func Open(path string) (*Pusher, error) {
-	p := &Pusher{path: path, client: &http.Client{Timeout: 15 * time.Second}}
+	p := &Pusher{path: path, client: &http.Client{Timeout: 15 * time.Second}, unheard: map[string]time.Time{}, heard: map[string]time.Time{}}
 	b, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		return p, nil
@@ -87,6 +100,47 @@ func (p *Pusher) Remove(endpoint string) error {
 	return p.save()
 }
 
+// Heard records that a device got a push.
+func (p *Pusher) Heard(endpoint string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	delete(p.unheard, endpoint)
+	p.heard[endpoint] = time.Now()
+	for i, d := range p.devices {
+		if d.Endpoint == endpoint && !d.Confirms {
+			p.devices[i].Confirms = true
+			p.save()
+		}
+	}
+}
+
+// Deaf lists the devices that confirm pushes and have left one unconfirmed for longer than after.
+func (p *Pusher) Deaf(after time.Duration) []Deaf {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	var out []Deaf
+	for _, d := range p.devices {
+		sent, ok := p.unheard[d.Endpoint]
+		if !d.Confirms || !ok || time.Since(sent) < after {
+			continue
+		}
+		since := p.heard[d.Endpoint]
+		if since.IsZero() {
+			since = sent
+		}
+		out = append(out, Deaf{Name: cmp.Or(d.Name, "a phone"), Endpoint: d.Endpoint, Since: since})
+	}
+	return out
+}
+
+func (p *Pusher) sent(endpoint string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if _, ok := p.unheard[endpoint]; !ok {
+		p.unheard[endpoint] = time.Now()
+	}
+}
+
 func (p *Pusher) Send(m Message) {
 	p.post(m, m.Title+": "+m.Body, func(Device) bool { return true })
 }
@@ -117,13 +171,18 @@ func (p *Pusher) post(v any, what string, to func(Device) bool) {
 			p.Remove(d.Endpoint)
 		case res.StatusCode >= 300:
 			log.Printf("push: %s answered %s", d.Name, res.Status)
-		case what != "":
-			log.Printf("push: %q sent to %s", what, d.Name)
+		default:
+			p.sent(d.Endpoint)
+			if what != "" {
+				log.Printf("push: %q sent to %s", what, d.Name)
+			}
 		}
 	}
 }
 
 func (p *Pusher) drop(endpoint string) {
+	delete(p.unheard, endpoint)
+	delete(p.heard, endpoint)
 	out := p.devices[:0]
 	for _, d := range p.devices {
 		if d.Endpoint != endpoint {

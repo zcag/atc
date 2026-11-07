@@ -62,6 +62,11 @@ Notifications use [UnifiedPush](https://unifiedpush.org): install a distributor 
 own. You get a notification when a session starts waiting for you and when one finishes a turn, with
 the start of its reply, unless you have that session open.
 
+The app tells atc each time a push reaches it. When one goes unconfirmed for 5 minutes (the phone is
+offline, or the distributor lost its connection to the server), atc says so on WhatsApp if it has
+WhatsApp, and in Settings and `atc doctor` under Phone notifications; and again once pushes get
+through. An app from before this has never confirmed one, so atc doesn't watch it.
+
 ## Share to atc
 
 Share a link, text, screenshot or file from any app and choose atc. It opens a screen to say what

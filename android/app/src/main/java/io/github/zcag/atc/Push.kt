@@ -28,7 +28,10 @@ class Push : PushService() {
         sync(this)
     }
 
-    override fun onMessage(message: PushMessage, instance: String) = handle(this, message.content)
+    override fun onMessage(message: PushMessage, instance: String) {
+        handle(this, message.content)
+        heard(this)
+    }
 
     override fun onRegistrationFailed(reason: FailedReason, instance: String) {
         Prefs(this).pushError = reason.name.lowercase()
@@ -85,6 +88,14 @@ class Push : PushService() {
                     syncing.set(false)
                 }
             }
+        }
+
+        /** Tells atc a push got here, so it can tell when pushes stop getting through. */
+        private fun heard(c: Context) {
+            val p = Prefs(c)
+            val server = p.server ?: return
+            val endpoint = p.endpoint ?: return
+            thread { runCatching { Net.post(c, "$server/api/push/heard", JSONObject().put("endpoint", endpoint)) } }
         }
 
         fun unregister(c: Context, server: String, endpoint: String) = thread {

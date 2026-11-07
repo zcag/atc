@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"os"
@@ -68,6 +69,9 @@ func (s *Server) capsEnv(f settings.File) caps.Env {
 	if s.Push != nil {
 		for _, d := range s.Push.Devices() {
 			env.Devices = append(env.Devices, d.Endpoint)
+		}
+		for _, d := range s.Push.Deaf(pushDeafAfter) {
+			env.Deaf = append(env.Deaf, fmt.Sprintf("%s since %s", d.Name, d.Since.Format("15:04")))
 		}
 	}
 	return env
