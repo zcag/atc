@@ -402,7 +402,7 @@ func TestOutputFileLinks(t *testing.T) {
 	link := s.fileURL("sid1", filepath.Join(dir, "index.html"), time.Now().Add(time.Hour).Unix())
 
 	res, body := get(t, ts.URL+link, "")
-	if res.StatusCode != 200 || body != "<h1>hi</h1>"+zenKeysScript || !strings.Contains(res.Header.Get("Content-Security-Policy"), "sandbox") {
+	if res.StatusCode != 200 || body != "<h1>hi</h1>"+pageKeysScript || !strings.Contains(res.Header.Get("Content-Security-Policy"), "sandbox") {
 		t.Fatalf("page: %d %q %v", res.StatusCode, body, res.Header)
 	}
 	if res, body := get(t, ts.URL+strings.Replace(link, "index.html", "css/a.css", 1), ""); res.StatusCode != 200 || body != "h1{}" {

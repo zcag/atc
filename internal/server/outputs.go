@@ -185,7 +185,7 @@ func (s *Server) outputFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-cache")
 	if ext := strings.ToLower(filepath.Ext(path)); ext == ".html" || ext == ".htm" {
 		if b, err := io.ReadAll(f); err == nil && !bytes.Contains(b, []byte("/atc.js")) {
-			http.ServeContent(w, r, st.Name(), time.Time{}, bytes.NewReader(append(b, zenKeysScript...)))
+			http.ServeContent(w, r, st.Name(), time.Time{}, bytes.NewReader(append(b, pageKeysScript...)))
 			return
 		}
 		f.Seek(0, io.SeekStart)
@@ -193,4 +193,4 @@ func (s *Server) outputFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, st.Name(), st.ModTime(), f)
 }
 
-const zenKeysScript = `<script>parent!==window&&addEventListener("keydown",e=>{const t=e.target;if(!e.defaultPrevented&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&(e.key==="z"||e.key==="Escape")&&!t.isContentEditable&&!/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName||""))parent.postMessage({atc:1,op:"key",arg:{key:e.key,code:e.code,shiftKey:e.shiftKey}},"*")})</script>`
+const pageKeysScript = `<script>parent!==window&&(()=>{const r=new Set([" ","PageDown","PageUp","Home","End","ArrowDown","ArrowUp","ArrowLeft","ArrowRight","Tab","Enter"]);addEventListener("keydown",e=>{const t=e.target;if(!e.defaultPrevented&&!e.ctrlKey&&!e.metaKey&&!r.has(e.key)&&!t.isContentEditable&&!/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName||""))parent.postMessage({atc:1,op:"key",arg:{key:e.key,code:e.code,altKey:e.altKey,shiftKey:e.shiftKey}},"*")})})()</script>`
