@@ -18,10 +18,11 @@ type draft struct {
 }
 
 type bayMemory struct {
-	Sid   string          `json:"sid,omitempty"`
-	View  string          `json:"view,omitempty"`
-	Panes json.RawMessage `json:"panes,omitempty"`
-	At    time.Time       `json:"at"`
+	Sid    string          `json:"sid,omitempty"`
+	View   string          `json:"view,omitempty"`
+	Panes  json.RawMessage `json:"panes,omitempty"`
+	Parked []string        `json:"parked,omitempty"`
+	At     time.Time       `json:"at"`
 }
 
 type bays struct {
@@ -185,10 +186,11 @@ func (s *Server) patchBay(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Sid, View *string
 		Panes     json.RawMessage
+		Parked    *[]string
 		From      string
 	}
 	bay := r.PathValue("bay")
-	if !decodeOr400(w, r, &req, "{sid, view, panes}", func() bool { return prefKey(bay) }) {
+	if !decodeOr400(w, r, &req, "{sid, view, panes, parked}", func() bool { return prefKey(bay) && (req.Parked == nil || len(*req.Parked) <= 500) }) {
 		return
 	}
 	s.editBays(w, req.From, func(b *bays) {
@@ -203,6 +205,9 @@ func (s *Server) patchBay(w http.ResponseWriter, r *http.Request) {
 			m.Panes = nil
 		} else if req.Panes != nil {
 			m.Panes = req.Panes
+		}
+		if req.Parked != nil {
+			m.Parked = *req.Parked
 		}
 		m.At = time.Now().UTC()
 		b.Memory[bay] = m

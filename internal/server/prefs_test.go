@@ -96,9 +96,13 @@ func TestBaysOrderAndMemory(t *testing.T) {
 	if ev := next(t, ch, "bays"); !strings.Contains(ev, `"view":"board"`) || !strings.Contains(ev, `"sid":"s1"`) {
 		t.Errorf("a patch merges: %s", ev)
 	}
-	do(t, "PATCH", ts.URL+"/api/bays/atc", "tok", `{"panes":null}`)
+	do(t, "PATCH", ts.URL+"/api/bays/atc", "tok", `{"panes":null,"parked":["s1","s2"]}`)
 	b := s.bays()
-	if m := b.Memory["atc"]; len(b.Order) != 2 || m.Sid != "s1" || m.View != "board" || m.Panes != nil {
+	if m := b.Memory["atc"]; len(b.Order) != 2 || m.Sid != "s1" || m.View != "board" || m.Panes != nil || len(m.Parked) != 2 {
 		t.Errorf("bays: %+v", b)
+	}
+	do(t, "PATCH", ts.URL+"/api/bays/atc", "tok", `{"parked":[]}`)
+	if m := s.bays().Memory["atc"]; len(m.Parked) != 0 || m.Sid != "s1" {
+		t.Errorf("clearing parked: %+v", m)
 	}
 }
