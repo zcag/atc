@@ -690,7 +690,7 @@ const waiting = (s) => (s.state === "needs-you" || s.state === "your-turn") && !
 function baysOf(live, keep) {
   const tabs = projectTabs(live || [], keep);
   const ag = (live || []).filter((s) => bayOf(s) === AGENT_BAY && s.state !== "stopped" && s.state !== "past");
-  if (ag.length || keep === AGENT_BAY) tabs.push({ name: AGENT_BAY, pips: ag.filter((s) => countsOnBay(s) && RANK[s.state] !== undefined).map((s) => s.state) });
+  if (ag.length || keep === AGENT_BAY) tabs.push({ name: AGENT_BAY, n: ag.length, resting: ag.filter((s) => !countsOnBay(s)).length, pips: ag.filter((s) => countsOnBay(s) && RANK[s.state] !== undefined).map((s) => s.state) });
   const names = tabs.map((t) => t.name);
   let order = BAYDATA.order;
   const fresh = names.filter((n) => !order.includes(n));
@@ -698,10 +698,11 @@ function baysOf(live, keep) {
     BAYDATA.order = order = [...order, ...fresh];
     api("/api/bays", { method: "PUT", body: { order, from: PAGE_ID } }).catch(() => {});
   } else if (fresh.length) order = [...order, ...fresh];
-  return order.filter((n) => names.includes(n)).map((n) => {
+  const out = order.filter((n) => names.includes(n)).map((n) => {
     const t = tabs.find((x) => x.name === n), c = (st) => t.pips.filter((x) => x === st).length;
-    return { name: n, needs: c("needs-you"), turn: c("your-turn"), work: c("working") };
+    return { name: n, needs: c("needs-you"), turn: c("your-turn"), work: c("working"), parked: t.n > 0 && t.resting === t.n };
   });
+  return [...out.filter((b) => !b.parked), ...out.filter((b) => b.parked)];
 }
 
 function goBay(name, live, session) {
@@ -714,7 +715,7 @@ function goBay(name, live, session) {
   go(pick ? keyOf(pick) : null);
 }
 
-const bayWords = (b, i) => [`${b.name}, bay ${i + 1}`, [b.needs + b.turn && `${b.needs + b.turn} waiting on you`, b.work && `${b.work} working`].filter(Boolean).join(", ")].filter(Boolean).join(": ");
+const bayWords = (b, i) => [`${b.name}, bay ${i + 1}${b.parked ? ", parked" : ""}`, [b.needs + b.turn && `${b.needs + b.turn} waiting on you`, b.work && `${b.work} working`].filter(Boolean).join(", ")].filter(Boolean).join(": ");
 
 function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onPeek }) {
   const now = new Date();
@@ -741,7 +742,8 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
       <div class="bays-scroll" ref=${scroller}>
         ${only === null && html`<span class="bay on"><button class="bn" aria-current="true" title="Every bay (alt 0)"><span class="k">0</span><span class="n">All</span></button></span>`}
         ${bays.map((b, i) => html`
-          <span class="bay ${only === b.name ? "on" : ""} ${peek === b.name ? "peeking" : ""}" data-bay=${b.name}>
+          ${b.parked && !bays[i - 1]?.parked && html`<span class="bay-rest" aria-hidden="true">parked</span>`}
+          <span class="bay ${only === b.name ? "on" : ""} ${peek === b.name ? "peeking" : ""} ${b.parked ? "rest" : ""}" data-bay=${b.name}>
             <button class="bn" aria-current=${only === b.name ? "true" : null} aria-label=${bayWords(b, i)}
               aria-keyshortcuts=${i < 9 ? `${i + 1}` : null} onClick=${() => goBay(b.name, live)}
               onContextMenu=${(e) => { e.preventDefault(); onPeek(b.name); }}>
@@ -2040,9 +2042,11 @@ function projectTabs(live, keep) {
   for (const x of live) {
     if (x.state === "past" || x.state === "stopped" || homeless(x)) continue;
     const n = project(x.cwd).name;
-    if (!by.has(n)) by.set(n, { name: n, pips: [], own: false });
+    if (!by.has(n)) by.set(n, { name: n, pips: [], own: false, n: 0, resting: 0 });
     const t = by.get(n);
     t.own ||= !x.agent;
+    t.n++;
+    if (!countsOnBay(x)) t.resting++;
     if (countsOnBay(x) && RANK[x.state] !== undefined) t.pips.push(x.state);
   }
   const tabs = [...by.values()].filter((t) => t.own || t.name === keep);
