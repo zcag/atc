@@ -147,6 +147,7 @@ export class Director {
   constructor(rig) {
     this.keys = Object.entries(rig.angles);
     this.has = rig.parts && new Set(rig.parts.map((p) => p.name));
+    this.pout = rig.serious > 0;
     this.angle = new Swap(this.nearest(0, 0));
     this.eyes = new Swap();
     this.brows = new Swap();
@@ -188,7 +189,7 @@ export class Director {
       m = p.round > (inRound ? .2 : .5) ? (this.lvl === 1 ? "u" : "o2") : p.wide > (inWide ? .15 : .4) ? `e${Math.min(2, this.lvl)}` : `a${this.lvl}`;
     } else {
       this.lvl = 0;
-      if (serious) m = this.has?.has(`${this.angle.cur}.mouth.n`) ? "n" : "u";
+      if (serious) m = this.has?.has(`${this.angle.cur}.mouth.n`) ? "n" : this.pout ? "u" : "base";
       else if (p.smile > .72) m = "s2";
       else if (p.smile > .5) m = "s1";
     }

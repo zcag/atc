@@ -13,7 +13,8 @@ its room into room.json, without needing its sources. Run with numpy, opencv and
   from outside the cut is removed first (room caught between hair tips).
 - --scale K shrinks the whole figure about the bottom middle, and --zoom sets how far the view crops in: a portrait whose head
   fills more of the frame than the others'. verify.py measures the result.
-- --serious blends the small closed mouth with the resting one when there is no neutral drawing and the full one pouts.
+- --serious blends the small closed mouth into the resting one while thinking or in a tool, for a character without a neutral
+  (n) mouth; without it such a character keeps the resting mouth. verify.py takes .6 at most, since the full one pouts.
 - --manner sets how the character acts: match it to the voice, in a real call.
 Coordinates are in the portrait's pixels (rig.json "size")."""
 import argparse, json, shutil

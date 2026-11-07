@@ -52,6 +52,9 @@ GAZE = [f"g{x}_{y}" for x in (-12, 0, 12) for y in (-10, 0, 10) if x or y]
 want = [f"eyes.{n}" for n in GAZE + ["half", "shut"]] + ["brows.up", "brows.knit"] + [f"mouth.{m}" for m in ("a1", "a2", "a3", "e1", "e2", "o2", "u", "s1", "s2")]
 gone = [f"{a}.{w}" for a in angles for w in want if f"{a}.{w}" not in parts]
 check("drawings complete", not gone and all(f"pose.{p}" in parts for p in ("think", "read", "write", "explain")), f"missing {gone[:6]}")
+no_n = [a for a in angles if f"{a}.mouth.n" not in parts]
+blend = R.get("serious") or 0
+check("serious mouth unpouted", not no_n or blend <= .6, f"{len(no_n)} angles without mouth.n show u at {blend:.2f} while thinking or in a tool: draw n, or keep --serious at .6 or less")
 pitched = [a for a, (_, p) in angles.items() if p >= 12]
 check("reading eyes", pitched and all(f"{a}.eyes.r0" in parts for a in pitched), f"bowed angles {pitched}")
 

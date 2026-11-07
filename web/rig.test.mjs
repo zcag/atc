@@ -54,6 +54,11 @@ test("the director picks the nearest head angle, with hysteresis, and drawings b
   assert.equal(d.mouth.cur, "s2", "a broad smile when not speaking");
   run({ smile: .9, jaw: .5 }, 2);
   assert.equal(d.mouth.cur, "a2", "speech takes the mouth back at once");
+  run({ serious: 1 });
+  assert.equal(d.mouth.cur, "base", "no neutral drawing and no serious blend: the resting mouth, not a held pout");
+  const blended = new Director({ ...rig, serious: .4 });
+  for (let i = 0; i < 30; i++) blended.step(1 / 30, { ...base, serious: 1 });
+  assert.equal(blended.mouth.cur, "u", "a serious blend shows the small closed mouth, faded");
   run({ pose: "read", pitch: .95, gazeY: .9, gazeX: -.5 });
   assert.equal(d.angle.cur, "y0p12");
   assert.equal(d.eyes.cur, "r-12");
