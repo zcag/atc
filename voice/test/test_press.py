@@ -36,7 +36,7 @@ def fake():
     t.paused, t.paused_at, t.reopening, t.reopened = False, 0.0, False, False
     t.may_speak = asyncio.Event()
     t.opening = t.discard = t.holding = t.pressed = t.released = False
-    t.speaking, t.unfinished, t.line_up = [], None, False
+    t.speaking, t.unfinished, t.line_up, t.last_voice = [], None, False, 0.0
     t.events, t.turns_sent = [], []
     t.log = lambda **kw: t.events.append(kw["event"])
     t.place = t.tick = lambda *_: None

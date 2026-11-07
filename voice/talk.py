@@ -390,8 +390,26 @@ class Talk:
                 and not self.cut and not self.opening and bool(words & p.LINE_CORE) and words <= p.LINE_CHECK)
 
     def echo(self, text):
+        """A turn that is delta's own voice coming back. --echo-order: only one that began while delta was audible and
+        repeats its words in its order; a Turkish answer repeats the question's verb («Kalsınlar mı?» «Kalsınlar.»),
+        and the any-order rule took 17 of his turns for echo out of 19 it dropped on his calls (1-7 Nov)."""
         words = re.findall(r"\w+", text.lower())
-        return bool(words) and sum(map(self.echoed, words)) / len(words) >= .7
+        if not self.a.echo_order:
+            return bool(words) and sum(map(self.echoed, words)) / len(words) >= .7
+        return bool(words) and self.app and getattr(self, "began_after", 9) < .5 and self.in_order(words) >= .7
+
+    def in_order(self, words):
+        """Share of words found among delta's last few seconds of words in the same order, as the transcriber spells them."""
+        now = time.monotonic()
+        said = [w for t, w in self.said_recently if now - t < 6 or now - self.last_voice < 3]
+        said += [w for it in self.speaking if it[0] for w in re.findall(r"\w+", it[0].lower())]
+        same = lambda a, b: a == b or abs(len(a) - len(b)) <= 2 and difflib.SequenceMatcher(None, a, b).ratio() >= .75
+        run = [0] * (len(said) + 1)
+        for w in words:
+            prev = run[:]
+            for j, s in enumerate(said, 1):
+                run[j] = max(run[j - 1], prev[j], prev[j - 1] + 1 if same(w, s) else 0)
+        return run[-1] / len(words)
 
     def show(self, **kw):
         """What the app's call screen shows: the state, what they are saying, what delta says, the tool it uses, and always
@@ -643,6 +661,7 @@ class Talk:
                             self.log(event="turn-reopened")
                     else:
                         self.utt, self.voiced_ms = bytearray(self.preroll), self.speech_ms
+                        self.began_after = time.monotonic() - self.speech_ms / 1000 - self.last_voice
                         if self.stt:
                             await self.off(self.stt.start, self.preroll)
                     if not self.talking():
@@ -1453,6 +1472,7 @@ if __name__ == "__main__":
     p.add_argument("--ack-ms", type=int, default=2500, help="ms after their turn with nothing from Claude before a thinking phrase (0 = never)")
     p.add_argument("--reopen-ms", type=int, default=700, help="ms of speech that take back a turn already sent to Claude")
     p.add_argument("--barge-words", type=int, default=3, help="words (not hı hı, evet...) that make an overlap a real interruption")
+    p.add_argument("--echo-order", action="store_true", help="drop a turn as delta's own echo only if it began while delta was audible and repeats its words in order")
     p.add_argument("--stop-words", action="store_true", help="their stop words (STOP_WORDS) count even when delta said one like it, and the whole of what they said is read before delta goes on")
     p.add_argument("--barge-max", type=float, default=2.0, help="s of paused overlap after which it counts as an interruption anyway")
     p.add_argument("--stt", choices=["whisper", "stream"], default="stream", help="whisper needs TALK_STT")
