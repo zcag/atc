@@ -4,7 +4,7 @@
 // drawing is swapped in for each moment with only a very short dissolve; between head angles the drawings are bent a
 // little (skinned meshes: the nose and eyes move more than the outline), and while two angles dissolve both are warped
 // along the measured flow between them, so features meet instead of doubling. Pose layers swing in from below the
-// frame. The room (web/room.js) is everything around the character: its picture, the light it throws on them, its grade,
+// frame. The room (room.js) is everything around the character: its picture, the light it throws on them, its grade,
 // glows, particles and moods. A character can be drawn without one. Behaviour decides the acting from the call's state
 // and both voices; Director turns it into drawings.
 

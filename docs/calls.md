@@ -166,7 +166,7 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   name while the voice changes with it. In the app the name changes with the face, on the new character's first frame, or to the orb after 6 seconds if that frame hasn't come. A pick tells the voice service, so the phone line speaks with it too.
   With nobody picked for a language, the character kept on that device shows, and the voice service's voice speaks. A
   person holds nothing about how the assistant behaves, and nothing in it is tied to the assistant, so an agent can name one too.
-- **Rooms** are in `$ATC_APP_DIR/personas/_rooms/`: a picture, best at a character's 768x1344, and optionally its light, glows, particles and moods in a `.json` of the same name ([the format](persona-rig.md#rooms)). A person's editor adds and removes pictures. One replaces a `rig`
+- **Rooms** are in `$ATC_APP_DIR/personas/_rooms/`: a picture, best at a character's 768x1344, and optionally its light, glows, particles and moods in a `.json` of the same name ([the format](https://github.com/zcag/cel/blob/master/docs/how-it-works.md#rooms)). A person's editor adds and removes pictures. One replaces a `rig`
   character's own room. A picture with no settings gets a look from its pixels: a lamp-lit one is darkened like that room, a bright one (by its mean brightness) stays bright. The orb and the other kinds draw their own surroundings.
 - **View** is how a device shows the call, kept on that device: **Character** (whoever is on the line, as above), or
   **Line** or **Bars**, built-in marks that only move with the voices, for a call in public. It leaves the person alone:
@@ -178,7 +178,7 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   atc's binary carries none besides the orb; `atc setup`, `atc voice install` and `atc app characters` fetch the characters and rooms of the latest release without the app, and `atc app update` brings both up to date (`make personas`). The kept one starts from the phone with no wait on the server, on the
   dark backdrop until its first frame; the orb shows only when it is the choice, or when the character
   is missing or stuck for 6 s. Kinds: `rig` (drawings swapped like cel animation, `web/rig.js`,
-  built as in [the rig's notes](persona-rig.md)), `illustration` and `footage` (`web/persona.js`, in the
+  built with [cel](https://github.com/zcag/cel)), `illustration` and `footage` (`web/persona.js`, in the
   app through a WebView), and `head3d` (`Head3D.kt`, a glTF head with ARKit morph targets drawn by
   Filament and driven by `Animator.kt`: `nodes` names its head and eye bones, `axes` which local axis of
   each turns which way, `rest` a starting pose (arms down from a T-pose), `camera` and `focal` the

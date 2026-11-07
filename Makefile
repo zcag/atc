@@ -60,7 +60,13 @@ android-publish:
 	rsync -t android/dist/atc.apk $(APP_HOST):$(APP_DIR)/
 	rsync -t android/dist/version.json $(APP_HOST):$(APP_DIR)/
 
+CEL ?= ../cel
+cel:
+	cd $(CEL) && node --test renderer/
+	cp $(CEL)/renderer/rig.js $(CEL)/renderer/room.js $(CEL)/renderer/motion.js $(CEL)/renderer/ears.js web/
+	git -C $(CEL) rev-parse HEAD > web/cel.rev
+
 personas:
 	python3 tools/persona/pack.py $${ATC_APP_DIR:-$$HOME/.local/share/atc/app}/personas android/dist
 
-.PHONY: build check install install-hub install-voice install-opencode install-mac android android-publish personas
+.PHONY: build check install install-hub install-voice install-opencode install-mac android android-publish personas cel

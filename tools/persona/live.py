@@ -6,7 +6,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 here = Path(__file__).resolve().parent
-web = here.parents[2] / "web"
+web = here.parents[1] / "web"
 work = Path(os.environ.get("PERSONA_WORK", Path.home() / ".local/share/persona2d"))
 C = work / "rig/live"
 src, out = Path(sys.argv[1]), sys.argv[2]
@@ -17,7 +17,7 @@ for f in ("persona.js", "rig.js", "motion.js", "room.js", "minimal.js"):
 shutil.copy(here / "live.html", C)
 shutil.copy(work / "clip/timeline.json", C)
 shutil.copytree(src, C / "p")
-srv = subprocess.Popen(["python3", str(here.parent / "serve.py"), str(C), str(C / "frames")])
+srv = subprocess.Popen(["python3", str(here / "serve.py"), str(C), str(C / "frames")])
 time.sleep(1)
 vids = C / "vid"
 try:

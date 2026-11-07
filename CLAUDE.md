@@ -39,11 +39,12 @@ from a `prompts.golden` beside them: read the diff, then accept it with `atc pro
 
 ## Characters
 
-A new or changed call character goes through `docs/persona-rig.md` to the end: `polish.py`, `flows.py`, `verify.py`, then
-`publish.py`, which refuses anything that didn't pass. Look at `verify.jpg` before publishing, and at the character in a
-real call after. When `verify.py` fails, fix the character, not the threshold. Every fault found in a character later
-becomes a new check there, so the next one can't repeat it. Keep each character's prompt in its `source.json`.
-A new room goes through `tools/persona/rig/rooms.py` the same way, with its prompt in its `.json`.
+Characters and rooms are built, checked and published with [cel](https://github.com/zcag/cel), its own repo: follow its
+docs, and look at a character in a real call after. atc only loads what cel publishes.
+
+`web/rig.js`, `room.js`, `motion.js` and `ears.js` are copies of cel's `renderer/`. Change them in cel, run its tests, then
+`make cel` here (`CEL=<checkout>`, default `../cel`) to copy them in; never edit the copies. `web/cel.rev` is the cel
+commit they came from.
 
 ## Services
 

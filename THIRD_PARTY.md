@@ -134,7 +134,7 @@ These are installed by the user and keep their own licences: Claude Code (Anthro
 
 ## Tools in the repo that fetch other work
 
-`tools/persona/` builds a call character from a portrait. It holds scripts and JSON prompts, no model
+Call characters are built with [cel](https://github.com/zcag/cel), a separate repo, which holds scripts and prompts, no model
 weights, images or characters. Releases carry three characters made with it, the professor, the woman and lanky,
 as a separate download (`atc app update`), and they depict no real person. They were made with models that have
 non-commercial terms, including InsightFace and the `jonathandinu/face-parsing` model, so check those before using the
