@@ -294,6 +294,7 @@ class Talk:
         self.guest = None
         self.app, self.shown, self.next_shown, self.steady, self.heard_shown = False, None, None, 0, ""
         self.said_recently, self.echoing = [], False
+        self.bye_waiting, self.answered_at, self.hello = False, None, None
         self.on_hold = False
         self.first_audio = {}
         self.pressed = self.released = False
@@ -518,7 +519,15 @@ class Talk:
         ends = [m.end() for m in re.finditer(r"[.!?…]\s|\n\n", buf)]
         if first:
             return next((e for e in ends if e >= 12), None)
-        return ends[self.a.chunk_sentences - 1] if len(ends) >= self.a.chunk_sentences else None
+        cut = ends[self.a.chunk_sentences - 1] if len(ends) >= self.a.chunk_sentences else None
+        if cut and self.a.topic_pause_ms:
+            cut = next((e for e in ends if e < cut and self.topic_starts(buf[max(0, e - 2):e], buf[e:])), cut)
+        return cut
+
+    def topic_starts(self, before, text):
+        """--topic-pause-ms: a new topic begins here, after a paragraph break or at «Bi de», «İkincisi», «Sıradaki»...
+        (TOPIC): 95% of delta's pauses were 0.6 s or less, so a new topic sounded like the next clause."""
+        return bool(self.a.topic_pause_ms) and ("\n\n" in before + text[:2] or bool(self.pack.TOPIC.match(text.lstrip())))
 
     async def tts(self, text, lang=None, voice=None, rate=None):
         """Speech for text, as PCM chunks the moment the TTS server sends them. A request that fails before any audio
@@ -744,7 +753,7 @@ class Talk:
         backchannel). Their stop word stops it; three real words stop it only if it had paused, as before."""
         heard = (await self.off(self.stt.text)).get(self.lang, "")
         words = [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.BACKCHANNEL and not self.echoed(w)]
-        if self.stop_heard(heard) or self.paused and len(words) >= self.a.barge_words:
+        if self.more_than_bye(heard) if self.bye_waiting else self.stop_heard(heard) or self.paused and len(words) >= self.a.barge_words:
             self.log(event="interrupted", heard=heard, by="stop-words")
             return True
         return False
@@ -754,7 +763,7 @@ class Talk:
         if self.paused and self.in_speech:
             heard = self.stt.partial(self.lang) if self.stt else ""
             words = [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.BACKCHANNEL and not self.echoed(w)]
-            if self.pack.STOP.search(heard) or self.stop_heard(heard) or len(words) >= self.a.barge_words or time.time() - self.paused_at > self.a.barge_max:
+            if self.more_than_bye(heard) if self.bye_waiting else self.pack.STOP.search(heard) or self.stop_heard(heard) or len(words) >= self.a.barge_words or time.time() - self.paused_at > self.a.barge_max:
                 self.paused = False
                 self.log(event="interrupted", heard=heard)
                 self.interrupt()
@@ -909,7 +918,7 @@ class Talk:
             self.show(you=text)
         self.history += [{"role": "user", "content": sent}, {"role": "assistant", "content": ""}]
         self.spoken = []
-        reply, buf, first = "", "", True
+        reply, buf, first, after = "", "", True, ""
         spoken = lambda t: LINE_TAG.sub("", self.hangup.sub("", t)).strip()
         self.tools_open = 0
         wants_ack = self.a.ack_ms and not self.opening and not self.holding and not self.moving \
@@ -917,7 +926,7 @@ class Talk:
         ack = asyncio.create_task(self.ack_later(lambda: first and not reply) if wants_ack else asyncio.sleep(0))
         hold = asyncio.create_task(self.hold_on())
 
-        async def speak(sentence):
+        async def speak(sentence, gap=False):
             nonlocal first
             if not sentence:
                 return
@@ -928,6 +937,8 @@ class Talk:
                 self.live, self.utt, self.opening, self.unfinished, first = True, bytearray(), False, None, False
             item, head, rate = [sentence, 0, False, b""], b"", self.rate
             self.speaking.append(item)
+            if gap:
+                self.queue(item, bytes(int(rate * self.a.topic_pause_ms / 1000) * 2), rate=rate)
             async for chunk in self.tts(sentence, rate=rate):
                 if head is not None:
                     head += chunk
@@ -945,6 +956,7 @@ class Talk:
                     self.log(event="tool", name=value)
                     self.show(tool=value)
                     self.tools_open += 1
+                    after = ""
                     if buf.strip():
                         await speak(spoken(buf))
                         buf = ""
@@ -966,10 +978,11 @@ class Talk:
                         self.log(event="language", lang=self.lang)
                         self.show()
                 while cut := self.piece_end(buf, first):
-                    sentence, buf = buf[:cut].strip(), buf[cut:]
-                    await speak(spoken(sentence))
+                    gap = not first and self.topic_starts(after, buf)
+                    sentence, after, buf = buf[:cut].strip(), buf[max(0, cut - 2):cut], buf[cut:]
+                    await speak(spoken(sentence), gap)
             if spoken(buf):
-                await speak(spoken(buf))
+                await speak(spoken(buf), not first and self.topic_starts(after, buf))
         except asyncio.CancelledError:
             ack.cancel(), hold.cancel()
             if not self.leaving:
@@ -986,9 +999,30 @@ class Talk:
         if self.hangup.search(reply):
             while self.speaking:
                 await asyncio.sleep(0.1)
-            await asyncio.sleep(0.5)
+            await self.bye_wait()
             self.log(event="hangup")
             await self.send_cmd({"cmd": "hangup"})
+
+    async def bye_wait(self):
+        """--bye-wait-ms: after delta's goodbye, room for theirs: hang up once they have said it (0.5 s after they stop),
+        or after bye_wait_ms if they say nothing, 5 s at most. delta used to hang up 1 s after its last word, and on 69
+        calls their goodbye got in on 5. Words that are more than a goodbye («Bi de şunu...») keep the call (more_than_bye)."""
+        if not self.a.bye_wait_ms:
+            await asyncio.sleep(0.5)
+            return
+        self.bye_waiting, start = True, time.monotonic()
+        try:
+            while (now := time.monotonic()) - start < 5:
+                spoke = self.last_heard > start
+                if not self.in_speech and (now - self.last_heard >= .5 if spoke else now - start >= self.a.bye_wait_ms / 1000):
+                    return
+                await asyncio.sleep(0.05)
+        finally:
+            self.bye_waiting = False
+
+    def more_than_bye(self, heard):
+        words = [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.BACKCHANNEL and not self.pack.BYE.fullmatch(w)]
+        return len(words) >= self.a.barge_words
 
     def picked(self):
         return {**voices(self.a), **self.line_voices}
@@ -1148,9 +1182,36 @@ class Talk:
             self.say("", self.cache[self.last_ack])
             self.log(event="ack", text=self.last_ack)
 
+    def back_greeting(self):
+        """--back-min: the user is greeted like someone delta talks to all day, not introduced to: within that many
+        minutes of their last call a short line (GREETING_BACK), otherwise a casual one (GREETING_HIM), each list in turn,
+        none again until all have played. Guests get GREETING, which says who is answering."""
+        if not self.a.back_min or self.guest:
+            return None
+        try:
+            with open(os.path.join(self.a.out, "last-call.json")) as f:
+                soon = time.time() - json.load(f)["end"] <= self.a.back_min * 60
+        except (OSError, ValueError, KeyError):
+            soon = False
+        kind, lines = ("back", self.first.GREETING_BACK) if soon else ("him", self.first.GREETING_HIM)
+        if not lines:
+            return None
+        path = os.path.join(self.a.out, f"greeting-{kind}.json")
+        try:
+            with open(path) as f:
+                n = int(json.load(f)["next"])
+        except (OSError, ValueError, KeyError):
+            n = 0
+        with open(path, "w") as f:
+            json.dump({"next": (n + 1) % len(lines)}, f)
+        return lines[n % len(lines)]
+
     def save(self):
         if not self.t0:
             return
+        if self.answered_at and not self.guest:
+            with open(os.path.join(self.a.out, "last-call.json"), "w") as f:
+                json.dump({"end": time.time()}, f)
         if self.speaking_task:
             self.speaking_task.cancel()
         n = max(len(self.track["in"]), len(self.track["out"]))
@@ -1165,7 +1226,7 @@ class Talk:
         asyncio.create_task(self.render(self.phrases(), rate=APP_RATE))
 
     def phrases(self, first=True, rest=True):
-        said = lambda p: [(t, p.code) for t in [p.GREETING, p.LINE_OK, *p.FILLERS, *p.HOLD, *[t for _, t in p.PROGRESS if t]]]
+        said = lambda p: [(t, p.code) for t in [p.GREETING, *p.GREETING_BACK, *p.GREETING_HIM, p.LINE_OK, *p.FILLERS, *p.HOLD, *[t for _, t in p.PROGRESS if t]]]
         lines = said(self.first) if first else []
         return lines + ([(t, p.code) for p in self.packs.values() for t in p.ACKS] + [l for p in self.packs.values() if p is not self.first for l in said(p)] if rest else [])
 
@@ -1252,6 +1313,7 @@ class Talk:
     async def start(self):
         if not self.t0:
             self.open()
+        self.answered_at = time.time()
         self.log(event="answered", **({"guest": self.guest} if self.guest else {}))
         asyncio.create_task(self.brain.start())
         self.speaking_task = asyncio.create_task(self.speaker())
@@ -1261,9 +1323,15 @@ class Talk:
         if self.first_line:
             asyncio.create_task(self.move_line(self.first_line))
             return
-        hello = self.first.GREETING
-        if not self.greeting:
-            self.greeting = self.cache[hello] = b"".join([c async for c in self.tts(hello)])
+        hello = self.back_greeting() or self.first.GREETING
+        if hello == self.first.GREETING:
+            if not self.greeting:
+                self.greeting = self.cache[hello] = b"".join([c async for c in self.tts(hello)])
+            audio = self.greeting
+        else:
+            audio = self.cache.get(hello) or b"".join([c async for c in self.tts(hello)])
+            self.cache[hello] = audio
+        self.hello = hello, audio
         self.history.append({"role": "assistant", "content": hello})
         asyncio.create_task(self.greet())
 
@@ -1278,7 +1346,7 @@ class Talk:
         if self.who:
             return
         self.log(event="greeting", waited_ms=round((time.monotonic() - start) * 1000), line_up=self.line_up)
-        self.say(self.first.GREETING, self.greeting)
+        self.say(*self.hello)
 
     async def release(self):
         """Let the prepared opening play once they have had their «Alo»: when they stop talking, or after
@@ -1514,6 +1582,9 @@ if __name__ == "__main__":
     p.add_argument("--ack-ms", type=int, default=2500, help="ms after their turn with nothing from Claude before a thinking phrase (0 = never)")
     p.add_argument("--reopen-ms", type=int, default=700, help="ms of speech that take back a turn already sent to Claude")
     p.add_argument("--barge-words", type=int, default=3, help="words (not hı hı, evet...) that make an overlap a real interruption")
+    p.add_argument("--back-min", type=float, default=0, help="the user gets casual greetings (GREETING_HIM), short ones (GREETING_BACK) within this many minutes of their last call; 0 = GREETING for everyone")
+    p.add_argument("--topic-pause-ms", type=int, default=0, help="extra silence before a piece that starts a new topic (paragraph break or TOPIC); 0 = off")
+    p.add_argument("--bye-wait-ms", type=int, default=0, help="after a goodbye, wait this long for theirs before hanging up (0 = 0.5 s, the old way)")
     p.add_argument("--echo-order", action="store_true", help="drop a turn as delta's own echo only if it began while delta was audible and repeats its words in order")
     p.add_argument("--stop-words", action="store_true", help="their stop words (STOP_WORDS) count even when delta said one like it, and the whole of what they said is read before delta goes on")
     p.add_argument("--barge-max", type=float, default=2.0, help="s of paused overlap after which it counts as an interruption anyway")
