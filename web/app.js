@@ -5910,7 +5910,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
         ${strip}
         ${quotes.map((q, j) => html`<div class="cstrip quote"><span class="qx">${q}</span><span class="sp"></span><button class="btn" onClick=${() => setQuotes(quotes.filter((_, k) => k !== j))}>Remove</button></div>`)}
         <div class="cbox ${chips.length ? "has-chips" : ""}">
-          ${chips.length > 0 && html`<div class="chips" aria-label="Suggested replies">${chips.map((r) => html`<button class="chip" onClick=${() => { setDraft(r); requestAnimationFrame(() => { ta.current?.focus(); ta.current?.setSelectionRange(1e4, 1e4); }); }}>${r}</button>`)}</div>`}
+          ${chips.length > 0 && html`<div class="chips" aria-label="Suggested replies">${chips.map((r) => html`<button class="chip" disabled=${busy} onClick=${async () => { setBusy(true); await send(r, { suggested: true }); setBusy(false); }}>${r}</button>`)}</div>`}
           <div class="box" onClick=${(e) => e.target === e.currentTarget && ta.current?.focus()}>
             ${prompt}
             <${AttChips} atts=${atts} up=${(a) => !a.path} zoom=${setBig} remove=${(a) => setAtts(atts.filter((x) => x.id !== a.id))} />
