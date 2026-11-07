@@ -219,6 +219,13 @@ async def tell_also(msg):
     also.clear()
 
 
+async def app_alerting():
+    """The call reached the user: the hub stops waiting to fall back, and the talker starts the opening."""
+    if app.get("phase") == "dialing":
+        app["phase"] = "alerting"
+        await app_event("precise", precise="alerting")
+
+
 async def app_answered_by(ws):
     """The first device to answer takes the call; the others ringing it are told it was answered elsewhere."""
     old, rate = app.get("ws"), also.pop(ws, None)
@@ -283,8 +290,9 @@ async def app_command(msg):
 async def ws_app(request):
     """atc's phone app, through atc's /api/call/line: one call at a time, their voice as binary frames
     (s16le, 16 kHz, mono) and these commands: call (they call), ringing (a call to them reached the phone),
-    accept, resume (after a reconnect), ring-here (a browser rings the call too, without counting as the phone
-    having rung: any of them may accept, and a hangup from any declines it), hangup, interrupt (they tapped: the talker stops), talk-down and talk-up (he
+    accept, resume (after a reconnect), ring-here (a browser rings the call too; with here, the user used that page
+    moments ago, so it counts as the call reaching them like ringing does; any of them may accept, and a hangup from any
+    declines it), hangup, interrupt (they tapped: the talker stops), talk-down and talk-up (he
     holds or lets go of the talk button: see Talk.press), and stats (its playback
     counters, kept in the call's log line). The talker's {"cmd": "persona", ...} reach it as {"event": "persona", ...}.
     call and ringing may say out_rate 24000: the talker then speaks at that rate (Higgs' own) instead of 16 kHz.
@@ -344,16 +352,18 @@ async def ws_app(request):
                         await broadcast({"event": "line", "to": next_line[0], "via": "app"}, "app")
                     next_line.clear()
             elif cmd == "ringing":
-                if phase == "dialing" and free():
-                    app["ws"], app["phase"] = ws, "alerting"
+                if phase in ("dialing", "alerting") and free():
+                    app["ws"] = ws
                     if m.get("out_rate") in (16000, 24000):
                         app["out_rate"] = m["out_rate"]
-                    await app_event("precise", precise="alerting")
+                    await app_alerting()
                 elif not (owner() and phase == "alerting"):
                     await reply({"event": "ended", "why": "gone"})
             elif cmd == "ring-here":
                 if phase in ("dialing", "alerting") and not owner():
                     also[ws] = m.get("out_rate")
+                    if m.get("here"):
+                        await app_alerting()
                 else:
                     await reply({"event": "ended", "why": "gone"})
             elif ws in also:
@@ -385,8 +395,8 @@ async def ws_app(request):
             elif cmd == "hangup":
                 await app_end("hangup")
     finally:
-        also.pop(ws, None)
-        if owner():
+        rang = also.pop(ws, None) is not None
+        if owner() or rang and free() and not also and app.get("phase") == "alerting":
             app["ws"] = None
             if app.get("phase") in ("ringing", "alerting", "active"):
                 asyncio.create_task(app_lost())
@@ -405,7 +415,7 @@ def keep_trace(m):
 async def app_lost():
     """A dropped connection (the phone switched networks) gets a few seconds to come back with resume."""
     await asyncio.sleep(APP_GRACE)
-    if app.get("ws") is None:
+    if app.get("ws") is None and not also:
         await app_end("lost")
 
 

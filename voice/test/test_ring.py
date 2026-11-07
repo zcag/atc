@@ -3,13 +3,13 @@
 # dependencies = ["aiohttp"]
 # ///
 """A call to the user on the app line, rung on the phone and in a browser at once: the first to answer has it, the
-others are told it was answered elsewhere, a decline on either ends it, and a browser alone never counts as the phone
-having rung (so the hub still falls back to the SIM line)."""
+others are told it was answered elsewhere, a decline on either ends it, and a browser counts as the call reaching the
+user (so the hub stops waiting to fall back to the SIM line) only when they used that page moments ago."""
 import asyncio, json, os, sys, tempfile, unittest
 
 VOICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, VOICE)
-os.environ.update(DELTA_CALL_BRIDGE="0", DELTA_CALL_DIAL_ALLOW="5550100", TALK_STATE=tempfile.mkdtemp())
+os.environ.update(DELTA_CALL_BRIDGE="0", DELTA_CALL_DIAL_ALLOW="5550100", DELTA_CALL_APP_GRACE=".1", TALK_STATE=tempfile.mkdtemp())
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 import call
@@ -33,9 +33,9 @@ class Ring(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.c.close()
 
-    async def device(self, hello):
+    async def device(self, hello, **more):
         ws = await self.c.ws_connect("/app")
-        await ws.send_json({"cmd": hello, "out_rate": 24000})
+        await ws.send_json({"cmd": hello, "out_rate": 24000, **more})
         await asyncio.sleep(.05)
         return ws
 
@@ -71,6 +71,23 @@ class Ring(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await self.precise(), "dialing")
         await self.c.post("/hangup", json={})
         self.assertEqual(await self.heard(web), {"event": "ended", "why": "hangup"})
+
+    async def test_a_browser_in_use_is_reaching_the_user(self):
+        await self.device("ring-here", here=True)
+        self.assertEqual(await self.precise(), "alerting")
+
+    async def test_the_phone_still_rings_after_a_browser_in_use(self):
+        web = await self.device("ring-here", here=True)
+        phone = await self.device("ringing")
+        await phone.send_json({"cmd": "accept"})
+        self.assertEqual(await self.heard(phone), {"event": "active"})
+        self.assertEqual(await self.heard(web), {"event": "ended", "why": call.ELSEWHERE})
+
+    async def test_the_last_browser_leaving_ends_a_call_only_it_rang(self):
+        web = await self.device("ring-here", here=True)
+        await web.close()
+        await asyncio.sleep(.3)
+        self.assertEqual(await self.precise(), "idle")
 
     async def test_browser_alone_can_answer(self):
         web = await self.device("ring-here")

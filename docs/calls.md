@@ -195,9 +195,11 @@ phone app ── wss://<atc>/api/call/line (atc's login) ── atc ── ws://
   talker starts the opening. Answering sends `accept`.
 - **It rings in the browser too.** atc also sends the ring to every open page (a `ring` event on
   `/api/events`), and a page outside the app rings it beside the phone: it opens the line with
-  `ring-here`, plays a ring and shows Answer and Decline (`A` and `E`). `ring-here` doesn't count as
-  the phone ringing, so with the app unreachable the hub still falls back to the SIM line after 8 s
-  and the page stops ringing. Whichever device sends `accept` first has the call; the others are told
+  `ring-here`, plays a ring and shows Answer and Decline (`A` and `E`). A page you used in the last
+  90 s says `here`, which counts as the call reaching you like the app's `ringing`: the hub stops
+  waiting to fall back and it rings there until the call's deadline. Any other page rings without
+  counting, so with the app unreachable the hub still falls back to the SIM line after 8 s and the page
+  stops ringing. Whichever device sends `accept` first has the call; the others are told
   it was answered on another device. Decline on any of them declines it; closing the tab only stops
   that page ringing.
 - **One device per call.** A call belongs to the connection that placed or took it; another device

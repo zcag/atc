@@ -211,7 +211,7 @@ const callAssistant = () => {
 };
 /** The native app rings calls itself; a browser rings one only while it is fresh. */
 const ringHere = ({ reason, at }) => {
-  if (APP || !CAN_CALL || Date.now() / 1000 - at > 60 || !Call.ring(reason)) return;
+  if (APP || !CAN_CALL || Date.now() / 1000 - at > 60 || !Call.ring(reason, Date.now() - lastInput < 90000)) return;
   CALLDOCK.set(true);
   if (isPhone() && location.hash !== CALL) location.hash = CALL;
 };

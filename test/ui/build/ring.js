@@ -34,6 +34,7 @@ async function open(b, { width, scheme }) {
       const o = JSON.parse(m);
       if (o.cmd === 'stats') return;
       line.cmds.push(o.cmd);
+      if (o.cmd === 'ring-here') line.here = o.here;
       if (o.cmd === 'accept') ws.send(JSON.stringify({ event: 'active' }));
       if (o.cmd === 'hangup') ws.send(JSON.stringify({ event: 'ended', why: 'hangup' }));
     });
@@ -76,8 +77,10 @@ const fits = (p, sel) => p.locator(sel).evaluate((el) => el.scrollWidth <= el.cl
     ok(await until(p, () => line.cmds.includes('hangup')), 'End hangs up');
     await p.waitForTimeout(3000);
 
+    await p.mouse.click(300, 400);
     await ring();
     await p.waitForSelector('.callp.ringing', { timeout: 3000 });
+    ok(line.here === true, 'a page just used is the call reaching them');
     await p.locator('.callp .ctl .btn.end').click();
     ok(await until(p, () => line.cmds.includes('hangup')), 'Decline sends hangup');
     ok(!line.cmds.includes('accept'), 'and no accept');

@@ -45,11 +45,12 @@ export const Call = {
     timers.push(setTimeout(() => st.phase === "calling" && hangup("no answer"), 20000));
   },
 
-  /** A call to the user: this page rings it beside the phone, and whichever answers first has it. */
-  ring(reason) {
+  /** A call to the user: this page rings it beside the phone, and whichever answers first has it. here: they used this
+   * page moments ago, so the call has reached them and the hub doesn't fall back to the SIM line. */
+  ring(reason, here) {
     if (Call.live() || !Call.supported()) return false;
     begin("ringing", reason);
-    open("ring-here");
+    open("ring-here", { here });
     ringBell();
     timers.push(setTimeout(() => st.phase === "ringing" && end("missed"), 60000));
     return true;
@@ -181,11 +182,11 @@ function play(node) {
   sink.play().catch(() => node.connect(ctx.destination));
 }
 
-function open(hello) {
+function open(hello, more) {
   const w = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/api/call/line`);
   w.binaryType = "arraybuffer";
   ws = w;
-  w.onopen = () => w.send(JSON.stringify({ cmd: hello, out_rate: OUT_RATE }));
+  w.onopen = () => w.send(JSON.stringify({ cmd: hello, out_rate: OUT_RATE, ...more }));
   w.onmessage = (e) => {
     if (w !== ws) return;
     if (typeof e.data !== "string") return down?.port.postMessage(e.data, [e.data]);
