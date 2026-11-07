@@ -20,7 +20,13 @@
     <div class="states" role="group" aria-label="Call state"></div>
     <div class="row">
       <button id="cycle" class="ghost">Run through the states</button>
+      <button id="freeze" class="ghost" title="Hold every drawing on screen now">Freeze</button>
       <button id="release" class="ghost" hidden>Back to acting</button>
+    </div>
+    <div id="voicebox" class="voice" hidden>
+      <select id="voice" aria-label="Voice"></select>
+      <textarea id="line" rows="3" aria-label="What to say"></textarea>
+      <div class="row"><button id="say">Say it</button><button id="talk" class="ghost" aria-pressed="false" title="Your voice: it listens, and hears you when you speak">Talk to it</button><span id="voicenote" class="note"></span></div>
     </div>
     <table class="now"><tbody></tbody></table>
   </section>

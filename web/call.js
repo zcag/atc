@@ -1,7 +1,7 @@
 import { logged, onLine } from "./call-log.js";
+import { rms, voiceTap } from "./ears.js";
 
 const OUT_RATE = 24000;
-const SPEECH_GAIN = 2.5;
 const FACE = { state: "listening", hearing: "", you: "", said: "", tool: "", line: "assistant", title: "", person: "", background: "", moving: false, knock: "", lang: "", log: [] };
 const TAIL_MS = 250;
 const WHY = { busy: "the line is busy", nobody: "nobody is there to answer", gone: "the call is over", lost: "connection lost", hangup: "hung up" };
@@ -15,26 +15,18 @@ const emit = () => subs.forEach((f) => f());
 const set = (p) => { st = { ...st, ...p }; emit(); };
 
 let bell = null;
-let ctx, mic, up, down, ears, mouth, low, high, ws, live = false, lostAt = 0, closed = true, stats = {}, timers = [], lock = null, sink = null, tail = 0;
+let ctx, mic, up, down, ears, voice, ws, live = false, lostAt = 0, closed = true, stats = {}, timers = [], lock = null, sink = null, tail = 0;
 const closedMic = () => st.muted || (st.ptt && !st.talking && !tail);
 const applyMic = () => up?.port.postMessage({ quiet: closedMic() });
 
-const rms = (an, buf, gain = 6) => {
-  if (!an) return 0;
-  an.getFloatTimeDomainData(buf);
-  let s = 0;
-  for (const v of buf) s += v * v;
-  return Math.min(1, Math.sqrt(s / buf.length) * gain);
-};
-const scratch = new Float32Array(512);
 
 export const Call = {
   get: () => st,
   face: () => face,
   live: () => st.phase === "ringing" || st.phase === "calling" || st.phase === "active",
   subscribe(f) { subs.add(f); return () => subs.delete(f); },
-  levels: () => [closedMic() ? 0 : rms(ears, scratch), rms(mouth, scratch)],
-  speech: () => [rms(mouth, scratch, SPEECH_GAIN), rms(low, scratch, SPEECH_GAIN), rms(high, scratch, SPEECH_GAIN)],
+  levels: () => [closedMic() ? 0 : rms(ears), voice?.level() || 0],
+  speech: () => voice?.speech() || [0, 0, 0],
   supported: () => !!(navigator.mediaDevices?.getUserMedia && window.AudioWorkletNode && window.WebSocket),
 
   async dial() {
@@ -131,12 +123,7 @@ async function connect() {
     src.connect(ears);
     down = new AudioWorkletNode(ctx, "call-down", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [1] });
     down.port.onmessage = (e) => (stats = e.data);
-    mouth = new AnalyserNode(ctx, { fftSize: 1024 });
-    down.connect(mouth);
-    low = new AnalyserNode(ctx, { fftSize: 1024 });
-    high = new AnalyserNode(ctx, { fftSize: 1024 });
-    down.connect(new BiquadFilterNode(ctx, { type: "lowpass", frequency: 700, Q: .5 })).connect(low);
-    down.connect(new BiquadFilterNode(ctx, { type: "highpass", frequency: 3000, Q: .5 })).connect(high);
+    voice = voiceTap(ctx, down);
   } catch (e) {
     return end({ NotAllowedError: "no microphone permission", NotFoundError: "no microphone found" }[e.name] || e.message || String(e)), false;
   }
@@ -271,7 +258,7 @@ function teardown() {
   mic?.getTracks().forEach((t) => t.stop());
   sink?.pause();
   ctx?.close();
-  ctx = mic = up = down = ears = mouth = low = high = sink = null;
+  ctx = mic = up = down = ears = voice = sink = null;
   lock?.release().catch(() => {});
   lock = null;
 }

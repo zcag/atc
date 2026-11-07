@@ -1,4 +1,5 @@
 import { rig, Director, framing } from "./rig.js";
+import { voiceTap } from "./ears.js";
 
 const PERSONAS = "/app/personas/", ROOMS = PERSONAS + "_rooms/";
 const STATES = ["listening", "hearing", "thinking", "tool", "speaking"];
@@ -9,7 +10,7 @@ const $ = (s, el = document) => el.querySelector(s);
 const el = (tag, props = {}, ...kids) => { const e = Object.assign(document.createElement(tag), props); e.append(...kids.flat().filter((k) => k != null)); return e; };
 const query = new URLSearchParams(location.search);
 
-const S = { name: null, R: null, extra: {}, room: query.get("room") || "own", state: "listening", forced: null, seen: {}, seenT: 0, tab: query.get("tab") || "eyes", angle: "y0p0", diff: false, tiles: null, stop: null, cycle: null };
+const S = { name: null, R: null, extra: {}, room: query.get("room") || "own", state: "listening", forced: null, seen: {}, seenT: 0, tab: query.get("tab") || "eyes", angle: "y0p0", diff: false, tiles: null, stop: null, cycle: null, now: null, saying: null, mic: null, heardAt: -9 };
 
 const anglesOf = (R) => Object.entries(R.angles).sort(([, a], [, b]) => a[1] - b[1] || a[0] - b[0]);
 const parse = (name) => { const [angle, slot, draw] = name.split("."); return { angle, slot, draw }; };
@@ -74,6 +75,7 @@ async function open(name) {
   if (!R.angles[S.angle]) S.angle = anglesOf(R)[0][0];
   remember();
   tabs();
+  voices();
   await live();
   render();
 }
@@ -98,7 +100,7 @@ function forcing(d) {
   if (!f) return;
   const A = d.angle;
   A.cur = f.angle; A.prev = null; A.k = 1;
-  for (const s of SLOTS) { d[s].cur = f.slot === s ? f.draw : "base"; d[s].prev = null; d[s].k = 1; }
+  for (const s of SLOTS) { d[s].cur = f[s] ?? (f.slot === s ? f.draw : "base"); d[s].prev = null; d[s].k = 1; }
   d.pose = { cur: f.pose || null, k: f.pose ? 1 : 0 };
 }
 
@@ -113,6 +115,12 @@ async function live() {
   const now = () => {
     const t = performance.now(), dt = Math.min(.1, (t - last) / 1000);
     last = t;
+    if (S.saying) { const [it, lo, hi] = S.saying.speech(); return { state: "speaking", you: 0, it, lo, hi }; }
+    if (S.mic) {
+      heard = S.mic.level();
+      if (heard > .08) S.heardAt = t;
+      return { state: t - S.heardAt < 700 ? "hearing" : S.state, you: heard };
+    }
     sig = S.state === "speaking" ? speak(dt) : { it: 0, lo: 0, hi: 0 };
     heard = S.state === "hearing" ? you(dt).it : 0;
     return { state: S.state, you: heard, ...sig };
@@ -140,19 +148,47 @@ function readout(p, d) {
   if (t - shown < 120) return;
   shown = t;
   const fmt = (v) => (typeof v === "number" ? v.toFixed(2) : String(v));
-  const rows = [
-    ["angle", d.angle.cur + (d.angle.prev ? ` ← ${d.angle.prev}` : "")],
-    ...SLOTS.map((s) => [s, d[s].cur + (d[s].prev ? ` ← ${d[s].prev}` : "")]),
-    ["pose", d.pose.cur ? `${d.pose.cur} ${Math.round(d.pose.k * 100)}%` : "none"],
-    ["head", `yaw ${fmt(p.yaw)} pitch ${fmt(p.pitch)} roll ${fmt(p.roll)}`],
-    ["face", `jaw ${fmt(p.jaw)} smile ${fmt(p.smile)} brow ${fmt(p.brow)} knit ${fmt(p.knit)}`],
-  ];
-  $(".now tbody").replaceChildren(...rows.map(([k, v]) => el("tr", {}, el("th", { textContent: k }), el("td", { textContent: v }))));
+  S.now = { angle: d.angle.cur, eyes: d.eyes.cur, brows: d.brows.cur, mouth: d.mouth.cur, pose: d.pose.cur || null };
+  const rows = {
+    angle: d.angle.cur + (d.angle.prev ? ` ← ${d.angle.prev}` : ""),
+    ...Object.fromEntries(SLOTS.map((s) => [s, d[s].cur + (d[s].prev ? ` ← ${d[s].prev}` : "")])),
+    pose: d.pose.cur ? `${d.pose.cur} ${Math.round(d.pose.k * 100)}%` : "none",
+    head: `yaw ${fmt(p.yaw)} pitch ${fmt(p.pitch)} roll ${fmt(p.roll)}`,
+    face: `jaw ${fmt(p.jaw)} smile ${fmt(p.smile)} brow ${fmt(p.brow)} knit ${fmt(p.knit)}`,
+  };
+  const body = $(".now tbody");
+  if (!body.children.length) body.append(...Object.keys(rows).map((k) => { const tr = el("tr", { className: k in JUMP ? "jump" : "", title: k in JUMP ? "Hold this frame and show this drawing" : "", onclick: () => k in JUMP && jump(k) }, el("th", { textContent: k }), el("td")); tr.dataset.k = k; return tr; }));
+  for (const tr of body.children) tr.lastChild.textContent = rows[tr.dataset.k];
   $("#release").hidden = !S.forced;
   if (S.tab in TILED) for (const tile of document.querySelectorAll(".tile[data-key]")) {
     const k = tile.dataset.key, pct = S.seenT > 1 ? Math.round(100 * (S.seen[k] || 0) / S.seenT) : null, out = tile.querySelector(".seen");
     if (out) out.textContent = pct === null ? "" : `${pct}%`;
   }
+}
+
+const JUMP = { angle: "angles", eyes: "eyes", brows: "brows", mouth: "mouth", pose: "poses" };
+
+/** Opens the tab holding what the live view shows now in that slot, at its angle, and marks the drawing. */
+async function jump(kind) {
+  const n = S.now;
+  if (!n || (kind === "pose" && !n.pose)) return;
+  if (!S.forced) force({ ...n });
+  S.tab = JUMP[kind];
+  if (kind !== "angle" && kind !== "pose") S.angle = n.angle;
+  remember();
+  tabs();
+  await render();
+  const key = kind === "angle" ? `angle.${n.angle}` : kind === "pose" ? `pose.${n.pose}` : `${kind}.${n[kind]}`;
+  const tile = document.querySelector(`.tile[data-key="${CSS.escape(key)}"]`);
+  if (!tile) return;
+  tile.scrollIntoView({ block: "center", behavior: "smooth" });
+  tile.classList.remove("flash");
+  void tile.offsetWidth;
+  tile.classList.add("flash");
+}
+
+function freeze() {
+  if (S.now) force({ ...S.now });
 }
 
 function setState(s) {
@@ -332,6 +368,58 @@ async function render() {
   if (!S.R) return;
   const kids = await TABS[S.tab]();
   if (n === rendering) pane.replaceChildren(...kids);
+  return n === rendering;
+}
+
+let audio = null;
+const ctx = () => (audio ??= new AudioContext());
+
+async function voices() {
+  const [list, persons] = await (S.voiceLists ??= Promise.all([json("/api/call/voices").catch(() => ({})), json("/api/call/persons").catch(() => null)]));
+  S.voices = list;
+  const sel = $("#voice"), opts = Object.entries(list).flatMap(([lang, v]) => (v.voices || []).map((name) => el("option", { value: `${lang}|${name}`, textContent: `${lang} · ${name}` })));
+  sel.replaceChildren(...opts);
+  $("#voicebox").hidden = !opts.length;
+  const theirs = persons?.persons?.find((p) => p.character === S.name);
+  const [lang, name] = Object.entries(theirs?.voices || {})[0] || [Object.keys(list)[0], Object.values(list)[0]?.current];
+  if (lang && name) sel.value = `${lang}|${name}`;
+  const pickedLang = sel.value.split("|")[0];
+  if (!$("#line").value || $("#line").dataset.auto) { $("#line").value = sampleLine(pickedLang); $("#line").dataset.auto = "1"; }
+}
+
+const sampleLine = (lang) => (S.voices?.[lang]?.sample || "").split(/(?<=[.?!])\s/).slice(0, 2).join(" ");
+
+async function say() {
+  const [lang, name] = $("#voice").value.split("|"), text = $("#line").value.trim(), out = $("#voicenote");
+  if (!text) return;
+  S.saying?.stop();
+  if (S.cycle) cycle();
+  S.forced = null;
+  const was = S.state;
+  setState("thinking");
+  out.textContent = "Rendering the line…";
+  const r = await fetch(`/api/call/voices/sample?${new URLSearchParams({ lang, voice: name, text })}`).catch((e) => ({ ok: false, status: 0, text: () => e.message }));
+  if (!r.ok) { setState(was); out.textContent = r.status === 409 ? "A call is on: the voices render new lines only between calls." : `Couldn't render it: ${await r.text()}`; return; }
+  const c = ctx(), buf = await c.decodeAudioData(await r.arrayBuffer()), src = c.createBufferSource();
+  src.buffer = buf;
+  src.connect(c.destination);
+  const tap = voiceTap(c, src);
+  S.saying = { ...tap, stop: () => src.stop() };
+  src.onended = () => { if (S.saying?.speech === tap.speech) S.saying = null; setState("listening"); out.textContent = ""; };
+  out.textContent = `${buf.duration.toFixed(1)} s`;
+  await c.resume();
+  src.start();
+}
+
+async function talk() {
+  const b = $("#talk");
+  if (S.mic) { S.mic.stop(); S.mic = null; b.setAttribute("aria-pressed", "false"); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }), c = ctx();
+    await c.resume();
+    S.mic = { ...voiceTap(c, c.createMediaStreamSource(stream)), stop: () => stream.getTracks().forEach((t) => t.stop()) };
+    b.setAttribute("aria-pressed", "true");
+  } catch (e) { $("#voicenote").textContent = `No microphone: ${e.message}`; }
 }
 
 function cycle() {
@@ -347,5 +435,10 @@ $(".states").append(...STATES.map((s) => el("button", { textContent: s, onclick:
 for (const [b, s] of [...document.querySelectorAll(".states button")].map((b, i) => [b, STATES[i]])) b.dataset.state = s;
 setStatePressed();
 $("#cycle").onclick = cycle;
+$("#freeze").onclick = freeze;
 $("#release").onclick = () => { S.forced = null; setStatePressed(); render(); };
+$("#say").onclick = say;
+$("#talk").onclick = talk;
+$("#line").oninput = () => delete $("#line").dataset.auto;
+$("#voice").onchange = () => { if ($("#line").dataset.auto) $("#line").value = sampleLine($("#voice").value.split("|")[0]); };
 loadIndex().catch((e) => $("#pane").replaceChildren(el("p", { className: "note", textContent: e.message })));
