@@ -328,8 +328,30 @@ class Talk:
         if not self.app or not self.stt:
             return False
         heard = self.stt.partial(self.lang)
+        if self.stop_heard(heard):
+            return False
         words = [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.BACKCHANNEL and not self.echoed(w, self.echoing)]
         return not self.pack.STOP.search(heard) and len(words) < 2 if self.echoing else not words
+
+    def stop_heard(self, heard):
+        """--stop-words: a stop word of theirs (STOP_WORDS: «durdur», «bir saniye», «kapat», «tamam tamam»...) counts
+        even when delta has just said a word like it: its own lines are «Dur bakayım.» and «Bir saniye, bakayım.», and
+        the echo filter threw out «bir saniye dur» and «dur» on 8 of his calls' real stops. Only a run of delta's own
+        words in its order is echo («dur bakayım»). A line marked echoing keeps the stricter rule."""
+        if not self.a.stop_words or self.echoing or not self.pack.STOP_WORDS.search(heard):
+            return False
+        return not self.own_phrase(re.findall(r"\w+", heard.lower()))
+
+    def own_phrase(self, words):
+        """Echo comes back as delta's words in delta's order; a lone word only from the sentence playing now."""
+        if not words or not self.app:
+            return False
+        same = lambda a, b: a == b or abs(len(a) - len(b)) <= 1 and difflib.SequenceMatcher(None, a, b).ratio() >= .75
+        if len(words) == 1:
+            now = getattr(self, "said_item", None)
+            return bool(now and now[0] and any(same(w, words[0]) for w in re.findall(r"\w+", now[0].lower())))
+        said = [w for _, w in self.said_recently] + [w for it in self.speaking if it[0] for w in re.findall(r"\w+", it[0].lower())]
+        return any(all(same(said[i + j], w) for j, w in enumerate(words)) for i in range(len(said) - len(words) + 1))
 
     def check_echo(self):
         """Whether their mic plays delta back: its loudness following delta's over the last 10 s at some delay up to
@@ -656,12 +678,23 @@ class Talk:
         await self.settle()
         self.preroll = (self.preroll + pcm)[-int(self.a.preroll * RATE) * 2:]
 
+    async def stops_after_all(self):
+        """--stop-words, before delta goes on after they spoke over it: the whole of what they said, not the partial of
+        0.25 s after they stopped, which often held only the first word («Tamam, kaptan ödey...» was taken as a
+        backchannel). Their stop word stops it; three real words stop it only if it had paused, as before."""
+        heard = (await self.off(self.stt.text)).get(self.lang, "")
+        words = [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.BACKCHANNEL and not self.echoed(w)]
+        if self.stop_heard(heard) or self.paused and len(words) >= self.a.barge_words:
+            self.log(event="interrupted", heard=heard, by="stop-words")
+            return True
+        return False
+
     async def settle(self):
         """What the silence so far decides about the turn."""
         if self.paused and self.in_speech:
             heard = self.stt.partial(self.lang) if self.stt else ""
             words = [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.BACKCHANNEL and not self.echoed(w)]
-            if self.pack.STOP.search(heard) or len(words) >= self.a.barge_words or time.time() - self.paused_at > self.a.barge_max:
+            if self.pack.STOP.search(heard) or self.stop_heard(heard) or len(words) >= self.a.barge_words or time.time() - self.paused_at > self.a.barge_max:
                 self.paused = False
                 self.log(event="interrupted", heard=heard)
                 self.interrupt()
@@ -682,6 +715,9 @@ class Talk:
                 self.in_speech = False
                 self.log(event="kept", heard=heard)
             self.may_speak.set()
+        if self.in_speech and self.silent(self.a.spec_ms) and self.talking() and self.a.stop_words and self.stt and await self.stops_after_all():
+            self.paused = False
+            self.interrupt()
         if self.in_speech and self.silent(self.a.spec_ms) and self.talking():
             self.in_speech, self.utt = False, bytearray()
             self.log(event="resumed" if self.paused else "backchannel", heard=self.stt.partial(self.lang) if self.stt else "")
@@ -1417,6 +1453,7 @@ if __name__ == "__main__":
     p.add_argument("--ack-ms", type=int, default=2500, help="ms after their turn with nothing from Claude before a thinking phrase (0 = never)")
     p.add_argument("--reopen-ms", type=int, default=700, help="ms of speech that take back a turn already sent to Claude")
     p.add_argument("--barge-words", type=int, default=3, help="words (not hı hı, evet...) that make an overlap a real interruption")
+    p.add_argument("--stop-words", action="store_true", help="their stop words (STOP_WORDS) count even when delta said one like it, and the whole of what they said is read before delta goes on")
     p.add_argument("--barge-max", type=float, default=2.0, help="s of paused overlap after which it counts as an interruption anyway")
     p.add_argument("--stt", choices=["whisper", "stream"], default="stream", help="whisper needs TALK_STT")
     p.add_argument("--second-ms", type=int, default=600, help="stream STT: a turn with at most this much speech, or one word, is read again by Whisper at TALK_STT, when it is set (0 = never)")
