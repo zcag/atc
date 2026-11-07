@@ -28,7 +28,7 @@
   "ALSO_HEARD": " (English transcriber heard: «{heard}»)",
   "CALL_ENDED": "[call over] ",
   "CALL_OVER": "(The call has ended. If some work is unfinished, finish it and report the result briefly with `atc notify`.)",
-  "CALL_OVER_GUEST": "(The call with {guest} has ended. If something came up that {user} should know or decide, tell the assistant with report; if you promised them anything, follow up on that too. If it ended before they said what they called about, or they asked for {user}, always report it.)",
+  "CALL_OVER_GUEST": "(The call with {guest} has ended. If something came up that {user} should know or decide, tell the assistant with report; if you promised them anything, follow up on that too.)",
   "NOT_PICKED_UP": "(Not answered: the phone rang but nobody picked up, so your prepared opening was not heard.)",
   "LINE_BACK": "\\b(back to (the )?assistant|(put|get|give me) (the )?assistant|assistant (please|back)|back to {assistant}|(put|get|give me) {assistant})\\b",
   "LINE_TO": "[The line just moved to you: {user} asked for you and hears you now. Just before, with {was}: {said}. If they already asked you something, answer it. Otherwise say in a few words that you are on.]",
