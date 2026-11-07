@@ -73,5 +73,56 @@ class Hold(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(t.said, ["still on it"])
 
 
+class LongReading(unittest.IsolatedAsyncioTestCase):
+    def line(self, reading):
+        t = talk.Talk.__new__(talk.Talk)
+        t.lang = "en"
+        t.packs = {"en": talk.Pack("en")}
+        t.events = []
+        t.log = lambda **kw: t.events.append(kw)
+
+        async def whisper(utt, lang, prompt="", timeout=None):
+            if isinstance(reading, Exception):
+                raise reading
+            return reading
+        t.whisper = whisper
+        return t
+
+    async def note(self, reading, text="we can skip these"):
+        t = self.line(reading)
+        return await t.long_reading(b"x", text, 3000), t.events[0]
+
+    async def test_a_different_reading_is_a_note_beside_the_words(self):
+        note, event = await self.note("we can keep these")
+        self.assertIn("we can keep these", note)
+        self.assertNotIn("skip", note)
+        self.assertTrue(event["used"])
+
+    async def test_the_same_words_are_no_note_whatever_the_punctuation(self):
+        note, event = await self.note("We can skip, these.")
+        self.assertEqual(note, "")
+        self.assertFalse(event["used"])
+
+    async def test_junk_is_no_note(self):
+        note, event = await self.note("Thanks for watching")
+        self.assertEqual(note, "")
+        self.assertTrue(event["junk"])
+
+    async def test_more_words_than_the_speech_could_hold_is_no_note(self):
+        note, event = await self.note(" ".join(["word"] * 40))
+        self.assertEqual(note, "")
+        self.assertTrue(event["junk"])
+
+    async def test_a_late_or_failed_reading_is_no_note(self):
+        note, event = await self.note(TimeoutError())
+        self.assertEqual(note, "")
+        self.assertIn("error", event)
+
+    def test_another_alphabet_is_junk_in_turkish(self):
+        pack = talk.Pack("tr")
+        self.assertTrue(pack.WHISPER_JUNK.search("Jók, listeðar, tíkar það"))
+        self.assertFalse(pack.WHISPER_JUNK.search("Yok, listeden çıkartabiliriz, şöyle değil mi?"))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -27,7 +27,7 @@ json.dump({"en": next(p["voices"]["en"] for p in d["persons"] if p["id"] == d["l
 	stack "$dir/tts-venv/bin/python" "$voice/ttsd.py" --engine pocket-en --port $((p + 6)) &
 	stack DELTA_CALL_BRIDGE=0 DELTA_CALL_HOST=127.0.0.1 DELTA_CALL_PORT=$((p + 2)) DELTA_CALL_DIAL_ALLOW=+15550100 uv run --script "$voice/call.py" &
 	until curl -sf -o /dev/null "http://127.0.0.1:$((p + 6))/v1/voices" || curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$((p + 6))/" | grep -q 404; do sleep 1; done
-	stack TALK_TTS="http://127.0.0.1:$((p + 6))/v1/audio/speech" uv run --script "$voice/talk.py" --loop --smart-turn --end-ms 1500 --stt stream \
+	stack TALK_TTS="http://127.0.0.1:$((p + 6))/v1/audio/speech" uv run --script "$voice/talk.py" --loop --end-ms 700 --stt stream \
 		--brain hub --line app --out "$dir/state/calls" --url "ws://127.0.0.1:$((p + 2))/call" --hub "http://127.0.0.1:$((p + 1))" &
 	wait
 	;;

@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run --script
 # /// script
-# dependencies = ["aiohttp", "numpy", "onnxruntime", "transformers", "sherpa-onnx", "huggingface_hub", "soxr"]
+# dependencies = ["aiohttp", "numpy", "onnxruntime", "sherpa-onnx", "huggingface_hub", "soxr"]
 # ///
 """The call's conversation: answers the line (call.py) and talks, with atc's hub as the brain.
 
@@ -23,11 +23,12 @@ RATE, FRAME = 16000, 640
 APP_RATE = 24000
 STT_URL = os.environ.get("TALK_STT", "")
 STT_MODEL = os.environ.get("TALK_STT_MODEL", "whisper-large-v3-turbo")
+STT_WORDS = os.environ.get("TALK_STT_WORDS", "")
+SECOND_DELAY, SECOND_WAIT = 0.15, 0.8
 TTS_URL = os.environ.get("TALK_TTS", "http://127.0.0.1:8812/v1/audio/speech")
 MODELS = os.path.expanduser(os.environ.get("TALK_MODELS") or "~/.cache/atc/voice")
 STATE = os.path.expanduser(os.environ.get("TALK_STATE") or "~/.local/state/atc/voice")
 VAD_MODEL = f"{MODELS}/silero_vad.onnx"
-TURN_MODEL = f"{MODELS}/smart-turn-v3.2-cpu.onnx"
 VOICES = f"{STATE}/voice.json"
 PERSONS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "persons.json")
 PHRASES = f"{MODELS}/phrases"
@@ -105,20 +106,6 @@ class Vad:
                     p = max(p, fresh)
             out.append(p)
         return out
-
-
-class SmartTurn:
-    """pipecat-ai/smart-turn v3: does this audio sound like a finished turn? Looks at the last 8 s, ~100 ms on two threads."""
-    def __init__(self):
-        from transformers import WhisperFeatureExtractor
-        self.fx = WhisperFeatureExtractor(chunk_length=8)
-        self.s = session(TURN_MODEL, 2)
-
-    def __call__(self, pcm):
-        a = np.frombuffer(pcm, np.int16).astype(np.float32)[-8 * RATE:] / 32768
-        f = self.fx(a, sampling_rate=RATE, return_tensors="np", padding="max_length", max_length=8 * RATE,
-                    truncation=True, do_normalize=True).input_features.astype(np.float32)
-        return float(self.s.run(None, {"input_features": f})[0].flatten()[0])
 
 
 class StreamSTT:
@@ -282,7 +269,6 @@ class Talk:
         self.hangup = hangup_tags(self.packs)
         self.heard, self.unfinished = None, None
         self.vad, self.cache = Vad(args.vad_fresh_peak), {}
-        self.turn = once("turn", SmartTurn) if args.smart_turn else None
         self.stt = once(("stt", args.gain_db), lambda: StreamSTT(args.gain_db, args.packs)) if args.stt == "stream" else None
         if self.stt:
             self.stt.s, self.stt.heard = {}, {}
@@ -313,7 +299,7 @@ class Talk:
         self.pressed = self.released = False
 
     async def off(self, fn, *args):
-        """Run the transcribers and smart-turn on one worker thread (they release the GIL), so the event loop keeps
+        """Run the transcribers on one worker thread (they release the GIL), so the event loop keeps
         pacing delta's voice: inline, a decode under load held the loop past the uplink's 120 ms lead and the phone
         ran dry mid-sentence (dry_ms 371 ms/s while speaking on one loaded call)."""
         return await asyncio.get_running_loop().run_in_executor(CPU, fn, *args)
@@ -609,8 +595,7 @@ class Talk:
 
     async def on_audio(self, pcm):
         """Turn-taking. The caller's turn stays open until delta's answer is audible: at spec_ms of silence a
-        reply starts in the background (STT, LLM, TTS), at end_ms (or when smart-turn says the turn sounds
-        finished) its audio may play. Speech before that audio starts reopens the turn: once a turn has gone to
+        reply starts in the background (STT, LLM, TTS), at end_ms it goes to Claude and its audio may play. Speech before that audio starts reopens the turn: once a turn has gone to
         Claude, its answer is held, not cut, while they goe on, and is redone with everything said only if what he
         added is new (not a repeat, «alo» or «ses geliyor mu»): cutting on every reopen left a caller who filled
         the wait with «Alo? Ses geliyor mu?» with no answer at all (a caller testing the line)."""
@@ -702,18 +687,11 @@ class Talk:
             self.log(event="resumed" if self.paused else "backchannel", heard=self.stt.partial(self.lang) if self.stt else "")
             self.paused = False
         if self.in_speech and self.silent(self.a.spec_ms) and not self.pending:
-            self.pending, done = True, False
+            self.pending = True
             text = await self.off(self.stt.text) if self.stt else None
-            if self.turn and not self.released:
-                prob = await self.off(self.turn, bytes(self.utt))
-                held = bool(self.pack.UNFINISHED.search((text or {}).get(self.lang, "") if isinstance(text, dict) else text or ""))
-                done = prob > self.a.turn_threshold and not held
-                self.log(event="smart-turn", p=round(prob, 3), held=held)
             self.commit.clear()
             self.reply = asyncio.create_task(self.respond(bytes(self.utt), time.time() - self.silence_ms / 1000, text, self.voiced_ms))
             self.reply.add_done_callback(lambda t: t.cancelled() or not t.exception() or self.log(event="error", error=repr(t.exception())))
-            if done:
-                self.commit.set()
         if self.in_speech and self.silent(self.a.end_ms):
             self.commit.set()
         if self.commit.is_set() and self.pending:
@@ -754,6 +732,25 @@ class Talk:
             return text or (p.UNCLEAR if voiced_ms >= self.a.unclear_ms else "")
         return fill(p.SECOND_TOO if text else p.SECOND_ONLY, text=text, second=second)
 
+    async def long_reading(self, utt, text, voiced_ms):
+        """A longer turn read by Whisper too (--second-all), prompted with the words the speaker's transcriber gets wrong.
+        Neither transcriber is safe alone, each wins some turns, so Claude gets this as a note beside their words, as with
+        a language's other transcriber: the words on screen and the turn checks stay the streaming ones. It holds the commit
+        only if Whisper is slower than the commit wait, and a late one is dropped. It starts a moment into the pause: most
+        pauses end by then, and an abandoned request still queues the ones behind it on the server."""
+        await asyncio.sleep(SECOND_DELAY)
+        start = time.monotonic()
+        try:
+            heard = await self.whisper(utt, self.lang, STT_WORDS, timeout=SECOND_WAIT)
+        except Exception as e:
+            self.log(event="second", error=repr(e), long=True, ms=round((time.monotonic() - start) * 1000))
+            return ""
+        squash = lambda t: re.sub(r"\W+", "", t.lower())
+        junk = self.pack.WHISPER_JUNK.search(heard) or len(re.findall(r"\w+", heard)) > max(2, voiced_ms // 150)
+        used = not junk and squash(heard) != squash(text)
+        self.log(event="second", stream=text, whisper=heard, used=used, junk=bool(junk), long=True, voiced_ms=voiced_ms, ms=round((time.monotonic() - start) * 1000))
+        return fill(self.pack.SECOND_TOO, text="", second=heard) if used else ""
+
     async def respond(self, utt, ended, text=None, voiced_ms=0):
         self.moving = False
         if (picked := self.picked()) != self.voices:
@@ -772,6 +769,8 @@ class Talk:
                 also = "".join(fill(self.packs[code].ALSO_HEARD, heard=heard) for code, heard in others.items() if agreement(heard, text) < SAME_SPEECH)
             if self.a.second_ms and utt:
                 text = await self.second_reading(utt, "" if p.HALLUCINATIONS.search(text) else text, voiced_ms)
+            if STT_URL and self.lang in self.a.second_all and utt and voiced_ms > self.a.second_ms and len(re.findall(r"\w+", text)) > 1:
+                also += await self.long_reading(utt, text, voiced_ms)
         mark("stt")
         if p.HALLUCINATIONS.search(text + also):
             self.log(event="dropped", text=text, **timing)
@@ -1408,7 +1407,7 @@ if __name__ == "__main__":
     p.add_argument("--vad-fresh-peak", type=float, default=0.4, help="a window this loud (0-1) may also start speech on the fresh VAD state (0 = off)")
     p.add_argument("--vad-reset-ms", type=int, default=3000, help="ms of silence after which the fresh VAD state is reset")
     p.add_argument("--spec-ms", type=int, default=250, help="ms of silence that starts a speculative reply")
-    p.add_argument("--end-ms", type=int, default=600, help="ms of silence that ends the caller's turn (backstop with --smart-turn)")
+    p.add_argument("--end-ms", type=int, default=600, help="ms of silence that ends the caller's turn")
     p.add_argument("--brain", choices=["hub"], default="hub")
     p.add_argument("--hub", default="http://127.0.0.1:8820", help="atc's hub, the assistant's conversation")
     p.add_argument("--lang", default=os.environ.get("TALK_LANG") or "en", help="the call's first language: its pack in lang/, its transcriber, what it says first")
@@ -1421,11 +1420,10 @@ if __name__ == "__main__":
     p.add_argument("--barge-max", type=float, default=2.0, help="s of paused overlap after which it counts as an interruption anyway")
     p.add_argument("--stt", choices=["whisper", "stream"], default="stream", help="whisper needs TALK_STT")
     p.add_argument("--second-ms", type=int, default=600, help="stream STT: a turn with at most this much speech, or one word, is read again by Whisper at TALK_STT, when it is set (0 = never)")
+    p.add_argument("--second-all", action="append", default=[], metavar="LANG", help="stream STT: in this language read every longer turn with Whisper too, at TALK_STT with TALK_STT_WORDS as its prompt, and give Claude both when they differ; repeatable")
     p.add_argument("--unclear-ms", type=int, default=200, help="speech no transcriber could read still reaches Claude as unclear from this much on")
     p.add_argument("--preroll", type=float, default=0.8, help="s of audio before speech onset that goes into the turn")
     p.add_argument("--gain-db", type=float, default=6, help="stream STT: 0-8 dB read a real call best, 18+ distorts")
-    p.add_argument("--smart-turn", action="store_true", help="end the turn at spec-ms when smart-turn says it is complete")
-    p.add_argument("--turn-threshold", type=float, default=0.5)
     p.add_argument("--prebuffer", type=int, default=0, help="ms of TTS audio to collect before playing a sentence (for TTS that only just keeps up)")
     p.add_argument("--chunk-sentences", type=int, default=2, help="sentences per piece sent to the voice after the first")
     p.add_argument("--lead-ms", type=int, default=120, help="audio kept queued on the phone ahead of playback")

@@ -351,6 +351,17 @@ func voiceEnv() map[string]string {
 	return set
 }
 
+func checkSecondReading(ctx context.Context, env Env) Result {
+	set := voiceEnv()
+	if !strings.Contains(set["TALK_ARGS"], "--second-all") {
+		return Result{Missing, "Off: longer turns have one reading."}
+	}
+	if set["TALK_STT"] == "" {
+		return Result{Missing, "--second-all is set, but TALK_STT names no Whisper server."}
+	}
+	return Result{OK, "Longer turns are read twice."}
+}
+
 func checkVoiceEngine(ctx context.Context, env Env) Result {
 	line, err := url.Parse(env.Get("ATC_CALL_LINE"))
 	if err != nil || line.Host == "" {

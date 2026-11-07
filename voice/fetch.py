@@ -3,7 +3,7 @@
 # dependencies = ["huggingface_hub"]
 # ///
 """Everything a call needs on disk, for the languages and voice engines in the environment (TALK_LANG, TALK_ALSO,
-TTS_ENGINES): the VAD and smart-turn models, each language's streaming STT, the TTS venv and its weights.
+TTS_ENGINES): the VAD model, each language's streaming STT, the TTS venv and its weights.
 Safe to run again: what is there stays. A venv with no record of its engines was made by hand and is left alone."""
 import os, subprocess, sys, urllib.request
 from huggingface_hub import hf_hub_download
@@ -27,8 +27,7 @@ ENGINES = {
     "higgs": {},
     "remote": {},
 }
-FILES = {"silero_vad.onnx": "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx",
-         "smart-turn-v3.2-cpu.onnx": "https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/main/smart-turn-v3.2-cpu.onnx"}
+FILES = {"silero_vad.onnx": "https://github.com/snakers4/silero-vad/raw/master/src/silero_vad/data/silero_vad.onnx"}
 
 
 def download(url, path):

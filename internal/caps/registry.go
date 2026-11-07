@@ -137,6 +137,12 @@ func All() []Cap {
 			Cost: onMac("The CPU, for speech in and out.", "A GPU, or a CPU with slower replies, for speech in and out."),
 		},
 		{
+			ID: "second-reading", Title: "Second reading on calls", Group: Calls, Optional: true, Why: "Reads longer turns on a call with a Whisper server as well, and gives the assistant both readings when they differ. Without it the assistant has only the streaming transcriber's reading, which can flip a word's meaning.",
+			Needs: []string{"talker"}, Check: checkSecondReading,
+			Fix:  Fix{Text: "In voice.env set TALK_STT to a Whisper server and TALK_ARGS=\"--second-all <language>\", optionally TALK_STT_WORDS to words it gets wrong, then run atc voice install.", Guide: "calls"},
+			Cost: "A Whisper server that answers within about a second, on every longer turn.",
+		},
+		{
 			ID: "voice-engine", Title: "Voice engine", Group: Calls, Optional: true, Why: "Turns the assistant's words into speech. Without it a call connects and stays silent.",
 			Needs: []string{"call-line"}, Check: checkVoiceEngine,
 			Fix: Fix{Command: "atc voice install", Text: onMac("Installs it with the call line, or --tts-url uses your own voice server; its log is /tmp/delta-tts.log.", "Installs it with the call line, or --tts-url uses your own voice server; its log is journalctl --user -u delta-tts."), Guide: "calls#your-own-voice-server"},

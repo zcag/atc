@@ -3,7 +3,7 @@ import difflib, json, os, re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SLOT = re.compile(r"\{(\w+)\}")
-REGEXES = "UNFINISHED", "HALLUCINATIONS", "WHISPER_JUNK", "STOP"
+REGEXES = "HALLUCINATIONS", "WHISPER_JUNK", "STOP"
 WORDS = "LINE_CHECK", "LINE_CORE", "BACKCHANNEL"
 
 

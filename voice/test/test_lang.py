@@ -65,7 +65,6 @@ class Tr(unittest.TestCase):
     def test_regex_flags_are_ignorecase(self):
         p = Pack("tr", **NAMES)
         self.assertTrue(p.STOP.search("DUR"))
-        self.assertTrue(p.UNFINISHED.search("Yarın akşam için, ŞEY"))
 
     def test_lines_as_spoken(self):
         p = Pack("tr", **NAMES)

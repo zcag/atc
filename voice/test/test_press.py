@@ -28,8 +28,8 @@ class Script:
 def fake():
     t = talk.Talk.__new__(talk.Talk)
     t.a = NS(vad_on=.5, vad_off=.35, min_speech=96, reopen_ms=1000, barge=300, barge_words=3, barge_max=2.0,
-             spec_ms=250, end_ms=1500, preroll=.3, vad_reset_ms=0, turn_threshold=.5)
-    t.vad, t.stt, t.turn = Script(), None, None
+             spec_ms=250, end_ms=1500, preroll=.3, vad_reset_ms=0)
+    t.vad, t.stt = Script(), None
     t.utt, t.preroll, t.voiced_ms = bytearray(), b"", 0
     t.in_speech, t.speech_ms, t.silence_ms, t.barge_ms = False, 0, 0, 0
     t.commit, t.pending, t.live, t.reply = asyncio.Event(), False, False, None

@@ -1,7 +1,6 @@
 {
- "UNFINISHED": "\\b(şey|ve|ama|fakat|yani|için|ile|veya|ya da|mesela|hani|ee+|ı+|şöyle|çünkü|ki|da|de|and|but|so|because|um+|uh+|like|the|to|of|with|or)\\W*$",
  "HALLUCINATIONS": "altyaz|abone ol|izlediğiniz için|^\\W*$",
- "WHISPER_JUNK": "altyaz|abone ol|izlediğiniz için|teşekkür|thank|gracias|grazie|danke|dank|merci|obrigad|^\\W*$",
+ "WHISPER_JUNK": "altyaz|abone ol|izlediğiniz için|teşekkür|thank|gracias|grazie|danke|dank|merci|obrigad|[ðþæøåíóáúéñß]|^\\W*$",
  "UNCLEAR": "(kısa bir şey söyledi ama anlaşılmadı)",
  "GREETING": "Alo, merhaba, ben Max.",
  "LINE_OK": "Buradayım, sesin geliyor.",

@@ -12,7 +12,6 @@
   "FILLERS": ["Let me check, one second.", "Checking now.", "One second, let me see."],
   "HOLD": ["Still looking.", "This may take a little while.", "Hmm, still on it."],
   "PROGRESS": [["mail|gmail", "Checking your email."], ["openwa|whatsapp", "Looking at WhatsApp."], ["web|search|fetch|browser|chrome", "Looking that up online."], ["calendar|takvim", "Checking your calendar."], ["atc", null], ["Agent|Task", "Handing this to an agent."], [".", "Let me look."]],
-  "UNFINISHED": "\\b(and|but|so|because|um+|uh+|er+|like|the|a|an|to|of|with|or|if|that|for|in|on|at|my|your|i|well|you know|i mean)\\W*$",
   "HALLUCINATIONS": "thanks for watching|subscribe to|^\\W*$",
   "WHISPER_JUNK": "thanks for watching|thank you|subscribe|gracias|grazie|danke|merci|obrigad|^\\W*$",
   "STOP": "\\b(wait|hold on|hang on|stop|stop it|no|nope|one sec|one second|just a sec|excuse me)\\b",

@@ -68,13 +68,21 @@ it finds, which can be newer than onnxruntime's wheels. On Linux it isn't, to le
 
 Copy `lang/en.json` to `lang/<code>.json`, translate it and point `STT` at a streaming sherpa-onnx transducer (`hf`
 for a Hugging Face repo, or `base` and `dir` for files at a URL); `test/test_lang.py` checks the keys and slots match.
-Everything heard and said follows the call's language: its word lists (`BACKCHANNEL`, `STOP`, `UNFINISHED`, ...), `STT`,
+Everything heard and said follows the call's language: its word lists (`BACKCHANNEL`, `STOP`, ...), `STT`,
 voice, markers and spoken lines. Any language's hangup tag ends a call, whichever language it is in.
 `GARBLES_OTHERS` says this language's transcriber turns the call's other languages into noise (English's does, Turkish's spells
 English well enough): then a turn also carries another transcriber's reading when the two disagree, so the assistant can
 tell the user switched. The built-in modes
 (`modes/phone.md`, `guest-call.md`) quote the English `CUT_OFF` and `[HANGUP]`; a language with other markers needs its
 own copies of them in `~/.config/atc/modes`.
+
+## Reading a turn twice
+
+With `TALK_STT` set, a short turn is also read by Whisper, because the streaming transcriber has no context for a lone word.
+`--second-all <language>` (in `TALK_ARGS`) does the same for every longer turn in that language, with `TALK_STT_WORDS` as
+Whisper's prompt: the terms you use that it would otherwise misspell, a short list. The assistant gets the second reading as
+a note beside your words when the two differ, and your words on screen stay the streaming ones. A reading later than 0.8 s,
+or one that `WHISPER_JUNK` catches, is left out. `second` lines in `turns.jsonl` carry both readings and how long Whisper took.
 
 ## Testing without a phone
 
