@@ -290,7 +290,7 @@ class Talk:
         self.last_heard, self.last_ack, self.canned_at = 0.0, None, 0.0
         self.t0 = self.speaking_task = None
         self.track = {"in": bytearray(), "out": bytearray()}
-        self.rate, self.down = RATE, None
+        self.rate, self.down, self.converting = RATE, None, {}
         self.guest = None
         self.app, self.shown, self.next_shown, self.steady, self.heard_shown = False, None, None, 0, ""
         self.said_recently, self.echoing = [], False
@@ -448,9 +448,46 @@ class Talk:
         that rate (from their disk copies once they exist), and the greeting is made fresh if they are not there yet."""
         if rate == self.rate:
             return
-        self.rate, self.down, self.cache, self.greeting = rate, None, {}, b""
+        old, self.rate, self.down, self.cache, self.greeting = self.rate, rate, None, {}, b""
+        self.requeue(old)
         self.log(event="rate", rate=rate)
         asyncio.create_task(self.prerender())
+
+    def requeue(self, old):
+        """Voice already queued when the rate changes (an opening made while it rang, then answered on a device that
+        takes another rate), resampled so it doesn't play fast and high or slow and low."""
+        queued = []
+        while not self.outbox.empty():
+            item, frame = self.outbox.get_nowait()
+            if queued and queued[-1][0] is item:
+                queued[-1][1].append(frame)
+            else:
+                queued.append((item, [frame]))
+        for item in self.speaking:
+            if item[3]:
+                item[3] = soxr.resample(np.frombuffer(item[3][:len(item[3]) // 2 * 2], np.int16), old, self.rate).tobytes()
+        frame = self.frame
+        for item, _ in queued:
+            item[1] = 0
+        for item, frames in queued:
+            pcm = soxr.resample(np.frombuffer(b"".join(frames), np.int16), old, self.rate).tobytes()
+            for i in range(0, len(pcm), frame):
+                item[1] += 1
+                self.outbox.put_nowait((item, pcm[i:i + frame].ljust(frame, b"\0")))
+
+    def convert(self, item, pcm, rate, last):
+        """A voice still streaming at the rate it started at, brought to the line's rate."""
+        stream, odd, to = self.converting.get(id(item)) or (None, b"", None)
+        if to != self.rate:
+            stream = soxr.ResampleStream(rate, self.rate, 1, dtype="int16")
+        pcm = odd + pcm
+        n = len(pcm) // 2 * 2
+        out = stream.resample_chunk(np.frombuffer(pcm[:n], np.int16), last=last).tobytes()
+        if last:
+            self.converting.pop(id(item), None)
+        else:
+            self.converting[id(item)] = (stream, pcm[n:], self.rate)
+        return out
 
     def recorded(self, frame):
         """delta's voice for call.wav, which keeps one 16 kHz clock for both sides."""
@@ -507,8 +544,11 @@ class Talk:
     def engine(self, lang):
         return setting("TALK_TTS_ENGINE", lang, self.a.lang)
 
-    def queue(self, item, pcm=b"", last=False):
-        """Frames for the uplink. item = [text, frames queued and not yet sent, synthesis finished, leftover bytes]."""
+    def queue(self, item, pcm=b"", last=False, rate=None):
+        """Frames for the uplink. item = [text, frames queued and not yet sent, synthesis finished, leftover bytes].
+        rate: what pcm is at, when it may no longer be the line's."""
+        if rate and (rate != self.rate or id(item) in self.converting):
+            pcm = self.convert(item, pcm, rate, last)
         pcm, frame = item[3] + pcm, self.frame
         self.first_audio.setdefault(id(item), time.monotonic())
         cut = len(pcm) if last else len(pcm) // frame * frame
@@ -583,6 +623,7 @@ class Talk:
             self.outbox.get_nowait()
         self.speaking.clear()
         self.first_audio.clear()
+        self.converting.clear()
         if self.reply and not self.reply.done():
             self.reply.cancel()
         said = (" ".join(self.spoken) + (f" {cut}" if cut else "")).strip()
@@ -885,16 +926,16 @@ class Talk:
                 mark("first_audio")
                 await self.may_speak.wait()
                 self.live, self.utt, self.opening, self.unfinished, first = True, bytearray(), False, None, False
-            item, head = [sentence, 0, False, b""], b""
+            item, head, rate = [sentence, 0, False, b""], b"", self.rate
             self.speaking.append(item)
-            async for chunk in self.tts(sentence):
+            async for chunk in self.tts(sentence, rate=rate):
                 if head is not None:
                     head += chunk
-                    if len(head) < self.a.prebuffer * self.rate * 2 / 1000:
+                    if len(head) < self.a.prebuffer * rate * 2 / 1000:
                         continue
                     chunk, head = head, None
-                self.queue(item, chunk)
-            self.queue(item, head or b"", last=True)
+                self.queue(item, chunk, rate=rate)
+            self.queue(item, head or b"", last=True, rate=rate)
 
         try:
             async for kind, value in self.brain.turn(sent):
@@ -1039,6 +1080,7 @@ class Talk:
             self.outbox.get_nowait()
         self.speaking.clear()
         self.first_audio.clear()
+        self.converting.clear()
         self.live = False
         if self.app:
             asyncio.ensure_future(self.send_cmd({"cmd": "flush"}))

@@ -363,6 +363,8 @@ async def ws_app(request):
                 if phase in ("dialing", "alerting") and not owner():
                     also[ws] = m.get("out_rate")
                     if m.get("here"):
+                        if phase == "dialing" and m.get("out_rate") in (16000, 24000):
+                            app["out_rate"] = m["out_rate"]
                         await app_alerting()
                 else:
                     await reply({"event": "ended", "why": "gone"})

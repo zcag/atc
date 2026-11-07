@@ -75,6 +75,7 @@ class Ring(unittest.IsolatedAsyncioTestCase):
     async def test_a_browser_in_use_is_reaching_the_user(self):
         await self.device("ring-here", here=True)
         self.assertEqual(await self.precise(), "alerting")
+        self.assertEqual(call.app["out_rate"], 24000)
 
     async def test_the_phone_still_rings_after_a_browser_in_use(self):
         web = await self.device("ring-here", here=True)
