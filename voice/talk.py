@@ -18,6 +18,7 @@ import argparse, asyncio, concurrent.futures, difflib, hashlib, io, json, os, ra
 import aiohttp
 import soxr, numpy as np, onnxruntime
 from langpack import Pack, agreement, fill, first_language, hangup_tags, like, saved_names
+from picker import FALLBACK, Picker, Wording, bank_lines
 
 RATE, FRAME = 16000, 640
 APP_RATE = 24000
@@ -241,6 +242,8 @@ class HubBrain:
                 return
             if e["type"] in ("text", "tool", "tool_done"):
                 yield e["type"], e.get("delta", e.get("name", ""))
+            elif e["type"] == "tool_input":
+                yield "tool_input", e.get("text", "")
 
     def interrupt(self):
         if self.busy and self.ws and not self.ws.closed:
@@ -265,6 +268,10 @@ class Talk:
         self.who, self.title, self.line_voices, self.line_since = None, ASSISTANT, {}, 0.0
         self.first_line, self.moving, self.leaving, self.knock = None, False, False, ""
         self.packs, self.names, self.lang = args.packs, saved_names(SETTINGS), first_language(SETTINGS, args.packs, args.lang)
+        self.picker = Picker(args.picker, http, self.log, Wording(os.path.join(args.out, "picker-said.json")),
+                             (self.names[0] or "delta", self.names[1] or "the caller"), args.picker_ms, args.picker_greet_ms,
+                             args.picker_tool_ms) if args.picker else None
+        self.tool_said, self.tool_name = [], ""
         self.first = self.packs[self.lang]
         self.hangup = hangup_tags(self.packs)
         self.heard, self.unfinished = None, None
@@ -923,30 +930,52 @@ class Talk:
         self.tools_open = 0
         wants_ack = self.a.ack_ms and not self.opening and not self.holding and not self.moving \
             and len(re.findall(r"\w+", re.sub(r"\s*\(.*", "", text))) > 2
-        ack = asyncio.create_task(self.ack_later(lambda: first and not reply) if wants_ack else asyncio.sleep(0))
+        before = next((h["content"] for h in reversed(self.history[:-2]) if h["role"] == "assistant" and h["content"]), "")
+        chosen = asyncio.create_task(self.picker.filler(p, before[-200:], text, lambda t: t in self.cache)) \
+            if wants_ack and self.picker and not self.picker.off else None
+        ack = asyncio.create_task(self.ack_later(lambda: first and not reply, chosen) if wants_ack else asyncio.sleep(0))
         hold = asyncio.create_task(self.hold_on())
+        progress, given, order = None, None, asyncio.Lock()
 
         async def speak(sentence, gap=False):
             nonlocal first
             if not sentence:
                 return
             ack.cancel()
-            if first:
-                mark("first_audio")
-                await self.may_speak.wait()
-                self.live, self.utt, self.opening, self.unfinished, first = True, bytearray(), False, None, False
-            item, head, rate = [sentence, 0, False, b""], b"", self.rate
-            self.speaking.append(item)
-            if gap:
-                self.queue(item, bytes(int(rate * self.a.topic_pause_ms / 1000) * 2), rate=rate)
-            async for chunk in self.tts(sentence, rate=rate):
-                if head is not None:
-                    head += chunk
-                    if len(head) < self.a.prebuffer * rate * 2 / 1000:
-                        continue
-                    chunk, head = head, None
-                self.queue(item, chunk, rate=rate)
-            self.queue(item, head or b"", last=True, rate=rate)
+            async with order:
+                if first:
+                    mark("first_audio")
+                    await self.may_speak.wait()
+                    self.live, self.utt, self.opening, self.unfinished, first = True, bytearray(), False, None, False
+                item, head, rate = [sentence, 0, False, b""], b"", self.rate
+                self.speaking.append(item)
+                if gap:
+                    self.queue(item, bytes(int(rate * self.a.topic_pause_ms / 1000) * 2), rate=rate)
+                async for chunk in self.tts(sentence, rate=rate):
+                    if head is not None:
+                        head += chunk
+                        if len(head) < self.a.prebuffer * rate * 2 / 1000:
+                            continue
+                        chunk, head = head, None
+                    self.queue(item, chunk, rate=rate)
+                self.queue(item, head or b"", last=True, rate=rate)
+
+        async def tool_progress(name, banked):
+            """The picker writes what the tool is doing once its input is in (or after picker_input_ms from its name
+            alone); a miss or a rejected line plays the pack's line instead. Said only while nothing of the reply
+            has been, and the tool is still open."""
+            try:
+                got = await asyncio.wait_for(asyncio.shield(given), self.a.picker_input_ms / 1000)
+            except TimeoutError:
+                got = ""
+            line = await self.picker.tool_line(p, name, got[:400], text, self.tool_said)
+            if line is FALLBACK:
+                line = banked
+            if line and first and not reply and self.tools_open and not self.canned_lately():
+                self.canned_at = time.monotonic()
+                self.tool_said.append(line)
+                self.log(event="progress", text=line, by="picker" if line != banked else "pack")
+                await asyncio.shield(speak(line))
 
         try:
             async for kind, value in self.brain.turn(sent):
@@ -956,13 +985,22 @@ class Talk:
                     self.log(event="tool", name=value)
                     self.show(tool=value)
                     self.tools_open += 1
+                    self.tool_name = value
                     after = ""
+                    banked = next(t for r, t in self.pack.PROGRESS if re.search(r, value, re.I))
                     if buf.strip():
                         await speak(spoken(buf))
                         buf = ""
-                    elif first and (line := next(t for r, t in self.pack.PROGRESS if re.search(r, value, re.I))) and not self.canned_lately():
+                    elif first and (not progress or progress.done()) and self.picker and not self.picker.off and not self.canned_lately():
+                        given = asyncio.get_running_loop().create_future()
+                        progress = asyncio.create_task(tool_progress(value, banked))
+                    elif first and banked and not self.canned_lately():
                         self.canned_at = time.monotonic()
-                        await speak(line)
+                        await speak(banked)
+                    continue
+                if kind == "tool_input":
+                    if given and not given.done():
+                        given.set_result(value)
                     continue
                 if kind == "tool_done":
                     self.tools_open = max(0, self.tools_open - 1)
@@ -984,11 +1022,11 @@ class Talk:
             if spoken(buf):
                 await speak(spoken(buf), not first and self.topic_starts(after, buf))
         except asyncio.CancelledError:
-            ack.cancel(), hold.cancel()
+            [t.cancel() for t in (ack, hold, progress, chosen) if t]
             if not self.leaving:
                 self.brain.interrupt()
             raise
-        ack.cancel(), hold.cancel()
+        [t.cancel() for t in (ack, hold, progress, chosen) if t]
         self.unfinished, self.moving = None, False
         self.log(event="delta", text=reply, **timing)
         if tag := LINE_TAG.search(reply):
@@ -1163,7 +1201,9 @@ class Talk:
             now = time.monotonic()
             if self.tools_open and not self.speaking and not self.in_speech and now - max(self.last_voice, self.last_heard) >= self.a.progress_ms / 1000 \
                     and now - last >= self.a.progress_every_ms / 1000:
-                line = random.choice([h for h in self.pack.HOLD if h != getattr(self, "last_hold", None)])
+                line = self.picker.hold(self.pack, self.tool_name, said, lambda t: t in self.cache) if self.picker else FALLBACK
+                if line is FALLBACK:
+                    line = random.choice([h for h in self.pack.HOLD if h != getattr(self, "last_hold", None)])
                 self.last_hold, said, last, self.canned_at = line, said + 1, now, now
                 self.say(line, self.cache.get(line) or b"".join([c async for c in self.tts(line)]))
                 self.log(event="hold", text=line)
@@ -1171,16 +1211,46 @@ class Talk:
     def canned_lately(self):
         return time.monotonic() - self.canned_at < self.a.canned_gap_ms / 1000
 
-    async def ack_later(self, silent):
+    async def ack_later(self, silent, chosen=None):
         """Claude is slower than a person: if nothing at all has come from it after ack_ms (silent()), a short thinking
         phrase ("Dur bakayım."), never the same one twice running and never within canned_gap_ms of another canned line
-        (respond_claude decides when to try at all). They picked these over silence and a bare "Hmm" on real turns."""
+        (respond_claude decides when to try at all). They picked these over silence and a bare "Hmm" on real turns.
+        With the picker, its choice (chosen, asked when the turn was sent) when it is in by then: a line, or silence
+        for a bare yes; when it isn't, or it failed, one of the ACKS as before."""
         await asyncio.sleep(self.a.ack_ms / 1000)
+        pick = FALLBACK
+        if chosen:
+            if chosen.done() and not chosen.cancelled() and not chosen.exception():
+                pick = chosen.result()
+            else:
+                chosen.cancel()
+                self.picker.miss("filler", "not in by ack time")
+        if pick and pick is not FALLBACK and pick not in self.cache:
+            pick = FALLBACK
+        if pick is not FALLBACK:
+            if pick and not self.speaking and not self.in_speech and silent() and not self.canned_lately():
+                self.last_ack, self.canned_at = pick, time.monotonic()
+                self.say("", self.cache[pick])
+                self.log(event="ack", text=pick, by="picker")
+            return
         ready = [a for a in self.pack.ACKS if a in self.cache and a != self.last_ack]
         if not self.speaking and not self.in_speech and ready and silent() and not self.canned_lately():
             self.last_ack, self.canned_at = random.choice(ready), time.monotonic()
             self.say("", self.cache[self.last_ack])
             self.log(event="ack", text=self.last_ack)
+
+    def call_situation(self):
+        """What the picker chooses a greeting by: the clock, and how long ago their last call ended."""
+        now, ago = time.localtime(), None
+        try:
+            with open(os.path.join(self.a.out, "last-call.json")) as f:
+                ago = time.time() - json.load(f)["end"]
+        except (OSError, ValueError, KeyError):
+            pass
+        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        last = "unknown" if ago is None else f"{round(ago / 60)} minutes ago" if ago < 3600 else \
+            f"{round(ago / 3600)} hours ago" if ago < 86400 else f"{round(ago / 86400)} days ago"
+        return f"Time: {time.strftime('%H:%M', now)}, {days[now.tm_wday]}. His last call ended {last}."
 
     def back_greeting(self):
         """--back-min: the user is greeted like someone delta talks to all day, not introduced to: within that many
@@ -1232,7 +1302,8 @@ class Talk:
     def phrases(self, first=True, rest=True):
         said = lambda p: [(t, p.code) for t in [p.GREETING, *p.GREETING_BACK, *p.GREETING_HIM, p.LINE_OK, *p.FILLERS, *p.HOLD, *[t for _, t in p.PROGRESS if t]]]
         lines = said(self.first) if first else []
-        return lines + ([(t, p.code) for p in self.packs.values() for t in p.ACKS] + [l for p in self.packs.values() if p is not self.first for l in said(p)] if rest else [])
+        picks = [(t, p.code) for p in self.packs.values() for t in bank_lines(p)] if self.picker else []
+        return lines + ([(t, p.code) for p in self.packs.values() for t in p.ACKS] + [l for p in self.packs.values() if p is not self.first for l in said(p)] + picks if rest else [])
 
     async def prerender(self):
         await self.render(self.phrases(rest=False))
@@ -1328,6 +1399,10 @@ class Talk:
             asyncio.create_task(self.move_line(self.first_line))
             return
         hello = self.back_greeting() or self.first.GREETING
+        if self.picker and await self.picker.check(self.first) and not self.guest:
+            picked = await self.picker.greeting(self.first, self.call_situation(), lambda t: t in self.cache)
+            if picked is not FALLBACK:
+                hello = picked
         if hello == self.first.GREETING:
             if not self.greeting:
                 self.greeting = self.cache[hello] = b"".join([c async for c in self.tts(hello)])
@@ -1592,7 +1667,12 @@ if __name__ == "__main__":
     p.add_argument("--ack-ms", type=int, default=2500, help="ms after their turn with nothing from Claude before a thinking phrase (0 = never)")
     p.add_argument("--reopen-ms", type=int, default=700, help="ms of speech that take back a turn already sent to Claude")
     p.add_argument("--barge-words", type=int, default=3, help="words (not hı hı, evet...) that make an overlap a real interruption")
-    p.add_argument("--back-min", type=float, default=0, help="the user gets casual greetings (GREETING_HIM), short ones (GREETING_BACK) within this many minutes of their last call; 0 = GREETING for everyone")
+    p.add_argument("--picker", default=os.environ.get("TALK_PICKER", ""), help="the picker's llama.cpp server (picker.py): fillers, greetings, tool and hold lines; empty = today's rules")
+    p.add_argument("--picker-ms", type=int, default=2000, help="ms the picker gets to choose a filler, from when the turn is sent")
+    p.add_argument("--picker-greet-ms", type=int, default=400, help="ms the picker gets to choose the greeting")
+    p.add_argument("--picker-tool-ms", type=int, default=1200, help="ms the picker gets to write a tool line")
+    p.add_argument("--picker-input-ms", type=int, default=1000, help="ms to wait for a tool's input before the picker writes from its name alone")
+    p.add_argument("--back-min", type=float, default=0,help="the user gets casual greetings (GREETING_HIM), short ones (GREETING_BACK) within this many minutes of their last call; 0 = GREETING for everyone")
     p.add_argument("--topic-pause-ms", type=int, default=0, help="extra silence before a piece that starts a new topic (paragraph break or TOPIC); 0 = off")
     p.add_argument("--bye-wait-ms", type=int, default=0, help="after a goodbye, wait this long for theirs before hanging up (0 = 0.5 s, the old way)")
     p.add_argument("--echo-order", action="store_true", help="drop a turn as delta's own echo only if it began while delta was audible and repeats its words in order")

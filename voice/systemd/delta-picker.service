@@ -1,0 +1,14 @@
+[Unit]
+Description=atc voice: the picker (picker.py), a small model through llama.cpp (Vulkan) on the GPU, :8842, kept loaded; set up by hand under PICKER_DIR
+After=network-online.target
+
+[Service]
+Slice=calls.slice
+Environment=PICKER_DIR=%h/.local/share/atc/voice/picker
+EnvironmentFile=-%h/.config/atc/voice.env
+ExecStart=/bin/sh -c 'exec "$$PICKER_DIR/bin/llama-server" -m "$$PICKER_DIR/model.gguf" --host 127.0.0.1 --port 8842 -ngl 99 -c 12288 -np 3 --swa-full --no-webui'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

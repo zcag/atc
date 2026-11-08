@@ -50,6 +50,7 @@ class Hold(unittest.IsolatedAsyncioTestCase):
         t.say = lambda text, _: t.said.append(text)
         t.log = lambda **_: None
         t.cache = {"still on it": b"x"}
+        t.picker, t.tool_name = None, "Bash"
         return t
 
     async def hold(self, t, seconds):

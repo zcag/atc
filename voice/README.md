@@ -39,6 +39,7 @@ atc app ── atc (/api/call/line) ── call.py :8807 ── talk.py ── a
 | `TALK_STATE` | `~/.local/state/atc/voice` | `calls/<talk-time>/`, `calls.jsonl`, `voice.json` |
 | `DELTA_CALL_BRIDGE`, `DELTA_CALL_PORT`, `DELTA_CALL_HOST`, `DELTA_CALL_DIAL_ALLOW`, `ANDROID_SERIAL` | `0`, `8807`, `127.0.0.1` (empty is every interface), none, adb's pick | the line |
 | `HIGGS_DIR`, `HIGGS_VOICES`, `HIGGS_URL` | under the data dir, `:8841` | Higgs, on a GPU, set up by hand |
+| `TALK_PICKER`, `PICKER_DIR` | empty, `~/.local/share/atc/voice/picker` | the picker (below): `http://127.0.0.1:8842` turns it on, add `delta-picker` to the units; empty is the rules without it |
 
 ## Built-in voices
 
@@ -83,6 +84,29 @@ With `TALK_STT` set, a short turn is also read by Whisper, because the streaming
 Whisper's prompt: the terms you use that it would otherwise misspell, a short list. The assistant gets the second reading as
 a note beside your words when the two differ, and your words on screen stay the streaming ones. A reading later than 0.8 s,
 or one that `WHISPER_JUNK` catches, is left out. `second` lines in `turns.jsonl` carry both readings and how long Whisper took.
+
+## The picker
+
+`picker.py` lets a small local model choose what delta says around the assistant's reply, from the pack's `PICK_*`
+lines. `delta-picker` serves it: llama.cpp's `llama-server` (Vulkan build) in `$PICKER_DIR/bin` and the model as
+`$PICKER_DIR/model.gguf`, set up by hand like Higgs. Gemma 4 E4B (Q4_K_M) takes about 5 GB beside Higgs on a 16 GB GPU,
+which slows a Higgs render by 1% loaded and 3% at four picks a second.
+
+- **Fillers** say nothing: the model only picks the kind of sound for the turn (looking, thinking, waiting on a request,
+  listening, a complaint) or none for a bare yes, asked when the turn is sent so the answer is in by `--ack-ms`.
+- **Greetings** by the clock and how long ago the last call ended (not for guests).
+- **Tool lines** are written by the model from the tool call itself (the hub's `tool_input` event: the input, and for
+  Bash the assistant's own description), 2 to 5 words; atc's read-only tools get none.
+- **Hold lines** come from `PICK_HOLDS` by what the open tool waits on, with no model.
+
+The wording within a kind is chosen in `Wording`: a line never comes twice running, and the weight beside it is a habit.
+Only lines already rendered are offered, so a take that failed never plays.
+
+It only advises. Each choice has a deadline (`--picker-ms`, `--picker-greet-ms`, `--picker-tool-ms`); a late answer, an
+error, a line that fails its check (too long, code, a repeat) or a bug in `picker.py` gives `FALLBACK`, and that moment
+goes to the rules without it. A server that is down at the start of a call, or two misses in a row, turn it off for the
+call. `pick`, `picker` (misses) and `progress` lines in `turns.jsonl` show each choice and its time.
+`test/test_picker.py` runs it against a fake server that is down, slow, broken or talking nonsense.
 
 ## Testing without a phone
 
