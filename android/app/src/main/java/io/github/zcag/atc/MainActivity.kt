@@ -47,6 +47,7 @@ import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.io.File
+import java.security.cert.X509Certificate
 
 class MainActivity : Activity() {
     companion object {
@@ -565,7 +566,8 @@ class MainActivity : Activity() {
         val leaf = error.certificate.x509Certificate
         val url = Uri.parse(error.url)
         val host = url.host ?: return handler.cancel()
-        if (leaf == null || host != serverHost() || error.hasError(SslError.SSL_IDMISMATCH)) return handler.cancel()
+        if (leaf == null || error.hasError(SslError.SSL_IDMISMATCH)) return handler.cancel()
+        if (host != serverHost()) return signedByServerAuthority(handler, host, url.port, leaf)
         sslWaiting += handler
         if (sslWaiting.size > 1) return
         val server = prefs.server ?: return handler.cancel()
@@ -601,6 +603,15 @@ class MainActivity : Activity() {
                         .show()
                 }
             }
+        }.start()
+    }
+
+    private fun signedByServerAuthority(handler: SslErrorHandler, host: String, port: Int, leaf: X509Certificate) {
+        val anchor = Pin.decode(prefs.pinFor(serverHost())) ?: return handler.cancel()
+        Thread {
+            val chain = runCatching { Pin.chainOf(host, if (port > 0) port else 443) }.getOrDefault(emptyList())
+            val ok = chain.firstOrNull()?.encoded?.contentEquals(leaf.encoded) == true && Pin.validates(chain, anchor)
+            runOnUiThread { if (ok) handler.proceed() else handler.cancel() }
         }.start()
     }
 
