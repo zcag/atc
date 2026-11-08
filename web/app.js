@@ -7562,6 +7562,7 @@ function PalBarSettings({ pal }) {
   const hidden = bar.hide ?? pal.hide ?? [];
   const shown = (k) => !hidden.includes(k);
   const flip = (k) => bar.set({ hide: shown(k) ? [...hidden, k] : hidden.filter((x) => x !== k) });
+  const label = (i) => (bar.known.filter((x) => x.title === i.title).length > 1 ? `${i.title} (${i.key.split("/")[0]})` : i.title || i.key);
   return html`<section id="palbar">
     <h2>pal bar <span class="n">on this device</span></h2>
     <div class="set">
@@ -7572,7 +7573,7 @@ function PalBarSettings({ pal }) {
     <div class="set">
       <b>Items</b>
       <p>${bar.known.length ? "Which of pal's items show here." : "pal's items show here once the bar has loaded."}${bar.hide && pal.hide && html` <button class="kb" onClick=${() => bar.set({ hide: null })}>Use atc's default</button>`}</p>
-      <div class="ctl palitems">${bar.known.map((i) => html`<button class=${`kb ${shown(i.key) ? "on" : ""}`} aria-pressed=${shown(i.key)} onClick=${() => flip(i.key)}>${i.title || i.key}</button>`)}</div>
+      <div class="ctl palitems">${bar.known.map((i) => html`<button class=${`kb ${shown(i.key) ? "on" : ""}`} aria-pressed=${shown(i.key)} title=${i.key} onClick=${() => flip(i.key)}>${label(i)}</button>`)}</div>
     </div>
   </section>`;
 }
