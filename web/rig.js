@@ -13,6 +13,9 @@ import { roomLook, lookFromPixels, brightness, daylight, Mood, flicker, Particle
 
 export { daylight };
 
+const FLOW = Symbol("flow");
+const ROOM = /^(plate|vignette|glow|shaft)/;
+const STAY = new Set(["breath", "blinkR", "blinkL"]);
 const VS = `#version 300 es
 layout(location=0) in vec2 pos;
 layout(location=1) in vec2 uv;
@@ -540,6 +543,34 @@ export async function rig(canvas, base, now, opts = {}) {
   await Promise.all([...new Set([...R.parts.map((p) => p.tex), ...(R.flow ? [R.flow.tex] : [])])].map(async (f) => {
     images[f] = await loadImage(base + f);
   }));
+  const chars = {};
+  const loadPose = async (name, entry) => {
+    const pb = base + entry.dir.replace(/\/?$/, "/"), PR = await (await fetch(pb + "rig.json")).json();
+    const clip = async (f) => {
+      if (!f) return null;
+      const v = document.createElement("video");
+      Object.assign(v, { muted: true, playsInline: true, preload: "auto", src: URL.createObjectURL(await (await fetch(pb + f)).blob()) });
+      await new Promise((done) => v.addEventListener("loadeddata", done, { once: true }));
+      return v;
+    };
+    chars[name] = { R: PR, base: pb, in: await clip(entry.in), out: await clip(entry.out) };
+  };
+  const ensure = (name) => {
+    const c = chars[name];
+    c.ready ??= (async () => {
+      const imgs = {};
+      await Promise.all([...new Set(c.R.parts.map((p) => p.tex))].map(async (f) => { imgs[f] = await loadImage(c.base + f); }));
+      if (G && c.ready) G.chars[name] = makeParts(c.R.parts, imgs, c.R.flow);
+    })();
+    return c.ready;
+  };
+  const release = (name) => {
+    const parts = G?.chars[name];
+    if (chars[name]) chars[name].ready = null;
+    if (!parts) return;
+    for (const q of Object.values(parts)) if (q?.vao) { gl.deleteVertexArray(q.vao); gl.deleteTexture(q.tex); }
+    delete G.chars[name];
+  };
   const plate = R.parts.find((p) => p.name === "plate")?.tex;
   const picked = opts.background && plate && await roomFile(opts.background).catch((e) => console.warn("persona: room", e));
   const fit = roomFit(R.view);
@@ -580,44 +611,50 @@ export async function rig(canvas, base, now, opts = {}) {
     const u = {};
     return { prog, u: (n) => (u[n] ??= gl.getUniformLocation(prog, n)) };
   };
+  const makeParts = (list, imgs, flowOf) => {
+    const tex = {};
+    for (const [f, img] of Object.entries(imgs)) {
+      tex[f] = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, tex[f]);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+      gl.generateMipmap(gl.TEXTURE_2D);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f === flowOf?.tex ? gl.LINEAR : gl.LINEAR_MIPMAP_LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      for (const k of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE);
+    }
+    const parts = {};
+    for (const p of list) parts[p.name] = { ...vao(p), tex: tex[p.tex], blend: p.blend, box: p.box, enter: p.enter };
+    parts[FLOW] = flowOf && tex[flowOf.tex];
+    return parts;
+  };
+  const vao = (p) => {
+    const n = p.v.length / 2, d = new Float32Array(n * 12), [bx, by, bw, bh] = p.box, [u0, v0, u1, v1] = p.uv || [0, 0, 1, 1];
+    for (let i = 0; i < n; i++) {
+      const x = p.v[2 * i], y = p.v[2 * i + 1], o = i * 12;
+      d.set([x, y, u0 + (x - bx) / bw * (u1 - u0), v0 + (y - by) / bh * (v1 - v0)], o);
+      d.set(p.bi[i], o + 4);
+      d.set(p.bw[i], o + 8);
+    }
+    const a = gl.createVertexArray();
+    gl.bindVertexArray(a);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
+    [2, 2, 4, 4].reduce((off, size, loc) => {
+      gl.enableVertexAttribArray(loc);
+      gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 48, off * 4);
+      return off + size;
+    }, 0);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(p.t), gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+    return { vao: a, count: p.t.length };
+  };
   let G = null;
   const setup = () => {
     const main = program(VS, FS), motes = program(DUST_VS, DUST_FS);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
     gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-    const tex = {};
-    for (const [f, img] of Object.entries(images)) {
-      tex[f] = gl.createTexture();
-      gl.bindTexture(gl.TEXTURE_2D, tex[f]);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
-      gl.generateMipmap(gl.TEXTURE_2D);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, f === R.flow?.tex ? gl.LINEAR : gl.LINEAR_MIPMAP_LINEAR);
-      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-      for (const k of [gl.TEXTURE_WRAP_S, gl.TEXTURE_WRAP_T]) gl.texParameteri(gl.TEXTURE_2D, k, gl.CLAMP_TO_EDGE);
-    }
-    const parts = {};
-    for (const p of R.parts) {
-      const n = p.v.length / 2, d = new Float32Array(n * 12), [bx, by, bw, bh] = p.box, [u0, v0, u1, v1] = p.uv || [0, 0, 1, 1];
-      for (let i = 0; i < n; i++) {
-        const x = p.v[2 * i], y = p.v[2 * i + 1], o = i * 12;
-        d.set([x, y, u0 + (x - bx) / bw * (u1 - u0), v0 + (y - by) / bh * (v1 - v0)], o);
-        d.set(p.bi[i], o + 4);
-        d.set(p.bw[i], o + 8);
-      }
-      const vao = gl.createVertexArray();
-      gl.bindVertexArray(vao);
-      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-      gl.bufferData(gl.ARRAY_BUFFER, d, gl.STATIC_DRAW);
-      [2, 2, 4, 4].reduce((off, size, loc) => {
-        gl.enableVertexAttribArray(loc);
-        gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 48, off * 4);
-        return off + size;
-      }, 0);
-      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
-      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(p.t), gl.STATIC_DRAW);
-      gl.bindVertexArray(null);
-      parts[p.name] = { vao, count: p.t.length, tex: tex[p.tex], blend: p.blend, box: p.box };
-    }
+    const parts = makeParts(R.parts, images, R.flow);
     const dvao = gl.createVertexArray(), dbufs = sets.map(() => gl.createBuffer());
     gl.bindVertexArray(dvao);
     gl.enableVertexAttribArray(0);
@@ -633,19 +670,25 @@ export async function rig(canvas, base, now, opts = {}) {
     gl.uniform1f(main.u("multiply"), -1);
     if (R.flow) {
       gl.activeTexture(gl.TEXTURE1);
-      gl.bindTexture(gl.TEXTURE_2D, tex[R.flow.tex]);
+      gl.bindTexture(gl.TEXTURE_2D, parts[FLOW]);
       gl.activeTexture(gl.TEXTURE0);
       gl.uniform4fv(main.u("flowBox"), R.flow.box);
       gl.uniform1f(main.u("flowRange"), R.flow.range);
     }
     for (const q of Object.values(parts)) {
+      if (!q?.vao) continue;
       gl.bindTexture(gl.TEXTURE_2D, q.tex);
       gl.bindVertexArray(q.vao);
       gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_SHORT, 0);
     }
     gl.bindVertexArray(null);
     gl.finish();
-    G = { main, motes, parts, dvao, dbufs, ddata: sets.map((s) => new Float32Array(s.list.length * 4)) };
+    for (const c of Object.values(chars)) c.ready = null;
+    const chars_ = {};
+    const move = { ...vao(quad("move", "move", [0, 0, artW, artH])), tex: gl.createTexture() };
+    gl.bindTexture(gl.TEXTURE_2D, move.tex);
+    for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.LINEAR], [gl.TEXTURE_MAG_FILTER, gl.LINEAR], [gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE], [gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+    G = { main, motes, parts, chars: chars_, move, dvao, dbufs, ddata: sets.map((s) => new Float32Array(s.list.length * 4)) };
   };
   setup();
   const lost = (e) => { e.preventDefault(); G = null; };
@@ -693,8 +736,9 @@ export async function rig(canvas, base, now, opts = {}) {
     });
     gl.useProgram(G.main.prog);
   };
+  let from = null;
   const draw = (name, alpha = 1, shift = [0, 0]) => {
-    const q = G.parts[name];
+    const q = (from || G.parts)[name] ?? (from && ROOM.test(name) ? G.parts[name] : undefined);
     if (!q || alpha <= .002) return;
     const [s, d] = BLEND[q.blend] || [gl.ONE, gl.ONE_MINUS_SRC_ALPHA];
     gl.blendFunc(s, d);
@@ -704,17 +748,58 @@ export async function rig(canvas, base, now, opts = {}) {
     gl.bindVertexArray(q.vao);
     gl.drawElements(gl.TRIANGLES, q.count, gl.UNSIGNED_SHORT, 0);
   };
+  const M = { phase: "rest", name: null, t: 0, clip: null, settle: 0, ease: 0 };
+  const SETTLE = .35, EASE = .45, SEAM = .25;
+  const begin = (name, kind) => {
+    if (kind === "in") ensure(name);
+    const clip = chars[name]?.[kind];
+    if (!clip) { Object.assign(M, { phase: kind === "in" ? "pose" : "rest", name: kind === "in" ? name : null, clip: null }); return; }
+    Object.assign(M, { phase: kind, name, t: 0, clip });
+    if (!opts.dt) { clip.currentTime = 0; clip.play().catch(() => {}); }
+  };
+  const posing = (dt, want) => {
+    want = want && R.poses?.[want] && chars[want] ? want : null;
+    M.ease = Math.max(0, M.ease - dt);
+    const leaving = (M.phase === "rest" && want) || (M.phase === "pose" && want !== M.name);
+    M.settle = leaving ? M.settle + dt : 0;
+    if (leaving && M.settle >= SETTLE) { M.settle = 0; begin(M.phase === "rest" ? want : M.name, M.phase === "rest" ? "in" : "out"); }
+    else if (M.phase === "in" || M.phase === "out") {
+      M.t += dt;
+      if (opts.dt ? M.t >= M.clip.duration - .02 : M.clip.ended) {
+        if (M.phase === "in" && !G.chars[M.name]) { if (opts.dt) return chars[M.name].ready; }
+        else if (M.phase === "in") Object.assign(M, { phase: "pose", clip: null, ease: EASE });
+        else { release(M.name); Object.assign(M, { phase: "rest", name: null, clip: null, ease: EASE }); }
+      }
+    }
+    if (M.phase === "pose" && !G.chars[M.name]) Object.assign(M, { phase: "rest", name: null, clip: null });
+    if (M.clip && opts.dt) {
+      const at = Math.min(M.t, M.clip.duration - .03);
+      if (Math.abs(M.clip.currentTime - at) > .001) return new Promise((done) => {
+        const v = M.clip, shown = () => (v.requestVideoFrameCallback ? v.requestVideoFrameCallback(() => done()) : done());
+        const late = setTimeout(done, 1500);
+        v.addEventListener("seeked", () => { shown(); setTimeout(() => { clearTimeout(late); done(); }, 300); }, { once: true });
+        v.currentTime = at;
+      });
+    }
+  };
   const frame = (ms) => {
     if (!opts.dt) raf = requestAnimationFrame(frame);
     const dt = opts.dt || clamp((ms - last) / 1000, 0, .1);
     last = ms;
     clock += dt;
     const { state, you, it, lo, hi } = now();
-    const params = (opts.params || ((p) => p))(behaviour.step(dt, state, you || 0, it || 0, lo || 0, hi || 0));
+    const live = (opts.params || ((p) => p))(behaviour.step(dt, state, you || 0, it || 0, lo || 0, hi || 0));
+    const seek = R.poses ? posing(dt, live.pose) : null;
+    const still = !R.poses ? 0 : M.clip ? 1 : M.settle > 0 ? M.settle / SETTLE : M.ease / EASE;
+    const params = still ? Object.fromEntries(Object.entries(live).map(([k, v]) => [k, typeof v === "number" && !STAY.has(k) ? v * (1 - smooth(0, 1, still)) : v])) : live;
     const { Y, P } = director.step(dt, params);
     opts.tick?.(params, director);
     mood.step(dt, behaviour.state);
     for (const s of sets) s.step(dt, clock);
+    if (seek) return seek.then(() => paint(params, Y, P));
+    paint(params, Y, P);
+  };
+  const paint = (params, Y, P) => {
     if (!G) return;
     const k = Math.min(devicePixelRatio || 1, 2), w = opts.dt ? canvas.width : Math.round(canvas.clientWidth * k), h = opts.dt ? canvas.height : Math.round(canvas.clientHeight * k);
     if (!w || !h) return;
@@ -725,9 +810,16 @@ export async function rig(canvas, base, now, opts = {}) {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.useProgram(G.main.prog);
     gl.uniform4fv(G.main.u("view"), view);
+    let posed = M.phase === "pose" && G.chars[M.name], showChar = !M.clip, clipA = 1;
+    if (M.clip) {
+      const dur = M.clip.duration, t = M.t, pc = G.chars[M.name];
+      const which = t < SEAM ? (M.phase === "in" ? "rest" : pc && "pose") : t > dur - SEAM ? (M.phase === "in" ? pc && "pose" : "rest") : null;
+      if (which) { showChar = true; posed = which === "pose" && pc; clipA = clamp(t < SEAM ? t / SEAM : (dur - t) / SEAM, 0, 1); }
+    }
+    const CR = posed ? chars[M.name].R : R;
     const bones = (key) => {
       const [ky, kp] = key ? director.angles(key) : [0, 0];
-      gl.uniformMatrix3x2fv(G.main.u("B"), false, pose(R, { ...params, yawRes: key ? clamp(Y - ky, -6, 6) : 0, pitchRes: key ? clamp(P - kp, -6, 6) : 0 }));
+      gl.uniformMatrix3x2fv(G.main.u("B"), false, pose(CR, { ...params, yawRes: key ? clamp(Y - ky, -6, 6) : 0, pitchRes: key ? clamp(P - kp, -6, 6) : 0 }));
     };
     bones(null);
     const u = G.main.u;
@@ -741,6 +833,20 @@ export async function rig(canvas, base, now, opts = {}) {
     for (const l of lights) if (l.back) draw(l.name, l.strength * flicker(l.kind, clock, l.seed) * mood.glow);
     motes("back", view, w);
     const A = director.angle, e = smooth(0, 1, A.k);
+    from = posed || null;
+    const drawClip = () => {
+      lighting(true);
+      shine(look.character, true, G.parts.plate ? look.light.wrap : 0);
+      gl.bindTexture(gl.TEXTURE_2D, G.move.tex);
+      if (M.clip.readyState >= 2) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, M.clip);
+      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.uniform1f(G.main.u("alpha"), clipA);
+      gl.uniform2f(G.main.u("shift"), 0, 0);
+      gl.bindVertexArray(G.move.vao);
+      gl.drawElements(gl.TRIANGLES, G.move.count, gl.UNSIGNED_SHORT, 0);
+      gl.uniform1f(u("wrap"), 0);
+    };
+    if (showChar) {
     if (look.light.shadow > 0 && G.parts.plate) {
       const off = [(.5 - look.light.from[0]) * 26, 12];
       gl.uniform1f(u("shade"), look.light.shadow);
@@ -757,9 +863,9 @@ export async function rig(canvas, base, now, opts = {}) {
     draw("body");
     gl.uniform1f(u("wrap"), 0);
     // below the mouth the head's edge lies over the character itself, not against the room
-    const lips = G.parts[`${A.cur}.mouth.a1`]?.box;
+    const lips = (posed || G.parts)[`${A.cur}.mouth.a1`]?.box;
     gl.uniform1f(u("wrapEnd"), lips ? (lips[1] + lips[3] * .35) / artH : 9);
-    const cell = A.prev && R.flow && (R.flow.cells[`${A.prev}|${A.cur}`] ?? R.flow.cells[`${A.cur}|${A.prev}`]);
+    const cell = !posed && A.prev && R.flow && (R.flow.cells[`${A.prev}|${A.cur}`] ?? R.flow.cells[`${A.cur}|${A.prev}`]);
     if (cell !== undefined && cell !== null) {
       const [nx, ny] = R.flow.grid;
       gl.uniform4f(G.main.u("flowCell"), (cell % nx) / nx, Math.floor(cell / nx) / ny, 1 / nx, 1 / ny);
@@ -776,7 +882,11 @@ export async function rig(canvas, base, now, opts = {}) {
       for (const slot of ["brows", "eyes", "mouth"]) for (const [name, w_] of director[slot].layers()) if (name !== "base") draw(`${key}.${slot}.${name}`, a * w_ * (name === "u" && params.serious > .5 ? R.serious ?? 1 : 1));
     }
     gl.uniform1f(G.main.u("morph"), 0);
-    const Z = director.pose, layer = Z.cur && G.parts[`pose.${Z.cur}`];
+    if (posed) {
+      bones(null);
+      draw("pose.hold");
+    }
+    const Z = director.pose, layer = !R.poses && Z.cur && G.parts[`pose.${Z.cur}`];
     if (layer && Z.k > 0) {
       bones(director.angle.cur);
       const [bx, by, bw, bh] = layer.box, reach = smooth(0, 1, Z.k), rest = 1 - reach;
@@ -784,9 +894,16 @@ export async function rig(canvas, base, now, opts = {}) {
       const talking = Z.cur === "explain" ? params.jaw : 0;
       const deg = -out * (rest * 14 + (Z.cur === "explain" ? 1.5 * Math.sin(clock * 1.7) + 2.5 * talking : 0));
       gl.uniform4f(G.main.u("turn"), bx + bw / 2, by + bh, Math.cos(deg * PI / 180), Math.sin(deg * PI / 180));
-      draw(`pose.${Z.cur}`, 1, [out * rest * drop * .16, rest * drop + 3 * params.breath - 8 * talking]);
+      if (layer.enter === "fade") {
+        gl.uniform4f(G.main.u("turn"), 0, 0, 1, 0);
+        draw(`pose.${Z.cur}`, reach, [0, 3 * params.breath]);
+      }
+      else draw(`pose.${Z.cur}`, 1, [out * rest * drop * .16, rest * drop + 3 * params.breath - 8 * talking]);
       gl.uniform4f(G.main.u("turn"), 0, 0, 1, 0);
     }
+    }
+    from = null;
+    if (M.clip) { bones(null); drawClip(); }
     gl.uniform2f(G.main.u("shift"), 0, 0);
     bones(null);
     shine(look.picture, false, 0);
@@ -798,7 +915,8 @@ export async function rig(canvas, base, now, opts = {}) {
     gl.bindVertexArray(null);
     if (!drew) { drew = true; opts.first?.(); }
   };
-  if (opts.dt) return frame;
+  const poses = Promise.all(Object.entries(R.poses || {}).map(([n, e]) => loadPose(n, e).catch((err) => console.warn("persona: pose", n, err))));
+  if (opts.dt) { await poses; return frame; }
   raf = requestAnimationFrame(frame);
   return () => { cancelAnimationFrame(raf); canvas.removeEventListener("webglcontextlost", lost); canvas.removeEventListener("webglcontextrestored", restored); };
 }
