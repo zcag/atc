@@ -233,6 +233,9 @@ func (h *Hub) ring(ctx context.Context, pc *call, via string, deadline time.Time
 	if via != "phone" {
 		dial["via"] = via
 	}
+	if pc.reason != "" {
+		dial["reason"] = pc.reason
+	}
 	if err := c.post(ctx, "/dial", dial); err != nil {
 		return "", err
 	}

@@ -511,6 +511,7 @@ type line_ struct {
 	states  []lineState
 	dialed  []string
 	via     []string
+	reasons []string
 	hangups int
 }
 
@@ -529,6 +530,7 @@ func (l *line_) server(t *testing.T) *httptest.Server {
 			var b map[string]string
 			json.NewDecoder(r.Body).Decode(&b)
 			l.dialed = append(l.dialed, b["number"])
+			l.reasons = append(l.reasons, b["reason"])
 			v, ok := b["via"]
 			if !ok {
 				v = "-"
@@ -551,8 +553,8 @@ func TestCallAnswered(t *testing.T) {
 	if err != nil || out != Answered {
 		t.Fatalf("%s %v", out, err)
 	}
-	if l.dialed[0] != "+900" {
-		t.Fatalf("dialed %v", l.dialed)
+	if l.dialed[0] != "+900" || l.reasons[0] != "deploy done" {
+		t.Fatalf("dialed %v, reasons %v", l.dialed, l.reasons)
 	}
 	var mu sync.Mutex
 	var written string
