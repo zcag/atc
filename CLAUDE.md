@@ -39,8 +39,9 @@ from a `prompts.golden` beside them: read the diff, then accept it with `atc pro
 
 ## Characters
 
-Characters and rooms are built, checked and published with [cel](https://github.com/zcag/cel), its own repo: follow its
-docs, and look at a character in a real call after. atc only loads what cel publishes.
+Characters come from [cel](https://github.com/zcag/cel), its own repo. Its pipeline is on hold while a new way of making
+characters is worked out (its README); the characters published so far keep working. Look at a character in a real call
+after any change to how they're drawn.
 
 `web/rig.js`, `room.js`, `motion.js` and `ears.js` are copies of cel's `renderer/`. Change them in cel, run its tests, then
 `make cel` here (`CEL=<checkout>`, default `../cel`) to copy them in; never edit the copies. `web/cel.rev` is the cel
