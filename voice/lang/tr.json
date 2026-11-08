@@ -6,6 +6,7 @@
   "GREETING_GUEST": "Alo, merhaba {guest}, ben {assistant}.",
   "LINE_OK": "Buradayım, sesin geliyor.",
   "UNCLEAR": "(kısa bir şey söyledi ama anlaşılmadı)",
+  "CALLOUT_HELLO": ["Alo?"],
   "OUTBOUND": "[{user}'ı arıyorsun, telefon çalıyor. Açıp «Alo» deyince ilk bu cevabını duyacak: kısaca selam ver, ben {assistant} de ve neden aradığını söyle.]",
   "OUTBOUND_GUEST": "[{guest}'yı {user}'ın isteğiyle sen arıyorsun, telefon çalıyor; sebep: {reason}. Açıp «Alo» deyince ilk bu cevabını duyacak: selam ver, {assistant} olduğunu ve neden aradığını kısaca söyle.]",
   "NO_REASON": "belirtilmedi",

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """--back-min: a call soon after the last one gets the short greetings in turn, guests and late calls the full one.
---bye-wait-ms: after delta's goodbye it waits for theirs, and words that are more than a goodbye keep the call."""
+--bye-wait-ms: after delta's goodbye it waits for theirs, and words that are more than a goodbye keep the call.
+A call delta makes: when none of the opening is ready by release, a short «Alo?» answers them at once."""
 import asyncio, json, os, sys, tempfile, time, unittest
 from types import SimpleNamespace as NS
 
@@ -85,6 +86,36 @@ class ByeWait(unittest.IsolatedAsyncioTestCase):
         for heard in ("görüşürüz", "tamam görüşürüz kolay gelsin", "sağ ol teşekkürler hadi iyi akşamlar", "tamam kapatabilirsin"):
             self.assertFalse(t.more_than_bye(heard), heard)
         self.assertTrue(t.more_than_bye("bi de şunu sormak istiyordum"))
+
+
+
+class CalloutHello(unittest.IsolatedAsyncioTestCase):
+    def callout(self, ready):
+        t = talk.Talk.__new__(talk.Talk)
+        t.a, t.lang, t.packs = NS(hold_ms=60, hold_max_ms=200), "tr", {"tr": Pack("tr", "delta", "Ada")}
+        t.holding, t.opening, t.in_speech, t.discard, t.canned_at = True, True, False, False, 0.0
+        t.speaking = [["Selam Ada, ben delta.", 0, False, b""]] if ready else []
+        t.cache, t.said, t.events = {"Alo?": b"x"}, [], []
+        t.say = lambda text, _: t.said.append(text)
+        t.log = lambda **kw: t.events.append(kw)
+        return t
+
+    async def test_an_opening_not_ready_gets_alo_at_once(self):
+        t = self.callout(ready=False)
+        await t.release()
+        self.assertEqual(t.said, ["Alo?"])
+        self.assertEqual(t.events[-1]["hello"], "Alo?")
+
+    async def test_a_ready_opening_plays_alone(self):
+        t = self.callout(ready=True)
+        await t.release()
+        self.assertEqual(t.said, [])
+
+    async def test_nothing_rendered_means_nothing_said(self):
+        t = self.callout(ready=False)
+        t.cache = {}
+        await t.release()
+        self.assertEqual(t.said, [])
 
 
 if __name__ == "__main__":

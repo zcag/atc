@@ -1302,7 +1302,7 @@ class Talk:
         asyncio.create_task(self.render(self.phrases(), rate=APP_RATE))
 
     def phrases(self, first=True, rest=True):
-        said = lambda p: [(t, p.code) for t in [p.GREETING, *p.GREETING_BACK, *p.GREETING_HIM, p.LINE_OK, *p.FILLERS, *p.HOLD, *[t for _, t in p.PROGRESS if t]]]
+        said = lambda p: [(t, p.code) for t in [p.GREETING, *p.GREETING_BACK, *p.GREETING_HIM, *p.CALLOUT_HELLO, p.LINE_OK, *p.FILLERS, *p.HOLD, *[t for _, t in p.PROGRESS if t]]]
         lines = said(self.first) if first else []
         picks = [(t, p.code) for p in self.packs.values() for t in bank_lines(p)] if self.picker else []
         return lines + ([(t, p.code) for p in self.packs.values() for t in p.ACKS] + [l for p in self.packs.values() if p is not self.first for l in said(p)] + picks if rest else [])
@@ -1431,7 +1431,9 @@ class Talk:
 
     async def release(self):
         """Let the prepared opening play once they have had their «Alo»: when they stop talking, or after
-        hold_ms if they say nothing, and never later than hold_max_ms."""
+        hold_ms if they say nothing, and never later than hold_max_ms. When none of the opening is ready by then
+        (they picked up within 2 s, and the opening waited behind the assistant's own turn: 5.6 s of silence on
+        one call), a short «Alo?» (CALLOUT_HELLO) answers them at once and the opening follows it."""
         start, heard = time.monotonic(), False
         while self.holding:
             waited = (time.monotonic() - start) * 1000
@@ -1439,7 +1441,12 @@ class Talk:
             heard = heard or talking
             if waited >= self.a.hold_max_ms or (not heard and waited >= self.a.hold_ms) or (heard and not talking):
                 self.holding = False
-                self.log(event="released", waited_ms=round(waited))
+                ready = [t for t in self.pack.CALLOUT_HELLO if t in self.cache]
+                hello = random.choice(ready) if ready and not self.speaking and self.opening else None
+                if hello:
+                    self.canned_at = time.monotonic()
+                    self.say(hello, self.cache[hello])
+                self.log(event="released", waited_ms=round(waited), **({"hello": hello} if hello else {}))
             await asyncio.sleep(0.02)
 
 
