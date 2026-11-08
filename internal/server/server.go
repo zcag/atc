@@ -89,9 +89,11 @@ type Server struct {
 	CallVoices string
 	// Pal is a pal launcher's remote address, whose panel the page can open (ATC_PAL); PalToken is pal's token for atc's site, needed off the tailnet.
 	Pal, PalToken string
-	hub           *hubLink
-	guests        *hubLink
-	Reachable     func() string
+	// PalBarHide is the pal bar items atc leaves out (ATC_PAL_BAR_HIDE), unless a device chose its own.
+	PalBarHide []string
+	hub        *hubLink
+	guests     *hubLink
+	Reachable  func() string
 	// PublicURL is where the user reaches atc (links in messages), LocalURL where this
 	// machine's own browser does.
 	PublicURL, LocalURL string
@@ -393,7 +395,7 @@ func (s *Server) me() map[string]any {
 	me := map[string]any{"host": s.Host, "home": home, "claudeTheme": theme, "hosts": hosts, "peers": s.fleet.statuses(), "callNumber": s.CallNumber,
 		"web": s.web, "call": s.CallLine != "", "look": s.look()}
 	if s.Pal != "" {
-		me["pal"] = map[string]string{"server": s.Pal, "token": s.PalToken}
+		me["pal"] = map[string]any{"server": s.Pal, "token": s.PalToken, "hide": s.PalBarHide}
 	}
 	return me
 }

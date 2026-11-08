@@ -322,6 +322,7 @@ func serve(args []string) error {
 		CallVoices:   os.Getenv("ATC_CALL_VOICES"),
 		Pal:          strings.TrimRight(os.Getenv("ATC_PAL"), "/"),
 		PalToken:     os.Getenv("ATC_PAL_TOKEN"),
+		PalBarHide:   strings.FieldsFunc(os.Getenv("ATC_PAL_BAR_HIDE"), func(r rune) bool { return r == ',' || r == ' ' }),
 		CallTestFrom: strings.FieldsFunc(os.Getenv("ATC_CALL_TEST_FROM"), func(r rune) bool { return r == ',' || r == ' ' }),
 		PublicURL:    strings.TrimRight(os.Getenv("ATC_PUBLIC_URL"), "/"),
 		LocalURL:     loopback(*addr),

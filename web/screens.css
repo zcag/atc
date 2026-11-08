@@ -109,6 +109,7 @@
 .palx > .kb { align-self: flex-end; margin-bottom: 6px; }
 .palx-in pal-panel { display: block; height: min(480px, 76vh); }
 .palbar pal-bar { display: block; }
+.palitems { display: flex; flex-wrap: wrap; gap: 4px; }
 body.palbar .app { height: calc(100dvh - var(--palbar-h, 0px)); }
 @media (max-width: 899px) { .palx { inset: 0; top: 0; left: 0; transform: none; width: auto; padding: 8px; background: var(--board); } .palx-in pal-panel { height: calc(100vh - 56px); } }
 .pal { position: fixed; z-index: 61; left: 50%; top: 10vh; transform: translateX(-50%); width: min(680px, calc(100vw - 32px)); max-height: 76vh; display: flex; flex-direction: column; overflow: hidden; background: var(--board); box-shadow: var(--shadow-pop); border-radius: var(--r-md); font-family: var(--sans); font-size: var(--fs-ui); color: var(--ink); }

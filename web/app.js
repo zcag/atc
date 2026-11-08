@@ -137,7 +137,7 @@ const tilde = (p) => {
 };
 let MULTI = false, HERE = "";
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-let PALETTE_OPEN = () => {}, NEW_SESSION = () => {}, PAL_TOGGLE = null, PALBAR_TOGGLE = null;
+let PALETTE_OPEN = () => {}, NEW_SESSION = () => {}, PAL_TOGGLE = null;
 let SESSION_API = null;
 let ASK = null, ASKED = 0;
 const ask = (d) => new Promise((done) => (ASK ? ASK({ ...d, id: ++ASKED, done }) : done(null)));
@@ -276,8 +276,7 @@ function App() {
   PALETTE_OPEN = () => setPalette(true);
   const [pal, setPal] = useState(false);
   PAL_TOGGLE = me?.pal ? () => setPal((v) => !v) : null;
-  const [palBar, setPalBar] = useState(() => stored("atc:palbar", true));
-  PALBAR_TOGGLE = me?.pal ? () => setPalBar((v) => (store("atc:palbar", !v), !v)) : null;
+  const palBar = usePalBar();
   const [cursor, setCursor] = useState(null);
   const [quick, setQuick] = useState(null);
   QUICK = (s, rect) => setQuick({ s, rect });
@@ -542,7 +541,7 @@ function App() {
         "/": () => setPalette(true),
         "?": () => setHelp((h) => !h),
         P: () => PAL_TOGGLE?.(),
-        B: () => PALBAR_TOGGLE?.(),
+        B: () => me?.pal && PALBAR.set({ on: !PALBAR.on }),
       }[e.key];
       if (move && k.route && (e.key === "j" || e.key === "k")) {
         const next = step(k.route, move);
@@ -590,7 +589,7 @@ function App() {
   };
 
   return html`
-    ${palBar && me.pal && html`<${PalBar} pal=${me.pal} />`}
+    ${palBar.on && me.pal && html`<${PalBar} pal=${me.pal} hide=${palBar.hide ?? me.pal.hide ?? []} />`}
     <div class="app ${assistView ? "assisting" : ""}">
     <${BayBar} bays=${bays} only=${only} view=${screen} panes=${panes} togglePane=${togglePane} up=${up} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
     ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} onBays=${onBays} say=${say} onClose=${() => setPeek(null)} />`}
@@ -5672,6 +5671,7 @@ function SettingsPage({ me, say, onClose }) {
               </button>`)}
           </div>
         </section>
+        ${me.pal && html`<${PalBarSettings} pal=${me.pal} />`}
         <section id="cards">
           <h2>Session list <span class="n">on this device</span></h2>
           <div class="set">
@@ -7543,6 +7543,40 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
     </div>`;
 }
 
+const PALBAR = {
+  on: stored("atc:palbar", true), hide: stored("atc:palbar-hide", null), known: stored("atc:palbar-known", []), subs: new Set(),
+  set(p) {
+    Object.assign(this, p);
+    for (const k of ["on", "hide", "known"]) store(`atc:palbar${k === "on" ? "" : `-${k}`}`, this[k]);
+    this.subs.forEach((f) => f());
+  },
+};
+function usePalBar() {
+  const [, tick] = useState(0);
+  useEffect(() => { const f = () => tick((n) => n + 1); PALBAR.subs.add(f); return () => PALBAR.subs.delete(f); }, []);
+  return PALBAR;
+}
+
+function PalBarSettings({ pal }) {
+  const bar = usePalBar();
+  const hidden = bar.hide ?? pal.hide ?? [];
+  const shown = (k) => !hidden.includes(k);
+  const flip = (k) => bar.set({ hide: shown(k) ? [...hidden, k] : hidden.filter((x) => x !== k) });
+  return html`<section id="palbar">
+    <h2>pal bar <span class="n">on this device</span></h2>
+    <div class="set">
+      <b>Show the bar</b>
+      <p>pal's bar across the top of atc; shift B toggles it.</p>
+      <div class="ctl"><${Seg} label="Show the bar" value=${bar.on} set=${(v) => bar.set({ on: v })} options=${[[true, "On"], [false, "Off"]]} /></div>
+    </div>
+    <div class="set">
+      <b>Items</b>
+      <p>${bar.known.length ? "Which of pal's items show here." : "pal's items show here once the bar has loaded."}${bar.hide && pal.hide && html` <button class="kb" onClick=${() => bar.set({ hide: null })}>Use atc's default</button>`}</p>
+      <div class="ctl palitems">${bar.known.map((i) => html`<button class=${`kb ${shown(i.key) ? "on" : ""}`} aria-pressed=${shown(i.key)} onClick=${() => flip(i.key)}>${i.title || i.key}</button>`)}</div>
+    </div>
+  </section>`;
+}
+
 let PAL_MODULE = null;
 const palElement = (pal, tag) => (PAL_MODULE ||= import(/* @vite-ignore */ `${pal.server}/__pal/web.js`)).then(() => {
   const el = document.createElement(tag);
@@ -7577,14 +7611,18 @@ function PalPanel({ pal, onClose }) {
     </div>`;
 }
 
-function PalBar({ pal }) {
-  const box = useRef();
+function PalBar({ pal, hide }) {
+  const box = useRef(), bar = useRef();
+  const apply = () => { if (bar.current) hide.length ? bar.current.setAttribute("hide", hide.join(",")) : bar.current.removeAttribute("hide"); };
+  useEffect(apply, [hide.join(",")]);
   useEffect(() => {
     let el, gone = false;
     const fit = new ResizeObserver(() => document.body.style.setProperty("--palbar-h", `${box.current.offsetHeight}px`));
     palElement(pal, "pal-bar").then((e) => {
       if (gone) return;
-      el = e;
+      el = bar.current = e;
+      el.addEventListener("pal-bar-items", (ev) => PALBAR.set({ known: ev.detail }));
+      apply();
       box.current.append(el);
       fit.observe(box.current);
       document.body.classList.add("palbar");
