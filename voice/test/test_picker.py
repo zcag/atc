@@ -129,8 +129,12 @@ class ToolLines(Rig):
         self.assertEqual(line, "Maillerine bakıyorum.")
 
     async def test_housekeeping_tools_get_no_line_and_no_request(self):
-        self.assertIsNone(await self.picker.tool_line(self.pack, "mcp__atc__read", "{}", "", []))
+        self.assertIsNone(await self.picker.tool_line(self.pack, "ToolSearch", "{}", "", []))
         self.assertEqual(self.srv.asked, [])
+
+    async def test_atc_reads_get_a_line(self):
+        self.assertEqual(await self.picker.tool_line(self.pack, "mcp__atc__state", '{"agent": "@tracker"}', "Tracker'da ne var", []),
+                         "Maillerine bakıyorum.")
 
     async def test_none_is_no_line(self):
         self.srv.text = "NONE"

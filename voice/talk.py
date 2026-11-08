@@ -933,7 +933,7 @@ class Talk:
         before = next((h["content"] for h in reversed(self.history[:-2]) if h["role"] == "assistant" and h["content"]), "")
         chosen = asyncio.create_task(self.picker.filler(p, before[-200:], text, lambda t: t in self.cache)) \
             if wants_ack and self.picker and not self.picker.off else None
-        ack = asyncio.create_task(self.ack_later(lambda: first and not reply, chosen) if wants_ack else asyncio.sleep(0))
+        ack = asyncio.create_task(self.ack_later(lambda: first and not reply and not (progress and not progress.done()), chosen) if wants_ack else asyncio.sleep(0))
         hold = asyncio.create_task(self.hold_on())
         progress, given, order = None, None, asyncio.Lock()
 
@@ -963,7 +963,9 @@ class Talk:
         async def tool_progress(name, banked):
             """The picker writes what the tool is doing once its input is in (or after picker_input_ms from its name
             alone); a miss or a rejected line plays the pack's line instead. Said only while nothing of the reply
-            has been, and the tool is still open."""
+            has been, and the tool is still open. A written line may follow a filler (on a call «Dur bir bakayım.»
+            0.2 s after the tool started kept «Jev kullanımına yazıyorum.» out for the canned gap), and the filler
+            waits while one is coming; the pack's line keeps the gap, so «Bakıyorum.» never stacks on «Bakayım.»."""
             try:
                 got = await asyncio.wait_for(asyncio.shield(given), self.a.picker_input_ms / 1000)
             except TimeoutError:
@@ -971,7 +973,7 @@ class Talk:
             line = await self.picker.tool_line(p, name, got[:400], text, self.tool_said)
             if line is FALLBACK:
                 line = banked
-            if line and first and not reply and self.tools_open and not self.canned_lately():
+            if line and first and not reply and self.tools_open and (line != banked or not self.canned_lately()):
                 self.canned_at = time.monotonic()
                 self.tool_said.append(line)
                 self.log(event="progress", text=line, by="picker" if line != banked else "pack")
@@ -991,7 +993,7 @@ class Talk:
                     if buf.strip():
                         await speak(spoken(buf))
                         buf = ""
-                    elif first and (not progress or progress.done()) and self.picker and not self.picker.off and not self.canned_lately():
+                    elif first and (not progress or progress.done()) and self.picker and not self.picker.off:
                         given = asyncio.get_running_loop().create_future()
                         progress = asyncio.create_task(tool_progress(value, banked))
                     elif first and banked and not self.canned_lately():

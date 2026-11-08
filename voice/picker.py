@@ -26,7 +26,7 @@ def safe(f):
     return wrapped
 LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 CODE_LIKE = re.compile(r"[/\\`{}<>|$=_]|https?:|\b[0-9a-f]{6,}\b|\.(py|sh|json|md|go|js)\b", re.I)
-QUIET_TOOLS = re.compile(r"^(ToolSearch|TodoWrite|mcp__atc__(sessions|read|status|state|outputs|backlog|history|presets|report))$")
+QUIET_TOOLS = re.compile(r"^(ToolSearch|TodoWrite|mcp__atc__report)$")
 
 FILLER = ("You pick a filler sound for {assistant}, a voice assistant on a phone call with {user}, to fill the silence while "
           "another model writes the real answer. The filler carries no content: it never agrees, answers, judges or "

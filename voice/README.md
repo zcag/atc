@@ -96,7 +96,8 @@ which slows a Higgs render by 1% loaded and 3% at four picks a second.
   listening, a complaint) or none for a bare yes, asked when the turn is sent so the answer is in by `--ack-ms`.
 - **Greetings** by the clock and how long ago the last call ended (not for guests).
 - **Tool lines** are written by the model from the tool call itself (the hub's `tool_input` event: the input, and for
-  Bash the assistant's own description), 2 to 5 words; atc's read-only tools get none.
+  Bash the assistant's own description), 2 to 5 words; only housekeeping (tool lookups, todo lists) gets none. A written line
+  may follow a filler, and the filler waits while one is coming.
 - **Hold lines** come from `PICK_HOLDS` by what the open tool waits on, with no model.
 
 The wording within a kind is chosen in `Wording`: a line never comes twice running, and the weight beside it is a habit.
