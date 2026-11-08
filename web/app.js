@@ -7630,7 +7630,7 @@ function PalBar({ pal, hide }) {
     }, () => {});
     return () => { gone = true; fit.disconnect(); el?.remove(); document.body.classList.remove("palbar"); };
   }, []);
-  return html`<div class="palbar" ref=${box}></div>`;
+  return html`<div class="palstrip" ref=${box}></div>`;
 }
 
 function readShared() {
