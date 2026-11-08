@@ -38,13 +38,13 @@ GREETING = ("You pick how {assistant}, a voice assistant, answers the phone when
             "time and how recently he last called.\n\nKinds:\n{kinds}\n\nAnswer with one letter.")
 TOOL = ("{assistant} is a voice assistant on a phone call with {user}. It just started a tool call (below). Write what it says "
         "out loud while the tool runs, like a person on the phone saying what they are doing.\n\nRules:\n"
-        "- One short spoken sentence, 2 to 5 words, in natural casual {language} with correct grammar, first person, present tense.\n"
+        "- One short spoken sentence, 2 to 5 words, first person, present tense.\n"
         "- Say only what the tool call shows it is doing. Never a result, never a promise, never how long it takes.\n"
-        "- No ids, file paths, commands, code or URLs. Name a session by its readable name in plain {language} words "
-        "(car-parked-location is the car's location), else just as a session. An id like 86f96cd1 is not a name.\n"
+        "- No ids, file paths, commands, code or URLs. Say a session's or agent's name exactly as it is written, never "
+        "translated, with dashes as spaces; an id like 86f96cd1 is not a name, then it is just a session.\n"
         "- For Bash, go by its \"description\": say in {language} what it says, in plain words he would understand.\n"
         "- Do not repeat or closely echo a line from \"already said\".\n"
-        "- Answer NONE for housekeeping he does not need to hear: tool lookups, sleeping, help texts.\n\nExamples:\n{examples}")
+        "- Answer NONE for housekeeping he does not need to hear: tool lookups, sleeping, help texts.\n\n{style}\n\nExamples:\n{examples}")
 
 
 OPENING = ("{assistant}, a voice assistant, is calling {user} on the phone, and {user} just picked up. Write the first thing "
@@ -53,7 +53,7 @@ OPENING = ("{assistant}, a voice assistant, is calling {user} on the phone, and 
            "- Only the main point of the reason, said plainly. If it has several updates, say there are a few things to go over.\n"
            "- Never what {user} or {assistant} will do later, no promises, no requests the reason does not make.\n"
            "- No details, lists, ids, paths, code or URLs. A question only when the reason asks one.\n"
-           "- If he asked to be called when something happened, say that it happened.\n\nExamples:\n{examples}")
+           "- If he asked to be called when something happened, say that it happened.\n\n{style}\n\nExamples:\n{examples}")
 
 
 class Wording:
@@ -184,7 +184,7 @@ class Picker:
         return self.prompt(FILLER, kinds=listing, examples=pack.PICK_FILLER_EXAMPLES)
 
     def tool_prompt(self, pack):
-        return self.prompt(TOOL, language=pack.PICK_LANGUAGE, examples=pack.PICK_TOOL_EXAMPLES)
+        return self.prompt(TOOL, language=pack.PICK_LANGUAGE, style=pack.PICK_STYLE, examples=pack.PICK_TOOL_EXAMPLES)
 
     @safe
     async def filler(self, pack, delta_last, his, ready):
@@ -227,14 +227,14 @@ class Picker:
         out, ms = got
         try:
             line = out["choices"][0]["message"]["content"].strip().strip("«»\"'")
-            line = re.sub(pack.PICK_TOOL_DROP, "", line, flags=re.I).strip()
+            line = re.sub(r"(?<=\w)-(?=\w)", " ", re.sub(pack.PICK_TOOL_DROP, "", line, flags=re.I)).strip()
             line = line[:1].upper() + line[1:]
         except (KeyError, IndexError, TypeError):
             line = ""
         if line.upper().startswith("NONE"):
             self.log(event="pick", kind="tool", tool=tool, line=None, ms=ms)
             return None
-        bad = (not line or len(line.split()) > 7 or CODE_LIKE.search(line) or re.search(pack.PICK_TOOL_BANNED, line, re.I)
+        bad = (not line or len(line.split()) > 9 or CODE_LIKE.search(line) or re.search(pack.PICK_TOOL_BANNED, line, re.I)
                or line in said)
         self.log(event="pick", kind="tool", tool=tool, line=line, ms=ms, **({"rejected": True} if bad else {}))
         return FALLBACK if bad else line
@@ -244,7 +244,7 @@ class Picker:
         """The first thing said on a call delta makes, written from its reason while it rings, so the call doesn't
         wait for the assistant's opening (one waited behind the assistant's own turn and a slow first token: 5.6 s
         from pickup to the first word). FALLBACK leaves the opening to the assistant, as before."""
-        got = await self.ask("opening", {"messages": [{"role": "system", "content": self.prompt(OPENING, language=pack.PICK_LANGUAGE, examples=pack.PICK_OPENING_EXAMPLES)},
+        got = await self.ask("opening", {"messages": [{"role": "system", "content": self.prompt(OPENING, language=pack.PICK_LANGUAGE, style=pack.PICK_STYLE, examples=pack.PICK_OPENING_EXAMPLES)},
                                                       {"role": "user", "content": f"Reason: {reason[:600]}"}],
                                          "max_tokens": 60, "temperature": 0.3, "stop": ["\n"]}, self.opening_deadline)
         if not got:

@@ -142,7 +142,7 @@ class ToolLines(Rig):
 
     async def test_rejected_lines_fall_back(self):
         for bad in ("cd ~/proj/atc && make", "Session 86f96cd1'e bakıyorum.", "Shopping ajanına yazıyorum.",
-                    "Bu çok uzun bir cümle ve hiç bitmiyor gibi duruyor", ""):
+                    "Bu çok uzun bir cümle ve hiç bitmiyor gibi duruyor, gerçekten öyle", ""):
             self.srv.text = bad
             self.assertIs(await self.picker.tool_line(self.pack, "Bash", "{}", "", []), FALLBACK, bad)
             self.picker.misses = 0
@@ -151,6 +151,11 @@ class ToolLines(Rig):
         for said, want in (("Takipçiye bakıyorum şimdi.", "Takipçiye bakıyorum."), ("Şimdi maillerine bakıyorum.", "Maillerine bakıyorum.")):
             self.srv.text = said
             self.assertEqual(await self.picker.tool_line(self.pack, "Bash", "{}", "", []), want)
+
+    async def test_a_session_name_is_said_as_written_without_its_dashes(self):
+        self.srv.text = "Jev-usage-lookup session'ına yazıyorum."
+        self.assertEqual(await self.picker.tool_line(self.pack, "mcp__atc__send", '{"session": "jev-usage-lookup"}', "", []),
+                         "Jev usage lookup session'ına yazıyorum.")
 
     async def test_a_repeat_falls_back(self):
         self.assertIs(await self.picker.tool_line(self.pack, "Bash", "{}", "", ["Maillerine bakıyorum."]), FALLBACK)

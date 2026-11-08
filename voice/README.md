@@ -96,7 +96,7 @@ which slows a Higgs render by 1% loaded and 3% at four picks a second.
   listening, a complaint) or none for a bare yes, asked when the turn is sent so the answer is in by `--ack-ms`.
 - **Greetings** by the clock and how long ago the last call ended (not for guests).
 - **Tool lines** are written by the model from the tool call itself (the hub's `tool_input` event: the input, and for
-  Bash the assistant's own description), 2 to 5 words; only housekeeping (tool lookups, todo lists) gets none. A written line
+  Bash the assistant's own description), 2 to 5 words, a session's name said as it is written (never translated, dashes as spaces); only housekeeping (tool lookups, todo lists) gets none. A written line
   may follow a filler, and the filler waits while one is coming. **On trial since 2026-11-08:** atc's read tools
   (`mcp__atc__read`, `state`, `sessions`...) get a line too. That reverses the user's decision of 2026-11-01 to keep
   them quiet (the one fixed «Session'lara erişiyorum.» on nearly every turn was the most repeated line); the written
@@ -109,6 +109,10 @@ which slows a Higgs render by 1% loaded and 3% at four picks a second.
   said. An opening that isn't voiced in time, or fails its check (his name missing, code, too long), gives the
   assistant's opening as before. Guests always get the assistant's. Whichever it is, `CALLOUT_HELLO` («Alo?») plays at
   release when nothing is ready yet.
+
+How every written line should sound is the pack's `PICK_STYLE`, in that language: for Turkish, everyday spoken Turkish
+in its own words rather than a word-for-word rendering of the English it is written from, with the English terms Turkish
+speakers use left as they are.
 
 The wording within a kind is chosen in `Wording`: a line never comes twice running, and the weight beside it is a habit.
 Only lines already rendered are offered, so a take that failed never plays.
