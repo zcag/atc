@@ -7,6 +7,8 @@
   "LINE_OK": "Buradayım, sesin geliyor.",
   "UNCLEAR": "(kısa bir şey söyledi ama anlaşılmadı)",
   "CALLOUT_HELLO": ["Alo?"],
+  "PICK_OPENING_EXAMPLES": "Reason: The tool-line fix is deployed, he asked to be called back to test it. -> Selam {user}, ben {assistant}. Tool line düzeltmesi canlıya çıktı, test için aradım.\nReason: The bank wants the payment approved in the app within a minute. -> Selam {user}, ben {assistant}. Banka ödemesi için aradım, uygulamadan onay bekliyor.\nReason: His TV has been paused for 2 min. He asked to be called when watching ends. Then go over the open items. -> Selam {user}, ben {assistant}. Televizyon durdu, bitince aramamı istemiştin.\nReason: Three updates: the invoice is paid, the laptop is back up, and a proposal needs his decision. -> Selam {user}, ben {assistant}. Konuşmamız gereken birkaç şey var, o yüzden aradım.",
+  "OPENED": "(Aramayı sen açtın, ilk «{said}» dedin; bu onun ilk cevabı. Sebebi yukarıda.) {text}",
   "OUTBOUND": "[{user}'ı arıyorsun, telefon çalıyor. Açıp «Alo» deyince ilk bu cevabını duyacak: kısaca selam ver, ben {assistant} de ve neden aradığını söyle.]",
   "OUTBOUND_GUEST": "[{guest}'yı {user}'ın isteğiyle sen arıyorsun, telefon çalıyor; sebep: {reason}. Açıp «Alo» deyince ilk bu cevabını duyacak: selam ver, {assistant} olduğunu ve neden aradığını kısaca söyle.]",
   "NO_REASON": "belirtilmedi",

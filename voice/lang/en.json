@@ -7,6 +7,8 @@
   "LINE_OK": "I'm here, I can hear you.",
   "UNCLEAR": "(said something short, but it could not be made out)",
   "CALLOUT_HELLO": ["Hello?"],
+  "PICK_OPENING_EXAMPLES": "Reason: The tool-line fix is deployed, he asked to be called back to test it. -> Hey {user}, it's {assistant}. The tool-line fix is live, calling so you can test it.\nReason: The bank wants the payment approved in the app within a minute. -> Hi {user}, {assistant} here. Calling about the bank payment, it's waiting for your approval in the app.\nReason: His TV has been paused for 2 min. He asked to be called when watching ends. Then go over the open items. -> Hey {user}, it's {assistant}. Your show's over, you asked me to call then.\nReason: Three updates: the invoice is paid, the laptop is back up, and a proposal needs his decision. -> Hi {user}, it's {assistant}. A few things to go over, so I called.",
+  "OPENED": "(You opened the call with «{said}»; this is their first reply. The reason is above.) {text}",
   "OUTBOUND": "[You are calling {user} and the phone is ringing. They hear this reply first, once they pick up and say hello: greet them briefly, say you are {assistant} and why you are calling.]",
   "OUTBOUND_GUEST": "[You are calling {guest} because {user} asked you to, and the phone is ringing; the reason: {reason}. They hear this reply first, once they pick up and say hello: greet them, say you are {assistant} and briefly why you are calling.]",
   "NO_REASON": "not given",

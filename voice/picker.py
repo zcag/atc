@@ -47,6 +47,15 @@ TOOL = ("{assistant} is a voice assistant on a phone call with {user}. It just s
         "- Answer NONE for housekeeping he does not need to hear: tool lookups, sleeping, help texts.\n\nExamples:\n{examples}")
 
 
+OPENING = ("{assistant}, a voice assistant, is calling {user} on the phone, and {user} just picked up. Write the first thing "
+           "{assistant} says: greet {user} by name, say it is {assistant}, and say in a few words why it is calling now, from "
+           "the reason below. One or two short spoken sentences, at most 20 words, in natural casual {language}.\n\nRules:\n"
+           "- Only the main point of the reason, said plainly. If it has several updates, say there are a few things to go over.\n"
+           "- Never what {user} or {assistant} will do later, no promises, no requests the reason does not make.\n"
+           "- No details, lists, ids, paths, code or URLs. A question only when the reason asks one.\n"
+           "- If he asked to be called when something happened, say that it happened.\n\nExamples:\n{examples}")
+
+
 class Wording:
     """Which variant of a kind to say: weight = habit x recency. A line never comes twice running and has half its
     weight the pick after; a longer block turns a kind into a strict rotation where the habits don't show. A weight
@@ -85,9 +94,10 @@ class Wording:
 
 
 class Picker:
-    def __init__(self, url, http, log, wording, names, deadline_ms=2000, greet_ms=400, tool_ms=1200, misses=2):
+    def __init__(self, url, http, log, wording, names, deadline_ms=2000, greet_ms=400, tool_ms=1200, misses=2, opening_ms=1500):
         self.url, self.http, self.log, self.wording, self.names = url.rstrip("/"), http, log, wording, names
         self.deadline, self.greet_deadline, self.tool_deadline = deadline_ms / 1000, greet_ms / 1000, tool_ms / 1000
+        self.opening_deadline = opening_ms / 1000
         self.max_misses, self.misses, self.off = misses, 0, False
 
     async def check(self, pack=None):
@@ -227,6 +237,24 @@ class Picker:
         bad = (not line or len(line.split()) > 7 or CODE_LIKE.search(line) or re.search(pack.PICK_TOOL_BANNED, line, re.I)
                or line in said)
         self.log(event="pick", kind="tool", tool=tool, line=line, ms=ms, **({"rejected": True} if bad else {}))
+        return FALLBACK if bad else line
+
+    @safe
+    async def opening(self, pack, reason):
+        """The first thing said on a call delta makes, written from its reason while it rings, so the call doesn't
+        wait for the assistant's opening (one waited behind the assistant's own turn and a slow first token: 5.6 s
+        from pickup to the first word). FALLBACK leaves the opening to the assistant, as before."""
+        got = await self.ask("opening", {"messages": [{"role": "system", "content": self.prompt(OPENING, language=pack.PICK_LANGUAGE, examples=pack.PICK_OPENING_EXAMPLES)},
+                                                      {"role": "user", "content": f"Reason: {reason[:600]}"}],
+                                         "max_tokens": 60, "temperature": 0.3, "stop": ["\n"]}, self.opening_deadline)
+        if not got:
+            return FALLBACK
+        out, ms = got
+        line = (out["choices"][0]["message"]["content"] or "").strip().strip("«»\"'")
+        name = self.names[1].split()[0]
+        bad = (not line or len(line.split()) > 26 or CODE_LIKE.search(line) or re.search(pack.PICK_TOOL_BANNED, line, re.I)
+               or name.lower() not in line.lower())
+        self.log(event="pick", kind="opening", line=line, ms=ms, **({"rejected": True} if bad else {}))
         return FALLBACK if bad else line
 
     def hold(self, pack, tool, nth, ready):

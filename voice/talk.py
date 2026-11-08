@@ -270,7 +270,8 @@ class Talk:
         self.packs, self.names, self.lang = args.packs, saved_names(SETTINGS), first_language(SETTINGS, args.packs, args.lang)
         self.picker = Picker(args.picker, http, self.log, Wording(os.path.join(args.out, "picker-said.json")),
                              (self.names[0] or "delta", self.names[1] or "the caller"), args.picker_ms, args.picker_greet_ms,
-                             args.picker_tool_ms) if args.picker else None
+                             args.picker_tool_ms, opening_ms=args.picker_opening_ms) if args.picker else None
+        self.opened = None
         self.tool_said, self.tool_name = [], ""
         self.first = self.packs[self.lang]
         self.hangup = hangup_tags(self.packs)
@@ -919,6 +920,8 @@ class Talk:
         if self.checked:
             sent = fill(p.LINE_TESTED, tried=" / ".join(self.checked), line_ok=p.LINE_OK, text=sent)
             self.checked = []
+        if self.opened:
+            sent, self.opened = fill(p.OPENED, said=self.opened, text=sent), None
         self.cut, self.heard, self.unfinished = False, None, text
         self.log(event="user", text=sent, **timing)
         if not self.moving:
@@ -1384,8 +1387,31 @@ class Talk:
         self.opening = self.holding = True
         p = self.pack
         opening = fill(p.OUTBOUND_GUEST, guest=self.guest, reason=reason or p.NO_REASON) if self.guest else p.OUTBOUND
-        self.reply = asyncio.create_task(self.respond(b"", time.time(), opening))
+        if self.picker and reason and not self.guest:
+            self.reply = asyncio.create_task(self.open_locally(reason, opening))
+        else:
+            self.reply = asyncio.create_task(self.respond(b"", time.time(), opening))
         self.reply.add_done_callback(lambda _: setattr(self, "opening", False))
+
+    async def open_locally(self, reason, opening):
+        """With the picker, a call to the user opens with its line, written from the reason and voiced while it
+        rings, and the assistant first hears of it with their reply (OPENED). On one call the assistant's own
+        opening came 5.6 s after pickup. Anything short of a voiced line (the picker down, late or rejected, or an
+        empty render) gives the assistant's opening, as before."""
+        t0, pcm = time.monotonic(), b""
+        try:
+            line = await self.picker.opening(self.pack, reason) if await self.picker.check(self.first) else FALLBACK
+            if line is not FALLBACK:
+                pcm = b"".join([c async for c in self.tts(line)])
+        except Exception as e:
+            self.log(event="picker", kind="opening", ok=False, why=repr(e))
+        if not pcm:
+            self.log(event="opening", by="assistant")
+            return await self.respond(b"", time.time(), opening)
+        self.say(line, pcm)
+        self.opened = line
+        self.history.append({"role": "assistant", "content": line})
+        self.log(event="opening", by="picker", text=line, ms=round((time.monotonic() - t0) * 1000))
 
     async def start(self):
         if not self.t0:
@@ -1680,7 +1706,8 @@ if __name__ == "__main__":
     p.add_argument("--picker-ms", type=int, default=2000, help="ms the picker gets to choose a filler, from when the turn is sent")
     p.add_argument("--picker-greet-ms", type=int, default=400, help="ms the picker gets to choose the greeting")
     p.add_argument("--picker-tool-ms", type=int, default=1200, help="ms the picker gets to write a tool line")
-    p.add_argument("--picker-input-ms", type=int, default=1000, help="ms to wait for a tool's input before the picker writes from its name alone")
+    p.add_argument("--picker-opening-ms", type=int, default=1500, help="ms the picker gets to write the opening of a call delta makes, while it rings")
+    p.add_argument("--picker-input-ms", type=int, default=1000,help="ms to wait for a tool's input before the picker writes from its name alone")
     p.add_argument("--back-min", type=float, default=0,help="the user gets casual greetings (GREETING_HIM), short ones (GREETING_BACK) within this many minutes of their last call; 0 = GREETING for everyone")
     p.add_argument("--topic-pause-ms", type=int, default=0, help="extra silence before a piece that starts a new topic (paragraph break or TOPIC); 0 = off")
     p.add_argument("--bye-wait-ms", type=int, default=0, help="after a goodbye, wait this long for theirs before hanging up (0 = 0.5 s, the old way)")

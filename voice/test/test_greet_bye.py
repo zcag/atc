@@ -118,5 +118,50 @@ class CalloutHello(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(t.said, [])
 
 
+
+class LocalOpening(unittest.IsolatedAsyncioTestCase):
+    """A call to the user opens with the picker's line, voiced while it rings; anything short of that is the
+    assistant's opening, as before."""
+
+    def callout(self, line, pcm=b"x", up=True):
+        t = talk.Talk.__new__(talk.Talk)
+        t.lang, t.packs, t.first = "tr", {"tr": Pack("tr", "delta", "Ada")}, None
+        t.history, t.said, t.events, t.asked, t.opened = [], [], [], [], None
+        t.say = lambda text, _: t.said.append(text)
+        t.log = lambda **kw: t.events.append(kw)
+
+        async def check(_):
+            return up
+
+        async def opening(_, reason):
+            if isinstance(line, Exception):
+                raise line
+            return line
+        t.picker = NS(check=check, opening=opening)
+
+        async def tts(_):
+            if isinstance(pcm, Exception):
+                raise pcm
+            yield pcm
+        t.tts = tts
+
+        async def respond(utt, ended, text):
+            t.asked.append(text)
+        t.respond = respond
+        return t
+
+    async def test_a_voiced_line_opens_and_the_assistant_hears_it_with_his_reply(self):
+        t = self.callout("Selam Ada, ben delta. Test için aradım.")
+        await t.open_locally("test", "[OUTBOUND]")
+        self.assertEqual((t.said, t.asked, t.opened), (["Selam Ada, ben delta. Test için aradım."], [], "Selam Ada, ben delta. Test için aradım."))
+        self.assertIn("«Selam Ada, ben delta. Test için aradım.» dedin", talk.fill(t.pack.OPENED, said=t.opened, text="Alo"))
+
+    async def test_anything_short_of_a_voiced_line_is_the_assistants_opening(self):
+        for t in (self.callout(talk.FALLBACK), self.callout("Selam Ada.", pcm=b""), self.callout("Selam Ada.", up=False),
+                  self.callout("Selam Ada.", pcm=RuntimeError("tts down"))):
+            await t.open_locally("test", "[OUTBOUND]")
+            self.assertEqual((t.said, t.asked, t.opened), ([], ["[OUTBOUND]"], None))
+
+
 if __name__ == "__main__":
     unittest.main()

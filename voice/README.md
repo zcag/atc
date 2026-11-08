@@ -103,6 +103,12 @@ which slows a Higgs render by 1% loaded and 3% at four picks a second.
   lines vary and name what is read, so he kept it to listen to and may turn it back off: put those tools back in
   `QUIET_TOOLS` in `picker.py`.
 - **Hold lines** come from `PICK_HOLDS` by what the open tool waits on, with no model.
+- **The opening of a call delta makes** to the user, when the hub passed a reason: written from it (about 0.3-0.5 s)
+  and voiced while it rings, so it is ready at pickup instead of waiting for the assistant's (one call: 5.6 s to the
+  first word). The assistant isn't asked for an opening; the user's first reply reaches it with `OPENED`, what was
+  said. An opening that isn't voiced in time, or fails its check (his name missing, code, too long), gives the
+  assistant's opening as before. Guests always get the assistant's. Whichever it is, `CALLOUT_HELLO` («Alo?») plays at
+  release when nothing is ready yet.
 
 The wording within a kind is chosen in `Wording`: a line never comes twice running, and the weight beside it is a habit.
 Only lines already rendered are offered, so a take that failed never plays.

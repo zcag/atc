@@ -156,6 +156,25 @@ class ToolLines(Rig):
         self.assertIs(await self.picker.tool_line(self.pack, "Bash", "{}", "", ["Maillerine bakıyorum."]), FALLBACK)
 
 
+class Openings(Rig):
+    async def test_an_opening_with_his_name_passes(self):
+        self.srv.text = "Selam Ali, ben delta. Düzeltme canlıya çıktı, test için aradım."
+        self.assertEqual(await self.picker.opening(self.pack, "the fix is live, call him to test"), self.srv.text)
+
+    async def test_without_his_name_or_with_code_or_ajan_it_falls_back(self):
+        for bad in ("Selam, ben delta. Test için aradım.", "Selam Ali, ~/proj/atc deploy oldu.", "Selam Ali, ajan bitirdi.", ""):
+            self.srv.text = bad
+            self.assertIs(await self.picker.opening(self.pack, "x"), FALLBACK, bad)
+            self.picker.misses = 0
+
+    async def test_slow_is_a_fallback_within_its_deadline(self):
+        self.srv.mode = "slow"
+        self.picker.opening_deadline = 0.3
+        t0 = time.monotonic()
+        self.assertIs(await self.picker.opening(self.pack, "x"), FALLBACK)
+        self.assertLess(time.monotonic() - t0, 0.6)
+
+
 class Holds(unittest.TestCase):
     def test_kind_follows_the_tool_and_the_second_sounds_like_a_second(self):
         pack, w = Pack("tr"), Wording(os.path.join(tempfile.mkdtemp(), "s.json"))
