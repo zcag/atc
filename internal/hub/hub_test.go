@@ -83,6 +83,8 @@ func fakeClaude() {
 		} else if strings.Contains(text, "TOOL") {
 			textBlock("looking")
 			se(map[string]any{"type": "content_block_start", "content_block": map[string]any{"type": "tool_use", "name": "Bash"}})
+			se(map[string]any{"type": "content_block_delta", "delta": map[string]any{"type": "input_json_delta", "partial_json": `{"description": `}})
+			se(map[string]any{"type": "content_block_delta", "delta": map[string]any{"type": "input_json_delta", "partial_json": `"Inbox status"}`}})
 			se(map[string]any{"type": "content_block_stop"})
 			var joined []string
 			interrupted := func(d time.Duration) bool {
@@ -393,6 +395,15 @@ func TestToolDoneReachesThePhone(t *testing.T) {
 	}
 	if strings.Join(order, ",") != "tool,tool_done,done" {
 		t.Fatalf("order %v", order)
+	}
+	var in []Event
+	for _, e := range es {
+		if e.Type == "tool_input" {
+			in = append(in, e)
+		}
+	}
+	if len(in) != 1 || in[0].Name != "Bash" || in[0].Text != `{"description": "Inbox status"}` {
+		t.Fatalf("tool_input %+v", in)
 	}
 }
 

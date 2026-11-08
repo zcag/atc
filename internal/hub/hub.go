@@ -114,7 +114,16 @@ type turn struct {
 	interrupted bool
 	tools       int
 	cutAfter    bool
+	tool        *toolInput
 }
+
+type toolInput struct {
+	name string
+	json strings.Builder
+	sent bool
+}
+
+const toolInputEnough = 240
 
 type sub struct {
 	channel string
@@ -492,8 +501,9 @@ type line struct {
 			Name string `json:"name"`
 		} `json:"content_block"`
 		Delta struct {
-			Type string `json:"type"`
-			Text string `json:"text"`
+			Type        string `json:"type"`
+			Text        string `json:"text"`
+			PartialJSON string `json:"partial_json"`
 		} `json:"delta"`
 	} `json:"event"`
 }
@@ -632,9 +642,17 @@ func (h *Hub) stream(l line) {
 			if l.Parent == "" {
 				t.tools++
 			}
+			t.tool = &toolInput{name: ev.ContentBlock.Name}
 			h.emit(Event{Type: "tool", Channel: t.route, Name: ev.ContentBlock.Name})
 		}
 	case "content_block_delta":
+		if ev.Delta.Type == "input_json_delta" && t.tool != nil {
+			t.tool.json.WriteString(ev.Delta.PartialJSON)
+			if t.tool.json.Len() >= toolInputEnough {
+				h.sendToolInput(t)
+			}
+			return
+		}
 		if ev.Delta.Type != "text_delta" || !t.inText {
 			return
 		}
@@ -645,11 +663,25 @@ func (h *Hub) stream(l line) {
 		}
 		h.emit(Event{Type: "text", Channel: t.block, Delta: ev.Delta.Text})
 	case "content_block_stop":
+		if t.tool != nil {
+			h.sendToolInput(t)
+			t.tool = nil
+		}
 		if t.inText && strings.TrimSpace(t.text.String()) != "" {
 			h.emit(Event{Type: "block", Channel: t.block, Text: t.text.String()})
 		}
 		t.inText = false
 	}
+}
+
+// sendToolInput passes the tool call's input on once, as soon as there is enough of it to say what the call does (a long
+// message to a session streams for seconds), so a channel can say what the tool is doing; it may end mid-JSON.
+func (h *Hub) sendToolInput(t *turn) {
+	if t.tool.sent {
+		return
+	}
+	t.tool.sent = true
+	h.emit(Event{Type: "tool_input", Channel: t.route, Name: t.tool.name, Text: t.tool.json.String()})
 }
 
 func (h *Hub) emit(e Event) {
