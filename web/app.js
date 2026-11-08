@@ -7581,13 +7581,15 @@ function PalBar({ pal }) {
   const box = useRef();
   useEffect(() => {
     let el, gone = false;
+    const fit = new ResizeObserver(() => document.body.style.setProperty("--palbar-h", `${box.current.offsetHeight}px`));
     palElement(pal, "pal-bar").then((e) => {
       if (gone) return;
       el = e;
       box.current.append(el);
+      fit.observe(box.current);
       document.body.classList.add("palbar");
     }, () => {});
-    return () => { gone = true; el?.remove(); document.body.classList.remove("palbar"); };
+    return () => { gone = true; fit.disconnect(); el?.remove(); document.body.classList.remove("palbar"); };
   }, []);
   return html`<div class="palbar" ref=${box}></div>`;
 }
