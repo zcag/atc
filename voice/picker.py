@@ -217,6 +217,8 @@ class Picker:
         out, ms = got
         try:
             line = out["choices"][0]["message"]["content"].strip().strip("«»\"'")
+            line = re.sub(pack.PICK_TOOL_DROP, "", line, flags=re.I).strip()
+            line = line[:1].upper() + line[1:]
         except (KeyError, IndexError, TypeError):
             line = ""
         if line.upper().startswith("NONE"):

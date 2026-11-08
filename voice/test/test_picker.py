@@ -141,11 +141,16 @@ class ToolLines(Rig):
         self.assertIsNone(await self.picker.tool_line(self.pack, "ToolSearch2", "{}", "", []))
 
     async def test_rejected_lines_fall_back(self):
-        for bad in ("cd ~/proj/atc && make", "Session 86f96cd1'e bakıyorum.", "Şimdi maillerine bakıyorum.",
+        for bad in ("cd ~/proj/atc && make", "Session 86f96cd1'e bakıyorum.", "Shopping ajanına yazıyorum.",
                     "Bu çok uzun bir cümle ve hiç bitmiyor gibi duruyor", ""):
             self.srv.text = bad
             self.assertIs(await self.picker.tool_line(self.pack, "Bash", "{}", "", []), FALLBACK, bad)
             self.picker.misses = 0
+
+    async def test_simdi_is_dropped_not_the_line(self):
+        for said, want in (("Takipçiye bakıyorum şimdi.", "Takipçiye bakıyorum."), ("Şimdi maillerine bakıyorum.", "Maillerine bakıyorum.")):
+            self.srv.text = said
+            self.assertEqual(await self.picker.tool_line(self.pack, "Bash", "{}", "", []), want)
 
     async def test_a_repeat_falls_back(self):
         self.assertIs(await self.picker.tool_line(self.pack, "Bash", "{}", "", ["Maillerine bakıyorum."]), FALLBACK)
