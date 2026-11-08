@@ -137,7 +137,7 @@ const tilde = (p) => {
 };
 let MULTI = false, HERE = "";
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-let PALETTE_OPEN = () => {}, NEW_SESSION = () => {}, PAL_TOGGLE = null;
+let PALETTE_OPEN = () => {}, NEW_SESSION = () => {}, PAL_TOGGLE = null, PALBAR_TOGGLE = null;
 let SESSION_API = null;
 let ASK = null, ASKED = 0;
 const ask = (d) => new Promise((done) => (ASK ? ASK({ ...d, id: ++ASKED, done }) : done(null)));
@@ -276,6 +276,8 @@ function App() {
   PALETTE_OPEN = () => setPalette(true);
   const [pal, setPal] = useState(false);
   PAL_TOGGLE = me?.pal ? () => setPal((v) => !v) : null;
+  const [palBar, setPalBar] = useState(() => stored("atc:palbar", true));
+  PALBAR_TOGGLE = me?.pal ? () => setPalBar((v) => (store("atc:palbar", !v), !v)) : null;
   const [cursor, setCursor] = useState(null);
   const [quick, setQuick] = useState(null);
   QUICK = (s, rect) => setQuick({ s, rect });
@@ -540,6 +542,7 @@ function App() {
         "/": () => setPalette(true),
         "?": () => setHelp((h) => !h),
         P: () => PAL_TOGGLE?.(),
+        B: () => PALBAR_TOGGLE?.(),
       }[e.key];
       if (move && k.route && (e.key === "j" || e.key === "k")) {
         const next = step(k.route, move);
@@ -587,6 +590,7 @@ function App() {
   };
 
   return html`
+    ${palBar && me.pal && html`<${PalBar} pal=${me.pal} />`}
     <div class="app ${assistView ? "assisting" : ""}">
     <${BayBar} bays=${bays} only=${only} view=${screen} panes=${panes} togglePane=${togglePane} up=${up} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
     ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} onBays=${onBays} say=${say} onClose=${() => setPeek(null)} />`}
@@ -7539,23 +7543,31 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
     </div>`;
 }
 
+let PAL_MODULE = null;
+const palElement = (pal, tag) => (PAL_MODULE ||= import(/* @vite-ignore */ `${pal.server}/__pal/web.js`)).then(() => {
+  const el = document.createElement(tag);
+  el.setAttribute("server", pal.server);
+  if (pal.token) el.setAttribute("token", pal.token);
+  el.setAttribute("links", "host");
+  el.addEventListener("pal-open", (e) => openOut(e.detail.url));
+  return el;
+}, (e) => { PAL_MODULE = null; throw e; });
+
 function PalPanel({ pal, onClose }) {
   const box = useRef();
   const [failed, setFailed] = useState(false);
   useEffect(() => {
-    let el;
-    import(/* @vite-ignore */ `${pal.server}/__pal/web.js`).then(() => {
-      el = document.createElement("pal-panel");
-      el.setAttribute("server", pal.server);
-      if (pal.token) el.setAttribute("token", pal.token);
-      el.setAttribute("links", "host");
-      el.addEventListener("pal-open", (e) => openOut(e.detail.url));
+    let el, gone = false;
+    palElement(pal, "pal-panel").then((e) => {
+      if (gone) return;
+      el = e;
+      el.addEventListener("pal-dismiss", onClose);
       box.current.append(el);
-      el.focus?.();
+      el.focus();
     }, () => setFailed(true));
     const esc = (e) => e.key === "Escape" && onClose();
     addEventListener("keydown", esc);
-    return () => { removeEventListener("keydown", esc); el?.remove(); };
+    return () => { gone = true; removeEventListener("keydown", esc); el?.remove(); };
   }, []);
   return html`
     <div class="pal-scrim" onPointerDown=${onClose}></div>
@@ -7563,6 +7575,21 @@ function PalPanel({ pal, onClose }) {
       <button class="kb" onClick=${onClose}>Close <kbd aria-hidden="true">esc</kbd></button>
       <div class="palx-in" ref=${box}>${failed && html`<div class="pal-none">pal did not answer at ${pal.server}.</div>`}</div>
     </div>`;
+}
+
+function PalBar({ pal }) {
+  const box = useRef();
+  useEffect(() => {
+    let el, gone = false;
+    palElement(pal, "pal-bar").then((e) => {
+      if (gone) return;
+      el = e;
+      box.current.append(el);
+      document.body.classList.add("palbar");
+    }, () => {});
+    return () => { gone = true; el?.remove(); document.body.classList.remove("palbar"); };
+  }, []);
+  return html`<div class="palbar" ref=${box}></div>`;
 }
 
 function readShared() {
