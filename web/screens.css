@@ -105,6 +105,10 @@
 /* palette */
 .pal-scrim { position: fixed; inset: 0; z-index: 60; background: var(--scrim); }
 .pal-scrim.previewing { background: transparent; }
+.palx { position: fixed; z-index: 61; left: 50%; top: 10vh; transform: translateX(-50%); width: min(760px, calc(100vw - 32px)); display: flex; flex-direction: column; }
+.palx > .kb { align-self: flex-end; margin-bottom: 6px; }
+.palx-in pal-panel { display: block; height: min(480px, 76vh); border-radius: var(--r-md); overflow: hidden; box-shadow: var(--shadow-pop); }
+@media (max-width: 899px) { .palx { inset: 0; top: 0; left: 0; transform: none; width: auto; padding: 8px; background: var(--board); } .palx-in pal-panel { height: calc(100vh - 56px); } }
 .pal { position: fixed; z-index: 61; left: 50%; top: 10vh; transform: translateX(-50%); width: min(680px, calc(100vw - 32px)); max-height: 76vh; display: flex; flex-direction: column; overflow: hidden; background: var(--board); box-shadow: var(--shadow-pop); border-radius: var(--r-md); font-family: var(--sans); font-size: var(--fs-ui); color: var(--ink); }
 .pal-in { flex: none; display: flex; align-items: center; gap: var(--s2); height: 48px; padding: 0 var(--s2) 0 var(--s4); border-bottom: 1px solid var(--line); background: var(--strip); }
 .pal-in .pr { font-family: var(--mono); font-weight: 650; color: var(--faint); flex: none; }

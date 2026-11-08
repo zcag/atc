@@ -137,7 +137,7 @@ const tilde = (p) => {
 };
 let MULTI = false, HERE = "";
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-let PALETTE_OPEN = () => {}, NEW_SESSION = () => {};
+let PALETTE_OPEN = () => {}, NEW_SESSION = () => {}, PAL_TOGGLE = null;
 let SESSION_API = null;
 let ASK = null, ASKED = 0;
 const ask = (d) => new Promise((done) => (ASK ? ASK({ ...d, id: ++ASKED, done }) : done(null)));
@@ -274,6 +274,8 @@ function App() {
   NEW_SESSION = (start) => setCreating(start || true);
   const [palette, setPalette] = useState(false);
   PALETTE_OPEN = () => setPalette(true);
+  const [pal, setPal] = useState(false);
+  PAL_TOGGLE = me?.pal ? () => setPal((v) => !v) : null;
   const [cursor, setCursor] = useState(null);
   const [quick, setQuick] = useState(null);
   QUICK = (s, rect) => setQuick({ s, rect });
@@ -537,6 +539,7 @@ function App() {
         ",": () => (inSettings() ? closeSettings() : (location.hash = SETTINGS)),
         "/": () => setPalette(true),
         "?": () => setHelp((h) => !h),
+        P: () => PAL_TOGGLE?.(),
       }[e.key];
       if (move && k.route && (e.key === "j" || e.key === "k")) {
         const next = step(k.route, move);
@@ -618,6 +621,7 @@ function App() {
     ${palette && html`<${Palette} live=${reach || []} onBays=${onBays} sel=${sel} say=${say} home=${me.host} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} onClose=${() => setPalette(false)}
       actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: openAssistant, ask: openAssistant,
         pane: togglePane, next: () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true })) }} />`}
+    ${pal && me?.pal && html`<${PalPanel} pal=${me.pal} onClose=${() => setPal(false)} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${settings && html`<${SettingsPage} me=${me} say=${say} onClose=${closeSettings} />`}
     ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} at=${alone.at} live=${all} say=${say} />`}
@@ -866,6 +870,7 @@ function TabBar({ view, onTalk }) {
       ${tab(view === "pages", "Pages", () => (location.hash = pagesHash()))}
       ${tab(view === "assistant", "Assistant", onTalk)}
       ${tab(false, "Go", () => PALETTE_OPEN())}
+      ${PAL_TOGGLE && tab(false, "pal", PAL_TOGGLE)}
     </nav>`;
 }
 
@@ -7531,6 +7536,32 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
       <div class="pal-top">${top && html`<span class="w">Opens</span><span class="t">${top.label}</span><button class="btn primary" onClick=${top.run}>Go</button>`}</div>
       <div class="pal-f"><span><kbd>enter</kbd>runs</span><span><kbd>tab</kbd>previews behind</span><span><kbd>↑</kbd><kbd>↓</kbd><kbd>ctrl j</kbd><kbd>ctrl k</kbd>move</span><span><kbd>2</kbd>alone: bay 2</span><span><kbd>esc</kbd>closes</span></div>
       <div class="sr" aria-live="polite">${ql ? `${flat.length} results${top ? `, first: ${top.label}` : ""}` : ""}</div>
+    </div>`;
+}
+
+function PalPanel({ pal, onClose }) {
+  const box = useRef();
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let el;
+    import(/* @vite-ignore */ `${pal.server}/__pal/web.js`).then(() => {
+      el = document.createElement("pal-panel");
+      el.setAttribute("server", pal.server);
+      if (pal.token) el.setAttribute("token", pal.token);
+      el.setAttribute("links", "host");
+      el.addEventListener("pal-open", (e) => openOut(e.detail.url));
+      box.current.append(el);
+      el.focus?.();
+    }, () => setFailed(true));
+    const esc = (e) => e.key === "Escape" && onClose();
+    addEventListener("keydown", esc);
+    return () => { removeEventListener("keydown", esc); el?.remove(); };
+  }, []);
+  return html`
+    <div class="pal-scrim" onPointerDown=${onClose}></div>
+    <div class="palx" role="dialog" aria-modal="true" aria-label="pal">
+      <button class="kb" onClick=${onClose}>Close <kbd aria-hidden="true">esc</kbd></button>
+      <div class="palx-in" ref=${box}>${failed && html`<div class="pal-none">pal did not answer at ${pal.server}.</div>`}</div>
     </div>`;
 }
 

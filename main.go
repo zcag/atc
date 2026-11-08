@@ -320,6 +320,8 @@ func serve(args []string) error {
 		CallTestLine: os.Getenv("ATC_CALL_TEST_LINE"),
 		CallNumber:   os.Getenv("ATC_CALL_LINE_NUMBER"),
 		CallVoices:   os.Getenv("ATC_CALL_VOICES"),
+		Pal:          strings.TrimRight(os.Getenv("ATC_PAL"), "/"),
+		PalToken:     os.Getenv("ATC_PAL_TOKEN"),
 		CallTestFrom: strings.FieldsFunc(os.Getenv("ATC_CALL_TEST_FROM"), func(r rune) bool { return r == ',' || r == ' ' }),
 		PublicURL:    strings.TrimRight(os.Getenv("ATC_PUBLIC_URL"), "/"),
 		LocalURL:     loopback(*addr),

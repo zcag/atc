@@ -87,9 +87,11 @@ type Server struct {
 	CallNumber string
 	// CallVoices is the voice service, which lists the voices calls can speak with and keeps the pick.
 	CallVoices string
-	hub        *hubLink
-	guests     *hubLink
-	Reachable  func() string
+	// Pal is a pal launcher's remote address, whose panel the page can open (ATC_PAL); PalToken is pal's token for atc's site, needed off the tailnet.
+	Pal, PalToken string
+	hub           *hubLink
+	guests        *hubLink
+	Reachable     func() string
 	// PublicURL is where the user reaches atc (links in messages), LocalURL where this
 	// machine's own browser does.
 	PublicURL, LocalURL string
@@ -388,8 +390,12 @@ func (s *Server) me() map[string]any {
 	for _, p := range s.Peers {
 		hosts = append(hosts, p.Name)
 	}
-	return map[string]any{"host": s.Host, "home": home, "claudeTheme": theme, "hosts": hosts, "peers": s.fleet.statuses(), "callNumber": s.CallNumber,
+	me := map[string]any{"host": s.Host, "home": home, "claudeTheme": theme, "hosts": hosts, "peers": s.fleet.statuses(), "callNumber": s.CallNumber,
 		"web": s.web, "call": s.CallLine != "", "look": s.look()}
+	if s.Pal != "" {
+		me["pal"] = map[string]string{"server": s.Pal, "token": s.PalToken}
+	}
+	return me
 }
 
 func webVersion(web fs.FS) string {
@@ -419,9 +425,14 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) static() http.Handler {
 	files := http.FileServerFS(s.Web)
+	pal := ""
+	if u, err := url.Parse(s.Pal); err == nil && u.Host != "" {
+		pal = " " + u.Scheme + "://" + u.Host
+	}
+	csp := fmt.Sprintf("script-src 'self'%[1]s; frame-src 'self'%[1]s; object-src 'none'; base-uri 'self'", pal)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
-			w.Header().Set("Content-Security-Policy", "script-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'")
+			w.Header().Set("Content-Security-Policy", csp)
 		}
 		if strings.HasPrefix(r.URL.Path, "/vendor/fonts/") {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
