@@ -4195,6 +4195,19 @@ const atcRoute = (href) => { const u = new URL(href, location.href); return u.or
 const routePage = () => { const m = location.hash.match(/^#\/(?:s|agents)\/[^/]+\/p\/(.+)$/); return m ? decodeURIComponent(m[1]) : null; };
 let LAST_KEY = 0;
 addEventListener("keydown", () => { LAST_KEY = Date.now(); }, true);
+let TYPING_IN = null, TAB_AT = 0;
+addEventListener("focusin", (e) => { TYPING_IN = typingIn(e.target) ? e.target : null; }, true);
+addEventListener("keydown", (e) => { if (e.key === "Tab") TAB_AT = Date.now(); }, true);
+let PRESSED = { at: 0, by: null };
+addEventListener("message", (e) => { if (e.data?.atc === 1 && e.data.op === "press") PRESSED = { at: Date.now(), by: e.source }; });
+addEventListener("blur", () => {
+  const back = TYPING_IN;
+  setTimeout(() => {
+    const f = document.activeElement, pressed = PRESSED.by === f?.contentWindow && Date.now() - PRESSED.at < 1000;
+    if (f?.tagName !== "IFRAME" || !f.sandbox?.contains("allow-scripts") || pressed || Date.now() - TAB_AT < 1000 || !back?.isConnected) return;
+    back.focus({ preventScroll: true });
+  }, 150);
+});
 
 function markPage(p) {
   const m = pseen();
@@ -4267,6 +4280,7 @@ function PageFrame({ p, at, onSend, say, changes }) {
         return e.source.postMessage({ atc: 1, op: "scroll", y: scroll.current }, "*");
       }
       if (m.op === "at") { scroll.current = m.arg; return; }
+      if (m.op === "press") return;
       const op = ops[m.op];
       Promise.resolve().then(() => (op ? op(m.arg) : Promise.reject(new Error(`atc has no ${m.op}`))))
         .then((value) => e.source.postMessage({ atc: 1, id: m.id, value: value ?? null }, "*"),

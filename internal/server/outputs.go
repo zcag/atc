@@ -193,4 +193,4 @@ func (s *Server) outputFile(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, st.Name(), st.ModTime(), f)
 }
 
-const pageKeysScript = `<script>parent!==window&&(()=>{const r=new Set([" ","PageDown","PageUp","Home","End","ArrowDown","ArrowUp","ArrowLeft","ArrowRight","Tab","Enter"]);addEventListener("keydown",e=>{const t=e.target;if(!e.defaultPrevented&&!e.ctrlKey&&!e.metaKey&&!r.has(e.key)&&!t.isContentEditable&&!/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName||""))parent.postMessage({atc:1,op:"key",arg:{key:e.key,code:e.code,altKey:e.altKey,shiftKey:e.shiftKey}},"*")})})()</script>`
+const pageKeysScript = `<script>parent!==window&&(()=>{addEventListener("pointerdown",()=>parent.postMessage({atc:1,op:"press"},"*"),!0);const r=new Set([" ","PageDown","PageUp","Home","End","ArrowDown","ArrowUp","ArrowLeft","ArrowRight","Tab","Enter"]);addEventListener("keydown",e=>{const t=e.target;if(!e.defaultPrevented&&!e.ctrlKey&&!e.metaKey&&!r.has(e.key)&&!t.isContentEditable&&!/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName||""))parent.postMessage({atc:1,op:"key",arg:{key:e.key,code:e.code,altKey:e.altKey,shiftKey:e.shiftKey}},"*")})})()</script>`

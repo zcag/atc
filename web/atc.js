@@ -121,6 +121,7 @@
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || reading.has(e.key) || t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || "")) return;
     parent.postMessage({ atc: 1, op: "key", arg: { key: e.key, code: e.code, altKey: e.altKey, shiftKey: e.shiftKey } }, "*");
   });
+  addEventListener("pointerdown", () => parent.postMessage({ atc: 1, op: "press" }, "*"), true);
   let t = 0;
   addEventListener("scroll", () => {
     clearTimeout(t);
