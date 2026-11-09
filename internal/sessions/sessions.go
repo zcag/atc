@@ -52,6 +52,7 @@ type Session struct {
 	TurnDone       bool             `json:"turnDone,omitempty"`
 	PermissionMode string           `json:"permissionMode,omitempty"`
 	LastPrompt     string           `json:"lastPrompt,omitempty"`
+	LastFrom       string           `json:"lastFrom,omitempty"`
 	Context        int              `json:"context,omitempty"`
 	PromptAt       time.Time        `json:"promptAt,omitzero"`
 	Activity       string           `json:"activity,omitempty"`
@@ -238,7 +239,7 @@ func (m *Manager) build(t history.Transcript) Session {
 		SessionID: t.SessionID, Kind: "transcript", State: Past,
 		Title: title(meta.Name, t), Name: t.AgentName,
 		Cwd: t.Cwd, StartCwd: t.StartCwd, Branch: t.Branch, Model: t.Model,
-		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, Context: t.Context, PromptAt: t.PromptAt,
+		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, LastFrom: t.LastFrom, Context: t.Context, PromptAt: t.PromptAt,
 		Activity: t.Activity, LastReply: t.LastReply, Preview: t.Preview, Summary: m.Summary.Get(t),
 		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine, Harness: t.Harness, Agent: meta.Agent,
 		Retired: RetiredHub(meta.Name),

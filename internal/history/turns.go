@@ -21,6 +21,11 @@ type Turn struct {
 	Partial bool         `json:"partial,omitempty"`
 	Notice  bool         `json:"notice,omitempty"`
 	Via     *Via         `json:"via,omitempty"`
+	Channel string       `json:"channel,omitempty"`
+	Switch  bool         `json:"switch,omitempty"`
+	Kind    string       `json:"kind,omitempty"`
+	Task    *Task        `json:"task,omitempty"`
+	CallEnd time.Time    `json:"callEnd,omitzero"`
 	Reply   string       `json:"reply,omitempty"`
 	Steps   int          `json:"steps"`
 	Looks   int          `json:"looks,omitempty"`
@@ -58,6 +63,7 @@ func BuildTurns(msgs []Message, offs []int64, end int64, price func(string, Usag
 		cur = &turns[len(turns)-1]
 	}
 	replyFrom, ended := false, false
+	channel := ""
 	for i, m := range msgs {
 		off := offs[i]
 		if m.Role == "user" || m.Role == "event" && (ended || cur == nil) {
@@ -67,6 +73,15 @@ func BuildTurns(msgs []Message, offs []int64, end int64, price func(string, Usag
 				v := *m.Via
 				v.Raw = ""
 				cur.Via = &v
+			}
+			if m.Role == "user" && m.Channel != "" {
+				channel, cur.Switch = m.Channel, true
+			}
+			switch {
+			case m.Role == "event":
+				cur.Channel, cur.Kind, cur.Task = m.Channel, m.Kind, m.Task
+			case m.Via == nil:
+				cur.Channel = channel
 			}
 			replyFrom, ended = false, false
 			continue
@@ -82,6 +97,10 @@ func BuildTurns(msgs []Message, offs []int64, end int64, price func(string, Usag
 			cur.Cost += price(m.Model, *m.Usage)
 		}
 		switch m.Role {
+		case "event":
+			if m.Kind == "call-end" {
+				cur.CallEnd = m.Time
+			}
 		case "note":
 			cur.Notes = append(cur.Notes, clip(m.Text, 300))
 		case "done":

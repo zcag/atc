@@ -30,6 +30,11 @@ type Message struct {
 	Badge  *Badge          `json:"badge,omitempty"`
 	Look   bool            `json:"look,omitempty"`
 	Via    *Via            `json:"via,omitempty"`
+	// Channel is where the user wrote from, given only on the turn where the hub said it changed.
+	Channel string   `json:"channel,omitempty"`
+	Kind    string   `json:"kind,omitempty"`
+	Task    *Task    `json:"task,omitempty"`
+	Pastes  []string `json:"pastes,omitempty"`
 }
 
 type Output struct {
@@ -217,12 +222,13 @@ type reader struct {
 	offs      []int64
 	tools     map[string]int
 	billed    map[string]bool
+	ended     map[string]bool
 	noImages  bool
 	sidechain bool
 }
 
 func newReader(noImages bool) *reader {
-	return &reader{tools: map[string]int{}, billed: map[string]bool{}, noImages: noImages}
+	return &reader{tools: map[string]int{}, billed: map[string]bool{}, ended: map[string]bool{}, noImages: noImages}
 }
 
 func (rd *reader) read(r *bufio.Reader, off int64) int64 {
@@ -245,6 +251,12 @@ func (rd *reader) line(line []byte, off int64) {
 		return
 	}
 	add := func(x Message) {
+		if x.Task != nil && x.Task.ID != "" {
+			if rd.ended[x.Task.ID] {
+				return
+			}
+			rd.ended[x.Task.ID] = true
+		}
 		if x.ID != "" {
 			rd.tools[x.ID] = len(rd.msgs)
 		}
@@ -427,23 +439,17 @@ func clipInput(raw json.RawMessage) json.RawMessage {
 var notice = regexp.MustCompile(`(?s)<summary>(.*?)</summary>`)
 
 func queued(text string, at time.Time) (Message, bool) {
-	t, via := envelope(text)
-	switch {
-	case t == "":
-		return Message{}, false
-	case isNotice(t):
-		return Message{Role: "event", Text: noticeText(t), Time: at}, true
-	case IsNoise(t):
+	if e, ok := event(text, at); ok {
+		return e, true
+	}
+	sd := envelope(text)
+	if sd.body == "" || IsNoise(sd.body) {
 		return Message{}, false
 	}
-	return Message{Role: "note", Text: t, Time: at, Via: via}, true
+	return Message{Role: "note", Text: sd.body, Time: at, Via: sd.via, Pastes: sd.pastes}, true
 }
 
 const compactPrefix = "This session is being continued from a previous conversation"
-
-func isNotice(t string) bool {
-	return strings.HasPrefix(t, "<task-notification>") || strings.HasPrefix(t, compactPrefix)
-}
 
 func noticeText(t string) string {
 	if strings.HasPrefix(t, compactPrefix) {
@@ -471,18 +477,19 @@ func convert(m rawMsg) []Message {
 	for _, b := range blocks {
 		switch {
 		case b.Type == "text" && strings.TrimSpace(b.Text) != "":
-			if t := strings.TrimSpace(b.Text); m.Type == "user" && isNotice(t) {
-				out = append(out, Message{Role: "event", Text: noticeText(t), Time: m.Timestamp})
+			if m.Type != "user" {
+				out = append(out, Message{Role: m.Type, Text: b.Text, Time: m.Timestamp})
 				continue
 			}
-			if m.Type == "user" && IsNoise(b.Text) {
+			if e, ok := event(b.Text, m.Timestamp); ok {
+				out = append(out, e)
 				continue
 			}
-			text, via := b.Text, (*Via)(nil)
-			if m.Type == "user" {
-				text, via = envelope(text)
+			if IsNoise(b.Text) {
+				continue
 			}
-			out = append(out, Message{Role: m.Type, Text: text, Time: m.Timestamp, Via: via})
+			sd := envelope(b.Text)
+			out = append(out, Message{Role: "user", Text: sd.body, Time: m.Timestamp, Via: sd.via, Channel: sd.channel, Pastes: sd.pastes})
 		case b.Type == "image" && m.Type == "user":
 			if img := image(b); img != "" {
 				images = append(images, img)

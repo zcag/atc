@@ -35,7 +35,8 @@ func TestEnvelope(t *testing.T) {
 		}},
 		{"a webhook", "[message from grafana]\n{\"alert\":1}", "{\"alert\":1}", &Via{Source: "grafana"}},
 	} {
-		body, via := envelope(c.in)
+		sd := envelope(c.in)
+		body, via := sd.body, sd.via
 		if c.via != nil && c.via.Raw == "" {
 			c.via.Raw = c.in
 		}

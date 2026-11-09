@@ -24,6 +24,7 @@ type Transcript struct {
 	AITitle        string    `json:"aiTitle"`
 	AgentName      string    `json:"agentName"`
 	LastPrompt     string    `json:"lastPrompt"`
+	LastFrom       string    `json:"lastFrom,omitempty"`
 	Branch         string    `json:"branch"`
 	Model          string    `json:"model"`
 	PermissionMode string    `json:"permissionMode"`
@@ -191,7 +192,11 @@ func apply(t *Transcript, e *entry, custom *string) {
 	case "agent-name":
 		t.AgentName = e.AgentName
 	case "last-prompt":
-		t.LastPrompt = strings.TrimSpace(unpaste(e.LastPrompt))
+		sd := envelope(e.LastPrompt)
+		t.LastPrompt, t.LastFrom = sd.body, ""
+		if sd.via != nil {
+			t.LastFrom = viaName(sd.via)
+		}
 	case "permission-mode":
 		t.PermissionMode = e.PermissionMode
 	case "system":

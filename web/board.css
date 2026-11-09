@@ -41,6 +41,8 @@
 .brow.fresh .t { font-weight: 700; }
 .brow .t:hover { text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
 .brow .w { font-family: var(--mono); font-size: var(--fs-small); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brow .from { display: inline-flex; align-items: center; gap: 3px; font-size: var(--fs-small); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brow .from svg { width: 11px; height: 11px; flex: none; }
 .brow .st { display: flex; flex-direction: column; min-width: 0; }
 .brow .st .l1 { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brow .st .l2 { color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

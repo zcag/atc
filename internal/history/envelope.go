@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Via is who a user turn really came from when the user didn't type it: another session (atc's
@@ -28,7 +29,13 @@ type Via struct {
 var (
 	pastedTag = regexp.MustCompile(`</?pasted_content[^>]*>\n?`)
 	// talkMode is how the hub tells its session which channel the user's message came from (atc's modes/).
-	talkMode = regexp.MustCompile(`(?s)^\[talk-mode: [\w-]+, until the next talk-mode line\]\n.*?\n\[message\]\n`)
+	talkMode = regexp.MustCompile(`(?s)^\[talk-mode: ([\w-]+), until the next talk-mode line\]\n.*?\n\[message\]\n`)
+	pasted   = regexp.MustCompile(`(?s)<pasted_content[^>]*>\n?(.*?)</pasted_content[^>]*>`)
+	// unsaid is the hub reminding the assistant, ahead of the user's words on a call, that a report came in meanwhile.
+	unsaid = regexp.MustCompile(`^\[hub: a report or a guest's message came in while you were on the call[^\]\n]*\]\n`)
+	// lineEvent is the call line telling the session what happened on it ("[phone event] ..."): a call ending starts
+	// with its bracketed words, anything else is a note in parentheses.
+	lineEvent = regexp.MustCompile(`(?s)^\[([\w-]+) event\] (.*)$`)
 	// asideMode is the hub's header on a message that is not the user talking (another session, a guest).
 	asideMode  = regexp.MustCompile(`(?s)^\[talk-mode: ([\w-]+), for this message only\]\n(.*?)\[message\]\n`)
 	asideWhere = regexp.MustCompile(`(?m)^\[now: (.*)\]$`)
@@ -36,10 +43,27 @@ var (
 	signature  = regexp.MustCompile(`(?s)\s*\[(from|started by) (?:session ("(?:[^"\\]|\\.)*") \((\S+?)(?: on (\S+))?\)|a Claude session on (\S+) that atc does not run, so it cannot take messages)(?: · (relays the user's own go-ahead)[^·\]]*)? · ([^\]]*)\]\s*$`)
 )
 
+// said is a user turn taken apart: the message itself, who sent it when the user didn't, the channel the hub
+// announced it on (only when it changed), and what was pasted into it alongside the user's own words.
+type said struct {
+	body    string
+	via     *Via
+	channel string
+	pastes  []string
+}
+
 // envelope splits what atc and the hub wrapped around a user turn from the message itself.
-func envelope(t string) (string, *Via) {
+func envelope(t string) said {
 	raw := strings.TrimSpace(t)
-	t = strings.TrimSpace(talkMode.ReplaceAllString(pastedTag.ReplaceAllString(t, ""), ""))
+	var out said
+	for _, m := range pasted.FindAllStringSubmatch(t, -1) {
+		out.pastes = append(out.pastes, strings.TrimSpace(m[1]))
+	}
+	t = strings.TrimSpace(pastedTag.ReplaceAllString(t, ""))
+	if m := talkMode.FindStringSubmatch(t); m != nil {
+		out.channel, t = m[1], strings.TrimSpace(t[len(m[0]):])
+	}
+	t = strings.TrimSpace(unsaid.ReplaceAllString(t, ""))
 	v := &Via{}
 	if m := asideMode.FindStringSubmatch(t); m != nil {
 		v.Channel = m[1]
@@ -78,11 +102,73 @@ func envelope(t string) (string, *Via) {
 		}
 		t = strings.TrimSpace(t[:m[0]])
 	}
+	out.body = t
+	if len(out.pastes) > 0 && strings.TrimSpace(pasted.ReplaceAllString(raw, "")) == "" {
+		out.pastes = nil
+	}
 	if v.Title == "" && v.Host == "" && v.Source == "" && v.Channel == "" {
-		return t, nil
+		return out
 	}
 	v.Raw = raw
-	return t, v
+	out.via = v
+	return out
+}
+
+// event is what a user turn says happened rather than what someone wrote: a background task ending, a call
+// line's news, the conversation being continued.
+func event(t string, at time.Time) (Message, bool) {
+	t = strings.TrimSpace(t)
+	switch {
+	case strings.HasPrefix(t, "<task-notification>"):
+		return Message{Role: "event", Text: noticeText(t), Time: at, Task: taskOf(t)}, true
+	case strings.HasPrefix(t, compactPrefix):
+		return Message{Role: "event", Text: noticeText(t), Time: at}, true
+	}
+	if m := talkMode.FindStringSubmatch(t); m != nil {
+		t = strings.TrimSpace(t[len(m[0]):])
+	}
+	t, _ = news(t)
+	if m := lineEvent.FindStringSubmatch(t); m != nil {
+		e := Message{Role: "event", Channel: m[1], Time: at, Kind: "line"}
+		if strings.HasPrefix(m[2], "[") {
+			e.Kind = "call-end"
+			e.Text, _, _ = strings.Cut(m[2][1:], "]")
+		} else {
+			e.Text = strings.Trim(strings.TrimSpace(m[2]), "()")
+		}
+		return e, true
+	}
+	return Message{}, false
+}
+
+var taskField = regexp.MustCompile(`<(task-id|tool-use-id|output-file|status)>([^<]*)</`)
+
+// Task is a background task's end as Claude Code tells the session: which one, how it ended, where its output is.
+type Task struct {
+	ID     string `json:"id,omitempty"`
+	Call   string `json:"call,omitempty"`
+	Output string `json:"output,omitempty"`
+	Status string `json:"status,omitempty"`
+}
+
+func taskOf(t string) *Task {
+	var k Task
+	for _, m := range taskField.FindAllStringSubmatch(t, -1) {
+		switch m[1] {
+		case "task-id":
+			k.ID = m[2]
+		case "tool-use-id":
+			k.Call = m[2]
+		case "output-file":
+			k.Output = m[2]
+		case "status":
+			k.Status = m[2]
+		}
+	}
+	if k == (Task{}) {
+		return nil
+	}
+	return &k
 }
 
 // news takes off what atc tells the session ahead of a message, which nobody wrote: a header line, its lines and
@@ -107,7 +193,19 @@ func news(t string) (string, []string) {
 	return strings.TrimSpace(rest), lines
 }
 
+// viaName is how a sender is called where there is room for one name.
+func viaName(v *Via) string {
+	switch {
+	case v.Title != "":
+		return v.Title
+	case v.Source != "":
+		return v.Source
+	case v.Host != "":
+		return "a session on " + v.Host
+	}
+	return v.Channel
+}
+
 func unpaste(t string) string {
-	body, _ := envelope(t)
-	return body
+	return envelope(t).body
 }
