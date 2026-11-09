@@ -28,6 +28,7 @@ type Turn struct {
 	CallEnd time.Time    `json:"callEnd,omitzero"`
 	Mark    *Mark        `json:"mark,omitempty"`
 	Model   string       `json:"model,omitempty"`
+	Ended   []Ended      `json:"ended,omitempty"`
 	Reply   string       `json:"reply,omitempty"`
 	Steps   int          `json:"steps"`
 	Looks   int          `json:"looks,omitempty"`
@@ -38,6 +39,14 @@ type Turn struct {
 	Notes   []string     `json:"notes,omitempty"`
 	Cost    float64      `json:"cost,omitempty"`
 	Ms      int64        `json:"ms,omitempty"`
+}
+
+// Ended is a background task or agent that ended in a turn: which call started it, when, how, and what it said.
+type Ended struct {
+	Call   string    `json:"call"`
+	At     time.Time `json:"at,omitzero"`
+	Status string    `json:"status,omitempty"`
+	Result string    `json:"result,omitempty"`
 }
 
 type FileChange struct {
@@ -82,7 +91,13 @@ func BuildTurns(msgs []Message, offs []int64, end int64, price func(string, Usag
 			cur.Kind, cur.Mark = m.Kind, m.Mark
 			switch {
 			case m.Role == "event":
-				cur.Channel, cur.Task = m.Channel, m.Task
+				cur.Channel = m.Channel
+				if m.Task != nil {
+					k := *m.Task
+					k.Result = clip(k.Result, 600)
+					cur.Task = &k
+				}
+				cur.ended(m)
 			case m.Via == nil:
 				cur.Channel = channel
 			}
@@ -107,6 +122,7 @@ func BuildTurns(msgs []Message, offs []int64, end int64, price func(string, Usag
 			if m.Kind == "call-end" {
 				cur.CallEnd = m.Time
 			}
+			cur.ended(m)
 		case "note":
 			cur.Notes = append(cur.Notes, clip(m.Text, 300))
 		case "done":
@@ -384,3 +400,9 @@ func snippet(s string, i, n int) string {
 }
 
 func utf8Start(b byte) bool { return b&0xC0 != 0x80 }
+
+func (t *Turn) ended(m Message) {
+	if m.Task != nil && m.Task.Call != "" {
+		t.Ended = append(t.Ended, Ended{m.Task.Call, m.Time, m.Task.Status, clip(m.Task.Result, 600)})
+	}
+}

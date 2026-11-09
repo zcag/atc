@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -196,24 +195,12 @@ func ReadRange(path string, from, to int64) (Page, error) {
 }
 
 func ReadAgent(transcript, toolUseID string) (Page, error) {
-	metas, _ := filepath.Glob(filepath.Join(strings.TrimSuffix(transcript, ".jsonl"), "subagents", "*.meta.json"))
-	for _, mp := range metas {
-		var meta struct {
-			ToolUseID string `json:"toolUseId"`
-			Finished  bool   `json:"finished"`
-		}
-		if b, err := os.ReadFile(mp); err != nil || json.Unmarshal(b, &meta) != nil || meta.ToolUseID != toolUseID {
+	for _, a := range subagents(transcript) {
+		if a.meta.ToolUseID != toolUseID {
 			continue
 		}
-		f, err := os.Open(strings.TrimSuffix(mp, ".meta.json") + ".jsonl")
-		if err != nil {
-			return Page{}, err
-		}
-		defer f.Close()
-		rd := newReader(false)
-		rd.sidechain = true
-		rd.read(bufio.NewReaderSize(f, 1<<20), 0)
-		return Page{Messages: rd.msgs, Done: meta.Finished}, nil
+		msgs, err := a.messages(false)
+		return Page{Messages: msgs, Done: a.meta.Finished}, err
 	}
 	return Page{}, fmt.Errorf("no subagent transcript for %s", toolUseID)
 }
@@ -253,10 +240,11 @@ func (rd *reader) line(line []byte, off int64) {
 	}
 	add := func(x Message) {
 		if x.Task != nil && x.Task.ID != "" {
-			if rd.ended[x.Task.ID] {
+			key := x.Task.ID + "\x00" + x.Task.Status + "\x00" + x.Task.Result
+			if rd.ended[key] {
 				return
 			}
-			rd.ended[x.Task.ID] = true
+			rd.ended[key] = true
 		}
 		if x.ID != "" {
 			rd.tools[x.ID] = len(rd.msgs)

@@ -195,6 +195,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sessions/{sid}/turns", s.turns)
 	mux.HandleFunc("GET /api/sessions/{sid}/tasks/{task}", s.task)
 	mux.HandleFunc("GET /api/sessions/{sid}/search", s.search)
+	mux.HandleFunc("GET /api/sessions/{sid}/agents", s.sessionAgents)
 	mux.HandleFunc("GET /api/sessions/{sid}/agents/{tool}", s.agent)
 	mux.HandleFunc("GET /api/sessions/{sid}/summary", s.summary)
 	mux.HandleFunc("POST /api/sessions/{sid}/summary", s.summary)
@@ -594,6 +595,15 @@ func (s *Server) turns(w http.ResponseWriter, r *http.Request) {
 	}
 	waiting, _ := s.M.Index.Waiting(t.Path)
 	reply(w, map[string]any{"turns": turns, "size": size, "waiting": waiting})
+}
+
+func (s *Server) sessionAgents(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.M.Index.Find(r.PathValue("sid"))
+	if !ok {
+		http.Error(w, "no transcript", http.StatusNotFound)
+		return
+	}
+	reply(w, map[string]any{"agents": history.Agents(t.Path)})
 }
 
 func (s *Server) agent(w http.ResponseWriter, r *http.Request) {

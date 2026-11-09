@@ -754,3 +754,27 @@ pre.mdiff:not(.num) .gap { padding-left: var(--s3); }
 .speek .spt b { color: var(--ink); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .speek .spt span { margin-left: auto; white-space: nowrap; color: var(--faint); }
 .speek p { margin: 4px 0 0; color: var(--ink); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* the agents a session started: one live row each, what it is doing now or what it found */
+.tx .subrun { margin: 2px 0; border-radius: var(--r-md); }
+.tx .subh { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 2px 8px; width: 100%; padding: 6px var(--s3); text-align: left; font: inherit; color: var(--dim); background: var(--board); border: 1px solid var(--hair); border-radius: var(--r-md); cursor: pointer; }
+.tx .subh:hover { border-color: var(--line); }
+.tx .subm { grid-row: 1 / span 2; align-self: start; padding-top: 2px; font-weight: 700; color: var(--faint); text-align: center; }
+.tx .subm .pulse { display: inline-block; width: 7px; height: 7px; background: var(--work); animation: tx-pulse 2s ease-in-out infinite alternate; }
+.tx .subrun.done .subm { color: var(--add); }
+.tx .subrun.failed .subm { color: var(--fail); }
+.tx .subn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-ui); }
+.tx .subn b { color: var(--ink); font-weight: 600; }
+.tx .subk { margin-left: 6px; padding: 0 6px; border: 1px solid var(--line); border-radius: var(--r-pill); font-size: 11px; color: var(--faint); }
+.tx .subt { font-size: var(--fs-small); color: var(--faint); font-family: var(--mono); white-space: nowrap; }
+.tx .subl { grid-column: 2 / span 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--fs-small); color: var(--dim); }
+.tx .subl.mono { font-family: var(--mono); color: var(--work); }
+.tx .subrun.running .subh { border-color: color-mix(in srgb, var(--work) 30%, var(--hair)); }
+.tx .subrun > .tbox { margin: 4px 0 var(--s3) 26px; }
+@media (prefers-reduced-motion: reduce) { .tx .subm .pulse { animation: none; } }
+
+/* an agent's end: how long it ran, and what it found, folded */
+.tx .task .tres { flex-basis: 100%; }
+.tx .task .tmeta { margin: 2px 0 0; font-size: var(--fs-small); color: var(--faint); }
+.tx .task .tout summary { cursor: pointer; margin-top: 4px; color: var(--ink); font-size: var(--fs-ui); }
+.tx .task .tout .prose { margin-top: var(--s2); padding: var(--s2) var(--s3); background: var(--strip); border-radius: var(--r-sm); }

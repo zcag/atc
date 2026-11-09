@@ -67,6 +67,25 @@ func TestPastesOnlyBesideTheUsersOwnWords(t *testing.T) {
 	}
 }
 
+func TestAResumedAgentReportsAgain(t *testing.T) {
+	n := func(result string) string {
+		return `<task-notification>\n<task-id>a1</task-id>\n<tool-use-id>toolu_1</tool-use-id>\n<status>completed</status>\n<summary>Agent \"Sweep\" finished</summary>\n<result>` + result + `</result>\n</task-notification>`
+	}
+	p := filepath.Join(t.TempDir(), "s.jsonl")
+	os.WriteFile(p, []byte(`{"type":"attachment","attachment":{"type":"queued_command","prompt":"`+n("all quiet")+`"}}
+{"type":"user","message":{"role":"user","content":"`+n("all quiet")+`"}}
+{"type":"user","message":{"role":"user","content":"`+n("one new item")+`"}}
+`), 0o644)
+	pg, _ := ReadRange(p, 0, 1<<20)
+	var got []string
+	for _, m := range pg.Messages {
+		got = append(got, m.Task.Call+" "+m.Task.Result)
+	}
+	if !reflect.DeepEqual(got, []string{"toolu_1 all quiet", "toolu_1 one new item"}) {
+		t.Fatalf("%q", got)
+	}
+}
+
 func TestATaskEndsOnceThoughTheTranscriptTellsItTwice(t *testing.T) {
 	n := `<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n<summary>Background command \"x\" completed</summary>\n</task-notification>`
 	p := filepath.Join(t.TempDir(), "s.jsonl")

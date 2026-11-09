@@ -156,7 +156,10 @@ func event(t string, at time.Time) (Message, bool) {
 	return Message{}, false
 }
 
-var taskField = regexp.MustCompile(`<(task-id|tool-use-id|output-file|status)>([^<]*)</`)
+var (
+	taskField  = regexp.MustCompile(`<(task-id|tool-use-id|output-file|status)>([^<]*)</`)
+	taskResult = regexp.MustCompile(`(?s)<result>(.*?)</result>`)
+)
 
 // Task is a background task's end as Claude Code tells the session: which one, how it ended, where its output is.
 type Task struct {
@@ -164,6 +167,7 @@ type Task struct {
 	Call   string `json:"call,omitempty"`
 	Output string `json:"output,omitempty"`
 	Status string `json:"status,omitempty"`
+	Result string `json:"result,omitempty"`
 }
 
 func taskOf(t string) *Task {
@@ -179,6 +183,9 @@ func taskOf(t string) *Task {
 		case "status":
 			k.Status = m[2]
 		}
+	}
+	if m := taskResult.FindStringSubmatch(t); m != nil {
+		k.Result = strings.TrimSpace(m[1])
 	}
 	if k == (Task{}) {
 		return nil

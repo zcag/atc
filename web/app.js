@@ -5484,6 +5484,53 @@ function Running({ st }) {
   return html`<span class="end running">${st.time ? txSpan(Date.now() - new Date(st.time)) : "running"}</span>`;
 }
 
+const AGENT_RUNS = new Map();
+function useAgentRuns(sid) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    let e = AGENT_RUNS.get(sid);
+    if (!e) {
+      e = { runs: null, subs: new Set(), timer: 0 };
+      const poll = () => api(`/api/sessions/${sid}/agents`).then((r) => {
+        e.runs = r.agents || [];
+        e.subs.forEach((f) => f());
+        clearTimeout(e.timer);
+        if (e.subs.size && e.runs.some((a) => !a.done)) e.timer = setTimeout(poll, document.visibilityState === "visible" ? 4000 : 20000);
+      }, () => {});
+      e.poll = poll;
+      AGENT_RUNS.set(sid, e);
+    }
+    const f = () => tick((n) => n + 1);
+    e.subs.add(f);
+    if (!e.runs || (e.runs.some((a) => !a.done) && !e.timer)) e.poll();
+    return () => { e.subs.delete(f); if (!e.subs.size) { clearTimeout(e.timer); e.timer = 0; } };
+  }, [sid]);
+  return AGENT_RUNS.get(sid)?.runs || null;
+}
+const agentDoing = (a) => a.last && (a.last.tool === "Bash" ? oneLine(a.last.detail || "running a command") : `${VERB[a.last.tool] || toolName(a.last.tool).toLowerCase()} ${oneLine(a.last.detail || "")}`.trim());
+const AGENT_MARK = { done: "✓", running: "", failed: "✕" };
+function AgentRow({ st, s, zoom }) {
+  useNow(5000);
+  const runs = useAgentRuns(s.sessionId), run = runs?.find((a) => a.tool === st.id);
+  const [open, setOpen] = useState(false);
+  const bg = /^Async agent launched/.test(st.out?.text || ""), end = TX_API?.ended(st.id), failed = st.out?.error || end?.status === "failed";
+  const done = failed || run?.done || end || (st.out && !bg), state = failed ? "failed" : done ? "done" : "running";
+  const started = run?.started || st.time, ended = done ? end?.at || run?.updated || st.out?.time : null;
+  const span = started ? txSpan(msOf(ended || new Date().toISOString()) - msOf(started)) : "";
+  const kind = st.input?.subagent_type && st.input.subagent_type !== "general-purpose" ? st.input.subagent_type : "";
+  const quiet = state === "running" && run?.updated && Date.now() - msOf(run.updated) > 120e3 ? txSpan(Date.now() - msOf(run.updated)) : "";
+  const line = state === "running" ? (agentDoing(run || {}) || "starting") + (quiet ? ` · quiet for ${quiet}` : "") : firstSentence(end?.result || run?.said || (!bg && st.out?.text) || "");
+  return html`<div class="subrun ${state}" id=${`ag-${st.id}`}>
+    <button class="subh" aria-expanded=${open} onClick=${() => setOpen(!open)}>
+      <span class="subm" aria-hidden="true">${state === "running" ? html`<i class="pulse"></i>` : AGENT_MARK[state]}</span>
+      <span class="subn"><b>${st.input?.description || st.detail || "Agent"}</b>${kind && html`<span class="subk">${kind}</span>`}</span>
+      <span class="subt">${[run?.steps > 0 && plural(run.steps, "step"), span].filter(Boolean).join(" · ")}</span>
+      ${line && html`<span class="subl ${state === "running" ? "mono" : ""}">${state === "running" ? "now: " : ""}${line}</span>`}
+    </button>
+    ${open && html`<div class="tbox"><${AgentThread} st=${st} s=${s} zoom=${zoom} /></div>`}
+  </div>`;
+}
+
 function AgentThread({ st, s, zoom }) {
   const [page, setPage] = useState(null);
   const done = page?.done || (st.out && !/^Async agent launched/.test(st.out.text || ""));
@@ -5575,10 +5622,7 @@ function Step({ st, s, zoom, pin }) {
     <button class="line" aria-expanded=${open} onClick=${toggle}><b>Read</b><span class="arg">${hostOf(i.url || st.detail)}</span>${running}</button>
     ${open && html`<div class="tbox">${i.prompt && html`<p class="tbhd">${i.prompt}</p>`}<div class="prose small" dangerouslySetInnerHTML=${{ __html: md(st.out?.text) }}></div></div>`}
   </div>`;
-  if (k === "agent") return html`<div class=${cls}>
-    <button class="line" aria-expanded=${open} onClick=${toggle}><b>Agent</b><span class="arg wrap sans">${i.description || st.detail}</span>${running}</button>
-    ${open && html`<div class="tbox"><${AgentThread} st=${st} s=${s} zoom=${zoom} /></div>`}
-  </div>`;
+  if (k === "agent") return html`<${AgentRow} st=${st} s=${s} zoom=${zoom} />`;
   if (TX_NOISE.test(st.tool)) return null;
   const input = Object.keys(i).length ? JSON.stringify(i, null, 1) : st.detail;
   return html`<div class=${cls}>
@@ -6230,7 +6274,7 @@ const stepsGist = (steps, s) => {
   const named = steps.filter((x) => !["run", "look", "edit", "web", "agent", "ask", "letter"].includes(txKind(x)));
   const others = [...new Set(named.map((x) => (x.badge ? x.badge.kind : VERB[x.tool] || toolName(x.tool).toLowerCase())))];
   return [reads.length && `read ${plural(files(reads), "file")}`, finds.length && `searched ${finds.length}`, count("run").length && `ran ${plural(count("run").length, "command")}`,
-    edits.length && `edited ${plural(files(edits), "file")}`, count("web").length && `${count("web").length} web`, count("agent").length && plural(count("agent").length, "agent"), ...new Set(count("letter").map(letterGist)), ...others].filter(Boolean).join(", ");
+    edits.length && `edited ${plural(files(edits), "file")}`, count("web").length && `${count("web").length} web`, count("agent").length && (count("agent").every((x) => /^Async agent launched/.test(x.out?.text || "")) ? `started ${plural(count("agent").length, "agent")}` : plural(count("agent").length, "agent")), ...new Set(count("letter").map(letterGist)), ...others].filter(Boolean).join(", ");
 };
 
 const InlineSteps = ({ steps, s, open, toggle, at }) => {
@@ -6261,7 +6305,7 @@ function GroupBody({ steps, s, open, zoom, live }) {
   if (open) return html`<div class="steps">${steps.map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} pin=${live && x === steps[steps.length - 1]} />`)}</div>`;
   const edits = steps.filter((x) => txKind(x) === "edit" && !x.out?.error && !scratch(x.input.file_path || x.detail));
   return html`${edits.length > 0 && html`<${Edits} steps=${edits} s=${s} />`}
-    ${steps.filter((x) => txKind(x) === "ask" || txKind(x) === "letter" || (x.tool === "Bash" && x.badge?.kind === "show")).map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} />`)}`;
+    ${steps.filter((x) => txKind(x) === "ask" || txKind(x) === "letter" || txKind(x) === "agent" || (x.tool === "Bash" && x.badge?.kind === "show")).map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} />`)}`;
 }
 
 function agentRows(b) {
@@ -6387,12 +6431,18 @@ function SentLetter({ st }) {
 
 const TASK_MARK = { completed: "✓", failed: "✕", killed: "■", stopped: "■" };
 function TxEvent({ e, s, at, call, open }) {
-  const [src, setSrc] = useState(null), [gone, setGone] = useState(false);
   if (e.kind === "call-end") return html`<div class="chan end phone"><span>${ICON.phone}<b>Call ended</b>${call && html`<time>${txSpan(msOf(at) - msOf(call)) || ""}</time>`}</span></div>`;
   if (e.kind === "line") return html`<p class="evt line">${chIcon(e.channel)} ${e.text}</p>`;
   if (e.kind === "stopped") return html`<p class="evt stopped">Stopped here</p>`;
   if (!e.task) return html`<p class="evt">${e.text}</p>`;
+  return html`<${TaskCard} e=${e} s=${s} at=${at} open=${open} />`;
+}
+
+function TaskCard({ e, s, at, open }) {
+  const [src, setSrc] = useState(null), [gone, setGone] = useState(false);
   const k = e.task, m = /^(.*?) "(.*)" (.*)$/.exec(e.text || "");
+  const runs = useAgentRuns(s.sessionId), run = k.call ? runs?.find((a) => a.tool === k.call) : null;
+  const from = () => document.getElementById(`ag-${k.call}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
   const output = () => api(`/api/sessions/${s.sessionId}/ref/file?path=${encodeURIComponent(k.output)}`).then(() => open(k.output, { exact: true }), () => setGone(true));
   const more = () => (src ? setSrc(null) : api(`/api/sessions/${s.sessionId}/tasks/${encodeURIComponent(k.id)}`).then(setSrc, () => setSrc({ detail: "The command isn't in the transcript any more." })));
   return html`<div class="task ${k.status}">
@@ -6400,6 +6450,10 @@ function TxEvent({ e, s, at, call, open }) {
     <span class="tt">${m ? html`<span class="tkind">${m[1]}</span> <b>${m[2]}</b> <span class="tst">${m[3]}</span>` : e.text}</span>
     <span class="ta">${k.id && html`<button class="kb" onClick=${more}>${src ? "Hide" : "Command"}</button>`}${k.output && html`<button class="kb" disabled=${gone} onClick=${output}>${gone ? "Output cleaned up" : "Output"}</button>`}</span>
     ${src && html`<pre class="tsrc">${src.detail || src.description}</pre>`}
+    ${(k.result || run?.started) && html`<div class="tres">
+      ${run?.started && html`<p class="tmeta">ran ${txSpan(msOf(at) - msOf(run.started))}${run.steps ? `, ${plural(run.steps, "step")}` : ""}${document.getElementById(`ag-${k.call}`) && html` · <button class="vlink" onClick=${from}>where it started</button>`}</p>`}
+      ${k.result && html`<details class="tout"><summary>${firstSentence(k.result)}</summary><div class="prose small" dangerouslySetInnerHTML=${{ __html: md(k.result) }}></div></details>`}
+    </div>`}
   </div>`;
 }
 
@@ -6845,7 +6899,8 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     find();
   };
   useEffect(() => { goSpot(); addEventListener("hashchange", goSpot); return () => removeEventListener("hashchange", goSpot); });
-  TX_API = { jump: (i) => { openTurn(i); requestAnimationFrame(() => document.getElementById(`tx${i}`)?.scrollIntoView({ block: "start", behavior: "smooth" })); },
+  const ends = new Map(turns.flatMap((t) => (t.ended || []).map((e) => [e.call, e])));
+  TX_API = { ended: (call) => ends.get(call), jump: (i) => { openTurn(i); requestAnimationFrame(() => document.getElementById(`tx${i}`)?.scrollIntoView({ block: "start", behavior: "smooth" })); },
     answered: (ref, at) => { const i = turns.findIndex((t) => t.via?.ref === ref && msOf(t.at) > msOf(at)); return i < 0 ? null : { i, at: turns[i].at }; },
     asked: (ref, at) => { for (let i = turns.length - 1; i >= 0; i--) { if (msOf(turns[i].at) > msOf(at)) continue; const st = txSteps(bodies[turns[i].from]?.items || []).findLast((x) => txKind(x) === "letter" && letterOut(x)?.ref === ref && x.input.report); if (st) return { i, at: st.time || turns[i].at }; } return null; },
     level: () => setLevel((level % 3) + 1), find: () => { findQ.current = ""; setPop("find"); }, results: () => setPop("results"), contents: () => setContents(!contents), zen: () => setZen(!zen) };
@@ -6993,7 +7048,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
         return html`<div class="sec ${first ? "first" : ""}" id=${`tx${r.i}`} data-stop data-you><h2 class="sr">${via ? viaName(via) : "you"}, ${txClock(r.at)}</h2>
           <${Lead} at=${clock(r.at, true)} when=${r.at} text=${cleanPrompt(r.b?.prompt ?? r.t.prompt).trim()} images=${r.b?.images} via=${via} channel=${r.t.channel} pastes=${r.b?.pastes} mark=${r.t.mark} /></div>`;
       }
-      case "notice": return !zen && html`<div id=${`tx${r.i}`}><${TxEvent} e=${{ text: plain(cleanPrompt(r.t.prompt)), task: r.t.task, kind: r.t.kind, channel: r.t.channel }} s=${s} at=${r.at} call=${r.callFrom} open=${openFileRef} /></div>`;
+      case "notice": return !zen && html`<div id=${`tx${r.i}`}><${TxEvent} e=${{ text: plain(cleanPrompt(r.t.prompt)), task: r.b?.items?.find((x) => x.t === "event" && x.task)?.task || r.t.task, kind: r.t.kind, channel: r.t.channel }} s=${s} at=${r.at} call=${r.callFrom} open=${openFileRef} /></div>`;
       case "chan": return html`<div class="chan ${r.ch}"><span>${chIcon(r.ch)}<b>${r.ch === "phone" ? r.called ? "It called you" : "Call" : chName(r.ch)}</b><time>${clock(r.at, true)}</time>${r.callKey && html`<button class="cfold" title="Fold the call" onClick=${() => setCalls((c) => { const n = new Set(c); n.delete(r.callKey); return n; })}>fold</button>`}</span></div>${r.reason && html`<p class="chwhy">${r.reason}</p>`}`;
       case "callfold": return html`<button class="callfold" onClick=${() => setCalls((c) => new Set(c).add(r.callKey))} title="Open the call">
           <span class="cfh">${ICON.phone}<b>${r.called ? "It called you" : "Call"}</b><time>${clock(r.at, true)}</time><span>${[r.dur, plural(r.n, "exchange")].filter(Boolean).join(" · ")}</span><span class="chev" aria-hidden="true"></span></span>
