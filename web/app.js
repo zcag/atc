@@ -5533,7 +5533,7 @@ function AgentRow({ st, s, zoom }) {
   </div>`;
 }
 
-function AgentThread({ st, s, zoom }) {
+function AgentThread({ st, s, zoom, brief }) {
   const [page, setPage] = useState(null);
   const done = page?.done || (st.out && !/^Async agent launched/.test(st.out.text || ""));
   useEffect(() => {
@@ -5547,7 +5547,9 @@ function AgentThread({ st, s, zoom }) {
   const b = bodyOf(page.messages || []);
   return html`<div class="thread">
     ${b.prompt && html`<p class="thread-ask">${firstSentence(b.prompt)}</p>`}
-    ${b.items.length > 0 && html`<div class="steps">${joinEdits(numberEdits(b.items)).filter((x) => x.t === "step" && !TX_NOISE.test(x.tool)).map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} />`)}</div>`}
+    ${b.items.length > 0 && (brief
+      ? html`<ol class="bsteps">${joinEdits(numberEdits(b.items)).filter((x) => x.t === "step" && !TX_NOISE.test(x.tool)).map((x) => { const m = stepNote(x, s), cmd = x.tool === "Bash" && !x.badge; return html`<li key=${x.id} class=${x.out?.error ? "bad" : ""} title=${cmd ? m.c : null}><b>${cmd ? "ran" : m.v}</b> ${cmd ? m.n || m.c : m.c}${!cmd && m.n && html` <span>${m.n}</span>`}${cmd && x.out?.error && html` <span>failed</span>`}</li>`; })}</ol>`
+      : html`<div class="steps">${joinEdits(numberEdits(b.items)).filter((x) => x.t === "step" && !TX_NOISE.test(x.tool)).map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} />`)}</div>`)}
     ${b.answer ? html`<div class="prose small" dangerouslySetInnerHTML=${{ __html: md(b.answer) }}></div>`
       : done ? st.out?.text && html`<div class="prose small" dangerouslySetInnerHTML=${{ __html: md(st.out.text) }}></div>`
       : html`<p class="cont">The agent is still working</p>`}
@@ -5931,12 +5933,12 @@ function BgItem({ t, s, run, out, open, toggle }) {
   const pct = !ended && t.kind === "shell" ? bgProgress(last) : null;
   const span = t.startedAt ? txSpan((ended || now) - t.startedAt) : "";
   const inTx = t.kind === "agent" && run && document.getElementById(`ag-${run.tool}`);
-  const click = () => {
-    if (inTx) { if (inTx.querySelector(".subh")?.getAttribute("aria-expanded") === "false") inTx.querySelector(".subh").click(); TX_API?.reveal(`#${CSS.escape(inTx.id)}`); return; }
-    toggle();
-  };
+  const show = () => { if (inTx.querySelector(".subh")?.getAttribute("aria-expanded") === "false") inTx.querySelector(".subh").click(); TX_API?.reveal(`#${CSS.escape(inTx.id)}`); };
+  const more = useRef(null), atEnd = useRef(true);
+  useLayoutEffect(() => { const el = more.current?.querySelector(".thread"); if (el && atEnd.current) el.scrollTop = el.scrollHeight; });
+  const scrolled = (e) => { const el = e.target; if (el.classList?.contains("thread")) atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; };
   return html`<li class="bgi ${state} ${open ? "more" : ""}">
-    <button class="bgi-h" onClick=${click} aria-expanded=${open} title=${inTx ? "Show it in the conversation" : ""}>
+    <button class="bgi-h" onClick=${toggle} aria-expanded=${open}>
       <span class="bgi-m" aria-hidden="true">${state === "run" ? html`<i class="pulse"></i>` : state === "bad" ? "✕" : "✓"}</span>
       <span class="bgi-k">${BG_KIND[t.kind] || t.kind}</span>
       <span class="bgi-n">${name}</span>
@@ -5944,9 +5946,9 @@ function BgItem({ t, s, run, out, open, toggle }) {
       ${(live || quiet) && html`<span class="bgi-l ${ended ? "" : "mono"}">${live}${quiet && html`<span class="bgi-q">${live ? " · " : ""}quiet for ${quiet}</span>`}</span>`}
       ${pct != null && html`<span class="bgi-bar" aria-label=${`${Math.round(pct)}%`}><i style=${`width:${pct}%`}></i></span>`}
     </button>
-    ${open && html`<div class="bgi-more">
+    ${open && html`<div class="bgi-more" ref=${more} onScrollCapture=${scrolled}>
       ${t.kind === "agent"
-        ? run ? html`<${AgentThread} st=${{ id: run.tool, out: run.done ? { text: "" } : null }} s=${s} />` : html`<p class="cont">Its transcript isn't there yet.</p>`
+        ? run ? html`<${AgentThread} st=${{ id: run.tool, out: run.done ? { text: "" } : null }} s=${s} brief />${inTx && html`<button class="vlink bgi-go" onClick=${show}>show in conversation</button>`}` : html`<p class="cont">Its transcript isn't there yet.</p>`
         : html`${src?.detail && html`<pre class="bgi-cmd">${src.detail}</pre>`}${long?.lines?.length ? html`<pre class="bgi-out">${long.lines.join("\n")}</pre>` : html`<p class="cont">No output yet.</p>`}`}
     </div>`}
   </li>`;
