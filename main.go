@@ -283,6 +283,7 @@ func serve(args []string) error {
 	}
 	modes.Dir = filepath.Join(client.ConfigDir(), "modes")
 	history.UseCallLines(callPacks()...)
+	history.UseCallStart(modes.Line("call.you_called"), modes.Line("call.reason"))
 	st, err := store.Open(filepath.Join(client.ConfigDir(), "meta.json"))
 	if err != nil {
 		return err

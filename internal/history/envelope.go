@@ -66,6 +66,8 @@ func envelope(t string) said {
 		out.channel, t = m[1], strings.TrimSpace(t[len(m[0]):])
 	}
 	t = strings.TrimSpace(unsaid.ReplaceAllString(t, ""))
+	var call *Mark
+	t, call = opened(t)
 	v := &Via{}
 	if m := asideMode.FindStringSubmatch(t); m != nil {
 		v.Channel = m[1]
@@ -106,6 +108,12 @@ func envelope(t string) said {
 	}
 	if v.Title == "" && v.Host == "" && v.Source == "" {
 		t, out.mark, out.kind = marked(t)
+	}
+	if call != nil {
+		if out.mark != nil {
+			call.Heard, call.Alt, call.AltOnly = out.mark.Heard, out.mark.Alt, out.mark.AltOnly
+		}
+		out.mark = call
 	}
 	out.body = t
 	if len(out.pastes) > 0 && strings.TrimSpace(pasted.ReplaceAllString(raw, "")) == "" {

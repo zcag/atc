@@ -962,6 +962,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   const status = (s.state === "needs-you" ? oneLine(s.summary?.status) || oneLine(s.preview || s.lastReply) || "Needs you" : headline(s)) || WORD[s.state] || "";
   const second = doingLine(s);
   const fresh = unread(s);
+  const owed = s.state !== "working" ? LIVE.filter((y) => y.reportsTo && y.reportsTo === (s.root || s.sessionId) && (y.state === "working" || y.state === "needs-you")) : [];
   const cls = `brow ${g} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""} ${open ? "open" : ""} ${fresh ? "fresh" : ""}`;
   const title = html`<span class="t">${s.title || "Untitled"}</span>`;
   if (rail) return html`
@@ -975,7 +976,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
       <div class=${cls} data-sid=${s.sessionId} role="button" tabindex="0" aria-expanded=${open} aria-description=${fresh ? "new since you looked" : null} ...${events}
         onDblClick=${() => go(keyOf(s))} onKeyDown=${(e) => e.target === e.currentTarget && (e.key === "Enter" ? go(keyOf(s)) : e.key === " " && (e.preventDefault(), toggle(s.sessionId)))}>
         <${StateBlock} s=${s} />
-        <span class="ses"><a class="t" href=${`#/s/${keyOf(s)}`} onClick=${(e) => e.stopPropagation()}>${s.title || "Untitled"}</a>${where && html`<span class="w">${where}</span>`}${s.lastFrom && html`<span class="from" title=${`The last message came from ${s.lastFrom}, not from you`}>${ICON.recv}${s.lastFrom}</span>`}</span>
+        <span class="ses"><a class="t" href=${`#/s/${keyOf(s)}`} onClick=${(e) => e.stopPropagation()}>${s.title || "Untitled"}</a>${where && html`<span class="w">${where}</span>`}${s.lastFrom && html`<span class="from" title=${`The last message came from ${s.lastFrom}, not from you`}>${ICON.recv}${s.lastFrom}</span>`}${owed.length > 0 && html`<span class="from owed" title="It asked for these reports and they haven't come back yet">waiting on ${owed.map((y) => y.title || "a session").join(", ")}</span>`}</span>
         <span class="st"><span class="l1">${status}</span>${!open && html`<${CardGist} s=${s} />`}${second && html`<span class="l2 ${s.state === "working" ? "mono" : ""}">${second}</span>`}</span>
         <span class="ctx">${s.context > 0 && html`<${CtxMeter} n=${s.context} /><span>${Math.round(s.context / 1000)}k</span>`}<${LoadTag} s=${s} /></span>
         <span class="stp">${s.steps > 0 && s.steps}${s.failed > 0 && html`<span class="f">${s.failed} failed</span>`}</span>
@@ -6206,14 +6207,19 @@ const groupSpan = (steps) => {
   const a = Date.parse(steps[0]?.time || 0), b = Math.max(...steps.map((x) => Date.parse(x.out?.time || x.time || 0)));
   return a && b - a >= 1000 ? txSpan(b - a) : "";
 };
+const letterGist = (x) => {
+  const v = x.tool.split("__").pop(), o = letterOut(x);
+  return v === "report" ? "reported to the assistant" : `${v === "start" ? "started" : "sent to"} ${o?.title || (v === "start" ? x.input.name || "a session" : x.input.session) || "a session"}`;
+};
 const stepsGist = (steps, s) => {
+  if (steps.length === 1 && txKind(steps[0]) === "letter") return letterGist(steps[0]);
   if (steps.length === 1) { const m = stepNote(steps[0], s); return steps[0].tool === "Bash" && !steps[0].badge ? m.n && m.n !== "failed" ? m.n : `ran ${m.c}` : `${m.v} ${m.c}`; }
   const count = (kind) => steps.filter((x) => txKind(x) === kind), files = (l) => new Set(l.map((x) => x.input.file_path || x.detail)).size;
   const reads = steps.filter((x) => x.tool === "Read"), finds = steps.filter((x) => x.tool === "Grep" || x.tool === "Glob"), edits = count("edit");
-  const named = steps.filter((x) => !["run", "look", "edit", "web", "agent", "ask"].includes(txKind(x)));
+  const named = steps.filter((x) => !["run", "look", "edit", "web", "agent", "ask", "letter"].includes(txKind(x)));
   const others = [...new Set(named.map((x) => (x.badge ? x.badge.kind : VERB[x.tool] || toolName(x.tool).toLowerCase())))];
   return [reads.length && `read ${plural(files(reads), "file")}`, finds.length && `searched ${finds.length}`, count("run").length && `ran ${plural(count("run").length, "command")}`,
-    edits.length && `edited ${plural(files(edits), "file")}`, count("web").length && `${count("web").length} web`, count("agent").length && plural(count("agent").length, "agent"), ...others].filter(Boolean).join(", ");
+    edits.length && `edited ${plural(files(edits), "file")}`, count("web").length && `${count("web").length} web`, count("agent").length && plural(count("agent").length, "agent"), ...new Set(count("letter").map(letterGist)), ...others].filter(Boolean).join(", ");
 };
 
 const InlineSteps = ({ steps, s, open, toggle, at }) => {
@@ -6322,13 +6328,29 @@ function Lead({ text, images, files, at, when, via, channel, pastes, mark }) {
 }
 
 const TX_GAP = 90 * 60e3;
+const dayText = (at) => new Date(at).toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
 const gapText = (a, b) => {
   const from = new Date(a), to = new Date(b);
-  if (from.toDateString() !== to.toDateString()) return to.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
   const h = (to - from) / 3600e3;
   return h < 1.5 ? `${Math.round(h * 60)} min later` : `${Math.round(h)} hours later`;
 };
+const replyDest = (t) => (t.via?.channel === "agent" || t.via?.channel === "guest" ? "reached no one" : t.channel === "whatsapp" ? "sent on WhatsApp" : t.channel === "phone" ? "said on the call" : "");
+const foldCalls = (rows, open, bodies) => {
+  for (let a = 0; a < rows.length; a++) {
+    const start = rows[a];
+    if (start.k !== "chan" || start.ch !== "phone") continue;
+    const b = rows.findIndex((r, j) => j > a && (r.kind === "call-end" || r.t?.kind === "call-end"));
+    if (b < 0) continue;
+    const key = start.key;
+    if (open.has(key)) { start.callKey = key; a = b; continue; }
+    const seg = rows.slice(a, b + 1), said = seg.filter((r) => (r.k === "you" || r.k === "fold") && !r.t?.via && r.t?.channel === "phone" && r.t?.prompt);
+    const letters = [...new Set(seg.flatMap((r) => (r.steps || []).filter((x) => txKind(x) === "letter").map(letterGist)))];
+    const end = rows[b].at || rows[b].t?.at, dur = start.at && end ? txSpan(msOf(end) - msOf(start.at)) : "";
+    rows.splice(a, b - a + 1, { k: "callfold", key: `cf${key}`, at: start.at, call: true, callKey: key, called: start.called, reason: start.reason, dur, n: said.length, first: oneLine(said[0]?.t.prompt || "").slice(0, 120), letters });
+  }
+};
 const letterOut = (st) => { try { return JSON.parse(st.out?.text || "null"); } catch { return null; } };
+const LETTER_WAIT = { working: "working on it now", "needs-you": "it is waiting on you", "your-turn": "finished, no report yet", stopped: "stopped without a report", past: "stopped without a report" };
 function SentLetter({ st }) {
   const i = st.input || {}, verb = st.tool.split("__").pop(), out = letterOut(st), failed = st.out?.error;
   const to = verb === "report" ? "the assistant" : out?.title || (verb === "start" ? i.name || i.preset || (i.dir && project(i.dir).name) || "a new session" : i.session) || "a session";
@@ -6339,7 +6361,8 @@ function SentLetter({ st }) {
   const chips = [i.report && ["want", "wants a report"], i.approved && ["go", "your go-ahead"], i.wake && ["", "woke it"], i.worktree && ["", "own worktree"]].filter(Boolean);
   const where = verb === "start" && [i.host, i.dir && tilde(i.dir)].filter(Boolean).join(" ");
   const [all, setAll] = useState(false), long = text.length > 700 || text.split("\n").length > 10;
-  const tail = back ? html`<button class="vlink" onClick=${() => TX_API?.jump(back.i)}>answered ${txClock(back.at)}</button>` : i.report && !failed && st.out && html`<span class="snx">no answer yet</span>`;
+  const waitOn = !back && i.report && !failed && st.out && (x ? LETTER_WAIT[x.state] || "no answer yet" : "no answer yet");
+  const tail = back ? html`<button class="vlink" onClick=${() => TX_API?.jump(back.i)}>answered ${txClock(back.at)}</button>` : waitOn && html`<span class="snx ${x?.state === "working" ? "busy" : ""}">${waitOn}</span>`;
   return html`<div class="sent ${failed ? "bad" : ""}">
     <div class="snh"><span class="sni">${ICON.sent}</span><span class="sto">${head} ${x ? html`<a href=${`#/s/${keyOf(x)}`}>${to}</a>` : html`<b>${to}</b>`}</span>${where && html`<span class="snx">${where}</span>`}<span class="vat">${txClock(st.time)}</span></div>
     ${(chips.length > 0 || tail) && html`<div class="sntags">${chips.map(([t, c]) => html`<span class="vchip ${t}">${c}</span>`)}${tail}</div>`}
@@ -6351,17 +6374,18 @@ function SentLetter({ st }) {
 
 const TASK_MARK = { completed: "✓", failed: "✕", killed: "■", stopped: "■" };
 function TxEvent({ e, s, at, call, open }) {
-  const [src, setSrc] = useState(null);
+  const [src, setSrc] = useState(null), [gone, setGone] = useState(false);
   if (e.kind === "call-end") return html`<div class="chan end phone"><span>${ICON.phone}<b>Call ended</b>${call && html`<time>${txSpan(msOf(at) - msOf(call)) || ""}</time>`}</span></div>`;
   if (e.kind === "line") return html`<p class="evt line">${chIcon(e.channel)} ${e.text}</p>`;
   if (e.kind === "stopped") return html`<p class="evt stopped">Stopped here</p>`;
   if (!e.task) return html`<p class="evt">${e.text}</p>`;
   const k = e.task, m = /^(.*?) "(.*)" (.*)$/.exec(e.text || "");
+  const output = () => api(`/api/sessions/${s.sessionId}/ref/file?path=${encodeURIComponent(k.output)}`).then(() => open(k.output, { exact: true }), () => setGone(true));
   const more = () => (src ? setSrc(null) : api(`/api/sessions/${s.sessionId}/tasks/${encodeURIComponent(k.id)}`).then(setSrc, () => setSrc({ detail: "The command isn't in the transcript any more." })));
   return html`<div class="task ${k.status}">
     <span class="tm" aria-hidden="true">${TASK_MARK[k.status] || "•"}</span>
     <span class="tt">${m ? html`<span class="tkind">${m[1]}</span> <b>${m[2]}</b> <span class="tst">${m[3]}</span>` : e.text}</span>
-    <span class="ta">${k.id && html`<button class="kb" onClick=${more}>${src ? "Hide" : "Command"}</button>`}${k.output && html`<button class="kb" onClick=${() => open(k.output, { exact: true })}>Output</button>`}</span>
+    <span class="ta">${k.id && html`<button class="kb" onClick=${more}>${src ? "Hide" : "Command"}</button>`}${k.output && html`<button class="kb" disabled=${gone} onClick=${output}>${gone ? "Output cleaned up" : "Output"}</button>`}</span>
     ${src && html`<pre class="tsrc">${src.detail || src.description}</pre>`}
   </div>`;
 }
@@ -6369,13 +6393,33 @@ function TxEvent({ e, s, at, call, open }) {
 const PATH_CODE = '<code class="path[^"]*"[^>]*>[^<]+</code>';
 const CITATION = new RegExp(`\\(${PATH_CODE}(?:,\\s*${PATH_CODE})*\\)`, "g");
 const quietCitations = (h) => h.replace(CITATION, '<span class="cite">$&</span>');
-function Prose({ text, id, cut }) {
+function SessionPeek() {
+  const [p, setP] = useState(null);
+  useEffect(() => {
+    if (!matchMedia("(hover: hover)").matches) return;
+    let t = 0;
+    const over = (e) => {
+      const a = e.target.closest?.('.tx a[href^="#/s/"]');
+      clearTimeout(t);
+      if (!a) return setP(null);
+      const k = decodeURIComponent(a.getAttribute("href").slice(4)), x = LIVE.find((y) => keyOf(y) === k || y.sessionId === k);
+      if (!x) return;
+      t = setTimeout(() => { const r = a.getBoundingClientRect(); setP({ x, left: Math.min(r.left, innerWidth - 340), top: r.bottom + 6 }); }, 250);
+    };
+    document.addEventListener("pointerover", over);
+    return () => { clearTimeout(t); document.removeEventListener("pointerover", over); };
+  }, []);
+  if (!p) return null;
+  const x = p.x, line = x.state === "working" ? doing(x) : headline(x);
+  return html`<div class="speek" style=${`left:${Math.max(8, p.left)}px;top:${p.top}px`} role="tooltip"><div class="spt"><${StateBlock} s=${x} mini /><b>${x.title || "Untitled"}</b><span>${WORD[x.state] || x.state} · ${ago(x)}</span></div>${line && html`<p>${line}</p>`}</div>`;
+}
+function Prose({ text, id, cut, dest }) {
   const h = useMemo(() => {
     const at = cut ? cutAt(text, cut) : -1, render = (t) => linkSessions(quietCitations(md(t)), LIVE, keyOf);
     const body = at < 0 || !/\w/.test(text.slice(at)) ? render(text) : `${render(text.slice(0, at))}<p class="cutin">you cut in here</p><div class="unheard">${render(text.slice(at))}</div>`;
     let j = 0; return body.replace(/<h([1-4])>(.*?)<\/h\1>/gs, (_, n, inner) => `<h${n} id="${id}h${j++}">${inner}<button class="hlink" data-link aria-label="Copy a link to this heading" title="Copy a link to this heading">#</button></h${n}>`);
   }, [text, cut, LIVE.length]);
-  return html`<div class="prose" dangerouslySetInnerHTML=${{ __html: h }}></div><div class="mbar"><button class="mcopy" data-copy data-src=${text}>Copy</button><button class="mcopy" data-link title="Copy a link to this reply">Link</button></div>`;
+  return html`<div class="prose" dangerouslySetInnerHTML=${{ __html: h }}></div><div class="mbar"><button class="mcopy" data-copy data-src=${text}>Copy</button><button class="mcopy" data-link title="Copy a link to this reply">Link</button>${dest && html`<span class="dest">${dest}</span>`}</div>`;
 }
 
 function LiveRow({ s, step, since, steps }) {
@@ -6610,6 +6654,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   }, [turns.length > 0, sid, SYNC.seen !== null]);
   const isOpen = (i) => (level === 3 || (level === 2 && i >= firstOpen) || opened.has(i));
   const openTurn = (i) => setOpened((o) => new Set(o).add(i));
+  const [calls, setCalls] = useState(() => new Set());
   const flip = (k) => setExpanded((o) => { const n = new Set(o); n.has(k) ? n.delete(k) : n.add(k); return n; });
 
   useEffect(() => { for (let i = level === 3 ? 0 : firstOpen; i < turns.length; i++) if (isOpen(i)) need(i); }, [idx, firstOpen, level]);
@@ -6838,16 +6883,19 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
 
   const rows = [];
   const askedQs = new Set(), shownAns = new Set();
-  let callAt = null, lastModel = "";
+  let callAt = null, lastModel = "", lastDay = "";
   turns.forEach((t, i) => {
     const b = bodies[t.from], open = isOpen(i), prev = turns[i - 1];
-    if (prev && t.at && msOf(t.at) - msOf(prev.end || prev.at) > TX_GAP) rows.push({ k: "gap", key: `g${t.from}`, text: gapText(prev.end || prev.at, t.at) });
+    const day = t.at && new Date(t.at).toDateString();
+    if (day && day !== lastDay && (lastDay || turns.some((x) => x.at && new Date(x.at).toDateString() !== day))) rows.push({ k: "day", key: `d${t.from}`, text: dayText(t.at) });
+    else if (prev && t.at && msOf(t.at) - msOf(prev.end || prev.at) > TX_GAP) rows.push({ k: "gap", key: `g${t.from}`, text: gapText(prev.end || prev.at, t.at) });
+    if (day) lastDay = day;
     if (t.model && lastModel && model(t.model) !== model(lastModel)) rows.push({ k: "model", key: `m${t.from}`, text: model(t.model) });
     if (t.model) lastModel = t.model;
     if (t.mark?.heard) { const said = rows.findLast((x) => x.k === "say" && x.text); if (said) said.cut = t.mark.heard; }
     if (t.switch && t.channel) {
       callAt = t.channel === "phone" ? t.at : null;
-      if (i > 0 || t.channel !== "atc") rows.push({ k: "chan", key: `c${t.from}`, at: t.at, ch: t.channel, call: !!callAt });
+      if (i > 0 || t.channel !== "atc") rows.push({ k: "chan", key: `c${t.from}`, at: t.at, ch: t.channel, call: !!callAt, called: t.mark?.called, reason: t.mark?.reason });
     }
     const call = !!callAt, callFrom = callAt;
     if (t.kind === "call-end") callAt = null;
@@ -6861,10 +6909,11 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     agentRows(b).forEach((r, j) => {
       if (t.notice && j === 0 && r.k === "evt") return;
       (r.steps || []).filter((x) => x.tool === "AskUserQuestion").forEach((x) => { (x.input.questions || []).forEach((q) => askedQs.add(q.question)); Object.values(answersOf(x)).forEach((a) => shownAns.add(a)); });
-      rows.push({ ...r, key: `${t.from}:${j}`, i, live: working && i === turns.length - 1, call, callFrom });
+      rows.push({ ...r, key: `${t.from}:${j}`, i, live: working && i === turns.length - 1, call, callFrom, dest: r.answer ? replyDest(t) : "" });
       if (r.kind === "call-end") callAt = null;
     });
   });
+  foldCalls(rows, calls, bodies);
   for (const r of ANSWERS.values()) {
     if (r.sid !== sid || r.id === asking?.id || askedQs.has(r.q)) continue;
     const at = msOf(r.at), j = rows.findIndex((x) => msOf(x.at) > at);
@@ -6907,9 +6956,10 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       case "fold": {
         const f = (r.t.files || []).filter((x) => !scratch(x.path)).sort((a, b) => b.add + b.del - a.add - a.del)[0];
         const work = [r.t.steps > 0 && plural(r.t.steps, "step"), f && `${relPath(f.path, s)} +${f.add}${f.del ? ` -${f.del}` : ""}`, (r.t.files || []).length > 1 && `${r.t.files.length - 1} more`].filter(Boolean).join(", ");
-        const who = r.t.notice ? "" : r.t.kind === "wake" ? `schedule, every ${r.t.mark.every}` : r.t.kind === "restart" ? "started over" : r.t.via ? viaName(r.t.via) : youOn(r.t.channel);
-        return html`${who && html`<h2 class="sr">${who}, ${txClock(r.at)}</h2>`}<button class="fold ${r.t.notice ? "ntc" : ""}" id=${`tx${r.i}`} data-stop data-you=${who ? "" : null} aria-expanded="false" title="Open this turn" onClick=${() => openTurn(r.i)}>
-          <span class="fy"><span class="lead-at">${who} ${clock(r.at, true)}</span><span class="fq">${r.t.partial ? "Continued from earlier" : plain(cleanPrompt(r.t.prompt)) || "Image"}</span></span>
+        const who = r.t.notice ? "" : r.t.mark?.called && !r.t.prompt ? "it called you" : r.t.kind === "wake" ? `schedule, every ${r.t.mark.every}` : r.t.kind === "restart" ? "started over" : r.t.via ? viaName(r.t.via) : youOn(r.t.channel);
+        const bare = r.t.notice || (r.t.mark?.called && !r.t.prompt);
+        return html`${who && html`<h2 class="sr">${who}, ${txClock(r.at)}</h2>`}<button class="fold ${bare ? "ntc" : ""}" id=${`tx${r.i}`} data-stop data-you=${who ? "" : null} aria-expanded="false" title="Open this turn" onClick=${() => openTurn(r.i)}>
+          <span class="fy"><span class="lead-at">${who} ${clock(r.at, true)}</span><span class="fq">${r.t.partial ? "Continued from earlier" : plain(cleanPrompt(r.t.prompt)) || (bare ? "" : "Image")}</span></span>
           <span class="g">${r.t.reply ? firstSentence(r.t.reply) : "No reply."} ${work && html`<b>${work}</b>`}</span></button>`;
       }
       case "wake": return html`<div class="wake" id=${`tx${r.i}`} data-stop><details><summary>${ICON.clock}<b>Scheduled wake-up</b><span>every ${r.t.mark.every}</span><time>${clock(r.at, true)}</time></summary>
@@ -6923,18 +6973,23 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       case "gap": return html`<div class="tgap"><span>${r.text}</span></div>`;
       case "model": return html`<div class="tgap model"><span>now on ${r.text}</span></div>`;
       case "you": {
+        if (r.t.mark?.called && !(r.b?.prompt ?? r.t.prompt)) return html`<div id=${`tx${r.i}`} data-stop></div>`;
         const first = rows[0] === r;
         const via = r.b ? r.b.via : r.t.via;
         return html`<div class="sec ${first ? "first" : ""}" id=${`tx${r.i}`} data-stop data-you><h2 class="sr">${via ? viaName(via) : "you"}, ${txClock(r.at)}</h2>
           <${Lead} at=${clock(r.at, true)} when=${r.at} text=${cleanPrompt(r.b?.prompt ?? r.t.prompt).trim()} images=${r.b?.images} via=${via} channel=${r.t.channel} pastes=${r.b?.pastes} mark=${r.t.mark} /></div>`;
       }
       case "notice": return !zen && html`<div id=${`tx${r.i}`}><${TxEvent} e=${{ text: plain(cleanPrompt(r.t.prompt)), task: r.t.task, kind: r.t.kind, channel: r.t.channel }} s=${s} at=${r.at} call=${r.callFrom} open=${openFileRef} /></div>`;
-      case "chan": return html`<div class="chan ${r.ch}"><span>${chIcon(r.ch)}<b>${r.ch === "phone" ? "Call" : chName(r.ch)}</b><time>${clock(r.at, true)}</time></span></div>`;
+      case "chan": return html`<div class="chan ${r.ch}"><span>${chIcon(r.ch)}<b>${r.ch === "phone" ? r.called ? "It called you" : "Call" : chName(r.ch)}</b><time>${clock(r.at, true)}</time>${r.callKey && html`<button class="cfold" title="Fold the call" onClick=${() => setCalls((c) => { const n = new Set(c); n.delete(r.callKey); return n; })}>fold</button>`}</span></div>${r.reason && html`<p class="chwhy">${r.reason}</p>`}`;
+      case "callfold": return html`<button class="callfold" onClick=${() => setCalls((c) => new Set(c).add(r.callKey))} title="Open the call">
+          <span class="cfh">${ICON.phone}<b>${r.called ? "It called you" : "Call"}</b><time>${clock(r.at, true)}</time><span>${[r.dur, plural(r.n, "exchange")].filter(Boolean).join(" · ")}</span><span class="chev" aria-hidden="true"></span></span>
+          ${r.reason && html`<span class="cfl">${r.reason}</span>`}${r.first && html`<span class="cfl q">“${r.first}”</span>`}${r.letters.length > 0 && html`<span class="cfl">${r.letters.join(", ")}</span>`}</button>`;
+      case "day": return html`<div class="tgap day"><span>${r.text}</span></div>`;
       case "partial": return html`<p class="evt" id=${`tx${r.i}`}>This turn started before what is loaded here.</p>`;
       case "skel": return html`<div class="skel" aria-label="Loading"><i></i><i></i><i></i></div>`;
       case "say": case "steps":
         return html`${r.answer && html`<h2 class="sr">${s.agent ? `@${s.agent}` : "agent"}, ${txClock(r.at)}</h2>`}${r.steps && html`${!zen && html`<${InlineSteps} steps=${r.steps} s=${s} at=${clock(r.at)} open=${gOpen} toggle=${() => flip(gk)} />`}<${GroupBody} steps=${zen ? r.steps.filter((x) => txKind(x) === "ask" || txKind(x) === "letter") : r.steps} s=${s} open=${gOpen && !zen} zoom=${setShot} live=${r.live && !r.text} />`}
-            ${r.text && html`<div id=${`said-${r.key}`} data-said data-stop=${r.answer ? "" : null}><${Prose} text=${r.text} cut=${r.cut} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`;
+            ${r.text && html`<div id=${`said-${r.key}`} data-said data-stop=${r.answer ? "" : null}><${Prose} text=${r.text} cut=${r.cut} dest=${r.dest} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`;
       case "evt": return !zen && html`<${TxEvent} e=${r} s=${s} at=${r.at} call=${r.callFrom} open=${openFileRef} />`;
       case "note": return html`<${Lead} at=${clock(r.at, true)} when=${r.at} text=${r.text} via=${r.via} pastes=${r.pastes} />`;
       case "answered": {
@@ -7020,7 +7075,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
           ${err && html`<p class="evt fail" role="alert"><b>Couldn't load the transcript.</b> ${err}</p>`}
           ${idx === null && !err && html`<div class="skel big" aria-label="Loading"><i></i><i></i><i></i><i></i></div>`}
           ${idx && turns.length === 0 && !rows.length && html`<p class="evt">No messages yet.${live ? " Write the first one below." : ""}</p>`}
-          ${rows.map((r, j) => html`<div class=${`tb${r.call ? ` incall${rows[j + 1]?.call ? "" : " callend"}` : ""}`} key=${r.key} data-k=${r.k}>${cell(r)}</div>`)}
+          <${SessionPeek} />${rows.map((r, j) => html`<div class=${`tb${r.call ? ` incall${rows[j + 1]?.call ? "" : " callend"}` : ""}`} key=${r.key} data-k=${r.k}>${cell(r)}</div>`)}
         </article>
         ${contents && html`<nav class="toc" aria-label="Contents"><div class="th">Contents <button class="kb" onClick=${() => setContents(false)}>Close <kbd aria-hidden="true">c</kbd></button></div><ol>${toc.map((x) => html`<li class=${x.folded ? "folded" : ""}>
           <a href=${`#${x.id}`} onClick=${(e) => { e.preventDefault(); const n = +x.id.slice(2); if (x.folded) go(n); else scrollTo(box.current.querySelector(`#${CSS.escape(x.id)}`)); }}><time>${x.at}</time>${x.text.length > 60 ? x.text.slice(0, 56).replace(/\s+\S*$/, "") + "..." : x.text}</a>
