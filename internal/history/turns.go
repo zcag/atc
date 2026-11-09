@@ -20,6 +20,7 @@ type Turn struct {
 	Images  int          `json:"images,omitempty"`
 	Partial bool         `json:"partial,omitempty"`
 	Notice  bool         `json:"notice,omitempty"`
+	Via     *Via         `json:"via,omitempty"`
 	Reply   string       `json:"reply,omitempty"`
 	Steps   int          `json:"steps"`
 	Looks   int          `json:"looks,omitempty"`
@@ -62,6 +63,11 @@ func BuildTurns(msgs []Message, offs []int64, end int64, price func(string, Usag
 		if m.Role == "user" || m.Role == "event" && (ended || cur == nil) {
 			open(m, off, false)
 			cur.Prompt, cur.Images, cur.Notice = clip(m.Text, 2000), len(m.Images), m.Role == "event"
+			if m.Via != nil {
+				v := *m.Via
+				v.Raw = ""
+				cur.Via = &v
+			}
 			replyFrom, ended = false, false
 			continue
 		}

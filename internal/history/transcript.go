@@ -29,6 +29,7 @@ type Message struct {
 	Ms     int64           `json:"ms,omitempty"`
 	Badge  *Badge          `json:"badge,omitempty"`
 	Look   bool            `json:"look,omitempty"`
+	Via    *Via            `json:"via,omitempty"`
 }
 
 type Output struct {
@@ -425,17 +426,8 @@ func clipInput(raw json.RawMessage) json.RawMessage {
 
 var notice = regexp.MustCompile(`(?s)<summary>(.*?)</summary>`)
 
-var pastedTag = regexp.MustCompile(`</?pasted_content[^>]*>\n?`)
-
-// talkMode is how the hub tells its session which channel a message came from (atc's modes/).
-var talkMode = regexp.MustCompile(`(?s)^\[talk-mode: [\w-]+, until the next talk-mode line\]\n.*?\n\[message\]\n`)
-
-func unpaste(t string) string {
-	return withoutNews(strings.TrimSpace(talkMode.ReplaceAllString(pastedTag.ReplaceAllString(t, ""), "")))
-}
-
 func queued(text string, at time.Time) (Message, bool) {
-	t := strings.TrimSpace(unpaste(text))
+	t, via := envelope(text)
 	switch {
 	case t == "":
 		return Message{}, false
@@ -444,7 +436,7 @@ func queued(text string, at time.Time) (Message, bool) {
 	case IsNoise(t):
 		return Message{}, false
 	}
-	return Message{Role: "note", Text: t, Time: at}, true
+	return Message{Role: "note", Text: t, Time: at, Via: via}, true
 }
 
 const compactPrefix = "This session is being continued from a previous conversation"
@@ -486,11 +478,11 @@ func convert(m rawMsg) []Message {
 			if m.Type == "user" && IsNoise(b.Text) {
 				continue
 			}
-			text := b.Text
+			text, via := b.Text, (*Via)(nil)
 			if m.Type == "user" {
-				text = strings.TrimSpace(unpaste(text))
+				text, via = envelope(text)
 			}
-			out = append(out, Message{Role: m.Type, Text: text, Time: m.Timestamp})
+			out = append(out, Message{Role: m.Type, Text: text, Time: m.Timestamp, Via: via})
 		case b.Type == "image" && m.Type == "user":
 			if img := image(b); img != "" {
 				images = append(images, img)
@@ -509,17 +501,6 @@ func convert(m rawMsg) []Message {
 		out = append(out, Message{Role: "user", Images: images, Time: m.Timestamp})
 	}
 	return out
-}
-
-// withoutNews drops what the hub tells the assistant ahead of a message, which the user never wrote. The hub ends it with
-// a blank line.
-func withoutNews(t string) string {
-	if strings.HasPrefix(t, "[atc now") || strings.HasPrefix(t, "[atc since") {
-		if _, rest, ok := strings.Cut(t, "\n\n"); ok {
-			return rest
-		}
-	}
-	return t
 }
 
 func IsNoise(t string) bool {

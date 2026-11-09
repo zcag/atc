@@ -135,7 +135,7 @@ const tilde = (p) => {
   const m = p.match(/^\/(home|Users)\/[^/]+(\/.*)?$/);
   return m ? "~" + (m[2] || "") : p;
 };
-let MULTI = false, HERE = "";
+let MULTI = false, HERE = "", LIVE = [];
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 let PALETTE_OPEN = () => {}, NEW_SESSION = () => {}, PAL_TOGGLE = null;
 let SESSION_API = null;
@@ -324,7 +324,8 @@ function App() {
     if (!me) return;
     const es = new EventSource("/api/events");
     es.addEventListener("sessions", (e) => {
-      setLive(steady(JSON.parse(e.data) || []));
+      LIVE = steady(JSON.parse(e.data) || []);
+      setLive(LIVE);
       setUp(true);
     });
     es.addEventListener("look", (e) => LOOK.adopt(JSON.parse(e.data)));
@@ -5287,14 +5288,14 @@ function bodyOf(msgs) {
     if (m.role === "done") ms = Math.max(ms, m.ms || 0);
     else if (m.role === "assistant") items.push({ t: "text", text: m.text, time: m.time });
     else if (m.role === "event") items.push({ t: "event", text: m.text, time: m.time });
-    else if (m.role === "note") items.push({ t: "note", text: m.text, time: m.time });
+    else if (m.role === "note") items.push({ t: "note", text: m.text, time: m.time, via: m.via });
     else if (m.role === "tool") items.push({ t: "step", ...m, input: m.input || {} });
   }
   const last = items.findLastIndex((it) => it.t === "step");
   const tail = items.slice(last + 1).filter((it) => it.t === "text"), answer = tail.map((it) => it.text).join("\n\n");
   const work = items.slice(0, last + 1).concat(items.slice(last + 1).filter((it) => it.t === "event" || it.t === "note"));
   const user = msgs.find((m) => m.role === "user");
-  return { items: work, answer, answerAt: tail[0]?.time, images: user?.images || [], prompt: user?.text, cost, ms };
+  return { items: work, answer, answerAt: tail[0]?.time, images: user?.images || [], prompt: user?.text, via: user?.via, cost, ms };
 }
 
 
@@ -6246,7 +6247,7 @@ function agentRows(b) {
     if (it.t === "step") { if (!TX_NOISE.test(it.tool)) g.push(it); continue; }
     flush();
     if (it.t === "text") rows.push({ k: "say", text: it.text, at: it.time });
-    else rows.push({ k: it.t === "note" ? "note" : "evt", text: it.text, at: it.time });
+    else rows.push({ k: it.t === "note" ? "note" : "evt", text: it.text, at: it.time, via: it.via });
   }
   flush();
   if (b.answer) rows.push({ k: "say", text: b.answer, at: b.answerAt || rows[rows.length - 1]?.at, answer: true });
@@ -6260,11 +6261,33 @@ function agentRows(b) {
 
 const unesc = (t) => t.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
 const cleanPrompt = (t) => unesc(t || "").replace(/\[Image #\d+\]\s*/g, "");
-function Lead({ text, images, files, at }) {
+const viaSession = (v) => v?.ref && LIVE.find((x) => x.id === v.ref || x.sessionId?.startsWith(v.ref)) || null;
+const viaName = (v) => v.title || v.source || (v.host ? `a session on ${v.host}` : v.channel || "another session");
+const VIA_ASK = { report: ["ask", "wants a report"], handoff: ["", "handed to you"] };
+function ViaHead({ v, at }) {
+  const pop = useRef(null), x = viaSession(v), name = viaName(v);
+  const hue = hueOf(x?.cwd ? project(x.cwd).name : name);
+  const [tone, chip] = v.approved ? ["go", "your go-ahead"] : VIA_ASK[v.ask] || ["", "FYI"];
+  useEffect(() => {
+    const away = (e) => pop.current?.open && !pop.current.contains(e.target) && (pop.current.open = false);
+    addEventListener("pointerdown", away);
+    return () => removeEventListener("pointerdown", away);
+  }, []);
+  const facts = [["from", name], ["ref", v.ref], ["host", v.host], ["source", v.source], ["channel", v.channel && `${v.channel}${v.channel === "agent" || v.channel === "guest" ? " (the reply reaches no one)" : ""}`],
+    ["asks", v.askText], ["user was", v.where && v.where.replace(/^The user is /, "")]].filter(([, val]) => val);
+  return html`<div class="vh">
+    <details class="vpop" ref=${pop}><summary><span class="vsq" style=${`--ph: ${hue}`} aria-hidden="true">${name.replace(/^@/, "")[0]?.toUpperCase()}</span><b>${name}</b>${v.host && html`<span class="vho">on ${v.host}</span>`}</summary>
+      <div class="vbox"><dl>${facts.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>
+        ${x && html`<a class="btn sm" href=${`#/s/${keyOf(x)}`}>Open ${x.title || name}</a>`}
+        ${v.raw && html`<details class="vraw"><summary>What this session read</summary><pre>${v.raw}</pre></details>`}</div></details>
+    ${v.started && html`<span class="vto">started this</span>`}
+    <span class="vchip ${tone}">${chip}</span><span class="vat">${at}</span></div>`;
+}
+function Lead({ text, images, files, at, via }) {
   const [all, setAll] = useState(false);
   const long = text.length > 600 || text.split("\n").length > 8;
   const body = useMemo(() => Marked.parse(text, { breaks: true }), [text]);
-  return html`<div class="lead"><div class="lead-at">you ${at}</div><div class="prose ptxt ${long && !all ? "clamp" : ""}" dangerouslySetInnerHTML=${{ __html: body }}></div>
+  return html`${via?.news?.length > 0 && via.news.map((n) => html`<p class="evt vnews">${n}</p>`)}<div class=${via ? "lead via" : "lead"}>${via ? html`<${ViaHead} v=${via} at=${at} />` : html`<div class="lead-at">you ${at}</div>`}<div class="prose ptxt ${long && !all ? "clamp" : ""}" dangerouslySetInnerHTML=${{ __html: body }}></div>
     ${long && html`<button class="kb more" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}
     ${files > 0 && html`<span class="attl">${plural(files, "attachment")}</span>`}
     ${(images || []).length > 0 && html`<span class="imgs">${images.map((src) => html`<img src=${src} alt="Image you attached" />`)}</span>`}</div>`;
@@ -6787,15 +6810,16 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       case "fold": {
         const f = (r.t.files || []).filter((x) => !scratch(x.path)).sort((a, b) => b.add + b.del - a.add - a.del)[0];
         const work = [r.t.steps > 0 && plural(r.t.steps, "step"), f && `${relPath(f.path, s)} +${f.add}${f.del ? ` -${f.del}` : ""}`, (r.t.files || []).length > 1 && `${r.t.files.length - 1} more`].filter(Boolean).join(", ");
-        const who = r.t.notice ? "" : "you";
-        return html`${who && html`<h2 class="sr">you, ${txClock(r.at)}</h2>`}<button class="fold ${r.t.notice ? "ntc" : ""}" id=${`tx${r.i}`} data-stop data-you=${who ? "" : null} aria-expanded="false" title="Open this turn" onClick=${() => openTurn(r.i)}>
+        const who = r.t.notice ? "" : r.t.via ? viaName(r.t.via) : "you";
+        return html`${who && html`<h2 class="sr">${who}, ${txClock(r.at)}</h2>`}<button class="fold ${r.t.notice ? "ntc" : ""}" id=${`tx${r.i}`} data-stop data-you=${who ? "" : null} aria-expanded="false" title="Open this turn" onClick=${() => openTurn(r.i)}>
           <span class="fy"><span class="lead-at">${who} ${clock(r.at, true)}</span><span class="fq">${r.t.partial ? "Continued from earlier" : plain(cleanPrompt(r.t.prompt)) || "Image"}</span></span>
           <span class="g">${r.t.reply ? firstSentence(r.t.reply) : "No reply."} ${work && html`<b>${work}</b>`}</span></button>`;
       }
       case "you": {
         const first = rows[0] === r;
-        return html`<div class="sec ${first ? "first" : ""}" id=${`tx${r.i}`} data-stop data-you><h2 class="sr">you, ${txClock(r.at)}</h2>
-          <${Lead} at=${clock(r.at, true)} text=${cleanPrompt(r.b?.prompt ?? r.t.prompt).trim()} images=${r.b?.images} /></div>`;
+        const via = r.b ? r.b.via : r.t.via;
+        return html`<div class="sec ${first ? "first" : ""}" id=${`tx${r.i}`} data-stop data-you><h2 class="sr">${via ? viaName(via) : "you"}, ${txClock(r.at)}</h2>
+          <${Lead} at=${clock(r.at, true)} text=${cleanPrompt(r.b?.prompt ?? r.t.prompt).trim()} images=${r.b?.images} via=${via} /></div>`;
       }
       case "notice": return !zen && html`<p class="evt" id=${`tx${r.i}`}>${plain(cleanPrompt(r.t.prompt))}</p>`;
       case "partial": return html`<p class="evt" id=${`tx${r.i}`}>This turn started before what is loaded here.</p>`;
@@ -6804,7 +6828,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
         return html`${r.answer && html`<h2 class="sr">${s.agent ? `@${s.agent}` : "agent"}, ${txClock(r.at)}</h2>`}${r.steps && html`${!zen && html`<${InlineSteps} steps=${r.steps} s=${s} at=${clock(r.at)} open=${gOpen} toggle=${() => flip(gk)} />`}<${GroupBody} steps=${zen ? r.steps.filter((x) => txKind(x) === "ask") : r.steps} s=${s} open=${gOpen && !zen} zoom=${setShot} live=${r.live && !r.text} />`}
             ${r.text && html`<div id=${`said-${r.key}`} data-said data-stop=${r.answer ? "" : null}><${Prose} text=${r.text} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`;
       case "evt": return !zen && html`<p class="evt">${r.text}</p>`;
-      case "note": return html`<${Lead} at=${clock(r.at, true)} text=${r.text} />`;
+      case "note": return html`<${Lead} at=${clock(r.at, true)} text=${r.text} via=${r.via} />`;
       case "answered": {
         const rec = r.rec;
         return html`<${AnsweredLine} q=${rec.q} cmd=${rec.cmd} options=${rec.options || []} chosen=${rec.i ? [rec.i - 1] : []}

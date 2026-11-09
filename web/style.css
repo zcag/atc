@@ -3,7 +3,7 @@
 .needs-you { --st: var(--needs); }
 .your-turn { --st: var(--turn); }
 .working { --st: var(--work); }
-:is(.it, .lane, .proj, .chips button) {
+:is(.it, .lane, .proj, .chips button, .vsq) {
   --pc: light-dark(hsl(var(--ph, 220) var(--proj-ink-l)), hsl(var(--ph, 220) var(--proj-ink-d)));
   --pb: light-dark(hsl(var(--ph, 220) var(--proj-tint-l)), hsl(var(--ph, 220) var(--proj-tint-d)));
   --pcs: light-dark(hsl(var(--ph, 220) var(--proj-soft-l)), hsl(var(--ph, 220) var(--proj-soft-d)));

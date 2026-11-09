@@ -16,7 +16,7 @@ func TestWithoutNews(t *testing.T) {
 		"hello\n\nthere": "hello\n\nthere",
 		"[atc now, 20:15]\nan older message with no blank line": "[atc now, 20:15]\nan older message with no blank line",
 	} {
-		if got := withoutNews(in); got != want {
+		if got, _ := news(in); got != want {
 			t.Errorf("%q: %q", in, got)
 		}
 	}
