@@ -5485,26 +5485,28 @@ function Running({ st }) {
 }
 
 const AGENT_RUNS = new Map();
-function useAgentRuns(sid) {
+function useAgentRuns(sid, live = false) {
   const [, tick] = useState(0);
   useEffect(() => {
     let e = AGENT_RUNS.get(sid);
     if (!e) {
-      e = { runs: null, subs: new Set(), timer: 0 };
+      e = { runs: null, subs: new Set(), live: new Set(), timer: 0 };
       const poll = () => api(`/api/sessions/${sid}/agents`).then((r) => {
         e.runs = r.agents || [];
         e.subs.forEach((f) => f());
         clearTimeout(e.timer);
-        if (e.subs.size && e.runs.some((a) => !a.done)) e.timer = setTimeout(poll, document.visibilityState === "visible" ? 4000 : 20000);
+        e.timer = 0;
+        if (e.subs.size && (e.live.size || e.runs.some((a) => !a.done))) e.timer = setTimeout(poll, document.visibilityState === "visible" ? 4000 : 20000);
       }, () => {});
       e.poll = poll;
       AGENT_RUNS.set(sid, e);
     }
     const f = () => tick((n) => n + 1);
     e.subs.add(f);
-    if (!e.runs || (e.runs.some((a) => !a.done) && !e.timer)) e.poll();
-    return () => { e.subs.delete(f); if (!e.subs.size) { clearTimeout(e.timer); e.timer = 0; } };
-  }, [sid]);
+    if (live) e.live.add(f);
+    if (!e.runs || ((live || e.runs.some((a) => !a.done)) && !e.timer)) e.poll();
+    return () => { e.subs.delete(f); e.live.delete(f); if (!e.subs.size) { clearTimeout(e.timer); e.timer = 0; } };
+  }, [sid, live]);
   return AGENT_RUNS.get(sid)?.runs || null;
 }
 const agentDoing = (a) => a.last && (a.last.tool === "Bash" ? oneLine(a.last.detail || "running a command") : `${VERB[a.last.tool] || toolName(a.last.tool).toLowerCase()} ${oneLine(a.last.detail || "")}`.trim());
@@ -5887,44 +5889,104 @@ function highlight(el, q) {
   ranges[0]?.startContainer.parentElement?.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
+function useBgOutputs(sid, live, id = "", n = 2) {
+  const [out, setOut] = useState({});
+  useEffect(() => {
+    if (!live) return;
+    let on = true, t = 0;
+    const get = () => api(`/api/sessions/${sid}/background?n=${n}${id ? `&id=${encodeURIComponent(id)}` : ""}`).then((r) => { if (on) setOut(r.outputs || {}); }, () => {}).finally(() => { if (on) t = setTimeout(get, document.visibilityState === "visible" ? 3000 : 20000); });
+    get();
+    return () => { on = false; clearTimeout(t); };
+  }, [sid, live, id, n]);
+  return out;
+}
+const BG_KIND = { agent: "agent", shell: "command", monitor: "watch" };
+const bgProgress = (line) => {
+  const pct = /(\d{1,3}(?:\.\d+)?)\s?%/.exec(line || ""), of = /\b(\d+)\s*(?:\/|of)\s*(\d+)\b/.exec(line || "");
+  if (pct && +pct[1] <= 100) return +pct[1];
+  if (of && +of[2] > 1 && +of[1] <= +of[2]) return (100 * of[1]) / of[2];
+  return null;
+};
+const eventLine = (l) => {
+  if (!/^\s*\{/.test(l || "")) return l;
+  try {
+    const o = JSON.parse(l);
+    return Object.entries(o).filter(([, v]) => v !== null && v !== "" && typeof v !== "object").slice(0, 5).map(([k, v]) => `${k} ${v}`).join(" · ") || l;
+  } catch { return l; }
+};
+const quietFor = (at) => (at && Date.now() - msOf(at) > 120e3 ? txSpan(Date.now() - msOf(at)) : "");
+
+function BgItem({ t, s, run, out, open, toggle }) {
+  const [src, setSrc] = useState(null);
+  useEffect(() => { if (t.kind !== "agent" && !src) api(`/api/sessions/${s.sessionId}/tasks/${encodeURIComponent(t.id)}`).then(setSrc, () => setSrc({})); }, [t.id]);
+  const long = useBgOutputs(s.sessionId, open && t.kind !== "agent", t.id, 40)[t.id] || (open ? out : null);
+  const now = Date.now(), last = out?.lines?.[out.lines.length - 1] || "", exit = out?.exit;
+  const failed = exit != null && exit !== 0, ended = t.done || (exit != null && msOf(out.updated));
+  const state = !ended ? "run" : failed ? "bad" : "ok";
+  const name = t.kind === "agent" ? run?.name || t.label : src?.description || t.label.replace(/^cd \S+ && /, "");
+  const live = t.kind === "agent"
+    ? (ended ? firstSentence(run?.said || "") : agentDoing(run || {}) || "starting")
+    : t.kind === "monitor" ? last && `${out?.updated ? `${txSpan(now - msOf(out.updated))} ago` : "last"}: ${eventLine(last)}` : last;
+  const quiet = !ended && t.kind !== "monitor" && quietFor(t.kind === "agent" ? run?.updated : out?.updated);
+  const pct = !ended && t.kind === "shell" ? bgProgress(last) : null;
+  const span = t.startedAt ? txSpan((ended || now) - t.startedAt) : "";
+  const inTx = t.kind === "agent" && run && document.getElementById(`ag-${run.tool}`);
+  const click = () => {
+    if (inTx) { if (inTx.querySelector(".subh")?.getAttribute("aria-expanded") === "false") inTx.querySelector(".subh").click(); TX_API?.reveal(`#${CSS.escape(inTx.id)}`); return; }
+    toggle();
+  };
+  return html`<li class="bgi ${state} ${open ? "more" : ""}">
+    <button class="bgi-h" onClick=${click} aria-expanded=${open} title=${inTx ? "Show it in the conversation" : ""}>
+      <span class="bgi-m" aria-hidden="true">${state === "run" ? html`<i class="pulse"></i>` : state === "bad" ? "✕" : "✓"}</span>
+      <span class="bgi-k">${BG_KIND[t.kind] || t.kind}</span>
+      <span class="bgi-n">${name}</span>
+      <span class="bgi-t">${[t.kind === "agent" && run?.steps > 0 && plural(run.steps, "step"), exit != null && exit !== 0 && `exit ${exit}`, ended ? `done ${span}` : span].filter(Boolean).join(" · ")}</span>
+      ${(live || quiet) && html`<span class="bgi-l ${ended ? "" : "mono"}">${live}${quiet && html`<span class="bgi-q">${live ? " · " : ""}quiet for ${quiet}</span>`}</span>`}
+      ${pct != null && html`<span class="bgi-bar" aria-label=${`${Math.round(pct)}%`}><i style=${`width:${pct}%`}></i></span>`}
+    </button>
+    ${open && html`<div class="bgi-more">
+      ${t.kind === "agent"
+        ? run ? html`<${AgentThread} st=${{ id: run.tool, out: run.done ? { text: "" } : null }} s=${s} />` : html`<p class="cont">Its transcript isn't there yet.</p>`
+        : html`${src?.detail && html`<pre class="bgi-cmd">${src.detail}</pre>`}${long?.lines?.length ? html`<pre class="bgi-out">${long.lines.join("\n")}</pre>` : html`<p class="cont">No output yet.</p>`}`}
+    </div>`}
+  </li>`;
+}
+
 function BgStrip({ s }) {
   const seen = useRef(new Map());
   const [open, setOpen] = useState(() => pref("atc.bgopen", "off") === "on");
   const [showDone, setShowDone] = useState(() => pref("atc.bgdone", "off") === "on");
-  const [more, setMoreRaw] = useState(null);
-  const [src, setSrc] = useState({});
-  const setMore = (id) => {
-    setMoreRaw(id);
-    if (id && !src[id]) api(`/api/sessions/${s.sessionId}/tasks/${encodeURIComponent(id)}`).then((r) => setSrc((m) => ({ ...m, [id]: r })), () => {});
-  };
+  const [more, setMore] = useState(null);
   useNow(1000);
   const now = Date.now(), cur = s.background || [], ids = new Set(cur.map((t) => t.id));
   for (const t of cur) seen.current.set(t.id, { ...t, done: t.doneAt || 0 });
   for (const [id, t] of seen.current) if (!ids.has(id) && !t.done) t.done = now;
   const all = [...seen.current.values()].sort((a, b) => (a.startedAt || 0) - (b.startedAt || 0));
-  const running = all.filter((t) => !t.done).length;
+  const running = all.filter((t) => !t.done);
+  const runs = useAgentRuns(s.sessionId, running.some((t) => t.kind === "agent"));
+  const outs = useBgOutputs(s.sessionId, all.some((t) => t.kind !== "agent" && (!t.done || now - t.done < 60e3)));
   if (!all.length) return null;
-  if (!running && now - Math.max(...all.map((t) => t.done)) > 60e3) { seen.current.clear(); return null; }
-  const word = (n) => (all.every((t) => t.kind === "agent") ? (n === 1 ? "agent" : "agents") : n === 1 ? "task" : "tasks");
+  if (!running.length && now - Math.max(...all.map((t) => t.done)) > 60e3) { seen.current.clear(); return null; }
+  const runOf = (t) => runs?.find((a) => a.id === t.id);
   const toggle = () => { setOpen(!open); setPref("atc.bgopen", open ? "off" : "on"); };
   const toggleDone = () => { setShowDone(!showDone); setPref("atc.bgdone", showDone ? "off" : "on"); };
-  const finished = all.length - running;
-  return html`<div class="bgstrip ${running ? "" : "finished"}">
-    <button class="bg-head" onClick=${toggle} aria-expanded=${open && running > 0}>
-      <span class="bg-dot ${running ? "run" : ""}"></span>
-      <span>${running ? `${running} ${word(running)} running in the background` : `${all.length} background ${word(all.length)} finished`}</span>
-      ${running > 0 && finished > 0 && !open && html`<span class="bg-sub">${finished} done</span>`}
-      ${running > 0 && html`<span class="chev" aria-hidden="true"></span>`}
+  const exited = (t) => t.kind !== "agent" && outs[t.id]?.exit != null;
+  const busy = running.filter((t) => !exited(t)), finished = all.length - busy.length;
+  const counts = Object.entries(busy.reduce((m, t) => ({ ...m, [t.kind]: (m[t.kind] || 0) + 1 }), {})).map(([k, n]) => plural(n, BG_KIND[k] || k)).join(", ");
+  const busiest = busy.map((t) => ({ t, at: msOf(t.kind === "agent" ? runOf(t)?.updated : outs[t.id]?.updated) })).sort((a, b) => b.at - a.at)[0]?.t;
+  const nowLine = busiest && (busiest.kind === "agent" ? agentDoing(runOf(busiest) || {}) : eventLine(outs[busiest.id]?.lines?.slice(-1)[0]));
+  const bad = all.filter((t) => outs[t.id]?.exit != null && outs[t.id].exit !== 0).length;
+  return html`<div class="bgstrip ${busy.length ? "" : "finished"}">
+    <button class="bg-head" onClick=${toggle} aria-expanded=${open}>
+      <span class="bgdots" aria-hidden="true">${all.map((t) => html`<i class=${!t.done && !exited(t) ? "run" : outs[t.id]?.exit ? "bad" : "ok"}></i>`)}</span>
+      <span class="bg-c">${busy.length ? `${counts} running` : `${plural(all.length, "background job")} finished`}${finished > 0 && busy.length > 0 ? html`<span class="bg-sub"> · ${finished} done${bad ? `, ${bad} failed` : ""}</span>` : ""}</span>
+      ${!open && nowLine && html`<span class="bg-now mono">${nowLine}</span>`}
+      <span class="chev" aria-hidden="true"></span>
     </button>
-    ${open && running > 0 && html`<ul>
-      ${finished > 0 && html`<li class="bg-fold"><button aria-expanded=${showDone} onClick=${toggleDone}>${finished} done<span class="chev" aria-hidden="true"></span></button></li>`}
-      ${all.filter((t) => showDone || !t.done).map((t) => html`<li class="${t.done ? "done" : ""} ${more === t.id ? "more" : ""}" onClick=${() => setMore(more === t.id ? null : t.id)}>
-      <span class="bg-k">${t.kind === "shell" ? "shell" : "agent"}</span>
-      <span class="bg-l" title=${more === t.id ? null : t.label}>${more === t.id
-        ? html`${src[t.id]?.description && t.kind === "shell" && html`<b>${src[t.id].description}</b>`}${src[t.id]?.detail || t.label}`
-        : t.kind === "shell" ? t.label.replace(/^cd \S+ && /, "") : t.label}</span>
-      <span class="bg-t">${t.done ? "done" : t.startedAt ? txSpan(now - t.startedAt) : "running"}</span>
-    </li>`)}</ul>`}
+    ${open && html`<ul>
+      ${finished > 0 && busy.length > 0 && html`<li class="bg-fold"><button aria-expanded=${showDone} onClick=${toggleDone}>${finished} done<span class="chev" aria-hidden="true"></span></button></li>`}
+      ${all.filter((t) => showDone || (!t.done && !exited(t)) || !busy.length).map((t) => html`<${BgItem} key=${t.id} t=${t} s=${s} run=${runOf(t)} out=${outs[t.id]} open=${more === t.id} toggle=${() => setMore(more === t.id ? null : t.id)} />`)}
+    </ul>`}
   </div>`;
 }
 
@@ -6442,7 +6504,7 @@ function TaskCard({ e, s, at, open }) {
   const [src, setSrc] = useState(null), [gone, setGone] = useState(false);
   const k = e.task, m = /^(.*?) "(.*)" (.*)$/.exec(e.text || "");
   const runs = useAgentRuns(s.sessionId), run = k.call ? runs?.find((a) => a.tool === k.call) : null;
-  const from = () => document.getElementById(`ag-${k.call}`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+  const from = () => TX_API?.reveal(`#ag-${CSS.escape(k.call)}`);
   const output = () => api(`/api/sessions/${s.sessionId}/ref/file?path=${encodeURIComponent(k.output)}`).then(() => open(k.output, { exact: true }), () => setGone(true));
   const more = () => (src ? setSrc(null) : api(`/api/sessions/${s.sessionId}/tasks/${encodeURIComponent(k.id)}`).then(setSrc, () => setSrc({ detail: "The command isn't in the transcript any more." })));
   return html`<div class="task ${k.status}">
@@ -6900,7 +6962,8 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   };
   useEffect(() => { goSpot(); addEventListener("hashchange", goSpot); return () => removeEventListener("hashchange", goSpot); });
   const ends = new Map(turns.flatMap((t) => (t.ended || []).map((e) => [e.call, e])));
-  TX_API = { ended: (call) => ends.get(call), jump: (i) => { openTurn(i); requestAnimationFrame(() => document.getElementById(`tx${i}`)?.scrollIntoView({ block: "start", behavior: "smooth" })); },
+  const reveal = (sel) => requestAnimationFrame(() => { if (!box.current?.querySelector(sel)) return; hold.current = sel; atEnd.current = false; settle(); });
+  TX_API = { ended: (call) => ends.get(call), reveal, jump: (i) => { openTurn(i); reveal(`#tx${i}`); },
     answered: (ref, at) => { const i = turns.findIndex((t) => t.via?.ref === ref && msOf(t.at) > msOf(at)); return i < 0 ? null : { i, at: turns[i].at }; },
     asked: (ref, at) => { for (let i = turns.length - 1; i >= 0; i--) { if (msOf(turns[i].at) > msOf(at)) continue; const st = txSteps(bodies[turns[i].from]?.items || []).findLast((x) => txKind(x) === "letter" && letterOut(x)?.ref === ref && x.input.report); if (st) return { i, at: st.time || turns[i].at }; } return null; },
     level: () => setLevel((level % 3) + 1), find: () => { findQ.current = ""; setPop("find"); }, results: () => setPop("results"), contents: () => setContents(!contents), zen: () => setZen(!zen) };

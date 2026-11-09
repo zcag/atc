@@ -196,6 +196,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/sessions/{sid}/tasks/{task}", s.task)
 	mux.HandleFunc("GET /api/sessions/{sid}/search", s.search)
 	mux.HandleFunc("GET /api/sessions/{sid}/agents", s.sessionAgents)
+	mux.HandleFunc("GET /api/sessions/{sid}/background", s.backgroundOutputs)
 	mux.HandleFunc("GET /api/sessions/{sid}/agents/{tool}", s.agent)
 	mux.HandleFunc("GET /api/sessions/{sid}/summary", s.summary)
 	mux.HandleFunc("POST /api/sessions/{sid}/summary", s.summary)
@@ -595,6 +596,18 @@ func (s *Server) turns(w http.ResponseWriter, r *http.Request) {
 	}
 	waiting, _ := s.M.Index.Waiting(t.Path)
 	reply(w, map[string]any{"turns": turns, "size": size, "waiting": waiting})
+}
+
+// backgroundOutputs is the end of what each background command and monitor of a session wrote: n lines (default 3)
+// each, or of the one task id names.
+func (s *Server) backgroundOutputs(w http.ResponseWriter, r *http.Request) {
+	t, ok := s.M.Index.Find(r.PathValue("sid"))
+	if !ok {
+		http.Error(w, "no transcript", http.StatusNotFound)
+		return
+	}
+	n, _ := strconv.Atoi(r.URL.Query().Get("n"))
+	reply(w, map[string]any{"outputs": claude.Outputs(t.SessionID, min(cmp.Or(n, 3), 200), r.URL.Query().Get("id"))})
 }
 
 func (s *Server) sessionAgents(w http.ResponseWriter, r *http.Request) {

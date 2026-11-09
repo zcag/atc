@@ -69,7 +69,7 @@ func Background(id string) []Task {
 	json.Unmarshal(b, &st)
 	var out []Task
 	for _, t := range st.Fan {
-		if t.Kind == "agent" || t.Kind == "shell" {
+		if t.Kind == "agent" || t.Kind == "shell" || t.Kind == "monitor" {
 			out = append(out, t)
 		}
 	}

@@ -14,6 +14,7 @@ import (
 // what it is doing now and the last it said.
 type AgentRun struct {
 	Tool    string    `json:"tool"`
+	ID      string    `json:"id"`
 	Name    string    `json:"name"`
 	Type    string    `json:"type,omitempty"`
 	Model   string    `json:"model,omitempty"`
@@ -102,7 +103,7 @@ func Agents(transcript string) []AgentRun {
 }
 
 func summarize(a subagent, msgs []Message) AgentRun {
-	run := AgentRun{Tool: a.meta.ToolUseID, Name: a.meta.Description, Type: a.meta.AgentType, Model: a.meta.Model, Done: a.meta.Finished}
+	run := AgentRun{Tool: a.meta.ToolUseID, ID: strings.TrimPrefix(strings.TrimSuffix(filepath.Base(a.path), ".jsonl"), "agent-"), Name: a.meta.Description, Type: a.meta.AgentType, Model: a.meta.Model, Done: a.meta.Finished}
 	for i, m := range msgs {
 		if run.Started.IsZero() && !m.Time.IsZero() {
 			run.Started = m.Time
