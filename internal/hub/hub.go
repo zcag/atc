@@ -565,19 +565,15 @@ func (h *Hub) event(l line) {
 		}
 		h.emit(Event{Type: "session", Text: h.sid})
 	case l.Type == "user" && l.IsReplay && len(l.Message.Content) > 0 && l.Message.Content[0] == '"' && len(h.pending) > 0:
-		m := h.pending[0]
-		h.pending = h.pending[1:]
-		ch := m.channel
-		h.emit(Event{Type: "read", Channel: ch})
-		if h.turn == nil {
-			h.turn = &turn{channels: []string{ch}, wrote: map[string]bool{}, interrupted: h.cutEarly}
-			h.cutEarly = false
-			h.emit(Event{Type: "turn", Channel: ch})
-		} else if !slices.Contains(h.turn.channels, ch) {
-			h.turn.channels = append(h.turn.channels, ch)
-			h.emit(Event{Type: "joined", Channel: ch})
+		var replayed string
+		json.Unmarshal(l.Message.Content, &replayed)
+		for i, m := range h.pending {
+			if i > 0 && !strings.Contains(replayed, m.text) {
+				break
+			}
+			h.pending = h.pending[1:]
+			h.take(m.channel)
 		}
-		h.turn.route = ch
 	case l.Type == "user" && !l.IsReplay && l.Parent == "" && h.turn != nil && h.turn.tools > 0:
 		var blocks []struct{ Type string }
 		json.Unmarshal(l.Message.Content, &blocks)
@@ -625,6 +621,21 @@ func (h *Hub) event(l line) {
 	case l.Type == "stream_event" && h.turn != nil:
 		h.stream(l)
 	}
+}
+
+// take is Claude taking in a message from ch: it starts the turn or joins it. Claude Code merges
+// messages queued while it was busy into one, so one replay can read several.
+func (h *Hub) take(ch string) {
+	h.emit(Event{Type: "read", Channel: ch})
+	if h.turn == nil {
+		h.turn = &turn{channels: []string{ch}, wrote: map[string]bool{}, interrupted: h.cutEarly}
+		h.cutEarly = false
+		h.emit(Event{Type: "turn", Channel: ch})
+	} else if !slices.Contains(h.turn.channels, ch) {
+		h.turn.channels = append(h.turn.channels, ch)
+		h.emit(Event{Type: "joined", Channel: ch})
+	}
+	h.turn.route = ch
 }
 
 func (h *Hub) stream(l line) {

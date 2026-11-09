@@ -757,3 +757,16 @@ func TestResetRule(t *testing.T) {
 		t.Error("due mid-turn")
 	}
 }
+
+func TestMergedReplayReadsEveryMessage(t *testing.T) {
+	h := New(Config{Dir: t.TempDir(), State: t.TempDir()})
+	h.pending = []msg{{Phone, "call ended"}, {Phone, "MODE phone\nhello again"}}
+	content, _ := json.Marshal("call ended\nMODE phone\nhello again")
+	var l line
+	l.Type, l.IsReplay, l.Message.Content = "user", true, content
+	h.event(l)
+	h.event(line{Type: "result", Subtype: "success"})
+	if len(h.pending) != 0 || h.turn != nil || h.holds("whatsapp") {
+		t.Fatalf("pending %v, turn %v: a merged replay must read both messages", h.pending, h.turn)
+	}
+}
