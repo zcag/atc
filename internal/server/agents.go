@@ -664,14 +664,21 @@ func (s *Server) hubNamed(name string) *hubLink {
 	return nil
 }
 
-// agentMessage wakes an agent with the request body: {"text": ...} or anything else as it came
+// agentMessage wakes an agent, or the hub's conversation, with the request body: {"text": ...} or anything else as it came
 // (a Grafana alert, a CI payload). With from=<source> it answers at once and delivers in the
 // background, so a webhook never times out and retries. {"user": true} is the user writing from
 // atc, which unparks it like typing into its conversation does.
 func (s *Server) agentMessage(w http.ResponseWriter, r *http.Request) {
+	b, _ := io.ReadAll(io.LimitReader(r.Body, 256<<10))
+	var body struct {
+		Text string
+		User bool
+	}
+	text := strings.TrimSpace(string(b))
+	if json.Unmarshal(b, &body) == nil && body.Text != "" {
+		text = body.Text
+	}
 	if l := s.hubNamed(r.PathValue("name")); l != nil {
-		b, _ := io.ReadAll(io.LimitReader(r.Body, 256<<10))
-		text := strings.TrimSpace(string(b))
 		if text == "" {
 			http.Error(w, "nothing to send", http.StatusBadRequest)
 			return
@@ -686,15 +693,6 @@ func (s *Server) agentMessage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		http.Error(w, "no agent named "+r.PathValue("name")+" on "+s.Host, http.StatusNotFound)
 		return
-	}
-	b, _ := io.ReadAll(io.LimitReader(r.Body, 256<<10))
-	var body struct {
-		Text string
-		User bool
-	}
-	text := strings.TrimSpace(string(b))
-	if json.Unmarshal(b, &body) == nil && body.Text != "" {
-		text = body.Text
 	}
 	text = cmp.Or(text, a.Prompt)
 	if text == "" {

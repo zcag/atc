@@ -158,6 +158,17 @@ func TestHubSessionIsListedAndTakesMessages(t *testing.T) {
 			t.Fatalf("hub got %q, want %q", got[len(got)-1], c.want)
 		}
 	}
+	for _, c := range []struct{ body, want string }{
+		{`{"text":"done.\nall of it"}`, "agent: done.\nall of it"},
+		{`an alert, not json`, "agent: an alert, not json"},
+	} {
+		if code, b := api(t, ts, "POST", "/api/agents/"+hubName+"/message", c.body); code != 200 {
+			t.Fatalf("send: %d %s", code, b)
+		}
+		if got := f.sent(); got[len(got)-1] != c.want {
+			t.Fatalf("hub got %q, want %q", got[len(got)-1], c.want)
+		}
+	}
 	api(t, ts, "POST", "/api/sessions/hub-sid/keys", `{"keys":"\u001b"}`)
 	if got := f.sent(); !strings.HasPrefix(got[len(got)-1], "interrupt ") {
 		t.Fatalf("Esc did not interrupt: %v", got)
