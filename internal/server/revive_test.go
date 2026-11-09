@@ -2,12 +2,16 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/zcag/atc/internal/claude"
+	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/sessions"
+	"github.com/zcag/atc/internal/store"
 )
 
 func TestReviverSpotsAMassStop(t *testing.T) {
@@ -100,5 +104,48 @@ func TestReviverAfterReboot(t *testing.T) {
 	os.WriteFile(rv.path, b, 0o600)
 	if got := rv.afterReboot(); len(got) != 1 || got[0].SID != "a" {
 		t.Fatalf("after reboot: %v (%s)", got, b)
+	}
+}
+
+func TestReviveWaitsForTheServiceToResumeItsOwn(t *testing.T) {
+	daemonGrace, daemonPoll = 2*time.Second, 20*time.Millisecond
+	t.Cleanup(func() { daemonGrace, daemonPoll = 45*time.Second, 2*time.Second })
+	bin := fakeClaude(t)
+	dir := filepath.Dir(bin)
+	agents := func(js string) { os.WriteFile(filepath.Join(dir, "agents.json"), []byte(js), 0o644) }
+	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
+	s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st}, Host: "here"}
+	lost := []running{{SID: "sid-a", ID: "aaaa0001", Dir: t.TempDir(), Title: "A"}, {SID: "sid-b", ID: "bbbb0001", Dir: t.TempDir(), Title: "B"}}
+
+	agents(`[{"id":"aaaa0001","sessionId":"sid-a","state":"blocked"},{"id":"bbbb0001","sessionId":"sid-b","state":"blocked"}]`)
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		agents(`[{"id":"aaaa0001","sessionId":"sid-a","pid":11,"state":"idle"},{"id":"bbbb0001","sessionId":"sid-b","pid":12,"state":"busy"}]`)
+	}()
+	start := time.Now()
+	s.awaitDaemon(lost)
+	if took := time.Since(start); took > time.Second {
+		t.Fatalf("both were back after 200ms but it waited %s", took)
+	}
+	for _, r := range lost {
+		if _, err := s.reviveOne(r); !errors.Is(err, errBack) {
+			t.Fatalf("%s is back on its own and must not get a second copy: %v", r.Title, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(dir, "started")); err == nil {
+		t.Fatal("a copy was started")
+	}
+
+	agents(`[{"id":"aaaa0001","sessionId":"sid-a","pid":11,"state":"idle"},{"id":"bbbb0001","sessionId":"sid-b","state":"blocked"}]`)
+	start = time.Now()
+	s.awaitDaemon(lost)
+	if took := time.Since(start); took < daemonGrace {
+		t.Fatalf("B never came back, so it should wait the whole grace; waited %s", took)
+	}
+	if _, err := s.reviveOne(lost[1]); err != nil {
+		t.Fatalf("B should be relaunched: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "started")); err != nil {
+		t.Fatal("B was not relaunched")
 	}
 }

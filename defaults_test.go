@@ -202,7 +202,9 @@ func TestAssistantVoiceStartsAsTheShippedPerson(t *testing.T) {
 
 func TestSetUnsetKeepsWhatIsSet(t *testing.T) {
 	isolate(t)
-	t.Setenv("ATC_PUBLIC_URL", "")
+	for _, k := range []string{"ATC_PUBLIC_URL", "ATC_CALL_VOICES", "ATC_CALL_LINE"} {
+		t.Setenv(k, "")
+	}
 	path := filepath.Join(client.ConfigDir(), "env")
 	os.MkdirAll(client.ConfigDir(), 0o755)
 	os.WriteFile(path, []byte("ATC_CALL_VOICES=http://mine\n"), 0o600)

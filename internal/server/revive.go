@@ -199,6 +199,7 @@ func bootTime() (time.Time, error) {
 // revive runs after rv.begin (observe calls it for a stop) and ends that claim.
 func (s *Server) revive(lost []running, why string) {
 	defer s.rv.end()
+	s.awaitDaemon(lost)
 	var back []string
 	for _, r := range lost {
 		r.Working = r.Working || s.midTurn(r.SID)
@@ -237,6 +238,24 @@ func (s *Server) revive(lost []running, why string) {
 	s.refresh()
 	if s.Push != nil && len(back) > 0 {
 		s.Push.Send(push.Message{Title: fmt.Sprintf("%s: %d sessions back", s.Host, len(back)), Body: why + ". Resumed " + strings.Join(back, ", ") + ".", Tag: "revive", URL: "/"})
+	}
+}
+
+// daemonGrace is how long a restarted Claude service gets to resume the sessions it adopted; until then they are
+// listed without a pid, the same as ones it never will.
+var daemonGrace, daemonPoll = 45 * time.Second, 2 * time.Second
+
+func (s *Server) awaitDaemon(lost []running) {
+	for end := time.Now().Add(daemonGrace); time.Now().Before(end); time.Sleep(daemonPoll) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		agents, err := s.M.CLI.Agents(ctx)
+		cancel()
+		if err == nil && !slices.ContainsFunc(lost, func(r running) bool {
+			_, ok := s.liveIn(s.chain(r.SID, agents), agents)
+			return r.Harness == "" && !ok
+		}) {
+			return
+		}
 	}
 }
 
