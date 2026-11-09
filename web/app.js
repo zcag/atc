@@ -7466,7 +7466,7 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
     seenDir.add(k);
     add("Folders", tilde(d.path), { mono: true, sub: `new session on ${d.host}`, run: run(null, () => actions.create({ dir: d.path, host: d.host })) });
   }
-  for (const a of Object.values(AGENT_INFO)) add("Agents", a.name === "assistant" ? "the assistant" : `@${a.name}`, { key: `g:${a.name}`, agent: a, boost: 2,
+  for (const a of Object.values(AGENT_INFO)) add("Agents", a.name === "assistant" ? "the assistant" : `@${a.name}`, { key: `g:${a.name}`, agent: a, boost: 60, kw: `agent ${a.name}`,
     sub: a.headline || a.error || (a.every ? `wakes every ${a.every}` : "wakes when messaged"), run: run(`g:${a.name}`, () => openAgent(a.name)) });
   bays.forEach((b, i) => add("Bays", b.name, { bayN: i + 1, b, hint: i < 9 ? `alt ${i + 1}` : "", sub: bayWords(b, i).split(": ")[1] || "nothing open", run: run(null, () => goBay(b.name, live)) }));
 
