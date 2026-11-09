@@ -7474,10 +7474,12 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
   let groups;
   if (!ql) {
     const byKey = Object.fromEntries(items.filter((it) => it.key).map((it) => [it.key, it]));
+    const recent = [...new Set([...stored(PAL_RECENT, []).map((k) => byKey[k]).filter(Boolean),
+      ...items.filter((it) => it.group === "Sessions" && !away(it.s)).sort((x, y) => (Date.parse(y.s.updated || 0) || 0) - (Date.parse(x.s.updated || 0) || 0))])].slice(0, 6);
     groups = [
-      ["Recent", [...new Set([...stored(PAL_RECENT, []).map((k) => byKey[k]).filter(Boolean),
-        ...items.filter((it) => it.group === "Sessions" && !away(it.s)).sort((x, y) => (Date.parse(y.s.updated || 0) || 0) - (Date.parse(x.s.updated || 0) || 0))])].slice(0, 6)],
+      ["Recent", recent],
       ["Needs you", items.filter((it) => it.group === "Sessions" && it.s.state === "needs-you" && !away(it.s))],
+      ["Agents", items.filter((it) => it.group === "Agents" && !recent.includes(it))],
       ["This session", items.filter((it) => it.group === "This session")],
       ["Actions", items.filter((it) => it.group === "Actions").slice(0, 5), items.filter((it) => it.group === "Actions").length - 5],
     ].filter(([, l]) => l.length);
