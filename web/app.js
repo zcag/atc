@@ -10,7 +10,7 @@ import { cube, niceMax } from "./usage-cube.js";
 import { partsOf } from "./res-parts.js";
 import { numberedLists } from "./md-lists.js";
 import { diffBlock, esc, marksOver, wordRanges } from "./md-diff.js";
-import { ansiParts, clipView, fileRef, githubIssue, isSha, issueRefs, shortURL, slug as headingSlug, spotLink, spotOf, stripAnsi } from "./md-refs.js";
+import { ansiParts, clipView, cutAt, fileRef, githubIssue, isSha, issueRefs, linkSessions, shortURL, slug as headingSlug, spotLink, spotOf, stripAnsi } from "./md-refs.js";
 import { glider, GLIDE_KEYS } from "./glide.js";
 import { personOf, speakers, VIEWS, nextView, personLangs, langName, voiceName } from "./persons.js";
 import { PersonsPage, useSample, ROOMS } from "./persons-page.js";
@@ -1925,6 +1925,7 @@ const ICON = {
   phone: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4.2 2.5h2l1 2.8-1.4 1.1a7 7 0 0 0 3.8 3.8l1.1-1.4 2.8 1v2c0 .6-.5 1.1-1.1 1.1A10.6 10.6 0 0 1 3.1 3.6c0-.6.5-1.1 1.1-1.1z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
   chat: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2.5 3.5h11v7.5H7l-3 2.5V11H2.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
   screen: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 3.5h12v8H2zM6 14h4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`,
+  clock: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 5.5v3l2 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
   mic: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 2a2 2 0 0 1 2 2v4a2 2 0 0 1-4 0V4a2 2 0 0 1 2-2zM4 7.5a4 4 0 0 0 8 0M8 11.5V14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
   recv: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M11 5L5 11M10 11H5V6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   sent: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 11L11 5M6 5h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
@@ -6307,18 +6308,26 @@ const pasteParts = (text, pastes) => {
   parts.push(rest);
   return parts.filter((x) => typeof x !== "string" || x.trim());
 };
-function Lead({ text, images, files, at, when, via, channel, pastes }) {
+function Lead({ text, images, files, at, when, via, channel, pastes, mark }) {
   const [all, setAll] = useState(false);
   const parts = useMemo(() => pasteParts(text, pastes).map((x) => (typeof x === "string" ? { html: Marked.parse(x.trim(), { breaks: true }) } : x)), [text, pastes]);
   const said = parts.map((x) => (x.html ? x.html : "")).join("");
   const long = said.length > 900 || said.split("<p>").length > 9;
   const spoken = !via && channel === "phone";
-  return html`${via?.news?.length > 0 && via.news.map((n) => html`<p class="evt vnews">${n}</p>`)}<div class=${via ? "lead via" : spoken ? "lead spoken" : "lead"}>${via ? html`<${ViaHead} v=${via} at=${at} when=${when} />` : html`<div class="lead-at">${channel && channel !== "atc" && html`<span class="lch">${chIcon(channel)}</span>`}${youOn(channel)} ${at}</div>`}<div class="prose ptxt ${long && !all ? "clamp" : ""}">${parts.map((x) => x.paste ? html`<details class="paste"><summary>Pasted, ${plural(x.paste.split("\n").length, "line")}</summary><pre>${x.paste}</pre></details>` : html`<div dangerouslySetInnerHTML=${{ __html: x.html }}></div>`)}</div>
+  return html`${via?.news?.length > 0 && via.news.map((n) => html`<p class="evt vnews">${n}</p>`)}<div class=${via ? "lead via" : spoken ? "lead spoken" : "lead"}>${via ? html`<${ViaHead} v=${via} at=${at} when=${when} />` : html`<div class="lead-at">${channel && channel !== "atc" && html`<span class="lch">${chIcon(channel)}</span>`}${youOn(channel)} ${at}${mark?.heard && html` <span class="cutchip" title=${`It had said: «${mark.heard}»`}>cut in</span>`}</div>`}<div class="prose ptxt ${long && !all ? "clamp" : ""}">${parts.map((x) => x.paste ? html`<details class="paste"><summary>Pasted, ${plural(x.paste.split("\n").length, "line")}</summary><pre>${x.paste}</pre></details>` : html`<div dangerouslySetInnerHTML=${{ __html: x.html }}></div>`)}</div>
+    ${mark?.alt && html`<p class="alt">or «${mark.alt}»</p>`}${mark?.altOnly && html`<p class="alt">only the second reading heard this</p>`}
     ${long && html`<button class="kb more" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}
     ${files > 0 && html`<span class="attl">${plural(files, "attachment")}</span>`}
     ${(images || []).length > 0 && html`<span class="imgs">${images.map((src) => html`<img src=${src} alt="Image you attached" />`)}</span>`}</div>`;
 }
 
+const TX_GAP = 90 * 60e3;
+const gapText = (a, b) => {
+  const from = new Date(a), to = new Date(b);
+  if (from.toDateString() !== to.toDateString()) return to.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+  const h = (to - from) / 3600e3;
+  return h < 1.5 ? `${Math.round(h * 60)} min later` : `${Math.round(h)} hours later`;
+};
 const letterOut = (st) => { try { return JSON.parse(st.out?.text || "null"); } catch { return null; } };
 function SentLetter({ st }) {
   const i = st.input || {}, verb = st.tool.split("__").pop(), out = letterOut(st), failed = st.out?.error;
@@ -6345,6 +6354,7 @@ function TxEvent({ e, s, at, call, open }) {
   const [src, setSrc] = useState(null);
   if (e.kind === "call-end") return html`<div class="chan end phone"><span>${ICON.phone}<b>Call ended</b>${call && html`<time>${txSpan(msOf(at) - msOf(call)) || ""}</time>`}</span></div>`;
   if (e.kind === "line") return html`<p class="evt line">${chIcon(e.channel)} ${e.text}</p>`;
+  if (e.kind === "stopped") return html`<p class="evt stopped">Stopped here</p>`;
   if (!e.task) return html`<p class="evt">${e.text}</p>`;
   const k = e.task, m = /^(.*?) "(.*)" (.*)$/.exec(e.text || "");
   const more = () => (src ? setSrc(null) : api(`/api/sessions/${s.sessionId}/tasks/${encodeURIComponent(k.id)}`).then(setSrc, () => setSrc({ detail: "The command isn't in the transcript any more." })));
@@ -6359,8 +6369,12 @@ function TxEvent({ e, s, at, call, open }) {
 const PATH_CODE = '<code class="path[^"]*"[^>]*>[^<]+</code>';
 const CITATION = new RegExp(`\\(${PATH_CODE}(?:,\\s*${PATH_CODE})*\\)`, "g");
 const quietCitations = (h) => h.replace(CITATION, '<span class="cite">$&</span>');
-function Prose({ text, id }) {
-  const h = useMemo(() => { let j = 0; return quietCitations(md(text)).replace(/<h([1-4])>(.*?)<\/h\1>/gs, (_, n, inner) => `<h${n} id="${id}h${j++}">${inner}<button class="hlink" data-link aria-label="Copy a link to this heading" title="Copy a link to this heading">#</button></h${n}>`); }, [text]);
+function Prose({ text, id, cut }) {
+  const h = useMemo(() => {
+    const at = cut ? cutAt(text, cut) : -1, render = (t) => linkSessions(quietCitations(md(t)), LIVE, keyOf);
+    const body = at < 0 || !/\w/.test(text.slice(at)) ? render(text) : `${render(text.slice(0, at))}<p class="cutin">you cut in here</p><div class="unheard">${render(text.slice(at))}</div>`;
+    let j = 0; return body.replace(/<h([1-4])>(.*?)<\/h\1>/gs, (_, n, inner) => `<h${n} id="${id}h${j++}">${inner}<button class="hlink" data-link aria-label="Copy a link to this heading" title="Copy a link to this heading">#</button></h${n}>`);
+  }, [text, cut, LIVE.length]);
   return html`<div class="prose" dangerouslySetInnerHTML=${{ __html: h }}></div><div class="mbar"><button class="mcopy" data-copy data-src=${text}>Copy</button><button class="mcopy" data-link title="Copy a link to this reply">Link</button></div>`;
 }
 
@@ -6824,9 +6838,13 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
 
   const rows = [];
   const askedQs = new Set(), shownAns = new Set();
-  let callAt = null;
+  let callAt = null, lastModel = "";
   turns.forEach((t, i) => {
-    const b = bodies[t.from], open = isOpen(i);
+    const b = bodies[t.from], open = isOpen(i), prev = turns[i - 1];
+    if (prev && t.at && msOf(t.at) - msOf(prev.end || prev.at) > TX_GAP) rows.push({ k: "gap", key: `g${t.from}`, text: gapText(prev.end || prev.at, t.at) });
+    if (t.model && lastModel && model(t.model) !== model(lastModel)) rows.push({ k: "model", key: `m${t.from}`, text: model(t.model) });
+    if (t.model) lastModel = t.model;
+    if (t.mark?.heard) { const said = rows.findLast((x) => x.k === "say" && x.text); if (said) said.cut = t.mark.heard; }
     if (t.switch && t.channel) {
       callAt = t.channel === "phone" ? t.at : null;
       if (i > 0 || t.channel !== "atc") rows.push({ k: "chan", key: `c${t.from}`, at: t.at, ch: t.channel, call: !!callAt });
@@ -6838,9 +6856,10 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       if (t.callEnd && callAt) { rows.push({ k: "evt", key: `ce${t.from}`, at: t.callEnd, kind: "call-end", call, callFrom }); callAt = null; }
       return;
     }
-    rows.push({ k: t.notice ? "notice" : t.partial ? "partial" : "you", key: `y${t.from}`, at: t.at, i, t, b, call, callFrom });
+    rows.push({ k: t.notice ? "notice" : t.partial ? "partial" : t.kind === "wake" || t.kind === "restart" ? t.kind : "you", key: `y${t.from}`, at: t.at, i, t, b, call, callFrom });
     if (!b) return (t.steps || t.reply) && rows.push({ k: "skel", key: `s${t.from}`, i, call });
     agentRows(b).forEach((r, j) => {
+      if (t.notice && j === 0 && r.k === "evt") return;
       (r.steps || []).filter((x) => x.tool === "AskUserQuestion").forEach((x) => { (x.input.questions || []).forEach((q) => askedQs.add(q.question)); Object.values(answersOf(x)).forEach((a) => shownAns.add(a)); });
       rows.push({ ...r, key: `${t.from}:${j}`, i, live: working && i === turns.length - 1, call, callFrom });
       if (r.kind === "call-end") callAt = null;
@@ -6888,16 +6907,26 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       case "fold": {
         const f = (r.t.files || []).filter((x) => !scratch(x.path)).sort((a, b) => b.add + b.del - a.add - a.del)[0];
         const work = [r.t.steps > 0 && plural(r.t.steps, "step"), f && `${relPath(f.path, s)} +${f.add}${f.del ? ` -${f.del}` : ""}`, (r.t.files || []).length > 1 && `${r.t.files.length - 1} more`].filter(Boolean).join(", ");
-        const who = r.t.notice ? "" : r.t.via ? viaName(r.t.via) : youOn(r.t.channel);
+        const who = r.t.notice ? "" : r.t.kind === "wake" ? `schedule, every ${r.t.mark.every}` : r.t.kind === "restart" ? "started over" : r.t.via ? viaName(r.t.via) : youOn(r.t.channel);
         return html`${who && html`<h2 class="sr">${who}, ${txClock(r.at)}</h2>`}<button class="fold ${r.t.notice ? "ntc" : ""}" id=${`tx${r.i}`} data-stop data-you=${who ? "" : null} aria-expanded="false" title="Open this turn" onClick=${() => openTurn(r.i)}>
           <span class="fy"><span class="lead-at">${who} ${clock(r.at, true)}</span><span class="fq">${r.t.partial ? "Continued from earlier" : plain(cleanPrompt(r.t.prompt)) || "Image"}</span></span>
           <span class="g">${r.t.reply ? firstSentence(r.t.reply) : "No reply."} ${work && html`<b>${work}</b>`}</span></button>`;
       }
+      case "wake": return html`<div class="wake" id=${`tx${r.i}`} data-stop><details><summary>${ICON.clock}<b>Scheduled wake-up</b><span>every ${r.t.mark.every}</span><time>${clock(r.at, true)}</time></summary>
+          <div class="prose ptxt" dangerouslySetInnerHTML=${{ __html: Marked.parse(cleanPrompt(r.b?.prompt ?? r.t.prompt), { breaks: true }) }}></div></details></div>`;
+      case "restart": {
+        const prev = r.t.mark.prev, whole = prev.length > 8;
+        return html`<div id=${`tx${r.i}`} data-stop><div class="chan restart"><span><b>Started over</b><time>${clock(r.at, true)}</time></span></div>
+          <details class="handover"><summary>The handover note${whole ? html`, from <a href=${`#/s/${prev}`} onClick=${(e) => e.stopPropagation()}>the conversation before</a>` : ""}</summary>
+          <div class="prose ptxt" dangerouslySetInnerHTML=${{ __html: Marked.parse(cleanPrompt(r.b?.prompt ?? r.t.prompt), { breaks: true }) }}></div></details></div>`;
+      }
+      case "gap": return html`<div class="tgap"><span>${r.text}</span></div>`;
+      case "model": return html`<div class="tgap model"><span>now on ${r.text}</span></div>`;
       case "you": {
         const first = rows[0] === r;
         const via = r.b ? r.b.via : r.t.via;
         return html`<div class="sec ${first ? "first" : ""}" id=${`tx${r.i}`} data-stop data-you><h2 class="sr">${via ? viaName(via) : "you"}, ${txClock(r.at)}</h2>
-          <${Lead} at=${clock(r.at, true)} when=${r.at} text=${cleanPrompt(r.b?.prompt ?? r.t.prompt).trim()} images=${r.b?.images} via=${via} channel=${r.t.channel} pastes=${r.b?.pastes} /></div>`;
+          <${Lead} at=${clock(r.at, true)} when=${r.at} text=${cleanPrompt(r.b?.prompt ?? r.t.prompt).trim()} images=${r.b?.images} via=${via} channel=${r.t.channel} pastes=${r.b?.pastes} mark=${r.t.mark} /></div>`;
       }
       case "notice": return !zen && html`<div id=${`tx${r.i}`}><${TxEvent} e=${{ text: plain(cleanPrompt(r.t.prompt)), task: r.t.task, kind: r.t.kind, channel: r.t.channel }} s=${s} at=${r.at} call=${r.callFrom} open=${openFileRef} /></div>`;
       case "chan": return html`<div class="chan ${r.ch}"><span>${chIcon(r.ch)}<b>${r.ch === "phone" ? "Call" : chName(r.ch)}</b><time>${clock(r.at, true)}</time></span></div>`;
@@ -6905,7 +6934,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       case "skel": return html`<div class="skel" aria-label="Loading"><i></i><i></i><i></i></div>`;
       case "say": case "steps":
         return html`${r.answer && html`<h2 class="sr">${s.agent ? `@${s.agent}` : "agent"}, ${txClock(r.at)}</h2>`}${r.steps && html`${!zen && html`<${InlineSteps} steps=${r.steps} s=${s} at=${clock(r.at)} open=${gOpen} toggle=${() => flip(gk)} />`}<${GroupBody} steps=${zen ? r.steps.filter((x) => txKind(x) === "ask" || txKind(x) === "letter") : r.steps} s=${s} open=${gOpen && !zen} zoom=${setShot} live=${r.live && !r.text} />`}
-            ${r.text && html`<div id=${`said-${r.key}`} data-said data-stop=${r.answer ? "" : null}><${Prose} text=${r.text} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`;
+            ${r.text && html`<div id=${`said-${r.key}`} data-said data-stop=${r.answer ? "" : null}><${Prose} text=${r.text} cut=${r.cut} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`;
       case "evt": return !zen && html`<${TxEvent} e=${r} s=${s} at=${r.at} call=${r.callFrom} open=${openFileRef} />`;
       case "note": return html`<${Lead} at=${clock(r.at, true)} when=${r.at} text=${r.text} via=${r.via} pastes=${r.pastes} />`;
       case "answered": {

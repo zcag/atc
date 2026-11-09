@@ -26,6 +26,8 @@ type Turn struct {
 	Kind    string       `json:"kind,omitempty"`
 	Task    *Task        `json:"task,omitempty"`
 	CallEnd time.Time    `json:"callEnd,omitzero"`
+	Mark    *Mark        `json:"mark,omitempty"`
+	Model   string       `json:"model,omitempty"`
 	Reply   string       `json:"reply,omitempty"`
 	Steps   int          `json:"steps"`
 	Looks   int          `json:"looks,omitempty"`
@@ -77,9 +79,10 @@ func BuildTurns(msgs []Message, offs []int64, end int64, price func(string, Usag
 			if m.Role == "user" && m.Channel != "" {
 				channel, cur.Switch = m.Channel, true
 			}
+			cur.Kind, cur.Mark = m.Kind, m.Mark
 			switch {
 			case m.Role == "event":
-				cur.Channel, cur.Kind, cur.Task = m.Channel, m.Kind, m.Task
+				cur.Channel, cur.Task = m.Channel, m.Task
 			case m.Via == nil:
 				cur.Channel = channel
 			}
@@ -92,6 +95,9 @@ func BuildTurns(msgs []Message, offs []int64, end int64, price func(string, Usag
 		}
 		if !m.Time.IsZero() {
 			cur.End = m.Time
+		}
+		if m.Model != "" {
+			cur.Model = m.Model
 		}
 		if m.Usage != nil && price != nil {
 			cur.Cost += price(m.Model, *m.Usage)

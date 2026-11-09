@@ -50,6 +50,8 @@ type said struct {
 	via     *Via
 	channel string
 	pastes  []string
+	mark    *Mark
+	kind    string
 }
 
 // envelope splits what atc and the hub wrapped around a user turn from the message itself.
@@ -102,6 +104,9 @@ func envelope(t string) said {
 		}
 		t = strings.TrimSpace(t[:m[0]])
 	}
+	if v.Title == "" && v.Host == "" && v.Source == "" {
+		t, out.mark, out.kind = marked(t)
+	}
 	out.body = t
 	if len(out.pastes) > 0 && strings.TrimSpace(pasted.ReplaceAllString(raw, "")) == "" {
 		out.pastes = nil
@@ -121,6 +126,8 @@ func event(t string, at time.Time) (Message, bool) {
 	switch {
 	case strings.HasPrefix(t, "<task-notification>"):
 		return Message{Role: "event", Text: noticeText(t), Time: at, Task: taskOf(t)}, true
+	case strings.HasPrefix(t, "[Request interrupted by user"):
+		return Message{Role: "event", Kind: "stopped", Time: at}, true
 	case strings.HasPrefix(t, compactPrefix):
 		return Message{Role: "event", Text: noticeText(t), Time: at}, true
 	}

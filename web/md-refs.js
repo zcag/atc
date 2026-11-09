@@ -90,3 +90,26 @@ export function clipView(lines, { n, bad }) {
   if (kept <= n) return { shown: lines, before: 0, after: 0 };
   return bad ? { shown: lines.slice(-n), before: kept - n, after: 0 } : { shown: lines.slice(0, n), before: 0, after: kept - n };
 }
+
+export const cutAt = (text, heard) => {
+  const t = text.toLowerCase(), h = (heard || "").toLowerCase().replace(/[\s.,!?…]+$/, "");
+  for (const n of [40, 24, 14]) {
+    if (h.length < Math.min(n, 8)) break;
+    const i = t.indexOf(h.slice(-n));
+    if (i >= 0) { const e = i + Math.min(n, h.length), b = text.slice(e).search(/[\s]/); return e + (b < 0 ? text.length - e : b); }
+  }
+  return -1;
+};
+const QUOTED = (name) => new RegExp(`(&quot;|“|«|')(${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/&/g, "&amp;")})(&quot;|”|»|')`, "gi");
+export const linkSessions = (h, sessions, keyOf) => {
+  const named = sessions.filter((x) => (x.title || "").length >= 4 && !x.agent);
+  const agents = new Map(sessions.filter((x) => x.agent).map((x) => [x.agent.toLowerCase(), x]));
+  if (!named.length && !agents.size) return h;
+  let skip = 0;
+  return h.split(/(<[^>]+>)/).map((part) => {
+    if (part.startsWith("<")) { if (/^<(a|code|pre)\b/i.test(part)) skip++; else if (/^<\/(a|code|pre)>/i.test(part)) skip = Math.max(0, skip - 1); return part; }
+    if (skip) return part;
+    for (const x of named) part = part.replace(QUOTED(x.title), (_, a, t, b) => `${a}<a class="sref" href="#/s/${keyOf(x)}">${t}</a>${b}`);
+    return part.replace(/(^|[\s(])@([\w-]+)/g, (m, pre, n) => (agents.has(n.toLowerCase()) ? `${pre}<a class="sref" href="#/s/${keyOf(agents.get(n.toLowerCase()))}">@${n}</a>` : m));
+  }).join("");
+};

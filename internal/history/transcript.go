@@ -35,6 +35,7 @@ type Message struct {
 	Kind    string   `json:"kind,omitempty"`
 	Task    *Task    `json:"task,omitempty"`
 	Pastes  []string `json:"pastes,omitempty"`
+	Mark    *Mark    `json:"mark,omitempty"`
 }
 
 type Output struct {
@@ -446,7 +447,7 @@ func queued(text string, at time.Time) (Message, bool) {
 	if sd.body == "" || IsNoise(sd.body) {
 		return Message{}, false
 	}
-	return Message{Role: "note", Text: sd.body, Time: at, Via: sd.via, Pastes: sd.pastes}, true
+	return Message{Role: "note", Text: sd.body, Time: at, Via: sd.via, Pastes: sd.pastes, Mark: sd.mark}, true
 }
 
 const compactPrefix = "This session is being continued from a previous conversation"
@@ -489,7 +490,7 @@ func convert(m rawMsg) []Message {
 				continue
 			}
 			sd := envelope(b.Text)
-			out = append(out, Message{Role: "user", Text: sd.body, Time: m.Timestamp, Via: sd.via, Channel: sd.channel, Pastes: sd.pastes})
+			out = append(out, Message{Role: "user", Text: sd.body, Time: m.Timestamp, Via: sd.via, Channel: sd.channel, Pastes: sd.pastes, Mark: sd.mark, Kind: sd.kind})
 		case b.Type == "image" && m.Type == "user":
 			if img := image(b); img != "" {
 				images = append(images, img)

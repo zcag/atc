@@ -692,3 +692,35 @@ pre.mdiff:not(.num) .gap { padding-left: var(--s3); }
 .tx .paste { margin: var(--s2) 0; border: 1px solid var(--hair); border-radius: var(--r-sm); }
 .tx .paste summary { padding: 4px 8px; cursor: pointer; font-size: var(--fs-small); color: var(--faint); font-family: var(--mono); }
 .tx .paste pre { margin: 0; padding: 6px 8px; max-height: 320px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--fs-small); border-top: 1px solid var(--hair); }
+
+/* a reply the user cut off on a call: what they never heard fades */
+.tx .cutin { display: flex; align-items: center; gap: 8px; margin: 4px 0 6px; font-size: var(--fs-small); color: var(--live); font-family: var(--mono); }
+.tx .cutin::after { content: ""; flex: 1; border-top: 1px dashed color-mix(in srgb, var(--live) 50%, transparent); }
+.tx .unheard { opacity: .45; }
+.tx .cutchip { margin-left: 4px; padding: 0 6px; border-radius: var(--r-pill); border: 1px solid color-mix(in srgb, var(--live) 45%, transparent); color: var(--live); font-size: 11px; }
+.tx .lead .alt { margin: 2px 0 0; font-size: var(--fs-small); color: var(--faint); font-style: italic; }
+.tx .evt.stopped { box-shadow: inset 2px 0 0 var(--fail); color: var(--faint); font-size: var(--fs-small); padding-block: 2px; }
+
+/* a scheduled wake-up: one quiet line, its message folded under it */
+.tx .wake { margin: var(--s4) 0; }
+.tx .wake summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; padding: 6px var(--s3); font-size: var(--fs-small); color: var(--dim); box-shadow: inset 2px 0 0 var(--line-strong); }
+.tx .wake summary::-webkit-details-marker { display: none; }
+.tx .wake summary svg { width: 14px; height: 14px; color: var(--faint); }
+.tx .wake summary b { color: var(--ink); font-weight: 600; }
+.tx .wake summary time { margin-left: auto; color: var(--faint); font-family: var(--mono); }
+.tx .wake .prose { padding: var(--s2) var(--s3) 0 calc(var(--s3) + 22px); font-size: 0.95em; color: var(--dim); }
+
+/* the conversation started over: a divider, and the note it was left folded under it */
+.tx .chan.restart > span { color: var(--dim); }
+.tx .handover { margin: 0 0 var(--s4); }
+.tx .handover summary { cursor: pointer; text-align: center; font-size: var(--fs-small); color: var(--faint); }
+.tx .handover .prose { margin-top: var(--s2); padding: var(--s3) var(--s4); background: var(--board); border-radius: var(--r-md); font-size: 0.95em; }
+
+/* time passing and the model changing: a hairline with a few words */
+.tx .tgap { display: flex; align-items: center; gap: var(--s3); margin: var(--s5) 0 var(--s4); color: var(--faint); font-size: var(--fs-small); font-family: var(--mono); }
+.tx .tgap::before, .tx .tgap::after { content: ""; flex: 1; border-top: 1px dotted var(--line); }
+.tx .tgap.model { font-family: inherit; }
+
+/* a session named in a reply */
+.tx .prose a.sref { color: inherit; text-decoration: underline; text-decoration-style: dotted; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.tx .prose a.sref:hover { text-decoration-color: var(--ink); }

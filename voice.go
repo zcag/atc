@@ -28,6 +28,27 @@ import (
 //go:embed voice
 var voiceFiles embed.FS
 
+// callPacks are the call line's words in each language it ships, for reading its notes back out of transcripts.
+func callPacks() []map[string]string {
+	files, _ := fs.Glob(voiceFiles, "voice/lang/*.json")
+	var packs []map[string]string
+	for _, f := range files {
+		b, _ := voiceFiles.ReadFile(f)
+		var p map[string]any
+		if json.Unmarshal(b, &p) != nil {
+			continue
+		}
+		words := map[string]string{}
+		for k, v := range p {
+			if s, ok := v.(string); ok {
+				words[k] = s
+			}
+		}
+		packs = append(packs, words)
+	}
+	return packs
+}
+
 //go:embed starter/agents
 var starterEmbed embed.FS
 

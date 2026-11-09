@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { Marked } from "./vendor/marked.esm.js";
-import { ansiParts, clipView, fileRef, githubIssue, isSha, issueRefs, shortURL, slug, spotLink, spotOf, stripAnsi } from "./md-refs.js";
+import { ansiParts, clipView, cutAt, fileRef, githubIssue, isSha, issueRefs, linkSessions, shortURL, slug, spotLink, spotOf, stripAnsi } from "./md-refs.js";
 
 test("file references, with and without a line", () => {
   assert.deepEqual(fileRef("web/app.js:12"), { path: "web/app.js", line: 12, end: 0 });
@@ -74,4 +74,22 @@ test("a failure folds to its end, anything else to its start", () => {
 
 test("stripping removes every terminal escape", () => {
   assert.equal(stripAnsi("\x1b[32mok\x1b[0m\x1b[2K!"), "ok!");
+});
+
+test("sessions named in a reply link to them, only by exact title in quotes or as @agent", () => {
+  const sessions = [{ id: "a1", title: "billing retry check" }, { id: "b2", title: "fix" }, { id: "c3", title: "Sweeper", agent: "sweeper" }, { id: "d4", title: "A&B check" }];
+  const link = (h) => linkSessions(h, sessions, (s) => s.id);
+  for (const [h, want] of [
+    ["<p>I started &quot;billing retry check&quot; to fix it.</p>", 'href="#/s/a1"'],
+    ["<p>I started “billing retry check”, it reports back.</p>", 'href="#/s/a1"'],
+    ["<p>ask @sweeper about it</p>", 'href="#/s/c3">@sweeper'],
+    ["<p>&quot;A&amp;B check&quot; done</p>", 'href="#/s/d4"'],
+  ]) assert.ok(link(h).includes(want), h);
+  for (const h of ["<p>billing retry check without quotes</p>", "<p>a &quot;fix&quot; is too short to trust</p>", "<p>mail me@sweeper.com</p>", "<p><code>&quot;billing retry check&quot;</code></p>"]) assert.equal(link(h), h, h);
+});
+
+test("a reply the user cut off splits after the last words they heard", () => {
+  const reply = "First this. Then the second part. And a third one nobody heard.";
+  assert.equal(reply.slice(cutAt(reply, "First this. Then the second part.")).trim(), "And a third one nobody heard.");
+  assert.equal(cutAt(reply, "something it never said"), -1);
 });
