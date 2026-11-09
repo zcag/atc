@@ -57,8 +57,9 @@ func TestMarks(t *testing.T) {
 
 func TestACallTheAssistantPlaced(t *testing.T) {
 	useShippedCallLines(t)
-	UseCallStart("[phone · %s · you called Sam, %s", " · reason: ")
-	t.Cleanup(func() { UseCallStart("", "") })
+	youCalled := "[phone · %s · you called Sam, %s"
+	UseCallStart(func() (string, string) { return youCalled, " · reason: " })
+	t.Cleanup(func() { UseCallStart(nil) })
 	in := "[talk-mode: phone, until the next talk-mode line]\nrules\n[message]\n" +
 		"[phone · 20:16 · you called Sam, it is ringing · reason: test the new line]\n[atc now, 20:16]\nYour turn: none\n\n" +
 		"[You are calling Sam and the phone is ringing. They hear this reply first, once they pick up and say hello: greet them briefly, say you are Ada and why you are calling.]"
@@ -68,6 +69,14 @@ func TestACallTheAssistantPlaced(t *testing.T) {
 	}
 	if sd := envelope("[phone · 20:16 · you called Sam, they picked up]\nhello?"); sd.body != "hello?" || !reflect.DeepEqual(sd.mark, &Mark{Called: true}) {
 		t.Fatalf("%q %+v", sd.body, sd.mark)
+	}
+	youCalled = "[telefon · %s · Sam'ı sen aradın, %s"
+	if sd := envelope("[telefon · 20:16 · Sam'ı sen aradın, açtı]\nalo?"); sd.mark != nil {
+		t.Fatal("the lines are read again only every half minute")
+	}
+	callStart.at = time.Time{}
+	if sd := envelope("[telefon · 20:16 · Sam'ı sen aradın, açtı]\nalo?"); sd.body != "alo?" || sd.mark == nil {
+		t.Fatalf("edited lines: %q %+v", sd.body, sd.mark)
 	}
 }
 

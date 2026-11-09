@@ -3,6 +3,8 @@ package history
 import (
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 )
 
 // Mark is what atc or the call line said about one of the user's turns, drawn beside it rather than as its words:
@@ -25,7 +27,13 @@ var (
 	// bracket naming the previous conversation's id, a blank line, then its handover note.
 	startedOver = regexp.MustCompile(`^\[(?:atc|hub): [^\]\n]*\(([0-9a-f-]{8,36})\)[^\]\n]*\]\n\n`)
 	callLines   []callNotes
-	callStart   *regexp.Regexp
+	callStart   struct {
+		sync.Mutex
+		lines      func() (string, string)
+		read, have string
+		at         time.Time
+		re         *regexp.Regexp
+	}
 )
 
 var placeholder = regexp.MustCompile(`\\\{\w+\\\}`)
@@ -45,31 +53,48 @@ func UseCallLines(packs ...map[string]string) {
 }
 
 // UseCallStart teaches the transcript the line the hub opens a call the assistant placed with (the call.you_called
-// and call.reason lines), so the call shows who rang whom and why instead of that line.
-func UseCallStart(youCalled, reason string) {
-	callStart = nil
-	if !strings.Contains(youCalled, "%s") {
-		return
+// and call.reason lines), so the call shows who rang whom and why instead of that line. lines is read again at most
+// every half minute, so an edit to them shows without a restart.
+func UseCallStart(lines func() (youCalled, reason string)) {
+	callStart.Lock()
+	defer callStart.Unlock()
+	callStart.lines, callStart.at, callStart.have, callStart.re = lines, time.Time{}, "", nil
+}
+
+func callOpener() *regexp.Regexp {
+	callStart.Lock()
+	defer callStart.Unlock()
+	if callStart.lines == nil || time.Since(callStart.at) < 30*time.Second {
+		return callStart.re
 	}
-	q := strings.ReplaceAll(regexp.QuoteMeta(youCalled), "%s", `[^\]\n]*?`)
-	if reason != "" {
-		q += `(?:` + regexp.QuoteMeta(reason) + `(?P<reason>[^\]\n]*))?`
+	callStart.at = time.Now()
+	youCalled, reason := callStart.lines()
+	if key := youCalled + "\x00" + reason; key != callStart.have {
+		callStart.have, callStart.re = key, nil
+		if strings.Contains(youCalled, "%s") {
+			q := strings.ReplaceAll(regexp.QuoteMeta(youCalled), "%s", `[^\]\n]*?`)
+			if reason != "" {
+				q += `(?:` + regexp.QuoteMeta(reason) + `(?P<reason>[^\]\n]*))?`
+			}
+			callStart.re = regexp.MustCompile(`^` + q + `\]\n?`)
+		}
 	}
-	callStart = regexp.MustCompile(`^` + q + `\]\n?`)
+	return callStart.re
 }
 
 // opened takes the hub's line opening a call the assistant placed off a turn, and the voice line's instruction
 // that follows it.
 func opened(t string) (string, *Mark) {
-	if callStart == nil {
+	re := callOpener()
+	if re == nil {
 		return t, nil
 	}
-	m := callStart.FindStringSubmatch(t)
+	m := re.FindStringSubmatch(t)
 	if m == nil {
 		return t, nil
 	}
 	k := &Mark{Called: true}
-	if i := callStart.SubexpIndex("reason"); i > 0 {
+	if i := re.SubexpIndex("reason"); i > 0 {
 		k.Reason = strings.TrimSpace(m[i])
 	}
 	t = strings.TrimSpace(t[len(m[0]):])

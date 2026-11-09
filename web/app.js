@@ -135,7 +135,7 @@ const tilde = (p) => {
   const m = p.match(/^\/(home|Users)\/[^/]+(\/.*)?$/);
   return m ? "~" + (m[2] || "") : p;
 };
-let MULTI = false, HERE = "", LIVE = [];
+let MULTI = false, HERE = "", LIVE = [], LIVE_NAMES = "";
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 let PALETTE_OPEN = () => {}, NEW_SESSION = () => {}, PAL_TOGGLE = null;
 let SESSION_API = null;
@@ -177,6 +177,15 @@ function useRoute() {
     return () => removeEventListener("hashchange", f);
   }, []);
   return r;
+}
+
+function useLive() {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const f = () => tick((n) => n + 1);
+    addEventListener("atc-live", f);
+    return () => removeEventListener("atc-live", f);
+  }, []);
 }
 
 function useNow(ms) {
@@ -325,7 +334,9 @@ function App() {
     const es = new EventSource("/api/events");
     es.addEventListener("sessions", (e) => {
       LIVE = steady(JSON.parse(e.data) || []);
+      LIVE_NAMES = LIVE.map((x) => `${keyOf(x)}:${x.title}:${x.agent || ""}`).join("|");
       setLive(LIVE);
+      dispatchEvent(new Event("atc-live"));
       setUp(true);
     });
     es.addEventListener("look", (e) => LOOK.adopt(JSON.parse(e.data)));
@@ -6283,6 +6294,7 @@ const chName = (ch) => CHANNELS[ch]?.[0] || ch;
 const chIcon = (ch) => ICON[CHANNELS[ch]?.[1] || "chat"];
 const youOn = (ch) => (!ch || ch === "atc" ? "you" : ch === "phone" ? "you said" : `you on ${chName(ch)}`);
 function ViaHead({ v, at, when }) {
+  useLive();
   const pop = useRef(null), x = viaSession(v), name = viaName(v), asked = v.ref && TX_API?.asked(v.ref, when);
   const hue = hueOf(x?.cwd ? project(x.cwd).name : name);
   const [tone, chip] = v.approved ? ["go", "your go-ahead"] : VIA_ASK[v.ask] || ["", "FYI"];
@@ -6352,6 +6364,7 @@ const foldCalls = (rows, open, bodies) => {
 const letterOut = (st) => { try { return JSON.parse(st.out?.text || "null"); } catch { return null; } };
 const LETTER_WAIT = { working: "working on it now", "needs-you": "it is waiting on you", "your-turn": "finished, no report yet", stopped: "stopped without a report", past: "stopped without a report" };
 function SentLetter({ st }) {
+  useLive();
   const i = st.input || {}, verb = st.tool.split("__").pop(), out = letterOut(st), failed = st.out?.error;
   const to = verb === "report" ? "the assistant" : out?.title || (verb === "start" ? i.name || i.preset || (i.dir && project(i.dir).name) || "a new session" : i.session) || "a session";
   const x = out?.ref && LIVE.find((y) => y.id === out.ref || y.sessionId?.startsWith(out.ref));
@@ -6414,11 +6427,12 @@ function SessionPeek() {
   return html`<div class="speek" style=${`left:${Math.max(8, p.left)}px;top:${p.top}px`} role="tooltip"><div class="spt"><${StateBlock} s=${x} mini /><b>${x.title || "Untitled"}</b><span>${WORD[x.state] || x.state} · ${ago(x)}</span></div>${line && html`<p>${line}</p>`}</div>`;
 }
 function Prose({ text, id, cut, dest }) {
+  useLive();
   const h = useMemo(() => {
     const at = cut ? cutAt(text, cut) : -1, render = (t) => linkSessions(quietCitations(md(t)), LIVE, keyOf);
     const body = at < 0 || !/\w/.test(text.slice(at)) ? render(text) : `${render(text.slice(0, at))}<p class="cutin">you cut in here</p><div class="unheard">${render(text.slice(at))}</div>`;
     let j = 0; return body.replace(/<h([1-4])>(.*?)<\/h\1>/gs, (_, n, inner) => `<h${n} id="${id}h${j++}">${inner}<button class="hlink" data-link aria-label="Copy a link to this heading" title="Copy a link to this heading">#</button></h${n}>`);
-  }, [text, cut, LIVE.length]);
+  }, [text, cut, LIVE_NAMES]);
   return html`<div class="prose" dangerouslySetInnerHTML=${{ __html: h }}></div><div class="mbar"><button class="mcopy" data-copy data-src=${text}>Copy</button><button class="mcopy" data-link title="Copy a link to this reply">Link</button>${dest && html`<span class="dest">${dest}</span>`}</div>`;
 }
 
