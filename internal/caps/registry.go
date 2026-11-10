@@ -227,6 +227,12 @@ func All() []Cap {
 			Cost:  "A second phone number, and plan tokens for the assistant.",
 		},
 		{
+			ID: "wa-groups", Title: "WhatsApp groups", Group: WhatsApp, Optional: true, Why: "Lets the @groups agent take part in the WhatsApp groups you are in with atc's account: add the account to a group and it reads along and answers when it should.",
+			Needs: []string{"whatsapp"}, Check: checkGroupsAgent,
+			Fix:  Fix{Text: "Make an agent named groups on the machine WhatsApp runs on (the starter one is a good start), and give it whatever tools your groups need in its mcp.json.", Guide: "whatsapp#groups"},
+			Cost: "Plan tokens: one turn of the agent for every message in those groups.",
+		},
+		{
 			ID: "stt", Title: "Voice notes: hearing", Group: WhatsApp, Optional: true, Why: "Turns the voice notes you send into text. Only WhatsApp voice notes use this.",
 			Needs: []string{"whatsapp"},
 			Fields: []Field{{Key: "ATC_STT_URL", Label: "Speech to text (OpenAI-compatible)", Hint: "http://127.0.0.1:8000/v1/audio/transcriptions", URL: true},

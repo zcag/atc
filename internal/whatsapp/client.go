@@ -28,11 +28,13 @@ type Client struct {
 	Owner             string
 	OwnerIDs          []string
 	Guests            *Guests
+	Quiet             *Quiet
 	Secret            string
 	Hook              string
 	Votes             atomic.Bool
 	chat              atomic.Value
 	http              *http.Client
+	groups            groupCache
 }
 
 func FromEnv() *Client {
@@ -234,13 +236,13 @@ func (c *Client) Verify(body []byte, sig string) bool {
 	return hmac.Equal([]byte(want), []byte(strings.TrimSpace(sig)))
 }
 
-// EnsureHook registers the two webhooks that bring the owner's side of the chat to atc, or
-// brings the ones already registered at the same URLs up to date: messages, filtered by
-// sender, and reactions, edits and poll votes, filtered by chat (a sender condition drops
-// reactions, which carry no sender field). With a guest list, a third brings every direct message,
-// unfiltered by sender: a guest may write from an @lid only atc can resolve, so atc picks them
-// out itself. The secret is write-only in OpenWA, so it is set
-// on every start rather than compared.
+// EnsureHook registers the webhooks that bring the owner's side of the chat to atc, or brings the
+// ones already registered at the same URLs up to date: messages, filtered by sender, and reactions,
+// edits and poll votes, filtered by chat (a sender condition drops reactions, which carry no sender
+// field). With a guest list, another brings every direct message, unfiltered by sender: a guest may
+// write from an @lid only atc can resolve, so atc picks them out itself. Two more bring every group's
+// messages and its joins and leaves; atc keeps the groups the owner is in. The secret is write-only
+// in OpenWA, so it is set on every start rather than compared.
 func (c *Client) EnsureHook(ctx context.Context) error {
 	if c.Hook == "" {
 		return nil
@@ -253,33 +255,32 @@ func (c *Client) EnsureHook(ctx context.Context) error {
 	if strings.Contains(c.Hook, "?") {
 		sep = "&"
 	}
+	cond := func(field string, v any) map[string]any {
+		return map[string]any{"field": field, "operator": "is", "value": v}
+	}
+	direct := []map[string]any{cond("isGroup", false), cond("fromMe", false)}
 	want := []struct {
 		url    string
 		events []string
-		match  map[string]any
+		conds  []map[string]any
 	}{
-		{c.Hook, []string{"message.received"}, map[string]any{"field": "sender", "operator": "is", "value": c.OwnerIDs}},
-		{c.Hook + sep + "changes=1", []string{"message.reaction", "message.edited", "poll.vote"}, map[string]any{"field": "chatId", "operator": "is", "value": c.OwnerIDs}},
+		{c.Hook, []string{"message.received"}, append([]map[string]any{cond("sender", c.OwnerIDs)}, direct...)},
+		{c.Hook + sep + "changes=1", []string{"message.reaction", "message.edited", "poll.vote"}, append([]map[string]any{cond("chatId", c.OwnerIDs)}, direct...)},
+		{c.Hook + sep + "groups=1", []string{"message.received"}, []map[string]any{cond("isGroup", true), cond("fromMe", false)}},
+		{c.Hook + sep + "members=1", []string{"group.join", "group.leave"}, nil},
 	}
 	if c.Guests != nil {
 		want = append(want, struct {
 			url    string
 			events []string
-			match  map[string]any
-		}{c.Hook + sep + "guests=1", []string{"message.received"}, nil})
+			conds  []map[string]any
+		}{c.Hook + sep + "guests=1", []string{"message.received"}, direct})
 	}
 	var noVotes error
 	for _, w := range want {
-		conds := []map[string]any{
-			{"field": "isGroup", "operator": "is", "value": false},
-			{"field": "fromMe", "operator": "is", "value": false},
-		}
-		if w.match != nil {
-			conds = append([]map[string]any{w.match}, conds...)
-		}
-		body := map[string]any{
-			"url": w.url, "events": w.events, "secret": c.Secret, "retryCount": 3,
-			"filters": map[string]any{"conditions": conds},
+		body := map[string]any{"url": w.url, "events": w.events, "secret": c.Secret, "retryCount": 3, "filters": nil}
+		if w.conds != nil {
+			body["filters"] = map[string]any{"conditions": w.conds}
 		}
 		method, path := "POST", "/webhooks"
 		for _, h := range hooks {
@@ -329,7 +330,12 @@ type Message struct {
 	FromMe      bool   `json:"fromMe"`
 	SenderPhone string `json:"senderPhone"`
 	IsForwarded bool   `json:"isForwarded"`
-	Media       *struct {
+	Author      string `json:"author"`
+	Contact     *struct {
+		PushName string `json:"pushName"`
+	} `json:"contact"`
+	MentionedIDs []string `json:"mentionedIds"`
+	Media        *struct {
 		Mimetype string `json:"mimetype"`
 		Filename string `json:"filename"`
 		Data     string `json:"data"`

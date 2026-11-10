@@ -127,7 +127,7 @@ func TestStarterAgentsStartWithNoSchedule(t *testing.T) {
 		t.Fatal(err)
 	}
 	names, _ := os.ReadDir(dir)
-	if len(names) != 6 {
+	if len(names) != 7 {
 		t.Fatalf("%d agents", len(names))
 	}
 	for _, n := range names {

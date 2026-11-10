@@ -26,6 +26,7 @@ func waClient() *whatsapp.Client {
 	c := whatsapp.FromEnv()
 	if c != nil {
 		c.Guests = &whatsapp.Guests{Path: filepath.Join(client.ConfigDir(), "guests")}
+		c.Quiet = &whatsapp.Quiet{Path: filepath.Join(client.ConfigDir(), "groups-quiet")}
 	}
 	return c
 }

@@ -176,6 +176,8 @@ func (s *Server) waHook(w http.ResponseWriter, r *http.Request) {
 		case !decode(&m):
 		case r.URL.Query().Get("guests") == "1":
 			go s.waGuest(m)
+		case r.URL.Query().Get("groups") == "1":
+			go s.waGroup(m)
 		default:
 			go s.waReceive(m)
 		}
@@ -188,6 +190,11 @@ func (s *Server) waHook(w http.ResponseWriter, r *http.Request) {
 		var x whatsapp.Edit
 		if decode(&x) {
 			go s.waEdited(x)
+		}
+	case "group.join", "group.leave":
+		var x whatsapp.GroupEvent
+		if decode(&x) {
+			go s.waGroupMembers(x, ev.Event == "group.join")
 		}
 	case "poll.vote":
 		var x whatsapp.Vote

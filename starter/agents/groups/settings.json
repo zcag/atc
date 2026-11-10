@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(atc wa --to*)",
+      "Bash(atc guest*)",
+      "Bash(atc group*)",
+      "Bash(atc call*)",
+      "Bash(atc new*)",
+      "Bash(atc send*)",
+      "Bash(atc stop*)",
+      "Bash(atc rm*)",
+      "Bash(git push*)",
+      "mcp__atc__start",
+      "mcp__atc__send",
+      "mcp__atc__stop"
+    ]
+  }
+}

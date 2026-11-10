@@ -83,6 +83,30 @@ included), so nothing a guest says can approve anything as long as its Claude fo
 sessions in `~/guests` group under one **guests** project and stay out of the full list unless one
 needs you, and none of it pushes to your phone. It needs the hub.
 
+## Groups
+
+atc's account can sit in WhatsApp groups too: a trip being planned with friends, say. Add it to a group you are in
+and it takes part. Being in the group yourself is the whole admission: the other members need not be guests. atc
+registers two more webhooks, one for every group message and one for joins and leaves, and drops any group you are
+not a member of (it asks WhatsApp who is in each group, and asks again when someone joins or leaves).
+
+Every message in such a group goes to one agent, **groups** (`@groups`, an agent folder like any other; atc's
+starter agents include one), which decides itself whether it is meant for it, for everyone, or for the others among
+themselves, and answers, chips in or stays quiet. atc writes in front of each message which group it is and who
+wrote it, from the verified sender: your own messages are marked as yours, everyone else's as a member with their
+WhatsApp name and number (and their guest name when they are one), so nothing a member types can pass for you, and
+a line imitating atc's is quoted. It also says when the message mentions the account, and the agent hears once
+when it is added to a group. It answers with `atc wa --group NAME` (text, files, a voice note; no polls), which atc
+refuses for any group you are not in.
+
+The agent keeps notes per group in its folder and treats your messages in a group as your word for that group's
+matters; what the others may cause without you is up to its brief. What it can reach is up to its folder: give it
+the tools a group needs in its `mcp.json` and hold the rest back in `settings.json`, as for any agent.
+
+`atc group` lists the groups the account is in: `in`, `quiet`, or `without you`. `atc group quiet NAME` keeps atc
+out of a group you are in (a group the account posts alerts to, say), `atc group on NAME` lets it back in; the list
+is `~/.config/atc/groups-quiet`, read fresh on every message.
+
 ## Speech services
 
 These services are for WhatsApp voice notes, in and out. They all speak the OpenAI API (a local

@@ -186,6 +186,7 @@ func mimeOf(path string, data []byte) string {
 // to the owner and nobody else.
 type waOut struct {
 	To      string   `json:"to"`
+	Group   string   `json:"group"`
 	Text    string   `json:"text"`
 	Files   []string `json:"files"`
 	Render  []string `json:"render"`
@@ -230,6 +231,53 @@ func (s *Server) waGuests(w http.ResponseWriter, r *http.Request) {
 	reply(w, g.List())
 }
 
+// waGroups lists the groups the account is in, each with whether atc takes part in it, or makes one
+// quiet or takes part again ({op: quiet|on, group: id or name}).
+func (s *Server) waGroups(w http.ResponseWriter, r *http.Request) {
+	if s.WhatsApp == nil {
+		http.Error(w, "WhatsApp is not set up on "+s.Host, http.StatusNotImplemented)
+		return
+	}
+	wa, ctx := s.WhatsApp, r.Context()
+	if r.Method == "POST" {
+		var in struct{ Op, Group string }
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Op != "quiet" && in.Op != "on" {
+			http.Error(w, "op is quiet or on", http.StatusBadRequest)
+			return
+		}
+		g, err := wa.FindGroup(ctx, in.Group)
+		if err == nil {
+			err = wa.Quiet.Set(g.ID, g.Name, in.Op == "quiet")
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		log.Printf("whatsapp: group %s %s", cmp.Or(g.Name, g.ID), in.Op)
+	}
+	list, err := wa.Groups(ctx)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	type row struct {
+		ID     string `json:"id"`
+		Name   string `json:"name"`
+		Status string `json:"status"`
+	}
+	out := []row{}
+	for _, g := range list {
+		st := "in"
+		if wa.Quiet.Has(g.ID) {
+			st = "quiet"
+		} else if _, ok := wa.Open(ctx, g.ID); !ok {
+			st = "without you"
+		}
+		out = append(out, row{g.ID, g.Name, st})
+	}
+	reply(w, out)
+}
+
 func (s *Server) waPost(w http.ResponseWriter, r *http.Request) {
 	if s.WhatsApp == nil {
 		http.Error(w, "WhatsApp is not set up on "+s.Host+" (ATC_WHATSAPP_* in ~/.config/atc/env)", http.StatusNotImplemented)
@@ -249,6 +297,26 @@ func (s *Server) waPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	if in.To != "" && in.Group != "" {
+		http.Error(w, "one of --to and --group", http.StatusBadRequest)
+		return
+	}
+	if in.Group != "" {
+		g, err := s.WhatsApp.FindGroup(ctx, in.Group)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		if g, ok := s.WhatsApp.Open(ctx, g.ID); !ok {
+			http.Error(w, fmt.Sprintf("atc stays out of %s: the user is not in it, or it is quiet (atc group)", cmp.Or(g.Name, in.Group)), http.StatusForbidden)
+			return
+		}
+		if in.Poll != nil {
+			http.Error(w, "polls go only to the owner", http.StatusBadRequest)
+			return
+		}
+		ctx = whatsapp.To(ctx, g.ID)
+	}
 	if in.To != "" {
 		chat, ok := s.WhatsApp.GuestChat(in.To)
 		if !ok {

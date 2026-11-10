@@ -607,6 +607,15 @@ func checkSummary(ctx context.Context, env Env) Result {
 	return Result{OK, "On, through Claude Code with " + model + ": this spends plan tokens on every finished turn."}
 }
 
+func checkGroupsAgent(_ context.Context, env Env) Result {
+	for _, a := range env.Agents {
+		if a.Name == "groups" {
+			return Result{OK, "@groups takes part in the groups you are in with atc's account (atc group lists them)."}
+		}
+	}
+	return Result{Missing, "No agent named groups, so messages in groups are dropped."}
+}
+
 func checkWhatsApp(ctx context.Context, env Env) Result {
 	keys := []string{"ATC_WHATSAPP_URL", "ATC_WHATSAPP_KEY", "ATC_WHATSAPP_SESSION", "ATC_WHATSAPP_OWNER", "ATC_WHATSAPP_SECRET"}
 	var unset []string
