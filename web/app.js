@@ -985,7 +985,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   if (rail) return html`
     <button class=${cls} data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
       <${StateBlock} s=${s} />
-      <span class="c">${title}<span class="s">${status}</span><${CardGist} s=${s} />${s.state === "working" && html`<span class="s2 mono">${doing(s)}</span>`}</span>
+      <span class="c">${title}<span class="s">${g === "cut" ? s.ended.text : status}</span><${CardGist} s=${s} />${s.state === "working" && html`<span class="s2 mono">${doing(s)}</span>`}</span>
       <span class="e"><span class="ago">${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>
     </button>`;
   return html`
