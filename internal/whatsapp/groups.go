@@ -39,9 +39,11 @@ type cachedGroup struct {
 }
 
 type groupCache struct {
-	mu   sync.Mutex
-	m    map[string]cachedGroup
-	self string
+	mu       sync.Mutex
+	m        map[string]cachedGroup
+	self     string
+	selfName string
+	phones   map[string]string
 }
 
 // Groups is every group the account is in, without members.
@@ -85,7 +87,7 @@ func (c *Client) Self(ctx context.Context) (string, error) {
 	if self != "" {
 		return self, nil
 	}
-	var s struct{ Phone string }
+	var s struct{ Phone, PushName string }
 	if err := c.do(ctx, "GET", "", nil, &s); err != nil {
 		return "", err
 	}
@@ -93,9 +95,19 @@ func (c *Client) Self(ctx context.Context) (string, error) {
 		return "", errors.New("openwa: the session has no phone yet")
 	}
 	c.groups.mu.Lock()
-	c.groups.self = strings.TrimPrefix(s.Phone, "+")
-	c.groups.mu.Unlock()
+	defer c.groups.mu.Unlock()
+	c.groups.self, c.groups.selfName = strings.TrimPrefix(s.Phone, "+"), s.PushName
 	return c.groups.self, nil
+}
+
+// SelfName is what the account calls itself on WhatsApp, once Self has asked.
+func (c *Client) SelfName() string {
+	c.groups.mu.Lock()
+	defer c.groups.mu.Unlock()
+	if c.groups.selfName == "" {
+		return "+" + c.groups.self
+	}
+	return c.groups.selfName
 }
 
 // Member is the member a sender id belongs to.

@@ -223,9 +223,24 @@ func (c *Client) Download(ctx context.Context, chat, id string) ([]byte, string,
 
 // Phone is the number behind a contact id, which for an @lid only WhatsApp can say.
 func (c *Client) Phone(ctx context.Context, contact string) (string, error) {
+	c.groups.mu.Lock()
+	p, ok := c.groups.phones[contact]
+	c.groups.mu.Unlock()
+	if ok {
+		return p, nil
+	}
 	var out struct{ Phone string }
-	err := c.do(ctx, "GET", "/contacts/"+url.PathEscape(contact)+"/phone", nil, &out)
-	return strings.TrimPrefix(out.Phone, "+"), err
+	if err := c.do(ctx, "GET", "/contacts/"+url.PathEscape(contact)+"/phone", nil, &out); err != nil {
+		return "", err
+	}
+	p = strings.TrimPrefix(out.Phone, "+")
+	c.groups.mu.Lock()
+	if c.groups.phones == nil {
+		c.groups.phones = map[string]string{}
+	}
+	c.groups.phones[contact] = p
+	c.groups.mu.Unlock()
+	return p, nil
 }
 
 // Verify checks OpenWA's X-OpenWA-Signature (sha256=<hex HMAC of the raw body>).

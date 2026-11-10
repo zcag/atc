@@ -5671,6 +5671,7 @@ function Step({ st, s, zoom, pin }) {
   const running = pin && !st.out && html`<${Running} st=${st} />`;
   if (k === "ask") return html`<div class=${cls}><${AskedStep} st=${st} s=${s} /></div>`;
   if (k === "letter") return html`<${SentLetter} st=${st} />`;
+  if (st.tool === "Bash" && st.badge?.kind === "wa" && st.badge.wa) return html`<${SentWA} st=${st} />`;
   if (st.tool === "Bash" && st.badge?.kind === "show") return html`<div class=${cls}><${PageRef} b=${st.badge} s=${s} /></div>`;
   if (st.tool === "Bash") {
     const cmd = i.command || st.detail || "";
@@ -6415,15 +6416,21 @@ const letterGist = (x) => {
   const v = x.tool.split("__").pop(), o = letterOut(x);
   return v === "report" ? "reported to the assistant" : `${v === "start" ? "started" : "sent to"} ${o?.title || (v === "start" ? x.input.name || "a session" : x.input.session) || "a session"}`;
 };
+const waReplyGist = (t) => {
+  const b = (t.badges || []).findLast((x) => x.kind === "wa" && x.ok && x.wa);
+  return b && `${b.wa.group ? `In ${waGroupName(b.wa.group)}` : `To ${b.wa.to || "you"}`}: ${firstSentence(b.wa.text || b.wa.voice || "a file")}`;
+};
+const waGist = (x) => { const w = x.badge.wa; return `${x.badge.ok ? "wrote" : "failed to write"} ${w.group ? `in ${waGroupName(w.group)}` : `to ${w.to || "you"}`}`; };
 const stepsGist = (steps, s) => {
   if (steps.length === 1 && txKind(steps[0]) === "letter") return letterGist(steps[0]);
+  if (steps.length === 1 && txKind(steps[0]) === "wa" && steps[0].badge.wa) return waGist(steps[0]);
   if (steps.length === 1) { const m = stepNote(steps[0], s); return steps[0].tool === "Bash" && !steps[0].badge ? m.n && m.n !== "failed" ? m.n : `ran ${m.c}` : `${m.v} ${m.c}`; }
   const count = (kind) => steps.filter((x) => txKind(x) === kind), files = (l) => new Set(l.map((x) => x.input.file_path || x.detail)).size;
   const reads = steps.filter((x) => x.tool === "Read"), finds = steps.filter((x) => x.tool === "Grep" || x.tool === "Glob"), edits = count("edit");
-  const named = steps.filter((x) => !["run", "look", "edit", "web", "agent", "ask", "letter"].includes(txKind(x)));
+  const named = steps.filter((x) => !["run", "look", "edit", "web", "agent", "ask", "letter", "wa"].includes(txKind(x)));
   const others = [...new Set(named.map((x) => (x.badge ? x.badge.kind : VERB[x.tool] || toolName(x.tool).toLowerCase())))];
   return [reads.length && `read ${plural(files(reads), "file")}`, finds.length && `searched ${finds.length}`, count("run").length && `ran ${plural(count("run").length, "command")}`,
-    edits.length && `edited ${plural(files(edits), "file")}`, count("web").length && `${count("web").length} web`, count("agent").length && (count("agent").every((x) => /^Async agent launched/.test(x.out?.text || "")) ? `started ${plural(count("agent").length, "agent")}` : plural(count("agent").length, "agent")), ...new Set(count("letter").map(letterGist)), ...others].filter(Boolean).join(", ");
+    edits.length && `edited ${plural(files(edits), "file")}`, count("web").length && `${count("web").length} web`, count("agent").length && (count("agent").every((x) => /^Async agent launched/.test(x.out?.text || "")) ? `started ${plural(count("agent").length, "agent")}` : plural(count("agent").length, "agent")), ...new Set(count("letter").map(letterGist)), ...new Set(count("wa").filter((x) => x.badge.wa).map(waGist)), ...others].filter(Boolean).join(", ");
 };
 
 const InlineSteps = ({ steps, s, open, toggle, at }) => {
@@ -6454,7 +6461,7 @@ function GroupBody({ steps, s, open, zoom, live }) {
   if (open) return html`<div class="steps">${steps.map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} pin=${live && x === steps[steps.length - 1]} />`)}</div>`;
   const edits = steps.filter((x) => txKind(x) === "edit" && !x.out?.error && !scratch(x.input.file_path || x.detail));
   return html`${edits.length > 0 && html`<${Edits} steps=${edits} s=${s} />`}
-    ${steps.filter((x) => txKind(x) === "ask" || txKind(x) === "letter" || txKind(x) === "agent" || (x.tool === "Bash" && x.badge?.kind === "show")).map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} />`)}`;
+    ${steps.filter((x) => txKind(x) === "ask" || txKind(x) === "letter" || txKind(x) === "agent" || (x.tool === "Bash" && (x.badge?.kind === "show" || x.badge?.kind === "wa"))).map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} />`)}`;
 }
 
 function agentRows(b) {
@@ -6506,6 +6513,58 @@ function ViaHead({ v, at, when }) {
     ${v.started && html`<span class="vto">started this</span>`}
     <span class="vchip ${tone}">${chip}</span>${asked && html`<button class="vlink" onClick=${() => TX_API?.jump(asked)}>answers your message, ${txClock(asked.at)}</button>`}<span class="vat">${at}</span></div>`;
 }
+const WA_GROUPS = new Map();
+const phoneText = (n) => (n.length === 12 && n.startsWith("90") ? `+90 ${n.slice(2, 5)} ${n.slice(5, 8)} ${n.slice(8, 10)} ${n.slice(10)}` : `+${n}`);
+const waWho = (w) => (w.you ? "You" : w.name || w.guest || (w.number ? phoneText(w.number) : "Someone"));
+const waGroupName = (id) => WA_GROUPS.get(id) || "the group";
+const waSpoken = (v) => (v && v !== "yes" ? `voice note, ${v[0].toUpperCase()}${v.slice(1)}` : "voice note");
+const mapsLink = (loc) => { const [, ll] = loc.match(/^(-?[\d.]+,-?[\d.]+)/) || []; return ll ? `https://maps.google.com/?q=${ll}` : null; };
+function WAHead({ v, at }) {
+  const w = v.wa, name = waWho(w), pop = useRef(null);
+  if (w.group && w.groupId) WA_GROUPS.set(w.groupId, w.group);
+  useEffect(() => {
+    const away = (e) => pop.current?.open && !pop.current.contains(e.target) && (pop.current.open = false);
+    addEventListener("pointerdown", away);
+    return () => removeEventListener("pointerdown", away);
+  }, []);
+  const facts = [["from", w.you ? "you (atc checked the sender)" : w.name], ["number", w.number && phoneText(w.number)], ["guest", w.guest], ["group", w.group], ["group id", w.groupId], ["file", w.path]].filter(([, val]) => val);
+  return html`<div class="vh wah">
+    <details class="vpop" ref=${pop}><summary><span class=${`wav ${w.you ? "you" : ""}`} style=${`--ph: ${hueOf(w.number || name)}`} aria-hidden="true">${name[0]?.toUpperCase()}</span><b>${name}</b>${!w.you && w.number && w.name && html`<span class="wanum">${phoneText(w.number)}</span>`}</summary>
+      <div class="vbox"><dl>${facts.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>
+        ${v.raw && html`<details class="vraw"><summary>What this session read</summary><pre>${v.raw}</pre></details>`}</div></details>
+    ${w.guest && html`<span class="vchip">guest</span>`}
+    <span class="vchip wa">${ICON.chat}${w.group ? w.group : "WhatsApp"}</span>
+    ${w.mention && html`<span class="vchip want">mentioned delta</span>`}
+    ${w.forwarded && html`<span class="vchip">forwarded</span>`}
+    <span class="vat">${at}</span></div>`;
+}
+function WAExtras({ w }) {
+  const link = w.location && mapsLink(w.location), voice = w.media === "voice note" || w.media === "audio";
+  return html`${w.quote && html`<blockquote class="waq"><span>replying to</span>${w.quote}</blockquote>`}
+    ${voice && html`<p class="wamedia">${ICON.mic}<span>${waSpoken(w.voice)}, as heard</span></p>`}
+    ${!voice && w.media && html`<p class="wamedia">${ICON.page}${w.path ? html`<span class="arg farg" data-file=${w.path} data-exact tabindex="0" role="link" title="Open this file">${w.media}: ${w.path.split("/").pop()}</span>` : html`<span>${w.media}</span>`}</p>`}
+    ${w.location && html`<p class="wamedia">${ICON.globe}${link ? html`<a href=${link} data-out>${w.location}</a>` : html`<span>${w.location}</span>`}</p>`}`;
+}
+function WAAdded({ v, at }) {
+  const w = v.wa, by = w.added?.you ? "you" : waWho(w.added || {});
+  if (w.groupId) WA_GROUPS.set(w.groupId, w.group);
+  const others = (w.members || []).filter((m) => !m.you).map(waWho);
+  return html`<p class="evt waadd">${ICON.chat} Added to <b>${w.group}</b> by ${by}${others.length > 0 && html`, with ${others.join(", ")}`}<time>${at}</time></p>`;
+}
+function SentWA({ st }) {
+  const w = st.badge.wa, failed = !st.badge.ok;
+  const to = w.group ? html`In <b>${waGroupName(w.group)}</b>` : w.to ? html`To <b>${w.to}</b>` : html`To <b>you</b>`;
+  const [all, setAll] = useState(false), long = (w.text || "").length > 700 || (w.text || "").split("\n").length > 10;
+  return html`<div class="sent wasent ${failed ? "bad" : ""}">
+    <div class="snh"><span class="sni">${ICON.chat}</span><span class="sto">${to} on WhatsApp</span><span class="vat">${txClock(st.time)}</span></div>
+    ${w.text && html`<div class="prose ptxt ${long && !all ? "clamp" : ""}" dangerouslySetInnerHTML=${{ __html: Marked.parse(w.text, { breaks: true }) }}></div>`}
+    ${long && html`<button class="kb more" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}
+    ${w.voice && html`<p class="wamedia">${ICON.mic}<span>voice note: «${w.voice}»</span></p>`}
+    ${(w.files || []).map((f) => html`<p class="wamedia">${ICON.page}<span class="arg farg" data-file=${f} data-exact tabindex="0" role="link" title="Open this file">${f.split("/").pop()}</span></p>`)}
+    ${w.poll && html`<p class="wamedia">${ICON.list}<span>poll: ${w.poll}</span></p>`}
+    ${failed && html`<p class="snerr">Not sent: ${oneLine(st.out?.text)}</p>`}
+  </div>`;
+}
 const PASTE_FOLD = 6;
 const pasteParts = (text, pastes) => {
   const parts = [];
@@ -6525,7 +6584,8 @@ function Lead({ text, images, files, at, when, via, channel, pastes, mark }) {
   const said = parts.map((x) => (x.html ? x.html : "")).join("");
   const long = said.length > 900 || said.split("<p>").length > 9;
   const spoken = !via && channel === "phone";
-  return html`${via?.news?.length > 0 && via.news.map((n) => html`<p class="evt vnews">${n}</p>`)}<div class=${via ? "lead via" : spoken ? "lead spoken" : "lead"}>${via ? html`<${ViaHead} v=${via} at=${at} when=${when} />` : html`<div class="lead-at">${channel && channel !== "atc" && html`<span class="lch">${chIcon(channel)}</span>`}${youOn(channel)} ${at}${mark?.heard && html` <span class="cutchip" title=${`It had said: «${mark.heard}»`}>cut in</span>`}</div>`}<div class="prose ptxt ${long && !all ? "clamp" : ""}">${parts.map((x) => x.paste ? html`<details class="paste"><summary>Pasted, ${plural(x.paste.split("\n").length, "line")}</summary><pre>${x.paste}</pre></details>` : html`<div dangerouslySetInnerHTML=${{ __html: x.html }}></div>`)}</div>
+  if (via?.wa?.added) return html`<${WAAdded} v=${via} at=${at} />`;
+  return html`${via?.news?.length > 0 && via.news.map((n) => html`<p class="evt vnews">${n}</p>`)}<div class=${via?.wa ? "lead via wa" : via ? "lead via" : spoken ? "lead spoken" : "lead"}>${via?.wa ? html`<${WAHead} v=${via} at=${at} />${html`<${WAExtras} w=${via.wa} />`}` : via ? html`<${ViaHead} v=${via} at=${at} when=${when} />` : html`<div class="lead-at">${channel && channel !== "atc" && html`<span class="lch">${chIcon(channel)}</span>`}${youOn(channel)} ${at}${mark?.heard && html` <span class="cutchip" title=${`It had said: «${mark.heard}»`}>cut in</span>`}</div>`}<div class="prose ptxt ${long && !all ? "clamp" : ""}">${parts.map((x) => x.paste ? html`<details class="paste"><summary>Pasted, ${plural(x.paste.split("\n").length, "line")}</summary><pre>${x.paste}</pre></details>` : html`<div dangerouslySetInnerHTML=${{ __html: x.html }}></div>`)}</div>
     ${mark?.alt && html`<p class="alt">or «${mark.alt}»</p>`}${mark?.altOnly && html`<p class="alt">only the second reading heard this</p>`}
     ${long && html`<button class="kb more" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}
     ${files > 0 && html`<span class="attl">${plural(files, "attachment")}</span>`}
@@ -7179,9 +7239,10 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
         const work = [r.t.steps > 0 && plural(r.t.steps, "step"), f && `${relPath(f.path, s)} +${f.add}${f.del ? ` -${f.del}` : ""}`, (r.t.files || []).length > 1 && `${r.t.files.length - 1} more`].filter(Boolean).join(", ");
         const who = r.t.notice ? "" : r.t.mark?.called && !r.t.prompt ? "it called you" : r.t.kind === "wake" ? `schedule, every ${r.t.mark.every}` : r.t.kind === "restart" ? "started over" : r.t.via ? viaName(r.t.via) : youOn(r.t.channel);
         const bare = r.t.notice || (r.t.mark?.called && !r.t.prompt);
+        if (r.t.via?.wa?.groupId) WA_GROUPS.set(r.t.via.wa.groupId, r.t.via.wa.group);
         return html`${who && html`<h2 class="sr">${who}, ${txClock(r.at)}</h2>`}<button class="fold ${bare ? "ntc" : ""}" id=${`tx${r.i}`} data-stop data-you=${who ? "" : null} aria-expanded="false" title="Open this turn" onClick=${() => openTurn(r.i)}>
           <span class="fy"><span class="lead-at">${who} ${clock(r.at, true)}</span><span class="fq">${r.t.partial ? "Continued from earlier" : plain(cleanPrompt(r.t.prompt)) || (bare ? "" : "Image")}</span></span>
-          <span class="g">${r.t.reply ? firstSentence(r.t.reply) : "No reply."} ${work && html`<b>${work}</b>`}</span></button>`;
+          <span class="g">${r.t.reply ? firstSentence(r.t.reply) : waReplyGist(r.t) || "No reply."} ${work && html`<b>${work}</b>`}</span></button>`;
       }
       case "wake": return html`<div class="wake" id=${`tx${r.i}`} data-stop><details><summary>${ICON.clock}<b>Scheduled wake-up</b><span>every ${r.t.mark.every}</span><time>${clock(r.at, true)}</time></summary>
           <div class="prose ptxt" dangerouslySetInnerHTML=${{ __html: Marked.parse(cleanPrompt(r.b?.prompt ?? r.t.prompt), { breaks: true }) }}></div></details></div>`;

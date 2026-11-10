@@ -23,6 +23,7 @@ type Via struct {
 	Channel  string   `json:"channel,omitempty"`
 	Where    string   `json:"where,omitempty"`
 	News     []string `json:"news,omitempty"`
+	WA       *WA      `json:"wa,omitempty"`
 	Raw      string   `json:"raw,omitempty"`
 }
 
@@ -93,6 +94,9 @@ func envelope(t string) said {
 		if s := selfSigned.FindStringSubmatchIndex(t); s != nil {
 			v.Title, t = t[s[2]:s[3]], t[:s[0]]
 		}
+	}
+	if body, w := whatsApp(t); w != nil {
+		t, v.WA, v.Source = body, w, waLabel(w)
 	}
 	var wrapped struct{ Text string }
 	if strings.HasPrefix(t, `{"text":`) && json.Unmarshal([]byte(t), &wrapped) == nil && wrapped.Text != "" {

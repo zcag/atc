@@ -43,6 +43,7 @@ func (s *Server) waGroup(d whatsapp.Message) {
 		log.Printf("whatsapp: group %q: %v", g.Name, err)
 		return
 	}
+	text = s.waMentions(ctx, g, d, text)
 	wa.Read(ctx, d.ChatID)
 	head := fmt.Sprintf("[WhatsApp group %q (%s) · %s", g.Name, g.ID, s.waAuthor(ctx, g, d))
 	if voice != "" {
@@ -65,9 +66,26 @@ func (s *Server) waGroupMembers(ev whatsapp.GroupEvent, joined bool) {
 	if !joined {
 		return
 	}
-	g, ok := wa.Open(ctx, ev.GroupID)
 	self, err := wa.Self(ctx)
-	if !ok || err != nil || !slices.ContainsFunc(ev.ParticipantIDs, func(id string) bool { return number(g, id) == self }) {
+	if err != nil {
+		log.Printf("whatsapp: a join in group %s, but the account's own number is unknown: %v", ev.GroupID, err)
+		return
+	}
+	var g whatsapp.Group
+	var ok bool
+	for try := 0; try < 4 && !ok; try++ {
+		if try > 0 {
+			time.Sleep(5 * time.Second)
+			wa.ForgetGroup(ev.GroupID)
+		}
+		g, ok = wa.Open(ctx, ev.GroupID)
+	}
+	if !ok {
+		log.Printf("whatsapp: a join in group %s, which atc stays out of (the user is not in it, it is quiet, or WhatsApp did not say)", ev.GroupID)
+		return
+	}
+	if !slices.ContainsFunc(ev.ParticipantIDs, func(id string) bool { return s.waNumber(ctx, g, id) == self }) {
+		log.Printf("whatsapp: %v joined group %q", ev.ParticipantIDs, g.Name)
 		return
 	}
 	a, ok := s.agentNamed(groupsAgent)
@@ -83,7 +101,7 @@ func (s *Server) waGroupMembers(ev whatsapp.GroupEvent, joined bool) {
 	}
 	by := "someone"
 	if ev.ActorID != "" {
-		by = s.waWho(ctx, g, ev.ActorID, number(g, ev.ActorID), "")
+		by = s.waWho(ctx, g, ev.ActorID, s.waNumber(ctx, g, ev.ActorID), "")
 	}
 	log.Printf("whatsapp: added to group %q", g.Name)
 	s.waToAgent(ctx, a, fmt.Sprintf("[WhatsApp group %q (%s) · you were added by %s]\nMembers: %s\n[end of message]",
@@ -108,7 +126,7 @@ func (s *Server) waAuthor(ctx context.Context, g whatsapp.Group, d whatsapp.Mess
 	id := cmp.Or(d.Author, d.From)
 	num := strings.TrimPrefix(d.SenderPhone, "+")
 	if num == "" {
-		num = number(g, id)
+		num = s.waNumber(ctx, g, id)
 	}
 	name := ""
 	if d.Contact != nil {
@@ -138,16 +156,51 @@ func (s *Server) waWho(ctx context.Context, g whatsapp.Group, id, num, name stri
 
 func (s *Server) waMentionsSelf(ctx context.Context, g whatsapp.Group, d whatsapp.Message) bool {
 	self, err := s.WhatsApp.Self(ctx)
-	return err == nil && slices.ContainsFunc(d.MentionedIDs, func(id string) bool { return number(g, id) == self })
+	return err == nil && slices.ContainsFunc(d.MentionedIDs, func(id string) bool { return s.waNumber(ctx, g, id) == self })
 }
 
-// number is the phone number behind a member id: its own digits for a @c.us id, else the group's word for it.
-func number(g whatsapp.Group, id string) string {
+// waMentions writes each @mention in a message as who it is: WhatsApp puts a bare id there (@1099...), which
+// says nothing to a reader.
+func (s *Server) waMentions(ctx context.Context, g whatsapp.Group, d whatsapp.Message, text string) string {
+	wa := s.WhatsApp
+	self, _ := wa.Self(ctx)
+	for _, id := range d.MentionedIDs {
+		user, _, _ := strings.Cut(id, "@")
+		num := s.waNumber(ctx, g, id)
+		name := "+" + num
+		switch {
+		case num == "":
+			continue
+		case num == self:
+			name = wa.SelfName()
+		case num == wa.Owner:
+			name = "the user"
+		default:
+			if guest := wa.Guest(ctx, num+"@c.us", num); guest != "" {
+				name = guest
+			} else if m, ok := g.Member(id); ok && m.Name != "" {
+				name = m.Name
+			}
+		}
+		text = strings.ReplaceAll(text, "@"+user, "@"+name)
+	}
+	return text
+}
+
+// waNumber is the phone number behind a member id: its own digits for a @c.us id, else the group's word for it,
+// else WhatsApp's for an @lid.
+func (s *Server) waNumber(ctx context.Context, g whatsapp.Group, id string) string {
 	if n, ok := strings.CutSuffix(id, "@c.us"); ok {
 		return n
 	}
-	m, _ := g.Member(id)
-	return m.Number
+	if m, ok := g.Member(id); ok && m.Number != "" {
+		return m.Number
+	}
+	if strings.HasSuffix(id, "@lid") {
+		n, _ := s.WhatsApp.Phone(ctx, id)
+		return n
+	}
+	return ""
 }
 
 // fenced keeps a member from writing a line that reads as atc's own header or end mark.

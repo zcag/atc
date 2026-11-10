@@ -95,8 +95,10 @@ starter agents include one), which decides itself whether it is meant for it, fo
 themselves, and answers, chips in or stays quiet. atc writes in front of each message which group it is and who
 wrote it, from the verified sender: your own messages are marked as yours, everyone else's as a member with their
 WhatsApp name and number (and their guest name when they are one), so nothing a member types can pass for you, and
-a line imitating atc's is quoted. It also says when the message mentions the account, and the agent hears once
-when it is added to a group. It answers with `atc wa --group NAME` (text, files, a voice note; no polls), which atc
+a line imitating atc's is quoted. It also says when the message mentions the account (a mention reads as the
+name, not WhatsApp's bare id), and the agent hears once when it is added to a group. In atc's transcript these
+messages read as messages: who wrote them, in which group, a voice note, the message it replies to, a file; and
+what the agent sent with `atc wa` as what went out, to whom. It answers with `atc wa --group NAME` (text, files, a voice note; no polls), which atc
 refuses for any group you are not in.
 
 The agent keeps notes per group in its folder and treats your messages in a group as your word for that group's

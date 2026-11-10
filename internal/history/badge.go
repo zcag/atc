@@ -12,7 +12,8 @@ type Badge struct {
 	Text string `json:"text"`
 	Ref  string `json:"ref,omitempty"`
 	// Range is what a push moved its branch across, old..new.
-	Range string `json:"range,omitempty"`
+	Range string  `json:"range,omitempty"`
+	WA    *WASent `json:"wa,omitempty"`
 }
 
 var (
@@ -56,6 +57,14 @@ func classify(m Message) (*Badge, bool) {
 		out = terminalEscape.ReplaceAllString(m.Out.Text, "")
 	}
 	switch {
+	case waCmd.MatchString(cmd) && !strings.Contains(cmd, "atc wa -h"):
+		if w := waSent(cmd); w != nil && (failed || waSentOut.MatchString(out)) {
+			b := &Badge{Kind: "wa", OK: !failed, Text: "Sent on WhatsApp", WA: w}
+			if failed {
+				b.Text = "WhatsApp not sent"
+			}
+			return b, false
+		}
 	case strings.Contains(cmd, "git commit"):
 		if sm := commitLine.FindStringSubmatch(out); sm != nil {
 			return &Badge{Kind: "commit", OK: true, Text: sm[3], Ref: sm[2][:7]}, false
