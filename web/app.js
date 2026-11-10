@@ -3208,12 +3208,13 @@ const ShareRows = ({ rows, onPick }) => {
 
 const dayOf = (d, o) => new Date(d + "T12:00").toLocaleDateString([], o);
 
-const RANGES = [["24h", "24h", "the last 24 hours", "hours=24"], ["7d", "7d", "the last 7 days", "days=7"], ["30d", "30d", "the last 30 days", "days=30"], ["90d", "90d", "the last 90 days", "days=90"], ["all", "All", "all time", "days=all"]];
+const RANGES = [["24h", "24h", "the last 24 hours", "hours=24"], ["week", "Week", "this week, since the weekly limit reset", null, "same length of time before the reset"], ["7d", "7d", "the last 7 days", "days=7"], ["30d", "30d", "the last 30 days", "days=30"], ["90d", "90d", "the last 90 days", "days=90"], ["all", "All", "all time", "days=all"]];
 const REPORTS = {};
 
 function useReport(q) {
   const [rep, setRep] = useState(REPORTS[q] || null);
   useEffect(() => {
+    if (!q) return setRep(null);
     let live = true;
     const load = () => api(`/api/usage/report?${q}`).then((r) => { REPORTS[q] = r; live && setRep(r); }, () => live && setRep((x) => (x && !x.failed ? x : { days: [], sessions: [], failed: true })));
     setRep(REPORTS[q] ? { ...REPORTS[q], loading: true } : null);
@@ -3825,8 +3826,9 @@ function UsagePage({ limits, live, down, onOpen }) {
   const [sel, setSel] = useState({});
   const [more, setMore] = useState(false);
   const pickSel = (p) => { setSel((x) => ({ ...x, ...p })); setMore(false); };
-  const rangeDef = RANGES.find((r) => r[0] === v.range) || RANGES[1];
-  const rep = useReport(rangeDef[3]);
+  const rangeDef = RANGES.find((r) => r[0] === v.range) || RANGES[2];
+  const weekFrom = Date.parse(winOf(u, "weekly_all")?.from);
+  const rep = useReport(rangeDef[0] !== "week" ? rangeDef[3] : weekFrom ? `since=${Math.floor(weekFrom / 1000)}` : null);
   const xp = useExplain();
   const scroll = useRef(), sessionsRef = useRef();
   useLayoutEffect(() => { if (scroll.current) scroll.current.scrollTop = stored("atc.usage.scroll", 0); }, [!!rep]);
@@ -3850,7 +3852,7 @@ function UsagePage({ limits, live, down, onOpen }) {
   const todayCost = rep?.days ? rep.days.filter((d) => d.day.startsWith(todayKey)).reduce((a, d) => a + d.cost, 0) : null;
   const week = u?.week;
   const trimmed = rep?.days && shownDays.length < rep.days.length;
-  const span = rep?.first && rangeDef[0] !== "24h" && rangeDef[0] !== "7d" && (trimmed || rangeDef[0] === "all");
+  const span = rep?.first && !["24h", "week", "7d"].includes(rangeDef[0]) && (trimmed || rangeDef[0] === "all");
 
   const chips = [
     sel.bucket && ["bucket", bucketName(sel.bucket)],
@@ -3871,7 +3873,7 @@ function UsagePage({ limits, live, down, onOpen }) {
   const kpis = [
     { l: filtered ? "In this selection" : "Spent", v: dollars(data.total),
       s: [wk(data.total), filtered ? `of ${dollars(data.range)}`
-        : delta != null ? `${delta >= 0 ? "+" : "-"}${dollars(Math.abs(data.total - rep.previous))} from the ${rangeDef[2].replace("the last", "previous")} (${dollars(rep.previous)})`
+        : delta != null ? `${delta >= 0 ? "+" : "-"}${dollars(Math.abs(data.total - rep.previous))} from the ${rangeDef[4] || rangeDef[2].replace("the last", "previous")} (${dollars(rep.previous)})`
         : rangeDef[2]].filter(Boolean).join(", "), big: true },
     sel.bucket
       ? { l: `Against the average ${unit}`, v: perUnit > 0 ? `${(data.total / perUnit).toFixed(1)}×` : "0", s: `average ${withWk(perUnit)} a ${unit}` }
@@ -3931,7 +3933,8 @@ function UsagePage({ limits, live, down, onOpen }) {
             </div>
             ${weekRate() && html`<p class="ufloor">${WK_SCALE()}</p>`}
             ${span && html`<p class="ufloor">Transcripts go back to ${dayOf(rep.first, { day: "numeric", month: "short" })}. Claude Code deletes older ones, so there is nothing further to add up.</p>`}
-            ${!rep ? html`<p class="none">Adding up the transcripts…</p>` : rep.failed ? html`<p class="none">Couldn't add up the transcripts.</p>`
+            ${!rep && rangeDef[0] === "week" && u && !weekFrom ? html`<p class="none">The weekly limit's reset is not known here, so there is no week to add up.</p>`
+            : !rep ? html`<p class="none">Adding up the transcripts…</p>` : rep.failed ? html`<p class="none">Couldn't add up the transcripts.</p>`
             : empty && rangeDef[0] === "all" ? html`
               <div class="uempty"><h2>No usage yet</h2><p>atc reads usage from Claude Code once a session has run. Spend per day, bay, model and session fill in from the first session on.</p>
                 <button class="btn primary" onClick=${() => NEW_SESSION()}>New session</button></div>`

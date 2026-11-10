@@ -245,6 +245,9 @@ func reportSpan(q url.Values) (time.Time, bool) {
 	if q.Get("days") == "all" {
 		return time.Time{}, false
 	}
+	if v, err := strconv.ParseInt(q.Get("since"), 10, 64); err == nil {
+		return time.Unix(v, 0), false
+	}
 	n := 30
 	if v, err := strconv.Atoi(q.Get("days")); err == nil {
 		n = min(max(v, 1), 90)
