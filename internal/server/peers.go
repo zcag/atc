@@ -291,7 +291,13 @@ func mergeHistory(lists [][]sessions.Session, limit int) []sessions.Session {
 	}
 	sort.SliceStable(all, func(i, j int) bool { return all[i].Updated.After(all[j].Updated) })
 	if limit > 0 && len(all) > limit {
-		all = all[:limit]
+		kept := slices.Clone(all[:limit])
+		for _, x := range all[limit:] {
+			if x.Ended != nil && x.Ended.Unexpected && !x.Ended.Dismissed {
+				kept = append(kept, x)
+			}
+		}
+		all = kept
 	}
 	return all
 }

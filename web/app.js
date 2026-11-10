@@ -920,11 +920,11 @@ function KeysOverlay({ onClose }) {
 
 const GROUPS = [["pinned", "Pinned"], ["waiting", "Waiting on you"], ["working", "Working"], ["cut", "Stopped unexpectedly"], ["parked", "Parked"], ["earlier", "Earlier"]];
 const QWERTY = "qwertyuiop";
-const UNASKED = new Set(["oom", "memory", "crashed", "daemon", "updated", "rebooted"]);
 const endedAt = (s) => Date.parse(s.ended?.at || 0) || 0;
-const cutOff = (s) => s.state === "stopped" && !s.retired && s.ended?.sure && !s.ended.dismissed && UNASKED.has(s.ended.cause)
-  && Date.now() - endedAt(s) < 7 * 86400000;
-const dismissEnded = (list, say, undo) => Promise.allSettled(list.map((s) => api(`/api/sessions/${s.sessionId}/ended/dismiss${undo ? "?undo=1" : ""}`, { method: "POST" })))
+const unexpected = (s) => (s.state === "stopped" || s.state === "past") && !!s.ended?.unexpected;
+const cutOff = (s) => unexpected(s) && !s.retired && !s.ended.dismissed && Date.now() - endedAt(s) < 7 * 86400000;
+const onHost = (s) => (s.host ? `?host=${encodeURIComponent(s.host)}` : "");
+const dismissEnded = (list, say, undo) => Promise.allSettled(list.map((s) => api(`/api/sessions/${s.sessionId}/ended/dismiss${onHost(s)}${undo ? `${s.host ? "&" : "?"}undo=1` : ""}`, { method: "POST" })))
   .then(() => !undo && say?.(list.length === 1 ? "Dismissed: it moves to Earlier." : `Dismissed ${list.length}: they move to Earlier.`, { undo: () => dismissEnded(list, say, true) }));
 const groupOf = (s) => (away(s) ? "parked" : s.pinned ? "pinned" : waiting(s) ? "waiting" : s.state === "working" ? "working" : cutOff(s) ? "cut" : "earlier");
 const byUrgency = (a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1) || (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
@@ -951,13 +951,16 @@ function bayLists(live, hist, only) {
   const mine = (s) => (only ? bayOf(s) === only : true);
   const now = (live || []).filter(mine);
   const ids = new Set((live || []).map((s) => s.sessionId));
-  const earlier = [...now.filter((s) => groupOf(s) === "earlier"), ...(hist || []).filter((s) => !ids.has(s.sessionId) && mine(s))]
+  const past = (hist || []).filter((s) => !ids.has(s.sessionId) && mine(s));
+  const earlier = [...now.filter((s) => groupOf(s) === "earlier"), ...past.filter((s) => !cutOff(s))]
     .sort((a, b) => (Date.parse(b.updated || b.startedAt || 0) || 0) - (Date.parse(a.updated || a.startedAt || 0) || 0));
   const by = Object.fromEntries(GROUPS.map(([k]) => [k, []]));
   for (const s of now) if (groupOf(s) !== "earlier") by[groupOf(s)].push(s);
   for (const k in by) by[k].sort(byUrgency);
   by.pinned.sort(byStart);
   by.earlier = earlier;
+  by.cut.push(...past.filter(cutOff));
+  by.cut.sort((a, b) => endedAt(b) - endedAt(a));
   return by;
 }
 
@@ -977,7 +980,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   const on = sel?.sessionId === s.sessionId, run = runningOf(s), made = madeOf(s), g = s.pinned && waiting(s) ? "pinned waiting" : groupOf(s);
   const where = [MULTI && s.host, s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch].filter(Boolean).join(" ");
   const status = (s.state === "needs-you" ? oneLine(s.summary?.status) || oneLine(s.preview || s.lastReply) || "Needs you" : headline(s)) || WORD[s.state] || "";
-  const second = doingLine(s) || (g === "cut" ? s.ended.text : "");
+  const second = doingLine(s) || (cutOff(s) ? s.ended.text : "");
   const fresh = unread(s);
   const owed = s.state !== "working" ? LIVE.filter((y) => y.reportsTo && y.reportsTo === (s.root || s.sessionId) && (y.state === "working" || y.state === "needs-you")) : [];
   const cls = `brow ${g} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""} ${open ? "open" : ""} ${fresh ? "fresh" : ""}`;
@@ -985,7 +988,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   if (rail) return html`
     <button class=${cls} data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
       <${StateBlock} s=${s} />
-      <span class="c">${title}<span class="s">${g === "cut" ? s.ended.text : status}</span><${CardGist} s=${s} />${s.state === "working" && html`<span class="s2 mono">${doing(s)}</span>`}</span>
+      <span class="c">${title}<span class="s">${cutOff(s) ? s.ended.text : status}</span><${CardGist} s=${s} />${s.state === "working" && html`<span class="s2 mono">${doing(s)}</span>`}</span>
       <span class="e"><span class="ago">${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>
     </button>`;
   return html`
@@ -1009,7 +1012,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
         <div class="ax">
           ${s.asks?.length > 0 && html`<${Ask} compact s=${s} a=${s.asks[0]} say=${say} />`}
           ${replyable(s) && html`<${CardReplies} s=${s} />`}
-          <div class="acts"><button class="btn" onClick=${() => go(keyOf(s))}>Open</button>${g === "cut" && html`<button class="btn" onClick=${() => dismissEnded([s], say)}>Dismiss</button>`}
+          <div class="acts"><button class="btn" onClick=${() => go(keyOf(s))}>Open</button>${cutOff(s) && html`<button class="btn" onClick=${() => dismissEnded([s], say)}>Dismiss</button>`}
             ${s.shown?.length > 0 && html`<button class="btn" onClick=${() => (location.hash = pageLink(keyOf(s), s.shown[0].name))}>${pageTitle(s.shown[0])}</button>`}</div>
         </div>
       </div>`}
@@ -3722,7 +3725,7 @@ function resTops(procs = []) {
   return [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, m]) => ({ n, m }));
 }
 
-const EndTag = ({ s }) => s.state === "stopped" && s.ended?.short && UNASKED.has(s.ended.cause)
+const EndTag = ({ s }) => unexpected(s) && s.ended.short
   ? html`<span class="endtag ${s.ended.cause === "oom" || s.ended.cause === "crashed" ? "bad" : ""}" title=${s.ended.text}>${s.ended.short}</span>` : null;
 const SRC_TAG = { "Claude's daemon log": "claude", "kernel log": "kernel", systemd: "systemd", atc: "atc", "atc resources": "res" };
 const evClock = (t) => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -3761,7 +3764,7 @@ function IncidentView({ inc, self }) {
 function EndWhy({ s, onClose }) {
   const [d, setD] = useState(null);
   const [err, setErr] = useState(null);
-  useEffect(() => { setD(null); api(`/api/sessions/${s.sessionId}/ended`).then(setD, (e) => setErr(e.message)); }, [s.sessionId, s.ended?.at]);
+  useEffect(() => { setD(null); api(`/api/sessions/${s.sessionId}/ended${onHost(s)}`).then(setD, (e) => setErr(e.message)); }, [s.sessionId, s.ended?.at]);
   const inc = d?.incident;
   return html`<section class="endwhy" aria-label="Why it stopped"><div class="cols"><div class="cx">
     <div class="ewh"><h3>${inc ? inc.title : "Why it stopped"}</h3><button class="btn" onClick=${onClose}>Close</button></div>
@@ -6180,11 +6183,11 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
 
 function EndBar({ s, resume, busy }) {
   const [why, setWhy] = useState(false);
-  const e = s.state === "stopped" && s.ended?.text && s.ended.cause !== "unknown" ? s.ended : null;
+  const e = (s.state === "stopped" || unexpected(s)) && s.ended?.text && s.ended.cause !== "unknown" ? s.ended : null;
   const at = txClock(e?.at || s.updated);
-  return html`${why && html`<${EndWhy} s=${s} onClose=${() => setWhy(false)} />`}<div class="endbar ${e && UNASKED.has(e.cause) ? "loud" : ""}"><div class="cols"><div class="cx">
-    <p><b>${s.state === "stopped" ? `Stopped${at ? ` ${at}` : ""}.` : "Not running."}</b> ${e ? e.text : "It keeps its transcript; Resume continues the conversation."}</p>
-    <span class="acts">${s.state === "stopped" && s.ended && html`<button class="btn" aria-expanded=${why} onClick=${() => setWhy((x) => !x)}>Why</button>`}${cutOff(s) && html`<button class="btn" title="Move it out of Stopped unexpectedly: you know why it stopped and have decided what to do" onClick=${() => dismissEnded([s])}>Dismiss</button>`}<button class="btn prime" disabled=${busy} aria-keyshortcuts="r" onClick=${resume}>${busy ? "Resuming" : html`Resume <kbd aria-hidden="true">r</kbd>`}</button></span>
+  return html`${why && html`<${EndWhy} s=${s} onClose=${() => setWhy(false)} />`}<div class="endbar ${e?.unexpected ? "loud" : ""}"><div class="cols"><div class="cx">
+    <p><b>${s.state === "stopped" || e ? `Stopped${at ? ` ${at}` : ""}.` : "Not running."}</b> ${e ? e.text : "It keeps its transcript; Resume continues the conversation."}</p>
+    <span class="acts">${e && html`<button class="btn" aria-expanded=${why} onClick=${() => setWhy((x) => !x)}>Why</button>`}${cutOff(s) && html`<button class="btn" title="Move it out of Stopped unexpectedly: you know why it stopped and have decided what to do" onClick=${() => dismissEnded([s])}>Dismiss</button>`}<button class="btn prime" disabled=${busy} aria-keyshortcuts="r" onClick=${resume}>${busy ? "Resuming" : html`Resume <kbd aria-hidden="true">r</kbd>`}</button></span>
   </div></div></div>`;
 }
 

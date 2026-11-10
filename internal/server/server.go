@@ -737,8 +737,12 @@ func (s *Server) history(w http.ResponseWriter, r *http.Request) {
 		limit = 100
 	}
 	local := s.M.History(q.Get("q"), q.Get("dir"), limit)
+	if q.Get("q") == "" && q.Get("dir") == "" {
+		local = s.withUnexpected(local)
+	}
 	for i := range local {
 		local[i].Host = s.Host
+		local[i].Ended = s.Ends.Known(local[i].SessionID)
 	}
 	if q.Get("local") != "" || len(s.Peers) == 0 {
 		reply(w, local)
@@ -747,6 +751,24 @@ func (s *Server) history(w http.ResponseWriter, r *http.Request) {
 	q.Set("local", "1")
 	q.Set("limit", strconv.Itoa(limit))
 	reply(w, mergeHistory([][]sessions.Session{local, s.fleet.gather(r.Context(), "/api/history?"+q.Encode())}, limit))
+}
+
+// withUnexpected adds the past sessions that stopped unexpectedly and that you have not dismissed,
+// however far down the history they are: Claude's daemon drops a session it closes from its list.
+func (s *Server) withUnexpected(list []sessions.Session) []sessions.Session {
+	ids := s.Ends.Unexpected()
+	missing := slices.DeleteFunc(ids, func(id string) bool {
+		return slices.ContainsFunc(list, func(x sessions.Session) bool { return strings.HasPrefix(x.SessionID, id) })
+	})
+	if len(missing) == 0 {
+		return list
+	}
+	for _, x := range s.M.History("", "", 0) {
+		if slices.ContainsFunc(missing, func(id string) bool { return strings.HasPrefix(x.SessionID, id) }) {
+			list = append(list, x)
+		}
+	}
+	return list
 }
 
 func (s *Server) route(next http.Handler) http.Handler {

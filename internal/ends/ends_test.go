@@ -150,3 +150,24 @@ func TestDismiss(t *testing.T) {
 		t.Fatal("undone")
 	}
 }
+
+func TestUnexpected(t *testing.T) {
+	w := watcher(
+		"["+at(0)+"] [bg] bg settled aaaa1111 (crashed)",
+		"["+at(time.Second)+"] [bg] bg settled bbbb2222 (killed)",
+	)
+	w.stops["bbbb2222"] = []Stop{{At: base, ID: "bbbb2222", By: Session, Who: "Planner"}}
+	if got := w.Unexpected(); len(got) != 1 || got[0] != "aaaa1111" {
+		t.Fatalf("an agent stopping a session is ordinary: %v", got)
+	}
+	if e := w.Known("aaaa1111-rest-of-id"); e == nil || !e.Unexpected {
+		t.Fatalf("got %+v", e)
+	}
+	if w.Known("cccc3333") != nil {
+		t.Fatal("no daemon line, nothing known")
+	}
+	w.Dismiss("aaaa1111", false)
+	if got := w.Unexpected(); len(got) != 0 {
+		t.Fatalf("dismissed: %v", got)
+	}
+}

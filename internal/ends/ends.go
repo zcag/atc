@@ -70,14 +70,15 @@ type Line struct {
 }
 
 type Ending struct {
-	At        time.Time `json:"at"`
-	Cause     string    `json:"cause"`
-	Short     string    `json:"short"`
-	Text      string    `json:"text"`
-	Sure      bool      `json:"sure"`
-	Dismissed bool      `json:"dismissed,omitempty"`
-	Incident  string    `json:"incident,omitempty"`
-	Evidence  []Line    `json:"evidence,omitempty"`
+	At         time.Time `json:"at"`
+	Cause      string    `json:"cause"`
+	Short      string    `json:"short"`
+	Text       string    `json:"text"`
+	Sure       bool      `json:"sure"`
+	Dismissed  bool      `json:"dismissed,omitempty"`
+	Unexpected bool      `json:"unexpected,omitempty"`
+	Incident   string    `json:"incident,omitempty"`
+	Evidence   []Line    `json:"evidence,omitempty"`
 }
 
 type Lost struct {
@@ -293,8 +294,53 @@ func (w *Watcher) Ended(id string, last time.Time) *Ending {
 	defer w.mu.Unlock()
 	e := w.explain(short(id), last)
 	e.Evidence = nil
-	e.Dismissed = w.isDismissed(short(id), e.At)
+	w.mark(short(id), &e)
 	return &e
+}
+
+// unexpected are the causes nobody asked for: an agent or atc stopping a session is ordinary.
+var unexpected = map[string]bool{OOM: true, Memory: true, Crashed: true, Daemon: true, Updated: true, Rebooted: true}
+
+func (w *Watcher) mark(id string, e *Ending) {
+	e.Dismissed = w.isDismissed(id, e.At)
+	e.Unexpected = e.Sure && unexpected[e.Cause]
+}
+
+// Known is why a session that ran in the background stopped, or nil when Claude's daemon log has
+// no line for it, as for a session that ran in a terminal.
+func (w *Watcher) Known(id string) *Ending {
+	if w == nil || id == "" {
+		return nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if len(w.settles[short(id)]) == 0 {
+		return nil
+	}
+	e := w.explain(short(id), time.Time{})
+	e.Evidence = nil
+	w.mark(short(id), &e)
+	return &e
+}
+
+// Unexpected are the sessions whose last end in the past week nobody asked for and you have not dismissed.
+func (w *Watcher) Unexpected() []string {
+	if w == nil {
+		return nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	var ids []string
+	for id, ss := range w.settles {
+		if time.Since(ss[len(ss)-1].at) > 7*24*time.Hour {
+			continue
+		}
+		e := w.explainSettle(id, ss[len(ss)-1])
+		if w.mark(id, &e); e.Unexpected && !e.Dismissed {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }
 
 // Dismiss records that you have dealt with how a session ended, so it leaves the list of sessions
@@ -325,7 +371,7 @@ func (w *Watcher) Detail(id string, last time.Time) (*Ending, *Incident) {
 	}
 	w.mu.Lock()
 	e := w.explain(short(id), last)
-	e.Dismissed = w.isDismissed(short(id), e.At)
+	w.mark(short(id), &e)
 	w.mu.Unlock()
 	sort.SliceStable(e.Evidence, func(i, j int) bool { return e.Evidence[i].At.Before(e.Evidence[j].At) })
 	if e.Incident == "" {
