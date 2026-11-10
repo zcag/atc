@@ -6285,12 +6285,13 @@ async function answerAsk(s, a, rec) {
   ANSWERS.set(k, { ...rec, sid: s.sessionId, id: a.id, st: "sending", at: new Date().toISOString(), why: "" });
   syncTell();
   markLooked({ ...s, updated: new Date().toISOString() });
-  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 10000);
+  const wait = 10 + 5 * Math.max(0, (rec.body?.answers?.length || 1) - 1);
+  const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), wait * 1000);
   try {
     await api(`/api/sessions/${s.sessionId}/asks/${a.id}`, { method: "POST", body: rec.body, signal: ctl.signal });
     ANSWERS.set(k, { ...ANSWERS.get(k), st: "sent", sent: new Date().toISOString() });
   } catch (e) {
-    const why = e.name === "AbortError" ? `${s.host || "The host"} did not confirm within 10 s.` : e.message;
+    const why = e.name === "AbortError" ? `${s.host || "The host"} did not confirm within ${wait} s.` : e.message;
     ANSWERS.set(k, { ...ANSWERS.get(k), st: "failed", why });
   }
   clearTimeout(t);
@@ -6945,9 +6946,10 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
 
   useEffect(() => {
     let moved = false;
-    for (const [k, r] of ANSWERS) if (r.sid === sid && r.st === "sent" && (s.asks?.[0]?.id !== r.id || s.state !== "needs-you")) { ANSWERS.set(k, { ...r, st: "accepted" }); moved = true; }
+    const took = (r) => s.answered?.ask === r.id && Date.parse(s.answered.at) >= Date.parse(r.at);
+    for (const [k, r] of ANSWERS) if (r.sid === sid && ((r.st === "sent" && (s.asks?.[0]?.id !== r.id || s.state !== "needs-you")) || (r.st === "failed" && took(r)))) { ANSWERS.set(k, { ...r, st: "accepted" }); moved = true; }
     if (moved) syncTell();
-  }, [s.asks?.[0]?.id, s.state]);
+  }, [s.asks?.[0]?.id, s.state, s.answered?.at]);
 
   const settle = () => {
     const el = box.current, target = hold.current && el?.querySelector(hold.current);
