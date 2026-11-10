@@ -291,7 +291,7 @@ func culprit(rows []resources.Row, big *Kill, w *Watcher, at time.Time) *Culprit
 				m = g.Mem
 			}
 		}
-		if m <= c.From {
+		if m < c.Peak/10 {
 			c.From, c.FromAt = m, time.Unix(r.T, 0)
 		}
 	}

@@ -922,7 +922,7 @@ const GROUPS = [["pinned", "Pinned"], ["waiting", "Waiting on you"], ["working",
 const QWERTY = "qwertyuiop";
 const UNASKED = new Set(["oom", "memory", "crashed", "daemon", "updated", "rebooted", "outside", "session", "atc"]);
 const endedAt = (s) => Date.parse(s.ended?.at || 0) || 0;
-const cutOff = (s) => s.state === "stopped" && !s.retired && UNASKED.has(s.ended?.cause) && !!SYNC.seen
+const cutOff = (s) => s.state === "stopped" && !s.retired && s.ended?.sure && UNASKED.has(s.ended.cause) && !!SYNC.seen
   && Date.now() - endedAt(s) < 3 * 86400000 && endedAt(s) > (Date.parse(seenOf(s.sessionId) || 0) || 0);
 const groupOf = (s) => (away(s) ? "parked" : s.pinned ? "pinned" : waiting(s) ? "waiting" : s.state === "working" ? "working" : cutOff(s) ? "cut" : "earlier");
 const byUrgency = (a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1) || (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);

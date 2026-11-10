@@ -56,8 +56,8 @@ func showWhy(args []string) error {
 	if *asJSON {
 		return printJSON(e)
 	}
-	if s.State != "stopped" {
-		fmt.Printf("%s is %s, not stopped. The last time it stopped:\n", s.Title, strings.ReplaceAll(s.State, "-", " "))
+	if s.State != "stopped" && s.State != "past" {
+		fmt.Printf("%s is running. The last time it stopped:\n", s.Title)
 	}
 	if e.Ending == nil {
 		return fmt.Errorf("%s: nothing recorded", s.Title)
