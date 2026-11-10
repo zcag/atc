@@ -556,7 +556,7 @@ pre.mdiff:not(.num) .gap { padding-left: var(--s3); }
 .tx-wrap .endbar p b { color: var(--ink); font-weight: 620; }
 .tx-wrap .endbar .acts { flex-wrap: nowrap; }
 .tx-wrap .endbar.loud p b { color: var(--fail); }
-.tx-wrap .endwhy { flex: none; max-height: 58vh; overflow-y: auto; border-top: 1px solid var(--line); background: var(--board); padding: var(--s3) var(--pad) var(--s2); }
+.tx-wrap .endwhy { flex: 0 1 auto; min-height: 0; max-height: 58vh; overflow-y: auto; border-top: 1px solid var(--line); background: var(--board); padding: var(--s3) var(--pad) var(--s2); }
 .tx-wrap .endwhy .ewh { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s2); }
 .tx-wrap .endwhy h3 { flex: 1; min-width: 0; margin: 0; font-size: var(--fs-ui); font-weight: 650; color: var(--fail); }
 .tx-wrap .endwhy .incident { padding-top: 0; }
