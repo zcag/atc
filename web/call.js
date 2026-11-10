@@ -6,16 +6,17 @@ const FACE = { state: "listening", hearing: "", you: "", said: "", tool: "", lin
 const TAIL_MS = 250;
 const WHY = { busy: "the line is busy", nobody: "nobody is there to answer", gone: "the call is over", lost: "connection lost", hangup: "hung up" };
 
+const LEFT = "atc.callLeft";
 const remembered = () => { try { return localStorage.getItem("atc.callPtt") === "1"; } catch { return false; } };
 
-let st = { phase: "idle", since: 0, muted: false, why: "", ptt: remembered(), talking: false, reason: "" };
+let st = { phase: "idle", since: 0, muted: false, why: "", ptt: remembered(), talking: false, reason: "", muffled: false };
 let face = FACE;
 const subs = new Set();
 const emit = () => subs.forEach((f) => f());
 const set = (p) => { st = { ...st, ...p }; emit(); };
 
 let bell = null;
-let ctx, mic, up, down, ears, voice, ws, live = false, lostAt = 0, closed = true, stats = {}, timers = [], lock = null, sink = null, tail = 0;
+let ctx, mic, up, down, ears, voice, ws, live = false, lostAt = 0, closed = true, stats = {}, timers = [], lock = null, sink = null, tail = 0, held = false;
 const closedMic = () => st.muted || (st.ptt && !st.talking && !tail);
 const applyMic = () => up?.port.postMessage({ quiet: closedMic() });
 
@@ -98,7 +99,8 @@ export const Call = {
 
 function begin(phase, reason = "") {
   face = FACE;
-  set({ phase, since: 0, muted: false, why: "", talking: false, reason });
+  held = false;
+  set({ phase, since: 0, muted: false, why: "", talking: false, reason, muffled: false });
   closed = false;
   live = false;
   lostAt = 0;
@@ -182,10 +184,13 @@ function open(hello, more) {
     if (o.event === "active") {
       live = true;
       lostAt = 0;
+      const again = st.phase === "active" || held;
+      unhold();
       if (st.phase !== "active") {
-        set({ phase: "active", since: Date.now() });
+        set({ phase: "active", since: st.since || Date.now() });
         wake();
-      } else if (st.ptt && !tail) send({ cmd: st.talking ? "talk-down" : "talk-up" });
+      }
+      if (again && st.ptt && !tail) send({ cmd: st.talking ? "talk-down" : "talk-up" });
     } else if (o.event === "ended") end(WHY[o.why] || o.why || "ended");
     else if (o.event === "persona") persona(o);
   };
@@ -271,4 +276,44 @@ async function wake() {
 document.addEventListener("visibilitychange", () => st.phase === "active" && (!lock || lock.released) && wake());
 addEventListener("keyup", (e) => e.key === " " && Call.release());
 addEventListener("blur", () => Call.release());
-addEventListener("pagehide", () => st.phase === "ringing" ? teardown() : Call.live() && hangup("you left"));
+/** Leaving with the call on (a reload, mostly) holds it rather than hanging up: the call line keeps a dropped call
+ * for a few seconds (APP_GRACE in voice/call.py), and a page that loads within them picks it up with resume. */
+addEventListener("pagehide", () => {
+  if (st.phase === "ringing") return teardown();
+  if (!Call.live()) return;
+  if (st.phase !== "active") return hangup("you left");
+  send({ cmd: "hold" });
+  try { sessionStorage.setItem(LEFT, JSON.stringify({ at: Date.now(), since: st.since, face })); } catch {}
+  teardown();
+  st = { ...st, phase: "idle" };
+});
+addEventListener("pageshow", (e) => e.persisted && rejoin());
+
+async function rejoin() {
+  let left;
+  try { left = JSON.parse(sessionStorage.getItem(LEFT)); sessionStorage.removeItem(LEFT); } catch {}
+  if (!left || Date.now() - left.at > 6000 || !Call.supported()) return;
+  begin("calling", "rejoining");
+  face = { ...FACE, ...left.face };
+  st = { ...st, since: left.since };
+  held = true;
+  if (!(await connect())) return;
+  if (ctx.state !== "running") {
+    set({ muffled: true });
+    const hear = () => ctx?.resume().then(() => {
+      sink?.play().catch(() => {});
+      down?.port.postMessage("flush");
+      set({ muffled: false });
+      unhold();
+    }, () => {});
+    for (const e of ["pointerdown", "keydown"]) addEventListener(e, hear, { once: true, capture: true });
+  }
+  open("resume");
+}
+rejoin();
+
+function unhold() {
+  if (!held || !live || ctx?.state !== "running") return;
+  held = false;
+  send({ cmd: "unhold" });
+}

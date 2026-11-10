@@ -1341,9 +1341,10 @@ const callDoing = (f) => ({
   speaking: "Speaking",
 })[f.state] || "Listening";
 const callWord = (st, f) => st.phase === "ringing" ? st.reason || "calling you"
-  : st.phase === "calling" ? "calling"
+  : st.phase === "calling" ? st.reason || "calling"
   : st.phase === "ended" ? `call ended${st.why ? `: ${st.why}` : ""}`
   : st.phase !== "active" ? (CAN_CALL ? "not on a call" : "calls need atc's call line and a microphone")
+  : st.muffled ? "tap anywhere to hear the call"
   : f.moving ? `connecting to ${onLine(f)}`
   : st.talking ? "talking, let go to send"
   : st.muted ? "muted" : ({ hearing: "hearing you", thinking: "thinking", tool: "working", speaking: st.ptt ? "speaking, hold to cut in" : "speaking, tap to stop it" })[f.state] || (st.ptt ? "hold to talk" : "listening");
