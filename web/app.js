@@ -918,9 +918,9 @@ function KeysOverlay({ onClose }) {
     </div>`;
 }
 
-const GROUPS = [["pinned", "Pinned"], ["waiting", "Waiting on you"], ["working", "Working"], ["cut", "Stopped, not by you"], ["parked", "Parked"], ["earlier", "Earlier"]];
+const GROUPS = [["pinned", "Pinned"], ["waiting", "Waiting on you"], ["working", "Working"], ["cut", "Stopped unexpectedly"], ["parked", "Parked"], ["earlier", "Earlier"]];
 const QWERTY = "qwertyuiop";
-const UNASKED = new Set(["oom", "memory", "crashed", "daemon", "updated", "rebooted", "outside", "session", "atc"]);
+const UNASKED = new Set(["oom", "memory", "crashed", "daemon", "updated", "rebooted"]);
 const endedAt = (s) => Date.parse(s.ended?.at || 0) || 0;
 const cutOff = (s) => s.state === "stopped" && !s.retired && s.ended?.sure && UNASKED.has(s.ended.cause) && !!SYNC.seen
   && Date.now() - endedAt(s) < 3 * 86400000 && endedAt(s) > (Date.parse(seenOf(s.sessionId) || 0) || 0);
@@ -1056,7 +1056,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
         <div class="bhead">
           <div class="b1"><h1>${only || "Every bay"}</h1>${path && html`<span class="w">${tilde(baseDir(path.cwd))}</span>`}
             <span class="r">${byPark.length > 0 && html`<button class="kb parkall" onClick=${() => unparkAll()} title=${`Unpark the ${byPark.length} your last Park all here set aside`}>Unpark all</button>`}${parkable.length > 0 && html`<button class="kb parkall" onClick=${parkAll} title=${`Park every session in ${only}; each comes back when it needs you`}>Park all</button>`}<${BacklogLine} only=${only} /><button class="kb" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts="/">Search <kbd aria-hidden="true">/</kbd></button></span></div>
-          <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${{ waiting: html`waiting<span class="wide"> on you</span>`, working: "working", cut: html`stopped<span class="wide">, not by you</span>`, parked: "parked" }[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}${innerWidth < 900 && html`<${ResourceChip} />`}</div>
+          <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${{ waiting: html`waiting<span class="wide"> on you</span>`, working: "working", cut: html`stopped<span class="wide"> unexpectedly</span>`, parked: "parked" }[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}${innerWidth < 900 && html`<${ResourceChip} />`}</div>
         </div>
         <div class="bcols" aria-hidden="true"><span></span><span>Session</span><span>Status, and what it last said or is doing</span><span>Context</span><span>Steps</span><span>Running, made</span><span>Since</span><span></span></div>
         ${GROUPS.map(([k, title]) => {
@@ -3718,8 +3718,7 @@ function resTops(procs = []) {
   return [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, m]) => ({ n, m }));
 }
 
-const END_LOUD = new Set(["oom", "memory", "crashed", "daemon", "updated", "rebooted"]);
-const EndTag = ({ s }) => s.state === "stopped" && s.ended?.short && (END_LOUD.has(s.ended.cause) || cutOff(s))
+const EndTag = ({ s }) => s.state === "stopped" && s.ended?.short && UNASKED.has(s.ended.cause)
   ? html`<span class="endtag ${s.ended.cause === "oom" || s.ended.cause === "crashed" ? "bad" : ""}" title=${s.ended.text}>${s.ended.short}</span>` : null;
 const SRC_TAG = { "Claude's daemon log": "claude", "kernel log": "kernel", systemd: "systemd", atc: "atc", "atc resources": "res" };
 const evClock = (t) => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -6179,7 +6178,7 @@ function EndBar({ s, resume, busy }) {
   const [why, setWhy] = useState(false);
   const e = s.state === "stopped" && s.ended?.text && s.ended.cause !== "unknown" ? s.ended : null;
   const at = txClock(e?.at || s.updated);
-  return html`${why && html`<${EndWhy} s=${s} onClose=${() => setWhy(false)} />`}<div class="endbar ${e && END_LOUD.has(e.cause) ? "loud" : ""}"><div class="cols"><div class="cx">
+  return html`${why && html`<${EndWhy} s=${s} onClose=${() => setWhy(false)} />`}<div class="endbar ${e && UNASKED.has(e.cause) ? "loud" : ""}"><div class="cols"><div class="cx">
     <p><b>${s.state === "stopped" ? `Stopped${at ? ` ${at}` : ""}.` : "Not running."}</b> ${e ? e.text : "It keeps its transcript; Resume continues the conversation."}</p>
     <span class="acts">${s.state === "stopped" && s.ended && html`<button class="btn" aria-expanded=${why} onClick=${() => setWhy((x) => !x)}>Why</button>`}<button class="btn prime" disabled=${busy} aria-keyshortcuts="r" onClick=${resume}>${busy ? "Resuming" : html`Resume <kbd aria-hidden="true">r</kbd>`}</button></span>
   </div></div></div>`;
