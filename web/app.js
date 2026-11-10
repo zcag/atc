@@ -918,9 +918,13 @@ function KeysOverlay({ onClose }) {
     </div>`;
 }
 
-const GROUPS = [["pinned", "Pinned"], ["waiting", "Waiting on you"], ["working", "Working"], ["parked", "Parked"], ["earlier", "Earlier"]];
+const GROUPS = [["pinned", "Pinned"], ["waiting", "Waiting on you"], ["working", "Working"], ["cut", "Stopped, not by you"], ["parked", "Parked"], ["earlier", "Earlier"]];
 const QWERTY = "qwertyuiop";
-const groupOf = (s) => (away(s) ? "parked" : s.pinned ? "pinned" : waiting(s) ? "waiting" : s.state === "working" ? "working" : "earlier");
+const UNASKED = new Set(["oom", "memory", "crashed", "daemon", "updated", "rebooted", "outside", "session", "atc"]);
+const endedAt = (s) => Date.parse(s.ended?.at || 0) || 0;
+const cutOff = (s) => s.state === "stopped" && !s.retired && UNASKED.has(s.ended?.cause) && !!SYNC.seen
+  && Date.now() - endedAt(s) < 3 * 86400000 && endedAt(s) > (Date.parse(seenOf(s.sessionId) || 0) || 0);
+const groupOf = (s) => (away(s) ? "parked" : s.pinned ? "pinned" : waiting(s) ? "waiting" : s.state === "working" ? "working" : cutOff(s) ? "cut" : "earlier");
 const byUrgency = (a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1) || (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
 const doingLine = (s) => s.state === "working" ? doing(s) : s.state === "needs-you" && s.asks?.[0] ? oneLine(s.asks[0].questions?.[0]?.question || (s.asks[0].permission && `Wants to use ${s.asks[0].permission}`)) : "";
 const runningOf = (s) => [s.background?.length > 0 && plural(s.background.length, "task"), ...(s.servers || []).slice(0, 2).map((p) => `:${p}`), s.tabs?.length > 0 && plural(s.tabs.length, "tab")].filter(Boolean);
@@ -971,7 +975,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   const on = sel?.sessionId === s.sessionId, run = runningOf(s), made = madeOf(s), g = s.pinned && waiting(s) ? "pinned waiting" : groupOf(s);
   const where = [MULTI && s.host, s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch].filter(Boolean).join(" ");
   const status = (s.state === "needs-you" ? oneLine(s.summary?.status) || oneLine(s.preview || s.lastReply) || "Needs you" : headline(s)) || WORD[s.state] || "";
-  const second = doingLine(s);
+  const second = doingLine(s) || (g === "cut" ? s.ended.text : "");
   const fresh = unread(s);
   const owed = s.state !== "working" ? LIVE.filter((y) => y.reportsTo && y.reportsTo === (s.root || s.sessionId) && (y.state === "working" || y.state === "needs-you")) : [];
   const cls = `brow ${g} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""} ${open ? "open" : ""} ${fresh ? "fresh" : ""}`;
@@ -980,7 +984,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
     <button class=${cls} data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
       <${StateBlock} s=${s} />
       <span class="c">${title}<span class="s">${status}</span><${CardGist} s=${s} />${s.state === "working" && html`<span class="s2 mono">${doing(s)}</span>`}</span>
-      <span class="e"><span class="ago">${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}<${LoadTag} s=${s} /></span>
+      <span class="e"><span class="ago">${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>
     </button>`;
   return html`
     <div class="bwrap ${open ? "open" : ""} ${g}">
@@ -989,9 +993,9 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
         <${StateBlock} s=${s} />
         <span class="ses"><a class="t" href=${`#/s/${keyOf(s)}`} onClick=${(e) => e.stopPropagation()}>${s.title || "Untitled"}</a>${where && html`<span class="w">${where}</span>`}${s.lastFrom && html`<span class="from" title=${`The last message came from ${s.lastFrom}, not from you`}>${ICON.recv}${s.lastFrom}</span>`}${owed.length > 0 && html`<span class="from owed" title="It asked for these reports and they haven't come back yet">waiting on ${owed.map((y) => y.title || "a session").join(", ")}</span>`}</span>
         <span class="st"><span class="l1">${status}</span>${!open && html`<${CardGist} s=${s} />`}${second && html`<span class="l2 ${s.state === "working" ? "mono" : ""}">${second}</span>`}</span>
-        <span class="ctx">${s.context > 0 && html`<${CtxMeter} n=${s.context} /><span>${Math.round(s.context / 1000)}k</span>`}<${LoadTag} s=${s} /></span>
+        <span class="ctx">${s.context > 0 && html`<${CtxMeter} n=${s.context} /><span>${Math.round(s.context / 1000)}k</span>`}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>
         <span class="stp">${s.steps > 0 && s.steps}${s.failed > 0 && html`<span class="f">${s.failed} failed</span>`}</span>
-        <span class="mk">${run.length > 0 && html`<span class="run">${run.join(" ")}</span>`}${made.length > 0 && html`<span>${made.join(" ")}</span>`}<${LoadTag} s=${s} /></span>
+        <span class="mk">${run.length > 0 && html`<span class="run">${run.join(" ")}</span>`}${made.length > 0 && html`<span>${made.join(" ")}</span>`}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>
         <span class="since">${fresh && html`<i class="dot" aria-hidden="true"></i>`}${ago(s)}${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span>
         <span class="chev" aria-hidden="true"></span>
       </div>
@@ -1023,7 +1027,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
   }, [cursor]);
   const by = bayLists(live, hist, only);
   let qn = 0;
-  const letter = { waiting: ["N", "needs"], working: ["W", "working"], parked: ["P", "parked"] };
+  const letter = { waiting: ["N", "needs"], working: ["W", "working"], cut: ["S", "stopped"], parked: ["P", "parked"] };
   const pinnedIn = { waiting: by.pinned.filter(waiting).length, working: by.pinned.filter((s) => s.state === "working").length };
   const counts = GROUPS.filter(([k]) => k in letter).map(([k]) => [k, by[k].length + (pinnedIn[k] || 0)]).filter(([, n]) => n > 0);
   const path = only && (live || []).find((s) => bayOf(s) === only);
@@ -1052,7 +1056,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
         <div class="bhead">
           <div class="b1"><h1>${only || "Every bay"}</h1>${path && html`<span class="w">${tilde(baseDir(path.cwd))}</span>`}
             <span class="r">${byPark.length > 0 && html`<button class="kb parkall" onClick=${() => unparkAll()} title=${`Unpark the ${byPark.length} your last Park all here set aside`}>Unpark all</button>`}${parkable.length > 0 && html`<button class="kb parkall" onClick=${parkAll} title=${`Park every session in ${only}; each comes back when it needs you`}>Park all</button>`}<${BacklogLine} only=${only} /><button class="kb" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts="/">Search <kbd aria-hidden="true">/</kbd></button></span></div>
-          <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${{ waiting: html`waiting<span class="wide"> on you</span>`, working: "working", parked: "parked" }[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}${innerWidth < 900 && html`<${ResourceChip} />`}</div>
+          <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${{ waiting: html`waiting<span class="wide"> on you</span>`, working: "working", cut: html`stopped<span class="wide">, not by you</span>`, parked: "parked" }[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}${innerWidth < 900 && html`<${ResourceChip} />`}</div>
         </div>
         <div class="bcols" aria-hidden="true"><span></span><span>Session</span><span>Status, and what it last said or is doing</span><span>Context</span><span>Steps</span><span>Running, made</span><span>Since</span><span></span></div>
         ${GROUPS.map(([k, title]) => {
@@ -1062,7 +1066,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
           return html`<section class="bgrp ${k}">
             ${isEarlier
               ? html`<${EarlierHead} open=${earlierOpen} toggle=${flipEarlier} n=${by.earlier.length} note=${earlierOpen && (earlierAll ? "all loaded" : "today and yesterday")} />`
-              : html`<h2 class="grp"><b>${title}</b><span class="c">${list.length}</span></h2>`}
+              : html`<h2 class="grp"><b>${title}</b><span class="c">${list.length}</span>${k === "cut" && html`<button class="kb seenall" title="Move these to Earlier: you know why they stopped" onClick=${() => list.forEach(markLooked)}>Seen</button>`}</h2>`}
             ${list.map((s) => html`<${BoardRow} key=${s.sessionId} s=${s} open=${open.has(s.sessionId)} toggle=${toggle} sel=${sel} cursor=${cursor} say=${say} qk=${QWERTY[qn++]} />`)}
             ${isEarlier && earlierOpen && (!earlierAll && by.earlier.length > shownEarlier.length
               ? html`<button class="kb bmore" onClick=${() => setEarlierAll(true)}>Show ${by.earlier.length - shownEarlier.length} older</button>`
@@ -2118,7 +2122,7 @@ function sessionActions(s, say, { rename, open, after } = {}) {
   items.push({ label: s.parked ? "Unpark" : "Park", run: run(() => patch({ parked: !s.parked })) });
   items.push({ label: "Send to backlog", title: "Stop it and take it off the list; its backlog item resumes the same conversation. A working session stops when its turn ends", run: () => putAside(s, say).then(() => after && after()) });
   if (s.agent && s.state !== "past") items.push({ label: "Start over", title: "It writes a handover note and a new conversation starts from it", run: run(() => agentApi(s.agent, "reset"), () => say(`${s.title} is starting over.`)) });
-  if (s.attachable) items.push({ label: "Stop", run: run(() => api(`/api/sessions/${s.id}/stop`, { method: "POST" }), () => say("Stopped. Resume it any time.")) });
+  if (s.attachable) items.push({ label: "Stop", run: run(() => api(`/api/sessions/${s.id}/stop?device=${encodeURIComponent(DEVICE)}`, { method: "POST" }), () => say("Stopped. Resume it any time.")) });
   if (!s.attachable && s.kind !== "interactive")
     items.push({ label: "Resume", run: run(() => api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" }), (r) => go(r.id)) });
   if (s.id)
@@ -2483,7 +2487,7 @@ function SummaryFoot({ onFull, again, onClose }) {
 function Unattachable(s, resume, busy, setMode) {
   if (s.kind === "interactive")
     return html`<div><p class="h">Open in a terminal</p><p>This session runs in a terminal window on the server, so it can't be shown here. You can read along in the transcript.</p><div class="row"><button class="btn" onClick=${() => setMode("chat")}>Read transcript</button></div></div>`;
-  return html`<div><p class="h">${s.state === "stopped" ? "Stopped" : "Not running"}</p><p>Resume it to pick up where it left off. The whole conversation comes back.</p><div class="row"><button class="btn primary" disabled=${busy} onClick=${resume}>${busy ? "Resuming…" : "Resume"}</button></div></div>`;
+  return html`<div><p class="h">${s.state === "stopped" ? "Stopped" : "Not running"}</p>${s.state === "stopped" && s.ended?.text && s.ended.cause !== "unknown" && html`<p>${s.ended.text}</p>`}<p>Resume it to pick up where it left off. The whole conversation comes back.</p><div class="row"><button class="btn primary" disabled=${busy} onClick=${resume}>${busy ? "Resuming…" : "Resume"}</button></div></div>`;
 }
 
 function Menu({ busy, items, render, label = "•••", cls = "icon", aria = "More actions", width = 190, left, up, sheetCls = "" }) {
@@ -3684,6 +3688,7 @@ function ResourcesPage({ hosts, home, live }) {
         </section>
         ${moment ? html`<p class="sec rat"><b>At ${resClock(moment.t, hours)}</b> ${moment.ram > 0 ? `${gb(moment.ram)} of files in RAM. ` : ""}Only what used over 500 MB or 10% of a core is kept per minute. <button class="btn" onClick=${() => setPin(null)}>Back to now</button></p>`
           : rows.length > 1 && html`<p class="sec rat quiet">${touch ? "Tap" : "Click"} a chart to see who was using what at that moment.</p>`}
+        ${!moment && html`<${ResIncidents} q=${q} />`}
         <${ResSection} title="Outlived their session" note="Their session ended, these kept running. Some are on purpose, like a dev stack other sessions use, so look before stopping one." groups=${left} colorOf=${colorOf} peaks=${peaks} sort=${v.sort} opened=${opened} toggle=${toggle} />
         ${bayNames.length > 1 && html`<div class="sec rbays" role="group" aria-label="Sessions of one bay">
           <button aria-pressed=${!bayPicked} onClick=${() => set({ bay: null })}>All<span>${gb(sum(allSessions))}</span></button>
@@ -3711,6 +3716,76 @@ function resTops(procs = []) {
   const by = new Map();
   for (const p of procs) by.set(p.name, (by.get(p.name) || 0) + p.mem);
   return [...by.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n, m]) => ({ n, m }));
+}
+
+const END_LOUD = new Set(["oom", "memory", "crashed", "daemon", "updated", "rebooted"]);
+const EndTag = ({ s }) => s.state === "stopped" && s.ended?.short && (END_LOUD.has(s.ended.cause) || cutOff(s))
+  ? html`<span class="endtag ${s.ended.cause === "oom" || s.ended.cause === "crashed" ? "bad" : ""}" title=${s.ended.text}>${s.ended.short}</span>` : null;
+const SRC_TAG = { "Claude's daemon log": "claude", "kernel log": "kernel", systemd: "systemd", atc: "atc", "atc resources": "res" };
+const evClock = (t) => new Date(t).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+const evWhen = (t) => { const d = new Date(t); return d.toDateString() === new Date().toDateString() ? resClock(d / 1000, 1) : d.toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" }); };
+
+function Evidence({ lines }) {
+  if (!lines?.length) return null;
+  return html`<ol class="evid" aria-label="What it rests on">${lines.map((l) => html`<li>
+    <span class="tm">${evClock(l.at)}</span><span class="src ${SRC_TAG[l.source] || ""}">${l.source}</span>
+    <span class="tx">${l.text}${l.raw && html`<details><summary>Log line</summary><pre>${l.raw}</pre></details>`}</span></li>`)}</ol>`;
+}
+
+function IncidentView({ inc, self }) {
+  const rows = useMemo(() => resRows(inc.rows), [inc]);
+  const { top } = useMemo(() => resSeries(rows), [rows]);
+  const [hover, setHover] = useState(null);
+  const killAt = Date.parse(inc.kills?.[0]?.at || inc.at) / 1000;
+  const mark = rows.length ? rows.reduce((b, r, i) => (Math.abs(r.t - killAt) < Math.abs(rows[b].t - killAt) ? i : b), 0) : null;
+  const t0 = rows[0]?.t, t1 = rows[rows.length - 1]?.t;
+  const who = (l) => html`<a href=${`#/s/${l.id}`} aria-current=${self && (l.sessionId === self || l.id === self) ? "true" : null}>${l.title}</a>`;
+  return html`<div class="incident">
+    <p class="it">${inc.text}</p>
+    ${rows.length > 1 && html`<div class="ichart">
+      <${ResChart} name="Memory" rows=${rows} series=${top} of=${(g) => g?.m || 0} whole=${(r) => r.mem} max=${inc.total || rows[rows.length - 1].total || 1} say=${gb}
+        tick=${(n) => `${Math.round(n / 2 ** 30)} GB`} hours=${1} t0=${t0} t1=${t1} at=${hover} onAt=${setHover} onPin=${() => {}} pinned=${mark} />
+      <div class="rc-t" aria-hidden="true"><span>${resClock(t0, 1)}</span><span>${resClock((t0 + t1) / 2, 1)}</span><span>${resClock(t1, 1)}</span></div>
+      <div class="ulegend rleg">${top.map((x) => html`<span><i class="umsw" style=${`background:${x.color}`}></i>${x.title}</span>`)}<span><i class="umsw rest"></i>everything else</span>
+        ${mark != null && html`<span><i class="ikill"></i>${inc.kills?.length ? "the kill" : "the warning"}</span>`}</div>
+    </div>`}
+    ${inc.lost?.length > 0 && html`<p class="ilost"><span>Stopped with it</span>${inc.lost.map(who)}</p>`}
+    ${inc.closed?.length > 0 && html`<p class="ilost"><span>Closed for memory</span>${inc.closed.map(who)}</p>`}
+    <${Evidence} lines=${inc.evidence} />
+  </div>`;
+}
+
+function EndWhy({ s, onClose }) {
+  const [d, setD] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => { setD(null); api(`/api/sessions/${s.sessionId}/ended`).then(setD, (e) => setErr(e.message)); }, [s.sessionId, s.ended?.at]);
+  const inc = d?.incident;
+  return html`<section class="endwhy" aria-label="Why it stopped"><div class="cols"><div class="cx">
+    <div class="ewh"><h3>${inc ? inc.title : "Why it stopped"}</h3><button class="btn" onClick=${onClose}>Close</button></div>
+    ${err ? html`<p class="none">${err}</p>` : !d ? html`<p class="none">Reading the logs…</p>`
+      : inc ? html`<${IncidentView} inc=${inc} self=${s.sessionId} />`
+      : html`<p class="it">${d.ending?.text}</p><${Evidence} lines=${d.ending?.evidence} />`}
+  </div></div></section>`;
+}
+
+function ResIncidents({ q }) {
+  const [list, setList] = useState(null);
+  const [open, setOpen] = useState(null);
+  const [full, setFull] = useState(null);
+  useEffect(() => { setOpen(null); api(`/api/resources/incidents${q && `?${q}`}`).then(setList, () => setList([])); }, [q]);
+  useEffect(() => { setFull(null); open && api(`/api/resources/incidents/${open}${q && `?${q}`}`).then(setFull, () => {}); }, [open, q]);
+  if (!list?.length) return null;
+  return html`<section class="sec rsec rinc">
+    <div class="sh"><h2>Memory incidents</h2><span class="n">The last week: when memory ran out, what the kernel or Claude's daemon stopped, and which sessions it cost.</span></div>
+    ${list.map((i) => html`<div class="ri ${open === i.id ? "open" : ""}">
+      <button class="rirow" aria-expanded=${open === i.id} onClick=${() => setOpen((o) => (o === i.id ? null : i.id))}>
+        <span class="when">${evWhen(i.at)}</span>
+        <span class="what"><b>${i.title}</b><span>${i.text}</span></span>
+        <span class="v">${i.lost?.length ? `${plural(i.lost.length, "session")} stopped` : i.closed?.length ? `${i.closed.length} closed` : ""}</span>
+      </button>
+      ${open === i.id && (full ? html`<${IncidentView} inc=${full} />` : html`<p class="none">Reading the logs…</p>`)}
+    </div>`)}
+  </section>`;
 }
 
 function useMachineBrief() {
@@ -6101,10 +6176,12 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
 }
 
 function EndBar({ s, resume, busy }) {
-  const at = txClock(s.updated);
-  return html`<div class="endbar"><div class="cols"><div class="cx">
-    <p><b>${s.state === "stopped" ? `Stopped${at ? ` ${at}` : ""}.` : "Not running."}</b> It keeps its transcript; Resume continues the conversation.</p>
-    <span class="acts"><button class="btn prime" disabled=${busy} aria-keyshortcuts="r" onClick=${resume}>${busy ? "Resuming" : html`Resume <kbd aria-hidden="true">r</kbd>`}</button></span>
+  const [why, setWhy] = useState(false);
+  const e = s.state === "stopped" && s.ended?.text && s.ended.cause !== "unknown" ? s.ended : null;
+  const at = txClock(e?.at || s.updated);
+  return html`${why && html`<${EndWhy} s=${s} onClose=${() => setWhy(false)} />`}<div class="endbar ${e && END_LOUD.has(e.cause) ? "loud" : ""}"><div class="cols"><div class="cx">
+    <p><b>${s.state === "stopped" ? `Stopped${at ? ` ${at}` : ""}.` : "Not running."}</b> ${e ? e.text : "It keeps its transcript; Resume continues the conversation."}</p>
+    <span class="acts">${s.state === "stopped" && s.ended && html`<button class="btn" aria-expanded=${why} onClick=${() => setWhy((x) => !x)}>Why</button>`}<button class="btn prime" disabled=${busy} aria-keyshortcuts="r" onClick=${resume}>${busy ? "Resuming" : html`Resume <kbd aria-hidden="true">r</kbd>`}</button></span>
   </div></div></div>`;
 }
 
@@ -6180,7 +6257,7 @@ function syncEvent(kind, d) {
 const seenOf = (sid) => SYNC.seen?.[sid] || null;
 function markLooked(s) {
   const sid = s.sessionId, was = seenOf(sid);
-  if (was && Date.parse(was) >= Date.parse(s.updated || 0)) return;
+  if (was && Date.parse(was) >= Math.max(Date.parse(s.updated || 0) || 0, endedAt(s))) return;
   (SYNC.seen ||= {})[sid] = new Date().toISOString();
   api("/api/seen", { method: "PUT", body: { sessionId: sid, from: PAGE_ID } }).catch(() => {});
   syncTell();
@@ -7748,7 +7825,7 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
     act("Rename", cur.rename, "title name");
     act(s.pinned ? "Unpin" : "Pin", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }));
     act(s.parked ? "Unpark" : "Park", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { parked: !s.parked } }), "hide quiet");
-    if (s.attachable) act("Stop", () => api(`/api/sessions/${s.sessionId}/stop`, { method: "POST" }).then(() => say("Stopped. Resume it any time.")), "end");
+    if (s.attachable) act("Stop", () => api(`/api/sessions/${s.sessionId}/stop?device=${encodeURIComponent(DEVICE)}`, { method: "POST" }).then(() => say("Stopped. Resume it any time.")), "end");
     act("Put on the backlog", () => putAside(s, say), "later aside backlog");
   }
   for (const s of live) add("Sessions", s.title || "Untitled", { key: `s:${s.sessionId}`, s, extra: bayOf(s) || project(s.cwd).name, boost: STATE_BOOST[s.state] || 0,

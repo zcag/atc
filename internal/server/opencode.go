@@ -17,6 +17,7 @@ import (
 
 	"github.com/zcag/atc/internal/attach"
 	"github.com/zcag/atc/internal/claude"
+	"github.com/zcag/atc/internal/ends"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/outputs"
@@ -96,6 +97,33 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	done(sid, s.M.OC.Respond(r.Context(), sid, r.PathValue("ask"), a))
+}
+
+// stopAsked is a stop someone asked for: you from a device, a session through its tools, or `atc stop`.
+func (s *Server) stopAsked(w http.ResponseWriter, r *http.Request) {
+	s.nameViewer(r)
+	q := r.URL.Query()
+	by := ends.Stop{By: cmp.Or(q.Get("by"), ends.You), Who: q.Get("device")}
+	if by.By == ends.Session {
+		by.Who = q.Get("from")
+	}
+	s.act(func(ctx context.Context, id string) error {
+		err := s.stop(ctx, id)
+		if err == nil {
+			by.ID = id
+			s.Ends.Stopped(by)
+		}
+		return err
+	})(w, r)
+}
+
+// stopFor is atc stopping a session for a reason of its own, which it keeps for the session's end.
+func (s *Server) stopFor(ctx context.Context, id, why string) error {
+	err := s.M.CLI.Stop(ctx, id)
+	if err == nil {
+		s.Ends.Stopped(ends.Stop{ID: id, By: ends.Atc, Why: why})
+	}
+	return err
 }
 
 func (s *Server) stop(ctx context.Context, id string) error {

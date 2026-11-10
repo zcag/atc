@@ -388,7 +388,17 @@ func (c *Client) Summary(sid string, wait int, again bool) (s Summary, err error
 	return s, c.do(method, fmt.Sprintf("/api/sessions/%s/summary?wait=%d", sid, min(wait, 50)), nil, &s)
 }
 
-func (c *Client) Stop(id string) error   { return c.do("POST", "/api/sessions/"+id+"/stop", nil, nil) }
+// Stop stops a session, saying who asked: by is "you", "session" or "cli", from the device or the asking session's title.
+func (c *Client) Stop(id, by, from string) error {
+	q := url.Values{"by": {by}}
+	if by == "session" {
+		q.Set("from", from)
+	} else if from != "" {
+		q.Set("device", from)
+	}
+	return c.do("POST", "/api/sessions/"+id+"/stop?"+q.Encode(), nil, nil)
+}
+
 func (c *Client) Remove(id string) error { return c.do("DELETE", "/api/sessions/"+id, nil, nil) }
 
 func (c *Client) Patch(sid string, fields map[string]any) error {

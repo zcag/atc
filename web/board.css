@@ -29,6 +29,9 @@
 .earlierh .chev { flex: none; width: 6px; height: 6px; border-right: 1.5px solid var(--faint); border-bottom: 1.5px solid var(--faint); transform: rotate(-45deg); }
 .earlierh button[aria-expanded="true"] .chev { transform: rotate(45deg); }
 .bview .grp .r { margin-left: auto; }
+.bview .grp .seenall { margin-left: auto; align-self: center; }
+.bview .bgrp.cut .grp b { color: var(--fail); }
+.brow.cut .st .l2 { white-space: normal; color: var(--dim); }
 
 .bwrap { border-bottom: 1px solid var(--hair); position: relative; }
 .bwrap.waiting::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--needs); }

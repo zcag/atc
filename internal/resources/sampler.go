@@ -126,6 +126,7 @@ type Sampler struct {
 	min        minute
 	minAt      time.Time
 	resolved   map[string][2]string
+	owners     map[int]Owner
 }
 
 func New(dir, claudeDir string) *Sampler {
@@ -234,6 +235,7 @@ func (s *Sampler) tick(now time.Time) {
 	r := Report{At: now, Machine: s.mach.sample(dt), Exact: s.sc.boot > 0}
 	r.Machine.Disks, r.Machine.RAMDisk = s.free, s.ramDisk
 	groups := s.aggregate(procs, targets, now, dt, first)
+	s.remember(procs, groups, now)
 	if runtime.GOOS != "linux" {
 		for _, g := range groups {
 			r.Machine.CPU += g.CPU

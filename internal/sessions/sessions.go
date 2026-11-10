@@ -14,6 +14,7 @@ import (
 
 	"github.com/zcag/atc/internal/browser"
 	"github.com/zcag/atc/internal/claude"
+	"github.com/zcag/atc/internal/ends"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/outputs"
@@ -77,6 +78,7 @@ type Session struct {
 	ReportsTo      string           `json:"reportsTo,omitempty"`
 	Retired        bool             `json:"retired,omitempty"`
 	Load           *resources.Load  `json:"load,omitempty"`
+	Ended          *ends.Ending     `json:"ended,omitempty"`
 }
 
 var retiredHub = regexp.MustCompile(`^(assistant|whatsapp) (\d\d-\d\d \d\d:\d\d|\(continued as [0-9a-f]+\))$`)

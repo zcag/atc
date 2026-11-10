@@ -555,6 +555,12 @@ pre.mdiff:not(.num) .gap { padding-left: var(--s3); }
 .tx-wrap .endbar p { flex: 1; min-width: 0; margin: 0; font-size: var(--fs-ui); color: var(--dim); }
 .tx-wrap .endbar p b { color: var(--ink); font-weight: 620; }
 .tx-wrap .endbar .acts { flex-wrap: nowrap; }
+.tx-wrap .endbar.loud p b { color: var(--fail); }
+.tx-wrap .endwhy { flex: none; max-height: 58vh; overflow-y: auto; border-top: 1px solid var(--line); background: var(--board); padding: var(--s3) var(--pad) var(--s2); }
+.tx-wrap .endwhy .ewh { display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s2); }
+.tx-wrap .endwhy h3 { flex: 1; min-width: 0; margin: 0; font-size: var(--fs-ui); font-weight: 650; color: var(--fail); }
+.tx-wrap .endwhy .incident { padding-top: 0; }
+.tx-wrap .endwhy .rc-p { height: 110px; }
 
 /* work running in the background, above the box: a dot per job, then what each is doing right now */
 .bgstrip { margin: 0 0 6px; font-size: var(--fs-small); color: var(--dim); }
@@ -656,6 +662,8 @@ pre.mdiff:not(.num) .gap { padding-left: var(--s3); }
   .tx-wrap .sl { min-height: 44px; grid-template-columns: 12ch minmax(0, 1fr); }
   .tx-wrap .slh { display: none; }
   .tx-wrap .endbar { padding: var(--s2) var(--s3) 8px; }
+  .tx-wrap .endwhy { padding: var(--s3) var(--s3) var(--s2); max-height: 64vh; }
+  .tx-wrap .endwhy .ewh .btn { height: 44px; }
   .tx-wrap .endbar .cx { flex-wrap: wrap; } .tx-wrap .endbar p { flex-basis: 100%; }
   .tx-wrap .endbar .acts { width: 100%; } .tx-wrap .endbar .acts .btn { flex: 1; justify-content: center; }
   .tx-wrap .pop { left: var(--s2); right: var(--s2); width: auto; }

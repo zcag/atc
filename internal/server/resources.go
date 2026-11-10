@@ -4,10 +4,13 @@ import (
 	"cmp"
 	"context"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/zcag/atc/internal/claude"
+	"github.com/zcag/atc/internal/ends"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/resources"
 	"github.com/zcag/atc/internal/sessions"
@@ -25,9 +28,52 @@ func (s *Server) startResources() {
 				break
 			}
 		}
-		return cmp.Or(found.Title, found.AITitle, found.AgentName), found.SessionID
+		title := cmp.Or(s.M.Store.Get(found.SessionID).Name, found.Title, found.AITitle, found.AgentName)
+		return title, found.SessionID
 	}
 	go s.Res.Run(context.Background())
+	dir := ""
+	if s.StateDir != "" {
+		dir = filepath.Join(s.StateDir, "ends")
+	}
+	s.Ends = ends.New(dir, filepath.Join(claude.ConfigDir(), "daemon.log"), s.Host, s.Res)
+	s.Ends.Title = s.Res.Resolve
+	go s.Ends.Run(context.Background())
+}
+
+func (s *Server) resourcesIncidents(w http.ResponseWriter, r *http.Request) {
+	if id := r.PathValue("id"); id != "" {
+		inc := s.Ends.Incident(id)
+		if inc == nil {
+			http.Error(w, "no such incident", http.StatusNotFound)
+			return
+		}
+		reply(w, inc)
+		return
+	}
+	list := s.Ends.Incidents()
+	if list == nil {
+		list = []ends.Incident{}
+	}
+	reply(w, list)
+}
+
+// ended is why a stopped session stopped, with its evidence and the incident it was part of.
+func (s *Server) ended(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("sid")
+	list, _ := s.M.Live(r.Context())
+	last := time.Time{}
+	for _, x := range list {
+		if x.SessionID == id || x.ID == id {
+			id, last = cmp.Or(x.ID, x.SessionID), x.Last()
+		}
+	}
+	e, inc := s.Ends.Detail(id, last)
+	if e == nil {
+		http.Error(w, "not measured here", http.StatusNotFound)
+		return
+	}
+	reply(w, map[string]any{"ending": e, "incident": inc})
 }
 
 func (s *Server) trackResources(list []sessions.Session) {

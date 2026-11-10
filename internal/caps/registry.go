@@ -171,6 +171,14 @@ func All() []Cap {
 			Cost:   "The Android SDK on the machine that builds it.",
 		},
 		{
+			ID: "endings", Title: "Why sessions stopped", Group: Core, Optional: true, Why: "Says on a stopped session who stopped it, or what ended it: Claude's daemon closing it for memory, the kernel killing a process when memory ran out, a crash or an update. Without the kernel log it can't see memory kills.",
+			Needs: []string{"claude"}, Check: checkEndings,
+			Fix: Fix{Command: onMac("", "sudo usermod -aG systemd-journal $USER"),
+				Text: onMac("Claude's daemon writes its log once a background session has run. On macOS atc reads only that log; memory kills show as the daemon's own lines.",
+					"Claude's daemon writes its log once a background session has run. To see the kernel's memory kills atc needs to read the kernel log: add its user to the systemd-journal group and restart atc.")},
+			Cost: "Reads Claude's daemon log and the kernel log every 15 seconds.",
+		},
+		{
 			ID: "peers", Title: "Other machines", Group: Machines, Optional: true, Why: "Lists the sessions of your other machines here too.",
 			Check: checkPeers,
 			Fix:   Fix{Text: "List them in peers.json in atc's config folder, each with its name, url and token (`atc token` on that machine).", Guide: "machines"},

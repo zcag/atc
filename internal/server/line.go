@@ -138,7 +138,7 @@ func (s *Server) agentLine(w http.ResponseWriter, r *http.Request) {
 		}
 		if cur.Attachable {
 			log.Printf("agent %s: stopping %s, it goes on the line", a.Name, cur.ID)
-			if err := s.M.CLI.Stop(r.Context(), cur.ID); err != nil {
+			if err := s.stopFor(r.Context(), cur.ID, "the agent went on a call"); err != nil {
 				fail(w, err)
 				return
 			}

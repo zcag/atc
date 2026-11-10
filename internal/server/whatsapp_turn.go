@@ -323,7 +323,7 @@ func (s *Server) waNew(ctx context.Context, msg waMsg) error {
 		if x.Kind == "background" && cmp.Or(s.M.Store.Get(x.SessionID).Name, x.Name) == waName {
 			s.M.Store.Update(x.SessionID, func(m *store.Meta) { m.Name = waName + " " + x.Last().Format("01-02 15:04") })
 			if x.Attachable {
-				s.M.CLI.Stop(ctx, x.ID)
+				s.stopFor(ctx, x.ID, "WhatsApp started over with a new conversation")
 			}
 		}
 	}

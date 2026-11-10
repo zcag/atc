@@ -30,6 +30,7 @@ import (
 	"github.com/zcag/atc/internal/browser"
 	"github.com/zcag/atc/internal/caps"
 	"github.com/zcag/atc/internal/claude"
+	"github.com/zcag/atc/internal/ends"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/opencode"
@@ -54,6 +55,7 @@ type Server struct {
 	told    map[string]string
 	M       *sessions.Manager
 	Res     *resources.Sampler
+	Ends    *ends.Watcher
 	Term    *attach.Hub
 	Web     fs.FS
 	Token   string
@@ -188,7 +190,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("POST /api/sessions", s.start)
 	mux.HandleFunc("POST /api/sessions/{sid}/resume", s.resume)
-	mux.HandleFunc("POST /api/sessions/{id}/stop", s.act(s.stop))
+	mux.HandleFunc("POST /api/sessions/{id}/stop", s.stopAsked)
+	mux.HandleFunc("GET /api/sessions/{sid}/ended", s.ended)
 	mux.HandleFunc("DELETE /api/sessions/{id}", s.act(s.remove))
 	mux.HandleFunc("PATCH /api/sessions/{sid}", s.patch)
 	mux.HandleFunc("GET /api/sessions/{sid}/transcript", s.transcript)
@@ -235,6 +238,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/usage/report", s.usageReport)
 	mux.HandleFunc("GET /api/resources", s.resourcesNow)
 	mux.HandleFunc("GET /api/resources/history", s.resourcesHistory)
+	mux.HandleFunc("GET /api/resources/incidents", s.resourcesIncidents)
+	mux.HandleFunc("GET /api/resources/incidents/{id}", s.resourcesIncidents)
 	mux.HandleFunc("GET /api/sessions/{sid}/o/{tok}/{path...}", s.outputFile)
 	mux.HandleFunc("GET /api/sessions/{sid}/pages", s.sessionPages)
 	mux.HandleFunc("POST /api/sessions/{sid}/pages", s.showPage)
@@ -700,6 +705,9 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 	for i := range list {
 		list[i].Host = s.Host
 		list[i].Load = s.Res.Load(cmp.Or(list[i].ID, list[i].SessionID))
+		if list[i].State == sessions.Stopped && list[i].Kind == "background" {
+			list[i].Ended = s.Ends.Ended(list[i].ID, list[i].Last())
+		}
 		if list[i].PID > 0 {
 			for _, l := range s.M.Ports.Of(list[i].PID) {
 				if !l.LocalOnly {
@@ -768,7 +776,7 @@ func (s *Server) route(next http.Handler) http.Handler {
 			attachID = parts[3]
 			s.nameViewer(r)
 		}
-		if len(parts) == 6 && parts[4] == "asks" || r.URL.Path == "/api/trust/term" {
+		if len(parts) == 6 && parts[4] == "asks" || len(parts) == 5 && parts[4] == "stop" || r.URL.Path == "/api/trust/term" {
 			s.nameViewer(r)
 		}
 		s.fleet.proxy(w, r, p, attachID)

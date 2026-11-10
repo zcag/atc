@@ -135,6 +135,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc limits [-json] [-short]    plan limits, one line each; -short fits a status line
   atc top [-json] [-host name] [session]  memory, CPU and disk per session and what outlived its session;
                                  with a session, its processes
+  atc why [-json] [-raw] [session|incident]  why a session stopped, with the log lines it rests
+                                 on (-raw prints them); with nothing, the week's memory incidents
   atc limits -tap                record the limits from Claude Code's status line input (stdin),
                                  so atc shows them without asking Anthropic
 
@@ -239,6 +241,8 @@ func main() {
 		err = showLimits(args)
 	case "top":
 		err = showTop(args)
+	case "why":
+		err = showWhy(args)
 	case "backlog":
 		err = backlogCmd(args)
 	case "resume", "stop", "rm", "rename", "pin", "unpin", "park", "unpark":
@@ -577,7 +581,12 @@ func act(cmd string, args []string) error {
 			return fmt.Errorf("%q is not a background session", s.Title)
 		}
 		if cmd == "stop" {
-			return c.Stop(s.ID)
+			if live, err := c.Live(); err == nil {
+				if me, ok := client.Self(live); ok {
+					return c.Stop(s.ID, "session", me.Title)
+				}
+			}
+			return c.Stop(s.ID, "cli", "")
 		}
 		return c.Remove(s.ID)
 	case "rename":

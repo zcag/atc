@@ -277,7 +277,7 @@ func (s *Server) hubClaim(sid string) {
 		if x.SessionID == sid {
 			if x.Attachable {
 				log.Printf("hub: stopping %s, a background copy of the hub's conversation", x.ID)
-				s.M.CLI.Stop(ctx, x.ID)
+				s.stopFor(ctx, x.ID, "it was a background copy of the assistant's conversation, which the hub runs now")
 			}
 			continue
 		}
@@ -288,7 +288,7 @@ func (s *Server) hubClaim(sid string) {
 		s.M.Store.Update(x.SessionID, func(m *store.Meta) { m.Name = name + " " + stamp })
 		if x.Attachable {
 			log.Printf("hub: stopping the %s session %s, the hub has it now", name, x.ID)
-			s.M.CLI.Stop(ctx, x.ID)
+			s.stopFor(ctx, x.ID, "the hub took over the "+name+" conversation")
 		}
 	}
 	for _, old := range s.M.Store.Find(func(id string, m store.Meta) bool { return m.Name == hubName && id != sid }) {

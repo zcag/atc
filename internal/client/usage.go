@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/zcag/atc/internal/ends"
 	"github.com/zcag/atc/internal/outputs"
 	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/resources"
@@ -69,6 +70,32 @@ func (c *Client) WeekRate() float64 {
 func (c *Client) Days(n int) ([]usage.Day, error) {
 	var r struct{ Days []usage.Day }
 	return r.Days, c.do("GET", fmt.Sprintf("/api/usage/report?days=%d", n), nil, &r)
+}
+
+// Ended is why a stopped session stopped, and the memory incident it was part of.
+type Ended struct {
+	Ending   *ends.Ending   `json:"ending"`
+	Incident *ends.Incident `json:"incident"`
+}
+
+func (c *Client) Ended(sid string) (e Ended, err error) {
+	return e, c.do("GET", "/api/sessions/"+url.PathEscape(sid)+"/ended", nil, &e)
+}
+
+func (c *Client) Incident(id, host string) (inc ends.Incident, err error) {
+	path := "/api/resources/incidents/" + url.PathEscape(id)
+	if host != "" {
+		path += "?host=" + url.QueryEscape(host)
+	}
+	return inc, c.do("GET", path, nil, &inc)
+}
+
+func (c *Client) Incidents(host string) (list []ends.Incident, err error) {
+	path := "/api/resources/incidents"
+	if host != "" {
+		path += "?host=" + url.QueryEscape(host)
+	}
+	return list, c.do("GET", path, nil, &list)
 }
 
 func (c *Client) Resources(host string) (r resources.Report, err error) {

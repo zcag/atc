@@ -405,7 +405,7 @@ func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if act == "stop" {
-			return m, m.do("stopped "+s.Title, func() error { return m.c.Stop(s.ID) })
+			return m, m.do("stopped "+s.Title, func() error { return m.c.Stop(s.ID, "you", "atc in a terminal") })
 		}
 		return m, m.do("deleted "+s.Title, func() error { return m.c.Remove(s.ID) })
 	}

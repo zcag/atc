@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -189,6 +190,19 @@ func urlCheck(key, off string) func(context.Context, Env) Result {
 		}
 		return Result{OK, site(u) + " answers."}
 	}
+}
+
+func checkEndings(ctx context.Context, env Env) Result {
+	if _, err := os.Stat(filepath.Join(claude.ConfigDir(), "daemon.log")); err != nil {
+		return Result{Missing, "Claude's daemon has no log yet."}
+	}
+	if runtime.GOOS != "linux" {
+		return Result{OK, "Reads Claude's daemon log."}
+	}
+	if out, err := exec.CommandContext(ctx, "journalctl", "-k", "-n", "1", "-q", "--no-pager").Output(); err != nil || len(bytes.TrimSpace(out)) == 0 {
+		return Result{Broken, "Reads Claude's daemon log, but can't read the kernel log, so it can't see what the kernel kills when memory runs out."}
+	}
+	return Result{OK, "Reads Claude's daemon log and the kernel log."}
 }
 
 func checkGit(ctx context.Context, env Env) Result {

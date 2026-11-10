@@ -88,6 +88,7 @@ type Session struct {
 	Pages      []string `json:"pages,omitempty" jsonschema:"pages it showed the user with atc show, by name"`
 	Servers    []int    `json:"servers,omitempty" jsonschema:"ports of servers it started that are still running"`
 	Since      string   `json:"since,omitempty"`
+	Ended      string   `json:"ended,omitempty" jsonschema:"why it stopped, when it is stopped: who stopped it, or what Claude's daemon log and the kernel recorded"`
 }
 
 type Ask struct {
@@ -225,6 +226,7 @@ type done struct {
 type transcript struct {
 	Title    string           `json:"title"`
 	State    string           `json:"state"`
+	Ended    string           `json:"ended,omitempty" jsonschema:"why it stopped, when it is stopped; atc why <session> has the evidence"`
 	Summary  *summary.Summary `json:"summary,omitempty" jsonschema:"its last reply in short"`
 	Turns    []string         `json:"turns,omitempty" jsonschema:"one line per turn, oldest first: when, what the user asked, files changed, tests, commits, pushes, deploys, failures, how long"`
 	Messages string           `json:"messages"`
@@ -359,6 +361,9 @@ func (t *tools) view(x sessions.Session, self *sessions.Session) Session {
 	for _, p := range x.Shown {
 		v.Pages = append(v.Pages, p.Name)
 	}
+	if x.Ended != nil {
+		v.Ended = x.Ended.Text
+	}
 	if at := x.Last(); !at.IsZero() {
 		v.Since = at.Format(time.RFC3339)
 	}
@@ -466,6 +471,9 @@ func (t *tools) read(ctx context.Context, _ *mcp.CallToolRequest, in readIn) (*m
 		return nil, transcript{}, err
 	}
 	out := transcript{Title: x.Title, State: x.State, Summary: x.Summary}
+	if x.Ended != nil {
+		out.Ended = x.Ended.Text
+	}
 	var wg sync.WaitGroup
 	var turns []history.Turn
 	var waiting []history.Waiting
@@ -836,7 +844,13 @@ func (t *tools) stop(ctx context.Context, _ *mcp.CallToolRequest, in ref) (*mcp.
 	if t.isSelf(x) {
 		return nil, done{}, fmt.Errorf("that is this session itself")
 	}
-	return nil, done{Ref: x.ID, Title: x.Title, State: "stopped"}, t.c.Stop(x.ID)
+	by := "an agent"
+	if live, err := t.c.Live(); err == nil {
+		if me, ok := client.Self(live); ok {
+			by = cmp.Or(me.Title, by)
+		}
+	}
+	return nil, done{Ref: x.ID, Title: x.Title, State: "stopped"}, t.c.Stop(x.ID, "session", by)
 }
 
 func (t *tools) later(ctx context.Context, _ *mcp.CallToolRequest, in laterIn) (*mcp.CallToolResult, backlogItem, error) {
