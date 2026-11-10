@@ -119,6 +119,48 @@ class CalloutHello(unittest.IsolatedAsyncioTestCase):
 
 
 
+class GreetWait(unittest.IsolatedAsyncioTestCase):
+    """The greeting waits for the far end's first sound on every line: the app's audio path comes up about a second
+    after the call is answered, and a greeting sent before that lost its first word."""
+
+    def answering(self, app):
+        t = talk.Talk.__new__(talk.Talk)
+        t.a, t.app, t.line_up, t.who = NS(greet_wait_ms=600, greet_wait_app_ms=300), app, False, None
+        t.hello, t.said, t.events = ("Selam Ada.", b"x"), [], []
+        t.say = lambda text, _: t.said.append((text, time.monotonic()))
+        t.log = lambda **kw: t.events.append(kw)
+        return t
+
+    async def test_the_app_line_waits_for_the_phone_audio(self):
+        t, start = self.answering(app=True), time.monotonic()
+
+        async def path_up():
+            await asyncio.sleep(0.15)
+            t.line_up = True
+        asyncio.create_task(path_up())
+        await t.greet()
+        self.assertEqual(t.said[0][0], "Selam Ada.")
+        self.assertAlmostEqual(t.said[0][1] - start, 0.15, delta=0.05)
+        self.assertTrue(t.events[-1]["line_up"])
+
+    async def test_a_silent_app_mic_gives_up_at_its_own_cap(self):
+        t, start = self.answering(app=True), time.monotonic()
+        await t.greet()
+        self.assertAlmostEqual(t.said[0][1] - start, 0.3, delta=0.05)
+        self.assertFalse(t.events[-1]["line_up"])
+
+    async def test_a_phone_line_keeps_the_longer_cap(self):
+        t, start = self.answering(app=False), time.monotonic()
+        await t.greet()
+        self.assertAlmostEqual(t.said[0][1] - start, 0.6, delta=0.05)
+
+    async def test_a_line_already_up_greets_at_once(self):
+        t = self.answering(app=True)
+        t.line_up = True
+        await t.greet()
+        self.assertEqual(t.events[-1]["waited_ms"], 0)
+
+
 class LocalOpening(unittest.IsolatedAsyncioTestCase):
     """A call to the user opens with the picker's line, voiced while it rings; anything short of that is the
     assistant's opening, as before."""

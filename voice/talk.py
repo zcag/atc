@@ -1445,10 +1445,13 @@ class Talk:
     async def greet(self):
         """The greeting waits for the far end's audio to start (the first frame that is not digital zero), up to
         greet_wait_ms: a WhatsApp call goes active before its audio flows, and on one call the greeting
-        played into the 4.4 s before it did, so their first words were «Alo? Ses geliyor mu?». The app line has its own
-        hold and is not waited for; a phone or WhatsApp line is normally up within 0.2 s."""
-        start = time.monotonic()
-        while not self.app and not self.line_up and time.monotonic() - start < self.a.greet_wait_ms / 1000:
+        played into the 4.4 s before it did, so their first words were «Alo? Ses geliyor mu?». A phone or WhatsApp
+        line is normally up within 0.2 s. The app line too, up to greet_wait_app_ms: Android brings the call's audio
+        path up (a Bluetooth link, the speaker) 0.6-1.4 s after answering, the mic sends digital zero until then, and a
+        greeting sent at once lost its first word there. A muted mic or push-to-talk sends zero throughout, hence the
+        shorter cap."""
+        start, cap = time.monotonic(), (self.a.greet_wait_app_ms if self.app else self.a.greet_wait_ms) / 1000
+        while not self.line_up and time.monotonic() - start < cap:
             await asyncio.sleep(0.02)
         if self.who:
             return
@@ -1732,6 +1735,7 @@ if __name__ == "__main__":
     p.add_argument("--progress-every-ms", type=int, default=15000)
     p.add_argument("--progress-max", type=int, default=2, help="'still on it' lines per turn at most")
     p.add_argument("--greet-wait-ms", type=int, default=6000, help="call in: ms the greeting waits at most for the far end's audio to start")
+    p.add_argument("--greet-wait-app-ms", type=int, default=2000, help="call in on the app line: ms the greeting waits at most for the phone's mic audio to start")
     p.add_argument("--hold-ms", type=int, default=1500, help="call out: ms after they pick up before the opening plays if they say nothing")
     p.add_argument("--hold-max-ms", type=int, default=3000, help="call out: the opening plays by then even if they keep talking")
     a = p.parse_args()
