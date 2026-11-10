@@ -130,3 +130,23 @@ func TestKernelLines(t *testing.T) {
 		t.Fatal("a scope in claude.slice holds Claude's daemon")
 	}
 }
+
+func TestDismiss(t *testing.T) {
+	w := watcher("[" + at(0) + "] [bg] bg settled dddd4444 (crashed)")
+	if e := w.Ended("dddd4444", time.Time{}); e.Dismissed {
+		t.Fatal("not dismissed yet")
+	}
+	w.Dismiss("dddd4444-0000", false)
+	if e := w.Ended("dddd4444", time.Time{}); !e.Dismissed {
+		t.Fatal("dismissed")
+	}
+	w.dismissed["dddd4444"] = base.Add(30 * time.Minute)
+	w.daemonLine("[" + at(time.Hour) + "] [bg] bg settled dddd4444 (crashed)")
+	if e := w.Ended("dddd4444", time.Time{}); e.Dismissed {
+		t.Fatal("a later end is not dismissed by an earlier dismissal")
+	}
+	w.Dismiss("dddd4444", true)
+	if e := w.Ended("dddd4444", time.Time{}); e.Dismissed {
+		t.Fatal("undone")
+	}
+}

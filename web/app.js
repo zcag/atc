@@ -922,8 +922,10 @@ const GROUPS = [["pinned", "Pinned"], ["waiting", "Waiting on you"], ["working",
 const QWERTY = "qwertyuiop";
 const UNASKED = new Set(["oom", "memory", "crashed", "daemon", "updated", "rebooted"]);
 const endedAt = (s) => Date.parse(s.ended?.at || 0) || 0;
-const cutOff = (s) => s.state === "stopped" && !s.retired && s.ended?.sure && UNASKED.has(s.ended.cause) && !!SYNC.seen
-  && Date.now() - endedAt(s) < 3 * 86400000 && endedAt(s) > (Date.parse(seenOf(s.sessionId) || 0) || 0);
+const cutOff = (s) => s.state === "stopped" && !s.retired && s.ended?.sure && !s.ended.dismissed && UNASKED.has(s.ended.cause)
+  && Date.now() - endedAt(s) < 7 * 86400000;
+const dismissEnded = (list, say, undo) => Promise.allSettled(list.map((s) => api(`/api/sessions/${s.sessionId}/ended/dismiss${undo ? "?undo=1" : ""}`, { method: "POST" })))
+  .then(() => !undo && say?.(list.length === 1 ? "Dismissed: it moves to Earlier." : `Dismissed ${list.length}: they move to Earlier.`, { undo: () => dismissEnded(list, say, true) }));
 const groupOf = (s) => (away(s) ? "parked" : s.pinned ? "pinned" : waiting(s) ? "waiting" : s.state === "working" ? "working" : cutOff(s) ? "cut" : "earlier");
 const byUrgency = (a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1) || (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
 const doingLine = (s) => s.state === "working" ? doing(s) : s.state === "needs-you" && s.asks?.[0] ? oneLine(s.asks[0].questions?.[0]?.question || (s.asks[0].permission && `Wants to use ${s.asks[0].permission}`)) : "";
@@ -1007,7 +1009,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
         <div class="ax">
           ${s.asks?.length > 0 && html`<${Ask} compact s=${s} a=${s.asks[0]} say=${say} />`}
           ${replyable(s) && html`<${CardReplies} s=${s} />`}
-          <div class="acts"><button class="btn" onClick=${() => go(keyOf(s))}>Open</button>
+          <div class="acts"><button class="btn" onClick=${() => go(keyOf(s))}>Open</button>${g === "cut" && html`<button class="btn" onClick=${() => dismissEnded([s], say)}>Dismiss</button>`}
             ${s.shown?.length > 0 && html`<button class="btn" onClick=${() => (location.hash = pageLink(keyOf(s), s.shown[0].name))}>${pageTitle(s.shown[0])}</button>`}</div>
         </div>
       </div>`}
@@ -1066,7 +1068,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
           return html`<section class="bgrp ${k}">
             ${isEarlier
               ? html`<${EarlierHead} open=${earlierOpen} toggle=${flipEarlier} n=${by.earlier.length} note=${earlierOpen && (earlierAll ? "all loaded" : "today and yesterday")} />`
-              : html`<h2 class="grp"><b>${title}</b><span class="c">${list.length}</span>${k === "cut" && html`<button class="kb seenall" title="Move these to Earlier: you know why they stopped" onClick=${() => list.forEach(markLooked)}>Seen</button>`}</h2>`}
+              : html`<h2 class="grp"><b>${title}</b><span class="c">${list.length}</span>${k === "cut" && html`<button class="kb seenall" title="Move all of these to Earlier: you know why they stopped and have decided what to do" onClick=${() => dismissEnded(list, say)}>Dismiss all</button>`}</h2>`}
             ${list.map((s) => html`<${BoardRow} key=${s.sessionId} s=${s} open=${open.has(s.sessionId)} toggle=${toggle} sel=${sel} cursor=${cursor} say=${say} qk=${QWERTY[qn++]} />`)}
             ${isEarlier && earlierOpen && (!earlierAll && by.earlier.length > shownEarlier.length
               ? html`<button class="kb bmore" onClick=${() => setEarlierAll(true)}>Show ${by.earlier.length - shownEarlier.length} older</button>`
@@ -6180,7 +6182,7 @@ function EndBar({ s, resume, busy }) {
   const at = txClock(e?.at || s.updated);
   return html`${why && html`<${EndWhy} s=${s} onClose=${() => setWhy(false)} />`}<div class="endbar ${e && UNASKED.has(e.cause) ? "loud" : ""}"><div class="cols"><div class="cx">
     <p><b>${s.state === "stopped" ? `Stopped${at ? ` ${at}` : ""}.` : "Not running."}</b> ${e ? e.text : "It keeps its transcript; Resume continues the conversation."}</p>
-    <span class="acts">${s.state === "stopped" && s.ended && html`<button class="btn" aria-expanded=${why} onClick=${() => setWhy((x) => !x)}>Why</button>`}<button class="btn prime" disabled=${busy} aria-keyshortcuts="r" onClick=${resume}>${busy ? "Resuming" : html`Resume <kbd aria-hidden="true">r</kbd>`}</button></span>
+    <span class="acts">${s.state === "stopped" && s.ended && html`<button class="btn" aria-expanded=${why} onClick=${() => setWhy((x) => !x)}>Why</button>`}${cutOff(s) && html`<button class="btn" title="Move it out of Stopped unexpectedly: you know why it stopped and have decided what to do" onClick=${() => dismissEnded([s])}>Dismiss</button>`}<button class="btn prime" disabled=${busy} aria-keyshortcuts="r" onClick=${resume}>${busy ? "Resuming" : html`Resume <kbd aria-hidden="true">r</kbd>`}</button></span>
   </div></div></div>`;
 }
 
@@ -6256,7 +6258,7 @@ function syncEvent(kind, d) {
 const seenOf = (sid) => SYNC.seen?.[sid] || null;
 function markLooked(s) {
   const sid = s.sessionId, was = seenOf(sid);
-  if (was && Date.parse(was) >= Math.max(Date.parse(s.updated || 0) || 0, endedAt(s))) return;
+  if (was && Date.parse(was) >= Date.parse(s.updated || 0)) return;
   (SYNC.seen ||= {})[sid] = new Date().toISOString();
   api("/api/seen", { method: "PUT", body: { sessionId: sid, from: PAGE_ID } }).catch(() => {});
   syncTell();

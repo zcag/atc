@@ -70,13 +70,14 @@ type Line struct {
 }
 
 type Ending struct {
-	At       time.Time `json:"at"`
-	Cause    string    `json:"cause"`
-	Short    string    `json:"short"`
-	Text     string    `json:"text"`
-	Sure     bool      `json:"sure"`
-	Incident string    `json:"incident,omitempty"`
-	Evidence []Line    `json:"evidence,omitempty"`
+	At        time.Time `json:"at"`
+	Cause     string    `json:"cause"`
+	Short     string    `json:"short"`
+	Text      string    `json:"text"`
+	Sure      bool      `json:"sure"`
+	Dismissed bool      `json:"dismissed,omitempty"`
+	Incident  string    `json:"incident,omitempty"`
+	Evidence  []Line    `json:"evidence,omitempty"`
 }
 
 type Lost struct {
@@ -124,6 +125,7 @@ type Stop struct {
 
 type record struct {
 	Kind  string    `json:"kind"`
+	ID    string    `json:"id,omitempty"`
 	At    time.Time `json:"at,omitzero"`
 	Stop  *Stop     `json:"stop,omitempty"`
 	Kill  *Kill     `json:"kill,omitempty"`
@@ -145,6 +147,7 @@ type Watcher struct {
 	kills     []Kill
 	units     []unitLine
 	stops     map[string][]Stop
+	dismissed map[string]time.Time
 	owners    map[string]Owner
 	guessed   map[string]*Owner
 	boot      time.Time
@@ -154,7 +157,7 @@ type Watcher struct {
 
 func New(dir, daemonLog, host string, res *resources.Sampler) *Watcher {
 	return &Watcher{Dir: dir, DaemonLog: daemonLog, Host: host, Res: res,
-		settles: map[string][]settle{}, retires: map[string][]retire{}, stops: map[string][]Stop{}, owners: map[string]Owner{}, guessed: map[string]*Owner{}}
+		settles: map[string][]settle{}, retires: map[string][]retire{}, stops: map[string][]Stop{}, dismissed: map[string]time.Time{}, owners: map[string]Owner{}, guessed: map[string]*Owner{}}
 }
 
 func (w *Watcher) Run(ctx context.Context) {
@@ -197,6 +200,8 @@ func (w *Watcher) load() {
 			w.since = r.At
 		case r.Kind == "stop" && r.Stop != nil:
 			w.stops[r.Stop.ID] = append(w.stops[r.Stop.ID], *r.Stop)
+		case r.Kind == "dismiss":
+			w.dismissed[r.ID] = r.At
 		case r.Kind == "kill" && r.Kill != nil && r.Owner != nil:
 			w.owners[killKey(*r.Kill)] = *r.Owner
 		}
@@ -288,7 +293,29 @@ func (w *Watcher) Ended(id string, last time.Time) *Ending {
 	defer w.mu.Unlock()
 	e := w.explain(short(id), last)
 	e.Evidence = nil
+	e.Dismissed = w.isDismissed(short(id), e.At)
 	return &e
+}
+
+// Dismiss records that you have dealt with how a session ended, so it leaves the list of sessions
+// stopped unexpectedly; undo brings it back.
+func (w *Watcher) Dismiss(id string, undo bool) {
+	if w == nil || id == "" {
+		return
+	}
+	r := record{Kind: "dismiss", ID: short(id)}
+	if !undo {
+		r.At = time.Now()
+	}
+	w.mu.Lock()
+	w.dismissed[r.ID] = r.At
+	w.write(r)
+	w.mu.Unlock()
+}
+
+func (w *Watcher) isDismissed(id string, ended time.Time) bool {
+	at, ok := w.dismissed[id]
+	return ok && !at.IsZero() && !at.Before(ended)
 }
 
 // Detail is why a stopped session stopped, with its evidence and the incident it was part of.
@@ -298,6 +325,7 @@ func (w *Watcher) Detail(id string, last time.Time) (*Ending, *Incident) {
 	}
 	w.mu.Lock()
 	e := w.explain(short(id), last)
+	e.Dismissed = w.isDismissed(short(id), e.At)
 	w.mu.Unlock()
 	sort.SliceStable(e.Evidence, func(i, j int) bool { return e.Evidence[i].At.Before(e.Evidence[j].At) })
 	if e.Incident == "" {

@@ -113,3 +113,11 @@ func (s *Server) resourcesHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	reply(w, s.Res.History(time.Duration(min(hours, 24*7))*time.Hour, r.URL.Query().Get("key")))
 }
+
+// dismissEnded is you having dealt with how a session ended: it leaves Stopped unexpectedly.
+// ?undo=1 brings it back.
+func (s *Server) dismissEnded(w http.ResponseWriter, r *http.Request) {
+	s.Ends.Dismiss(r.PathValue("sid"), r.URL.Query().Get("undo") != "")
+	s.refresh()
+	reply(w, map[string]bool{"ok": true})
+}
