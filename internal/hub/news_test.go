@@ -80,6 +80,7 @@ func TestNoticeJoinsARunningPhoneTool(t *testing.T) {
 	if !joined || err != nil {
 		t.Fatalf("notice during a phone tool: %v %v", joined, err)
 	}
+	r.finishTool()
 	es := phone.until("done")
 	if got := said(es); !strings.Contains(got, "change") {
 		t.Fatalf("the turn did not take the change in: %q", got)

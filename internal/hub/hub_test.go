@@ -30,7 +30,9 @@ func TestMain(m *testing.M) {
 
 // fakeClaude speaks enough stream-json for the hub: it replays each message, answers
 // "echo: <message>", and for a message containing TOOL runs a tool first, taking in what
-// arrives meanwhile as joined messages, the way Claude reads them at a tool boundary.
+// arrives meanwhile as joined messages, the way Claude reads them at a tool boundary. The tool
+// runs until the test releases it (rig.release) and holds once more after its result, so a test
+// acts while a tool runs however slow the machine is.
 func fakeClaude() {
 	sid := ""
 	for i, a := range os.Args {
@@ -87,37 +89,34 @@ func fakeClaude() {
 			se(map[string]any{"type": "content_block_delta", "delta": map[string]any{"type": "input_json_delta", "partial_json": `"Inbox status"}`}})
 			se(map[string]any{"type": "content_block_stop"})
 			var joined []string
-			interrupted := func(d time.Duration) bool {
-				for wait := time.After(d); ; {
-					select {
-					case l := <-lines:
-						var j struct {
-							Type    string
-							Request struct{ Subtype string }
-							Message struct{ Content string }
-						}
-						json.Unmarshal([]byte(l), &j)
-						if j.Type == "control_request" && j.Request.Subtype == "interrupt" {
-							return true
-						}
-						if j.Type == "user" {
-							replay(j.Message.Content)
-							joined = append(joined, last(j.Message.Content))
-						}
-						continue
-					case <-wait:
+			interrupted := func() bool {
+				for l := range lines {
+					var j struct {
+						Type    string
+						Request struct{ Subtype string }
+						Message struct{ Content string }
 					}
-					return false
+					json.Unmarshal([]byte(l), &j)
+					switch {
+					case j.Type == release:
+						return false
+					case j.Type == "control_request" && j.Request.Subtype == "interrupt":
+						return true
+					case j.Type == "user":
+						replay(j.Message.Content)
+						joined = append(joined, last(j.Message.Content))
+					}
 				}
+				return true
 			}
-			if interrupted(400 * time.Millisecond) {
+			if interrupted() {
 				textBlock("tool cancelled")
 				emit(map[string]any{"type": "result", "subtype": "error_during_execution"})
 				continue
 			}
 			emit(map[string]any{"type": "user", "parent_tool_use_id": nil, "message": map[string]any{"role": "user",
 				"content": []map[string]any{{"type": "tool_result", "tool_use_id": "t1", "content": "ok"}}}})
-			if interrupted(200 * time.Millisecond) {
+			if interrupted() {
 				emit(map[string]any{"type": "result", "subtype": "error_during_execution"})
 				continue
 			}
@@ -131,15 +130,14 @@ func fakeClaude() {
 }
 
 // cutBeforeReplay is Claude Code taking ~2 s to replay a message: an interrupt in that time ends
-// the turn without the message ever being replayed.
+// the turn without the message ever being replayed. Here that time lasts until the next line:
+// an interrupt, or the test's release.
 func cutBeforeReplay(lines chan string) bool {
-	select {
-	case l := <-lines:
-		return strings.Contains(l, `"interrupt"`)
-	case <-time.After(600 * time.Millisecond):
-		return false
-	}
+	return strings.Contains(<-lines, `"interrupt"`)
 }
+
+// release is the line a test writes to the fake's stdin to let a held step go on.
+const release = "test_release"
 
 func last(text string) string {
 	lines := strings.Split(text, "\n")
@@ -169,6 +167,19 @@ func newRig(t *testing.T, call CallConfig) *rig {
 	t.Cleanup(func() { srv.Close(); h.Stop() })
 	return &rig{t, h, srv}
 }
+
+// release lets the fake's held step go on. The hub writes it after everything it wrote before,
+// so a message sent first is read first.
+func (r *rig) release() {
+	r.h.mu.Lock()
+	defer r.h.mu.Unlock()
+	if err := r.h.write(map[string]string{"type": release}); err != nil {
+		r.t.Fatal(err)
+	}
+}
+
+// finishTool releases a running tool and the step after its result.
+func (r *rig) finishTool() { r.release(); r.release() }
 
 type conn struct {
 	t  *testing.T
@@ -351,6 +362,7 @@ func TestTextWaitsForPhoneTurn(t *testing.T) {
 	if es := wa.until("held"); len(es) != 1 {
 		t.Fatalf("whatsapp got %v before held", es)
 	}
+	r.finishTool()
 	ps := append(first, phone.until("done")...)
 	if got := said(ps); got != "looking\n\ndone " {
 		t.Fatalf("phone heard %q", got)
@@ -364,7 +376,6 @@ func TestCutBeforeReplay(t *testing.T) {
 	r := newRig(t, CallConfig{})
 	phone := r.dial("phone")
 	phone.send("message", "SLOW half a question")
-	time.Sleep(50 * time.Millisecond)
 	phone.send("interrupt", "")
 	es := phone.until("done")
 	if got := said(es); got != "" || !es[len(es)-1].Interrupted {
@@ -383,7 +394,9 @@ func TestToolDoneReachesThePhone(t *testing.T) {
 	r := newRig(t, CallConfig{})
 	phone := r.dial("phone")
 	phone.send("message", "TOOL check")
-	es := phone.until("done")
+	es := phone.until("tool")
+	r.finishTool()
+	es = append(es, phone.until("done")...)
 	if types(es, "tool") != 1 || types(es, "tool_done") != 1 {
 		t.Fatalf("events %v", es)
 	}
@@ -413,7 +426,9 @@ func TestJoinRoutesToNewest(t *testing.T) {
 	atc.send("message", "TOOL build")
 	first := atc.until("tool")
 	wa.send("message", "status?")
-	ws := wa.until("done")
+	ws := wa.until("joined")
+	r.finishTool()
+	ws = append(ws, wa.until("done")...)
 	if types(ws, "joined") != 1 || said(ws) != "done status?" {
 		t.Fatalf("whatsapp %v", ws)
 	}
@@ -457,9 +472,6 @@ func TestAgentReportReachesNoOne(t *testing.T) {
 	}
 
 	ph := r.dial(Phone)
-	for r.h.Status().Channels[Phone] == 0 {
-		time.Sleep(10 * time.Millisecond)
-	}
 	r.h.Say(Agent, "report: merged")
 	all.until("done")
 	ph.send("message", "ne oldu")
@@ -495,7 +507,10 @@ func TestBargeInLetsTheToolFinish(t *testing.T) {
 	phone := r.dial("phone")
 	phone.send("message", "TOOL send it")
 	phone.until("tool")
-	phone.send("interrupt", "")
+	if !r.h.Interrupt(Phone, false) {
+		t.Fatal("barge-in refused")
+	}
+	r.release()
 	es := phone.until("done")
 	if strings.Contains(said(es), "cancelled") || strings.Contains(said(es), "done") || !es[len(es)-1].Interrupted {
 		t.Fatalf("said %q, done %v", said(es), es[len(es)-1])

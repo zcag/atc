@@ -65,9 +65,6 @@ func TestOnCallAsksTheLine(t *testing.T) {
 	defer line.Close()
 	r := newRig(t, CallConfig{URL: line.URL})
 	r.dial(Phone)
-	for r.h.Status().Channels[Phone] == 0 {
-		time.Sleep(10 * time.Millisecond)
-	}
 	r.h.mu.Lock()
 	idle := r.h.onCall()
 	r.h.mu.Unlock()
@@ -106,6 +103,7 @@ func TestGuestCallIsSpokenAndHoldsHim(t *testing.T) {
 	if es := wa.until("held"); len(es) != 1 {
 		t.Fatalf("whatsapp got %v before held", es)
 	}
+	r.finishTool()
 	if got := said(append(first, call.until("done")...)); !strings.HasPrefix(got, "looking") {
 		t.Fatalf("guest heard %q", got)
 	}

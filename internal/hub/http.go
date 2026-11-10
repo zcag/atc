@@ -116,6 +116,8 @@ func (h *Hub) serveWS(w http.ResponseWriter, r *http.Request, channel string, ta
 	if talk && channel == "" {
 		channel = "anon"
 	}
+	events, done := h.Subscribe(channel)
+	defer done()
 	c, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return
@@ -123,8 +125,6 @@ func (h *Hub) serveWS(w http.ResponseWriter, r *http.Request, channel string, ta
 	c.SetReadLimit(4 << 20)
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	events, done := h.Subscribe(channel)
-	defer done()
 	log.Printf("hub: %s connected", nameOf(channel))
 	defer log.Printf("hub: %s left", nameOf(channel))
 	defer h.Left(channel)
