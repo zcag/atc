@@ -33,6 +33,12 @@ func TestEnvelope(t *testing.T) {
 		{"sent before the hub read JSON", "{\"text\":\"Done.\\n\\n[from session \\\"Sweeper\\\" (5e1a90b2 on box1) · no need to answer]\"}", "Done.", &Via{
 			Title: "Sweeper", Ref: "5e1a90b2", Host: "box1", AskText: "no need to answer",
 		}},
+		{"Claude's own SendMessage", "<cross-session-message from=\"uds:/run/x.sock\" from-name=\"handover\" from-mode=\"bypass\">\nPay it.\n</cross-session-message>", "Pay it.", &Via{
+			Title: "handover", Source: "another Claude session",
+		}},
+		{"SendMessage signed by an agent", "<cross-session-message from=\"uds:/run/x.sock\" from-name=\"handover\" from-mode=\"bypass\">Pay it. [from @tracker]</cross-session-message>", "Pay it.", &Via{
+			Title: "@tracker", Source: "another Claude session",
+		}},
 		{"a webhook", "[message from grafana]\n{\"alert\":1}", "{\"alert\":1}", &Via{Source: "grafana"}},
 	} {
 		sd := envelope(c.in)

@@ -40,7 +40,12 @@ var (
 	asideMode  = regexp.MustCompile(`(?s)^\[talk-mode: ([\w-]+), for this message only\]\n(.*?)\[message\]\n`)
 	asideWhere = regexp.MustCompile(`(?m)^\[now: (.*)\]$`)
 	fromSource = regexp.MustCompile(`^\[message from ([^\]\n]+)\]\n`)
-	signature  = regexp.MustCompile(`(?s)\s*\[(from|started by) (?:session ("(?:[^"\\]|\\.)*") \((\S+?)(?: on (\S+))?\)|a Claude session on (\S+) that atc does not run, so it cannot take messages)(?: · (relays the user's own go-ahead)[^·\]]*)? · ([^\]]*)\]\s*$`)
+	// crossSession is how Claude Code delivers its own SendMessage between sessions, outside atc; a sender may still
+	// sign the body itself ("[from @agent]").
+	crossSession = regexp.MustCompile(`(?s)^<cross-session-message\b([^>]*)>\s*(.*?)\s*</cross-session-message>$`)
+	crossName    = regexp.MustCompile(`\bfrom-name="([^"]*)"`)
+	selfSigned   = regexp.MustCompile(`\s*\[from (@[\w.-]+)\]$`)
+	signature    = regexp.MustCompile(`(?s)\s*\[(from|started by) (?:session ("(?:[^"\\]|\\.)*") \((\S+?)(?: on (\S+))?\)|a Claude session on (\S+) that atc does not run, so it cannot take messages)(?: · (relays the user's own go-ahead)[^·\]]*)? · ([^\]]*)\]\s*$`)
 )
 
 // said is a user turn taken apart: the message itself, who sent it when the user didn't, the channel the hub
@@ -79,6 +84,15 @@ func envelope(t string) said {
 	t, v.News = news(t)
 	if m := fromSource.FindStringSubmatch(t); m != nil {
 		v.Source, t = m[1], strings.TrimSpace(t[len(m[0]):])
+	}
+	if m := crossSession.FindStringSubmatch(t); m != nil {
+		t, v.Source = m[2], "another Claude session"
+		if n := crossName.FindStringSubmatch(m[1]); n != nil {
+			v.Title = n[1]
+		}
+		if s := selfSigned.FindStringSubmatchIndex(t); s != nil {
+			v.Title, t = t[s[2]:s[3]], t[:s[0]]
+		}
 	}
 	var wrapped struct{ Text string }
 	if strings.HasPrefix(t, `{"text":`) && json.Unmarshal([]byte(t), &wrapped) == nil && wrapped.Text != "" {
