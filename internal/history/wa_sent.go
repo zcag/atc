@@ -19,6 +19,7 @@ var (
 	waCmd     = regexp.MustCompile(`(?:^|[\s;&|(])atc wa(?:\s|$)`)
 	heredoc   = regexp.MustCompile(`(?s)<<-?\s*(['"]?)(\w+)['"]?[^\n]*\n(.*?)\n\s*(\w+)\s*(?:\n|$)`)
 	waSentOut = regexp.MustCompile(`(?m)^Sent on WhatsApp`)
+	catOpen   = regexp.MustCompile(`["']?\$\(\s*cat\s*$`)
 )
 
 // waSent reads an atc wa command: its flags and text, the text from a heredoc when it is piped one.
@@ -32,7 +33,7 @@ func waSent(cmd string) *WASent {
 	if m := heredoc.FindStringSubmatch(cmd); m != nil && m[2] == m[4] {
 		stdin = m[3]
 		if i := strings.Index(line, "<<"); i >= 0 {
-			line = line[:i]
+			line = catOpen.ReplaceAllString(strings.TrimRight(line[:i], " \t"), "")
 		}
 	}
 	words := shellWords(line)

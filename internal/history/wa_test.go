@@ -44,6 +44,7 @@ func TestWhatsAppSent(t *testing.T) {
 		{`atc wa --group 1@g.us "Tam olarak \"bulamadık\".` + "\n\n" + `• Tek"`, WASent{Group: "1@g.us", Text: "Tam olarak \"bulamadık\".\n\n• Tek"}},
 		{`atc wa --to sam --file /tmp/a.pdf --caption 'the plan' hello there`, WASent{To: "sam", Files: []string{"/tmp/a.pdf"}, Text: "hello there"}},
 		{"cd x && atc wa --group=1@g.us <<'EOF'\nline one\nline 'two'\nEOF", WASent{Group: "1@g.us", Text: "line one\nline 'two'"}},
+		{"atc wa --to sam \"$(cat <<'EOF'\nline one\n\nline two\nEOF\n)\" && echo done >> notes.md", WASent{To: "sam", Text: "line one\n\nline two"}},
 		{`atc wa --voice 'Selam!' 2>&1`, WASent{Voice: "Selam!"}},
 	} {
 		got := waSent(c.cmd)
