@@ -37,6 +37,7 @@ const (
 	evDown    = "down"
 	evUpgrade = "upgrade"
 	evLow     = "low-memory"
+	evAdopt   = "adopt"
 )
 
 // Kill is one process the kernel killed for memory.
@@ -64,6 +65,7 @@ var (
 	dDown    = regexp.MustCompile(`^shutting down \(cause=([a-z_]+)`)
 	dUpgrade = regexp.MustCompile(`^binary at .* changed \(.*/([^/ ]+) → .*/([^/ )]+)\)`)
 	dLow     = regexp.MustCompile(`^bg: low memory`)
+	dAdopt   = regexp.MustCompile(`^bg adopt: adopted=[1-9]`)
 
 	kOOM  = regexp.MustCompile(`oom-kill:constraint=(\w+),.*task_memcg=([^,]*),task=([^,]*),pid=(\d+)`)
 	kKill = regexp.MustCompile(`(?:Out of memory|Memory cgroup out of memory): Killed process (\d+) \(([^)]*)\).*anon-rss:(\d+)kB`)
@@ -114,6 +116,8 @@ func (w *Watcher) daemonLine(line string) {
 		w.daemon = append(w.daemon, daemonEvent{at: at, kind: evUpgrade, from: x[1], to: x[2], raw: line})
 	} else if dLow.MatchString(msg) {
 		w.daemon = append(w.daemon, daemonEvent{at: at, kind: evLow, raw: line})
+	} else if dAdopt.MatchString(msg) {
+		w.daemon = append(w.daemon, daemonEvent{at: at, kind: evAdopt, raw: line})
 	}
 }
 

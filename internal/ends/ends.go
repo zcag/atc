@@ -504,6 +504,9 @@ func (w *Watcher) retireNear(id string, t time.Time) (retire, bool) {
 func (w *Watcher) downBefore(t time.Time) (daemonEvent, bool) {
 	for i := len(w.daemon) - 1; i >= 0; i-- {
 		d := w.daemon[i]
+		if d.kind == evAdopt && !d.at.After(t) {
+			return daemonEvent{}, false
+		}
 		if d.kind == evDown && d.cause != "idle_exit" && t.Sub(d.at) >= -5*time.Second && t.Sub(d.at) <= downWindow {
 			return d, true
 		}

@@ -6190,7 +6190,7 @@ function EndBar({ s, resume, busy }) {
   const [why, setWhy] = useState(false);
   const e = (s.state === "stopped" || unexpected(s)) && s.ended?.text && s.ended.cause !== "unknown" ? s.ended : null;
   const at = txClock(e?.at || s.updated);
-  return html`${why && html`<${EndWhy} s=${s} onClose=${() => setWhy(false)} />`}<div class="endbar ${e?.unexpected ? "loud" : ""}"><div class="cols"><div class="cx">
+  return html`${why && html`<${EndWhy} s=${s} onClose=${() => setWhy(false)} />`}<div class="endbar ${cutOff(s) ? "loud" : ""}"><div class="cols"><div class="cx">
     <p><b>${s.state === "stopped" || e ? `Stopped${at ? ` ${at}` : ""}.` : "Not running."}</b> ${e ? e.text : "It keeps its transcript; Resume continues the conversation."}</p>
     <span class="acts">${e && html`<button class="btn" aria-expanded=${why} onClick=${() => setWhy((x) => !x)}>Why</button>`}${cutOff(s) && html`<button class="btn" title="Move it out of Stopped unexpectedly: you know why it stopped and have decided what to do" onClick=${() => dismissEnded([s])}>Dismiss</button>`}<button class="btn prime" disabled=${busy} aria-keyshortcuts="r" onClick=${resume}>${busy ? "Resuming" : html`Resume <kbd aria-hidden="true">r</kbd>`}</button></span>
   </div></div></div>`;

@@ -109,6 +109,17 @@ func TestUpdateAndCrash(t *testing.T) {
 	}
 }
 
+func TestStoppedAfterAdoptingRestart(t *testing.T) {
+	w := watcher(
+		"["+at(0)+"] [supervisor] shutting down (cause=signal, uptime=824s, leases=0, live_workers=1)",
+		"["+at(time.Second)+"] [bg] bg adopt: adopted=1 respawned=0 dead=0",
+		"["+at(70*time.Second)+"] [bg] bg settled aaaa1111 (killed)",
+	)
+	if e := w.explain("aaaa1111", time.Time{}); e.Cause != Outside || unexpected[e.Cause] {
+		t.Fatalf("the restarted daemon adopted it, so the restart did not stop it: %+v", e)
+	}
+}
+
 func TestNoLineAfterReboot(t *testing.T) {
 	w := watcher()
 	w.boot = base
