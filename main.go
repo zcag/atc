@@ -291,7 +291,7 @@ func serve(args []string) error {
 	cli := claude.CLI{Bin: bin, Args: strings.Fields(os.Getenv("ATC_CLAUDE_ARGS"))}
 	if _, err := exec.LookPath("systemd-run"); err == nil && os.Getenv("ATC_CONTAIN") == "1" {
 		cli.Slice = "claude.slice"
-		cli.Launch = []string{"systemd-run", "--user", "--scope", "--collect", "--quiet", "--slice=" + cli.Slice}
+		cli.Launch = []string{"systemd-run", "--user", "--scope", "--collect", "--quiet", "--property=OOMPolicy=continue", "--slice=" + cli.Slice}
 	}
 	sum, err := summarizer(cli)
 	if err != nil {

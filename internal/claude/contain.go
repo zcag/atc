@@ -47,8 +47,8 @@ func (c CLI) Contain() (string, error) {
 	unit := fmt.Sprintf("claude-daemon-%d.scope", daemon)
 	args := append([]string{"--user", "call", "org.freedesktop.systemd1", "/org/freedesktop/systemd1",
 		"org.freedesktop.systemd1.Manager", "StartTransientUnit", "ssa(sv)a(sa(sv))", unit, "fail",
-		"3", "PIDs", "au", strconv.Itoa(len(pids))}, pids...)
-	args = append(args, "Slice", "s", c.Slice, "CollectMode", "s", "inactive-or-failed", "0")
+		"4", "PIDs", "au", strconv.Itoa(len(pids))}, pids...)
+	args = append(args, "Slice", "s", c.Slice, "CollectMode", "s", "inactive-or-failed", "OOMPolicy", "s", "continue", "0")
 	if out, err := exec.Command("busctl", args...).CombinedOutput(); err != nil {
 		return "", fmt.Errorf("move %d processes from %s into %s: %v: %s", len(pids), home, unit, err, strings.TrimSpace(string(out)))
 	}
