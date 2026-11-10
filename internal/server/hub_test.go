@@ -254,3 +254,54 @@ func TestRingReachesOpenPages(t *testing.T) {
 		t.Fatalf("ring = %+v", got)
 	}
 }
+
+func TestWhatsAppTurnTheHubLostEnds(t *testing.T) {
+	defer func(d time.Duration) { waOrphan = d }(waOrphan)
+	waOrphan = 200 * time.Millisecond
+	var mu sync.Mutex
+	var calls []string
+	gw := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		calls = append(calls, r.URL.Path+" "+string(b))
+		mu.Unlock()
+		w.Write([]byte(`{"id":"out1","messageId":"out1"}`))
+	}))
+	defer gw.Close()
+	for k, v := range map[string]string{"URL": gw.URL, "KEY": "k", "SESSION": "bot", "OWNER": "12025550100", "SECRET": "0123456789abcdef0123"} {
+		t.Setenv("ATC_WHATSAPP_"+k, v)
+	}
+	f := newFakeHub(t, "hub-sid")
+	f.status.Held = []string{"whatsapp"}
+	s, _ := hubServer(t, f, whatsapp.FromEnv())
+	if err := s.waType(context.Background(), waMsg{"12025550100@c.us", "in1"}, "hello", ""); err != nil {
+		t.Fatal(err)
+	}
+	f.events <- hub.Event{Type: "held", Channel: "whatsapp"}
+	count := func(part string) int {
+		mu.Lock()
+		defer mu.Unlock()
+		n := 0
+		for _, c := range calls {
+			if strings.Contains(c, part) {
+				n++
+			}
+		}
+		return n
+	}
+	eventually(t, "typing while held", func() bool { return count("/chats/typing") > 0 })
+	time.Sleep(3 * waOrphan)
+	if count("is lost") > 0 {
+		t.Fatal("a turn the hub still holds was ended")
+	}
+	f.mu.Lock()
+	f.status.Held = nil
+	f.mu.Unlock()
+	eventually(t, "told it is lost", func() bool { return count("is lost") == 1 })
+	eventually(t, "typing paused", func() bool { return count(`"paused"`) == 1 })
+	s.wa.mu.Lock()
+	defer s.wa.mu.Unlock()
+	if s.wa.hub != nil {
+		t.Fatal("turn still open")
+	}
+}

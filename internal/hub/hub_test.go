@@ -770,3 +770,28 @@ func TestMergedReplayReadsEveryMessage(t *testing.T) {
 		t.Fatalf("pending %v, turn %v: a merged replay must read both messages", h.pending, h.turn)
 	}
 }
+
+func TestHeldSurvivesARestart(t *testing.T) {
+	r := newRig(t, CallConfig{})
+	phone, wa := r.dial("phone"), r.dial("whatsapp")
+	phone.send("message", "TOOL check")
+	phone.until("tool")
+	wa.send("message", "hello")
+	wa.until("held")
+	r.h.Stop()
+
+	exe, _ := os.Executable()
+	h := New(Config{Bin: exe, Dir: r.h.cfg.Dir, State: r.h.cfg.State})
+	srv := httptest.NewServer(h.Handler())
+	t.Cleanup(func() { srv.Close(); h.Stop() })
+	again := (&rig{t, h, srv}).dial("whatsapp")
+	if err := h.Start(); err != nil {
+		t.Fatal(err)
+	}
+	if got := said(again.until("done")); got != "echo: hello" {
+		t.Fatalf("whatsapp got %q after the restart", got)
+	}
+	if _, err := os.Stat(h.heldPath()); !os.IsNotExist(err) {
+		t.Fatalf("held.json left behind: %v", err)
+	}
+}

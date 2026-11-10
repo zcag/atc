@@ -178,11 +178,47 @@ func New(cfg Config) *Hub {
 	if b, err := os.ReadFile(h.homePath()); err == nil {
 		h.home = strings.TrimSpace(string(b))
 	}
+	h.loadHeld()
 	return h
 }
 
 func (h *Hub) sidPath() string  { return filepath.Join(h.cfg.State, "session") }
 func (h *Hub) homePath() string { return filepath.Join(h.cfg.State, "home") }
+func (h *Hub) heldPath() string { return filepath.Join(h.cfg.State, "held.json") }
+
+type savedMsg struct{ Channel, Text string }
+
+// saveHeld keeps the messages waiting for a turn to end on disk, so a restart of the hub sends them
+// once it is back instead of dropping them while their channel still waits for an answer.
+func (h *Hub) saveHeld() {
+	if h.cfg.State == "" {
+		return
+	}
+	if len(h.held) == 0 {
+		os.Remove(h.heldPath())
+		return
+	}
+	out := make([]savedMsg, len(h.held))
+	for i, m := range h.held {
+		out[i] = savedMsg{m.channel, m.text}
+	}
+	b, _ := json.Marshal(out)
+	os.MkdirAll(h.cfg.State, 0o755)
+	os.WriteFile(h.heldPath(), b, 0o644)
+}
+
+func (h *Hub) loadHeld() {
+	var saved []savedMsg
+	if b, err := os.ReadFile(h.heldPath()); err != nil || json.Unmarshal(b, &saved) != nil {
+		return
+	}
+	for _, m := range saved {
+		h.held = append(h.held, msg{m.Channel, m.Text})
+	}
+	if len(saved) > 0 {
+		log.Printf("hub: %d held message(s) kept from before a restart", len(saved))
+	}
+}
 
 func (h *Hub) Start() error {
 	h.mu.Lock()
@@ -313,6 +349,7 @@ func (h *Hub) say(ch, text string) (string, error) {
 	}
 	if h.holds(ch) {
 		h.held = append(h.held, msg{ch, text})
+		h.saveHeld()
 		h.emit(Event{Type: "held", Channel: ch})
 		log.Printf("hub: held %s behind %v", ch, h.busy())
 		return "held", nil
@@ -434,6 +471,7 @@ func (h *Hub) release() {
 		}
 		h.say(m.channel, m.text)
 	}
+	h.saveHeld()
 }
 
 func (h *Hub) write(v any) error {
