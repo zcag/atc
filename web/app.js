@@ -5278,6 +5278,7 @@ const TX_FACES = {
   lit: { name: "Literata", css: "Literata, Georgia, serif", sizes: [16, 17.5, 19, 21, 23.5], lh: 1.52, weight: 420, optical: "none" },
   sans: { name: "Recursive", css: "var(--sans)", sizes: [15, 16, 17.5, 19.5, 22], lh: 1.5 },
 };
+const farFromEnd = (el) => el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight * 0.6;
 const txStore = {
   get: (k, d) => { try { return JSON.parse(localStorage.getItem(`atc.tx.${k}`)) ?? d; } catch { return d; } },
   set: (k, v) => { try { v === null ? localStorage.removeItem(`atc.tx.${k}`) : localStorage.setItem(`atc.tx.${k}`, JSON.stringify(v)); } catch {} },
@@ -6876,6 +6877,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   const letGo = () => { hold.current = null; };
   const openBodies = turns.filter((_, i) => isOpen(i) && i >= firstOpen).map((t) => bodies[t.from]);
   const ready = idx && SYNC.seen && openBodies.every(Boolean);
+  useLayoutEffect(() => { if (landed.current) letGo(); }, [turns.at(-1)?.to]);
   useLayoutEffect(() => {
     const el = box.current;
     if (!el || !idx) return;
@@ -6899,7 +6901,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     let h = 0;
     const ro = new ResizeObserver(() => {
       if (landed.current && (hold.current !== null || atEnd.current)) settle();
-      else if (landed.current && el.scrollHeight > h + 40 && !reflowed.current) setFresh((n) => n + 1);
+      else if (landed.current && el.scrollHeight > h + 40 && !reflowed.current) { setFresh((n) => n + 1); setBelow(farFromEnd(el)); }
       h = el.scrollHeight;
     });
     ro.observe(inner);
@@ -7202,8 +7204,8 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     onDragLeave=${(e) => !e.currentTarget.contains(e.relatedTarget) && setDrop(false)}
     onDrop=${(e) => { if (!drop) return; e.preventDefault(); setDrop(false); uploadRef.current?.([...e.dataTransfer.files]); }}>
     ${zen && html`<div class="zenbar"><span class="t">${s.title || "Untitled"}</span><button class="kb zenaa" aria-expanded=${pop === "look"} aria-keyshortcuts="a" title="How the text looks" onClick=${() => setPop(pop === "look" ? null : "look")}>Aa <kbd aria-hidden="true">a</kbd></button><button class="kb" onClick=${() => setZen(false)}>Leave zen <kbd aria-hidden="true">z</kbd></button></div>`}
-    <div class="txv"><div class="tx" ref=${box} tabindex="0" aria-label=${`Transcript of ${s.title || "this session"}`} onWheel=${letGo} onTouchStart=${letGo} onPointerDown=${letGo}
-      onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; setBelow(el.scrollHeight - el.scrollTop - el.clientHeight > el.clientHeight * 0.6); if (atEnd.current) { setFresh(0); if (landed.current) markLooked(s); } setSel(null); }}>
+    <div class="txv"><div class="tx" ref=${box} tabindex="0" aria-label=${`Transcript of ${s.title || "this session"}`} onWheel=${letGo} onTouchStart=${letGo} onPointerDown=${letGo} onKeyDown=${letGo}
+      onScroll=${(e) => { const el = e.target; atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60; setBelow(farFromEnd(el)); if (atEnd.current) { setFresh(0); if (landed.current) markLooked(s); } setSel(null); }}>
       <div class="read">
         <article class="flow">
           ${err && html`<p class="evt fail" role="alert"><b>Couldn't load the transcript.</b> ${err}</p>`}
