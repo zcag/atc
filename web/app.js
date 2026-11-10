@@ -1106,11 +1106,13 @@ function RailList({ live, hist, only, sel, cursor }) {
       ${by.pinned.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[i]} />`)}
       ${active.length > 0 && html`<h2 class="grp"><b>Now</b><span class="c">${active.length}</span></h2>`}`}
     ${active.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + i]} />`)}
+    ${by.cut.length > 0 && html`<h2 class="grp cut"><b>Stopped unexpectedly</b><span class="c">${by.cut.length}</span></h2>
+      ${by.cut.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + i]} />`)}`}
     ${by.parked.length > 0 && html`<h2 class="grp"><b>Parked</b><span class="c">${by.parked.length}</span><span class="r">to resume later</span></h2>
-      ${by.parked.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + i]} />`)}`}
+      ${by.parked.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + by.cut.length + i]} />`)}`}
     ${by.earlier.length > 0 && html`<${EarlierHead} open=${earlierOpen} toggle=${flipEarlier} n=${by.earlier.length} />
-      ${earlier.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + by.parked.length + i]} />`)}`}
-    ${!np && !active.length && !by.parked.length && !by.earlier.length && html`<p class="calm">Nothing here yet.</p>`}
+      ${earlier.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + by.cut.length + by.parked.length + i]} />`)}`}
+    ${!np && !active.length && !by.cut.length && !by.parked.length && !by.earlier.length && html`<p class="calm">Nothing here yet.</p>`}
   </div>`;
 }
 

@@ -30,7 +30,7 @@
 .earlierh button[aria-expanded="true"] .chev { transform: rotate(45deg); }
 .bview .grp .r { margin-left: auto; }
 .bview .grp .seenall { margin-left: auto; align-self: center; }
-.bview .bgrp.cut .grp b { color: var(--fail); }
+.bview .bgrp.cut .grp b, .rail .grp.cut b { color: var(--fail); }
 .brow.cut .st .l2 { white-space: normal; color: var(--dim); }
 
 .bwrap { border-bottom: 1px solid var(--hair); position: relative; }
