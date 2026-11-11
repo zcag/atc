@@ -49,12 +49,17 @@ func Hide(pid int) func() {
 // anyone, past every check atc wa makes. Settings marks them secret (caps' registry), a test keeps the two lists alike.
 var Secrets = []string{"ATC_WHATSAPP_KEY", "ATC_WHATSAPP_SECRET"}
 
-// Env is this process's environment without Secrets, for every Claude process atc starts.
-func Env() []string {
-	return slices.DeleteFunc(os.Environ(), func(kv string) bool {
+// Env is this process's environment without Secrets, for a Claude process atc starts in dir. A set Env keeps os/exec
+// from pointing PWD at dir itself, so it is set here.
+func Env(dir string) []string {
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool {
 		k, _, _ := strings.Cut(kv, "=")
 		return slices.Contains(Secrets, k)
 	})
+	if dir != "" {
+		env = append(env, "PWD="+dir)
+	}
+	return env
 }
 
 func (c CLI) run(ctx context.Context, dir string, args ...string) (string, error) {
@@ -63,7 +68,7 @@ func (c CLI) run(ctx context.Context, dir string, args ...string) (string, error
 		argv = append(slices.Clone(c.Launch), argv...)
 	}
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Dir, cmd.Env = dir, Env()
+	cmd.Dir, cmd.Env = dir, Env(dir)
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()

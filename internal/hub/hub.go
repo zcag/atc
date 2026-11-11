@@ -247,7 +247,8 @@ func (h *Hub) start() error {
 		args = append(args, "--session-id", h.sid)
 	}
 	cmd := exec.Command(h.cfg.Bin, args...)
-	cmd.Dir, cmd.Stderr, cmd.Env = cmp.Or(startedIn(h.sid), h.cfg.Dir), os.Stderr, claude.Env()
+	cmd.Dir, cmd.Stderr = cmp.Or(startedIn(h.sid), h.cfg.Dir), os.Stderr
+	cmd.Env = claude.Env(cmd.Dir)
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return err
