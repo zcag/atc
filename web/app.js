@@ -4288,8 +4288,10 @@ const pageLink = (sid, name) => `#/s/${sid}/p/${encodeURIComponent(name)}`;
 const aloneLink = (sid, name) => `#/p/${sid}/${encodeURIComponent(name)}`;
 const linkSlug = (t) => (t || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 const unstamped = (t) => linkSlug(t).replace(/-\d\d-\d\d-\d\d-\d\d$/, "");
-const ownerRef = (p, s) => (p.session.startsWith("@") ? p.session : linkSlug(s?.title || p.of) || p.session);
-const idRef = (r) => r.startsWith("@") || /^[0-9a-f]{8}(-[0-9a-f-]*)?$/.test(r);
+const PIN = "+pinned";
+const isPin = (p) => p?.session === PIN;
+const ownerRef = (p, s) => (p.session.startsWith("@") || isPin(p) ? p.session : linkSlug(s?.title || p.of) || p.session);
+const idRef = (r) => r === PIN || r.startsWith("@") || /^[0-9a-f]{8}(-[0-9a-f-]*)?$/.test(r);
 const splitRef = (r) => { const i = (r || "").indexOf("#"); return i < 0 ? [r, null] : [r.slice(0, i), r.slice(i + 1)]; };
 const pageRef = (p) => (p.at ? `${p.name}#${p.at}` : p.name);
 let AT_SEQ = 0;
@@ -4677,11 +4679,16 @@ const clockAt = (t) => { const d = new Date(t); return d.toDateString() === new 
 const pageDay = (t) => { const n = new Date(); n.setHours(0, 0, 0, 0); return t >= +n ? "Today" : t >= n - 86400000 ? "Yesterday" : "Earlier"; };
 const focusComposer = (n = 0) => { const t = document.querySelector(".composer textarea"); t ? t.focus() : n < 30 && setTimeout(() => focusComposer(n + 1), 100); };
 const pageToPhone = (p, say) => api("/api/pages/phone", { method: "POST", body: { session: p.session, name: p.name, title: pageTitle(p) } }).then(() => say("Sent to your phone."), (e) => say(e.message));
-const copyPageLink = (p, say, s) => { copyText(`${location.origin}/${aloneLink(ownerRef(p, s), p.name)}`); say("Link copied."); };
+const copyPageLink = (p, say, s) => { copyText(isPin(p) ? `${location.origin}/p/${encodeURIComponent(p.name)}` : `${location.origin}/${aloneLink(ownerRef(p, s), p.name)}`); say("Link copied."); };
+const pinOp = (p, op, say) => api(`/api/pins/${encodeURIComponent(p.name)}${op === "rm" ? "" : `/${op}`}`, { method: op === "rm" ? "DELETE" : "POST" })
+  .then(() => (say(op === "rm" ? `Deleted “${pageTitle(p)}”.` : `${op === "pin" ? "Pinned" : "Unpinned"} “${pageTitle(p)}”.`), true), (e) => (say(e.message), false));
+const askDeletePin = (p) => ask({ title: `Delete “${pageTitle(p)}”?`, body: "Its folder and everything in it are deleted for good.",
+  ok: "Delete", busy: "Deleting…", danger: true, run: () => api(`/api/pins/${encodeURIComponent(p.name)}`, { method: "DELETE" }) });
 
 function usePageList(live, say) {
   const [list, setList] = useState(null);
-  const load = useCallback(() => api("/api/pages").then((l) => setList(l || []), (e) => { say(e.message); setList((x) => x || []); }), []);
+  const load = useCallback(() => Promise.all([api("/api/pages"), api("/api/pins").catch(() => [])])
+    .then(([l, pins]) => setList([...(pins || []), ...(l || [])]), (e) => { say(e.message); setList((x) => x || []); }), []);
   useEffect(() => {
     load();
     const t = setInterval(() => document.visibilityState === "visible" && load(), 10000);
@@ -4706,14 +4713,17 @@ function PagesView({ at, live, bays, say, index }) {
     const s = ownerOf(p, live);
     return { p, s, bay: s ? bayOf(s) : p.cwd ? project(p.cwd).name : null };
   }).sort((a, b) => pageAt(b.p) - pageAt(a.p));
-  const scoped = at.bay ? rows.filter((x) => x.bay === at.bay) : rows;
+  const regular = rows.filter((x) => !isPin(x.p)), pins = rows.filter((x) => isPin(x.p) && !x.p.unpinned), unpinned = rows.filter((x) => isPin(x.p) && x.p.unpinned);
+  const scoped = at.bay ? regular.filter((x) => x.bay === at.bay) : regular;
   const names = bays.map((b) => b.name);
   const groups = at.bay
     ? ["Today", "Yesterday", "Earlier"].map((d) => ({ name: d, rows: scoped.filter((x) => pageDay(pageAt(x.p)) === d) }))
-    : [...names, ...new Set(rows.map((x) => x.bay).filter((b) => b && !names.includes(b))), null].map((b) => ({ name: b || "No bay", bay: true, rows: scoped.filter((x) => x.bay === b) }));
-  const shown = groups.filter((g) => g.rows.length);
+    : [...names, ...new Set(regular.map((x) => x.bay).filter((b) => b && !names.includes(b))), null].map((b) => ({ name: b || "No bay", bay: true, rows: scoped.filter((x) => x.bay === b) }));
+  const cur = at.sid ? rows.find((x) => x.p.session === at.sid && x.p.name === at.name) : phone ? null : pins[0] || scoped[0];
+  const [unfold, setUnfold] = useState(false);
+  const shown = [{ name: "Pinned", pin: true, rows: pins }, ...groups.filter((g) => g.rows.length),
+    ...(unpinned.length ? [{ name: "Unpinned", fold: true, n: unpinned.length, rows: unfold || cur?.p.unpinned ? unpinned : [] }] : [])];
   const order = shown.flatMap((g) => g.rows);
-  const cur = at.sid ? rows.find((x) => x.p.session === at.sid && x.p.name === at.name) : phone ? null : scoped[0];
   const ck = cur && pkey(cur.p);
   const opened = useRef({});
   if (cur && opened.current.key !== ck) opened.current = { key: ck, st: pageStatus(cur.p), seen: pseen()[ck], changes: true };
@@ -4742,7 +4752,9 @@ function PagesView({ at, live, bays, say, index }) {
     note: () => { if (!s) return say("Its session is not running."); AUTO_PANE = "chat"; go(keyOf(s)); focusComposer(); },
     phone: () => pageToPhone(p, say),
     copy: () => copyPageLink(p, say, s),
-    down: () => askTakeDown(p).then((ok) => {
+    pin: (op) => pinOp(p, op, say).then((ok) => ok && load()),
+    del: () => askDeletePin(p).then((ok) => { if (ok) { say(`Deleted “${pageTitle(p)}”.`); load(); back(); } }),
+    down: () => isPin(p) ? act.pin("unpin") : askTakeDown(p).then((ok) => {
       if (!ok) return;
       say(`Took down “${pageTitle(p)}”.`);
       load();
@@ -4781,7 +4793,8 @@ function PagesView({ at, live, bays, say, index }) {
     return html`<button class="pgi ${st} ${on ? "sel" : ""}" data-pk=${pkey(x.p)} aria-current=${on ? "page" : null} onClick=${() => pick(x)}>
       <span class="t">${st === "unseen" && html`<span class="sr">Unseen: </span>`}${pageTitle(x.p)}</span>
       <span class="ag">${st === "updated" && html`<span class="upd">updated</span>`}${ago({ updated: x.p.updated || x.p.shown })}</span>
-      <span class="ss">${x.s ? html`<${StateBlock} s=${x.s} mini />` : html`<span class="sb mini earlier" aria-hidden="true">E</span>`}<span>${x.s?.title || x.p.of || "Earlier session"}</span></span>
+      ${isPin(x.p) ? html`<span class="ss"><span class="mono">/p/${x.p.name}</span></span>`
+        : html`<span class="ss">${x.s ? html`<${StateBlock} s=${x.s} mini />` : html`<span class="sb mini earlier" aria-hidden="true">E</span>`}<span>${x.s?.title || x.p.of || "Earlier session"}</span></span>`}
       ${x.p.note && html`<span class="ld">${x.p.note}</span>`}
     </button>`;
   };
@@ -4797,28 +4810,33 @@ function PagesView({ at, live, bays, say, index }) {
     <header class="hd pghd">
       <div class="l1">
         <button class="kb back" onClick=${back} aria-label="Back to the pages">Back</button>
-        ${s ? html`<${StateBlock} s=${s} />` : html`<span class="sb earlier" role="img" aria-label="ended">E</span>`}
+        ${s ? html`<${StateBlock} s=${s} />` : isPin(p) ? html`<span class="sb earlier" role="img" aria-label=${p.unpinned ? "unpinned" : "pinned"}>P</span>` : html`<span class="sb earlier" role="img" aria-label="ended">E</span>`}
         <h1 title=${pageTitle(p)}>${pageTitle(p)}</h1>
         <span class="where">${(KIND_LABEL[p.kind] || "Page").toLowerCase()}  ${p.name}</span>
         <span class="r">
           ${upd && html`${kb("Changes", "d", act.changes, { on: op.changes, title: "Mark what changed since you saw it" })}<span class="div"></span>`}
-          ${kb("Beside its session", "\\", act.beside, { title: s ? "The page beside its conversation" : "Its session is not running", cls: s ? "" : "off" })}
+          ${!isPin(p) && kb("Beside its session", "\\", act.beside, { title: s ? "The page beside its conversation" : "Its session is not running", cls: s ? "" : "off" })}
           ${!APP && kb("On phone", null, act.phone, { title: "Push this page to your phone" })}
           ${kb("Copy link", null, act.copy)}
-          ${kb("Note", "enter", act.note, { title: s ? "Write to its session about this page" : "Its session is not running", cls: s ? "" : "off" })}
+          ${!isPin(p) && kb("Note", "enter", act.note, { title: s ? "Write to its session about this page" : "Its session is not running", cls: s ? "" : "off" })}
           <span class="div"></span>
-          ${kb("Take down", null, act.down, { cls: "danger" })}
+          ${!isPin(p) ? kb("Take down", null, act.down, { cls: "danger" })
+            : p.unpinned ? html`${kb("Pin", null, () => act.pin("pin"), { title: "Back on the Pinned list" })}${kb("Delete", null, act.del, { cls: "danger", title: "Delete its folder for good" })}`
+            : kb("Unpin", null, () => act.pin("unpin"), { title: "Off the Pinned list; its folder is kept under Unpinned" })}
           <div class="more"><${Menu} cls="kb" aria="Page actions" label="Actions" items=${[
             upd && { label: op.changes ? "Hide what changed" : "Show what changed", run: act.changes },
             s && { label: "Note to its session", run: act.note },
             s && { label: "Open its session", run: () => go(keyOf(s)) },
             { label: "Copy link", run: act.copy },
-            { label: "Take down", danger: true, run: act.down },
+            !isPin(p) && { label: "Take down", danger: true, run: act.down },
+            isPin(p) && !p.unpinned && { label: "Unpin", run: () => act.pin("unpin") },
+            p.unpinned && { label: "Pin", run: () => act.pin("pin") },
+            p.unpinned && { label: "Delete", danger: true, run: act.del },
           ].filter(Boolean)} /></div>
         </span>
       </div>
       <div class="l2">
-        ${s ? html`<button class="sl" onClick=${() => go(keyOf(s))} title="Open the session">${s.title || "Untitled"}</button>` : html`<span class="sl off">${p.of || "Earlier session"}</span>`}
+        ${s ? html`<button class="sl" onClick=${() => go(keyOf(s))} title="Open the session">${s.title || "Untitled"}</button>` : isPin(p) ? html`<span class="sl off">${p.unpinned ? "Unpinned" : "Pinned"} · /p/${p.name}</span>` : html`<span class="sl off">${p.of || "Earlier session"}</span>`}
         ${cur.bay && cur.bay !== at.bay && html`<span>in ${cur.bay}</span>`}
         <span class="mono">${p.gone ? "file is gone" : upd && op.seen ? `updated ${hm(pageAt(p))}, seen ${hm(op.seen)}` : clockAt(pageAt(p))}</span>
         ${op.st === "unseen" && html`<span class="new">new</span>`}
@@ -4833,8 +4851,10 @@ function PagesView({ at, live, bays, say, index }) {
         <div class="ph"><b>${at.bay || "All bays"}</b><span>${list ? [plural(scoped.length, "page"), counts(scoped)].filter(Boolean).join(", ") : "Loading…"}</span>
           <span class="r"><button class="kb ${at.bay ? "" : "on"}" aria-pressed=${!at.bay} onClick=${scopeLink}>All bays</button></span></div>
         <div class="pgscroll">
-          ${shown.map((g) => html`<section>
-            <h2 class="grp"><b>${g.name}</b><span class="c">${g.rows.length}</span>${g.bay && counts(g.rows) && html`<span class="r">${counts(g.rows)}</span>`}</h2>
+          ${shown.map((g) => html`<section class=${g.pin ? "pins" : ""}>
+            ${g.fold ? html`<h2 class="grp"><button class="fold" aria-expanded=${!!g.rows.length} onClick=${() => setUnfold(!g.rows.length)}><b>${g.name}</b><span class="c">${g.n}</span></button></h2>`
+              : html`<h2 class="grp"><b>${g.name}</b><span class="c">${g.rows.length}</span>${g.bay && counts(g.rows) && html`<span class="r">${counts(g.rows)}</span>`}</h2>`}
+            ${g.pin && !g.rows.length && list && html`<p class="none">Nothing pinned yet. What you keep coming back to goes here: ask an agent to pin it.</p>`}
             ${g.rows.map(row)}
           </section>`)}
           ${!at.bay && list && quiet.length > 0 && html`<p class="none">${quiet.join(", ")}: no pages</p>`}
@@ -5314,7 +5334,7 @@ function PageOf({ sid, via, name, at, live, say }) {
     const t = setInterval(load, 5000);
     return () => clearInterval(t);
   }, [sid, !!s]);
-  const list = s ? [browserPage(s), ...(s.shown || [])].filter(Boolean) : Array.isArray(got) ? got : [];
+  const list = s ? [browserPage(s), ...(s.shown || [])].filter(Boolean) : Array.isArray(got) ? got.filter((p) => !p.unpinned || p.name === name) : [];
   const owner = s || { sessionId: list[0]?.session || sid, title: list[0]?.of || "", state: "past" };
   const back = () => (s ? (location.hash = pageLink(sid, name)) : (location.hash = pagesHash()));
   return html`

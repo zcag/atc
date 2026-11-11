@@ -36,6 +36,9 @@ func (s *Server) pageURLs(list []pages.Page) []pages.Page {
 }
 
 func (s *Server) aloneLink(owner, ref string) string {
+	if owner == pages.Pinned {
+		return "/p/" + ref
+	}
 	if !strings.HasPrefix(owner, agentRef) {
 		if t := pages.Slug(s.M.Briefs(map[string]bool{owner: true})[owner].Title); t != "" {
 			owner = t
@@ -69,6 +72,10 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 	}
 	if name == "" {
 		http.Error(w, "give the page a name with letters or digits", http.StatusBadRequest)
+		return
+	}
+	if r.PathValue("sid") == pages.Pinned {
+		http.Error(w, "a pinned page is its folder: atc pages new <name> gives it, and editing it there updates the page", http.StatusBadRequest)
 		return
 	}
 	if sid := r.PathValue("sid"); strings.HasPrefix(sid, agentRef) && !s.localAgent(sid) {
@@ -143,7 +150,57 @@ func (s *Server) openPage(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]string{"ok": "opened", "link": link})
 }
 
+func (s *Server) pinList(w http.ResponseWriter, r *http.Request) {
+	list := s.pageURLs(s.Pages.Of(pages.Pinned))
+	for i := range list {
+		list[i].Of = "Pinned"
+	}
+	reply(w, list)
+}
+
+func (s *Server) newPin(w http.ResponseWriter, r *http.Request) {
+	var req struct{ Name string }
+	if !decodeOr400(w, r, &req, "{name}", func() bool { return req.Name != "" }) {
+		return
+	}
+	dir, created, err := s.Pages.NewPin(req.Name)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	reply(w, map[string]any{"dir": dir, "created": created, "link": s.PublicURL + s.aloneLink(pages.Pinned, req.Name)})
+}
+
+func (s *Server) setPinned(w http.ResponseWriter, r *http.Request) {
+	op := r.PathValue("op")
+	if op != "pin" && op != "unpin" {
+		http.NotFound(w, r)
+		return
+	}
+	s.pinDone(w, r, s.Pages.SetPinned(r.PathValue("name"), op == "pin"))
+}
+
+func (s *Server) deletePin(w http.ResponseWriter, r *http.Request) {
+	s.pinDone(w, r, s.Pages.DeletePin(r.PathValue("name")))
+}
+
+func (s *Server) pinDone(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		http.Error(w, "no pinned page named "+r.PathValue("name"), http.StatusNotFound)
+	case err != nil:
+		http.Error(w, err.Error(), http.StatusBadRequest)
+	default:
+		s.refresh()
+		reply(w, map[string]string{"ok": "done"})
+	}
+}
+
 func (s *Server) hidePage(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("sid") == pages.Pinned {
+		http.Error(w, "a pinned page is unpinned, not taken down: atc pages unpin "+r.PathValue("name"), http.StatusBadRequest)
+		return
+	}
 	ok, err := s.Pages.Remove(s.owner(r.PathValue("sid")), r.PathValue("name"))
 	if err != nil {
 		fail(w, err)

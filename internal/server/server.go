@@ -250,6 +250,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/sessions/{sid}/pages/{name}/state", s.pageState)
 	mux.HandleFunc("POST /api/sessions/{sid}/pages/{name}/run", s.runAction)
 	mux.HandleFunc("GET /api/pages", s.allPages)
+	mux.HandleFunc("GET /api/pins", s.pinList)
+	mux.HandleFunc("POST /api/pins", s.newPin)
+	mux.HandleFunc("POST /api/pins/{name}/{op}", s.setPinned)
+	mux.HandleFunc("DELETE /api/pins/{name}", s.deletePin)
+	mux.HandleFunc("GET /pages", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/#/pages", http.StatusFound) })
+	mux.HandleFunc("GET /p/{name}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/#/p/"+pages.Pinned+"/"+url.PathEscape(r.PathValue("name")), http.StatusFound)
+	})
 	mux.HandleFunc("POST /api/pages/phone", s.pageToPhone)
 	mux.HandleFunc("POST /api/sessions/{sid}/notify", s.postNote)
 	mux.HandleFunc("GET /api/browser/{sid}/cdp", s.browserCDP)
@@ -781,7 +789,9 @@ func (s *Server) route(next http.Handler) http.Handler {
 		}
 		parts := strings.Split(r.URL.Path, "/")
 		host := r.URL.Query().Get("host")
-		if name, ok := strings.CutPrefix(parts[min(3, len(parts)-1)], agentRef); host == "" && len(parts) >= 4 && parts[2] == "sessions" && ok {
+		if host == "" && (parts[2] == "pins" || len(parts) >= 4 && parts[2] == "sessions" && parts[3] == pages.Pinned) {
+			host = s.Host
+		} else if name, ok := strings.CutPrefix(parts[min(3, len(parts)-1)], agentRef); host == "" && len(parts) >= 4 && parts[2] == "sessions" && ok {
 			host = s.agentHost(name)
 		} else if host == "" && len(parts) >= 4 && parts[2] == "agents" {
 			host = s.agentHost(parts[3])

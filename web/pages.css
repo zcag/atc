@@ -13,6 +13,10 @@
 .pgidx .grp b { color: var(--dim); font-weight: 620; }
 .pgidx .grp .c { font-family: var(--mono); }
 .pgidx .grp .r { margin-left: auto; }
+.pgidx .grp .fold { all: unset; display: flex; align-items: baseline; gap: var(--s2); flex: 1; cursor: pointer; }
+.pgidx .grp .fold::after { content: "▸"; margin-left: auto; color: var(--faint); }
+.pgidx .grp .fold[aria-expanded="true"]::after { content: "▾"; }
+.pgidx .grp .fold:focus-visible { outline: 2px solid var(--focus, currentColor); outline-offset: 2px; }
 .pgidx .none { margin: 0; padding: var(--s3) var(--s4); font-size: var(--fs-small); color: var(--faint); }
 
 .pgi { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--s3); row-gap: 2px; width: 100%; padding: 10px var(--s3) 10px var(--s5); border: 0; border-bottom: 1px solid var(--hair); background: none; text-align: left; color: inherit; font: inherit; position: relative; }

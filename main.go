@@ -102,6 +102,9 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
                                  from inside a session: show the user a page (HTML, image,
                                  markdown, PDF) beside the conversation, live as the file
                                  changes; atc show -h for the full reference
+  atc pages [new|unpin|pin|rm] <name>
+                                 pinned pages: kept for the user to come back to, they belong
+                                 to no session; atc pages -h
   atc open <session|@agent>/<page>[#id]
                                  the assistant only: open a page any session or agent shows
                                  on the user's phone screen, at a section; atc show -h
@@ -230,6 +233,8 @@ func main() {
 		err = notify(args)
 	case "open":
 		err = openPage(args)
+	case "pages":
+		err = pagesCmd(args)
 	case "browser":
 		err = browserCmd(args)
 	case "outputs":
@@ -375,6 +380,7 @@ func serve(args []string) error {
 	if srv.Pages, err = pages.Open(filepath.Join(client.ConfigDir(), "pages.json")); err != nil {
 		return err
 	}
+	srv.Pages.PinAt(filepath.Join(home, ".local/share/atc/pinned"))
 	if srv.Backlog, err = backlog.Open(filepath.Join(client.ConfigDir(), "backlog.json")); err != nil {
 		return err
 	}

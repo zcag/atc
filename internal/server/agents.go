@@ -286,6 +286,9 @@ func (s *Server) localAgent(ref string) bool {
 // owner is who a session's pages belong to: its agent, so every conversation it has shows the
 // same pages, or the session itself.
 func (s *Server) owner(sid string) string {
+	if sid == pages.Pinned {
+		return sid
+	}
 	sid = s.fullID(sid)
 	if a := s.M.Store.Get(sid).Agent; a != "" {
 		return agentRef + a

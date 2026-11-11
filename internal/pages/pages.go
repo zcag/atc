@@ -20,23 +20,24 @@ import (
 )
 
 type Page struct {
-	Session string              `json:"session"`
-	Name    string              `json:"name"`
-	Title   string              `json:"title,omitempty"`
-	Path    string              `json:"path"`
-	Note    string              `json:"note,omitempty"`
-	At      string              `json:"at,omitempty"`
-	Shown   time.Time           `json:"shown"`
-	Kind    string              `json:"kind,omitempty"`
-	Updated time.Time           `json:"updated,omitzero"`
-	StateAt time.Time           `json:"stateAt,omitzero"`
-	Size    int64               `json:"size,omitempty"`
-	Gone    bool                `json:"gone,omitempty"`
-	URL     string              `json:"url,omitempty"`
-	Host    string              `json:"host,omitempty"`
-	Of      string              `json:"of,omitempty"`
-	Cwd     string              `json:"cwd,omitempty"`
-	Actions map[string][]string `json:"actions,omitempty"`
+	Session  string              `json:"session"`
+	Name     string              `json:"name"`
+	Title    string              `json:"title,omitempty"`
+	Path     string              `json:"path"`
+	Note     string              `json:"note,omitempty"`
+	At       string              `json:"at,omitempty"`
+	Shown    time.Time           `json:"shown"`
+	Kind     string              `json:"kind,omitempty"`
+	Updated  time.Time           `json:"updated,omitzero"`
+	StateAt  time.Time           `json:"stateAt,omitzero"`
+	Size     int64               `json:"size,omitempty"`
+	Gone     bool                `json:"gone,omitempty"`
+	Unpinned bool                `json:"unpinned,omitempty"`
+	URL      string              `json:"url,omitempty"`
+	Host     string              `json:"host,omitempty"`
+	Of       string              `json:"of,omitempty"`
+	Cwd      string              `json:"cwd,omitempty"`
+	Actions  map[string][]string `json:"actions,omitempty"`
 }
 
 type saved struct {
@@ -46,6 +47,7 @@ type saved struct {
 
 type Store struct {
 	path   string
+	pins   string
 	mu     sync.Mutex
 	s      saved
 	titles map[string]titled
@@ -172,6 +174,9 @@ func (st *Store) Remove(sid, name string) (bool, error) {
 }
 
 func (st *Store) Of(sid string) []Page {
+	if sid == Pinned {
+		return st.fill(st.pinList())
+	}
 	st.mu.Lock()
 	list := append([]Page(nil), st.s.Pages[sid]...)
 	st.mu.Unlock()
@@ -212,11 +217,15 @@ func (st *Store) State(sid, name string) json.RawMessage {
 func (st *Store) SetState(sid, name string, v json.RawMessage) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	i := slices.IndexFunc(st.s.Pages[sid], func(p Page) bool { return p.Name == name })
-	if i < 0 {
+	if sid == Pinned {
+		if !slices.ContainsFunc(st.pinList(), func(p Page) bool { return p.Name == name }) {
+			return os.ErrNotExist
+		}
+	} else if i := slices.IndexFunc(st.s.Pages[sid], func(p Page) bool { return p.Name == name }); i < 0 {
 		return os.ErrNotExist
+	} else {
+		st.s.Pages[sid][i].StateAt = time.Now()
 	}
-	st.s.Pages[sid][i].StateAt = time.Now()
 	key := sid + "/" + name
 	v = Merge(st.s.State[key], v)
 	if len(v) > MaxState {

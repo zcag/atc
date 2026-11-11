@@ -29,6 +29,10 @@ so to update a page, edit the file. Run show again only to point a page at anoth
 file or to change its title, note or actions. Reports, handovers, diagrams, screenshots and
 dashboards all go here; don't publish them anywhere else.
 
+A page shown here belongs to this session. When it is something the user will come back
+to (it keeps updating over time, or they will look things up in it later), make it a
+pinned page instead: atc pages -h.
+
   --as name    which page this is; defaults to the file's name (a folder's for its
                index.html). Showing a name again replaces that page. Give each different
                thing its own name and keep it current, rather than a copy per change.
@@ -272,6 +276,117 @@ func show(args []string) error {
 		fmt.Printf("  atc.run(%q, args) runs %s\n", k, strings.Join(p.Actions[k], " "))
 	}
 	return nil
+}
+
+const pagesHelp = `atc pages: pinned pages, the ones the user keeps.
+
+A page from atc show belongs to its session: the work in front of the user, a report,
+a diff, a result. It lives where its file is and goes when that does.
+
+A pinned page belongs to no session. It is for what the user comes back to: a page
+that keeps updating over time (a tracker, a small site, a dashboard) or a sheet they
+will look things up in later. It is a folder atc keeps and never deletes, it sits at
+the top of atc's Pages screen, and it has a short link, /p/<name>. Pin only what is
+meant to last; one-off results stay on the session.
+
+  atc pages                    every pinned page, then the unpinned ones
+  atc pages new <name>         make a pinned page and print its folder. Write
+                               index.html (or index.md) there, with any files beside it;
+                               it shows once index.html exists. To update the page, edit
+                               the files there, from this session or any later one: that
+                               folder is the only copy. An existing name gives its folder.
+  atc pages unpin <name>       take it off the Pinned list; the folder is kept, listed
+                               under Unpinned, and pin brings it back
+  atc pages pin <name>
+  atc pages rm <name>          delete an unpinned page and its folder for good. Only on
+                               the user's ask.
+  atc pages state <name> [--set]
+                               its atc.state, as atc show --state
+
+Making a session page a pinned one is a move you do yourself: atc pages new, write the
+page into that folder (copy its images too, and fix any path that pointed outside it),
+check it shows, then take the old one down with atc show --off. Names are lowercase
+letters, digits and dashes. Everything in atc show -h about writing pages, atc.css and
+/atc.js applies here as well.
+`
+
+func pagesCmd(args []string) error {
+	c := client.Load()
+	op, name := "", ""
+	if len(args) > 0 {
+		op = args[0]
+	}
+	if len(args) > 1 {
+		name = args[1]
+	}
+	need := func() error {
+		if name == "" {
+			return fmt.Errorf("which page? atc pages %s <name>", op)
+		}
+		return nil
+	}
+	switch op {
+	case "-h", "--help", "help":
+		fmt.Print(pagesHelp)
+		return nil
+	case "", "ls", "list":
+		list, err := c.Pins()
+		if err != nil {
+			return err
+		}
+		if len(list) == 0 {
+			fmt.Println("No pinned pages yet: atc pages new <name>.")
+		}
+		for _, p := range list {
+			state := "pinned"
+			if p.Unpinned {
+				state = "unpinned"
+			}
+			fmt.Printf("%-24s %s\n%24s %s, %s · updated %s\n", p.Name, cmp.Or(p.Title, "(no title)"), "", state, tilde(filepath.Dir(p.Path)), p.Updated.Format("Jan 2 15:04"))
+		}
+		return nil
+	case "new":
+		if err := need(); err != nil {
+			return err
+		}
+		r, err := c.NewPin(name)
+		if err != nil {
+			return err
+		}
+		if r.Created {
+			fmt.Printf("Pinned page %s: write index.html in %s\n", name, r.Dir)
+		} else {
+			fmt.Printf("%s is already pinned; its folder is %s\n", name, r.Dir)
+		}
+		if strings.HasPrefix(r.Link, "http") {
+			fmt.Println("Link:", r.Link)
+		}
+		return nil
+	case "pin", "unpin":
+		if err := need(); err != nil {
+			return err
+		}
+		if err := c.SetPinned(name, op == "pin"); err != nil {
+			return err
+		}
+		fmt.Printf("%sned %s.\n", strings.ToUpper(op[:1])+op[1:], name)
+		return nil
+	case "rm":
+		if err := need(); err != nil {
+			return err
+		}
+		if err := c.DeletePin(name); err != nil {
+			return err
+		}
+		fmt.Printf("Deleted %s.\n", name)
+		return nil
+	case "state":
+		if err := need(); err != nil {
+			return err
+		}
+		return pageState(c, pages.Pinned, name, slices.Contains(args, "--set") || slices.Contains(args, "-set"))
+	}
+	return fmt.Errorf("unknown: atc pages %s (atc pages -h)", op)
 }
 
 func openPage(args []string) error {

@@ -350,6 +350,30 @@ func (c *Client) Pages(sid string) (list []pages.Page, err error) {
 	return list, c.do("GET", "/api/sessions/"+url.PathEscape(sid)+"/pages", nil, &list)
 }
 
+func (c *Client) Pins() (list []pages.Page, err error) {
+	return list, c.do("GET", "/api/pins", nil, &list)
+}
+
+func (c *Client) NewPin(name string) (r struct {
+	Dir     string `json:"dir"`
+	Created bool   `json:"created"`
+	Link    string `json:"link"`
+}, err error) {
+	return r, c.do("POST", "/api/pins", map[string]string{"name": name}, &r)
+}
+
+func (c *Client) SetPinned(name string, on bool) error {
+	op := "unpin"
+	if on {
+		op = "pin"
+	}
+	return c.do("POST", "/api/pins/"+url.PathEscape(name)+"/"+op, nil, nil)
+}
+
+func (c *Client) DeletePin(name string) error {
+	return c.do("DELETE", "/api/pins/"+url.PathEscape(name), nil, nil)
+}
+
 func (c *Client) HidePage(sid, name string) error {
 	return c.do("DELETE", "/api/sessions/"+url.PathEscape(sid)+"/pages/"+url.PathEscape(name), nil, nil)
 }
