@@ -37,6 +37,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.content.ComponentName
 import android.content.pm.PackageManager
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
@@ -108,6 +109,7 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         web?.onResume()
+        claimLinks(true)
         unlockThen?.let { i -> unlockThen = null; ui.post { unlock(i) } }
         if (prefs.server == null) return
         Push.sync(this)
@@ -172,9 +174,17 @@ class MainActivity : Activity() {
             ?: packageManager.queryIntentActivities(probe, 0).map { it.activityInfo.packageName }.firstOrNull { it != packageName }
             ?: return runOnUiThread { Toast.makeText(this, "No browser on this phone", Toast.LENGTH_LONG).show() }
         runOnUiThread {
+            claimLinks(false)
             runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE).setPackage(browser)) }
-                .onFailure { Toast.makeText(this, "The browser didn't open it", Toast.LENGTH_LONG).show() }
+                .onFailure { claimLinks(true); Toast.makeText(this, "The browser didn't open it", Toast.LENGTH_LONG).show() }
         }
+    }
+
+    private fun claimLinks(on: Boolean) {
+        if (BuildConfig.APP_LINK_HOST.isEmpty()) return
+        packageManager.setComponentEnabledSetting(ComponentName(this, "$packageName.Links"),
+            if (on) PackageManager.COMPONENT_ENABLED_STATE_DEFAULT else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP)
     }
 
     fun copyImage(url: String) {
