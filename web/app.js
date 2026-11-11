@@ -828,7 +828,8 @@ function BayPeek({ bay, live, onBays, say, onClose }) {
   });
   const every = bay === "*";
   const mine = (onBays || []).filter((s) => (every ? waiting(s) : bayOf(s) === bay) && countsOnBay(s));
-  const wait = mine.filter(waiting).sort((a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1)), work = mine.filter((s) => s.state === "working");
+  const pins = pinnedOf(mine), rest = mine.filter((s) => !pins.includes(s)), waits = mine.filter(waiting).length;
+  const wait = rest.filter(waiting).sort((a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1)), work = rest.filter((s) => s.state === "working");
   const open = (s) => { onClose(); go(keyOf(s)); };
   const row = (s) => html`<div class="pk ${s.state}" key=${s.sessionId}>
     <div class="row"><${StateBlock} s=${s} /><a class="ti" href=${`#/s/${keyOf(s)}`} onClick=${(e) => { e.preventDefault(); open(s); }}>${s.title || "Untitled"}</a><span class="ago">${every && html`<span class="bayn">${bayOf(s)}</span>`}${ago(s)}</span></div>
@@ -837,6 +838,7 @@ function BayPeek({ bay, live, onBays, say, onClose }) {
     ${replyable(s) && html`<div class="ask"><${CardReplies} s=${s} /></div>`}
   </div>`;
   const body = html`
+    ${pins.length > 0 && html`<h3 class="grp"><b>Pinned</b><span class="c">${pins.length}</span></h3>${pins.map(row)}`}
     ${wait.length > 0 && html`<h3 class="grp"><b>Waiting on you</b><span class="c">${wait.length}</span></h3>${wait.map(row)}`}
     ${work.length > 0 && html`<h3 class="grp"><b>Working</b><span class="c">${work.length}</span></h3>${work.map(row)}`}
     ${!mine.length && html`<p class="pkf"><span>Nothing running in ${bay}.</span></p>`}
@@ -844,7 +846,7 @@ function BayPeek({ bay, live, onBays, say, onClose }) {
   return phone
     ? html`<${Sheet} cls="peeksheet" title=${every ? "Every bay" : bay} onClose=${onClose}><div class="peek" ref=${box}>${body}</div><//>`
     : html`<div class="peek" ref=${box} role="dialog" aria-label=${`Peek at ${bay}`}>
-        <div class="pkh"><b>${bay}</b><span>${wait.length ? `${wait.length} waiting on you` : ""}</span><span class="r"><button class="kb" onClick=${onClose}>Close <kbd aria-hidden="true">esc</kbd></button></span></div>
+        <div class="pkh"><b>${bay}</b><span>${waits ? `${waits} waiting on you` : ""}</span><span class="r"><button class="kb" onClick=${onClose}>Close <kbd aria-hidden="true">esc</kbd></button></span></div>
         ${body}
       </div>`;
 }
