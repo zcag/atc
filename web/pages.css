@@ -94,3 +94,20 @@
   .pbar { min-height: 44px; }
   .pbar .kb { height: 44px; }
 }
+
+.pggal { height: 100%; min-height: 0; overflow: auto; background: var(--strip); }
+.pggal-in { max-width: 1320px; margin: 0 auto; padding: var(--s4) var(--s5) 48px; }
+.pggal section + section, .pggal .gunp { margin-top: var(--s5); }
+.pggal .gh { display: flex; align-items: baseline; gap: var(--s2); margin: 0 0 var(--s3); padding-bottom: 6px; border-bottom: 1px solid var(--hair); font-size: var(--fs-small); font-weight: 400; color: var(--faint); }
+.pggal .gh b { color: var(--ink); font-size: var(--fs-ui); font-weight: 620; }
+.pggal .gh .c { font-family: var(--mono); }
+.pggal .gh .r { margin-left: auto; }
+.pggal .cards.big { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+.pggal .none, .pggal .gmore { margin: var(--s3) 0 0; color: var(--faint); font-size: var(--fs-small); }
+.pggal .gunp summary { cursor: pointer; padding-bottom: 6px; margin-bottom: var(--s3); border-bottom: 1px solid var(--hair); color: var(--faint); font-size: var(--fs-small); }
+.pggal .gunp summary b { color: var(--dim); }
+@media (max-width: 899px) {
+  .pggal-in { padding: var(--s3) var(--s4) 32px; }
+  .pggal .cards.big { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pggal .gh .r .kb { height: 44px; }
+}

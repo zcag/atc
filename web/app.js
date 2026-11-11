@@ -4725,8 +4725,9 @@ function PagesView({ at, live, bays, say, index }) {
   const groups = at.bay
     ? ["Today", "Yesterday", "Earlier"].map((d) => ({ name: d, rows: scoped.filter((x) => pageDay(pageAt(x.p)) === d) }))
     : [...names, ...new Set(regular.map((x) => x.bay).filter((b) => b && !names.includes(b))), null].map((b) => ({ name: b || "No bay", bay: true, rows: scoped.filter((x) => x.bay === b) }));
-  const cur = at.sid ? rows.find((x) => x.p.session === at.sid && x.p.name === at.name) : phone ? null : pins[0] || scoped[0];
+  const cur = at.sid ? rows.find((x) => x.p.session === at.sid && x.p.name === at.name) : null;
   const [unfold, setUnfold] = useState(false);
+  const [more, setMore] = useState(false);
   const shown = [{ name: "Pinned", pin: true, rows: pins }, ...groups.filter((g) => g.rows.length),
     ...(unpinned.length ? [{ name: "Unpinned", fold: true, n: unpinned.length, rows: unfold || cur?.p.unpinned ? unpinned : [] }] : [])];
   const order = shown.flatMap((g) => g.rows);
@@ -4851,6 +4852,25 @@ function PagesView({ at, live, bays, say, index }) {
   const missing = at.sid && !cur && html`<div class="pgnone"><h2>${list ? "This page was taken down." : "Loading…"}</h2>
     ${list && html`<button class="kb" onClick=${back}>Every page in ${at.bay || "every bay"}</button>`}</div>`;
   const quiet = names.filter((b) => !rows.some((x) => x.bay === b));
+  const open = (x) => (location.hash = pagesHash(at.bay, x.p.session, x.p.name));
+  const card = (x, sub) => html`<${PageCard} key=${pkey(x.p)} p=${x.p} sub=${sub} onOpen=${() => open(x)} />`;
+  const recent = more ? scoped : scoped.slice(0, 24);
+  if (!at.sid) return html`
+    <div class="pggal"><div class="pggal-in">
+      <section class="gpins" aria-label="Pinned pages">
+        <h2 class="gh"><b>Pinned</b><span class="c">${pins.length || ""}</span><span class="r">pages you keep, at /p/name</span></h2>
+        ${pins.length ? html`<div class="cards big">${pins.map((x) => card(x, `/p/${x.p.name}`))}</div>`
+          : html`<p class="none">${list ? "Nothing pinned yet. What you keep coming back to goes here: ask an agent to pin it." : "Loading…"}</p>`}
+      </section>
+      <section aria-label="Pages from sessions">
+        <h2 class="gh"><b>From sessions</b><span class="c">${scoped.length || ""}</span>
+          <span class="r"><button class="kb ${at.bay ? "" : "on"}" aria-pressed=${!at.bay} onClick=${scopeLink}>${at.bay ? `Only ${at.bay}` : "All bays"}</button></span></h2>
+        ${recent.length ? html`<div class="cards">${recent.map((x) => card(x, x.s?.title || x.p.of || "Earlier session"))}</div>` : list && empty}
+        ${scoped.length > recent.length && html`<p class="gmore"><button class="kb" onClick=${() => setMore(true)}>Show all ${scoped.length}</button></p>`}
+      </section>
+      ${unpinned.length > 0 && html`<details class="gunp"><summary><b>Unpinned</b> <span class="c">${unpinned.length}</span></summary>
+        <div class="cards">${unpinned.map((x) => card(x, `/p/${x.p.name}`))}</div></details>`}
+    </div></div>`;
   return html`
     <div class="pgv ${index || phone ? "" : "noindex"} ${phone && at.sid ? "full" : ""}">
       <aside class="pgidx" aria-label="Pages index">
