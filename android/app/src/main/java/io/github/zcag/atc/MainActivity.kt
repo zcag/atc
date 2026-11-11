@@ -37,6 +37,7 @@ import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.content.pm.PackageManager
 import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -159,6 +160,20 @@ class MainActivity : Activity() {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             runCatching { startActivity(Intent.createChooser(view, f.name)) }
                 .onFailure { Toast.makeText(this, "No app on this phone opens ${f.name}", Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    fun openInBrowser(url: String) {
+        val uri = Uri.parse(url)
+        if (uri.scheme != "http" && uri.scheme != "https") return
+        val probe = Intent(Intent.ACTION_VIEW, Uri.parse("https://example.org/")).addCategory(Intent.CATEGORY_BROWSABLE)
+        val browser = packageManager.resolveActivity(probe, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
+            ?.takeIf { it != packageName && it != "android" }
+            ?: packageManager.queryIntentActivities(probe, 0).map { it.activityInfo.packageName }.firstOrNull { it != packageName }
+            ?: return runOnUiThread { Toast.makeText(this, "No browser on this phone", Toast.LENGTH_LONG).show() }
+        runOnUiThread {
+            runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE).setPackage(browser)) }
+                .onFailure { Toast.makeText(this, "The browser didn't open it", Toast.LENGTH_LONG).show() }
         }
     }
 

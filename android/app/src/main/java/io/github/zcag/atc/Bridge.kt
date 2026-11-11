@@ -25,6 +25,7 @@ class Bridge(private val a: MainActivity) {
         Live.render(a)
     }
     @JavascriptInterface fun openExternal(url: String) { a.openOutside(url) }
+    @JavascriptInterface fun openInBrowser(url: String) { a.openInBrowser(url) }
     @JavascriptInterface fun copyImage(url: String) { a.copyImage(url) }
     @JavascriptInterface fun call() = a.runOnUiThread {
         a.startActivity(android.content.Intent(a, CallActivity::class.java).setAction(CallActivity.DIAL))

@@ -4637,6 +4637,7 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, onZen, say
           !alone && { label: "Open full page", run: full },
           { label: "Open the file in a new tab", run: () => openOut(p.url) },
           { label: "Copy link", run: () => copyPageLink(p, say, s) },
+          inBrowser && { label: "Open in browser", run: () => inBrowser(pageURL(p, s)) },
           !APP && { label: "On phone", run: () => pageToPhone(p, say) },
           { label: "Take down", danger: true, run: () => askTakeDown(p).then((ok) => ok && say(`Took down “${pageTitle(p)}”.`)) },
         ].filter(Boolean)} />`}
@@ -4685,7 +4686,9 @@ const clockAt = (t) => { const d = new Date(t); return d.toDateString() === new 
 const pageDay = (t) => { const n = new Date(); n.setHours(0, 0, 0, 0); return t >= +n ? "Today" : t >= n - 86400000 ? "Yesterday" : "Earlier"; };
 const focusComposer = (n = 0) => { const t = document.querySelector(".composer textarea"); t ? t.focus() : n < 30 && setTimeout(() => focusComposer(n + 1), 100); };
 const pageToPhone = (p, say) => api("/api/pages/phone", { method: "POST", body: { session: p.session, name: p.name, title: pageTitle(p) } }).then(() => say("Sent to your phone."), (e) => say(e.message));
-const copyPageLink = (p, say, s) => { copyText(isPin(p) ? `${location.origin}/p/${encodeURIComponent(p.name)}` : `${location.origin}/${aloneLink(ownerRef(p, s), p.name)}`); say("Link copied."); };
+const pageURL = (p, s) => isPin(p) ? `${location.origin}/p/${encodeURIComponent(p.name)}` : `${location.origin}/${aloneLink(ownerRef(p, s), p.name)}`;
+const copyPageLink = (p, say, s) => { copyText(pageURL(p, s)); say("Link copied."); };
+const inBrowser = APP?.openInBrowser && ((url) => APP.openInBrowser(url));
 const pinOp = (p, op, say) => api(`/api/pins/${encodeURIComponent(p.name)}${op === "rm" ? "" : `/${op}`}`, { method: op === "rm" ? "DELETE" : "POST" })
   .then(() => (say(op === "rm" ? `Deleted “${pageTitle(p)}”.` : `${op === "pin" ? "Pinned" : "Unpinned"} “${pageTitle(p)}”.`), true), (e) => (say(e.message), false));
 const askDeletePin = (p) => ask({ title: `Delete “${pageTitle(p)}”?`, body: "Its folder and everything in it are deleted for good.",
@@ -4835,6 +4838,7 @@ function PagesView({ at, live, bays, say, index }) {
             s && { label: "Note to its session", run: act.note },
             s && { label: "Open its session", run: () => go(keyOf(s)) },
             { label: "Copy link", run: act.copy },
+            inBrowser && { label: "Open in browser", run: () => inBrowser(pageURL(p, s)) },
             !isPin(p) && { label: "Take down", danger: true, run: act.down },
             isPin(p) && !p.unpinned && { label: "Unpin", run: () => act.pin("unpin") },
             p.unpinned && { label: "Pin", run: () => act.pin("pin") },
@@ -7971,6 +7975,7 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
   action("Backlog", "", "future tasks of this bay", () => (location.hash = BACKLOG), "later todo tasks ideas");
   action("New backlog item", "", "put a task aside for later", () => actions.create({ later: true }), "later todo task add put");
   action("Agents", "", "standing agents and what they keep", () => (location.hash = AGENTS_ROUTE), "tracker standing");
+  if (inBrowser) action("Open in browser", "", "this screen in the phone's browser instead of the app", () => inBrowser(location.href), "chrome external web");
   action("Settings", ",", "appearance, reading, notifications", () => (location.hash = SETTINGS), "preferences options theme");
   action("Keys", "?", "every key", actions.help, "help shortcuts keyboard");
   for (const p of presets) action(`Start ${p.name}`, "", `preset, ${MULTI && p.host ? `${p.host} ` : ""}${tilde(p.dir)}`, () => api(`/api/sessions${hostQ(p.host, home)}`, { method: "POST", body: { preset: p.name } }).then((r) => { say(`Started ${p.name}.`); go(r.id); }, (e) => say(e.message)), "preset");
