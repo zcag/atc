@@ -59,3 +59,28 @@ func TestPins(t *testing.T) {
 		t.Fatal("delete removes the folder and its state")
 	}
 }
+
+func TestPinInSession(t *testing.T) {
+	root := t.TempDir()
+	st, _ := Open("")
+	st.PinAt(filepath.Join(root, "pinned"))
+	dir, _, _ := st.NewPin("site")
+	index := filepath.Join(dir, "index.html")
+	os.WriteFile(index, []byte("<title>Site</title>"), 0o644)
+	if st.PinOf(index) != "site" || st.PinOf(filepath.Join(root, "elsewhere")) != "" {
+		t.Fatal("PinOf")
+	}
+	st.Show(Page{Session: "s1", Name: "site", Path: index, Pin: "site"})
+	st.SetState("s1", "site", json.RawMessage(`{"a":1}`))
+	if string(st.State(Pinned, "site")) != `{"a":1}` {
+		t.Fatal("a session's pinned page writes the pin's own state")
+	}
+	st.SetPinned("site", false)
+	if p, _ := st.Get("s1", "site"); p.Gone || !p.Unpinned || p.Title != "Site" {
+		t.Fatalf("the session's entry follows the pin: %+v", p)
+	}
+	st.Remove("s1", "site")
+	if st.State(Pinned, "site") == nil || len(st.Of(Pinned)) != 1 {
+		t.Fatal("taking it off the session keeps the pin and its state")
+	}
+}

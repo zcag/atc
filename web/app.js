@@ -4296,6 +4296,7 @@ const linkSlug = (t) => (t || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").repl
 const unstamped = (t) => linkSlug(t).replace(/-\d\d-\d\d-\d\d-\d\d$/, "");
 const PIN = "+pinned";
 const isPin = (p) => p?.session === PIN;
+const pinOf = (p) => (isPin(p) ? p.name : p?.pin || null);
 const ownerRef = (p, s) => (p.session.startsWith("@") || isPin(p) ? p.session : linkSlug(s?.title || p.of) || p.session);
 const idRef = (r) => r === PIN || r.startsWith("@") || /^[0-9a-f]{8}(-[0-9a-f-]*)?$/.test(r);
 const splitRef = (r) => { const i = (r || "").indexOf("#"); return i < 0 ? [r, null] : [r.slice(0, i), r.slice(i + 1)]; };
@@ -4353,7 +4354,7 @@ function usePages(s) {
   return b ? [...list, b] : list;
 }
 
-const askTakeDown = (p) => ask({ title: `Take down “${pageTitle(p)}”?`, body: "It leaves atc's pages. The file stays where it is.",
+const askTakeDown = (p) => ask({ title: `Take down “${pageTitle(p)}”?`, body: p.pin ? "It leaves this session's pages and stays pinned." : "It leaves atc's pages. The file stays where it is.",
   ok: "Take down", busy: "Taking down…", danger: true, run: () => api(`/api/sessions/${p.session}/pages/${encodeURIComponent(p.name)}${p.host ? `?host=${p.host}` : ""}`, { method: "DELETE" }) });
 async function takeDown(p, say) {
   try {
@@ -4637,6 +4638,8 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, onZen, say
           !alone && { label: "Open full page", run: full },
           { label: "Open the file in a new tab", run: () => openOut(p.url) },
           { label: "Copy link", run: () => copyPageLink(p, say, s) },
+          p.pin && !p.unpinned && { label: "Unpin", run: () => pinOp(p, "unpin", say) },
+          p.pin && p.unpinned && { label: "Pin", run: () => pinOp(p, "pin", say) },
           inBrowser && { label: "Open in browser", run: () => inBrowser(pageURL(p, s)) },
           !APP && { label: "On phone", run: () => pageToPhone(p, say) },
           { label: "Take down", danger: true, run: () => askTakeDown(p).then((ok) => ok && say(`Took down “${pageTitle(p)}”.`)) },
@@ -4686,10 +4689,10 @@ const clockAt = (t) => { const d = new Date(t); return d.toDateString() === new 
 const pageDay = (t) => { const n = new Date(); n.setHours(0, 0, 0, 0); return t >= +n ? "Today" : t >= n - 86400000 ? "Yesterday" : "Earlier"; };
 const focusComposer = (n = 0) => { const t = document.querySelector(".composer textarea"); t ? t.focus() : n < 30 && setTimeout(() => focusComposer(n + 1), 100); };
 const pageToPhone = (p, say) => api("/api/pages/phone", { method: "POST", body: { session: p.session, name: p.name, title: pageTitle(p) } }).then(() => say("Sent to your phone."), (e) => say(e.message));
-const pageURL = (p, s) => isPin(p) ? `${location.origin}/p/${encodeURIComponent(p.name)}` : `${location.origin}/${aloneLink(ownerRef(p, s), p.name)}`;
+const pageURL = (p, s) => pinOf(p) ? `${location.origin}/p/${encodeURIComponent(pinOf(p))}` : `${location.origin}/${aloneLink(ownerRef(p, s), p.name)}`;
 const copyPageLink = (p, say, s) => { copyText(pageURL(p, s)); say("Link copied."); };
 const inBrowser = APP?.openInBrowser && ((url) => APP.openInBrowser(url));
-const pinOp = (p, op, say) => api(`/api/pins/${encodeURIComponent(p.name)}${op === "rm" ? "" : `/${op}`}`, { method: op === "rm" ? "DELETE" : "POST" })
+const pinOp = (p, op, say) => api(`/api/pins/${encodeURIComponent(pinOf(p))}${op === "rm" ? "" : `/${op}`}`, { method: op === "rm" ? "DELETE" : "POST" })
   .then(() => (say(op === "rm" ? `Deleted “${pageTitle(p)}”.` : `${op === "pin" ? "Pinned" : "Unpinned"} “${pageTitle(p)}”.`), true), (e) => (say(e.message), false));
 const askDeletePin = (p) => ask({ title: `Delete “${pageTitle(p)}”?`, body: "Its folder and everything in it are deleted for good.",
   ok: "Delete", busy: "Deleting…", danger: true, run: () => api(`/api/pins/${encodeURIComponent(p.name)}`, { method: "DELETE" }) });
@@ -4722,7 +4725,7 @@ function PagesView({ at, live, bays, say, index }) {
     const s = ownerOf(p, live);
     return { p, s, bay: s ? bayOf(s) : p.cwd ? project(p.cwd).name : null };
   }).sort((a, b) => pageAt(b.p) - pageAt(a.p));
-  const regular = rows.filter((x) => !isPin(x.p)), pins = rows.filter((x) => isPin(x.p) && !x.p.unpinned), unpinned = rows.filter((x) => isPin(x.p) && x.p.unpinned);
+  const regular = rows.filter((x) => !pinOf(x.p)), pins = rows.filter((x) => isPin(x.p) && !x.p.unpinned), unpinned = rows.filter((x) => isPin(x.p) && x.p.unpinned);
   const scoped = at.bay ? regular.filter((x) => x.bay === at.bay) : regular;
   const names = bays.map((b) => b.name);
   const groups = at.bay

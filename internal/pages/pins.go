@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Pinned owns the pages that belong to no session: each is a folder under the pins dir that
@@ -36,6 +37,16 @@ func (st *Store) pinList() []Page {
 		}
 	}
 	return list
+}
+
+// PinOf names the pinned page a path is in, or gives "" for a path outside them.
+func (st *Store) PinOf(path string) string {
+	for _, dir := range []string{st.pins, st.unpinned()} {
+		if rel, err := filepath.Rel(dir, path); st.pins != "" && err == nil && rel != "." && !strings.HasPrefix(rel, "..") {
+			return strings.Split(rel, string(filepath.Separator))[0]
+		}
+	}
+	return ""
 }
 
 func (st *Store) pinName(name string) (string, error) {

@@ -47,6 +47,13 @@ func (s *Server) aloneLink(owner, ref string) string {
 	return "/#/p/" + owner + "/" + ref
 }
 
+func (s *Server) pageLink(p pages.Page) string {
+	if p.Pin != "" {
+		return s.aloneLink(pages.Pinned, p.Pin)
+	}
+	return s.aloneLink(p.Session, p.Ref())
+}
+
 func (s *Server) sessionPages(w http.ResponseWriter, r *http.Request) {
 	reply(w, s.pageURLs(s.Pages.Of(s.owner(r.PathValue("sid")))))
 }
@@ -69,6 +76,10 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 	name := pages.Name(cmp.Or(req.Name, target))
 	if filepath.Base(target) == "index.html" && req.Name == "" {
 		name = pages.Name(filepath.Dir(target))
+	}
+	pin := s.Pages.PinOf(target)
+	if pin != "" && req.Name == "" {
+		name = pin
 	}
 	if name == "" {
 		http.Error(w, "give the page a name with letters or digits", http.StatusBadRequest)
@@ -97,7 +108,7 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	p, created, err := s.Pages.Show(pages.Page{Session: s.owner(r.PathValue("sid")), Name: name, Title: strings.TrimSpace(req.Title), Path: target, Note: strings.TrimSpace(req.Note), At: at, Shown: time.Now(), Actions: req.Actions})
+	p, created, err := s.Pages.Show(pages.Page{Session: s.owner(r.PathValue("sid")), Name: name, Title: strings.TrimSpace(req.Title), Path: target, Note: strings.TrimSpace(req.Note), At: at, Shown: time.Now(), Actions: req.Actions, Pin: pin})
 	if err != nil {
 		fail(w, err)
 		return
@@ -110,7 +121,7 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 	if req.Open {
 		s.pushOpen(p, pages.Link(p.Session, p.Ref()))
 	}
-	reply(w, map[string]any{"page": s.pageURLs([]pages.Page{p})[0], "created": created, "link": s.PublicURL + s.aloneLink(p.Session, p.Ref())})
+	reply(w, map[string]any{"page": s.pageURLs([]pages.Page{p})[0], "created": created, "link": s.PublicURL + s.pageLink(p)})
 }
 
 func (s *Server) pushOpen(p pages.Page, link string) {

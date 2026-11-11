@@ -300,6 +300,11 @@ meant to last; one-off results stay on the session.
   atc pages pin <name>
   atc pages rm <name>          delete an unpinned page and its folder for good. Only on
                                the user's ask.
+  atc pages show <name> [--note N]
+                               also show it in this session, as atc show does: it lands in
+                               the session's pages with a push, and stays the one pinned
+                               page (same state, same link). atc show on its folder does
+                               the same. Taking it down there only takes it off the session.
   atc pages state <name> [--set]
                                its atc.state, as atc show --state
 
@@ -379,6 +384,35 @@ func pagesCmd(args []string) error {
 			return err
 		}
 		fmt.Printf("Deleted %s.\n", name)
+		return nil
+	case "show":
+		if err := need(); err != nil {
+			return err
+		}
+		sid := os.Getenv("CLAUDE_CODE_SESSION_ID")
+		if sid == "" {
+			return fmt.Errorf("not inside a Claude session, so atc can't tell which session shows it")
+		}
+		list, err := c.Pins()
+		if err != nil {
+			return err
+		}
+		i := slices.IndexFunc(list, func(p pages.Page) bool { return p.Name == name })
+		if i < 0 {
+			return fmt.Errorf("no pinned page %s with an index.html yet (atc pages)", name)
+		}
+		note := ""
+		if j := slices.Index(args, "--note"); j >= 0 && j+1 < len(args) {
+			note = args[j+1]
+		}
+		r, err := c.Show(sid, map[string]any{"path": filepath.Dir(list[i].Path), "note": note})
+		if err != nil {
+			return err
+		}
+		fmt.Printf("Showing pinned page %s in this session.\n", r.Page.Name)
+		if strings.HasPrefix(r.Link, "http") {
+			fmt.Println("Link:", r.Link)
+		}
 		return nil
 	case "state":
 		if err := need(); err != nil {

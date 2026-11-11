@@ -33,6 +33,7 @@ type Page struct {
 	Size     int64               `json:"size,omitempty"`
 	Gone     bool                `json:"gone,omitempty"`
 	Unpinned bool                `json:"unpinned,omitempty"`
+	Pin      string              `json:"pin,omitempty"`
 	URL      string              `json:"url,omitempty"`
 	Host     string              `json:"host,omitempty"`
 	Of       string              `json:"of,omitempty"`
@@ -211,7 +212,14 @@ func (st *Store) All() []Page {
 func (st *Store) State(sid, name string) json.RawMessage {
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	return st.s.State[sid+"/"+name]
+	return st.s.State[st.stateKey(sid, name)]
+}
+
+func (st *Store) stateKey(sid, name string) string {
+	if i := slices.IndexFunc(st.s.Pages[sid], func(p Page) bool { return p.Name == name }); i >= 0 && st.s.Pages[sid][i].Pin != "" {
+		return Pinned + "/" + st.s.Pages[sid][i].Pin
+	}
+	return sid + "/" + name
 }
 
 func (st *Store) SetState(sid, name string, v json.RawMessage) error {
@@ -226,7 +234,7 @@ func (st *Store) SetState(sid, name string, v json.RawMessage) error {
 	} else {
 		st.s.Pages[sid][i].StateAt = time.Now()
 	}
-	key := sid + "/" + name
+	key := st.stateKey(sid, name)
 	v = Merge(st.s.State[key], v)
 	if len(v) > MaxState {
 		return ErrTooBig
@@ -287,8 +295,20 @@ func newest(dir string, t time.Time) time.Time {
 }
 
 func (st *Store) fill(list []Page) []Page {
+	var pins []Page
 	for i := range list {
 		p := &list[i]
+		if p.Pin != "" && p.Session != Pinned {
+			if pins == nil {
+				pins = st.pinList()
+			}
+			j := slices.IndexFunc(pins, func(q Page) bool { return q.Name == p.Pin })
+			if j < 0 {
+				p.Gone = true
+				continue
+			}
+			p.Path, p.Unpinned = pins[j].Path, pins[j].Unpinned
+		}
 		p.Kind = outputs.Kind(p.Path)
 		fi, err := os.Stat(p.Path)
 		if err != nil {
