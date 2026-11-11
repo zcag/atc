@@ -809,6 +809,10 @@ func (s *Server) route(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		if r.Method == http.MethodPost && r.URL.Path == "/api/sessions" && s.guestCaller(r) {
+			http.Error(w, "work for guests and groups runs on "+s.Host, http.StatusForbidden)
+			return
+		}
 		attachID := ""
 		if len(parts) == 5 && parts[4] == "attach" {
 			attachID = parts[3]
@@ -824,6 +828,7 @@ func (s *Server) route(next http.Handler) http.Handler {
 type startReq struct {
 	Dir, Name, Prompt, Preset, Engine string
 	Worktree                          bool
+	guest                             bool
 }
 
 type badRequest struct{ error }
@@ -836,6 +841,7 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	req.guest = s.guestCaller(r)
 	id, err := s.startSession(r.Context(), req)
 	if errors.As(err, new(badRequest)) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -860,6 +866,15 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 	extra, err := p.extra(dir)
 	if err != nil {
 		return "", err
+	}
+	if req.guest {
+		if g := guestsDir(); dir != g && !strings.HasPrefix(dir, g+"/") {
+			return "", badf("work for guests and groups starts in %s", g)
+		}
+		if req.Engine != "" || req.Worktree {
+			return "", badf("work for guests and groups starts on the default engine, without a worktree")
+		}
+		extra = append(extra, guestWorkerArgs...)
 	}
 	var e Engine
 	if req.Engine != "" {

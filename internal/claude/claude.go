@@ -45,13 +45,25 @@ func Hide(pid int) func() {
 	return func() { hidden.Delete(pid) }
 }
 
+// Secrets are atc's settings no Claude session needs: with the WhatsApp gateway's key a session could write to
+// anyone, past every check atc wa makes. Settings marks them secret (caps' registry), a test keeps the two lists alike.
+var Secrets = []string{"ATC_WHATSAPP_KEY", "ATC_WHATSAPP_SECRET"}
+
+// Env is this process's environment without Secrets, for every Claude process atc starts.
+func Env() []string {
+	return slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		k, _, _ := strings.Cut(kv, "=")
+		return slices.Contains(Secrets, k)
+	})
+}
+
 func (c CLI) run(ctx context.Context, dir string, args ...string) (string, error) {
 	argv := append([]string{c.Bin}, args...)
 	if args[0] == "--bg" {
 		argv = append(slices.Clone(c.Launch), argv...)
 	}
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Dir = dir
+	cmd.Dir, cmd.Env = dir, Env()
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()

@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/settings"
@@ -29,10 +30,13 @@ const (
 
 // GuestsArgs are the flags for the guests' conversation: its own brief, only atc's tools (no WhatsApp,
 // mail or browser of the user's), no approvals to pass on, and allowed only what its brief asks of it: answering a
-// guest, the guests' folder and looking things up.
+// guest or a group, the guests' folder (with the groups' notes in groups/, which may be a link) and looking things up.
 func GuestsArgs(dir string) []string {
-	allow := []string{"mcp__atc", "Bash(atc wa --to *)", "Read(/" + dir + "/**)", "Edit(/" + dir + "/**)", "WebSearch", "WebFetch"}
-	return append(standingArgs(modes.Text("guests-desk")), "--strict-mcp-config", "--disallowedTools", "AskUserQuestion,EnterPlanMode",
+	allow := []string{"mcp__atc", "Bash(atc wa --to *)", "Bash(atc wa --group *)", "WebSearch", "WebFetch"}
+	for _, d := range append(places(dir), places(filepath.Join(dir, "groups"))...) {
+		allow = append(allow, "Read(/"+d+"/**)", "Edit(/"+d+"/**)")
+	}
+	return append(standingArgs(modes.Text("guests-desk")), "--strict-mcp-config", "--disallowedTools", "AskUserQuestion,EnterPlanMode,Read(~/.config/atc/**),Bash(*.config/atc*)",
 		"--allowedTools", strings.Join(allow, ","))
 }
 
@@ -300,9 +304,28 @@ func (s *Server) hubClaim(sid string) {
 // guestWork is the guests' conversation or a session it started in ~/guests: none of it pushes
 // to the user unless it needs them.
 func guestWork(x sessions.Session) bool {
-	home, _ := os.UserHomeDir()
-	dir := filepath.Join(home, guestsName)
+	dir := guestsDir()
 	return x.Agent == guestsName || x.Cwd == dir || strings.HasPrefix(x.Cwd, dir+"/")
+}
+
+// guestCaller is whether a request comes from the guests' conversation or a session working for it.
+func (s *Server) guestCaller(r *http.Request) bool {
+	sid := r.Header.Get(client.CallerHeader)
+	if sid == "" {
+		return false
+	}
+	x, ok := s.M.Session(sid)
+	return sid == s.guests.session() || ok && guestWork(x)
+}
+
+// guestWorkerArgs keep a session working for guests and groups from reaching anyone but through the guests'
+// conversation: no WhatsApp tools of the user's, and none of atc's settings, which hold its WhatsApp key.
+var guestWorkerArgs = []string{"--disallowedTools", "mcp__openwa,Read(~/.config/atc/**),Bash(*.config/atc*)"}
+
+// guestsName's folder, where every guest worker runs.
+func guestsDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, guestsName)
 }
 
 // guestsClaim names the guests' conversation in atc and dates the one it replaces.

@@ -608,12 +608,15 @@ func checkSummary(ctx context.Context, env Env) Result {
 }
 
 func checkGroupsAgent(_ context.Context, env Env) Result {
+	if env.Get("ATC_HUB") == "" {
+		return Result{Missing, "No hub, so messages in groups are dropped: its guests' conversation takes them."}
+	}
 	for _, a := range env.Agents {
 		if a.Name == "groups" {
-			return Result{OK, "@groups takes part in the groups you are in with atc's account (atc group lists them)."}
+			return Result{OK, "The guests' conversation takes part in the groups you are in with atc's account (atc group lists them), and hands heavy work to @groups."}
 		}
 	}
-	return Result{Missing, "No agent named groups, so messages in groups are dropped."}
+	return Result{OK, "The guests' conversation takes part in the groups you are in with atc's account (atc group lists them). With no @groups agent, it hands heavy work to sessions."}
 }
 
 func checkWhatsApp(ctx context.Context, env Env) Result {

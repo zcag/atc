@@ -13,7 +13,7 @@ const groupHelp = `atc group: the WhatsApp groups atc's account is in.
   atc group quiet GROUP      stay out of GROUP although you are in it (by name or id)
   atc group on GROUP         take part in GROUP again
 
-atc takes part in every group you are in: the @groups agent reads each message and
+atc takes part in every group you are in: the guests' conversation reads each message and
 answers with atc wa --group when it judges it should. Being added to a group you are
 in is enough; nobody else there needs to be a guest.
 `

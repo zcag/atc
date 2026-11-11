@@ -28,6 +28,8 @@ import (
 const (
 	DefaultAddr   = "127.0.0.1:7272"
 	DefaultListen = ":7272"
+	// CallerHeader carries the Claude session a request comes from, so atc knows who starts a session.
+	CallerHeader = "X-Atc-Caller"
 )
 
 type Client struct {
@@ -119,6 +121,9 @@ func (c *Client) do(method, path string, body, out any) error {
 		}
 		req.Header.Set("Authorization", "Bearer "+c.Token)
 		req.Header.Set("Content-Type", "application/json")
+		if sid := os.Getenv("CLAUDE_CODE_SESSION_ID"); sid != "" {
+			req.Header.Set(CallerHeader, sid)
+		}
 		if res, err = c.http.Do(req); err == nil {
 			break
 		}

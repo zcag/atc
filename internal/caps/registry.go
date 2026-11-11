@@ -227,10 +227,10 @@ func All() []Cap {
 			Cost:  "A second phone number, and plan tokens for the assistant.",
 		},
 		{
-			ID: "wa-groups", Title: "WhatsApp groups", Group: WhatsApp, Optional: true, Why: "Lets the @groups agent take part in the WhatsApp groups you are in with atc's account: add the account to a group and it reads along and answers when it should.",
-			Needs: []string{"whatsapp"}, Check: checkGroupsAgent,
-			Fix:  Fix{Text: "Make an agent named groups on the machine WhatsApp runs on (the starter one is a good start), and give it whatever tools your groups need in its mcp.json.", Guide: "whatsapp#groups"},
-			Cost: "Plan tokens: one turn of the agent for every message in those groups.",
+			ID: "wa-groups", Title: "WhatsApp groups", Group: WhatsApp, Optional: true, Why: "Lets atc's account take part in the WhatsApp groups you are in with it: add the account to a group and the guests' conversation reads along and answers when it should, so a guest is the same person to it in a group and in their own chat.",
+			Needs: []string{"whatsapp", "hub"}, Check: checkGroupsAgent,
+			Fix:  Fix{Text: "Set up the hub. For heavy work in a group, make an agent named groups (the starter one is a good start) with whatever tools your groups need in its mcp.json; the guests' conversation hands that work to it.", Guide: "whatsapp#groups"},
+			Cost: "Plan tokens: one turn of the guests' conversation for every message in those groups.",
 		},
 		{
 			ID: "stt", Title: "Voice notes: hearing", Group: WhatsApp, Optional: true, Why: "Turns the voice notes you send into text. Only WhatsApp voice notes use this.",

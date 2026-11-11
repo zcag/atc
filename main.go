@@ -119,7 +119,7 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc wa [--file F]... [--render F.html]... [--voice TEXT] [--poll Q --option A...] [text...]
                                  send the user files, a rendered page, a voice note, a poll or text on
                                  WhatsApp, from the account atc answers them on; atc wa -h
-  atc group [quiet|on GROUP]     the WhatsApp groups the @groups agent takes part in
+  atc group [quiet|on GROUP]     the WhatsApp groups the guests' conversation takes part in
   atc app update|characters      download the latest Android app and characters, or only the characters
   atc setup                      guided first run: who you are, limits, tools, reaching atc from other devices
   atc service install|uninstall|status

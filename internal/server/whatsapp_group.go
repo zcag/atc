@@ -9,13 +9,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/whatsapp"
 )
 
-// groupsAgent is the agent that takes part in the account's WhatsApp groups, one conversation for all of them.
-const groupsAgent = "groups"
-
-// waGroup passes a message in a group the owner is in to the groups agent, which decides itself
+// waGroup passes a message in a group the owner is in to the guests' conversation, which decides itself
 // whether it is for it and answers with atc wa --group. atc writes who sent it, from the verified
 // sender, so the owner's word there is theirs and nobody else can claim it.
 func (s *Server) waGroup(d whatsapp.Message) {
@@ -31,11 +29,6 @@ func (s *Server) waGroup(d whatsapp.Message) {
 		return
 	}
 	if strings.TrimSpace(d.Body) == "" && d.Media == nil && d.Location == nil || !s.wa.first(d.ID) {
-		return
-	}
-	a, ok := s.agentNamed(groupsAgent)
-	if !ok {
-		log.Printf("whatsapp: a message in group %q, but there is no @%s agent on this machine to take it", g.Name, groupsAgent)
 		return
 	}
 	d.Body = fenced(d.Body)
@@ -54,7 +47,7 @@ func (s *Server) waGroup(d whatsapp.Message) {
 		head += ", mentioning you"
 	}
 	log.Printf("whatsapp: group %q: a %s message", g.Name, d.Type)
-	s.waToAgent(ctx, a, head+"]\n"+text+"\n[end of message]")
+	s.waToGuests(ctx, "group "+g.Name, head+"]\n"+text+"\n[end of message]")
 }
 
 // waGroupMembers keeps track of joins and leaves: the members are fetched again, and the agent
@@ -89,11 +82,6 @@ func (s *Server) waGroupMembers(ev whatsapp.GroupEvent, joined bool) {
 		log.Printf("whatsapp: %v joined group %q", ev.ParticipantIDs, g.Name)
 		return
 	}
-	a, ok := s.agentNamed(groupsAgent)
-	if !ok {
-		log.Printf("whatsapp: added to group %q, but there is no @%s agent on this machine", g.Name, groupsAgent)
-		return
-	}
 	var members []string
 	for _, m := range g.Members {
 		if m.Number != self {
@@ -105,17 +93,22 @@ func (s *Server) waGroupMembers(ev whatsapp.GroupEvent, joined bool) {
 		by = s.waWho(ctx, g, ev.ActorID, s.waNumber(ctx, g, ev.ActorID), "")
 	}
 	log.Printf("whatsapp: added to group %q", g.Name)
-	s.waToAgent(ctx, a, fmt.Sprintf("[WhatsApp group %q (%s) · you were added by %s]\nMembers: %s\n[end of message]",
+	s.waToGuests(ctx, "group "+g.Name, fmt.Sprintf("[WhatsApp group %q (%s) · you were added by %s]\nMembers: %s\n[end of message]",
 		g.Name, g.ID, by, strings.Join(members, "; ")))
 }
 
-func (s *Server) waToAgent(ctx context.Context, a Agent, text string) {
+// waToGuests hands a guest's or a group's message to the guests' conversation.
+func (s *Server) waToGuests(ctx context.Context, what string, text string) {
+	if s.Hub == nil {
+		log.Printf("whatsapp: %s wrote, but there is no hub to take it", what)
+		return
+	}
 	for try := 1; ; try++ {
-		_, err := s.wakeAgent(ctx, a, text)
+		err := s.hubSend(ctx, hub.Guest, text)
 		if err == nil {
 			return
 		}
-		log.Printf("whatsapp: to @%s (try %d): %v", a.Name, try, err)
+		log.Printf("whatsapp: %s (try %d): %v", what, try, err)
 		if try == 6 {
 			return
 		}

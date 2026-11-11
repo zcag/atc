@@ -76,6 +76,9 @@ func (g *Guests) Add(name, num string) error {
 	if !guestName.MatchString(name) {
 		return fmt.Errorf("a guest's name is lowercase letters, digits, - or _: %q", name)
 	}
+	if name == "groups" {
+		return fmt.Errorf("groups is where the groups' notes live in ~/guests; pick another name")
+	}
 	if !guestNum.MatchString(num) {
 		return fmt.Errorf("a number is the full international number, digits only, with country code: %q", num)
 	}

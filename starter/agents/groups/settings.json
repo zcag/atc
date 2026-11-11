@@ -1,7 +1,7 @@
 {
   "permissions": {
     "deny": [
-      "Bash(atc wa --to*)",
+      "Bash(atc wa*)",
       "Bash(atc guest*)",
       "Bash(atc group*)",
       "Bash(atc call*)",
@@ -10,8 +10,10 @@
       "Bash(atc stop*)",
       "Bash(atc rm*)",
       "Bash(git push*)",
+      "Read(~/.config/atc/**)",
+      "Bash(*.config/atc*)",
+      "mcp__openwa",
       "mcp__atc__start",
-      "mcp__atc__send",
       "mcp__atc__stop"
     ]
   }

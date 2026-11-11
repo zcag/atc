@@ -61,7 +61,7 @@ func (s *Server) trustTerm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cmd := exec.Command(s.M.CLI.Bin)
-	cmd.Dir = dir
+	cmd.Dir, cmd.Env = dir, claude.Env()
 	s.Term.Run(w, r, id, cmd, func(ctx context.Context, cmd *exec.Cmd) {
 		pid := cmd.Process.Pid
 		defer claude.Hide(pid)()

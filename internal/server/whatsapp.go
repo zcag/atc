@@ -19,7 +19,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/whatsapp"
 )
@@ -267,10 +266,6 @@ func (s *Server) waGuest(d whatsapp.Message) {
 	if strings.TrimSpace(d.Body) == "" && d.Media == nil && d.Location == nil || !s.wa.first(d.ID) {
 		return
 	}
-	if s.Hub == nil {
-		log.Printf("whatsapp: guest %s wrote, but there is no hub to take it", name)
-		return
-	}
 	wa.Read(ctx, cmp.Or(d.ChatID, d.From))
 	d.Body = fenced(d.Body)
 	text, voice, err := s.waPrompt(ctx, d)
@@ -283,17 +278,7 @@ func (s *Server) waGuest(d whatsapp.Message) {
 		head += ", a voice note spoken in " + cmp.Or(langNames[voice], voice)
 	}
 	log.Printf("whatsapp: guest %s wrote (%s)", name, d.Type)
-	for try := 1; ; try++ {
-		err := s.hubSend(ctx, hub.Guest, head+"]\n"+strings.TrimRight(text, "\n")+"\n[end of message]")
-		if err == nil {
-			return
-		}
-		log.Printf("whatsapp: guest %s (try %d): %v", name, try, err)
-		if try == 6 {
-			return
-		}
-		time.Sleep(10 * time.Second)
-	}
+	s.waToGuests(ctx, "guest "+name, head+"]\n"+strings.TrimRight(text, "\n")+"\n[end of message]")
 }
 
 func (s *Server) waFailed(ctx context.Context, msg waMsg, err error) {

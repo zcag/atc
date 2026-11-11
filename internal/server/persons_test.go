@@ -61,7 +61,7 @@ func TestAutonomyArgs(t *testing.T) {
 		t.Fatal("the assistant at daily runs atc guest")
 	}
 	guests := GuestsArgs("/home/x/guests")
-	if !has(guests, "Bash(atc wa --to *)") || !has(guests, "Edit(//home/x/guests/**)") || has(guests, "dangerously") || has(guests, "Read,") {
+	if !has(guests, "Bash(atc wa --to *)") || !has(guests, "Bash(atc wa --group *)") || !has(guests, "Edit(//home/x/guests/groups/**)") || !has(guests, "Edit(//home/x/guests/**)") || has(guests, "dangerously") || has(guests, "Read,") {
 		t.Fatal(guests)
 	}
 }
