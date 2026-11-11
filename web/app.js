@@ -150,6 +150,10 @@ const engineTag = (s) => s.harness && s.kind !== "hub"
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
 const USAGE = "#/usage", RESOURCES = "#/resources", PAGES = "#/pages", SETTINGS = "#/settings";
+{
+  const m = location.pathname.match(/^\/(?:pages|p)(?:\/([^/]+))?\/?$/);
+  if (m) history.replaceState(null, "", m[1] ? `/#/p/+pinned/${m[1]}` : `/${location.hash || PAGES}`);
+}
 const inSettings = () => /^#\/settings([#/]|$)/.test(location.hash);
 const CALLS_ROW = `${SETTINGS}#calls`;
 let SETTINGS_FROM = "#/";

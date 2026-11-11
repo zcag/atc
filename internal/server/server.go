@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -254,10 +255,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/pins", s.newPin)
 	mux.HandleFunc("POST /api/pins/{name}/{op}", s.setPinned)
 	mux.HandleFunc("DELETE /api/pins/{name}", s.deletePin)
-	mux.HandleFunc("GET /pages", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/#/pages", http.StatusFound) })
-	mux.HandleFunc("GET /p/{name}", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/#/p/"+pages.Pinned+"/"+url.PathEscape(r.PathValue("name")), http.StatusFound)
-	})
 	mux.HandleFunc("POST /api/pages/phone", s.pageToPhone)
 	mux.HandleFunc("POST /api/sessions/{sid}/notify", s.postNote)
 	mux.HandleFunc("GET /api/browser/{sid}/cdp", s.browserCDP)
@@ -443,6 +440,8 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	reply(w, s.me())
 }
 
+var appPath = regexp.MustCompile(`^/(pages|p)(/[^/]+)?/?$`)
+
 func (s *Server) static() http.Handler {
 	files := http.FileServerFS(s.Web)
 	pal := ""
@@ -451,6 +450,10 @@ func (s *Server) static() http.Handler {
 	}
 	csp := fmt.Sprintf("script-src 'self'%[1]s; frame-src 'self'%[1]s; object-src 'none'; base-uri 'self'", pal)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if appPath.MatchString(r.URL.Path) {
+			r = r.Clone(r.Context())
+			r.URL.Path = "/"
+		}
 		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 			w.Header().Set("Content-Security-Policy", csp)
 		}
