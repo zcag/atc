@@ -30,6 +30,7 @@ type WA struct {
 var (
 	waGroupHead = regexp.MustCompile(`^\[WhatsApp group ("(?:[^"\\]|\\.)*") \((\S+@g\.us)\) · (.*)\]$`)
 	waGuestHead = regexp.MustCompile(`^\[guest ([\w-]+) on WhatsApp(, a voice note)?\]$`)
+	waDMHead    = regexp.MustCompile(`^\[WhatsApp DM · guest ([\w-]+)(.*)\]$`)
 	waMember    = regexp.MustCompile(`^member ("(?:[^"\\]|\\.)*")(?:, guest ([\w-]+))? \(([^)]*)\)`)
 	waSpoken    = regexp.MustCompile(`^, a voice note(?: spoken in (\w+))?`)
 	waMedia     = regexp.MustCompile(`^\[([\w ]+): (/[^\]\n]+)\]$`)
@@ -84,6 +85,14 @@ func whatsApp(t string) (string, *WA) {
 			w.Voice = "yes"
 		}
 		body = strings.TrimSuffix(strings.TrimRight(body, "\n "), "[end of what guest "+m[1]+" wrote]")
+		return waBody(w, body), w
+	}
+	if m := waDMHead.FindStringSubmatch(head); m != nil {
+		w := &WA{Guest: m[1]}
+		if s := waSpoken.FindStringSubmatch(m[2]); s != nil {
+			w.Voice = strings.ToLower(cmp.Or(s[1], "yes"))
+		}
+		body = strings.TrimSuffix(strings.TrimRight(body, "\n "), "[end of message]")
 		return waBody(w, body), w
 	}
 	return t, nil

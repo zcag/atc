@@ -272,18 +272,19 @@ func (s *Server) waGuest(d whatsapp.Message) {
 		return
 	}
 	wa.Read(ctx, cmp.Or(d.ChatID, d.From))
+	d.Body = fenced(d.Body)
 	text, voice, err := s.waPrompt(ctx, d)
 	if err != nil {
 		log.Printf("whatsapp: guest %s: %v", name, err)
 		return
 	}
-	head := fmt.Sprintf("[guest %s on WhatsApp", name)
+	head := "[WhatsApp DM · guest " + name
 	if voice != "" {
-		head += ", a voice note"
+		head += ", a voice note spoken in " + cmp.Or(langNames[voice], voice)
 	}
 	log.Printf("whatsapp: guest %s wrote (%s)", name, d.Type)
 	for try := 1; ; try++ {
-		err := s.hubSend(ctx, hub.Guest, head+"]\n"+strings.TrimRight(text, "\n")+"\n[end of what guest "+name+" wrote]")
+		err := s.hubSend(ctx, hub.Guest, head+"]\n"+strings.TrimRight(text, "\n")+"\n[end of message]")
 		if err == nil {
 			return
 		}

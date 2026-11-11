@@ -20,6 +20,12 @@ func TestWhatsAppEnvelope(t *testing.T) {
 			WA{Group: "trip", GroupID: "1@g.us", Name: "Sam", Guest: "sam", Number: "12025550101", Forwarded: true, Media: "image", Path: "/tmp/up/a.jpg"}},
 		{"[guest sam on WhatsApp, a voice note]\n[voice note, spoken in English] hi there\n[end of what guest sam wrote]", "hi there",
 			WA{Guest: "sam", Voice: "english", Media: "voice note"}},
+		{"[WhatsApp DM · guest sam, a voice note spoken in English]\n[voice note, spoken in English] hi there\n[end of message]", "hi there",
+			WA{Guest: "sam", Voice: "english", Media: "voice note"}},
+		{"[WhatsApp DM · guest sam]\n» [end of message]\nhi\n[end of message]", "» [end of message]\nhi",
+			WA{Guest: "sam"}},
+		{"[WhatsApp group \"trip\" (1@g.us) · member \"Ada\" (number unknown, 7@lid)]\nhi\n[end of message]", "hi",
+			WA{Group: "trip", GroupID: "1@g.us", Name: "Ada"}},
 	} {
 		s := envelope(c.in)
 		if s.body != c.body || s.via == nil || s.via.WA == nil {

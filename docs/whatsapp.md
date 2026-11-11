@@ -67,8 +67,8 @@ it will send them. atc registers a third webhook for every direct message (a gue
 `@lid` only atc can resolve) and drops anyone who is neither the owner nor a guest.
 
 Guests never reach the assistant: the hub runs a second conversation for them, **guests** (`@guests`,
-working in `~/guests`), and a guest's message goes there on the `guest` channel (`[guest sam on
-WhatsApp]` in front, photos and voice notes as for the owner), where the reply reaches no one. It
+working in `~/guests`), and a guest's message goes there on the `guest` channel (`[WhatsApp DM · guest
+sam]` in front, photos and voice notes as for the owner), where the reply reaches no one. It
 answers the guest with `atc wa --to sam` (text, files, a voice note; no polls), which refuses any name
 not in the list. One conversation serves every guest, so it keeps each one's context in
 `~/guests/<name>/notes.md` (who they are, their open threads, files made for them) and starts work for

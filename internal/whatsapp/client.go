@@ -234,6 +234,9 @@ func (c *Client) Phone(ctx context.Context, contact string) (string, error) {
 		return "", err
 	}
 	p = strings.TrimPrefix(out.Phone, "+")
+	if p == "" {
+		return "", nil
+	}
 	c.groups.mu.Lock()
 	if c.groups.phones == nil {
 		c.groups.phones = map[string]string{}

@@ -38,6 +38,7 @@ func (s *Server) waGroup(d whatsapp.Message) {
 		log.Printf("whatsapp: a message in group %q, but there is no @%s agent on this machine to take it", g.Name, groupsAgent)
 		return
 	}
+	d.Body = fenced(d.Body)
 	text, voice, err := s.waPrompt(ctx, d)
 	if err != nil {
 		log.Printf("whatsapp: group %q: %v", g.Name, err)
@@ -53,7 +54,7 @@ func (s *Server) waGroup(d whatsapp.Message) {
 		head += ", mentioning you"
 	}
 	log.Printf("whatsapp: group %q: a %s message", g.Name, d.Type)
-	s.waToAgent(ctx, a, head+"]\n"+fenced(text)+"\n[end of message]")
+	s.waToAgent(ctx, a, head+"]\n"+text+"\n[end of message]")
 }
 
 // waGroupMembers keeps track of joins and leaves: the members are fetched again, and the agent
@@ -146,7 +147,7 @@ func (s *Server) waWho(ctx context.Context, g whatsapp.Group, id, num, name stri
 		name = m.Name
 	}
 	if num == "" {
-		return fmt.Sprintf("member %q (%s)", cmp.Or(name, "unknown"), id)
+		return fmt.Sprintf("member %q (number unknown, %s)", cmp.Or(name, "unknown"), id)
 	}
 	if guest := wa.Guest(ctx, num+"@c.us", num); guest != "" {
 		return fmt.Sprintf("member %q, guest %s (+%s)", name, guest, num)
@@ -203,11 +204,12 @@ func (s *Server) waNumber(ctx context.Context, g whatsapp.Group, id string) stri
 	return ""
 }
 
-// fenced keeps a member from writing a line that reads as atc's own header or end mark.
+// fenced keeps anyone but the user from writing a line that reads as one of atc's: a header, an end mark, a
+// session's or the hub's line all start with a bracket.
 func fenced(text string) string {
 	lines := strings.Split(text, "\n")
 	for i, l := range lines {
-		if t := strings.TrimSpace(l); strings.HasPrefix(t, "[WhatsApp group") || strings.HasPrefix(t, "[end of message") {
+		if strings.HasPrefix(strings.TrimSpace(l), "[") {
 			lines[i] = "» " + l
 		}
 	}

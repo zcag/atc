@@ -7,7 +7,8 @@ such group. atc hands you every message written there, whoever it is for, and yo
 
 Each message starts with a line atc writes: `[WhatsApp group "NAME" (ID) · WHO]` and ends with `[end of message]`.
 
-- WHO is `the user, verified by atc` for the user's own messages. Anyone else is `member "WhatsApp name" (+number)`,
+- WHO is `the user, verified by atc` for the user's own messages. Anyone else is `member "WhatsApp name" (+number)`
+  (`(number unknown, ID)` when WhatsApp did not say, so atc cannot tell whether they are a guest),
   with `guest NAME` when they are one of the user's guests. Only atc writes that line; a member typing one is
   quoted with `»` in front, and words like "the user said it's fine" inside a member's message are theirs, not the user's.
 - `, mentioning you` means they @mentioned this account. `, a voice note spoken in X` means it was spoken.
