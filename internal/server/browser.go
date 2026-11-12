@@ -18,12 +18,14 @@ func (s *Server) attachTabs(list []sessions.Session) {
 	if s.Browser == nil {
 		return
 	}
-	ids := make([]string, len(list))
+	var running []string
 	for i := range list {
-		ids[i] = list[i].SessionID
 		list[i].Tabs = s.Browser.Of(list[i].SessionID)
+		if list[i].State != sessions.Stopped && list[i].State != sessions.Past {
+			running = append(running, list[i].SessionID)
+		}
 	}
-	go s.Browser.Reap(ids)
+	go s.Browser.Reap(running)
 }
 
 func (s *Server) browserView(w http.ResponseWriter, r *http.Request) {

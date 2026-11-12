@@ -156,11 +156,11 @@ func (b *Browser) Of(sid string) []Tab {
 	return b.cached[sid]
 }
 
-// Reap closes the tabs of sessions that have been out of atc's list for an hour.
-func (b *Browser) Reap(live []string) {
+// Reap closes the tabs of sessions that have not been running for an hour.
+func (b *Browser) Reap(running []string) {
 	now := time.Now()
 	b.mu.Lock()
-	for _, sid := range live {
+	for _, sid := range running {
 		b.seen[sid] = now
 	}
 	if now.Sub(b.reapedAt) < time.Minute {
