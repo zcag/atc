@@ -6337,16 +6337,17 @@ function draftPut(sid, text, wait = 600) {
 // One answer per ask, kept outside the components so its state survives redraws:
 // sending (shown after 400 ms), sent (the host took it), accepted (the session moved on), failed (with why).
 const ANSWERS = new Map();
-const ansKey = (sid, id) => `${sid}:${id}`;
+const askId = (a) => a.key || a.id;
+const ansKey = (sid, a) => `${sid}:${askId(a)}`;
 async function answerAsk(s, a, rec) {
-  const k = ansKey(s.sessionId, a.id);
-  ANSWERS.set(k, { ...rec, sid: s.sessionId, id: a.id, st: "sending", at: new Date().toISOString(), why: "" });
+  const k = ansKey(s.sessionId, a);
+  ANSWERS.set(k, { ...rec, sid: s.sessionId, id: a.id, ak: askId(a), st: "sending", at: new Date().toISOString(), why: "" });
   syncTell();
   markLooked({ ...s, updated: new Date().toISOString() });
   const wait = 10 + 5 * Math.max(0, (rec.body?.answers?.length || 1) - 1);
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), wait * 1000);
   try {
-    await api(`/api/sessions/${s.sessionId}/asks/${a.id}`, { method: "POST", body: rec.body, signal: ctl.signal });
+    await api(`/api/sessions/${s.sessionId}/asks/${a.id}${a.key ? `?key=${encodeURIComponent(a.key)}` : ""}`, { method: "POST", body: rec.body, signal: ctl.signal });
     ANSWERS.set(k, { ...ANSWERS.get(k), st: "sent", sent: new Date().toISOString() });
   } catch (e) {
     const why = e.name === "AbortError" ? `${s.host || "The host"} did not confirm within ${wait} s.` : e.message;
@@ -6367,7 +6368,7 @@ function askSpec(s, a) {
   return { qs: (a.questions || []).map((q) => ({ text: q.question, multiple: q.multiple, custom: q.custom, options: (q.options || []).map((o) => ({ label: o.label, note: o.description !== o.label ? o.description : "" })) })) };
 }
 const ANSWER_VIA = { push: "the notification", widget: "the home-screen widget", web: "atc" };
-const answeredElsewhere = (s) => s.answered && !ANSWERS.has(ansKey(s.sessionId, s.answered.ask)) ? s.answered : null;
+const answeredElsewhere = (s) => s.answered && !ANSWERS.has(ansKey(s.sessionId, { id: s.answered.ask, key: s.answered.key })) ? s.answered : null;
 const fromWhere = (x) => html` <span class="from">(from ${ANSWER_VIA[x.via] || x.via}${x.device ? ` on ${x.device}` : ""})</span>`;
 const askHead = (rec) => rec.i ? html`You answered <b>${rec.i}, ${rec.label}</b>` : html`You answered <b>${rec.label}</b>`;
 
@@ -6391,11 +6392,11 @@ function AnsweredLine({ q, cmd, options, chosen = [], line, state }) {
 
 function Ask({ s, a, say, keyRef = { current: null }, onType, compact, sheet }) {
   useSync();
-  const spec = askSpec(s, a), rec = ANSWERS.get(ansKey(s.sessionId, a.id));
+  const spec = askSpec(s, a), rec = ANSWERS.get(ansKey(s.sessionId, a));
   const locked = rec && rec.st !== "failed";
   const [picked, setPicked] = useState([]);
   const [typed, setTyped] = useState([]);
-  useEffect(() => { setPicked([]); setTyped([]); }, [a.id]);
+  useEffect(() => { setPicked([]); setTyped([]); }, [askId(a)]);
   const one = spec.qs.length === 1 && !spec.qs[0].multiple;
   const go = (body, i, label, q) => answerAsk(s, a, { body, i, label, q, cmd: spec.qs[0].cmd, perm: !!spec.perm, deny: !!body.reject, options: spec.qs[0].options });
   const pick = (qi, i) => {
@@ -7063,10 +7064,10 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
 
   useEffect(() => {
     let moved = false;
-    const took = (r) => s.answered?.ask === r.id && Date.parse(s.answered.at) >= Date.parse(r.at);
-    for (const [k, r] of ANSWERS) if (r.sid === sid && ((r.st === "sent" && (s.asks?.[0]?.id !== r.id || s.state !== "needs-you")) || (r.st === "failed" && took(r)))) { ANSWERS.set(k, { ...r, st: "accepted" }); moved = true; }
+    const took = (r) => s.answered && askId({ id: s.answered.ask, key: s.answered.key }) === r.ak && Date.parse(s.answered.at) >= Date.parse(r.at);
+    for (const [k, r] of ANSWERS) if (r.sid === sid && ((r.st === "sent" && ((s.asks?.[0] && askId(s.asks[0])) !== r.ak || s.state !== "needs-you")) || (r.st === "failed" && took(r)))) { ANSWERS.set(k, { ...r, st: "accepted" }); moved = true; }
     if (moved) syncTell();
-  }, [s.asks?.[0]?.id, s.state, s.answered?.at]);
+  }, [s.asks?.[0] && askId(s.asks[0]), s.state, s.answered?.at]);
 
   const settle = () => {
     const el = box.current, target = hold.current && el?.querySelector(hold.current);
@@ -7253,19 +7254,19 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   });
   foldCalls(rows, calls, bodies);
   for (const r of ANSWERS.values()) {
-    if (r.sid !== sid || r.id === asking?.id || askedQs.has(r.q)) continue;
+    if (r.sid !== sid || (asking && r.ak === askId(asking)) || askedQs.has(r.q)) continue;
     const at = msOf(r.at), j = rows.findIndex((x) => msOf(x.at) > at);
     rows.splice(j < 0 ? rows.length : j, 0, { k: "answered", key: `a${r.id}`, at: r.at, rec: r });
   }
   const other = answeredElsewhere(s);
-  if (other && other.ask !== asking?.id && !shownAns.has(other.what)) {
+  if (other && !(asking && askId({ id: other.ask, key: other.key }) === askId(asking)) && !shownAns.has(other.what)) {
     const at = msOf(other.at), j = rows.findIndex((x) => msOf(x.at) > at);
     rows.splice(j < 0 ? rows.length : j, 0, { k: "elsewhere", key: `e${other.ask}`, at: other.at, x: other });
   }
   pending.filter((p) => p.state !== "queued" && p.state !== "cancelled").forEach((p) => rows.push({ k: "sent", key: `p${p.id}`, at: new Date(p.at).toISOString(), p }));
   if (stream?.text) rows.push({ k: "stream", key: "stream", st: stream });
   if (working && !stream?.text) rows.push({ k: "live", key: "live", at: new Date().toISOString() });
-  if (asking) rows.push({ k: "ask", key: `q${asking.id}`, at: s.updated, a: asking });
+  if (asking) rows.push({ k: "ask", key: `q${askId(asking)}`, at: s.updated, a: asking });
   const di = markMs ? rows.findIndex((r) => r.at && r.k !== "live" && msOf(r.at) > markMs) : -1;
   if (di > 0) rows.splice(di, 0, { k: "since", key: "since", at: mark.current, after: rows.slice(di) });
   waiting.forEach((w, j) => rows.push({ k: "waiting", key: `w${w.at}:${j}`, w }));
@@ -7334,7 +7335,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       case "answered": {
         const rec = r.rec;
         return html`<${AnsweredLine} q=${rec.q} cmd=${rec.cmd} options=${rec.options || []} chosen=${rec.i ? [rec.i - 1] : []}
-          line=${html`${askHead(rec)}, ${txClock(rec.at)} <span class="from">(from this screen)</span>`} state=${rec.st !== "accepted" && html`<${AskState} rec=${rec} host=${s.host} retry=${() => answerAsk(s, { id: rec.id }, rec)} />`} />`;
+          line=${html`${askHead(rec)}, ${txClock(rec.at)} <span class="from">(from this screen)</span>`} state=${rec.st !== "accepted" && html`<${AskState} rec=${rec} host=${s.host} retry=${() => answerAsk(s, { id: rec.id, key: rec.ak }, rec)} />`} />`;
       }
       case "elsewhere": return html`<div class="ask line"><p class="adl"><span>You answered <b>${r.x.what}</b>, ${txClock(r.x.at)}${fromWhere(r.x)}</span></p></div>`;
       case "since": return html`<${Since} mark=${r.at} rows=${r.after} s=${s} jump=${nextUnseen} />`;
