@@ -64,6 +64,11 @@ func TestAutonomyArgs(t *testing.T) {
 	if !has(guests, "Bash(atc wa --to *)") || !has(guests, "Bash(atc wa --group *)") || !has(guests, "Edit(//home/x/guests/groups/**)") || !has(guests, "Edit(//home/x/guests/**)") || has(guests, "dangerously") || has(guests, "Read,") {
 		t.Fatal(guests)
 	}
+	home, notes := t.TempDir(), t.TempDir()
+	os.Symlink(notes, filepath.Join(home, "groups"))
+	if linked := strings.Join(GuestsArgs(home), " "); !strings.Contains(linked, "--add-dir "+notes) || strings.Contains(linked, "--add-dir "+home) {
+		t.Fatal("the groups' real folder is a working directory, so writing through the link isn't refused:", linked)
+	}
 }
 
 func TestSeedPersonsOnlyWhenNobodyWasEverSaved(t *testing.T) {

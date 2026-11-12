@@ -33,10 +33,15 @@ const (
 // guest or a group, the guests' folder (with the groups' notes in groups/, which may be a link) and looking things up.
 func GuestsArgs(dir string) []string {
 	allow := []string{"mcp__atc", "Bash(atc wa --to *)", "Bash(atc wa --group *)", "WebSearch", "WebFetch"}
+	var extra []string
 	for _, d := range append(places(dir), places(filepath.Join(dir, "groups"))...) {
 		allow = append(allow, "Read(/"+d+"/**)", "Edit(/"+d+"/**)")
+		if d != dir && !strings.HasPrefix(d, dir+"/") {
+			extra = append(extra, "--add-dir", d)
+		}
 	}
-	return append(standingArgs(modes.Text("guests-desk")), "--strict-mcp-config", "--disallowedTools", "AskUserQuestion,EnterPlanMode,Read(~/.config/atc/**),Bash(*.config/atc*)",
+	args := append(standingArgs(modes.Text("guests-desk")), extra...)
+	return append(args, "--strict-mcp-config", "--disallowedTools", "AskUserQuestion,EnterPlanMode,Read(~/.config/atc/**),Bash(*.config/atc*)",
 		"--allowedTools", strings.Join(allow, ","))
 }
 
