@@ -228,8 +228,8 @@ func All() []Cap {
 		},
 		{
 			ID: "wa-groups", Title: "WhatsApp groups", Group: WhatsApp, Optional: true, Why: "Lets atc's account take part in the WhatsApp groups you are in with it: add the account to a group and the guests' conversation reads along and answers when it should, so a guest is the same person to it in a group and in their own chat.",
-			Needs: []string{"whatsapp", "hub"}, Check: checkGroupsAgent,
-			Fix:  Fix{Text: "Set up the hub. For heavy work in a group, make an agent named groups (the starter one is a good start) with whatever tools your groups need in its mcp.json; the guests' conversation hands that work to it.", Guide: "whatsapp#groups"},
+			Needs: []string{"whatsapp", "hub"}, Check: checkGroups,
+			Fix:  Fix{Text: "Set up the hub. Give the guests' conversation the tools your groups need in ~/guests/mcp.json.", Guide: "whatsapp#groups"},
 			Cost: "Plan tokens: one turn of the guests' conversation for every message in those groups.",
 		},
 		{

@@ -70,6 +70,12 @@ func TestAutonomyArgs(t *testing.T) {
 	if linked := strings.Join(GuestsArgs(home), " "); strings.Count(linked, "--add-dir") != 1 || !strings.Contains(linked, "--add-dir "+realNotes) {
 		t.Fatal("the groups' real folder is a working directory, so writing through the link isn't refused:", linked)
 	}
+	mcp := filepath.Join(home, "mcp.json")
+	os.WriteFile(mcp, []byte(`{"mcpServers":{}}`), 0o644)
+	realMCP, _ := filepath.EvalSymlinks(mcp)
+	if tools := strings.Join(GuestsArgs(home), " "); !strings.Contains(tools, "--mcp-config "+mcp) || !strings.Contains(tools, "Edit(/"+realMCP+")") {
+		t.Fatal("the guests' folder's mcp.json adds its tools, and the conversation can't edit it:", tools)
+	}
 }
 
 func TestSeedPersonsOnlyWhenNobodyWasEverSaved(t *testing.T) {

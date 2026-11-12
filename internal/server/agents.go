@@ -150,12 +150,20 @@ func (a Agent) args() ([]string, error) {
 		return nil, err
 	}
 	extra = append(extra, "--append-system-prompt", a.standing()+"\n\n"+string(brief))
-	for _, f := range []struct{ flag, file string }{{"--settings", "settings.json"}, {"--mcp-config", "mcp.json"}} {
-		if p := filepath.Join(a.Folder, f.file); exists(p) {
-			extra = append(extra, f.flag, p)
+	return append(extra, folderConfig(a.Folder)...), nil
+}
+
+var folderConfigs = []struct{ flag, file string }{{"--settings", "settings.json"}, {"--mcp-config", "mcp.json"}}
+
+// folderConfig is the settings.json and mcp.json a folder holds for the Claude that works in it.
+func folderConfig(folder string) []string {
+	var out []string
+	for _, f := range folderConfigs {
+		if p := filepath.Join(folder, f.file); exists(p) {
+			out = append(out, f.flag, p)
 		}
 	}
-	return extra, nil
+	return out
 }
 
 // controlFiles are the files in its folder that say what it is and may do, read fresh each time it starts, and what

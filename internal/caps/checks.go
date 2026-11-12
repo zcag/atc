@@ -607,16 +607,11 @@ func checkSummary(ctx context.Context, env Env) Result {
 	return Result{OK, "On, through Claude Code with " + model + ": this spends plan tokens on every finished turn."}
 }
 
-func checkGroupsAgent(_ context.Context, env Env) Result {
+func checkGroups(_ context.Context, env Env) Result {
 	if env.Get("ATC_HUB") == "" {
 		return Result{Missing, "No hub, so messages in groups are dropped: its guests' conversation takes them."}
 	}
-	for _, a := range env.Agents {
-		if a.Name == "groups" {
-			return Result{OK, "The guests' conversation takes part in the groups you are in with atc's account (atc group lists them), and hands heavy work to @groups."}
-		}
-	}
-	return Result{OK, "The guests' conversation takes part in the groups you are in with atc's account (atc group lists them). With no @groups agent, it hands heavy work to sessions."}
+	return Result{OK, "The guests' conversation takes part in the groups you are in with atc's account (atc group lists them)."}
 }
 
 func checkWhatsApp(ctx context.Context, env Env) Result {

@@ -36,7 +36,6 @@ line from this table to its `agent.json`. Each needs what its brief says: a mail
 | Invoice | prepares each period's invoice | `"every": "2w", "from": "<first date>T09:00"` |
 | Reviewer | reads pull requests with no review | `"every": "15m", "check": "./prs-without-review.sh"` |
 | Ops | looks into firing alerts | `"every": "2m", "check": "./unresolved-alerts.sh"` |
-| Groups | takes part in the WhatsApp groups you are in with atc's account ([WhatsApp](whatsapp.md#groups)) | none: a group message wakes it |
 
 ## Agents
 

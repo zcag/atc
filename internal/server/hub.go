@@ -28,9 +28,10 @@ const (
 	guestsName = "guests"
 )
 
-// GuestsArgs are the flags for the guests' conversation: its own brief, only atc's tools (no WhatsApp,
-// mail or browser of the user's), no approvals to pass on, and allowed only what its brief asks of it: answering a
-// guest or a group, the guests' folder (with the groups' notes in groups/, which may be a link) and looking things up.
+// GuestsArgs are the flags for the guests' conversation: its own brief, only atc's tools and those its folder's
+// mcp.json adds (no WhatsApp, mail or browser of the user's), its folder's settings.json, no approvals to pass on, and
+// allowed only what its brief asks of it: answering a guest or a group, the guests' folder (with the groups' notes in
+// groups/, which may be a link) and looking things up. It can't edit what decides what it may do.
 func GuestsArgs(dir string) []string {
 	allow := []string{"mcp__atc", "Bash(atc wa --to *)", "Bash(atc wa --group *)", "WebSearch", "WebFetch"}
 	own := places(dir)
@@ -41,9 +42,14 @@ func GuestsArgs(dir string) []string {
 			extra = append(extra, "--add-dir", d)
 		}
 	}
-	args := append(standingArgs(modes.Text("guests-desk")), extra...)
-	return append(args, "--strict-mcp-config", "--disallowedTools", "AskUserQuestion,EnterPlanMode,Read(~/.config/atc/**),Bash(*.config/atc*)",
-		"--allowedTools", strings.Join(allow, ","))
+	deny := []string{"AskUserQuestion", "EnterPlanMode", "Read(~/.config/atc/**)", "Bash(*.config/atc*)"}
+	for _, f := range folderConfigs {
+		for _, p := range places(filepath.Join(dir, f.file)) {
+			deny = append(deny, "Edit(/"+p+")")
+		}
+	}
+	args := append(append(standingArgs(modes.Text("guests-desk")), extra...), folderConfig(dir)...)
+	return append(args, "--strict-mcp-config", "--disallowedTools", strings.Join(deny, ","), "--allowedTools", strings.Join(allow, ","))
 }
 
 // autonomyArgs is what the assistant may do alone. Nobody can approve a tool on a call or on WhatsApp, so what isn't allowed
@@ -133,6 +139,7 @@ func (s *Server) startHub() {
 	s.guests = s.newHubLink(guestsName, hub.NewClient(s.Hub.URL+"/guests"), "hub-guests.json")
 	if s.WhatsApp != nil {
 		go s.waHubLoop()
+		go s.guestsDaily()
 	}
 	go s.watchHub(s.hub, s.hubEvent)
 	go s.watchHub(s.guests, func(e hub.Event) {
@@ -141,6 +148,21 @@ func (s *Server) startHub() {
 		}
 	})
 	go s.watchLines()
+}
+
+const guestsDailyHour = 10
+
+// guestsDaily wakes the guests' conversation once a day to keep what it promised guests and groups.
+func (s *Server) guestsDaily() {
+	for {
+		now := time.Now()
+		at := time.Date(now.Year(), now.Month(), now.Day(), guestsDailyHour, 0, 0, 0, now.Location())
+		if !at.After(now) {
+			at = at.AddDate(0, 0, 1)
+		}
+		time.Sleep(time.Until(at))
+		s.waToGuests(context.Background(), "the daily wake-up", modes.Line("guests.daily"))
+	}
 }
 
 func (s *Server) watchHub(l *hubLink, also func(hub.Event)) {

@@ -6,5 +6,6 @@
   "call.not_picked_up": "[phone · %s · {{user}} did not pick up (%s)",
   "call.reason": " · reason: ",
   "hub.handover": "[hub: this conversation is closing and a new one starts] So the new one can carry on, write a handover note: work in progress and who has it, promises made, open questions, preferences {{user}} stated in this conversation, the last topic. Short and plain, nothing else.",
-  "hub.new_session": "[hub: new conversation; the previous one (%s) left this handover note]\n\n%s"
+  "hub.new_session": "[hub: new conversation; the previous one (%s) left this handover note]\n\n%s",
+  "guests.daily": "[wake-up from your schedule, daily] Go through every guest's and group's notes for what is due now: a promise, a reminder, something you watch. Do it, and write to whoever should hear. Nothing due: send nothing."
 }

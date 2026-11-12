@@ -72,8 +72,9 @@ sam]` in front, photos and voice notes as for the owner), where the reply reache
 answers the guest with `atc wa --to sam` (text, files, a voice note; no polls), which refuses any name
 not in the list. One conversation serves every guest, so it keeps each one's context in
 `~/guests/<name>/notes.md` (who they are, their open threads, files made for them) and starts work for
-them as sessions in `~/guests/<name>`, which report back to it. It only talks; anything longer goes to such a
-session, so its own conversation stays small. A session it starts (or one of those starts) runs only in `~/guests`,
+them as sessions in `~/guests/<name>`, which report back to it. Quick work it does itself; anything longer goes to
+such a session, so its own conversation stays small. Once a day (10:00) atc wakes it to go through every guest's and
+group's notes for what is due: a promise, a reminder, something it watches. A session it starts (or one of those starts) runs only in `~/guests`,
 only on this machine, and without your WhatsApp tools or atc's settings, so it can reach people only through the
 guests' conversation.
 
@@ -82,7 +83,9 @@ you are on and passes your yes back with `send @guests` and `approved`. Only the
 message as your go-ahead (atc refuses `approved` from any other session, the guests' conversation
 included), so nothing a guest says can approve anything as long as its Claude follows its brief: see
 [what atc does not enforce](security.md#what-atc-does-not-enforce). Its Claude loads only atc's MCP
-(`--strict-mcp-config`): no WhatsApp, mail or browser of yours. In atc it shows under `@agents`,
+(`--strict-mcp-config`): no WhatsApp, mail or browser of yours. A `mcp.json` in `~/guests` adds the tools you want it
+to have (a wiki your groups plan in, say) and a `settings.json` there holds back what you don't, as in an agent's
+folder; it can't edit either. In atc it shows under `@agents`,
 sessions in `~/guests` group under one **guests** project and stay out of the full list unless one
 needs you, and none of it pushes to your phone. It needs the hub.
 
@@ -105,10 +108,7 @@ what it sent with `atc wa` as what went out, to whom. It answers with `atc wa --
 refuses for any group you are not in. It needs the hub.
 
 It keeps notes per group in `~/guests/groups/<group>/notes.md` and treats your messages in a group as your word
-for that group's matters. Heavy work for a group (research, documents, a group's own tools) goes to an agent named
-**groups** when there is one (`@groups`; atc's starter agents include one): it never writes to a group itself, it
-reports back to the guests' conversation, which passes the result on. What it can reach is up to its folder: give
-it the tools a group needs in its `mcp.json` and hold the rest back in `settings.json`, as for any agent.
+for that group's matters. Longer work for a group goes to a session in `~/guests/groups/<group>`, as for a guest.
 
 `atc group` lists the groups the account is in: `in`, `quiet`, or `without you`. `atc group quiet NAME` keeps atc
 out of a group you are in (a group the account posts alerts to, say), `atc group on NAME` lets it back in; the list
