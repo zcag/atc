@@ -28,10 +28,10 @@ const (
 	guestsName = "guests"
 )
 
-// GuestsArgs are the flags for the guests' conversation: its own brief, only atc's tools and those its folder's
-// mcp.json adds (no WhatsApp, mail or browser of the user's), its folder's settings.json, no approvals to pass on, and
-// allowed only what its brief asks of it: answering a guest or a group, the guests' folder (with the groups' notes in
-// groups/, which may be a link) and looking things up. It can't edit what decides what it may do.
+// GuestsArgs are the flags for the guests' conversation: its own brief, atc's tools and those its folder's mcp.json
+// adds (no WhatsApp, mail or browser of the user's), that folder's settings.json, no approvals to pass on, and allowed
+// what its brief asks of it: answering a guest or a group, the guests' folder (with the groups' notes in groups/, which
+// may be a link) and looking things up. Its edit tools can't change what decides what it may do.
 func GuestsArgs(dir string) []string {
 	allow := []string{"mcp__atc", "Bash(atc wa --to *)", "Bash(atc wa --group *)", "WebSearch", "WebFetch"}
 	own := places(dir)

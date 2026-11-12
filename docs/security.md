@@ -88,8 +88,9 @@ and the sender uses atc's client; the rest are what a login means.
   to you, and only the assistant's brief says to add one only when you ask. At `full`, or with `--dangerously-skip-permissions` in `ATC_CLAUDE_ARGS`,
   nothing stops it. It can't pass on your approval: `approved` is only for the assistant.
 - **Guest isolation is the same kind of thing.** The guests' conversation is kept apart by its brief,
-  `--strict-mcp-config` (no MCP servers but atc's) and the name check in `atc wa`. It runs as your user,
-  so a shell that Claude Code's permissions allow it reaches your files and your atc login. A guest's
+  `--strict-mcp-config` (no MCP servers but atc's and those in `~/guests/mcp.json`) and the name check in
+  `atc wa`. It runs as your user with your own Claude Code permissions (your permission mode and allow
+  rules apply on top of atc's), so a shell they allow reaches your files and your atc login. A guest's
   words are followed by an end marker, so they can't be a message's last line; that stops a guest from
   writing the approval line, not from persuading Claude.
 - **A page's `atc.run` does not ask.** A page can run the actions its session declared, with any

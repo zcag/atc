@@ -72,22 +72,23 @@ sam]` in front, photos and voice notes as for the owner), where the reply reache
 answers the guest with `atc wa --to sam` (text, files, a voice note; no polls), which refuses any name
 not in the list. One conversation serves every guest, so it keeps each one's context in
 `~/guests/<name>/notes.md` (who they are, their open threads, files made for them) and starts work for
-them as sessions in `~/guests/<name>`, which report back to it. Quick work it does itself; anything longer goes to
-such a session, so its own conversation stays small. Once a day (10:00) atc wakes it to go through every guest's and
-group's notes for what is due: a promise, a reminder, something it watches. A session it starts (or one of those starts) runs only in `~/guests`,
-only on this machine, and without your WhatsApp tools or atc's settings, so it can reach people only through the
-guests' conversation.
+them as sessions in `~/guests/<name>`, which report back to it. Quick work it does itself; anything
+longer goes to such a session, so its own conversation stays small. Once a day (10:00) atc wakes it to
+go through every guest's and group's notes for what is due: a promise, a reminder, something it
+watches. A session it starts (or one of those starts) runs only in `~/guests`, only on this machine,
+and without your WhatsApp tools or atc's settings, so it can reach people only through the guests'
+conversation.
 
 What needs you it brings to the assistant with `report`; the assistant asks you on whatever channel
 you are on and passes your yes back with `send @guests` and `approved`. Only the assistant can mark a
 message as your go-ahead (atc refuses `approved` from any other session, the guests' conversation
 included), so nothing a guest says can approve anything as long as its Claude follows its brief: see
 [what atc does not enforce](security.md#what-atc-does-not-enforce). Its Claude loads only atc's MCP
-(`--strict-mcp-config`): no WhatsApp, mail or browser of yours. A `mcp.json` in `~/guests` adds the tools you want it
-to have (a wiki your groups plan in, say) and a `settings.json` there holds back what you don't, as in an agent's
-folder; it can't edit either. In atc it shows under `@agents`,
-sessions in `~/guests` group under one **guests** project and stay out of the full list unless one
-needs you, and none of it pushes to your phone. It needs the hub.
+(`--strict-mcp-config`): no WhatsApp, mail or browser of yours. A `mcp.json` in `~/guests` adds the
+tools you want it to have (a wiki your groups plan in, say) and a `settings.json` there holds back what
+you don't, as in an agent's folder; its edit tools can't change either. In atc it shows under
+`@agents`, sessions in `~/guests` group under one **guests** project and stay out of the full list
+unless one needs you, and none of it pushes to your phone. It needs the hub.
 
 ## Groups
 
@@ -102,7 +103,7 @@ for everyone, or for the others among themselves, and answers, chips in or stays
 wrote it, from the verified sender: your own messages are marked as yours, everyone else's as a member with their
 WhatsApp name and number (and their guest name when they are one), so nothing a member types can pass for you, and
 a line imitating atc's is quoted. It also says when the message mentions the account (a mention reads as the
-name, not WhatsApp's bare id), and the agent hears once when it is added to a group. In atc's transcript these
+name, not WhatsApp's bare id), and the guests' conversation hears once when it is added to a group. In atc's transcript these
 messages read as messages: who wrote them, in which group, a voice note, the message it replies to, a file; and
 what it sent with `atc wa` as what went out, to whom. It answers with `atc wa --group NAME` (text, files, a voice note; no polls), which atc
 refuses for any group you are not in. It needs the hub.
