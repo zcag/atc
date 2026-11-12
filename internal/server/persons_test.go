@@ -66,7 +66,8 @@ func TestAutonomyArgs(t *testing.T) {
 	}
 	home, notes := t.TempDir(), t.TempDir()
 	os.Symlink(notes, filepath.Join(home, "groups"))
-	if linked := strings.Join(GuestsArgs(home), " "); !strings.Contains(linked, "--add-dir "+notes) || strings.Contains(linked, "--add-dir "+home) {
+	realNotes, _ := filepath.EvalSymlinks(notes)
+	if linked := strings.Join(GuestsArgs(home), " "); strings.Count(linked, "--add-dir") != 1 || !strings.Contains(linked, "--add-dir "+realNotes) {
 		t.Fatal("the groups' real folder is a working directory, so writing through the link isn't refused:", linked)
 	}
 }
