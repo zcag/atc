@@ -83,8 +83,6 @@ natural. Higgs, on a GPU, sounds much better, but it is set up by hand and its l
 
 The character moves with both voices as it listens, thinks and speaks. Pick who the assistant is, give an agent its own person, voice and room, or use any picture you upload as a room. In public, a plain line or bars replace the face.
 
-<img src="docs/img/rooms.webp" alt="Arthur and June in five rooms: a night study with a desk lamp, a loft with rain on the window and a neon city outside, a cabin with a fire and snow outside, a library with a green lamp and a violet window, and a sunroom with plants." />
-
 [Calls](docs/calls.md) · [The assistant](docs/assistant.md)
 
 ## Control of every session
