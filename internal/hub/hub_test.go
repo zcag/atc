@@ -150,10 +150,12 @@ type rig struct {
 	srv *httptest.Server
 }
 
-func newRig(t *testing.T, call CallConfig) *rig {
+func newRig(t *testing.T, call CallConfig) *rig { return newRigAt(t, call, nil) }
+
+func newRigAt(t *testing.T, call CallConfig, now func() time.Time) *rig {
 	exe, _ := os.Executable()
 	t.Setenv("HUB_FAKE_CLAUDE", "1")
-	h := New(Config{Bin: exe, Dir: t.TempDir(), State: t.TempDir(), Call: call,
+	h := New(Config{Bin: exe, Dir: t.TempDir(), State: t.TempDir(), Call: call, Now: now,
 		Mode: func(ch string) string {
 			if ch == "agent" {
 				return ""
@@ -563,7 +565,8 @@ func (l *line_) server(t *testing.T) *httptest.Server {
 
 func TestCallAnswered(t *testing.T) {
 	l := &line_{states: []lineState{{"idle", "idle"}, {"offhook", "dialing"}, {"offhook", "alerting"}, {"offhook", "active"}}}
-	r := newRig(t, CallConfig{URL: l.server(t).URL, Number: "+900", Poll: 10 * time.Millisecond})
+	at := time.Date(2026, 1, 2, 9, 41, 0, 0, time.Local)
+	r := newRigAt(t, CallConfig{URL: l.server(t).URL, Number: "+900", Poll: 10 * time.Millisecond}, func() time.Time { return at })
 	out, err := r.h.Call(context.Background(), CallReq{Reason: "deploy done", From: "[from session \"x\"]"})
 	if err != nil || out != Answered {
 		t.Fatalf("%s %v", out, err)
@@ -582,7 +585,7 @@ func TestCallAnswered(t *testing.T) {
 	phone.until("done")
 	mu.Lock()
 	defer mu.Unlock()
-	if !strings.Contains(written, "[message]\\n[phone · "+time.Now().Format("15:04")+" · you called the user, they picked up · reason: deploy done]\\n[from session \\\"x\\\"]\\n[the user") {
+	if !strings.Contains(written, "[message]\\n[phone · 09:41 · you called the user, they picked up · reason: deploy done]\\n[from session \\\"x\\\"]\\n[the user") {
 		t.Fatalf("phone message: %s", written)
 	}
 	if r.h.Status().Call != "" {
