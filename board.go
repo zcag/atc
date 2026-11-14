@@ -31,10 +31,11 @@ worth keeping beyond today. A card says it came from you; you never decide for t
                     it, --img a picture (a local file is copied next to the board).
                     It is signed with your agent's name or your session's title, or NAME.
   atc board add -   cards from stdin, a JSON array of {title, note, body, url, img}
-  atc board         every card with its lane, best first: in, maybe, unsure, then what
-                    is still waiting (unsorted) and out
+  atc board         every card with its lane and note, best first: in (in the user's
+                    order), maybe, unsure, then what is still waiting (unsorted) and out;
+                    a card buried as built says "out done", handed off "out handed"
   atc board --lane in --json
-                    only one lane, or JSON
+                    only one lane, or JSON with the bodies and links too
   --project DIR     another project than the one this folder is in
 
 The first add makes the board and shows it on the sessions working in the repo. Read
@@ -153,7 +154,7 @@ func boardCmd(args []string) error {
 		return nil
 	case "ls", "list":
 		raw, err := c.PageState(pages.ProjectOwner(pages.ProjectRoot(dir)), pages.BoardName)
-		if err != nil {
+		if err != nil || len(raw) == 0 || string(raw) == "null" {
 			return fmt.Errorf("%s has no board yet; atc board add makes one", filepath.Base(pages.ProjectRoot(dir)))
 		}
 		cards := boardCards(raw)
@@ -184,6 +185,9 @@ func boardCmd(args []string) error {
 				l += " " + x.Reason
 			}
 			fmt.Printf("%-12s %s%s\n", l, x.Title, who)
+			if x.Note != "" {
+				fmt.Printf("%-12s %s\n", "", x.Note)
+			}
 		}
 		return nil
 	}

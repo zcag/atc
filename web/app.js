@@ -1056,7 +1056,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
   const [earlierAll, setEarlierAll] = useState(false);
   const [earlierOpen, flipEarlier] = useEarlierOpen();
   const shownEarlier = earlierAll ? by.earlier : by.earlier.filter((s) => Date.now() - (Date.parse(s.updated || s.startedAt || 0) || 0) < 2 * 86400000).slice(0, 12);
-  const pages = index && (live || []).filter((s) => (only ? bayOf(s) === only : !homeless(s))).flatMap((s) => (s.shown || []).map((p) => ({ p, s })))
+  const pages = index && [...new Map((live || []).filter((s) => (only ? bayOf(s) === only : !homeless(s))).flatMap((s) => (s.shown || []).map((p) => [pkey(p), { p, s }]))).values()]
     .sort((a, b) => (Date.parse(b.p.updated || b.p.shown) || 0) - (Date.parse(a.p.updated || a.p.shown) || 0));
   return html`
     <div class="bview ${index ? "withindex" : ""}">

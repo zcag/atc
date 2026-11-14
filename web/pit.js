@@ -1238,7 +1238,7 @@ button,input,textarea,select{font:inherit;color:inherit}
   .sift-stage{grid-template-columns:repeat(var(--zones,4),1fr);grid-template-rows:minmax(0,1fr) auto;gap:8px;padding:8px}
   .deck{grid-column:1/-1;grid-row:1;align-self:stretch;width:100%}
   .deck i{display:none}
-  .zone{grid-row:2 !important;grid-column:auto !important;flex-direction:column !important;gap:3px;padding:9px 4px;min-height:48px}
+  .zone{grid-row:2 !important;grid-column:auto !important;flex-direction:column !important;gap:3px !important;padding:9px 4px;min-height:48px}
   .zone.out{order:1}.zone.unsure{order:2}.zone.maybe{order:3}.zone.in{order:4}
   .zone .key{display:none}
   .drawer{width:100vw}
