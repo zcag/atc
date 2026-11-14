@@ -274,7 +274,6 @@ func (s *Server) Handler() http.Handler {
 		s.Term.Serve(w, r, r.PathValue("id"))
 	})
 	mux.HandleFunc("GET /api/trust", s.trustState)
-	mux.HandleFunc("GET /api/trust/term", s.trustTerm)
 	mux.HandleFunc("POST /api/call/about", s.callAbout)
 	mux.HandleFunc("POST /api/call/to", s.callTo)
 	mux.HandleFunc("GET /api/call/voices", s.callVoices)
@@ -820,7 +819,7 @@ func (s *Server) route(next http.Handler) http.Handler {
 			attachID = parts[3]
 			s.nameViewer(r)
 		}
-		if len(parts) == 6 && parts[4] == "asks" || len(parts) == 5 && parts[4] == "stop" || r.URL.Path == "/api/trust/term" {
+		if len(parts) == 6 && parts[4] == "asks" || len(parts) == 5 && parts[4] == "stop" {
 			s.nameViewer(r)
 		}
 		s.fleet.proxy(w, r, p, attachID)
@@ -1770,13 +1769,8 @@ func reply(w http.ResponseWriter, v any) {
 
 func fail(w http.ResponseWriter, err error) {
 	code := http.StatusInternalServerError
-	var u *claude.Untrusted
-	if errors.As(err, &u) {
+	if errors.Is(err, claude.ErrUntrusted) {
 		code = http.StatusBadRequest
-		if !u.Home {
-			code = http.StatusConflict
-			w.Header().Set(claude.UntrustedHeader, url.Values{"dir": {u.Dir}, "parent": {u.Parent}, "host": {u.Host}}.Encode())
-		}
 	}
 	http.Error(w, err.Error(), code)
 }

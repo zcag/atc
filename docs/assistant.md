@@ -14,7 +14,7 @@ atc hub status · atc hub reset           # what it is doing; start over now
 Installed the usual way, the assistant works with nothing accepted: `claude -p` doesn't ask for trust,
 and its folder is atc's own (`~/.local/share/atc/assistant`). Without a hub (`atc serve` by hand, or
 `--only atc`) it is a background session, in `ATC_ASSIST_DIR`, by default that same folder; Claude Code
-requires a yes for that, so the page asks you once with its own prompt.
+requires a yes for that, which atc records on the first start.
 
 ## What it may do alone
 

@@ -41,8 +41,8 @@
   - Select any text for **Quote**, **Explain**, **Push back** or **Do this** (each quotes it into
     the box with a start you can edit), **Copy** or **Find**.
 - **New session** starts Claude in any folder, with an optional name and first message. Paste, drop
-  or attach images and files in the prompt; they upload to the session's machine when it starts. In a folder
-  Claude Code doesn't trust yet, Start shows you its trust prompt first ([Install](install.md#notes)).
+  or attach images and files in the prompt; they upload to the session's machine when it starts. A folder
+  Claude Code doesn't trust yet gets trusted on the way ([Install](install.md#notes)).
 - **Assistant** (the chat button, or `a`) opens one session with the atc tools, for asking about
   your other sessions or driving them. It is the same session the phone's side key opens, and with
   a hub (see [The assistant](assistant.md)) the same conversation as WhatsApp and calls.

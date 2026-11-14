@@ -653,20 +653,3 @@ func checkWhatsApp(ctx context.Context, env Env) Result {
 	}
 	return Result{OK, "The gateway's session is ready."}
 }
-
-func checkAgentFolders(_ context.Context, env Env) Result {
-	if len(env.Agents) == 0 {
-		return Result{Missing, "No agents on this machine."}
-	}
-	trusted := claude.Trust()
-	var bad []string
-	for _, a := range env.Agents {
-		if a.Scheduled && !trusted(a.Dir) {
-			bad = append(bad, "@"+a.Name)
-		}
-	}
-	if len(bad) > 0 {
-		return Result{Broken, "Not trusted by Claude Code yet, so they can't wake: " + strings.Join(bad, ", ") + "."}
-	}
-	return Result{OK, fmt.Sprintf("%d agents, and none with a schedule waits on Claude Code's trust. One you wake yourself asks then.", len(env.Agents))}
-}

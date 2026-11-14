@@ -6,10 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
-	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -46,20 +44,6 @@ func (c *Client) Attach(id string) error {
 		return fmt.Errorf("cannot attach to %s: %w", id, err)
 	}
 	return nil
-}
-
-// Trust puts Claude Code's own trust prompt for the folder in this terminal, and returns once it is answered.
-func (c *Client) Trust(u *Untrusted) error {
-	dir := u.Dir
-	if u.Parent != "" {
-		fmt.Printf("%s is one of the agents in %s, and a yes covers a folder and everything under it.\nTrust all agents there, now and added later, so you are not asked again? [y/N] ", u.Dir, u.Parent)
-		var ans string
-		fmt.Scanln(&ans)
-		if strings.HasPrefix(strings.ToLower(ans), "y") {
-			dir = u.Parent
-		}
-	}
-	return c.terminal("/api/trust/term?" + url.Values{"dir": {dir}, "host": {u.Host}}.Encode() + "&")
 }
 
 func (c *Client) terminal(path string) error {

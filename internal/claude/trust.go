@@ -1,68 +1,131 @@
 package claude
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
+	"sync"
 )
 
-// UntrustedHeader carries a refused start's folder, as a query string: dir, and parent and host when known.
-const UntrustedHeader = "X-Atc-Untrusted"
-
-// Untrusted is why `claude --bg` refused a folder. Home is its own case: Claude Code never records
-// a yes for the home folder, so its prompt could not help a background session there. Parent is a
-// folder a yes could go to instead, covering this one and its siblings.
+// Untrusted is why `claude --bg` refused a folder after atc recorded its trust. Home is its own case:
+// Claude Code trusts the home folder one session at a time, so no recorded yes helps there.
 type Untrusted struct {
-	Dir, Agent, Parent, Host string
-	Home                     bool
+	Dir  string
+	Home bool
+	Why  error
 }
 
 func (u *Untrusted) Error() string {
-	who, how := "it won't start a session there", "Start in atc's New session shows it, and so does atc new in a terminal"
-	if u.Agent != "" {
-		who, how = "@"+u.Agent+" can't start", "the agent's page in atc shows it, and so does atc send @"+u.Agent+" in a terminal"
-	}
 	if u.Home {
 		return fmt.Sprintf("Claude Code trusts the home folder one session at a time, so a background session can't start in %s. Pick a project folder.", u.Dir)
 	}
-	return fmt.Sprintf("Claude Code does not trust %s yet, so %s. Whoever uses atc has to accept its prompt once: %s.", u.Dir, who, how)
+	return fmt.Sprintf("Claude Code does not trust %s, and recording its trust failed: %v", u.Dir, u.Why)
 }
 
 func (u *Untrusted) Is(target error) bool { return target == ErrUntrusted }
 
-// Trusted says what Claude Code has recorded for dir: a yes counts for everything under that folder.
-// It only reads, and only to know when to stop asking; `claude --bg` stays the authority on starting.
-func Trusted(dir string) bool { return Trust()(dir) }
+var accepting sync.Mutex
 
-// Trust reads Claude Code's config once, for asking about several folders.
-func Trust() func(dir string) bool {
-	path := filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), ".claude.json")
-	if os.Getenv("CLAUDE_CONFIG_DIR") == "" {
-		home, _ := os.UserHomeDir()
-		path = filepath.Join(home, ".claude.json")
+func configPath() string {
+	if d := os.Getenv("CLAUDE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, ".claude.json")
 	}
-	var cfg struct {
-		Projects map[string]struct {
-			Accepted bool `json:"hasTrustDialogAccepted"`
-		} `json:"projects"`
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".claude.json")
+}
+
+// bg runs a `claude --bg` and, when Claude Code refuses the folder only for want of its trust prompt,
+// records the yes the prompt would and runs it again: a git repo needs its own yes even when a folder
+// above it has one, so anything new under an already trusted home would otherwise need a terminal.
+func (c CLI) bg(ctx context.Context, dir string, args ...string) (string, error) {
+	out, err := c.run(ctx, dir, args...)
+	u, ok := err.(*Untrusted)
+	if !ok || u.Home {
+		return out, err
 	}
-	if b, err := os.ReadFile(path); err == nil {
-		json.Unmarshal(b, &cfg)
+	root := trustRoot(ctx, dir)
+	if u.Why = Accept(root); u.Why != nil {
+		return out, u
 	}
-	return func(dir string) bool {
-		if real, err := filepath.EvalSymlinks(dir); err == nil {
-			dir = real
+	log.Printf("trust: recorded Claude Code's trust for %s", root)
+	out, err = c.run(ctx, dir, args...)
+	if u, ok := err.(*Untrusted); ok && u.Why == nil {
+		u.Why = fmt.Errorf("Claude Code still refuses it with the trust recorded for %s", root)
+	}
+	return out, err
+}
+
+// trustRoot is the folder Claude Code asks about for dir: its git repo's top, else dir itself.
+func trustRoot(ctx context.Context, dir string) string {
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		dir = real
+	}
+	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
+	cmd.Dir = dir
+	if out, err := cmd.Output(); err == nil && strings.TrimSpace(string(out)) != "" {
+		return strings.TrimSpace(string(out))
+	}
+	return dir
+}
+
+// Accept records a yes to Claude Code's trust prompt for dir in its config, as the prompt itself would,
+// leaving everything else in the file as it was. Claude Code rewrites the file by renaming a new one
+// over it, so this does the same.
+func Accept(dir string) error {
+	accepting.Lock()
+	defer accepting.Unlock()
+	path := configPath()
+	var cfg map[string]json.RawMessage
+	b, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if len(b) > 0 {
+		if err := json.Unmarshal(b, &cfg); err != nil {
+			return fmt.Errorf("%s: %w", path, err)
 		}
-		for {
-			if cfg.Projects[dir].Accepted {
-				return true
-			}
-			up := filepath.Dir(dir)
-			if up == dir {
-				return false
-			}
-			dir = up
+	}
+	if cfg == nil {
+		cfg = map[string]json.RawMessage{}
+	}
+	projects := map[string]map[string]json.RawMessage{}
+	if raw, ok := cfg["projects"]; ok {
+		if err := json.Unmarshal(raw, &projects); err != nil {
+			return fmt.Errorf("%s projects: %w", path, err)
 		}
 	}
+	if projects[dir] == nil {
+		projects[dir] = map[string]json.RawMessage{}
+	}
+	projects[dir]["hasTrustDialogAccepted"] = json.RawMessage("true")
+	if cfg["projects"], err = json.Marshal(projects); err != nil {
+		return err
+	}
+	if b, err = json.MarshalIndent(cfg, "", "  "); err != nil {
+		return err
+	}
+	mode := os.FileMode(0o600)
+	if st, err := os.Stat(path); err == nil {
+		mode = st.Mode().Perm()
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".claude.json.atc-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name())
+	if _, err = tmp.Write(b); err == nil {
+		err = tmp.Chmod(mode)
+	}
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }

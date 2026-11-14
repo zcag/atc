@@ -68,16 +68,10 @@ type Env struct {
 	Deaf    []string
 	Peers   []Peer
 	Engines []Engine
-	Agents  []AgentFolder
 }
 
 type Peer struct{ Name, URL, Token string }
 type Engine struct{ Name, URL string }
-type AgentFolder struct {
-	Name, Dir string
-	Scheduled bool
-}
-
 type Need struct {
 	ID     string `json:"id"`
 	Title  string `json:"title"`

@@ -18,7 +18,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/pages"
@@ -424,7 +423,7 @@ func (s *Server) startAgent(ctx context.Context, a Agent, prompt string, parked 
 		s.tag(ctx, id, func(m *store.Meta) { m.Agent, m.Name, m.Parked = a.Name, a.label(), parked })
 		log.Printf("agent %s: started %s", a.Name, id)
 	}
-	return id, s.agentTrustErr(a, err)
+	return id, err
 }
 
 func (s *Server) resumeAgent(ctx context.Context, a Agent, sid string) (string, error) {
@@ -434,7 +433,7 @@ func (s *Server) resumeAgent(ctx context.Context, a Agent, sid string) (string, 
 	}
 	home, _ := os.UserHomeDir()
 	id, err := s.M.CLI.Resume(ctx, existingDir(a.dir(), home), sid, args...)
-	if err = s.agentTrustErr(a, err); err != nil {
+	if err != nil {
 		return "", err
 	}
 	was := s.M.Store.Get(sid)
@@ -638,13 +637,12 @@ type AgentView struct {
 	Pages     []pages.Page     `json:"pages"`
 	Badge     json.RawMessage  `json:"badge,omitempty"`
 	Headline  string           `json:"headline,omitempty"`
-	Trust     *agentTrust      `json:"trust,omitempty"`
+	Home      bool             `json:"home,omitempty"`
 }
 
 func (s *Server) agents(w http.ResponseWriter, r *http.Request) {
 	list := []AgentView{}
 	live, _ := s.M.Live(r.Context())
-	trusted := claude.Trust()
 	for _, a := range s.agentList() {
 		if a.Host != s.Host && a.Err == "" {
 			continue
@@ -656,10 +654,8 @@ func (s *Server) agents(w http.ResponseWriter, r *http.Request) {
 		} else if t, ok := s.lastAgentTranscript(a.Name); ok {
 			v.Session, v.State, v.Parked, v.Context, v.Last = t.SessionID, sessions.Past, s.M.Store.Get(t.SessionID).Parked, t.Context, t.Updated
 		}
-		if x := agentSession(live, a.Name); a.Host == s.Host && a.Err == "" && (x == nil || !x.Attachable) {
-			if v.Trust = s.trustNeeded(a, trusted); v.Trust != nil {
-				v.Next = time.Time{}
-			}
+		if v.Home = a.Host == s.Host && a.Err == "" && isHome(a.dir()); v.Home {
+			v.Next = time.Time{}
 		}
 		for _, pg := range v.Pages {
 			st := s.Pages.State(pg.Session, pg.Name)
@@ -755,16 +751,9 @@ func (s *Server) agentMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	text = "[message from " + from + "]\n" + text
-	if !claude.Trusted(a.dir()) {
-		id, err := s.wakeAgent(r.Context(), a, text)
-		s.tellUntrusted(a, err)
-		s.done(w, id, err)
-		return
-	}
 	go func() {
 		if _, err := s.wakeAgent(context.Background(), a, text); err != nil {
 			log.Printf("agent %s: message from %s: %v", a.Name, from, err)
-			s.tellUntrusted(a, err)
 		}
 		s.refresh()
 	}()

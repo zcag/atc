@@ -13,7 +13,6 @@ const (
 	Assistant = "Assistant"
 	Calls     = "Calls"
 	Phone     = "Phone"
-	Agents    = "Agents"
 	Machines  = "Machines"
 	Browser   = "Browser"
 	Models    = "Other models"
@@ -22,7 +21,7 @@ const (
 )
 
 // Groups is the order they are shown in.
-var Groups = []string{Core, Assistant, Agents, Calls, Phone, Machines, Browser, Models, Summaries, WhatsApp}
+var Groups = []string{Core, Assistant, Calls, Phone, Machines, Browser, Models, Summaries, WhatsApp}
 
 const docs = "https://github.com/zcag/atc/blob/master/docs/"
 
@@ -105,11 +104,6 @@ func All() []Cap {
 			Fields: []Field{{Key: settings.AutonomyKey, Label: "limited: atc's tools and messaging you. daily: also reads your files, searches the web and keeps notes in its folder. full: anything, with no checks", Hub: true, Options: []string{settings.AutonomyDaily, settings.AutonomyLimited, settings.AutonomyFull}}},
 			Check:  checkAutonomy,
 			Fix:    Fix{Text: "Choose here, or in atc setup. For more than daily without going to full, add allow rules to Claude Code's settings: the assistant honours them.", Guide: "assistant#what-it-may-do-alone"},
-		},
-		{
-			ID: "agent-folders", Title: "Agents' folders", Group: Agents, Optional: true, Why: "An agent can't wake until Claude Code trusts its folder, and with nobody at the screen nothing else says so.",
-			Needs: []string{"claude"}, Check: checkAgentFolders,
-			Fix: Fix{Text: "Open the agent in atc and accept Claude Code's prompt there. A yes for the folder of all agents covers every one of them.", Guide: "presets-and-agents#trusting-its-folder"},
 		},
 		{
 			ID: "calls", Title: "Calls with the assistant", Group: Calls, Optional: true, Why: "Talk to the assistant by voice, from this page or the phone app.",

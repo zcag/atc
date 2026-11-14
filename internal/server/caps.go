@@ -63,9 +63,6 @@ func (s *Server) capsEnv(f settings.File) caps.Env {
 	for _, e := range s.Engines {
 		env.Engines = append(env.Engines, caps.Engine{Name: e.Name, URL: e.URL})
 	}
-	for _, a := range s.localAgents() {
-		env.Agents = append(env.Agents, caps.AgentFolder{Name: a.Name, Dir: a.dir(), Scheduled: a.Every != "" || a.Check != ""})
-	}
 	if s.Push != nil {
 		for _, d := range s.Push.Devices() {
 			env.Devices = append(env.Devices, d.Endpoint)

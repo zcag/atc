@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -534,28 +533,11 @@ func newSession(args []string) error {
 	}
 	c, l := client.Load(), client.Launch{Host: *host, Dir: dir, Name: *name, Preset: *preset, Prompt: strings.Join(rest, " "), Report: *report}
 	id, dir, err := c.Launch(context.Background(), l)
-	if askedTrust(c, err) {
-		id, dir, err = c.Launch(context.Background(), l)
-	}
 	if err != nil {
 		return err
 	}
 	fmt.Printf("started %s in %s\n", id, dir)
 	return nil
-}
-
-// askedTrust puts Claude Code's trust prompt in this terminal when that is what err is about.
-func askedTrust(c *client.Client, err error) bool {
-	var u *client.Untrusted
-	if !errors.As(err, &u) || !term.IsTerminal(int(os.Stdin.Fd())) {
-		return false
-	}
-	fmt.Printf("Claude Code has not been trusted in %s. Its own prompt comes next; a no starts nothing.\n", u.Dir)
-	if err := c.Trust(u); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return false
-	}
-	return true
 }
 
 func tildePWD() string {
@@ -820,9 +802,6 @@ func sendTo(args []string) error {
 			return err
 		}
 		_, err = c.Message(agent, signed)
-		if askedTrust(c, err) {
-			_, err = c.Message(agent, signed)
-		}
 		return err
 	}
 	s, err := c.Find(args[0], true)

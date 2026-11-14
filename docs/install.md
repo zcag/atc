@@ -103,15 +103,13 @@ To log in a new device without typing the token, use `atc pair` (see
 
 ## Notes
 
-- Claude Code only starts in folders you have trusted. New session says when a folder isn't yet;
-  Start then opens Claude Code's own trust prompt in a terminal in the page, on a phone too, and
-  starts the session with your message once you accept. `atc new` in a terminal does the same. The
-  answer is yours, it is a real security decision: Claude Code's prompt starts on No, atc never
-  answers it, and agents can't start there until you have (their `start` tool tells them so). A yes
-  covers the folder and everything under it, and is kept by Claude Code in `~/.claude.json`.
+- Claude Code's background sessions only start in folders it trusts, and a git repo needs its own
+  yes even when a folder above it has one. When `claude --bg` refuses a folder for that, atc records
+  the yes itself in `~/.claude.json` (for the repo's top, or the folder when it is no repo), as the
+  trust prompt would, and starts again. Whoever can start a session through atc can already run
+  anything in any folder, so the prompt guards nothing here.
 - Claude Code doesn't remember a yes for your home folder itself, so a background session can't
   start there unless it already has one on record. Pick a folder under it instead.
-- Agents need the same yes: see [Trusting its folder](presets-and-agents.md#trusting-its-folder).
 - Sessions you started yourself in a terminal show up as **in a terminal**. atc can't attach to
   those, but you can read their transcript, and resume them once they have ended.
 - Resuming always keeps the session's original options. Passing flags to Claude Code while

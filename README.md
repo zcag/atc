@@ -288,10 +288,9 @@ account and no key of its own.
   `claude agents`, and `claude -p` for summaries.
 - It reads what Claude Code keeps on disk for that user: conversation transcripts, its list of
   background sessions, and which folders it trusts.
-- It never answers Claude Code's trust prompt or records a yes itself. For a folder not yet trusted,
-  atc runs plain `claude` there in its terminal so you answer that prompt yourself. Claude Code writes
-  the yes to its own `~/.claude.json`; atc only reads that file, to stop the prompt and start your
-  session. The assistant needs none of this: its hub runs `claude -p`, which doesn't ask.
+- When `claude --bg` refuses a folder it hasn't been told to trust, atc records that yes in
+  `~/.claude.json` itself, as Claude Code's trust prompt would, and starts again. That is the one
+  thing it writes there.
 - It reads your plan limits from Claude Code's status line. `atc setup` sets that up
   (`atc limits -tap`), or tells you the line to add if you have your own status line.
 - It changes Claude Code's own files in two places: `atc setup`, when you say yes, sets the status

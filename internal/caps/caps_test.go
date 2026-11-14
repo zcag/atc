@@ -327,21 +327,3 @@ func TestOlder(t *testing.T) {
 		}
 	}
 }
-
-func TestAgentFolders(t *testing.T) {
-	home, dir := t.TempDir(), t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("CLAUDE_CONFIG_DIR", "")
-	dir, _ = filepath.EvalSymlinks(dir)
-	env := Env{Agents: []AgentFolder{{Name: "mail", Dir: filepath.Join(dir, "mail"), Scheduled: true}, {Name: "idle", Dir: filepath.Join(dir, "nowhere", "idle")}}}
-	if r := checkAgentFolders(context.Background(), Env{}); r.Status != Missing {
-		t.Errorf("no agents: %+v", r)
-	}
-	if r := checkAgentFolders(context.Background(), env); r.Status != Broken || !strings.Contains(r.Detail, "@mail") {
-		t.Errorf("untrusted: %+v", r)
-	}
-	os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"projects":{"`+dir+`":{"hasTrustDialogAccepted":true}}}`), 0o600)
-	if r := checkAgentFolders(context.Background(), env); r.Status != OK {
-		t.Errorf("trusted parent: %+v", r)
-	}
-}

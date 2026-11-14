@@ -28,20 +28,7 @@
 
 /* new session */
 .nsveil { position: fixed; inset: 0; z-index: 40; background: var(--scrim); }
-.trustveil { z-index: 45; }
-.trustwhy { margin: 0; line-height: 1.5; color: var(--dim); overflow-wrap: anywhere; }
-.trustwhy b { color: var(--ink); font-weight: 600; }
-.trustterm { flex: none; height: 340px; }
-.trustterm .xterm-viewport { scrollbar-width: none; }
-@media (max-width: 899px) { .trustterm { height: min(430px, 58dvh); } }
-.trustterm .term { padding: var(--s1) 0 0 var(--s2); }
-.trustkeys { display: inline-flex; gap: var(--s1); }
-.trustpick { display: grid; gap: 4px; width: 100%; padding: var(--s3); border: 0; border-radius: var(--r-sm); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
-.trustpick:hover { background: var(--strip-hi); }
-.trustpick b { font-weight: 620; overflow-wrap: anywhere; }
-.trustpick span { color: var(--dim); font-size: var(--fs-small); line-height: 1.4; overflow-wrap: anywhere; }
-.ar .trustneed { display: flex; align-items: center; gap: var(--s2); color: var(--ink); overflow: visible; }
-.ar .trustneed b { font-family: inherit; }
+.ar .cantstart { color: var(--ink); }
 .nstrust { font-size: var(--fs-small); line-height: 1.4; color: var(--dim); }
 .nstrust b { color: var(--ink); font-weight: 600; }
 .nsdlg { position: fixed; top: 56px; left: 50%; transform: translateX(-50%); width: min(680px, calc(100vw - 32px)); max-height: calc(100dvh - 88px); display: flex; flex-direction: column; background: var(--board); box-shadow: var(--shadow-pop); font-family: var(--sans); font-size: var(--fs-ui); color: var(--ink); }

@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/url"
 	"slices"
@@ -636,7 +635,7 @@ func (t *tools) send(ctx context.Context, _ *mcp.CallToolRequest, in sendIn) (*m
 			return nil, done{}, err
 		}
 		id, err := t.c.Message(agent, text)
-		return nil, done{Ref: id, Title: in.Session, State: "sent"}, userMustTrust(err)
+		return nil, done{Ref: id, Title: in.Session, State: "sent"}, err
 	}
 	x, err := t.find(in.Session, true)
 	if err != nil {
@@ -706,7 +705,7 @@ func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*m
 func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (*mcp.CallToolResult, done, error) {
 	id, _, err := t.c.Launch(ctx, client.Launch{Host: in.Host, Dir: in.Dir, Name: in.Name, Preset: in.Preset, Prompt: in.Prompt, Worktree: in.Worktree, Report: in.Report, Approved: in.Approved})
 	if err != nil {
-		return nil, done{}, userMustTrust(err)
+		return nil, done{}, err
 	}
 	out := done{Ref: id, Title: cmp.Or(in.Name, in.Preset), State: "started", Note: "handed off: it does not report back; read to check in"}
 	if in.Report {
@@ -719,14 +718,6 @@ func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (
 		return s.Title != "" && s.State != sessions.Stopped
 	})
 	return nil, out, nil
-}
-
-func userMustTrust(err error) error {
-	var u *client.Untrusted
-	if errors.As(err, &u) {
-		return fmt.Errorf("%s Only the user can accept this, it is a security decision: tell them, and start it once they have. Do not get around it by editing Claude Code's config or starting it another way", u.Msg)
-	}
-	return err
 }
 
 func (t *tools) outputs(ctx context.Context, _ *mcp.CallToolRequest, in ref) (*mcp.CallToolResult, client.Outputs, error) {
