@@ -4560,7 +4560,7 @@ function BrowserView({ p, say }) {
   };
   if (!tab) return html`<div class="fbody"><div class="none"><p>This session has no tabs open.</p></div></div>`;
   return html`
-    <div class="bview">
+    <div class="brview">
       ${tabs.length > 1 && html`<div class="btabs" role="tablist">${tabs.map((t) => html`<button role="tab" aria-selected=${t === tab} class="ptab ${t === tab ? "on" : ""}" title=${t.url} onClick=${() => setCur(t.id)}><span>${t.title || t.url || "New tab"}</span></button>`)}</div>`}
       <form class="bbar" onSubmit=${go}>
         <button type="button" class="icon" title="Back" aria-label="Back" onClick=${() => nav(-1)}>←</button>

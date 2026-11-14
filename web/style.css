@@ -411,7 +411,7 @@ pre:hover > .copy, pre > .copy:focus-visible { opacity: 1; }
 .pframe iframe { flex: 1; border: 0; background: none; width: 100%; }
 .pframe iframe.next { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
 
-.bview { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.brview { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .btabs { display: flex; gap: var(--sp-2); overflow-x: auto; scrollbar-width: none; padding: var(--sp-2) var(--sp-3) 0; background: var(--strip); }
 .bbar { display: flex; align-items: center; gap: var(--sp-1); padding: var(--sp-3) var(--sp-3); border-bottom: 1px solid var(--line); background: var(--strip); }
 .bbar .icon { min-width: 32px; display: inline-flex; align-items: center; justify-content: center; }
