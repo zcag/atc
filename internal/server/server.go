@@ -252,6 +252,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/sessions/{sid}/pages/{name}/state", s.pageState)
 	mux.HandleFunc("POST /api/sessions/{sid}/pages/{name}/run", s.runAction)
 	mux.HandleFunc("GET /api/pages", s.allPages)
+	mux.HandleFunc("POST /api/projects/board", s.boardAdd)
 	mux.HandleFunc("GET /api/pins", s.pinList)
 	mux.HandleFunc("POST /api/pins", s.newPin)
 	mux.HandleFunc("POST /api/pins/{name}/{op}", s.setPinned)
@@ -458,7 +459,7 @@ func (s *Server) static() http.Handler {
 		if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 			w.Header().Set("Content-Security-Policy", csp)
 		}
-		if strings.HasPrefix(r.URL.Path, "/vendor/fonts/") {
+		if strings.HasPrefix(r.URL.Path, "/vendor/fonts/") || r.URL.Path == "/pit.js" || r.URL.Path == "/board.js" {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 		if strings.HasPrefix(r.URL.Path, "/vendor/") {

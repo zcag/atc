@@ -54,7 +54,10 @@ const instructions = `atc is how the user runs Claude Code sessions on their mac
 	"`atc show -h`" + ` has the rest: names, notes, folders with images, and window.atc for pages that save state or send the user's notes back to you. ` +
 	`Such a page belongs to your session. What the user will come back to (a page that keeps updating over time, a small site, a sheet ` +
 	`they will look things up in later) is a pinned page instead: ` + "`atc pages new <name>`" + ` gives a folder atc keeps, with a short link, and ` + "`atc pages show <name>`" + ` shows it in your session as well; ` +
-	"`atc pages -h`" + ` has the rest. Pin only what is meant to last.
+	"`atc pages -h`" + ` has the rest. Pin only what is meant to last. A page about the project rather than your work today ` +
+	`belongs to the project: ` + "`atc show --project`" + ` keeps it and its state for every session in that repo. When the user has to ` +
+	`choose between things you found (options, picks, photos, ideas), put them on the project's board with ` + "`atc board add`" + ` ` +
+	`and let them go through it one card at a time; read their decisions back with ` + "`atc board`" + `. ` + "`atc board -h`" + ` has the rest.
 
 ` +
 	`To tell the user something while they are away (a long task finished, you are blocked on them), run ` +

@@ -145,6 +145,14 @@ Links to other sites open outside atc on their own.
 Inside a session atc knows which one it is; anywhere else add --session <session>.
 Inside an agent's conversation pages belong to the agent, not the conversation: the
 next one shows and reads the same pages and state (atc state @<name>).
+
+  --project    the page belongs to the project (the repo this folder is in; a worktree
+               counts as its main checkout) instead of this session: every session working
+               there shows it, and it and its state stay when this session ends. For what is
+               true of the project beyond today's work. Works with --list, --off and --state.
+               atc state --project [page] reads it from anywhere in the repo.
+
+A project also has a board of things to decide: atc board -h.
 `
 
 func show(args []string) error {
@@ -192,6 +200,8 @@ func show(args []string) error {
 			}
 		case flag == "set":
 			set = true
+		case flag == "project":
+			ref = projectRef
 		case flag == "open":
 			open = true
 		case flag == "list" || flag == "l" || flag == "off" || flag == "state":
@@ -205,7 +215,9 @@ func show(args []string) error {
 	}
 	c := client.Load()
 	sid := os.Getenv("CLAUDE_CODE_SESSION_ID")
-	if strings.HasPrefix(ref, "@") {
+	if ref == projectRef {
+		sid = here()
+	} else if strings.HasPrefix(ref, "@") {
 		sid = ref
 	} else if ref != "" {
 		s, err := c.Find(ref, true)
@@ -474,20 +486,28 @@ func pageState(c *client.Client, sid, name string, write bool) error {
 func stateCmd(args []string) error {
 	fs := flag.NewFlagSet("state", flag.ExitOnError)
 	set := fs.Bool("set", false, "merge the JSON on stdin into the state")
+	project := fs.Bool("project", false, "the project this folder is in, instead of a session")
 	fs.Parse(args)
-	if fs.NArg() < 1 || fs.NArg() > 2 {
-		return fmt.Errorf("usage: atc state [-set] <session> [page]")
+	argv := fs.Args()
+	if *project {
+		argv = append([]string{here()}, argv...)
+	}
+	if len(argv) < 1 || len(argv) > 2 {
+		return fmt.Errorf("usage: atc state [-set] <session> [page], or atc state -project [page]")
 	}
 	c := client.Load()
-	sid, title := fs.Arg(0), fs.Arg(0)
-	if !strings.HasPrefix(sid, "@") {
+	sid, title := argv[0], argv[0]
+	if !strings.HasPrefix(sid, "@") && !pages.IsProject(sid) {
 		s, err := c.Find(sid, true)
 		if err != nil {
 			return err
 		}
 		sid, title = s.SessionID, s.Title
 	}
-	name := fs.Arg(1)
+	name := ""
+	if len(argv) > 1 {
+		name = argv[1]
+	}
 	if name == "" {
 		list, err := c.Pages(sid)
 		if err != nil {

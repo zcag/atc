@@ -338,7 +338,8 @@ func (s *Server) allPages(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) attachPages(list []sessions.Session) {
 	for i := range list {
-		if ps := s.Pages.Of(s.owner(list[i].SessionID)); len(ps) > 0 {
+		ps := append(s.Pages.Of(s.owner(list[i].SessionID)), s.projectPages(list[i].Cwd)...)
+		if len(ps) > 0 {
 			list[i].Shown = s.pageURLs(ps)
 		}
 	}
@@ -350,6 +351,11 @@ func pageAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 	for _, x := range list {
 		for _, p := range x.Shown {
 			key := x.SessionID + "/" + p.Name
+			if pages.IsProject(p.Session) {
+				if key = p.Session + "/" + p.Name; !now[key].IsZero() {
+					continue
+				}
+			}
 			now[key] = p.Shown
 			was, ok := prev[key]
 			if prev == nil || (ok && !p.Shown.After(was)) || x.Away() || viewing(x) {

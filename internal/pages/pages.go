@@ -223,6 +223,12 @@ func (st *Store) stateKey(sid, name string) string {
 }
 
 func (st *Store) SetState(sid, name string, v json.RawMessage) error {
+	return st.Update(sid, name, func(old json.RawMessage) (json.RawMessage, error) { return Merge(old, v), nil })
+}
+
+// Update rewrites a page's state from what it holds now, in one step under the store's lock, so two
+// writers adding to the same list cannot lose each other's additions.
+func (st *Store) Update(sid, name string, fn func(json.RawMessage) (json.RawMessage, error)) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	if sid == Pinned {
@@ -235,7 +241,10 @@ func (st *Store) SetState(sid, name string, v json.RawMessage) error {
 		st.s.Pages[sid][i].StateAt = time.Now()
 	}
 	key := st.stateKey(sid, name)
-	v = Merge(st.s.State[key], v)
+	v, err := fn(st.s.State[key])
+	if err != nil {
+		return err
+	}
 	if len(v) > MaxState {
 		return ErrTooBig
 	}

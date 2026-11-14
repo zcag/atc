@@ -61,12 +61,18 @@ android-publish:
 	rsync -t android/dist/version.json $(APP_HOST):$(APP_DIR)/
 
 CEL ?= ../cel
+PIT ?= ../pit
 cel:
 	cd $(CEL) && node --test renderer/
 	cp $(CEL)/renderer/rig.js $(CEL)/renderer/room.js $(CEL)/renderer/motion.js $(CEL)/renderer/ears.js web/
 	git -C $(CEL) rev-parse HEAD > web/cel.rev
 
+pit:
+	cd $(PIT) && node --test test/
+	cp $(PIT)/web/pit.js web/
+	git -C $(PIT) rev-parse HEAD > web/pit.rev
+
 personas:
 	python3 tools/persona/pack.py $${ATC_APP_DIR:-$$HOME/.local/share/atc/app}/personas android/dist
 
-.PHONY: build check install install-hub install-voice install-opencode install-mac android android-publish personas cel
+.PHONY: build check install install-hub install-voice install-opencode install-mac android android-publish personas cel pit

@@ -2,5 +2,5 @@ package web
 
 import "embed"
 
-//go:embed index.html app.js call.js call-log.js call-worklet.js ears.js persona.js rig.js room.js usage-cube.js res-parts.js md-lists.js md-diff.js md-refs.js persons.js persons-page.js portrait.js persons.css devices.js minimal.js motion.js glide.js persona.html atc.js atc.css tokens.css themes style.css chrome.css session.css board.css transcript.css zen.css settings.css devices.css pages.css screens.css assistant.css icon.svg vendor caps.js
+//go:embed index.html app.js call.js call-log.js call-worklet.js ears.js persona.js rig.js room.js usage-cube.js res-parts.js md-lists.js md-diff.js md-refs.js persons.js persons-page.js portrait.js persons.css devices.js minimal.js motion.js glide.js persona.html atc.js atc.css tokens.css themes style.css chrome.css session.css board.css transcript.css zen.css settings.css devices.css pages.css screens.css assistant.css icon.svg vendor caps.js pit.js board.js
 var FS embed.FS

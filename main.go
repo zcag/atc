@@ -105,6 +105,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc pages [new|unpin|pin|rm] <name>
                                  pinned pages: kept for the user to come back to, they belong
                                  to no session; atc pages -h
+  atc board [add <title>]        the project's board of things to decide: agents add cards,
+                                 the user sifts them; it outlives sessions; atc board -h
   atc open <session|@agent>/<page>[#id]
                                  the assistant only: open a page any session or agent shows
                                  on the user's phone screen, at a section; atc show -h
@@ -235,6 +237,8 @@ func main() {
 		err = openPage(args)
 	case "pages":
 		err = pagesCmd(args)
+	case "board":
+		err = boardCmd(args)
 	case "browser":
 		err = browserCmd(args)
 	case "outputs":

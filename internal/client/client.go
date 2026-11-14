@@ -391,6 +391,26 @@ func (c *Client) SetPageState(sid, name string, st json.RawMessage) error {
 	return c.do("PUT", "/api/sessions/"+url.PathEscape(sid)+"/pages/"+url.PathEscape(name)+"/state", st, nil)
 }
 
+type BoardCard struct {
+	Title  string `json:"title"`
+	Note   string `json:"note,omitempty"`
+	Body   string `json:"body,omitempty"`
+	URL    string `json:"url,omitempty"`
+	Img    string `json:"img,omitempty"`
+	Author string `json:"author,omitempty"`
+}
+
+type BoardAdded struct {
+	Owner string   `json:"owner"`
+	Root  string   `json:"root"`
+	IDs   []string `json:"ids"`
+	Link  string   `json:"link"`
+}
+
+func (c *Client) BoardAdd(root, sid string, cards []BoardCard) (r BoardAdded, err error) {
+	return r, c.do("POST", "/api/projects/board", map[string]any{"root": root, "session": sid, "cards": cards}, &r)
+}
+
 func (c *Client) Transcript(sid string) (p history.Page, err error) {
 	return p, c.do("GET", "/api/sessions/"+sid+"/transcript", nil, &p)
 }

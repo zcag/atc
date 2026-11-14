@@ -4298,7 +4298,7 @@ const PIN = "+pinned";
 const isPin = (p) => p?.session === PIN;
 const pinOf = (p) => (isPin(p) ? p.name : p?.pin || null);
 const ownerRef = (p, s) => (p.session.startsWith("@") || isPin(p) ? p.session : linkSlug(s?.title || p.of) || p.session);
-const idRef = (r) => r === PIN || r.startsWith("@") || /^[0-9a-f]{8}(-[0-9a-f-]*)?$/.test(r);
+const idRef = (r) => r === PIN || r.startsWith("@") || r.startsWith("+proj-") || /^[0-9a-f]{8}(-[0-9a-f-]*)?$/.test(r);
 const splitRef = (r) => { const i = (r || "").indexOf("#"); return i < 0 ? [r, null] : [r.slice(0, i), r.slice(i + 1)]; };
 const pageRef = (p) => (p.at ? `${p.name}#${p.at}` : p.name);
 let AT_SEQ = 0;
