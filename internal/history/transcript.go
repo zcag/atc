@@ -3,6 +3,7 @@ package history
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -312,7 +313,40 @@ func output(b block, result json.RawMessage) *Output {
 	}
 	o.Text, o.More, o.Tail = clipOutput(strings.TrimRight(strings.Join(texts, "\n"), "\n"), maxOutLines)
 	o.Meta = meta(result)
+	sent(o, result)
 	return o
+}
+
+// sent keeps what Claude handed the user with SendUserFile. Its result holds only paths, so a small image is read from
+// disk now, while it is still there; anything else stays a path to open.
+func sent(o *Output, raw json.RawMessage) {
+	var r struct {
+		Caption     string `json:"caption"`
+		Attachments []struct {
+			Path      string `json:"path"`
+			IsImage   bool   `json:"isImage"`
+			MediaType string `json:"media_type"`
+		} `json:"attachments"`
+	}
+	if json.Unmarshal(raw, &r) != nil || len(r.Attachments) == 0 {
+		return
+	}
+	files := []string{}
+	for _, a := range r.Attachments {
+		if a.IsImage && strings.HasPrefix(a.MediaType, "image/") {
+			if st, err := os.Stat(a.Path); err == nil && st.Size() <= maxImage*3/4 {
+				if b, err := os.ReadFile(a.Path); err == nil {
+					o.Images = append(o.Images, "data:"+a.MediaType+";base64,"+base64.StdEncoding.EncodeToString(b))
+					continue
+				}
+			}
+		}
+		files = append(files, a.Path)
+	}
+	if o.Meta == nil {
+		o.Meta = map[string]any{}
+	}
+	o.Meta["sent"] = map[string]any{"caption": r.Caption, "files": files}
 }
 
 func meta(raw json.RawMessage) map[string]any {

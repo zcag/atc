@@ -5729,6 +5729,7 @@ function Step({ st, s, zoom, pin }) {
   if (k === "ask") return html`<div class=${cls}><${AskedStep} st=${st} s=${s} /></div>`;
   if (k === "letter") return html`<${SentLetter} st=${st} />`;
   if (st.tool === "Bash" && st.badge?.kind === "wa" && st.badge.wa) return html`<${SentWA} st=${st} />`;
+  if (st.tool === "SendUserFile") return html`<${SentFiles} st=${st} zoom=${zoom} />`;
   if (st.tool === "Bash" && st.badge?.kind === "show") return html`<div class=${cls}><${PageRef} b=${st.badge} s=${s} /></div>`;
   if (st.tool === "Bash") {
     const cmd = i.command || st.detail || "";
@@ -6519,7 +6520,7 @@ function GroupBody({ steps, s, open, zoom, live }) {
   if (open) return html`<div class="steps">${steps.map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} pin=${live && x === steps[steps.length - 1]} />`)}</div>`;
   const edits = steps.filter((x) => txKind(x) === "edit" && !x.out?.error && !scratch(x.input.file_path || x.detail));
   return html`${edits.length > 0 && html`<${Edits} steps=${edits} s=${s} />`}
-    ${steps.filter((x) => txKind(x) === "ask" || txKind(x) === "letter" || txKind(x) === "agent" || (x.tool === "Bash" && (x.badge?.kind === "show" || x.badge?.kind === "wa"))).map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} />`)}`;
+    ${steps.filter((x) => txKind(x) === "ask" || txKind(x) === "letter" || txKind(x) === "agent" || x.tool === "SendUserFile" || (x.tool === "Bash" && (x.badge?.kind === "show" || x.badge?.kind === "wa"))).map((x) => html`<${Step} key=${x.id} st=${x} s=${s} zoom=${zoom} />`)}`;
 }
 
 function agentRows(b) {
@@ -6620,6 +6621,17 @@ function SentWA({ st }) {
     ${w.voice && html`<p class="wamedia">${ICON.mic}<span>voice note: «${w.voice}»</span></p>`}
     ${(w.files || []).map((f) => html`<p class="wamedia">${ICON.page}<span class="arg farg" data-file=${f} data-exact tabindex="0" role="link" title="Open this file">${f.split("/").pop()}</span></p>`)}
     ${w.poll && html`<p class="wamedia">${ICON.list}<span>poll: ${w.poll}</span></p>`}
+    ${failed && html`<p class="snerr">Not sent: ${oneLine(st.out?.text)}</p>`}
+  </div>`;
+}
+function SentFiles({ st, zoom }) {
+  const i = st.input, m = st.out?.meta?.sent, failed = st.out?.error;
+  const files = m ? m.files : i.files || [];
+  return html`<div class="sent ${failed ? "bad" : ""}">
+    <div class="snh"><span class="sni">${ICON.page}</span><span class="sto">To <b>you</b></span><span class="vat">${txClock(st.time)}</span></div>
+    ${(m?.caption || i.caption) && html`<p class="sncap">${m?.caption || i.caption}</p>`}
+    ${(st.out?.images || []).map((src) => html`<img class="snap" src=${src} alt="Image Claude sent you" onClick=${() => zoom(src)} />`)}
+    ${files.map((f) => html`<p class="wamedia">${ICON.page}<span class="arg farg" data-file=${f} data-exact tabindex="0" role="link" title="Open this file">${f.split("/").pop()}</span></p>`)}
     ${failed && html`<p class="snerr">Not sent: ${oneLine(st.out?.text)}</p>`}
   </div>`;
 }

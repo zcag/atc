@@ -715,6 +715,8 @@ pre.mdiff:not(.num) .gap { padding-left: var(--s3); }
 .tx .sent .ptxt { font-size: 0.95em; }
 .tx .sntags { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin: -2px 0 var(--s2) 22px; font-size: var(--fs-small); }
 .tx .sent .ptxt.clamp { max-height: 12em; overflow: hidden; -webkit-mask-image: linear-gradient(#000 76%, transparent); mask-image: linear-gradient(#000 76%, transparent); }
+.tx .sncap { margin: 0 0 var(--s2); }
+.tx .sent .snap { border-radius: var(--r-sm); }
 .tx .sent .more { margin-top: 4px; padding: 0; height: 24px; }
 .tx .snerr { margin: var(--s2) 0 0; color: var(--fail); font-size: var(--fs-small); }
 .tx .vlink { padding: 0; border: 0; background: none; color: var(--focus); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: color-mix(in srgb, var(--focus) 40%, transparent); }

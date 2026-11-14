@@ -1,6 +1,7 @@
 package history
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -110,6 +111,30 @@ func TestReadPageAttachesResultsAndTurns(t *testing.T) {
 	}
 	if m[4].Text != "Build finished" || m[5].Ms != 4200 {
 		t.Fatalf("event %q, done %d", m[4].Text, m[5].Ms)
+	}
+}
+
+func TestReadPageShowsFilesSentToTheUser(t *testing.T) {
+	dir := t.TempDir()
+	img, doc := filepath.Join(dir, "shot.png"), filepath.Join(dir, "report.pdf")
+	os.WriteFile(img, []byte("png"), 0o644)
+	os.WriteFile(doc, []byte("pdf"), 0o644)
+	lines := []string{
+		`{"type":"assistant","message":{"id":"m1","content":[{"type":"tool_use","id":"t1","name":"SendUserFile","input":{"files":["` + img + `","` + doc + `"],"caption":"look"}}]}}`,
+		`{"type":"user","toolUseResult":{"caption":"look","attachments":[{"path":"` + img + `","isImage":true,"media_type":"image/png"},{"path":"` + doc + `","isImage":false}]},"message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"2 files delivered to user."}]}}`,
+	}
+	path := filepath.Join(dir, "s.jsonl")
+	os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644)
+	p, err := ReadPage(path, 0, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o := p.Messages[0].Out
+	if len(o.Images) != 1 || o.Images[0] != "data:image/png;base64,cG5n" {
+		t.Fatalf("images %v", o.Images)
+	}
+	if s, _ := o.Meta["sent"].(map[string]any); s["caption"] != "look" || fmt.Sprint(s["files"]) != "["+doc+"]" {
+		t.Fatalf("sent %+v", o.Meta)
 	}
 }
 
