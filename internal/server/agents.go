@@ -546,6 +546,8 @@ func (s *Server) resetAgent(ctx context.Context, a Agent, why string) error {
 	if t, ok := s.M.Index.Find(cur.SessionID); ok {
 		before = t.ReplyID
 	}
+	s.markLeaving(cur.ID, a)
+	defer s.markLeaving(cur.ID, Agent{})
 	id, err := s.deliverAgent(ctx, a, handoverPrompt)
 	if err != nil {
 		return err
@@ -556,7 +558,7 @@ func (s *Server) resetAgent(ctx context.Context, a Agent, why string) error {
 			return false
 		}
 		t, ok := s.M.Index.Find(x.SessionID)
-		if !ok || t.ReplyID == "" || t.ReplyID == before {
+		if !ok || t.ReplyID == "" || t.ReplyID == before || !strings.HasPrefix(t.LastPrompt, handoverPrompt[:40]) {
 			return false
 		}
 		var rerr error
@@ -576,6 +578,39 @@ func (s *Server) resetAgent(ctx context.Context, a Agent, why string) error {
 	}
 	s.M.Store.Update(old.SessionID, func(m *store.Meta) { m.Name = a.label() + " " + old.StartedAt.Format("01-02 15:04") })
 	return s.remove(ctx, id)
+}
+
+func (s *Server) markLeaving(id string, a Agent) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.leaving == nil {
+		s.leaving = map[string]Agent{}
+	}
+	if a.Name == "" {
+		delete(s.leaving, id)
+	} else {
+		s.leaving[id] = a
+	}
+}
+
+func (s *Server) startingOver(id string) (Agent, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.leaving[id]
+	return a, ok
+}
+
+func (s *Server) sendAfterStartOver(a Agent, text string, byUser bool) {
+	ctx := context.Background()
+	id, err := s.wakeAgent(ctx, a, text)
+	if err != nil {
+		log.Printf("agent %s: message after start over: %v", a.Name, err)
+		return
+	}
+	log.Printf("agent %s: message sent during start over went to %s", a.Name, id)
+	if byUser {
+		s.unparkOnInput(ctx, id)
+	}
 }
 
 func (s *Server) lastReset(name string) time.Time {

@@ -38,6 +38,7 @@ type Hub struct {
 	Attach func(id string) *exec.Cmd
 	mu     sync.Mutex
 	groups map[string]*group
+	typing map[string]*sync.Mutex
 	seq    int
 }
 
@@ -421,6 +422,9 @@ func (h *Hub) Send(ctx context.Context, id, text string) error {
 const keyGap = 1200 * time.Millisecond
 
 func (h *Hub) Keys(ctx context.Context, id string, keys ...string) error {
+	t := h.typist(id)
+	t.Lock()
+	defer t.Unlock()
 	for i, k := range keys {
 		if i > 0 {
 			time.Sleep(keyGap)
@@ -436,6 +440,18 @@ func (h *Hub) Keys(ctx context.Context, id string, keys ...string) error {
 		}
 	}
 	return nil
+}
+
+func (h *Hub) typist(id string) *sync.Mutex {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.typing == nil {
+		h.typing = map[string]*sync.Mutex{}
+	}
+	if h.typing[id] == nil {
+		h.typing[id] = &sync.Mutex{}
+	}
+	return h.typing[id]
 }
 
 func (h *Hub) owner(id string) (*os.File, uint16, uint16) {

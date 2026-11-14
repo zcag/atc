@@ -50,6 +50,7 @@ import (
 
 type Server struct {
 	agentMu map[string]*sync.Mutex
+	leaving map[string]Agent
 	linesMu sync.Mutex
 	lines   map[string]*hubLink
 	wakes   map[string]time.Time
@@ -939,6 +940,11 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 			channel = hub.Agent
 		}
 		s.done(w, id, s.linkSend(r.Context(), l, channel, req.Text))
+		return
+	}
+	if a, ok := s.startingOver(id); ok {
+		go s.sendAfterStartOver(a, req.Text, req.From == "")
+		s.done(w, id, nil)
 		return
 	}
 	if req.From == "" {
