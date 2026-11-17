@@ -49,7 +49,8 @@ transcripts, history and background daemon. It links your settings, `CLAUDE.md`,
 plugins from `~/.claude` and copies your MCP servers (run it again to bring over ones you add later). Restart
 atc and every new session under `~/proj/work` runs on that account; New session has a **Claude account** choice
 to pick another, `atc new -profile` and the `start` tool take one, and a preset or an agent can name one with
-`"profile"`. A session resumes on the account that keeps its transcript, and its turn summaries are written
+`"profile"`. A session resumes on the account that keeps its transcript (`atc profile move <session> <name>` moves
+it, with its whole conversation, and resumes it there if it was open), and its turn summaries are written
 on that account too, so its text never goes through another. Sessions on another account carry its name on
 their row and in `atc ls`. An entry in `profiles.json` with only a name, like `{"name": "personal"}`, names the
 default account.

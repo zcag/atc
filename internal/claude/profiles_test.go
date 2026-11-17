@@ -108,3 +108,28 @@ func TestResumeFollowsTheTranscript(t *testing.T) {
 		t.Errorf("resumed in %s", b)
 	}
 }
+
+func TestMove(t *testing.T) {
+	work, home := withProfiles(t)
+	base := filepath.Join(home, ".claude")
+	proj := filepath.Join(base, "projects", "p")
+	os.MkdirAll(filepath.Join(proj, "s1", "subagents"), 0o755)
+	os.WriteFile(filepath.Join(proj, "s1.jsonl"), []byte("{}\n"), 0o644)
+	os.WriteFile(filepath.Join(proj, "s1", "subagents", "a.jsonl"), []byte("{}\n"), 0o644)
+	os.MkdirAll(filepath.Join(base, "file-history", "s1"), 0o755)
+	to, _ := ProfileNamed("work")
+	if err := Move("s1", to); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"projects/p/s1.jsonl", "projects/p/s1/subagents/a.jsonl", "file-history/s1"} {
+		if _, err := os.Stat(filepath.Join(work, p)); err != nil {
+			t.Errorf("%s did not move: %v", p, err)
+		}
+	}
+	if ProfileOfSession("s1").Name != "work" {
+		t.Error("it would not resume on work")
+	}
+	if Move("s1", to) == nil {
+		t.Error("moved onto the account it is on")
+	}
+}

@@ -202,6 +202,39 @@ func Homes() []string {
 	return out
 }
 
+// Move puts the conversation sid's files on the account to: its transcript, its subagents' transcripts and its file
+// history. Resumed after, it runs there with everything it had.
+func Move(sid string, to Profile) error {
+	path := Transcript(sid)
+	if path == "" {
+		return fmt.Errorf("no transcript for %s", sid)
+	}
+	from := ProfileOfFile(path)
+	if from.Name == to.Name {
+		return fmt.Errorf("it is on %s already", to.Name)
+	}
+	src, dst := filepath.Dir(path), filepath.Join(to.Projects(), filepath.Base(filepath.Dir(path)))
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	for _, m := range [][2]string{
+		{path, filepath.Join(dst, sid+".jsonl")},
+		{filepath.Join(src, sid), filepath.Join(dst, sid)},
+		{filepath.Join(from.Home(), "file-history", sid), filepath.Join(to.Home(), "file-history", sid)},
+	} {
+		if _, err := os.Stat(m[0]); err != nil {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(m[1]), 0o755); err != nil {
+			return err
+		}
+		if err := os.Rename(m[0], m[1]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ProjectRoots is every profile's transcript folder.
 func ProjectRoots() []string {
 	var out []string

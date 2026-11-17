@@ -26,6 +26,10 @@ atc profile add <name> <folder>...
                                  plugins and MCP servers. Run it again to bring over MCP servers added since.
 atc profile rm <name>            sessions under its folders go back to the default account; its folder
                                  and transcripts are left as they are
+atc profile move <session> <name>
+                                 put a session on another account, with its whole conversation: a
+                                 session resumes on the account that keeps its transcript, so this
+                                 moves the transcript, and an open session resumes there
 
 Profiles live in profiles.json in atc's config folder; atc reads it when it starts.
 `
@@ -76,6 +80,25 @@ func profileCmd(args []string) error {
 			fmt.Printf("Sign it in to that account:\n  CLAUDE_CONFIG_DIR=%s claude auth login\n", p.Dir)
 		}
 		fmt.Println("Then restart atc (atc service install, or restart its service) so it reads the profile.")
+		return nil
+	case "move":
+		if len(args) != 3 {
+			return errors.New("usage: atc profile move <session> <name>")
+		}
+		c := client.Load()
+		s, err := c.Find(args[1], true)
+		if err != nil {
+			return err
+		}
+		id, err := c.Move(s.SessionID, args[2])
+		if err != nil {
+			return err
+		}
+		if id != "" {
+			fmt.Printf("%s runs on %s now, as %s\n", s.Title, args[2], id)
+		} else {
+			fmt.Printf("%s is on %s now; it resumes there\n", s.Title, args[2])
+		}
 		return nil
 	case "rm":
 		if len(args) != 2 {

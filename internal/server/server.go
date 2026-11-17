@@ -192,6 +192,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/events", s.events)
 	mux.HandleFunc("POST /api/sessions", s.start)
 	mux.HandleFunc("POST /api/sessions/{sid}/resume", s.resume)
+	mux.HandleFunc("POST /api/sessions/{sid}/move", s.move)
 	mux.HandleFunc("POST /api/sessions/{id}/stop", s.stopAsked)
 	mux.HandleFunc("GET /api/sessions/{sid}/ended", s.ended)
 	mux.HandleFunc("POST /api/sessions/{sid}/ended/dismiss", s.dismissEnded)

@@ -281,6 +281,13 @@ func (c *Client) StartPreset(name, prompt string) (string, string, error) {
 	return "", "", fmt.Errorf("no preset named %q (have: %s)", name, strings.Join(names, ", "))
 }
 
+// Move puts a session on another Claude account; an open one resumes there, under the id it returns.
+func (c *Client) Move(sid, profile string) (string, error) {
+	var r idReply
+	err := c.do("POST", "/api/sessions/"+sid+"/move", map[string]string{"profile": profile}, &r)
+	return r.ID, err
+}
+
 func (c *Client) Resume(sid string) (string, error) {
 	var r idReply
 	err := c.do("POST", "/api/sessions/"+sid+"/resume", nil, &r)

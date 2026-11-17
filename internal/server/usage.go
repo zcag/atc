@@ -257,28 +257,6 @@ func (s *Server) usageLimits(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type profileInfo struct {
-	Name    string   `json:"name"`
-	Default bool     `json:"default,omitempty"`
-	Home    string   `json:"home"`
-	Paths   []string `json:"paths,omitempty"`
-}
-
-// profiles lists this machine's Claude accounts and, given a dir, the one a new session there runs on.
-func (s *Server) profiles(w http.ResponseWriter, r *http.Request) {
-	out := struct {
-		Profiles []profileInfo `json:"profiles"`
-		For      string        `json:"for,omitempty"`
-	}{Profiles: []profileInfo{}}
-	for _, p := range claude.Profiles() {
-		out.Profiles = append(out.Profiles, profileInfo{p.Name, p.Default(), p.Home(), p.Paths})
-	}
-	if dir := r.URL.Query().Get("dir"); dir != "" {
-		out.For = claude.ProfileFor(dir).Name
-	}
-	reply(w, out)
-}
-
 type report struct {
 	Days     []usage.Day `json:"days"`
 	Sessions []spentIn   `json:"sessions"`

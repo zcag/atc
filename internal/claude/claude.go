@@ -167,7 +167,11 @@ func (c CLI) Stop(ctx context.Context, id string) error {
 }
 
 func (c CLI) Remove(ctx context.Context, id string) error {
-	_, err := c.run(ctx, ProfileOf(id), "", "rm", id)
+	return c.RemoveFrom(ctx, ProfileOf(id), id)
+}
+
+func (c CLI) RemoveFrom(ctx context.Context, p Profile, id string) error {
+	_, err := c.run(ctx, p, "", "rm", id)
 	return err
 }
 
