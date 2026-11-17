@@ -223,6 +223,11 @@ conversation. When one hits a login or a captcha, click and type in its tab and 
 See your 5-hour and weekly limits with a projection of when you'd hit them, and spend by day, model, project and session. See
 memory and CPU per session, a week back, including the dev server a finished session left behind.
 
+**More than one Claude account.** Run the sessions in some folders on another account, such as a company one for work, side by
+side with your own. Each account keeps its own sign-in, transcripts and limits, shares your settings, skills and MCP servers,
+and gets its own view on the usage page. `atc profile add work ~/work` sets it up; a session can move across with its whole
+conversation. [More than one account](docs/usage.md#more-than-one-claude-account)
+
 <table>
 <tr>
 <td width="50%"><picture>
