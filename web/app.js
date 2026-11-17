@@ -2968,6 +2968,7 @@ function useUsage(path, every, profile = "") {
     let live = true;
     const load = () => loadWindows(false, profile).then((u) => {
       const q = [["week", winOf(u, "weekly_all")], ["fiveHour", winOf(u, "session")]].filter(([, w]) => w).map(([k, w]) => `${k}=${Math.floor(Date.parse(w.from) / 1000)}`);
+      if (q.length && profile) q.push(`profile=${encodeURIComponent(profile)}`);
       return api(`${path}${q.length ? `?${q.join("&")}` : ""}`);
     }).then((d) => live && setData({ ...d, wins: WINS[profile] }), () => live && setData((d) => d || { failed: true }));
     load();
@@ -3945,7 +3946,7 @@ function SessionUsage({ s, use, onClose, agent }) {
     ["Wall time", use.start ? `${span(use.wallSeconds)}, since ${new Date(use.start).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : "n/a"],
   ];
   return html`
-    <${Sheet} cls="usage" title="Usage" sub=${s.title} onClose=${onClose}>
+    <${Sheet} cls="usage" title="Usage" sub=${s.profile ? `${s.title} · ${s.profile} account` : s.title} onClose=${onClose}>
       ${!use ? html`<p class="note">Reading the transcript${agent ? "s" : ""}…</p>` : use.failed ? html`<p class="note">Couldn't read this ${what}'s usage.</p>` : html`
         <div class="tiles">
           ${sh.map((x) => html`<div>
@@ -3969,7 +3970,7 @@ function SessionUsage({ s, use, onClose, agent }) {
           <h4>Conversations</h4>
           <${ShareRows} onPick=${(r) => { onClose(); go(r.id); }}
             rows=${convs.map((c) => ({ id: c.sessionId, label: c.title || "Untitled", cost: c.cost,
-              sub: [c.start && (c.end && day(c.end) !== day(c.start) ? `${day(c.start)} to ${day(c.end)}` : day(c.start)), `${c.turns} turns`, `${tokens(c.total)} tokens`].filter(Boolean).join(" · ") }))} />`}
+              sub: [c.start && (c.end && day(c.end) !== day(c.start) ? `${day(c.start)} to ${day(c.end)}` : day(c.start)), `${c.turns} turns`, `${tokens(c.total)} tokens`, c.profile && `${c.profile} account`].filter(Boolean).join(" · ") }))} />`}
         ${kinds && use.cost > 0 && html`
           <h4>Where the cost goes</h4>
           <${ShareRows} rows=${kinds} />`}
@@ -3980,7 +3981,9 @@ function SessionUsage({ s, use, onClose, agent }) {
         <h4>Activity</h4>
         <dl class="facts">${rows.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
         ${!agent && s.agent && AGENT_INFO[s.agent] && html`<button class="btn" onClick=${() => { onClose(); openAgent(s.agent, "usage"); }}>All of ${agentLabel(AGENT_INFO[s.agent])}'s conversations</button>`}
-        <p class="note">The week and 5-hour tiles count only this ${what}'s spend since that window opened. ${WK_NOTE()} ${ESTIMATE(use.pricesAsOf)}${use.unpriced?.length ? ` No price known for ${use.unpriced.join(", ")}, so it counts as $0.` : ""} Working time adds up the gaps between messages in each turn, at most 10 minutes per gap.</p>`}
+        <p class="note">${sh.length ? `The week and 5-hour tiles count only this ${what}'s spend${convs.some((c) => c.profile) ? " on your default account" : ""} since that window opened. ` : ""}${WK_NOTE()} ${s.profile
+          ? `Dollar figures are estimated from the transcript at Claude API list prices${use.pricesAsOf ? ` (${use.pricesAsOf})` : ""}. This ${what} runs on the ${s.profile} account; if that account is billed per token, this is close to what it pays.`
+          : ESTIMATE(use.pricesAsOf)}${use.unpriced?.length ? ` No price known for ${use.unpriced.join(", ")}, so it counts as $0.` : ""} Working time adds up the gaps between messages in each turn, at most 10 minutes per gap.</p>`}
     <//>`;
 }
 

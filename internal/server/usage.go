@@ -45,22 +45,34 @@ type usageReply struct {
 }
 
 type conversation struct {
-	ID    string    `json:"sessionId"`
-	Title string    `json:"title"`
-	Cost  float64   `json:"cost"`
-	Total int64     `json:"total"`
-	Turns int       `json:"turns"`
-	Start time.Time `json:"start,omitzero"`
-	End   time.Time `json:"end,omitzero"`
+	ID      string    `json:"sessionId"`
+	Title   string    `json:"title"`
+	Cost    float64   `json:"cost"`
+	Total   int64     `json:"total"`
+	Turns   int       `json:"turns"`
+	Start   time.Time `json:"start,omitzero"`
+	End     time.Time `json:"end,omitzero"`
+	Profile string    `json:"profile,omitempty"`
 }
 
+func accountOf(path string) string {
+	if p := claude.ProfileOfFile(path); !p.Default() {
+		return p.Name
+	}
+	return ""
+}
+
+// usageOf is the transcripts' usage. The week and 5-hour figures are against one account's limits (the profile
+// parameter, else the default), so they count only the transcripts on that account.
 func (s *Server) usageOf(r *http.Request, paths ...string) usageReply {
+	acct, _ := claude.ProfileNamed(r.URL.Query().Get("profile"))
+	on := slices.DeleteFunc(slices.Clone(paths), func(p string) bool { return claude.ProfileOfFile(p).Name != acct.Name })
 	since := func(k string) *float64 {
 		v, err := strconv.ParseInt(r.URL.Query().Get(k), 10, 64)
 		if err != nil {
 			return nil
 		}
-		c := s.stats.CostSince(time.Unix(v, 0), paths...)
+		c := s.stats.CostSince(time.Unix(v, 0), on...)
 		return &c
 	}
 	return usageReply{Stats: s.stats.Session(paths...), WeekCost: since("week"), FiveHourCost: since("fiveHour")}
@@ -78,7 +90,7 @@ func (s *Server) agentUsage(w http.ResponseWriter, r *http.Request) {
 		}
 		st := s.stats.Session(t.Path)
 		paths = append(paths, t.Path)
-		convs = append(convs, conversation{id, cmp.Or(s.M.Store.Get(id).Name, t.Title), st.Cost, st.Total, st.Turns, st.Start, st.End})
+		convs = append(convs, conversation{id, cmp.Or(s.M.Store.Get(id).Name, t.Title), st.Cost, st.Total, st.Turns, st.Start, st.End, accountOf(t.Path)})
 	}
 	if len(paths) == 0 {
 		http.Error(w, "no conversations of "+name+" on "+s.Host, http.StatusNotFound)
