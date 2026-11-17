@@ -52,7 +52,7 @@ func TestAttribute(t *testing.T) {
 }
 
 func TestCPUSurvivesAChildBeingReaped(t *testing.T) {
-	s := New("", "")
+	s := New("", nil)
 	s.prevMax = 100
 	targets := []Target{{Key: "a", PID: 100}}
 	before := map[int]*proc{
@@ -74,7 +74,7 @@ func TestCPUSurvivesAChildBeingReaped(t *testing.T) {
 }
 
 func TestAttributionFlipIsNoDiskSpike(t *testing.T) {
-	s := New("", "")
+	s := New("", nil)
 	now := time.Now()
 	outside := map[int]*proc{100: {pid: 100, start: 50, args: "claude", own: 1, total: 1}}
 	attribute(outside, nil)
@@ -95,7 +95,7 @@ func TestAttributionFlipIsNoDiskSpike(t *testing.T) {
 }
 
 func TestHostReapingASessionIsNoCPUSpike(t *testing.T) {
-	s := New("", "")
+	s := New("", nil)
 	now := time.Now()
 	host := func(reaped float64) map[int]*proc {
 		return map[int]*proc{50: {pid: 50, ppid: 10, start: 5, args: "claude bg-pty-host --bg-pty-host x", own: 1, total: 1 + reaped}}
@@ -111,7 +111,7 @@ func TestHostReapingASessionIsNoCPUSpike(t *testing.T) {
 }
 
 func TestNoHistoryBeforeSessionsAreKnown(t *testing.T) {
-	s := New(t.TempDir(), "")
+	s := New(t.TempDir(), nil)
 	s.tick(time.Now())
 	s.tick(time.Now().Add(every))
 	if s.min.n != 0 {

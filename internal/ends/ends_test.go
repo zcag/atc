@@ -11,10 +11,10 @@ var base = time.Now().UTC().Add(-3 * time.Hour).Truncate(time.Second)
 func at(d time.Duration) string { return base.Add(d).Format("2006-01-02T15:04:05.000Z") }
 
 func watcher(lines ...string) *Watcher {
-	w := New("", "", "box", nil)
+	w := New("", nil, "box", nil)
 	w.since = base.Add(-time.Hour)
 	for _, l := range lines {
-		w.daemonLine(l)
+		w.daemonLine("", l)
 	}
 	return w
 }
@@ -152,13 +152,27 @@ func TestDismiss(t *testing.T) {
 		t.Fatal("dismissed")
 	}
 	w.dismissed["dddd4444"] = base.Add(30 * time.Minute)
-	w.daemonLine("[" + at(time.Hour) + "] [bg] bg settled dddd4444 (crashed)")
+	w.daemonLine("", "["+at(time.Hour)+"] [bg] bg settled dddd4444 (crashed)")
 	if e := w.Ended("dddd4444", time.Time{}); e.Dismissed {
 		t.Fatal("a later end is not dismissed by an earlier dismissal")
 	}
 	w.Dismiss("dddd4444", true)
 	if e := w.Ended("dddd4444", time.Time{}); e.Dismissed {
 		t.Fatal("undone")
+	}
+}
+
+func TestOneDaemonDownLeavesTheOtherAccounts(t *testing.T) {
+	w := watcher()
+	w.daemonLine("work", "["+at(0)+"] [supervisor] binary at /home/u/.local/bin/claude changed (/v/2.1.1 → /v/2.1.2), self-restarting for upgrade")
+	w.daemonLine("work", "["+at(time.Second)+"] [supervisor] shutting down (cause=upgrade, uptime=10s, leases=0, live_workers=1)")
+	w.daemonLine("work", "["+at(5*time.Second)+"] [bg] bg settled aaaa1111 (done)")
+	w.daemonLine("personal", "["+at(5*time.Second)+"] [bg] bg settled bbbb2222 (done)")
+	if e := w.explain("aaaa1111", time.Time{}); e.Cause != Updated {
+		t.Fatalf("its own daemon's update: %+v", e)
+	}
+	if e := w.explain("bbbb2222", time.Time{}); e.Cause == Updated {
+		t.Fatalf("another account's daemon going down explained it: %+v", e)
 	}
 }
 

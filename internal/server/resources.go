@@ -36,7 +36,7 @@ func (s *Server) startResources() {
 	if s.StateDir != "" {
 		dir = filepath.Join(s.StateDir, "ends")
 	}
-	s.Ends = ends.New(dir, filepath.Join(claude.ConfigDir(), "daemon.log"), s.Host, s.Res)
+	s.Ends = ends.New(dir, daemonLogs(), s.Host, s.Res)
 	s.Ends.Title = s.Res.Resolve
 	go s.Ends.Run(context.Background())
 }
@@ -120,4 +120,12 @@ func (s *Server) dismissEnded(w http.ResponseWriter, r *http.Request) {
 	s.Ends.Dismiss(r.PathValue("sid"), r.URL.Query().Get("undo") != "")
 	s.refresh()
 	reply(w, map[string]bool{"ok": true})
+}
+
+func daemonLogs() []string {
+	var out []string
+	for _, p := range claude.Profiles() {
+		out = append(out, filepath.Join(p.Home(), "daemon.log"))
+	}
+	return out
 }

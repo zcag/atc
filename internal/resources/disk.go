@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -79,7 +80,7 @@ func worktrees(repo string) []string {
 // diskEntries lists what to measure: every repo a session works in with each of its worktrees, and
 // a folder that is no repo itself, like one holding many worktrees, with the repos directly inside it.
 // A session's working folder decides; what its processes sit in only adds repos.
-func diskEntries(cwds, inside []string, claudeDir string) map[string]string {
+func diskEntries(cwds, inside, claudeDirs []string) map[string]string {
 	home, _ := os.UserHomeDir()
 	out := map[string]string{}
 	addRepo := func(r string) {
@@ -88,7 +89,9 @@ func diskEntries(cwds, inside []string, claudeDir string) map[string]string {
 			out[w] = "worktree"
 		}
 	}
-	mine := func(p string) bool { return p != home && within(home, p) && !within(claudeDir, p) }
+	mine := func(p string) bool {
+		return p != home && within(home, p) && !slices.ContainsFunc(claudeDirs, func(c string) bool { return within(c, p) })
+	}
 	for _, c := range cwds {
 		if !mine(c) {
 			continue
@@ -114,16 +117,18 @@ func diskEntries(cwds, inside []string, claudeDir string) map[string]string {
 			}
 		}
 	}
-	for _, name := range []string{"projects", "jobs"} {
-		out[filepath.Join(claudeDir, name)] = "claude"
+	for _, c := range claudeDirs {
+		for _, name := range []string{"projects", "jobs"} {
+			out[filepath.Join(c, name)] = "claude"
+		}
 	}
 	return out
 }
 
 // measureDisk sizes each entry leaving out the entries nested in it. Excluding rather than
 // subtracting matters: worktrees that share hardlinked files add up to more than their parent.
-func measureDisk(cwds, inside []string, claudeDir string) []DiskUse {
-	entries := diskEntries(cwds, inside, claudeDir)
+func measureDisk(cwds, inside, claudeDirs []string) []DiskUse {
+	entries := diskEntries(cwds, inside, claudeDirs)
 	var out []DiskUse
 	for path, kind := range entries {
 		var nested []string

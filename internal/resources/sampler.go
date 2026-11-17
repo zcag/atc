@@ -96,9 +96,9 @@ type procPrev struct {
 }
 
 type Sampler struct {
-	Dir       string
-	ClaudeDir string
-	Resolve   func(key string) (title, sessionID string)
+	Dir        string
+	ClaudeDirs []string
+	Resolve    func(key string) (title, sessionID string)
 
 	mu      sync.Mutex
 	targets []Target
@@ -129,8 +129,8 @@ type Sampler struct {
 	owners     map[int]Owner
 }
 
-func New(dir, claudeDir string) *Sampler {
-	return &Sampler{Dir: dir, ClaudeDir: claudeDir, sc: newScanner(), prev: map[procKey]procPrev{}, cgPrev: map[string]counters{},
+func New(dir string, claudeDirs []string) *Sampler {
+	return &Sampler{Dir: dir, ClaudeDirs: claudeDirs, sc: newScanner(), prev: map[procKey]procPrev{}, cgPrev: map[string]counters{},
 		loads: map[string]Load{}, resolved: map[string][2]string{}}
 }
 
@@ -175,7 +175,7 @@ func (s *Sampler) watchDisk(ctx context.Context) {
 			inside = append(inside, paths...)
 		}
 		s.mu.Unlock()
-		d := diskScan{At: time.Now(), Uses: measureDisk(dedupe(cwds), dedupe(inside), s.ClaudeDir)}
+		d := diskScan{At: time.Now(), Uses: measureDisk(dedupe(cwds), dedupe(inside), s.ClaudeDirs)}
 		s.mu.Lock()
 		s.disk = d
 		s.mu.Unlock()

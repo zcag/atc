@@ -172,9 +172,17 @@ func (c CLI) Remove(ctx context.Context, id string) error {
 }
 
 func (c CLI) Print(ctx context.Context, model, system, input string) (string, error) {
+	return c.PrintAs(ctx, DefaultProfile(), model, system, input)
+}
+
+// PrintAs is Print on the account p, for text that belongs to it.
+func (c CLI) PrintAs(ctx context.Context, p Profile, model, system, input string) (string, error) {
 	cmd := exec.CommandContext(ctx, c.Bin, "-p", "--model", model, "--safe-mode", "--system-prompt", system, "--tools", "",
 		"--strict-mcp-config", "--no-session-persistence", "--output-format", "json")
 	cmd.Dir = os.TempDir()
+	if env := p.Env(); env != nil {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	cmd.Stdin = strings.NewReader(input)
 	var out, errOut bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errOut

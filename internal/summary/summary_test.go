@@ -53,7 +53,7 @@ func TestSummarizesFinalMessageOnce(t *testing.T) {
 	tr := transcript(t, long)
 	calls := 0
 	var asked string
-	s, err := Open(filepath.Join(t.TempDir(), "summaries.json"), "test", func(ctx context.Context, system, user string) (string, error) {
+	s, err := Open(filepath.Join(t.TempDir(), "summaries.json"), "test", func(ctx context.Context, _, system, user string) (string, error) {
 		calls++
 		asked = user
 		return `{"status": "Found: stale cache", "gist": ["Rebuild keeps the old index"], "overview": ["Found: stale cache"]}`, nil
@@ -90,7 +90,7 @@ func TestSummarizesFinalMessageOnce(t *testing.T) {
 
 func TestShortReplyKeepsItsText(t *testing.T) {
 	tr := transcript(t, "Done, all green. Merge it?")
-	s, _ := Open(filepath.Join(t.TempDir(), "s.json"), "test", func(context.Context, string, string) (string, error) {
+	s, _ := Open(filepath.Join(t.TempDir(), "s.json"), "test", func(context.Context, string, string, string) (string, error) {
 		return `{"status": "Done: tests green", "gist": ["All tests pass"], "replies": ["ok go"]}`, nil
 	})
 	s.Want(tr)
@@ -101,7 +101,7 @@ func TestShortReplyKeepsItsText(t *testing.T) {
 	}
 
 	tr = transcript(t, "Done, all green.")
-	s, _ = Open(filepath.Join(t.TempDir(), "s.json"), "test", func(context.Context, string, string) (string, error) {
+	s, _ = Open(filepath.Join(t.TempDir(), "s.json"), "test", func(context.Context, string, string, string) (string, error) {
 		return "", context.DeadlineExceeded
 	})
 	s.Want(tr)

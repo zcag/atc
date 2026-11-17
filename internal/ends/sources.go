@@ -16,6 +16,7 @@ type settle struct {
 	at      time.Time
 	id, how string
 	raw     string
+	log     string
 }
 
 type retire struct {
@@ -26,6 +27,7 @@ type retire struct {
 
 // daemonEvent is something Claude's daemon did to all its sessions at once.
 type daemonEvent struct {
+	log      string
 	at       time.Time
 	kind     string
 	cause    string
@@ -92,11 +94,11 @@ func (w *Watcher) readDaemon(path string, offset int64) int64 {
 			return offset
 		}
 		offset += int64(len(line))
-		w.daemonLine(strings.TrimRight(line, "\n"))
+		w.daemonLine(path, strings.TrimRight(line, "\n"))
 	}
 }
 
-func (w *Watcher) daemonLine(line string) {
+func (w *Watcher) daemonLine(path, line string) {
 	m := dLine.FindStringSubmatch(line)
 	if m == nil {
 		return
@@ -107,17 +109,17 @@ func (w *Watcher) daemonLine(line string) {
 	}
 	at, msg := at.Local(), m[2]
 	if x := dSettle.FindStringSubmatch(msg); x != nil {
-		w.settles[x[1]] = append(w.settles[x[1]], settle{at, x[1], x[2], line})
+		w.settles[x[1]] = append(w.settles[x[1]], settle{at, x[1], x[2], line, path})
 	} else if x := dRetire.FindStringSubmatch(msg); x != nil {
 		w.retires[x[1]] = append(w.retires[x[1]], retire{at, x[1], x[2], line})
 	} else if x := dDown.FindStringSubmatch(msg); x != nil {
-		w.daemon = append(w.daemon, daemonEvent{at: at, kind: evDown, cause: x[1], raw: line})
+		w.daemon = append(w.daemon, daemonEvent{log: path, at: at, kind: evDown, cause: x[1], raw: line})
 	} else if x := dUpgrade.FindStringSubmatch(msg); x != nil {
-		w.daemon = append(w.daemon, daemonEvent{at: at, kind: evUpgrade, from: x[1], to: x[2], raw: line})
+		w.daemon = append(w.daemon, daemonEvent{log: path, at: at, kind: evUpgrade, from: x[1], to: x[2], raw: line})
 	} else if dLow.MatchString(msg) {
-		w.daemon = append(w.daemon, daemonEvent{at: at, kind: evLow, raw: line})
+		w.daemon = append(w.daemon, daemonEvent{log: path, at: at, kind: evLow, raw: line})
 	} else if dAdopt.MatchString(msg) {
-		w.daemon = append(w.daemon, daemonEvent{at: at, kind: evAdopt, raw: line})
+		w.daemon = append(w.daemon, daemonEvent{log: path, at: at, kind: evAdopt, raw: line})
 	}
 }
 

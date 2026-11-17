@@ -48,8 +48,11 @@ The first makes `~/.claude-work`, a Claude Code config folder of the account's o
 transcripts, history and background daemon. It links your settings, `CLAUDE.md`, skills, commands, agents and
 plugins from `~/.claude` and copies your MCP servers (run it again to bring over ones you add later). Restart
 atc and every new session under `~/proj/work` runs on that account; New session has a **Claude account** choice
-to pick another, and a preset or an agent can name one with `"profile"`. A session resumes on the account
-that keeps its transcript. Sessions on another account carry its name on their row.
+to pick another, `atc new -profile` and the `start` tool take one, and a preset or an agent can name one with
+`"profile"`. A session resumes on the account that keeps its transcript, and its turn summaries are written
+on that account too, so its text never goes through another. Sessions on another account carry its name on
+their row and in `atc ls`. An entry in `profiles.json` with only a name, like `{"name": "personal"}`, names the
+default account.
 
 The usage page then has a switch per account, each with its own limits and spend. An account billed per token
 has no limits to show, and for it the dollar figures are close to what it pays. `atc profile` lists the

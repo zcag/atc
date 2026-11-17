@@ -754,6 +754,9 @@ func (m model) row(s sessions.Session, sel bool) []string {
 	if s.Kind == "interactive" {
 		meta = append(meta, st(dim).Render("in a terminal"))
 	}
+	if s.Profile != "" {
+		meta = append(meta, st(dim).Render(s.Profile))
+	}
 	if s.Pinned {
 		meta = append(meta, st(plain.Foreground(accent)).Render("pinned"))
 	}

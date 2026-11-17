@@ -72,7 +72,7 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc ls [-json]                 live sessions, most urgent first
   atc attach <session>           take over this terminal; Ctrl+Z detaches
   atc history [-json] [query]    past conversations, newest first
-  atc new [-n name] [-host machine] [-report] [dir] [prompt...]
+  atc new [-n name] [-host machine] [-profile name] [-report] [dir] [prompt...]
   atc new -p preset [prompt...]  start from a preset (presets.json in the server's config folder)
       dir defaults to the current dir, with your home written as ~ so it
       maps onto the same path under the server's home
@@ -354,7 +354,7 @@ func serve(args []string) error {
 		AppDir:    cmp.Or(os.Getenv("ATC_APP_DIR"), defaultAppDir()),
 		AgentsDir: cmp.Or(os.Getenv("ATC_AGENTS"), filepath.Join(client.ConfigDir(), "agents.d")),
 		StateDir:  client.ConfigDir(),
-		Res:       resources.New(filepath.Join(client.ConfigDir(), "resources"), claude.ConfigDir()),
+		Res:       resources.New(filepath.Join(client.ConfigDir(), "resources"), claude.Homes()),
 		AssistDir: os.Getenv("ATC_ASSIST_DIR"),
 
 		TrustTailnet:   tailscaleBin(os.Getenv("ATC_TRUST_TAILNET")),
@@ -444,13 +444,13 @@ func summarizer(cli claude.CLI) (*summary.Summarizer, error) {
 	path := filepath.Join(client.ConfigDir(), "summaries.json")
 	if url := os.Getenv("ATC_SUMMARY_URL"); url != "" {
 		model := os.Getenv("ATC_SUMMARY_MODEL")
-		return summary.Open(path, model, func(ctx context.Context, system, user string) (string, error) {
+		return summary.Open(path, model, func(ctx context.Context, _, system, user string) (string, error) {
 			return llm.Chat(ctx, url, model, system, user, 900, true)
 		})
 	}
 	model := cmp.Or(os.Getenv("ATC_SUMMARY_MODEL"), "haiku")
-	return summary.Open(path, model, func(ctx context.Context, system, user string) (string, error) {
-		return cli.Print(ctx, model, system, user)
+	return summary.Open(path, model, func(ctx context.Context, transcript, system, user string) (string, error) {
+		return cli.PrintAs(ctx, claude.ProfileOfFile(transcript), model, system, user)
 	})
 }
 
@@ -529,6 +529,7 @@ func newSession(args []string) error {
 	host := fs.String("host", "", "machine to start it on, when the server lists several")
 	preset := fs.String("p", "", "start from a named preset")
 	report := fs.Bool("report", false, "from inside a Claude session: ask the new session to report back to it")
+	profile := fs.String("profile", "", "Claude account to run it on (atc profile); default the one its folder belongs to")
 	fs.Parse(args)
 	rest := fs.Args()
 	dir := ""
@@ -538,7 +539,7 @@ func newSession(args []string) error {
 		}
 		dir = cmp.Or(dir, tildePWD())
 	}
-	c, l := client.Load(), client.Launch{Host: *host, Dir: dir, Name: *name, Preset: *preset, Prompt: strings.Join(rest, " "), Report: *report}
+	c, l := client.Load(), client.Launch{Host: *host, Dir: dir, Name: *name, Preset: *preset, Prompt: strings.Join(rest, " "), Report: *report, Profile: *profile}
 	id, dir, err := c.Launch(context.Background(), l)
 	if err != nil {
 		return err
@@ -874,6 +875,9 @@ func printRows(list []sessions.Session) {
 		var tags []string
 		if s.Kind == "interactive" {
 			tags = append(tags, "in a terminal")
+		}
+		if s.Profile != "" {
+			tags = append(tags, s.Profile)
 		}
 		if s.Pinned {
 			tags = append(tags, "pinned")

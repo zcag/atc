@@ -39,7 +39,7 @@ type Summary struct {
 	At       time.Time `json:"at"`
 }
 
-type Complete func(ctx context.Context, system, user string) (string, error)
+type Complete func(ctx context.Context, transcript, system, user string) (string, error)
 
 type Summarizer struct {
 	Model    string
@@ -189,7 +189,7 @@ func (s *Summarizer) make(j job) (Summary, error) {
 	text = strings.TrimSpace(text)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	out, err := s.complete(ctx, Prompt, fmt.Sprintf("The person asked:\n%s\n\nThe assistant's final message:\n%s", j.prompt, text))
+	out, err := s.complete(ctx, j.path, Prompt, fmt.Sprintf("The person asked:\n%s\n\nThe assistant's final message:\n%s", j.prompt, text))
 	x, perr := Parse(out)
 	line := clean(text)
 	short := len([]rune(line)) <= verbatimUpTo

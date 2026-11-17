@@ -194,6 +194,14 @@ func Transcript(sid string) string {
 	return ""
 }
 
+func Homes() []string {
+	var out []string
+	for _, p := range Profiles() {
+		out = append(out, p.Home())
+	}
+	return out
+}
+
 // ProjectRoots is every profile's transcript folder.
 func ProjectRoots() []string {
 	var out []string

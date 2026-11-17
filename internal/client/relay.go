@@ -12,8 +12,8 @@ import (
 const HubAgent = "assistant"
 
 type Launch struct {
-	Host, Dir, Name, Preset, Prompt string
-	Worktree, Report, Approved      bool
+	Host, Dir, Name, Preset, Prompt, Profile string
+	Worktree, Report, Approved               bool
 }
 
 func (c *Client) Launch(ctx context.Context, l Launch) (id, dir string, err error) {
@@ -26,7 +26,7 @@ func (c *Client) Launch(ctx context.Context, l Launch) (id, dir string, err erro
 		id, dir, err = c.StartPreset(l.Preset, prompt)
 	} else {
 		dir = l.Dir
-		id, err = c.StartOn(l.Host, l.Dir, l.Name, prompt, l.Worktree)
+		id, err = c.Begin(l.Host, map[string]any{"dir": l.Dir, "name": l.Name, "prompt": prompt, "worktree": l.Worktree, "profile": l.Profile})
 	}
 	if err != nil || !l.Report {
 		return id, dir, err

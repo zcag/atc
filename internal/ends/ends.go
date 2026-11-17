@@ -134,14 +134,14 @@ type record struct {
 }
 
 type Watcher struct {
-	Dir       string
-	DaemonLog string
-	Host      string
-	Res       *resources.Sampler
-	Title     func(id string) (title, sid string)
+	Dir        string
+	DaemonLogs []string
+	Host       string
+	Res        *resources.Sampler
+	Title      func(id string) (title, sid string)
 
 	mu        sync.Mutex
-	offset    int64
+	offsets   map[string]int64
 	settles   map[string][]settle
 	retires   map[string][]retire
 	daemon    []daemonEvent
@@ -156,8 +156,8 @@ type Watcher struct {
 	since     time.Time
 }
 
-func New(dir, daemonLog, host string, res *resources.Sampler) *Watcher {
-	return &Watcher{Dir: dir, DaemonLog: daemonLog, Host: host, Res: res,
+func New(dir string, daemonLogs []string, host string, res *resources.Sampler) *Watcher {
+	return &Watcher{Dir: dir, DaemonLogs: daemonLogs, Host: host, Res: res, offsets: map[string]int64{},
 		settles: map[string][]settle{}, retires: map[string][]retire{}, stops: map[string][]Stop{}, dismissed: map[string]time.Time{}, owners: map[string]Owner{}, guessed: map[string]*Owner{}}
 }
 
@@ -256,7 +256,9 @@ func (w *Watcher) poll() {
 	kills, units := kernelKills(from.Add(-2*time.Second)), unitLines(from.Add(-2*time.Second))
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.offset = w.readDaemon(w.DaemonLog, w.offset)
+	for _, l := range w.DaemonLogs {
+		w.offsets[l] = w.readDaemon(l, w.offsets[l])
+	}
 	for _, k := range kills {
 		if slices.ContainsFunc(w.kills, func(x Kill) bool { return x.PID == k.PID && x.At.Sub(k.At).Abs() < time.Second }) {
 			continue
@@ -408,7 +410,7 @@ func (w *Watcher) explainSettle(id string, st settle) Ending {
 		e.Evidence = []Line{{r.at, SrcClaude, "The daemon closed it to free memory.", r.raw}, end}
 		return e
 	}
-	if d, ok := w.downBefore(st.at); ok {
+	if d, ok := w.downBefore(st.log, st.at); ok {
 		e.Evidence = []Line{{d.at, SrcClaude, "Claude's daemon shut down.", d.raw}, end}
 		if c := w.clusterAround(d.at); c != nil {
 			k := c.biggest
@@ -423,7 +425,7 @@ func (w *Watcher) explainSettle(id string, st settle) Ending {
 			e.Evidence = append([]Line{{k.At, SrcKernel, fmt.Sprintf("The kernel killed %s (%s) for memory.", k.Name, gb(k.RSS)), strings.Join(k.Raw, "\n")}}, e.Evidence...)
 			return e
 		}
-		if u, ok := w.upgradeBefore(d.at); ok {
+		if u, ok := w.upgradeBefore(st.log, d.at); ok {
 			e.Cause, e.Short = Updated, "Claude updated"
 			e.Text = fmt.Sprintf("Claude Code updated itself at %s (%s → %s), and this session did not come back after its daemon restarted.", clock(d.at), u.from, u.to)
 			e.Evidence = append([]Line{{u.at, SrcClaude, "Claude Code's binary changed.", u.raw}}, e.Evidence...)
@@ -501,9 +503,12 @@ func (w *Watcher) retireNear(id string, t time.Time) (retire, bool) {
 	return retire{}, false
 }
 
-func (w *Watcher) downBefore(t time.Time) (daemonEvent, bool) {
+func (w *Watcher) downBefore(log string, t time.Time) (daemonEvent, bool) {
 	for i := len(w.daemon) - 1; i >= 0; i-- {
 		d := w.daemon[i]
+		if d.log != log {
+			continue
+		}
 		if d.kind == evAdopt && !d.at.After(t) {
 			return daemonEvent{}, false
 		}
@@ -514,9 +519,12 @@ func (w *Watcher) downBefore(t time.Time) (daemonEvent, bool) {
 	return daemonEvent{}, false
 }
 
-func (w *Watcher) upgradeBefore(t time.Time) (daemonEvent, bool) {
+func (w *Watcher) upgradeBefore(log string, t time.Time) (daemonEvent, bool) {
 	for i := len(w.daemon) - 1; i >= 0; i-- {
 		d := w.daemon[i]
+		if d.log != log {
+			continue
+		}
 		if d.kind == evUpgrade && t.Sub(d.at) >= 0 && t.Sub(d.at) <= 30*time.Second {
 			return d, true
 		}

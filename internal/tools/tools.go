@@ -136,6 +136,7 @@ type startIn struct {
 	Name     string `json:"name,omitempty" jsonschema:"short title; without one Claude titles it"`
 	Host     string `json:"host,omitempty" jsonschema:"machine name from the sessions list; default the main one"`
 	Worktree bool   `json:"worktree,omitempty" jsonschema:"work in its own git worktree so it cannot clash with other sessions in the repo"`
+	Profile  string `json:"profile,omitempty" jsonschema:"Claude account to run it on, by name; default the one the folder belongs to. Only when the user names one"`
 	Report   bool   `json:"report,omitempty" jsonschema:"have it report back to you when done; only when your own next step needs its outcome. Off, the work is handed off and it does not report"`
 	Approved bool   `json:"approved,omitempty" jsonschema:"assistant only: the user told you, in their own words, to have exactly this done, so it counts as their approval for it (a merge, push, deploy, send)"`
 }
@@ -703,7 +704,7 @@ func (t *tools) wait(ctx context.Context, _ *mcp.CallToolRequest, in waitIn) (*m
 }
 
 func (t *tools) start(ctx context.Context, _ *mcp.CallToolRequest, in startIn) (*mcp.CallToolResult, done, error) {
-	id, _, err := t.c.Launch(ctx, client.Launch{Host: in.Host, Dir: in.Dir, Name: in.Name, Preset: in.Preset, Prompt: in.Prompt, Worktree: in.Worktree, Report: in.Report, Approved: in.Approved})
+	id, _, err := t.c.Launch(ctx, client.Launch{Host: in.Host, Dir: in.Dir, Name: in.Name, Preset: in.Preset, Prompt: in.Prompt, Worktree: in.Worktree, Profile: in.Profile, Report: in.Report, Approved: in.Approved})
 	if err != nil {
 		return nil, done{}, err
 	}
