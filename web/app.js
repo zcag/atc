@@ -981,7 +981,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   const tap = rail ? null : () => toggle(s.sessionId);
   const { events } = useRowEvents(s, tap, !rail && s.state !== "past" && s.state !== "stopped");
   const on = sel?.sessionId === s.sessionId, run = runningOf(s), made = madeOf(s), g = s.pinned && waiting(s) ? "pinned waiting" : groupOf(s);
-  const where = [MULTI && s.host, s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch].filter(Boolean).join(" ");
+  const where = [MULTI && s.host, s.profile, s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch].filter(Boolean).join(" ");
   const status = (s.state === "needs-you" ? oneLine(s.summary?.status) || oneLine(s.preview || s.lastReply) || "Needs you" : headline(s)) || WORD[s.state] || "";
   const second = doingLine(s) || (cutOff(s) ? s.ended.text : "");
   const fresh = unread(s);
@@ -992,7 +992,7 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
     <button class=${cls} data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
       <${StateBlock} s=${s} />
       <span class="c">${title}<span class="s">${cutOff(s) ? s.ended.text : status}</span><${CardGist} s=${s} />${s.state === "working" && html`<span class="s2 mono">${doing(s)}</span>`}</span>
-      <span class="e"><span class="ago">${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>
+      <span class="e"><span class="ago">${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${s.profile && html`<${ProfileTag} s=${s} />`}${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>
     </button>`;
   return html`
     <div class="bwrap ${open ? "open" : ""} ${g}">
@@ -2276,6 +2276,7 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
     SESSION_API = { s, canAttach, mode: choose, page: openPage, pages: shown, zen, usage: () => setShowUse(true), rename: () => setRenaming(true) };
     return () => { SESSION_API = null; };
   });
+  USAGE_PROFILE = s.profile || "";
   const use = useSessionUsage(s, showUse || s.state === "working" ? 15000 : 90000);
   const outCount = outs ? outs.servers.length + outs.files.filter((f) => f.kind !== "text").length + outs.links.length : 0;
 
@@ -2291,7 +2292,7 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
     if (!panes?.state) togglePane("state");
     scrollWhenThere(`.statep ${sel}`);
   };
-  const where = [MULTI && s.host, s.branch && s.branch !== "HEAD" && s.branch].filter(Boolean).join(" ");
+  const where = [MULTI && s.host, s.profile, s.branch && s.branch !== "HEAD" && s.branch].filter(Boolean).join(" ");
   useEffect(() => {
     const k = (e) => {
       const t = e.target;
@@ -2311,6 +2312,7 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
     ["Model", engineTag(s) || (s.model && model(s.model))],
     ["Permissions", s.permissionMode === "bypassPermissions" ? "no prompts" : s.permissionMode],
     ["Host", s.host],
+    ["Claude account", s.profile],
     ["Branch", s.branch !== "HEAD" && s.branch],
     ["Folder", s.cwd && tilde(s.cwd)],
     ["Started", s.startedAt && agoLong(s.startedAt)],
@@ -2937,36 +2939,41 @@ const modelName = (m) => {
   return n[0].toUpperCase() + n.slice(1);
 };
 
-let WINS = null, winsAt = 0, winsLoading = null;
-function loadWindows(fresh) {
-  if (!fresh && Date.now() - winsAt < 120000) return Promise.resolve(WINS);
-  return (winsLoading ||= api("/api/usage/windows").then((w) => { WINS = w; winsAt = Date.now(); return w; }, () => WINS).finally(() => (winsLoading = null)));
+// Every Claude account has its own limits, so its own windows; USAGE_PROFILE is the one the screen being drawn is about.
+const WINS = {}, winsAt = {}, winsLoading = {};
+let USAGE_PROFILE = "";
+const profQ = (p, sep = "?") => (p ? `${sep}profile=${encodeURIComponent(p)}` : "");
+function loadWindows(fresh, profile = "") {
+  if (!fresh && Date.now() - (winsAt[profile] || 0) < 120000) return Promise.resolve(WINS[profile] ?? null);
+  return (winsLoading[profile] ||= api(`/api/usage/windows${profQ(profile)}`).then((w) => { WINS[profile] = w; winsAt[profile] = Date.now(); return w; }, () => WINS[profile] ?? null).finally(() => delete winsLoading[profile]));
 }
+let PROFILES = null;
+const loadProfiles = () => (PROFILES ||= api("/api/profiles").then((p) => p?.profiles || [], () => { PROFILES = null; return []; }));
 const winOf = (u, key) => u?.windows?.find((w) => w.key === key);
 const perPct = (w) => (w?.cost > 0 && w.percent >= 1 ? w.cost / w.percent : null);
 const pct = (x) => (x < 0.1 ? "<0.1%" : x < 10 ? `${x.toFixed(1)}%` : `${Math.round(x)}%`);
 const usd = (c) => (c > 0 && c < 0.01 ? "<$0.01" : `~${dollars(c)}`);
-const weekRate = () => perPct(winOf(WINS, "weekly_all"));
+const weekRate = () => perPct(winOf(WINS[USAGE_PROFILE], "weekly_all"));
 const wk = (c) => (c > 0 && weekRate() ? `${pct(c / weekRate())} wk` : "");
 const withWk = (c, money = dollars) => (wk(c) ? `${money(c)} (${wk(c)})` : money(c));
 const resetDay = (t) => new Date(t).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
 
-const useSessionUsage = (s, every) => useUsage(`/api/sessions/${s.sessionId}/usage`, every);
+const useSessionUsage = (s, every) => useUsage(`/api/sessions/${s.sessionId}/usage`, every, s.profile);
 
-function useUsage(path, every) {
+function useUsage(path, every, profile = "") {
   const [data, setData] = useState(null);
   useEffect(() => setData(null), [path]);
   useEffect(() => {
     if (!path) return;
     let live = true;
-    const load = () => loadWindows().then((u) => {
+    const load = () => loadWindows(false, profile).then((u) => {
       const q = [["week", winOf(u, "weekly_all")], ["fiveHour", winOf(u, "session")]].filter(([, w]) => w).map(([k, w]) => `${k}=${Math.floor(Date.parse(w.from) / 1000)}`);
       return api(`${path}${q.length ? `?${q.join("&")}` : ""}`);
-    }).then((d) => live && setData({ ...d, wins: WINS }), () => live && setData((d) => d || { failed: true }));
+    }).then((d) => live && setData({ ...d, wins: WINS[profile] }), () => live && setData((d) => d || { failed: true }));
     load();
     const t = setInterval(load, every);
     return () => { live = false; clearInterval(t); };
-  }, [path, every]);
+  }, [path, every, profile]);
   return data;
 }
 
@@ -3324,6 +3331,8 @@ const ioShort = (r, w) => (r + w) < 1024 ? "" : `${gb(r + w)}/s`;
 const shortLoad = (l) => [l.mem > 0 && gb(l.mem), l.cpu > 0 && `${l.cpu}% CPU`].filter(Boolean).join(", ");
 const hotLoad = (l) => l.mem >= 4 * 2 ** 30 || l.cpu >= 300;
 const LoadTag = ({ s }) => s.load ? html`<span class="load ${hotLoad(s.load) ? "hot" : ""}" title=${`This session and its processes: ${[s.load.mem > 0 && gb(s.load.mem), s.load.cpu > 0 && `${s.load.cpu}% of a core`].filter(Boolean).join(", ")}`}>${shortLoad(s.load)}</span>` : null;
+
+const ProfileTag = ({ s }) => html`<span class="prof" title=${`Runs on the ${s.profile} Claude account`}>${s.profile}</span>`;
 
 const RES_RANGES = [["1h", 1], ["6h", 6], ["24h", 24], ["7d", 168]];
 const RES_SERIES = 5;
@@ -3733,21 +3742,37 @@ function ResourceChip() {
   return html`<button class="kb reschip" onClick=${openResources} title=${`Memory ${gb(b.machine.memUsed)} of ${gb(b.machine.memTotal)}, CPU ${Math.round(b.machine.cpu / b.machine.cores)}%`}>mem ${pct}%</button>`;
 }
 
-function UsagePage({ limits, live, down, onOpen }) {
+function UsagePage({ limits: mine, live, down, onOpen }) {
   useNow(60000);
-  const [u, setU] = useState(WINS);
-  useEffect(() => { loadWindows(true).then(setU); }, []);
   const [v, setV] = useState(() => {
-    const x = { sort: "cost", dir: -1, q: "", range: "7d", ...stored("atc.usage", {}) };
+    const x = { sort: "cost", dir: -1, q: "", range: "7d", profile: "", ...stored("atc.usage", {}) };
     return USAGE_COLS.some(([k]) => k === x.sort) ? x : { ...x, sort: "cost", dir: -1 };
   });
   const set = (p) => setV((x) => { const n = { ...x, ...p }; store("atc.usage", n); return n; });
+  const [profs, setProfs] = useState([]);
+  useEffect(() => { loadProfiles().then(setProfs); }, []);
+  const prof = profs.some((p) => p.name === v.profile && !p.default) ? v.profile : "";
+  USAGE_PROFILE = prof;
+  const [u, setU] = useState(() => WINS[prof] ?? null);
+  useEffect(() => { setU(WINS[prof] ?? null); loadWindows(true, prof).then(setU); }, [prof]);
+  const [theirs, setTheirs] = useState(null);
+  useEffect(() => {
+    setTheirs(null);
+    if (!prof) return;
+    let on = true;
+    const load = () => api(`/api/usage/limits${profQ(prof)}`).then((l) => on && setTheirs(l), () => {});
+    load();
+    const t = setInterval(load, 120000);
+    return () => { on = false; clearInterval(t); };
+  }, [prof]);
+  const limits = prof ? theirs : mine;
   const [sel, setSel] = useState({});
   const [more, setMore] = useState(false);
   const pickSel = (p) => { setSel((x) => ({ ...x, ...p })); setMore(false); };
   const rangeDef = RANGES.find((r) => r[0] === v.range) || RANGES[2];
   const weekFrom = Date.parse(winOf(u, "weekly_all")?.from);
-  const rep = useReport(rangeDef[0] !== "week" ? rangeDef[3] : weekFrom ? `since=${Math.floor(weekFrom / 1000)}` : null);
+  const span0 = rangeDef[0] !== "week" ? rangeDef[3] : weekFrom ? `since=${Math.floor(weekFrom / 1000)}` : null;
+  const rep = useReport(span0 && span0 + profQ(prof, "&"));
   const xp = useExplain();
   const scroll = useRef(), sessionsRef = useRef();
   useLayoutEffect(() => { if (scroll.current) scroll.current.scrollTop = stored("atc.usage.scroll", 0); }, [!!rep]);
@@ -3756,7 +3781,8 @@ function UsagePage({ limits, live, down, onOpen }) {
   const rows = ws.map((w) => limitRow(w, winOf(u, w.key)));
   const hit = rows.find((r) => r.hit);
   const isDown = (h) => down.some((p) => p.name === h);
-  const status = !limits ? "Checking the limits…" : !ws.length ? `Limits are not available here${limits.error ? `: ${limits.error}` : ""}`
+  const noLimits = prof ? `The ${prof} account reports no plan limits; an account billed per token has none` : `Limits are not available here${limits?.error ? `: ${limits.error}` : ""}`;
+  const status = !limits ? "Checking the limits…" : !ws.length ? noLimits
     : hit ? `${hit.name} runs out ${hit.when} at this rate, ${hit.left} before the reset` : "Every limit lasts to its reset at this rate";
   const src = limits && (limits.source === "cached" ? `from Claude Code's last check, ${agoLong(limits.fetchedAt)}` : limits.source === "statusline" ? `from Claude Code's status line, ${agoLong(limits.fetchedAt)}` : "");
 
@@ -3817,7 +3843,9 @@ function UsagePage({ limits, live, down, onOpen }) {
   return html`
     <section class="scrpane usage" aria-label="Usage">
       <header class="hd">
-        <div class="l1"><h1>Usage</h1><span class="where">Claude Code${MULTI ? " on every host" : ""}${limits?.plan ? `, ${limits.plan} plan` : ""}</span></div>
+        <div class="l1"><h1>Usage</h1><span class="where">Claude Code${MULTI ? " on every host" : ""}${limits?.plan ? `, ${limits.plan} plan` : ""}</span>
+          ${profs.length > 1 && html`<span class="seg uprof" role="group" aria-label="Claude account">${profs.map((p) => html`<button aria-pressed=${(p.default ? "" : p.name) === prof}
+            onClick=${() => { set({ profile: p.default ? "" : p.name }); setSel({}); }}>${p.name}</button>`)}</span>`}</div>
         <div class="l2 no-block"><span class="stat">${status}</span>
           ${todayCost != null && html`<span class="rd"><span class="l">today</span>${withWk(todayCost)}</span>`}
           ${week && html`<span class="rd"><span class="l">week</span>${withWk(week.cost)}</span>`}
@@ -3827,7 +3855,7 @@ function UsagePage({ limits, live, down, onOpen }) {
         <div class="ubody">
           <section class="sec" aria-labelledby="u-lim">
             <div class="sh"><h2 id="u-lim">Limits</h2><span class="n">${ws.length ? `Claude Code${MULTI ? ", every host" : ""}. ${touch ? "Tap" : "Point at"} a number for how it is worked out.` : ""}</span></div>
-            ${!ws.length && html`<p class="none">${limits ? `Limits are not available here${limits.error ? `: ${limits.error}` : "."}` : "Checking…"}</p>`}
+            ${!ws.length && html`<p class="none">${limits ? `${noLimits}.` : "Checking…"}</p>`}
             ${rows.map((r) => html`
               <div class="lim ${r.hit ? "hit" : ""}">
                 <div class="nm"><b>${r.name}</b><span>${r.reset}${r.spent > 0 ? `, ${dollars(r.spent)} so far` : ""}</span></div>
@@ -3844,7 +3872,7 @@ function UsagePage({ limits, live, down, onOpen }) {
           </section>
           <div class="uspend ${rep?.loading ? "loading" : ""}">
             <div class="ubar">
-              <div class="sh"><h2>Spend</h2><span class="n">API prices; a plan is not billed per token</span>
+              <div class="sh"><h2>Spend</h2><span class="n">${prof ? `the ${prof} account, at API prices` : "API prices; a plan is not billed per token"}</span>
                 <span class="r"><span class="seg" role="group" aria-label="Range">${RANGES.map((r) => html`<button aria-pressed=${r[0] === rangeDef[0]} aria-label=${r[2]} onClick=${() => { set({ range: r[0] }); pickSel({ bucket: null }); }}>${r[1]}</button>`)}</span></span></div>
               ${chips.length > 0 && html`<div class="uchips">
                 ${chips.map(([k, l]) => html`<button class="uchip" aria-label=${`Remove ${l}`} onClick=${() => pickSel({ [k]: null })}>${l}<span aria-hidden="true">×</span></button>`)}
@@ -3888,7 +3916,7 @@ function UsagePage({ limits, live, down, onOpen }) {
             </div>
             <${HoursMap} days=${shownDays} hourly=${hourly} range=${rangeDef[0]} filtered=${filtered} />`}
           </div>
-          <p class="unote">${ESTIMATE()} ${WK_NOTE()}</p>
+          <p class="unote">${prof ? `Dollar figures are estimated from the ${prof} account's transcripts at Claude API list prices. If that account is billed per token, this is close to what it pays.` : ESTIMATE()} ${WK_NOTE()}</p>
         </div>
       </div>
       <${Explain} at=${xp.at} />
@@ -7631,6 +7659,9 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
   const [engines, setEngines] = useState([]);
   const [engine, setEngine] = useState("");
   const [engOpen, setEngOpen] = useState(false);
+  const [profile, setProfile] = useState("");
+  const [profOpen, setProfOpen] = useState(false);
+  const [profs, setProfs] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
   const up = hosts.filter((h) => !isDown(h));
@@ -7655,6 +7686,15 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
   useEffect(() => { if (!usable.some((e) => e.name === engine)) setEngine(""); }, [target, engines]);
   const eng = usable.find((e) => e.name === engine);
   const harness = eng?.harness;
+  const profDir = preset ? preset.dir : dir.trim();
+  useEffect(() => {
+    let live = true;
+    const t = setTimeout(() => api(`/api/profiles?${new URLSearchParams({ dir: profDir, ...(target !== home ? { host: target } : {}) })}`).then((p) => live && setProfs(p), () => live && setProfs(null)), 250);
+    return () => { live = false; clearTimeout(t); };
+  }, [profDir, target]);
+  useEffect(() => { if (profs && profile && !profs.profiles.some((p) => p.name === profile)) setProfile(""); }, [profs]);
+  const byFolder = preset?.profile || profs?.for;
+  const profLine = profile ? html`<b>${profile}</b>` : html`<b>${byFolder || "default"}</b>${preset?.profile ? ", from the preset" : profs?.profiles.length > 1 ? ", from the folder" : ""}`;
   const git = !!dirs.find((d) => tilde(d.path) === dir)?.git;
   const busyHere = workingIn(live, dir, target, home);
   const trust = useTrustState(later || harness ? "" : preset ? preset.dir : dir.trim(), target);
@@ -7705,8 +7745,8 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
     try {
       const opening = await withFiles(h);
       const r = await (preset
-        ? api(`/api/sessions${hostQ(preset.host, home)}`, { method: "POST", body: { preset: preset.name, name: name.trim(), prompt: opening, engine } })
-        : api(`/api/sessions${hostQ(h, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt: opening, worktree: wtOn, engine } }));
+        ? api(`/api/sessions${hostQ(preset.host, home)}`, { method: "POST", body: { preset: preset.name, name: name.trim(), prompt: opening, engine, profile } })
+        : api(`/api/sessions${hostQ(h, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt: opening, worktree: wtOn, engine, profile } }));
       if (!preset) store(NS_HOSTS, { ...stored(NS_HOSTS, {}), [dir]: h });
       nsDraft.set(null);
       setFiles([]);
@@ -7766,6 +7806,13 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
               ${naming
                 ? html`<input class="nsin nsname" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} placeholder=${preset ? preset.name : "Session name"} aria-label="Session name" ref=${focusOnMount} />`
                 : html`<button type="button" class="kb" title=${`Without one, ${harness || "Claude"} titles the session from what you ask`} onClick=${() => setNaming(true)}>Name it</button>`}
+            </div></div>`}
+          ${!later && !harness && profs?.profiles.length > 1 && html`<div class="nsfld"><div class="nslb">Claude account <span>the sign-in it runs and is billed on</span></div>
+            <div class="nseng">
+              ${profOpen
+                ? html`<select aria-label="Claude account" value=${profile} onChange=${(e) => setProfile(e.target.value)} ref=${focusOnMount}>
+                    ${[{ name: "" }, ...profs.profiles].map((p) => html`<option value=${p.name}>${p.name || `By folder (${byFolder || "default"})`}</option>`)}</select>`
+                : html`<span>${profLine}</span><button type="button" class="kb" onClick=${() => setProfOpen(true)}>Change</button>`}
             </div></div>`}
           ${err && html`<div class="nserr" role="alert" ref=${intoView}><b>Couldn't ${later ? "add it" : `start on ${preset ? preset.host || home : host}`}.</b> ${err}</div>`}
         </div>

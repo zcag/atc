@@ -284,13 +284,7 @@ func (h *Hub) saveSID(sid string) {
 // written is whether the session has a transcript yet: one that never had a turn can't be resumed.
 func written(sid string) bool { return transcript(sid) != "" }
 
-func transcript(sid string) string {
-	m, _ := filepath.Glob(filepath.Join(claude.ConfigDir(), "projects", "*", sid+".jsonl"))
-	if len(m) == 0 {
-		return ""
-	}
-	return m[0]
-}
+func transcript(sid string) string { return claude.Transcript(sid) }
 
 // startedIn is the folder a written session was started in: Claude resumes a session only from there.
 func startedIn(sid string) string {

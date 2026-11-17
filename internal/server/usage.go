@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/opencode"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/store"
@@ -127,8 +128,24 @@ func byCost(xs []spentIn) {
 	sort.Slice(xs, func(i, j int) bool { return xs[i].Cost > xs[j].Cost })
 }
 
-func (s *Server) spentSince(from time.Time) (usage.Spend, []spentIn) {
-	sp := s.stats.Spend(s.M.Index.Root, from)
+// profileOf is the Claude account a usage request asks about: its profile parameter, else the default.
+func profileOf(w http.ResponseWriter, r *http.Request) (claude.Profile, bool) {
+	p, ok := claude.ProfileNamed(r.URL.Query().Get("profile"))
+	if !ok {
+		http.Error(w, "no Claude profile called "+r.URL.Query().Get("profile"), http.StatusNotFound)
+	}
+	return p, ok
+}
+
+func (s *Server) limitsOf(ctx context.Context, p claude.Profile) usage.Limits {
+	if p.Default() {
+		return s.limits.Get(ctx)
+	}
+	return (&usage.LimitsClient{Home: p.Home(), State: p.State()}).Get(ctx)
+}
+
+func (s *Server) spentSince(p claude.Profile, from time.Time) (usage.Spend, []spentIn) {
+	sp := s.stats.Spend(p.Projects(), from)
 	return sp, s.spentIn(sp.Sessions)
 }
 
@@ -153,21 +170,22 @@ func (s *Server) spentIn(sessions map[string]*usage.SessionSpend) []spentIn {
 	return out
 }
 
-func (s *Server) localSpend(from time.Time) spend {
-	sp, list := s.spentSince(from)
+func (s *Server) localSpend(p claude.Profile, from time.Time) spend {
+	sp, list := s.spentSince(p, from)
 	return spend{Cost: sp.Cost, Models: sp.Models, Sessions: list[:min(len(list), topSessions)]}
 }
 
-func (s *Server) fleetSpend(ctx context.Context, from time.Time) spend {
-	out := s.localSpend(from)
+func (s *Server) fleetSpend(ctx context.Context, p claude.Profile, from time.Time) spend {
+	out := s.localSpend(p, from)
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	for _, p := range s.Peers {
+	for _, peer := range s.Peers {
 		wg.Go(func() {
 			var ps spend
-			if s.fleet.get(ctx, p, "/api/usage/spend?from="+strconv.FormatInt(from.Unix(), 10), &ps) != nil {
+			q := url.Values{"from": {strconv.FormatInt(from.Unix(), 10)}, "profile": {p.Name}}
+			if s.fleet.get(ctx, peer, "/api/usage/spend?"+q.Encode(), &ps) != nil {
 				return
 			}
 			mu.Lock()
@@ -191,7 +209,9 @@ func (s *Server) usageSpend(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "from is required", http.StatusBadRequest)
 		return
 	}
-	reply(w, s.localSpend(time.Unix(v, 0)))
+	if p, ok := profileOf(w, r); ok {
+		reply(w, s.localSpend(p, time.Unix(v, 0)))
+	}
 }
 
 type windowSpend struct {
@@ -201,16 +221,20 @@ type windowSpend struct {
 }
 
 func (s *Server) usageWindows(w http.ResponseWriter, r *http.Request) {
+	p, ok := profileOf(w, r)
+	if !ok {
+		return
+	}
 	out := struct {
 		Windows []windowSpend `json:"windows"`
 		Week    *spend        `json:"week,omitempty"`
 	}{Windows: []windowSpend{}}
 	byFrom := map[time.Time]*spend{}
-	for _, win := range s.limits.Get(r.Context()).Windows {
+	for _, win := range s.limitsOf(r.Context(), p).Windows {
 		from := win.From()
 		sp := byFrom[from]
 		if sp == nil {
-			v := s.fleetSpend(r.Context(), from)
+			v := s.fleetSpend(r.Context(), p, from)
 			sp, byFrom[from] = &v, &v
 		}
 		ws := windowSpend{Window: win, From: from}
@@ -228,7 +252,31 @@ func (s *Server) usageWindows(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) usageLimits(w http.ResponseWriter, r *http.Request) {
-	reply(w, s.limits.Get(r.Context()))
+	if p, ok := profileOf(w, r); ok {
+		reply(w, s.limitsOf(r.Context(), p))
+	}
+}
+
+type profileInfo struct {
+	Name    string   `json:"name"`
+	Default bool     `json:"default,omitempty"`
+	Home    string   `json:"home"`
+	Paths   []string `json:"paths,omitempty"`
+}
+
+// profiles lists this machine's Claude accounts and, given a dir, the one a new session there runs on.
+func (s *Server) profiles(w http.ResponseWriter, r *http.Request) {
+	out := struct {
+		Profiles []profileInfo `json:"profiles"`
+		For      string        `json:"for,omitempty"`
+	}{Profiles: []profileInfo{}}
+	for _, p := range claude.Profiles() {
+		out.Profiles = append(out.Profiles, profileInfo{p.Name, p.Default(), p.Home(), p.Paths})
+	}
+	if dir := r.URL.Query().Get("dir"); dir != "" {
+		out.For = claude.ProfileFor(dir).Name
+	}
+	reply(w, out)
 }
 
 type report struct {
@@ -259,7 +307,11 @@ func reportSpan(q url.Values) (time.Time, bool) {
 func (s *Server) usageReport(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	from, hourly := reportSpan(q)
-	rep := s.stats.Report(s.M.Index.Root, from, hourly)
+	p, ok := profileOf(w, r)
+	if !ok {
+		return
+	}
+	rep := s.stats.Report(p.Projects(), from, hourly)
 	local := report{rep.Days, s.spentIn(rep.Sessions), rep.Previous, rep.First}
 	if q.Get("local") != "" {
 		reply(w, local)

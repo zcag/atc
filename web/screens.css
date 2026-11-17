@@ -22,6 +22,7 @@
 .scrpane .seg button:hover { color: var(--ink); }
 .scrpane .seg button[aria-pressed="true"] { background: var(--ink); color: var(--strip); font-weight: 600; }
 .scrpane .seg .c { font-family: var(--mono); font-size: var(--fs-micro); opacity: .8; }
+.usage .hd .uprof { margin-left: auto; }
 
 .toast .tundo { height: 26px; margin-left: var(--s3); background: none; box-shadow: none; color: inherit; text-decoration: underline; text-underline-offset: 3px; font-weight: 650; }
 .toast .tundo kbd { margin-left: 4px; opacity: .7; }
@@ -506,6 +507,7 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
 
 /* resources */
 .load { font-family: var(--mono); font-size: var(--fs-micro); color: var(--dim); white-space: nowrap; }
+.prof { font-size: var(--fs-micro); line-height: 1.5; padding: 0 5px; border: 1px solid var(--line); border-radius: 4px; color: var(--dim); white-space: nowrap; }
 .load.hot { color: var(--fail); font-weight: 650; }
 .brow .mk .load { color: inherit; }
 .brow .mk .load.hot { color: var(--fail); }

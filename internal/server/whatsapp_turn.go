@@ -37,11 +37,7 @@ func (s *Server) transcriptOf(sid string) string {
 	if tr, ok := s.M.Index.Find(sid); ok && filepath.Base(tr.Path) == sid+".jsonl" {
 		return tr.Path
 	}
-	matches, _ := filepath.Glob(filepath.Join(claude.ConfigDir(), "projects", "*", sid+".jsonl"))
-	if len(matches) > 0 {
-		return matches[0]
-	}
-	return ""
+	return claude.Transcript(sid)
 }
 
 // waTurn is one stretch of the session's transcript being relayed: from where the last one

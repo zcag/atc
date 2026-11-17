@@ -1,10 +1,12 @@
 package usage
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"io"
 	"os"
 	"path/filepath"
@@ -42,7 +44,11 @@ type Limits struct {
 	Error     string    `json:"error,omitempty"`
 }
 
+// A LimitsClient reads one Claude account's limits: Home is its config folder and State the file Claude Code keeps
+// its cached usage in; empty means the default account.
 type LimitsClient struct {
+	Home   string
+	State  string
 	Cached func() ([]byte, time.Time, error)
 	Tapped func() ([]byte, time.Time, error)
 }
@@ -87,14 +93,14 @@ func (c *LimitsClient) cached() ([]byte, time.Time, error) {
 	if c.Cached != nil {
 		return c.Cached()
 	}
-	return ReadCached()
+	return ReadCachedAt(c.State)
 }
 
 func (c *LimitsClient) tapped() ([]byte, time.Time, error) {
 	if c.Tapped != nil {
 		return c.Tapped()
 	}
-	return ReadTapped()
+	return ReadTappedAt(TapFile(c.Home))
 }
 
 func cachePath(name string) string {
@@ -102,8 +108,24 @@ func cachePath(name string) string {
 	return filepath.Join(dir, "atc", name)
 }
 
-func ReadTapped() ([]byte, time.Time, error) {
-	p := cachePath("statusline-limits.json")
+func defaultHome() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".claude")
+}
+
+// TapFile is where the status line's limits for the Claude account in config folder home are kept.
+func TapFile(home string) string {
+	if home == "" || filepath.Clean(home) == defaultHome() {
+		return cachePath("statusline-limits.json")
+	}
+	h := fnv.New32a()
+	h.Write([]byte(filepath.Clean(home)))
+	return cachePath(fmt.Sprintf("statusline-limits-%08x.json", h.Sum32()))
+}
+
+func ReadTapped() ([]byte, time.Time, error) { return ReadTappedAt(TapFile("")) }
+
+func ReadTappedAt(p string) ([]byte, time.Time, error) {
 	st, err := os.Stat(p)
 	if err != nil {
 		return nil, time.Time{}, err
@@ -137,7 +159,7 @@ func Tap(r io.Reader) error {
 		return nil
 	}
 	b, _ := json.Marshal(out)
-	p := cachePath("statusline-limits.json")
+	p := TapFile(cmp.Or(os.Getenv("CLAUDE_CONFIG_DIR"), defaultHome()))
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		return err
 	}
@@ -148,9 +170,14 @@ func Tap(r io.Reader) error {
 	return os.Rename(tmp, p)
 }
 
-func ReadCached() ([]byte, time.Time, error) {
-	home, _ := os.UserHomeDir()
-	b, err := os.ReadFile(filepath.Join(home, ".claude.json"))
+func ReadCached() ([]byte, time.Time, error) { return ReadCachedAt("") }
+
+func ReadCachedAt(path string) ([]byte, time.Time, error) {
+	if path == "" {
+		home, _ := os.UserHomeDir()
+		path = filepath.Join(home, ".claude.json")
+	}
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, time.Time{}, err
 	}

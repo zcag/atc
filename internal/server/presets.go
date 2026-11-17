@@ -18,6 +18,7 @@ type Preset struct {
 	Args     []string `json:"args,omitempty"`
 	Worktree bool     `json:"worktree,omitempty"`
 	Host     string   `json:"host,omitempty"`
+	Profile  string   `json:"profile,omitempty"`
 }
 
 func LoadPresets(path string) ([]Preset, error) {

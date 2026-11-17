@@ -239,6 +239,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/usage/windows", s.usageWindows)
 	mux.HandleFunc("GET /api/usage/spend", s.usageSpend)
 	mux.HandleFunc("GET /api/usage/report", s.usageReport)
+	mux.HandleFunc("GET /api/profiles", s.profiles)
 	mux.HandleFunc("GET /api/resources", s.resourcesNow)
 	mux.HandleFunc("GET /api/resources/history", s.resourcesHistory)
 	mux.HandleFunc("GET /api/resources/incidents", s.resourcesIncidents)
@@ -827,9 +828,9 @@ func (s *Server) route(next http.Handler) http.Handler {
 }
 
 type startReq struct {
-	Dir, Name, Prompt, Preset, Engine string
-	Worktree                          bool
-	guest                             bool
+	Dir, Name, Prompt, Preset, Engine, Profile string
+	Worktree                                   bool
+	guest                                      bool
 }
 
 type badRequest struct{ error }
@@ -859,6 +860,7 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 			return "", badf("no preset named %s", req.Preset)
 		}
 		req.Dir, req.Name, req.Worktree = cmp.Or(req.Dir, p.Dir), cmp.Or(req.Name, p.Name), req.Worktree || p.Worktree
+		req.Profile = cmp.Or(req.Profile, p.Profile)
 	}
 	dir, err := folderAt(req.Dir)
 	if err != nil {
@@ -872,8 +874,8 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 		if g := guestsDir(); dir != g && !strings.HasPrefix(dir, g+"/") {
 			return "", badf("work for guests and groups starts in %s", g)
 		}
-		if req.Engine != "" || req.Worktree {
-			return "", badf("work for guests and groups starts on the default engine, without a worktree")
+		if req.Engine != "" || req.Worktree || req.Profile != "" {
+			return "", badf("work for guests and groups starts on the default engine and profile, without a worktree")
 		}
 		extra = append(extra, guestWorkerArgs...)
 	}
@@ -888,6 +890,9 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 		if req.Worktree {
 			return "", badf("a git worktree needs Claude; opencode sessions start in the folder itself")
 		}
+		if req.Profile != "" {
+			return "", badf("a Claude profile needs Claude; opencode sessions have their own sign-in")
+		}
 		return s.startOpenCode(ctx, dir, req.Name, req.Prompt, e, p)
 	}
 	if req.Worktree {
@@ -896,7 +901,10 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 	if req.Engine != "" {
 		extra = append(extra, e.args()...)
 	}
-	id, err := s.M.CLI.Start(ctx, dir, req.Name, req.Prompt, extra...)
+	if _, ok := claude.ProfileNamed(req.Profile); !ok {
+		return "", badf("no Claude profile called %s on %s", req.Profile, s.Host)
+	}
+	id, err := s.M.CLI.Start(ctx, req.Profile, dir, req.Name, req.Prompt, extra...)
 	if err == nil {
 		s.tag(ctx, id, func(m *store.Meta) { m.Engine = cmp.Or(req.Engine, m.Engine) })
 	}
@@ -1550,7 +1558,7 @@ func (s *Server) keep(ctx context.Context, name string, fresh bool) (string, err
 		}
 	}
 	args, _ := standing(name)
-	id, err := s.M.CLI.Start(ctx, home, name, "", args...)
+	id, err := s.M.CLI.Start(ctx, claude.DefaultProfile().Name, home, name, "", args...)
 	if err == nil {
 		s.claim(ctx, name, id, "")
 	}

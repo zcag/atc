@@ -48,6 +48,7 @@ type Session struct {
 	Model          string           `json:"model,omitempty"`
 	Engine         string           `json:"engine,omitempty"`
 	Harness        string           `json:"harness,omitempty"`
+	Profile        string           `json:"profile,omitempty"`
 	Asks           []opencode.Ask   `json:"asks,omitempty"`
 	Background     []claude.Task    `json:"background,omitempty"`
 	TurnDone       bool             `json:"turnDone,omitempty"`
@@ -147,6 +148,9 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		origin[a.SessionID] = t.Origin
 		s := m.build(t)
 		s.SessionID, s.ID, s.Kind, s.Name = a.SessionID, a.ID, a.Kind, a.Name
+		if p, ok := claude.ProfileNamed(a.Profile); ok {
+			s.Profile = profileName(p)
+		}
 		s.State, s.Attachable, s.PID = state(a), a.Kind == "background" && a.PID > 0, a.PID
 		if b := claude.Asking(a.ID); a.Kind == "background" && (len(b.Questions) > 0 || b.Approve != "") {
 			s.State, s.Asks = NeedsYou, []opencode.Ask{claudeAsk(a.ID, b, history.LastAsk(t.Path))}
@@ -244,8 +248,16 @@ func (m *Manager) build(t history.Transcript) Session {
 		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, LastFrom: t.LastFrom, Context: t.Context, PromptAt: t.PromptAt,
 		Activity: t.Activity, LastReply: t.LastReply, Preview: t.Preview, Summary: m.Summary.Get(t),
 		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine, Harness: t.Harness, Agent: meta.Agent,
-		Retired: RetiredHub(meta.Name),
+		Retired: RetiredHub(meta.Name), Profile: profileName(claude.ProfileOfFile(t.Path)),
 	}
+}
+
+// profileName names a session's Claude account when it is not the default one.
+func profileName(p claude.Profile) string {
+	if p.Default() {
+		return ""
+	}
+	return p.Name
 }
 
 func (m *Manager) lineage(sid string) (root, reportsTo string) {

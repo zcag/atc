@@ -31,20 +31,21 @@ const agentRef = "@"
 // Agent is a standing conversation defined by a folder: agent.json, brief.md, and settings.json
 // and mcp.json when they are there, all read fresh each time it starts or resumes.
 type Agent struct {
-	Name   string     `json:"name"`
-	Folder string     `json:"folder"`
-	Host   string     `json:"host"`
-	Title  string     `json:"title,omitempty"`
-	Icon   string     `json:"icon,omitempty"`
-	Color  string     `json:"color,omitempty"`
-	Dir    string     `json:"dir,omitempty"`
-	Args   []string   `json:"args,omitempty"`
-	Every  string     `json:"every,omitempty"`
-	From   string     `json:"from,omitempty"`
-	Check  string     `json:"check,omitempty"`
-	Prompt string     `json:"prompt,omitempty"`
-	Reset  *resetSpec `json:"reset,omitempty"`
-	Share  *share     `json:"share,omitempty"`
+	Name    string     `json:"name"`
+	Folder  string     `json:"folder"`
+	Host    string     `json:"host"`
+	Title   string     `json:"title,omitempty"`
+	Icon    string     `json:"icon,omitempty"`
+	Color   string     `json:"color,omitempty"`
+	Dir     string     `json:"dir,omitempty"`
+	Args    []string   `json:"args,omitempty"`
+	Profile string     `json:"profile,omitempty"`
+	Every   string     `json:"every,omitempty"`
+	From    string     `json:"from,omitempty"`
+	Check   string     `json:"check,omitempty"`
+	Prompt  string     `json:"prompt,omitempty"`
+	Reset   *resetSpec `json:"reset,omitempty"`
+	Share   *share     `json:"share,omitempty"`
 	// Talk lets the user talk to it directly on a call; Person is who it sounds and looks like there, and Background
 	// replaces the background of whoever that is.
 	Talk       bool   `json:"talk,omitempty"`
@@ -418,7 +419,7 @@ func (s *Server) startAgent(ctx context.Context, a Agent, prompt string, parked 
 	if err != nil {
 		return "", err
 	}
-	id, err := s.M.CLI.Start(ctx, a.dir(), a.Name, prompt, args...)
+	id, err := s.M.CLI.Start(ctx, a.Profile, a.dir(), a.Name, prompt, args...)
 	if err == nil {
 		s.tag(ctx, id, func(m *store.Meta) { m.Agent, m.Name, m.Parked = a.Name, a.label(), parked })
 		log.Printf("agent %s: started %s", a.Name, id)

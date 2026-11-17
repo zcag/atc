@@ -36,6 +36,7 @@ type Control struct {
 type Hub struct {
 	Bin    string
 	Attach func(id string) *exec.Cmd
+	Env    func(id string) []string
 	mu     sync.Mutex
 	groups map[string]*group
 	typing map[string]*sync.Mutex
@@ -275,8 +276,15 @@ func (h *Hub) command(id string) *exec.Cmd {
 	if cmd == nil {
 		cmd = exec.Command(h.Bin, "attach", id)
 	}
-	cmd.Env = termEnv()
+	cmd.Env = append(termEnv(), h.env(id)...)
 	return cmd
+}
+
+func (h *Hub) env(id string) []string {
+	if h.Env == nil {
+		return nil
+	}
+	return h.Env(id)
 }
 
 func termEnv() []string { return append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor") }
@@ -522,7 +530,7 @@ func (h *Hub) Drive(ctx context.Context, id string, fn func(*Typist) error) erro
 
 func (h *Hub) drive(ctx context.Context, id string, cols, rows uint16, fn func(*Typist) error) error {
 	cmd := exec.CommandContext(ctx, h.Bin, "attach", id)
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor")
+	cmd.Env = append(termEnv(), h.env(id)...)
 	f, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: cols, Rows: rows})
 	if err != nil {
 		return err

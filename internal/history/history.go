@@ -69,7 +69,7 @@ type entry struct {
 }
 
 type Index struct {
-	Root  string
+	Roots []string
 	Forks func() map[string]string
 	Price func(model string, u Usage) float64
 	mu    sync.Mutex
@@ -78,10 +78,14 @@ type Index struct {
 	cache map[string]*Transcript
 }
 
-func New(root string) *Index { return &Index{Root: root, cache: map[string]*Transcript{}} }
+func New(roots ...string) *Index { return &Index{Roots: roots, cache: map[string]*Transcript{}} }
 
 func (x *Index) Scan() []Transcript {
-	paths, _ := filepath.Glob(filepath.Join(x.Root, "*", "*.jsonl"))
+	var paths []string
+	for _, root := range x.Roots {
+		m, _ := filepath.Glob(filepath.Join(root, "*", "*.jsonl"))
+		paths = append(paths, m...)
+	}
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	seen := map[string]bool{}

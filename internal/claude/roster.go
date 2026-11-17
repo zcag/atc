@@ -8,9 +8,17 @@ import (
 )
 
 func Forks() map[string]string {
-	b, err := os.ReadFile(filepath.Join(ConfigDir(), "daemon", "roster.json"))
+	out := map[string]string{}
+	for _, p := range Profiles() {
+		forks(p, out)
+	}
+	return out
+}
+
+func forks(p Profile, out map[string]string) {
+	b, err := os.ReadFile(filepath.Join(p.Home(), "daemon", "roster.json"))
 	if err != nil {
-		return nil
+		return
 	}
 	var r struct {
 		Workers map[string]struct {
@@ -24,15 +32,17 @@ func Forks() map[string]string {
 		} `json:"workers"`
 	}
 	if json.Unmarshal(b, &r) != nil {
-		return nil
+		return
 	}
-	out := map[string]string{}
 	for _, w := range r.Workers {
 		if l := w.Dispatch.Launch; l.Mode == "resume" && l.SessionID != "" && l.SessionID != w.SessionID {
 			out[w.SessionID] = l.SessionID
 		}
 	}
-	return out
+}
+
+func jobState(id string) ([]byte, error) {
+	return os.ReadFile(filepath.Join(ProfileOf(id).Home(), "jobs", id, "state.json"))
 }
 
 type Question struct {
@@ -59,7 +69,7 @@ type Task struct {
 }
 
 func Background(id string) []Task {
-	b, err := os.ReadFile(filepath.Join(ConfigDir(), "jobs", id, "state.json"))
+	b, err := jobState(id)
 	if err != nil {
 		return nil
 	}
@@ -77,7 +87,7 @@ func Background(id string) []Task {
 }
 
 func Asking(id string) Block {
-	b, err := os.ReadFile(filepath.Join(ConfigDir(), "jobs", id, "state.json"))
+	b, err := jobState(id)
 	if err != nil {
 		return Block{}
 	}

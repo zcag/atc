@@ -34,3 +34,23 @@ in their own transcripts), wall time and how long Claude was working. Its amount
 week and 5-hour tiles count only what the session spent since that window opened. The cost is what the same
 tokens would cost at Claude API list prices, an estimate for comparison, since a subscription is
 not billed per token.
+
+## More than one Claude account
+
+Sessions in some folders can run on another Claude account, such as a company one for work:
+
+```sh
+atc profile add work ~/proj/work
+CLAUDE_CONFIG_DIR=~/.claude-work claude auth login
+```
+
+The first makes `~/.claude-work`, a Claude Code config folder of the account's own: its own sign-in,
+transcripts, history and background daemon. It links your settings, `CLAUDE.md`, skills, commands, agents and
+plugins from `~/.claude` and copies your MCP servers (run it again to bring over ones you add later). Restart
+atc and every new session under `~/proj/work` runs on that account; New session has a **Claude account** choice
+to pick another, and a preset or an agent can name one with `"profile"`. A session resumes on the account
+that keeps its transcript. Sessions on another account carry its name on their row.
+
+The usage page then has a switch per account, each with its own limits and spend. An account billed per token
+has no limits to show, and for it the dollar figures are close to what it pays. `atc profile` lists the
+accounts and whether each is signed in; `profiles.json` in atc's config folder holds them, on each machine.

@@ -173,6 +173,13 @@ func All() []Cap {
 			Cost: "Reads Claude's daemon log and the kernel log every 15 seconds.",
 		},
 		{
+			ID: "profiles", Title: "Claude accounts", Group: Core, Optional: true, Why: "Runs the sessions in some folders on another Claude account, such as work on a company one, each with its own sign-in, transcripts and usage.",
+			Needs: []string{"claude"}, Check: checkProfiles,
+			Fix: Fix{Command: "atc profile add work ~/proj/work",
+				Text: "Makes a config folder for the account, sharing your settings, CLAUDE.md, skills and MCP servers, and has new sessions under those folders use it. Then sign it in with the command it prints."},
+			Cost: "Whatever that account is billed; atc only reads its transcripts.",
+		},
+		{
 			ID: "peers", Title: "Other machines", Group: Machines, Optional: true, Why: "Lists the sessions of your other machines here too.",
 			Check: checkPeers,
 			Fix:   Fix{Text: "List them in peers.json in atc's config folder, each with its name, url and token (`atc token` on that machine).", Guide: "machines"},

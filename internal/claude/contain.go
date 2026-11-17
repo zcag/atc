@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,7 +18,7 @@ func (c CLI) Contain() (string, error) {
 		return "", nil
 	}
 	parent := map[int]int{}
-	daemon := 0
+	var daemons []int
 	entries, _ := os.ReadDir("/proc")
 	for _, e := range entries {
 		pid, err := strconv.Atoi(e.Name())
@@ -28,12 +29,24 @@ func (c CLI) Contain() (string, error) {
 			parent[pid] = ppid
 		}
 		if isDaemon(pid) {
-			daemon = pid
+			daemons = append(daemons, pid)
 		}
 	}
-	if daemon == 0 {
-		return "", nil
+	var moved []string
+	var errs []error
+	for _, d := range daemons {
+		m, err := c.contain(d, parent)
+		if m != "" {
+			moved = append(moved, m)
+		}
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
+	return strings.Join(moved, ", "), errors.Join(errs...)
+}
+
+func (c CLI) contain(daemon int, parent map[int]int) (string, error) {
 	home := cgroupOf(daemon)
 	if home == "" || slices.Contains(strings.Split(home, "/"), c.Slice) {
 		return "", nil

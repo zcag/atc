@@ -138,6 +138,8 @@ CLIENT (talks to $ATC_URL, a saved login, or the local server)
   atc usage [-json] [session]    plan limits and tokens per day; with a session, its tokens,
                                  models, turns and working time, with an estimated API cost
   atc limits [-json] [-short]    plan limits, one line each; -short fits a status line
+  atc profile [add|rm]           Claude accounts for the sessions in some folders, such as a
+                                 company one for work; atc profile -h
   atc top [-json] [-host name] [session]  memory, CPU and disk per session and what outlived its session;
                                  with a session, its processes
   atc why [-json] [-raw] [session|incident]  why a session stopped, with the log lines it rests
@@ -161,6 +163,9 @@ func loadSettings() {
 	}
 	f, _ := conf.Load()
 	modes.User, modes.Assistant = f.User, f.Assistant
+	if err := claude.LoadProfiles(profilesPath()); err != nil {
+		log.Printf("atc: %v", err)
+	}
 }
 
 func main() {
@@ -248,6 +253,8 @@ func main() {
 		err = stateCmd(args)
 	case "usage":
 		err = showUsage(args)
+	case "profile", "profiles":
+		err = profileCmd(args)
 	case "limits":
 		err = showLimits(args)
 	case "top":
@@ -313,10 +320,10 @@ func serve(args []string) error {
 		return err
 	}
 	host, _ := os.Hostname()
-	index := history.New(filepath.Join(claude.ConfigDir(), "projects"))
+	index := history.New(claude.ProjectRoots()...)
 	index.Forks, index.Price = claude.Forks, server.Priced
 	srv := &server.Server{
-		Term:     &attach.Hub{Bin: bin},
+		Term:     &attach.Hub{Bin: bin, Env: func(id string) []string { return claude.ProfileOf(id).Env() }},
 		Web:      web.FS,
 		Host:     strings.Split(host, ".")[0],
 		Settings: conf,

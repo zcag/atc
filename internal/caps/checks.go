@@ -82,6 +82,37 @@ func checkClaude(ctx context.Context, env Env) Result {
 	return Result{OK, "Version " + v + "."}
 }
 
+func checkProfiles(ctx context.Context, env Env) Result {
+	ps := claude.Profiles()[1:]
+	if len(ps) == 0 {
+		return Result{Missing, "Every session runs on the one account Claude Code is signed in to."}
+	}
+	var ok, bad []string
+	for _, p := range ps {
+		if _, err := os.Stat(p.Home()); err != nil {
+			bad = append(bad, fmt.Sprintf("%s has no folder at %s", p.Name, p.Home()))
+		} else if !signedIn(ctx, env.Bin, p.Env()) {
+			bad = append(bad, fmt.Sprintf("%s is not signed in (CLAUDE_CONFIG_DIR=%s claude auth login)", p.Name, p.Home()))
+		} else {
+			ok = append(ok, fmt.Sprintf("%s for %s", p.Name, strings.Join(p.Paths, ", ")))
+		}
+	}
+	if len(bad) > 0 {
+		return Result{Broken, strings.Join(bad, "; ") + "."}
+	}
+	return Result{OK, "Signed in: " + strings.Join(ok, "; ") + "."}
+}
+
+func signedIn(ctx context.Context, bin string, env []string) bool {
+	cmd := exec.CommandContext(ctx, bin, "auth", "status")
+	cmd.Env, cmd.WaitDelay = append(os.Environ(), env...), time.Second
+	out, err := cmd.Output()
+	var st struct {
+		LoggedIn bool `json:"loggedIn"`
+	}
+	return err == nil && json.Unmarshal(out, &st) == nil && st.LoggedIn
+}
+
 // SignedIn says whether the Claude Code at bin has a sign-in.
 func SignedIn(ctx context.Context, bin string) bool {
 	return checkSignin(ctx, Env{Bin: bin}).Status == OK

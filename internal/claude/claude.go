@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"regexp"
@@ -24,6 +25,7 @@ type Agent struct {
 	State     string `json:"state"`
 	Status    string `json:"status"`
 	StartedAt int64  `json:"startedAt"`
+	Profile   string `json:"profile,omitempty"`
 }
 
 var ErrUntrusted = errors.New("workspace not trusted")
@@ -62,13 +64,13 @@ func Env(dir string) []string {
 	return env
 }
 
-func (c CLI) run(ctx context.Context, dir string, args ...string) (string, error) {
+func (c CLI) run(ctx context.Context, p Profile, dir string, args ...string) (string, error) {
 	argv := append([]string{c.Bin}, args...)
 	if args[0] == "--bg" {
 		argv = append(slices.Clone(c.Launch), argv...)
 	}
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Dir, cmd.Env = dir, Env(dir)
+	cmd.Dir, cmd.Env = dir, append(Env(dir), p.Env()...)
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()
@@ -82,17 +84,50 @@ func (c CLI) run(ctx context.Context, dir string, args ...string) (string, error
 	return s, nil
 }
 
+// Agents lists every profile's sessions, each daemon asked on its own. A profile whose daemon can't answer is left
+// out rather than failing the rest; only the default's failure is an error.
 func (c CLI) Agents(ctx context.Context) ([]Agent, error) {
-	out, err := c.run(ctx, "", "agents", "--json", "--all")
+	ps := Profiles()
+	lists, errs := make([][]Agent, len(ps)), make([]error, len(ps))
+	var wg sync.WaitGroup
+	for i, p := range ps {
+		wg.Go(func() { lists[i], errs[i] = c.agents(ctx, p) })
+	}
+	wg.Wait()
+	var as []Agent
+	for i, p := range ps {
+		if errs[i] != nil && !p.Default() {
+			log.Printf("claude agents, profile %s: %v", p.Name, errs[i])
+			continue
+		}
+		as = append(as, lists[i]...)
+	}
+	return as, errs[0]
+}
+
+func (c CLI) agents(ctx context.Context, p Profile) ([]Agent, error) {
+	out, err := c.run(ctx, p, "", "agents", "--json", "--all")
 	if err != nil {
 		return nil, err
 	}
 	var as []Agent
 	err = json.Unmarshal([]byte(out), &as)
+	for i := range as {
+		as[i].Profile = p.Name
+		jobProfile.Store(as[i].ID, p.Name)
+	}
 	return slices.DeleteFunc(as, func(a Agent) bool { _, ok := hidden.Load(a.PID); return ok }), err
 }
 
-func (c CLI) Start(ctx context.Context, dir, name, prompt string, extra ...string) (string, error) {
+// Start starts a background session in dir as the profile named profile, or the one dir's rules pick when it is "".
+func (c CLI) Start(ctx context.Context, profile, dir, name, prompt string, extra ...string) (string, error) {
+	p := ProfileFor(dir)
+	if profile != "" {
+		var ok bool
+		if p, ok = ProfileNamed(profile); !ok {
+			return "", fmt.Errorf("no Claude profile called %q here", profile)
+		}
+	}
 	args := append(append([]string{"--bg"}, c.Args...), extra...)
 	if name != "" {
 		args = append(args, "--name", name)
@@ -100,29 +135,39 @@ func (c CLI) Start(ctx context.Context, dir, name, prompt string, extra ...strin
 	if prompt != "" {
 		args = append(args, prompt)
 	}
-	out, err := c.bg(ctx, dir, args...)
+	out, err := c.bg(ctx, p, dir, args...)
 	if err != nil {
 		return "", err
 	}
-	return idFrom(out)
+	return started(p, out)
 }
 
+// Resume reopens a conversation as the profile that keeps its transcript: no other account can see it.
 func (c CLI) Resume(ctx context.Context, dir, sessionID string, extra ...string) (string, error) {
+	p := ProfileOfSession(sessionID)
 	args := append(append([]string{"--bg"}, c.Args...), extra...)
-	out, err := c.bg(ctx, dir, append(args, "--resume", sessionID)...)
+	out, err := c.bg(ctx, p, dir, append(args, "--resume", sessionID)...)
 	if err != nil {
 		return "", err
 	}
-	return idFrom(out)
+	return started(p, out)
+}
+
+func started(p Profile, out string) (string, error) {
+	id, err := idFrom(out)
+	if err == nil {
+		jobProfile.Store(id, p.Name)
+	}
+	return id, err
 }
 
 func (c CLI) Stop(ctx context.Context, id string) error {
-	_, err := c.run(ctx, "", "stop", id)
+	_, err := c.run(ctx, ProfileOf(id), "", "stop", id)
 	return err
 }
 
 func (c CLI) Remove(ctx context.Context, id string) error {
-	_, err := c.run(ctx, "", "rm", id)
+	_, err := c.run(ctx, ProfileOf(id), "", "rm", id)
 	return err
 }
 
