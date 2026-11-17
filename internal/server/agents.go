@@ -493,7 +493,7 @@ func (s *Server) watchAgents() {
 		}
 		for _, a := range s.localAgents() {
 			cur := agentSession(live, a.Name)
-			if cur == nil || !cur.Parked || cur.State != sessions.YourTurn || strings.HasPrefix(cur.LastPrompt, seedMark) {
+			if cur == nil || !cur.Parked || cur.State != sessions.YourTurn || strings.HasPrefix(s.lastPrompt(cur.SessionID), seedMark) {
 				continue
 			}
 			p, _ := a.policy()
@@ -513,6 +513,18 @@ func (s *Server) watchAgents() {
 const seedMark = "[atc: a new conversation"
 
 var errAgentBusy = errors.New("the agent is busy; try again when its turn ends")
+
+// lastPrompt is the prompt of the conversation's last turn: Claude Code's own last-prompt line can lag behind it.
+func (s *Server) lastPrompt(sid string) string {
+	t, ok := s.M.Index.Find(sid)
+	if !ok {
+		return ""
+	}
+	if turns, _, err := s.M.Index.Turns(t.Path); err == nil && len(turns) > 0 {
+		return turns[len(turns)-1].Prompt
+	}
+	return t.LastPrompt
+}
 
 const handoverPrompt = "[atc: this conversation is about to start over] Write a handover note for your next conversation: " +
 	"work in progress and who has it, promises made, open questions, preferences the user stated here, the last topic. " +
@@ -558,7 +570,7 @@ func (s *Server) resetAgent(ctx context.Context, a Agent, why string) error {
 			return false
 		}
 		t, ok := s.M.Index.Find(x.SessionID)
-		if !ok || t.ReplyID == "" || t.ReplyID == before || !strings.HasPrefix(t.LastPrompt, handoverPrompt[:40]) {
+		if !ok || t.ReplyID == "" || t.ReplyID == before || !strings.HasPrefix(s.lastPrompt(x.SessionID), handoverPrompt[:40]) {
 			return false
 		}
 		var rerr error
