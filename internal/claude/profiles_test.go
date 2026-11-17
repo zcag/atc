@@ -80,16 +80,20 @@ func TestEachProfileHasItsOwnDaemon(t *testing.T) {
 	if b, _ := os.ReadFile(bin + ".stopped"); strings.TrimSpace(string(b)) != work+" bbbb2222" {
 		t.Errorf("stop went to %s", b)
 	}
-	for profile, want := range map[string]string{"": work, "personal": filepath.Join(home, ".claude")} {
-		if _, err := c.Start(context.Background(), profile, filepath.Join(home, "proj", "co", "app"), "", "go"); err != nil {
+	for _, x := range []struct{ asked, home, runsOn string }{
+		{"", work, "work"},
+		{"personal", filepath.Join(home, ".claude"), "personal"},
+	} {
+		id, err := c.Start(context.Background(), x.asked, filepath.Join(home, "proj", "co", "app"), "", "go")
+		if err != nil {
 			t.Fatal(err)
 		}
-		if b, _ := os.ReadFile(bin + ".started"); strings.TrimSpace(string(b)) != want {
-			t.Errorf("profile %q started in %s, want %s", profile, b, want)
+		if b, _ := os.ReadFile(bin + ".started"); strings.TrimSpace(string(b)) != x.home {
+			t.Errorf("profile %q started in %s, want %s", x.asked, b, x.home)
 		}
-	}
-	if ProfileOf("cccc3333").Name != "personal" {
-		t.Errorf("the last start was personal")
+		if got := ProfileOf(id).Name; got != x.runsOn {
+			t.Errorf("profile %q: its job is on %s, want %s", x.asked, got, x.runsOn)
+		}
 	}
 	if _, err := c.Start(context.Background(), "nope", home, "", "go"); err == nil {
 		t.Error("started as a profile that does not exist")
