@@ -19,7 +19,7 @@ import (
 
 // inbound is a message from outside atc that waits on the user: who wrote, on what, the gist and where to read it.
 type inbound struct {
-	ID, Sender, Network, Where, Text, Link string
+	ID, Conv, Sender, Network, Where, Text, Link string
 }
 
 const inboundSecretKey = "ATC_INBOUND_SECRET"
@@ -48,8 +48,8 @@ func (s *Server) inboundHook(w http.ResponseWriter, r *http.Request) {
 		reply(w, map[string]bool{"taken": false})
 		return
 	}
-	fresh := s.feed.message(m, time.Now())
-	if fresh && s.hubUp() {
+	fresh, first := s.feed.message(m, time.Now())
+	if first && s.hubUp() {
 		go s.Hub.Notice(context.Background())
 	}
 	reply(w, map[string]bool{"taken": fresh})
@@ -114,6 +114,7 @@ func parseInbound(body []byte, link string) (m inbound, ok bool, err error) {
 		m.Where = t
 	}
 	m.ID = cmp.Or(str("messageId"), field(top, "id"), m.Network+"|"+m.Sender+"|"+m.Text)
+	m.Conv = m.Network + "|" + cmp.Or(str("conversationId"), m.Where, m.Sender)
 	if m.Sender == "" {
 		return m, false, fmt.Errorf("sender is required")
 	}

@@ -18,7 +18,7 @@ func TestParseInbound(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("ok=%v err=%v", ok, err)
 	}
-	want := inbound{ID: "90211", Sender: "Ada Lovelace", Network: "whatsapp", Text: "Are we still on for tonight?", Link: "https://inbox.example/c/441?m=90211"}
+	want := inbound{ID: "90211", Conv: "whatsapp|441", Sender: "Ada Lovelace", Network: "whatsapp", Text: "Are we still on for tonight?", Link: "https://inbox.example/c/441?m=90211"}
 	if m != want {
 		t.Fatalf("got %+v", m)
 	}
@@ -60,8 +60,11 @@ func TestFeedMessages(t *testing.T) {
 	f := newFeed()
 	now := time.Now()
 	_, seq := f.news(0, false, now)
-	m := inbound{ID: "1", Sender: "Ada", Network: "whatsapp", Text: "Are we still on?", Link: "https://x/1"}
-	if !f.message(m, now) || f.message(m, now.Add(time.Hour)) {
+	m := inbound{ID: "1", Conv: "whatsapp|7", Sender: "Ada", Network: "whatsapp", Text: "Are we still on?", Link: "https://x/1"}
+	if fresh, first := f.message(m, now); !fresh || !first {
+		t.Fatal("first message")
+	}
+	if fresh, _ := f.message(m, now.Add(time.Hour)); fresh {
 		t.Fatal("dedup")
 	}
 	text, seq2 := f.news(seq, false, now.Add(time.Minute))
@@ -77,8 +80,29 @@ func TestFeedMessages(t *testing.T) {
 	if snap, _ := f.news(0, true, now); !strings.Contains(snap, "Messages from other apps waiting on the user:\n- Ada on whatsapp") {
 		t.Fatalf("snapshot %q", snap)
 	}
-	if !f.message(m, now.Add(msgMemory+time.Hour)) {
+	if fresh, _ := f.message(m, now.Add(msgMemory+time.Hour)); !fresh {
 		t.Fatal("remembered forever")
+	}
+}
+
+func TestFeedFoldsABurst(t *testing.T) {
+	f := newFeed()
+	now := time.Now()
+	_, seq := f.news(0, false, now)
+	for i, text := range []string{"hey", "you there?", "call me"} {
+		m := inbound{ID: string(rune('a' + i)), Conv: "whatsapp|7", Sender: "Ada", Network: "whatsapp", Text: text}
+		if _, first := f.message(m, now.Add(time.Duration(i)*time.Minute)); first != (i == 0) {
+			t.Fatalf("message %d first=%v", i, first)
+		}
+	}
+	f.message(inbound{ID: "z", Conv: "sms|9", Sender: "Grace", Network: "sms", Text: "ok"}, now)
+	text, _ := f.news(seq, false, now.Add(2*time.Minute))
+	if strings.Count(text, "\n- ") != 2 || !strings.Contains(text, `Ada on whatsapp wrote 3 messages (the last 0m ago, waits on the user): "call me"`) {
+		t.Fatalf("news %q", text)
+	}
+	snap, _ := f.news(0, true, now.Add(2*time.Minute))
+	if strings.Count(snap, "\n- ") != 2 || !strings.Contains(snap, "wrote 3 messages") {
+		t.Fatalf("snapshot %q", snap)
 	}
 }
 

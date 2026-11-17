@@ -181,7 +181,7 @@ func (f *feed) find(e feedEvent) sessions.Session {
 func (f *feed) line(e feedEvent, now time.Time) string {
 	switch e.kind {
 	case evMessage:
-		return msgLine(*e.msg, now.Sub(e.at))
+		return msgLine(*e.msg, f.burst(e, now), now.Sub(e.at))
 	case evOffline:
 		return e.host + " went offline: its sessions are missing until it is back"
 	case evBack:
@@ -313,9 +313,11 @@ func (f *feed) snapshot(now time.Time) string {
 // messages is the snapshot's list of messages from outside atc that are still news.
 func (f *feed) messages(now time.Time) string {
 	var lines []string
-	for _, e := range f.msgs {
-		if now.Sub(e.at) <= msgFresh {
-			lines = append(lines, "\n- "+msgLine(*e.msg, now.Sub(e.at)))
+	seen := map[string]bool{}
+	for _, e := range slices.Backward(f.msgs) {
+		if now.Sub(e.at) <= msgFresh && !seen[e.msg.Conv] {
+			seen[e.msg.Conv] = true
+			lines = slices.Insert(lines, 0, "\n- "+msgLine(*e.msg, f.burst(e, now), now.Sub(e.at)))
 		}
 	}
 	if len(lines) == 0 {
@@ -396,22 +398,35 @@ func (s *Server) isHub(x sessions.Session) bool {
 	return x.Kind == "hub" || x.SessionID != "" && x.SessionID == s.hubSID()
 }
 
-// message records a message from outside atc that waits on the user; false when it was already seen.
-func (f *feed) message(m inbound, now time.Time) bool {
+// message records a message from outside atc that waits on the user. fresh is false when it was already seen; first
+// is whether it starts a burst, the only one worth waking a running turn for: the rest of a chat is folded into its line.
+func (f *feed) message(m inbound, now time.Time) (fresh, first bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.msgs = slices.DeleteFunc(f.msgs, func(e feedEvent) bool { return now.Sub(e.at) > msgMemory })
 	if slices.ContainsFunc(f.msgs, func(e feedEvent) bool { return e.msg.ID == m.ID }) {
-		return false
+		return false, false
 	}
+	first = !slices.ContainsFunc(f.msgs, func(e feedEvent) bool { return e.msg.Conv == m.Conv && now.Sub(e.at) <= msgFresh })
 	f.seq++
-	e := feedEvent{seq: f.seq, sid: "msg:" + m.ID, kind: evMessage, msg: &m, at: now}
+	e := feedEvent{seq: f.seq, sid: "conv:" + m.Conv, kind: evMessage, msg: &m, at: now}
 	f.evs = append(f.evs, e)
 	f.msgs = append(f.msgs, e)
-	return true
+	return true, first
 }
 
-func msgLine(m inbound, age time.Duration) string {
+// burst is how many of a conversation's messages up to e are still news.
+func (f *feed) burst(e feedEvent, now time.Time) int {
+	n := 0
+	for _, o := range f.msgs {
+		if o.msg.Conv == e.msg.Conv && !o.at.After(e.at) && now.Sub(o.at) <= msgFresh {
+			n++
+		}
+	}
+	return max(n, 1)
+}
+
+func msgLine(m inbound, n int, age time.Duration) string {
 	who := m.Sender
 	if m.Network != "" {
 		who += " on " + m.Network
@@ -420,6 +435,9 @@ func msgLine(m inbound, age time.Duration) string {
 		who += fmt.Sprintf(" in %q", m.Where)
 	}
 	l := who + " wrote (" + ago(age) + " ago, waits on the user)"
+	if n > 1 {
+		l = fmt.Sprintf("%s wrote %d messages (the last %s ago, waits on the user)", who, n, ago(age))
+	}
 	if t := clipText(m.Text, 200); t != "" {
 		l += fmt.Sprintf(": %q", t)
 	}

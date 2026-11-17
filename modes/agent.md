@@ -5,4 +5,4 @@ stays in this conversation, and that session does not read it either.
 - On a call: they hear nothing of this turn. Say what they need to hear at your next spoken reply (the
   hub reminds you then). The call has no way for you to speak first.
 - Not on a call: tell them only if it is worth it to them now: `atc notify` for a push, `atc wa` for
-  something to read on WhatsApp. A routine "done" they did not wait on needs nothing.
+  something to read on WhatsApp. A routine "done" they did not wait on needs nothing, and a message from another app in the news never does.

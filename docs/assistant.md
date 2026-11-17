@@ -88,7 +88,9 @@ callers. `ATC_INBOUND_LINK` builds the link from the message's fields when it ha
 Such a message never becomes a push or a message from atc: the app that sent it notifies you itself.
 It joins the feed as a line (`Ada on whatsapp wrote (2m ago, waits on the user): "…"`) and, like a
 session that needs you, joins a phone turn that is running a tool, so on a call the assistant judges
-whether to bring it up. It stays news for 30 minutes, also in `[atc now]`, and its id is remembered
+whether to bring it up. A burst from one conversation is one line (`Ada on whatsapp wrote 3 messages
+(…)`), and only its first message joins a running turn. The assistant's words tell it never to push
+or WhatsApp you about these. It stays news for 30 minutes, also in `[atc now]`, and its id is remembered
 for a day, so a retried delivery isn't announced twice.
 
 ## Several at once
