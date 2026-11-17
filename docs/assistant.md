@@ -74,6 +74,23 @@ now, in a line, or later (`modes/phone.md`). A call only speaks answers to your 
 turns the change waits for your next one. The hub reads the feed from
 `GET /api/feed?since=SEQ[&full=1]` on atc; atc wakes it with `POST /notice`.
 
+## Messages from other apps
+
+Another app can tell the assistant about a message that waits on you: `POST /api/inbound` with
+`{"sender", "network", "text", "link", "id"}`, or an event envelope with those fields under `data`
+(`channel`, `conversationTitle`, `subject` and `messageId` are read too). An event whose `type` isn't a
+`message…` one, or with `"waitsOnYou": false` or `"screener": true`, is dropped. With
+`ATC_INBOUND_SECRET` set, the endpoint takes deliveries from anywhere that carry an HMAC-SHA256 of the
+raw body under that secret in a `*-Signature` header (`sha256=<hex>`); without it, only signed-in
+callers. `ATC_INBOUND_LINK` builds the link from the message's fields when it has none
+(`https://inbox.example/c/{conversationId}`).
+
+Such a message never becomes a push or a message from atc: the app that sent it notifies you itself.
+It joins the feed as a line (`Ada on whatsapp wrote (2m ago, waits on the user): "…"`) and, like a
+session that needs you, joins a phone turn that is running a tool, so on a call the assistant judges
+whether to bring it up. It stays news for 30 minutes, also in `[atc now]`, and its id is remembered
+for a day, so a retried delivery isn't announced twice.
+
 ## Several at once
 
 A message that arrives while the session works joins the turn it is on, and each part of the reply

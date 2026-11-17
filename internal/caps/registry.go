@@ -106,6 +106,14 @@ func All() []Cap {
 			Fix:    Fix{Text: "Choose here, or in atc setup. For more than daily without going to full, add allow rules to Claude Code's settings: the assistant honours them.", Guide: "assistant#what-it-may-do-alone"},
 		},
 		{
+			ID: "inbound", Title: "Messages from other apps", Group: Assistant, Optional: true, Why: "Another app (an inbox, a chat bridge) posts a message that waits on you to POST /api/inbound, and the assistant hears it in its news, so a call or \"what's new\" includes it. It is never a push: the app that sent it tells you itself.",
+			Needs: []string{"hub"},
+			Fields: []Field{{Key: "ATC_INBOUND_SECRET", Label: "Webhook secret: HMAC-SHA256 of the body in a *-Signature header", Secret: true},
+				{Key: "ATC_INBOUND_LINK", Label: "Link to a message, filled from its fields", Hint: "https://inbox.example/c/{conversationId}"}},
+			Check: checkInbound,
+			Fix:   Fix{Text: "Point the app's webhook at https://<atc>/api/inbound and give both the same secret.", Guide: "assistant#messages-from-other-apps"},
+		},
+		{
 			ID: "calls", Title: "Calls with the assistant", Group: Calls, Optional: true, Why: "Talk to the assistant by voice, from this page or the phone app.",
 			Needs: []string{"hub", "call-line", "talker", "voice-engine"},
 			Fix:   Fix{Text: "Set up what it still needs, in the rows below.", Guide: "calls"},

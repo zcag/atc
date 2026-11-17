@@ -312,6 +312,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/push/devices", func(w http.ResponseWriter, r *http.Request) { reply(w, s.Push.Devices()) })
 	mux.HandleFunc("POST /api/assist", s.assist)
 	mux.HandleFunc("POST /api/whatsapp/hook", s.waHook)
+	mux.HandleFunc("POST /api/inbound", s.inboundHook)
 	mux.HandleFunc("POST /api/whatsapp/send", s.waPost)
 	mux.HandleFunc("GET /api/whatsapp/guests", s.waGuests)
 	mux.HandleFunc("POST /api/whatsapp/guests", s.waGuests)
@@ -346,7 +347,7 @@ func (s *Server) auth(next http.Handler) http.Handler {
 			http.Error(w, "cross-site request refused", http.StatusForbidden)
 			return
 		}
-		if s.Token == "" || r.URL.Path == "/api/login" || r.URL.Path == pair.ClaimPath || r.URL.Path == "/healthz" || r.URL.Path == "/api/whatsapp/hook" || isOutputLink(r) {
+		if s.Token == "" || r.URL.Path == "/api/login" || r.URL.Path == pair.ClaimPath || r.URL.Path == "/healthz" || r.URL.Path == "/api/whatsapp/hook" || r.URL.Path == "/api/inbound" && inboundSecret() != "" || isOutputLink(r) {
 			next.ServeHTTP(w, r)
 			return
 		}

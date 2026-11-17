@@ -29,6 +29,7 @@ type feed struct {
 	onDemand func() map[string]bool
 	about    string
 	aboutAt  time.Time
+	msgs     []feedEvent
 }
 
 type feedEvent struct {
@@ -37,6 +38,8 @@ type feedEvent struct {
 	kind string
 	host string
 	was  sessions.Session
+	msg  *inbound
+	at   time.Time
 }
 
 const (
@@ -46,7 +49,12 @@ const (
 	evStopped = "stopped"
 	evOffline = "offline"
 	evBack    = "back"
+	evMessage = "message"
 	feedKeep  = 200
+	// msgFresh is how long a message from outside stays news; msgMemory how long its id is remembered, so a
+	// retried or repeated delivery isn't announced again.
+	msgFresh  = 30 * time.Minute
+	msgMemory = 24 * time.Hour
 )
 
 func newFeed() *feed { return &feed{seq: time.Now().UnixNano()} }
@@ -76,7 +84,7 @@ func (f *feed) observe(list []sessions.Session, peers []peerStatus, skip func(se
 	}
 	add := func(kind string, x sessions.Session, host string) {
 		f.seq++
-		f.evs = append(f.evs, feedEvent{f.seq, x.SessionID, kind, host, x})
+		f.evs = append(f.evs, feedEvent{seq: f.seq, sid: x.SessionID, kind: kind, host: host, was: x})
 	}
 	for _, p := range peers {
 		if down[p.Name] != f.down[p.Name] {
@@ -124,14 +132,21 @@ func (f *feed) news(since int64, full bool, now time.Time) (text string, seq int
 	defer f.mu.Unlock()
 	clock := now.Format("15:04")
 	if full {
-		if f.prev == nil {
+		var parts []string
+		if f.prev != nil {
+			parts = append(parts, f.snapshot(now))
+		}
+		if m := f.messages(now); m != "" {
+			parts = append(parts, m)
+		}
+		if len(parts) == 0 {
 			return "", f.seq
 		}
-		return "[atc now, " + clock + "]\n" + f.snapshot(now), f.seq
+		return "[atc now, " + clock + "]\n" + strings.Join(parts, "\n"), f.seq
 	}
 	var latest []feedEvent
 	for _, e := range f.evs {
-		if e.seq <= since {
+		if e.seq <= since || e.kind == evMessage && now.Sub(e.at) > msgFresh {
 			continue
 		}
 		key := cmp.Or(e.sid, "host:"+e.host)
@@ -143,7 +158,7 @@ func (f *feed) news(since int64, full bool, now time.Time) (text string, seq int
 	}
 	var lines []string
 	for _, e := range latest {
-		if l := f.line(e); l != "" {
+		if l := f.line(e, now); l != "" {
 			lines = append(lines, "- "+l)
 		}
 	}
@@ -163,8 +178,10 @@ func (f *feed) find(e feedEvent) sessions.Session {
 	return e.was
 }
 
-func (f *feed) line(e feedEvent) string {
+func (f *feed) line(e feedEvent, now time.Time) string {
 	switch e.kind {
+	case evMessage:
+		return msgLine(*e.msg, now.Sub(e.at))
 	case evOffline:
 		return e.host + " went offline: its sessions are missing until it is back"
 	case evBack:
@@ -293,6 +310,20 @@ func (f *feed) snapshot(now time.Time) string {
 	return strings.Join(parts, "\n")
 }
 
+// messages is the snapshot's list of messages from outside atc that are still news.
+func (f *feed) messages(now time.Time) string {
+	var lines []string
+	for _, e := range f.msgs {
+		if now.Sub(e.at) <= msgFresh {
+			lines = append(lines, "\n- "+msgLine(*e.msg, now.Sub(e.at)))
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "Messages from other apps waiting on the user:" + strings.Join(lines, "")
+}
+
 func boolInt(b bool) int {
 	if b {
 		return 1
@@ -363,4 +394,37 @@ func (s *Server) feedNews(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) isHub(x sessions.Session) bool {
 	return x.Kind == "hub" || x.SessionID != "" && x.SessionID == s.hubSID()
+}
+
+// message records a message from outside atc that waits on the user; false when it was already seen.
+func (f *feed) message(m inbound, now time.Time) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.msgs = slices.DeleteFunc(f.msgs, func(e feedEvent) bool { return now.Sub(e.at) > msgMemory })
+	if slices.ContainsFunc(f.msgs, func(e feedEvent) bool { return e.msg.ID == m.ID }) {
+		return false
+	}
+	f.seq++
+	e := feedEvent{seq: f.seq, sid: "msg:" + m.ID, kind: evMessage, msg: &m, at: now}
+	f.evs = append(f.evs, e)
+	f.msgs = append(f.msgs, e)
+	return true
+}
+
+func msgLine(m inbound, age time.Duration) string {
+	who := m.Sender
+	if m.Network != "" {
+		who += " on " + m.Network
+	}
+	if m.Where != "" {
+		who += fmt.Sprintf(" in %q", m.Where)
+	}
+	l := who + " wrote (" + ago(age) + " ago, waits on the user)"
+	if t := clipText(m.Text, 200); t != "" {
+		l += fmt.Sprintf(": %q", t)
+	}
+	if m.Link != "" {
+		l += " " + m.Link
+	}
+	return l
 }

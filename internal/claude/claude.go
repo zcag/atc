@@ -49,7 +49,7 @@ func Hide(pid int) func() {
 
 // Secrets are atc's settings no Claude session needs: with the WhatsApp gateway's key a session could write to
 // anyone, past every check atc wa makes. Settings marks them secret (caps' registry), a test keeps the two lists alike.
-var Secrets = []string{"ATC_WHATSAPP_KEY", "ATC_WHATSAPP_SECRET"}
+var Secrets = []string{"ATC_WHATSAPP_KEY", "ATC_WHATSAPP_SECRET", "ATC_INBOUND_SECRET"}
 
 // Env is this process's environment without Secrets, for a Claude process atc starts in dir. A set Env keeps os/exec
 // from pointing PWD at dir itself, so it is set here.

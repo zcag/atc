@@ -638,6 +638,13 @@ func checkSummary(ctx context.Context, env Env) Result {
 	return Result{OK, "On, through Claude Code with " + model + ": this spends plan tokens on every finished turn."}
 }
 
+func checkInbound(_ context.Context, env Env) Result {
+	if env.Get("ATC_INBOUND_SECRET") == "" {
+		return Result{Missing, "No secret: POST /api/inbound takes messages only from signed-in callers (a token or your tailnet)."}
+	}
+	return Result{OK, "Takes signed messages at POST /api/inbound from anywhere."}
+}
+
 func checkGroups(_ context.Context, env Env) Result {
 	if env.Get("ATC_HUB") == "" {
 		return Result{Missing, "No hub, so messages in groups are dropped: its guests' conversation takes them."}
