@@ -94,7 +94,7 @@
 .pal-scrim { position: fixed; inset: 0; z-index: 60; background: var(--scrim); }
 .pal-scrim.previewing { background: transparent; }
 html.pal-bar body { padding-top: var(--pal-bar-h, 0px); box-sizing: border-box; }
-html.pal-bar .app { height: calc(100dvh - var(--pal-bar-h, 0px)); }
+html.pal-bar :is(#app, .app) { height: calc(100dvh - var(--pal-bar-h, 0px)); }
 html.pal-bar :is(.callp, .callp.full, .hold, .viewer, .pghome, .palone) { top: var(--pal-bar-h, 0px); }
 html.pal-bar .peek { top: calc(var(--bar-h) - 1px + var(--pal-bar-h, 0px)); }
 html.pal-bar .tx .toc { top: calc(104px + var(--pal-bar-h, 0px)); }
