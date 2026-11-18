@@ -20,7 +20,7 @@ func TestPalOnlyWhenSet(t *testing.T) {
 		bin := fakeClaude(t)
 		st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
 		s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st}, Term: &attach.Hub{Bin: bin},
-			Web: fstest.MapFS{"index.html": {Data: []byte("atc")}}, Token: "tok", Host: "here", Pal: pal, PalToken: "pt", PalBarHide: []string{"audio/volume"}}
+			Web: fstest.MapFS{"index.html": {Data: []byte("atc")}}, Token: "tok", Host: "here", Pal: pal, PalToken: "pt"}
 		ts := httptest.NewServer(s.Handler())
 		defer ts.Close()
 
@@ -30,7 +30,6 @@ func TestPalOnlyWhenSet(t *testing.T) {
 		var me struct {
 			Pal *struct {
 				Server, Token string
-				Hide          []string
 			}
 		}
 		json.Unmarshal([]byte(body), &me)
@@ -40,7 +39,7 @@ func TestPalOnlyWhenSet(t *testing.T) {
 			}
 			continue
 		}
-		if me.Pal == nil || me.Pal.Server != pal || me.Pal.Token != "pt" || len(me.Pal.Hide) != 1 {
+		if me.Pal == nil || me.Pal.Server != pal || me.Pal.Token != "pt" {
 			t.Errorf("me: %+v", me.Pal)
 		}
 		if !strings.Contains(csp, "script-src 'self' "+pal+";") || !strings.Contains(csp, "frame-src 'self' "+pal+";") {

@@ -284,9 +284,7 @@ function App() {
   NEW_SESSION = (start) => setCreating(start || true);
   const [palette, setPalette] = useState(false);
   PALETTE_OPEN = () => setPalette(true);
-  const [pal, setPal] = useState(false);
-  PAL_TOGGLE = me?.pal ? () => setPal((v) => !v) : null;
-  const palBar = usePalBar();
+  PAL_TOGGLE = usePal(me?.pal) ? () => window.pal.toggle() : null;
   const [cursor, setCursor] = useState(null);
   const [quick, setQuick] = useState(null);
   QUICK = (s, rect) => setQuick({ s, rect });
@@ -553,8 +551,6 @@ function App() {
         ",": () => (inSettings() ? closeSettings() : (location.hash = SETTINGS)),
         "/": () => setPalette(true),
         "?": () => setHelp((h) => !h),
-        P: () => PAL_TOGGLE?.(),
-        B: () => me?.pal && PALBAR.set({ on: !PALBAR.on }),
       }[e.key];
       if (move && k.route && (e.key === "j" || e.key === "k")) {
         const next = step(k.route, move);
@@ -602,7 +598,6 @@ function App() {
   };
 
   return html`
-    ${palBar.on && me.pal && html`<${PalBar} pal=${me.pal} hide=${palBar.hide ?? me.pal.hide ?? []} />`}
     <div class="app ${assistView ? "assisting" : ""}">
     <${BayBar} bays=${bays} only=${only} view=${screen} panes=${panes} togglePane=${togglePane} up=${up} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
     ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} onBays=${onBays} say=${say} onClose=${() => setPeek(null)} />`}
@@ -637,7 +632,6 @@ function App() {
     ${palette && html`<${Palette} live=${reach || []} onBays=${onBays} sel=${sel} say=${say} home=${me.host} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} onClose=${() => setPalette(false)}
       actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: openAssistant, ask: openAssistant,
         pane: togglePane, next: () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true })) }} />`}
-    ${pal && me?.pal && html`<${PalPanel} pal=${me.pal} onClose=${() => setPal(false)} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
     ${settings && html`<${SettingsPage} me=${me} say=${say} onClose=${closeSettings} />`}
     ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} at=${alone.at} live=${all} say=${say} />`}
@@ -5822,7 +5816,6 @@ function SettingsPage({ me, say, onClose }) {
               </button>`)}
           </div>
         </section>
-        ${me.pal && html`<${PalBarSettings} pal=${me.pal} />`}
         <section id="cards">
           <h2>Session list <span class="n">on this device</span></h2>
           <div class="set">
@@ -7937,6 +7930,10 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
   action("New backlog item", "", "put a task aside for later", () => actions.create({ later: true }), "later todo task add put");
   action("Agents", "", "standing agents and what they keep", () => (location.hash = AGENTS_ROUTE), "tracker standing");
   if (inBrowser) action("Open in browser", "", "this screen in the phone's browser instead of the app", () => inBrowser(location.href), "chrome external web");
+  if (PAL_TOGGLE) {
+    action("pal", "shift P", "pal's panel: search, palettes, live views", PAL_TOGGLE, "launcher");
+    action("pal bar", "shift B", "show or hide pal's bar on this device", () => window.pal.bar(), "strip top");
+  }
   action("Settings", ",", "appearance, reading, notifications", () => (location.hash = SETTINGS), "preferences options theme");
   action("Keys", "?", "every key", actions.help, "help shortcuts keyboard");
   for (const p of presets) action(`Start ${p.name}`, "", `preset, ${MULTI && p.host ? `${p.host} ` : ""}${tilde(p.dir)}`, () => api(`/api/sessions${hostQ(p.host, home)}`, { method: "POST", body: { preset: p.name } }).then((r) => { say(`Started ${p.name}.`); go(r.id); }, (e) => say(e.message)), "preset");
@@ -8044,94 +8041,24 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
     </div>`;
 }
 
-const PALBAR = {
-  on: stored("atc:palbar", true), hide: stored("atc:palbar-hide", null), known: stored("atc:palbar-known", []), subs: new Set(),
-  set(p) {
-    Object.assign(this, p);
-    for (const k of ["on", "hide", "known"]) store(`atc:palbar${k === "on" ? "" : `-${k}`}`, this[k]);
-    this.subs.forEach((f) => f());
-  },
-};
-function usePalBar() {
-  const [, tick] = useState(0);
-  useEffect(() => { const f = () => tick((n) => n + 1); PALBAR.subs.add(f); return () => PALBAR.subs.delete(f); }, []);
-  return PALBAR;
-}
-
-function PalBarSettings({ pal }) {
-  const bar = usePalBar();
-  const hidden = bar.hide ?? pal.hide ?? [];
-  const shown = (k) => !hidden.includes(k);
-  const flip = (k) => bar.set({ hide: shown(k) ? [...hidden, k] : hidden.filter((x) => x !== k) });
-  const label = (i) => (bar.known.filter((x) => x.title === i.title).length > 1 ? `${i.title} (${i.key.split("/")[0]})` : i.title || i.key);
-  return html`<section id="palbar">
-    <h2>pal bar <span class="n">on this device</span></h2>
-    <div class="set">
-      <b>Show the bar</b>
-      <p>pal's bar across the top of atc; shift B toggles it.</p>
-      <div class="ctl"><${Seg} label="Show the bar" value=${bar.on} set=${(v) => bar.set({ on: v })} options=${[[true, "On"], [false, "Off"]]} /></div>
-    </div>
-    <div class="set">
-      <b>Items</b>
-      <p>${bar.known.length ? "Which of pal's items show here." : "pal's items show here once the bar has loaded."}${bar.hide && pal.hide && html` <button class="kb" onClick=${() => bar.set({ hide: null })}>Use atc's default</button>`}</p>
-      <div class="ctl palitems">${bar.known.map((i) => html`<button class=${`kb ${shown(i.key) ? "on" : ""}`} aria-pressed=${shown(i.key)} title=${i.key} onClick=${() => flip(i.key)}>${label(i)}</button>`)}</div>
-    </div>
-  </section>`;
-}
-
-let PAL_MODULE = null;
-const palElement = (pal, tag) => (PAL_MODULE ||= import(/* @vite-ignore */ `${pal.server}/__pal/web.js`)).then(() => {
-  const el = document.createElement(tag);
-  el.setAttribute("server", pal.server);
-  if (pal.token) el.setAttribute("token", pal.token);
-  el.setAttribute("links", "host");
-  el.addEventListener("pal-open", (e) => openOut(e.detail.url));
-  return el;
-}, (e) => { PAL_MODULE = null; throw e; });
-
-function PalPanel({ pal, onClose }) {
-  const box = useRef();
-  const [failed, setFailed] = useState(false);
+let PAL_UP = null;
+function usePal(pal) {
+  const [up, setUp] = useState(false);
   useEffect(() => {
-    let el, gone = false;
-    palElement(pal, "pal-panel").then((e) => {
-      if (gone) return;
-      el = e;
-      el.addEventListener("pal-dismiss", onClose);
-      box.current.append(el);
-      el.focus();
-    }, () => setFailed(true));
-    const esc = (e) => e.key === "Escape" && onClose();
-    addEventListener("keydown", esc);
-    return () => { gone = true; removeEventListener("keydown", esc); el?.remove(); };
-  }, []);
-  return html`
-    <div class="pal-scrim" onPointerDown=${onClose}></div>
-    <div class="palx" role="dialog" aria-modal="true" aria-label="pal">
-      <button class="kb" onClick=${onClose}>Close <kbd aria-hidden="true">esc</kbd></button>
-      <div class="palx-in" ref=${box}>${failed && html`<div class="pal-none">pal did not answer at ${pal.server}.</div>`}</div>
-    </div>`;
-}
-
-function PalBar({ pal, hide }) {
-  const box = useRef(), bar = useRef();
-  const apply = () => { if (bar.current) hide.length ? bar.current.setAttribute("hide", hide.join(",")) : bar.current.removeAttribute("hide"); };
-  useEffect(apply, [hide.join(",")]);
-  useEffect(() => {
-    let el, gone = false;
-    const fit = new ResizeObserver(() => document.body.style.setProperty("--palbar-h", `${box.current.offsetHeight}px`));
-    palElement(pal, "pal-bar").then((e) => {
-      if (gone) return;
-      el = bar.current = e;
-      el.addEventListener("pal-bar-items", (ev) => PALBAR.set({ known: ev.detail }));
-      apply();
-      box.current.append(el);
-      fit.observe(box.current);
-      document.body.classList.add("palbar");
-    }, () => {});
-    return () => { gone = true; fit.disconnect(); el?.remove(); document.body.classList.remove("palbar"); };
-  }, []);
-  return html`<div class="palstrip" ref=${box}></div>`;
+    if (!pal) return;
+    PAL_UP ||= new Promise((done) => {
+      const s = document.createElement("script");
+      s.type = "module";
+      s.src = `${pal.server}/__pal/embed.js`;
+      if (pal.token) s.dataset.token = pal.token;
+      s.onload = () => Promise.resolve(window.pal?.ready).then((ok) => done(!!ok), () => done(false));
+      s.onerror = () => done(false);
+      addEventListener("pal-open", (e) => { e.preventDefault(); openOut(e.detail.url); });
+      document.head.append(s);
+    });
+    PAL_UP.then(setUp);
+  }, [!!pal]);
+  return up;
 }
 
 function readShared() {
