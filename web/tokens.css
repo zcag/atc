@@ -209,6 +209,32 @@
   --side: 400px;
   --measure: 760px;
   --wide: 1180px;
+
+  --pal-bg: var(--strip);
+  --pal-bg-elevated: var(--strip);
+  --pal-bg-glass: var(--strip);
+  --pal-bg-sunken: var(--sunk);
+  --pal-fg: var(--ink);
+  --pal-fg-muted: var(--dim);
+  --pal-fg-faint: var(--faint);
+  --pal-line: var(--line);
+  --pal-line-strong: var(--line-strong);
+  --pal-accent: var(--ink);
+  --pal-accent-fg: var(--strip);
+  --pal-accent-soft: var(--strip-hi);
+  --pal-selection: var(--strip-hi);
+  --pal-scrim: var(--scrim);
+  --pal-destructive: var(--fail);
+  --pal-success: var(--add);
+  --pal-font-ui: var(--sans);
+  --pal-font-mono: var(--mono);
+  --pal-radius-row: var(--r-sm);
+  --pal-radius-control: var(--r-sm);
+  --pal-radius-tag: var(--r-sm);
+  --pal-radius-kbd: var(--r-sm);
+  --pal-radius-panel: var(--r-md);
+  --pal-radius-popover: var(--r-md);
+  --pal-radius-hud: var(--r-md);
 }
 @media (prefers-color-scheme: dark) { :root:not([data-scheme="light"]) { --dark: 1; } }
 :root[data-scheme="light"] { color-scheme: light; }
