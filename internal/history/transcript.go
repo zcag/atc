@@ -511,7 +511,8 @@ func convert(m rawMsg) []Message {
 			if IsNoise(b.Text) {
 				continue
 			}
-			sd := envelope(b.Text)
+			text, _ := SlashCommand(b.Text)
+			sd := envelope(text)
 			out = append(out, Message{Role: "user", Text: sd.body, Time: m.Timestamp, Via: sd.via, Channel: sd.channel, Pastes: sd.pastes, Mark: sd.mark, Kind: sd.kind})
 		case b.Type == "image" && m.Type == "user":
 			if img := image(b); img != "" {
@@ -533,7 +534,22 @@ func convert(m rawMsg) []Message {
 	return out
 }
 
+var slashCommand = regexp.MustCompile(`(?s)^<command-message>.*?</command-message>\s*<command-name>(.*?)</command-name>(?:\s*<command-args>(.*?)</command-args>)?`)
+
+// SlashCommand reads a prompt command the user typed (a skill or custom command, unlike a local one such as /model,
+// whose text starts with its name) back as "/name args"; any other text comes back unchanged with false.
+func SlashCommand(t string) (string, bool) {
+	m := slashCommand.FindStringSubmatch(strings.TrimSpace(t))
+	if m == nil {
+		return t, false
+	}
+	return strings.TrimSpace(strings.TrimSpace(m[1]) + " " + strings.TrimSpace(m[2])), true
+}
+
 func IsNoise(t string) bool {
+	if _, ok := SlashCommand(t); ok {
+		return false
+	}
 	t = strings.TrimSpace(t)
 	for _, p := range []string{"<system-reminder>", "<local-command", "<command-name>", "<command-message>", "<task-notification>", "Caveat:", "[Request interrupted"} {
 		if strings.HasPrefix(t, p) {
