@@ -135,13 +135,7 @@ const tilde = (p) => {
 let MULTI = false, HERE = "", LIVE = [], LIVE_NAMES = "";
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 let PALETTE_OPEN = () => {}, NEW_SESSION = () => {}, PAL_TOGGLE = null;
-const PAL_OFF = (() => {
-  const q = new URLSearchParams(location.search).get("pal");
-  try {
-    if (q) sessionStorage.setItem("atc-pal", q);
-    return (q || sessionStorage.getItem("atc-pal")) === "off";
-  } catch { return q === "off"; }
-})();
+const FRAMED = window.self !== window.top;
 let SESSION_API = null;
 let ASK = null, ASKED = 0;
 const ask = (d) => new Promise((done) => (ASK ? ASK({ ...d, id: ++ASKED, done }) : done(null)));
@@ -294,7 +288,7 @@ function App() {
   const [shellAt, setShellAt] = useState(shellRoute);
   const [palette, setPalette] = useState(false);
   PALETTE_OPEN = () => setPalette(true);
-  PAL_TOGGLE = usePal(!PAL_OFF && me?.pal) ? () => window.pal.toggle() : null;
+  PAL_TOGGLE = usePal(!FRAMED && me?.pal) ? () => window.pal.toggle() : null;
   const [cursor, setCursor] = useState(null);
   const [quick, setQuick] = useState(null);
   QUICK = (s, rect) => setQuick({ s, rect });
