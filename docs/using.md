@@ -54,6 +54,17 @@
 When two screens show the same session, the one you last typed in decides the terminal size, and
 the other scales to fit. **Fit to this one** takes it back.
 
+## Shells
+
+A **Shell** is a plain login shell on one of your machines, with no Claude in it: the way in when
+Claude is out of quota, broken or not running. Open one with **Shell** at the top of the list, or
+**New shell** in the palette (`/` or Ctrl+K), on any machine and in any folder (your home folder
+unless you pick one). Each shell lives in a tmux server of atc's own (`~/.config/atc/shells.sock`,
+apart from your own tmux), so closing the tab, losing the network or restarting atc leaves it
+running: open it again from **Shells** in the list. **Close** ends it, as does `exit`. The mouse
+wheel (or a drag on a phone) scrolls back through its output. Shells need tmux on that machine
+(Settings, Shell); they are behind the same login as everything else in atc.
+
 ## From a terminal
 
 ```sh

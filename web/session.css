@@ -69,3 +69,6 @@
 .hd .pgbtn em, .hd .pgbtn .caret { color: var(--faint); }
 .hd .kb.pin svg { width: 14px; height: 14px; }
 .hd .kb.pin.on { color: var(--ink); box-shadow: none; }
+
+.hd .shmark { font-family: var(--mono); font-weight: 680; color: var(--dim); }
+@media (min-width: 900px) { .hd .shmore { display: none; } }

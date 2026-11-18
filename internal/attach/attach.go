@@ -84,7 +84,7 @@ func (v *viewer) logf(format string, a ...any) {
 
 func Short(sid string) string {
 	switch {
-	case len(sid) <= 8:
+	case len(sid) <= 8, strings.HasPrefix(sid, "sh-"):
 		return sid
 	case strings.Contains(sid, "_"):
 		return sid[len(sid)-8:]
@@ -124,16 +124,18 @@ func size(q string, def uint16) uint16 {
 }
 
 func (h *Hub) Serve(w http.ResponseWriter, r *http.Request, id string) {
-	h.serve(w, r, id, h.command(id), nil)
+	h.serve(w, r, id, h.command(id))
 }
 
-// Run gives a browser a terminal on cmd instead of on a session; watch runs alongside it until the viewer is gone.
-func (h *Hub) Run(w http.ResponseWriter, r *http.Request, id string, cmd *exec.Cmd, watch func(context.Context, *exec.Cmd)) {
-	cmd.Env = termEnv()
-	h.serve(w, r, id, cmd, watch)
+// Run gives a browser a terminal on cmd instead of on a session, in the environment cmd brings or else atc's.
+func (h *Hub) Run(w http.ResponseWriter, r *http.Request, id string, cmd *exec.Cmd) {
+	if cmd.Env == nil {
+		cmd.Env = termEnv()
+	}
+	h.serve(w, r, id, cmd)
 }
 
-func (h *Hub) serve(w http.ResponseWriter, r *http.Request, id string, cmd *exec.Cmd, watch func(context.Context, *exec.Cmd)) {
+func (h *Hub) serve(w http.ResponseWriter, r *http.Request, id string, cmd *exec.Cmd) {
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return
@@ -156,9 +158,6 @@ func (h *Hub) serve(w http.ResponseWriter, r *http.Request, id string, cmd *exec
 	}
 	v.logf("connected %dx%d hidden=%v reconnect=%v", v.cols, v.rows, v.hidden, v.rejoin)
 	h.join(id, v)
-	if watch != nil {
-		go watch(ctx, cmd)
-	}
 	var sent atomic.Int64
 	why := "closed by the browser"
 	defer func() {

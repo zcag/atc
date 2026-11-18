@@ -193,6 +193,7 @@ export function SetupScreen({ machine, check, skip, ui }) {
         <p class="capintro">atc runs your Claude Code sessions, so it needs Claude Code working on ${machine.host} first. This screen moves on by itself once it does.</p>
         ${machine.rows.map((r) => html`<${Row} key=${r.id} r=${r} host=${machine.host} ui=${ui} reload=${check} canStart=${false} open=${r.warn} />`)}
         <div class="capbtns end">
+          ${ui.shell && html`<button class="btn" title="A plain login shell on this machine, to run the fixes above" onClick=${ui.shell}>Open a shell</button>`}
           <button class="btn" onClick=${skip}>Continue anyway</button>
           <button class="btn primary" disabled=${checking} onClick=${again}>${checking ? "Checking" : "Check again"}</button>
         </div>

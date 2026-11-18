@@ -641,3 +641,5 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
   .bhead .b2 .reschip { margin-left: auto; }
   .bhead .b2 .wide { display: none; }
 }
+
+.nshint { margin: 0; color: var(--dim); font-size: var(--fs-small); }

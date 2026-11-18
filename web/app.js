@@ -282,6 +282,9 @@ function App() {
   const [past, setPast] = useState({});
   const [creating, setCreating] = useState(false);
   NEW_SESSION = (start) => setCreating(start || true);
+  const [shelling, setShelling] = useState(false);
+  NEW_SHELL = (start) => setShelling(start || true);
+  const [shellAt, setShellAt] = useState(shellRoute);
   const [palette, setPalette] = useState(false);
   PALETTE_OPEN = () => setPalette(true);
   PAL_TOGGLE = usePal(me?.pal) ? () => window.pal.toggle() : null;
@@ -353,6 +356,13 @@ function App() {
 
   useEffect(() => {
     if (!me) return;
+    SHELLS.load();
+    const t = setInterval(() => document.visibilityState === "visible" && SHELLS.load(), 20000);
+    return () => clearInterval(t);
+  }, [!!me]);
+
+  useEffect(() => {
+    if (!me) return;
     const load = () => api("/api/usage/limits").then(setLimits, () => {});
     load();
     const t = setInterval(load, 120000);
@@ -384,7 +394,7 @@ function App() {
   const [calling, setCalling] = useState(location.hash === CALL);
   const [holding, setHolding] = useState(location.hash === HOLD);
   useEffect(() => {
-    const f = (e) => { if (inSettings() && e.oldURL && !new URL(e.oldURL).hash.startsWith(SETTINGS)) SETTINGS_FROM = new URL(e.oldURL).hash || "#/"; if (location.hash === HOLD && e.oldURL) HOLD_FROM = new URL(e.oldURL).hash || "#/"; setHolding(location.hash === HOLD); setAssisting(fromCall() || location.hash === ASSIST); setCalling(location.hash === CALL); setScr(screenOf()); setAgentName(agentRoute()); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesAt(readPages()); setSettings(inSettings()); setAgentSheet(null); };
+    const f = (e) => { if (inSettings() && e.oldURL && !new URL(e.oldURL).hash.startsWith(SETTINGS)) SETTINGS_FROM = new URL(e.oldURL).hash || "#/"; if (location.hash === HOLD && e.oldURL) HOLD_FROM = new URL(e.oldURL).hash || "#/"; setHolding(location.hash === HOLD); setAssisting(fromCall() || location.hash === ASSIST); setCalling(location.hash === CALL); setScr(screenOf()); setAgentName(agentRoute()); setSharing(shareRoute()); setAlone(aloneRoute()); setPagesAt(readPages()); setSettings(inSettings()); setAgentSheet(null); setShellAt(shellRoute()); };
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
@@ -582,12 +592,12 @@ function App() {
   HERE = me.host || "";
   CAN_CALL = !!me.call && (!!APP?.call || (!APP && Call.supported()));
   const down = (me.peers || []).filter((p) => p.error);
-  if (setup.machine) return html`<${SetupScreen} machine=${setup.machine} check=${setup.check} skip=${setup.skip} ui=${{ ...capsUI(say), home: me.host }} />`;
+  if (setup.machine) return html`<${SetupScreen} machine=${setup.machine} check=${setup.check} skip=${setup.skip} ui=${{ ...capsUI(say), home: me.host, shell: () => { setup.skip(); setShelling(true); } }} />`;
 
   const all = runs || [];
   const sel = route && (all.find((s) => s.id === route || s.sessionId === route) || past[route]);
   const assistView = assisting || (sel?.kind === "hub" && sel.agent === "assistant");
-  const screen = assistView ? "assistant" : route ? "session" : pagesAt ? "pages" : scr || "board";
+  const screen = assistView ? "assistant" : route || shellAt ? "session" : pagesAt ? "pages" : scr || "board";
   const bays = baysOf(onBays, only);
   const inBay = (live || []).filter((x) => x.state !== "stopped" && (only ? bayOf(x) === only : !homeless(x))).length;
   const remember = rememberPast;
@@ -607,18 +617,19 @@ function App() {
       : scr === "resources" ? html`<${ResourcesPage} hosts=${(me.hosts || [me.host]).filter((h) => h)} home=${me.host} live=${all} />`
       : scr === "backlog" ? html`<${BacklogPage} live=${all} say=${say} onAdd=${setCreating} only=${only} />`
       : html`<${AgentsPage} name=${agentName} agents=${agents} live=${all} past=${past} remember=${rememberPast} say=${say} reload=${loadAgents} panes=${panes} togglePane=${togglePane} />`}</main>`
-    : !route ? html`<div class="shell boardv"><${BoardView} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} say=${say} index=${panes.index && wide} /></div>` : html`
+    : !route && !shellAt ? html`<div class="shell boardv"><${BoardView} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} say=${say} index=${panes.index && wide} /></div>` : html`
     <div class="shell open ${!panes.rail ? "norail" : ""}">
       <aside class="side">
         <div class="ph"><b>${only || "Every bay"}</b><span>${plural(inBay, "session")}</span>
-          <span class="r"><button class="kb" onClick=${() => setCreating(true)} aria-keyshortcuts="+">New session <kbd aria-hidden="true">+</kbd></button></span></div>
-        <${RailList} live=${live} hist=${hist} only=${only} sel=${sel} cursor=${cursor} />
+          <span class="r"><button class="kb" onClick=${() => setShelling(true)} title="A plain login shell, no Claude">Shell</button><button class="kb" onClick=${() => setCreating(true)} aria-keyshortcuts="+">New session <kbd aria-hidden="true">+</kbd></button></span></div>
+        <${RailList} live=${live} hist=${hist} only=${only} sel=${sel} cursor=${cursor} shell=${shellAt} />
         <${BacklogLine} only=${only} />
         <${UsageFoot} limits=${limits} onOpen=${openUsage} />
       </aside>
       <main class="main">
-        ${sel && !wide && html`<${SessionStrip} live=${live} sel=${sel} />`}
-        ${sel
+        ${sel && !wide && !shellAt && html`<${SessionStrip} live=${live} sel=${sel} />`}
+        ${shellAt ? html`<${ShellView} key=${shellAt.id} at=${shellAt} say=${say} />`
+        : sel
           ? html`<${Session} key=${sel.sessionId} s=${sel} say=${say} live=${all} panes=${panes} togglePane=${togglePane} />`
           : html`<div class="blank">${!live || lookingUp ? "Opening…" : "This session is gone. Pick another from the list."}</div>`}
       </main>
@@ -629,6 +640,7 @@ function App() {
     </div>
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${me.hosts || [me.host]} down=${down} home=${me.host} live=${all}
       start=${creating === true ? null : creating} context=${creating === true ? here(sel, live) : null} />`}
+    ${shelling && html`<${NewShell} onClose=${() => setShelling(false)} hosts=${me.hosts || [me.host]} down=${down} home=${me.host} live=${all} start=${shelling === true ? null : shelling} />`}
     ${palette && html`<${Palette} live=${reach || []} onBays=${onBays} sel=${sel} say=${say} home=${me.host} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} onClose=${() => setPalette(false)}
       actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: openAssistant, ask: openAssistant,
         pane: togglePane, next: () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true })) }} />`}
@@ -1057,15 +1069,16 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
       <div class="bmain" id="bscroll">
         <div class="bhead">
           <div class="b1"><h1>${only || "Every bay"}</h1>${path && html`<span class="w">${tilde(baseDir(path.cwd))}</span>`}
-            <span class="r">${byPark.length > 0 && html`<button class="kb parkall" onClick=${() => unparkAll()} title=${`Unpark the ${byPark.length} your last Park all here set aside`}>Unpark all</button>`}${parkable.length > 0 && html`<button class="kb parkall" onClick=${parkAll} title=${`Park every session in ${only}; each comes back when it needs you`}>Park all</button>`}<${BacklogLine} only=${only} /><button class="kb" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts="/">Search <kbd aria-hidden="true">/</kbd></button></span></div>
+            <span class="r">${byPark.length > 0 && html`<button class="kb parkall" onClick=${() => unparkAll()} title=${`Unpark the ${byPark.length} your last Park all here set aside`}>Unpark all</button>`}${parkable.length > 0 && html`<button class="kb parkall" onClick=${parkAll} title=${`Park every session in ${only}; each comes back when it needs you`}>Park all</button>`}<${BacklogLine} only=${only} /><button class="kb keep" onClick=${() => NEW_SHELL()} title="A plain login shell, no Claude">Shell</button><button class="kb" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts="/">Search <kbd aria-hidden="true">/</kbd></button></span></div>
           <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${{ waiting: html`waiting<span class="wide"> on you</span>`, working: "working", cut: html`stopped<span class="wide"> unexpectedly</span>`, parked: "parked" }[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}${innerWidth < 900 && html`<${ResourceChip} />`}</div>
         </div>
         <div class="bcols" aria-hidden="true"><span></span><span>Session</span><span>Status, and what it last said or is doing</span><span>Context</span><span>Steps</span><span>Running, made</span><span>Since</span><span></span></div>
         ${GROUPS.map(([k, title]) => {
           const isEarlier = k === "earlier";
-          if (isEarlier ? !by.earlier.length : !by[k].length) return null;
+          if (isEarlier && !by.earlier.length) return html`<${ShellGroup} />`;
+          if (!isEarlier && !by[k].length) return null;
           const list = !isEarlier ? by[k] : earlierOpen ? shownEarlier : [];
-          return html`<section class="bgrp ${k}">
+          return html`${isEarlier && html`<${ShellGroup} />`}<section class="bgrp ${k}">
             ${isEarlier
               ? html`<${EarlierHead} open=${earlierOpen} toggle=${flipEarlier} n=${by.earlier.length} note=${earlierOpen && (earlierAll ? "all loaded" : "today and yesterday")} />`
               : html`<h2 class="grp"><b>${title}</b><span class="c">${list.length}</span>${k === "cut" && html`<button class="kb seenall" title="Move all of these to Earlier: you know why they stopped and have decided what to do" onClick=${() => dismissEnded(list, say)}>Dismiss all</button>`}</h2>`}
@@ -1096,7 +1109,7 @@ function EarlierHead({ open, toggle, n, note }) {
   return html`<h2 class="grp earlierh"><button aria-expanded=${open} onClick=${toggle}><span class="chev" aria-hidden="true"></span><b>Earlier</b><span class="c">${n}</span></button>${note && html`<span class="r">${note}</span>`}</h2>`;
 }
 
-function RailList({ live, hist, only, sel, cursor }) {
+function RailList({ live, hist, only, sel, cursor, shell }) {
   const by = bayLists(live, hist, only);
   const active = [...by.waiting, ...by.working];
   const [earlierOpen, flipEarlier] = useEarlierOpen();
@@ -1110,6 +1123,7 @@ function RailList({ live, hist, only, sel, cursor }) {
       ${by.cut.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + i]} />`)}`}
     ${by.parked.length > 0 && html`<h2 class="grp"><b>Parked</b><span class="c">${by.parked.length}</span><span class="r">to resume later</span></h2>
       ${by.parked.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + by.cut.length + i]} />`)}`}
+    <${ShellGroup} cur=${shell} />
     ${by.earlier.length > 0 && html`<${EarlierHead} open=${earlierOpen} toggle=${flipEarlier} n=${by.earlier.length} />
       ${earlier.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + by.cut.length + by.parked.length + i]} />`)}`}
     ${!np && !active.length && !by.cut.length && !by.parked.length && !by.earlier.length && html`<p class="calm">Nothing here yet.</p>`}
@@ -2606,11 +2620,13 @@ function prewarm(s) {
   if (s?.attachable && s.kind !== "hub" && s.id && !DOCK.has(s.id)) dock(s);
 }
 
-function dock(s) {
-  let d = DOCK.get(s.id);
+const dock = (s) => dockAt(s.id, `/api/sessions/${s.id}/attach?`);
+
+function dockAt(id, path, alive) {
+  let d = DOCK.get(id);
   if (!d) {
-    d = makeDock(s.id);
-    DOCK.set(s.id, d);
+    d = makeDock(id, path, alive);
+    DOCK.set(id, d);
   }
   d.used = Date.now();
   const spare = [...DOCK.values()].filter((x) => !x.box && x !== d).sort((p, q) => p.used - q.used);
@@ -2618,8 +2634,7 @@ function dock(s) {
   return d;
 }
 
-function makeDock(id) {
-  const path = `/api/sessions/${id}/attach?`;
+function makeDock(id, path, alive) {
   const el = document.createElement("div");
   el.className = "termhost";
   shelf().append(el);
@@ -2716,7 +2731,9 @@ function makeDock(id) {
       if (exited || dead) return;
       if (tries >= 20) return emit({ cover: "lost" });
       emit({ retrying: true });
-      timer = setTimeout(connect, Math.min(1000 * 2 ** tries++, 8000));
+      const retry = () => { if (!dead) timer = setTimeout(connect, Math.min(1000 * 2 ** tries++, 8000)); };
+      if (!alive) return retry();
+      alive().then((yes) => { if (yes !== false) return retry(); exited = true; emit({ cover: "detached", retrying: false }); }, retry);
     };
     ws.onerror = () => {};
   };
@@ -2791,8 +2808,9 @@ document.addEventListener("visibilitychange", () => {
   for (const d of DOCK.values()) if (d.box) d.page(!document.hidden);
 });
 
-function Term({ s, say }) {
+function Term({ s, say, sh }) {
   const keyboard = useKeyboard();
+  const key_ = sh ? shellKey(sh) : s.id;
   const box = useRef();
   const api_ = useRef({});
   const picker = useRef();
@@ -2801,7 +2819,7 @@ function Term({ s, say }) {
   upload.current = async (files) => {
     for (const f of files) {
       try {
-        const path = await uploadFile(`/api/sessions/${s.sessionId}/upload`, f);
+        const path = await uploadFile(sh ? `/api/uploads${hostQ(sh.host, HERE)}` : `/api/sessions/${s.sessionId}/upload`, f);
         if (!api_.current.send?.(` \x1b[200~${quotePath(path)}\x1b[201~`)) say(`Uploaded, but the terminal is not connected, so it did not get the path: ${path}`);
       } catch (e) {
         say(`Upload failed: ${e.message}`);
@@ -2812,12 +2830,13 @@ function Term({ s, say }) {
   const [gen, setGen] = useState(0);
   const [st, setSt] = useState({ cover: null, foreign: null, retrying: false });
   const { cover, foreign, retrying } = st;
+  useEffect(() => { if (sh && cover === "detached") SHELLS.load(); }, [cover]);
   const [ctrl, setCtrl] = useState(false);
   const ctrlRef = useRef(false);
   ctrlRef.current = ctrl;
 
   useEffect(() => {
-    const d = dock(s);
+    const d = sh ? shellDock(sh) : dock(s);
     d.ui = setSt;
     setSt({ ...d.state });
     d.hooks = {
@@ -2835,7 +2854,7 @@ function Term({ s, say }) {
     api_.current = { send: d.send, focus: d.focus, claim: d.claim };
     if (!touch) d.focus();
     return () => d.hide();
-  }, [s.id, gen]);
+  }, [key_, gen]);
 
   const key = (k, seq) => {
     if (seq === null) return setCtrl(!ctrl);
@@ -2862,10 +2881,12 @@ function Term({ s, say }) {
       ${cover && html`
         <div class="cover">
           <div>
-            <p class="h">${cover === "detached" ? "Detached" : "Connection lost"}</p>
-            <p>${cover === "detached" ? "The terminal closed. The session keeps running." : "The link to the server dropped. The session keeps running."}</p>
+            <p class="h">${cover === "detached" ? (sh ? "The shell ended" : "Detached") : "Connection lost"}</p>
+            <p>${cover === "detached" ? (sh ? "It exited, or someone closed it." : "The terminal closed. The session keeps running.") : `The link to the server dropped. The ${sh ? "shell" : "session"} keeps running.`}</p>
             <div class="row">
-              <button class="btn primary" onClick=${() => { DOCK.get(s.id)?.dispose(); setGen(gen + 1); }}>Reopen</button>
+              ${sh && cover === "detached"
+                ? html`<button class="btn primary" onClick=${() => startShell(sh.host, sh.dir || "~").catch((e) => say(e.message))}>New shell here</button>`
+                : html`<button class="btn primary" onClick=${() => { DOCK.get(key_)?.dispose(); setGen(gen + 1); }}>Reopen</button>`}
               <button class="btn" onClick=${() => go(null)}>Back to list</button>
             </div>
           </div>
@@ -2876,6 +2897,127 @@ function Term({ s, say }) {
       </div>
     </div>
   `;
+}
+
+const SHELLS = {
+  list: null, subs: new Set(), at: 0,
+  set(l) { SHELLS.list = (l || []).sort((a, b) => Date.parse(a.started) - Date.parse(b.started)); SHELLS.subs.forEach((f) => f(SHELLS.list)); },
+  load() { SHELLS.at = Date.now(); return api("/api/shells").then((l) => SHELLS.set(l), () => {}); },
+};
+let NEW_SHELL = () => {};
+const shellKey = (sh) => `sh-${sh.id}`;
+const shellHash = (sh) => `#/sh/${encodeURIComponent(sh.host || HERE)}/${sh.id}`;
+const shellRoute = () => {
+  const m = location.hash.match(/^#\/sh\/([^/]+)\/([0-9a-f]{8})$/);
+  return m && { host: decodeURIComponent(m[1]), id: m[2] };
+};
+const shellOn = (host) => (host && host !== HERE ? `host=${encodeURIComponent(host)}&` : "");
+const shellDock = (sh) => dockAt(shellKey(sh), `/api/shells/${sh.id}/attach?${shellOn(sh.host)}`,
+  () => api(`/api/shells?${shellOn(sh.host)}local=1`).then((l) => (l || []).some((x) => x.id === sh.id)));
+
+function useShells() {
+  const [list, set] = useState(SHELLS.list);
+  useEffect(() => {
+    SHELLS.subs.add(set);
+    if (Date.now() - SHELLS.at > 5000) SHELLS.load();
+    return () => SHELLS.subs.delete(set);
+  }, []);
+  return list;
+}
+
+async function startShell(host, dir) {
+  const sh = await api(`/api/shells${hostQ(host, HERE)}`, { method: "POST", body: { dir } });
+  SHELLS.set([...(SHELLS.list || []).filter((x) => x.id !== sh.id), sh]);
+  location.hash = shellHash(sh);
+  return sh;
+}
+
+const closeShell = (sh, say) => ask({ title: "Close this shell?", body: `Whatever runs in it on ${sh.host || HERE} stops.`, ok: "Close", busy: "Closing…", danger: true,
+  run: () => api(`/api/shells/${sh.id}${hostQ(sh.host, HERE)}`, { method: "DELETE" }) })
+  .then((r) => {
+    if (!r) return;
+    DOCK.get(shellKey(sh))?.dispose();
+    SHELLS.set((SHELLS.list || []).filter((x) => x.id !== sh.id));
+    if (location.hash === shellHash(sh)) location.replace("#/");
+    say("Shell closed.");
+  });
+
+const shellWhere = (sh) => [MULTI && sh.host, sh.cmd].filter(Boolean).join(" · ");
+
+function ShellGroup({ cur }) {
+  const list = useShells();
+  if (!list?.length) return null;
+  return html`<section class="shgrp">
+    <h2 class="grp"><b>Shells</b><span class="c">${list.length}</span><span class="r"><button class="kb" onClick=${() => NEW_SHELL()}>New shell</button></span></h2>
+    ${list.map((x) => html`<button class="shrow ${cur?.id === x.id ? "on" : ""}" aria-current=${cur?.id === x.id ? "page" : null} onClick=${() => (location.hash = shellHash(x))}>
+      <span class="ic" aria-hidden="true">$</span><span class="t">${tilde(x.dir)}</span><span class="m">${shellWhere(x)}</span><span class="ago">${ago({ startedAt: x.started })}</span>
+    </button>`)}
+  </section>`;
+}
+
+function ShellView({ at, say }) {
+  const list = useShells();
+  const sh = { dir: "", ...(list || []).find((x) => x.id === at.id && (x.host || HERE) === at.host), id: at.id, host: at.host };
+  return html`
+    <header class="hd">
+      <div class="l1">
+        <button class="kb back" onClick=${() => go(null)} aria-label="Back">Back</button>
+        <span class="shmark" aria-hidden="true">$</span>
+        <h1 title=${sh.dir}>${sh.dir ? tilde(sh.dir) : "Shell"}</h1>
+        <span class="where">${MULTI ? `shell on ${sh.host}` : "shell"}${sh.cmd ? `, running ${sh.cmd}` : ""}</span>
+        <span class="r">
+          <button class="kb" onClick=${() => NEW_SHELL({ host: sh.host, dir: sh.dir })}>New shell</button>
+          <button class="kb" onClick=${() => closeShell(sh, say)}>Close</button>
+          <div class="more shmore"><${Menu} cls="kb" aria="Shell menu" label="More"
+            items=${[{ label: "New shell", run: () => NEW_SHELL({ host: sh.host, dir: sh.dir }) }, { label: "Close this shell", danger: true, run: () => closeShell(sh, say) }]} /></div>
+        </span>
+      </div>
+    </header>
+    <div class="sbody"><div class="smain"><${Term} key=${shellKey(sh)} sh=${sh} say=${say} /></div></div>`;
+}
+
+function NewShell({ start, hosts, down = [], home, live, onClose }) {
+  const [host, setHost] = useState(() => (start?.host && hosts.includes(start.host) ? start.host : home));
+  const [dir, setDir] = useState(() => (start?.dir ? tilde(start.dir) : "~"));
+  const dirs = useDirs(host, home);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  useEffect(() => {
+    const f = (e) => e.key === "Escape" && onClose();
+    addEventListener("keydown", f);
+    if (!touch) requestAnimationFrame(() => document.getElementById("ns-folder")?.focus());
+    return () => removeEventListener("keydown", f);
+  }, []);
+  const open = async () => {
+    if (busy) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await startShell(host, dir.trim() || "~");
+      onClose();
+    } catch (e) {
+      setErr(e.message);
+      setBusy(false);
+    }
+  };
+  return html`
+    <div class="nsveil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
+      <form class="nsdlg" role="dialog" aria-modal="true" aria-label="New shell" onSubmit=${(e) => { e.preventDefault(); open(); }}>
+        <div class="dh"><b>New shell</b><span class="r"><button type="button" class="kb" onClick=${onClose} aria-keyshortcuts="Escape">Close <kbd aria-hidden="true">esc</kbd></button></span></div>
+        <div class="db">
+          <p class="nshint">A login shell with no Claude in it. It keeps running when you close the tab; close it from its header or with <code>exit</code>.</p>
+          <${FolderField} dirs=${dirs} folder=${dir} pick=${setDir} host=${host} live=${live} home=${home} onStart=${open} />
+          ${hosts.length > 1 && html`<div class="nsrow2"><div class="nsfld"><div class="nslb" id="ns-hl">Host</div>
+            <${HostPick} hosts=${hosts} down=${down} host=${host} setHost=${(h) => { setHost(h); setDir("~"); setErr(null); }} /></div></div>`}
+          ${err && html`<div class="nserr" role="alert" ref=${intoView}><b>Couldn't open a shell on ${host}.</b> ${err}</div>`}
+        </div>
+        <div class="df">
+          <span class="sum"><b>${dir}</b> on ${host}</span>
+          <button type="button" class="btn nsx" onClick=${onClose}>Cancel</button>
+          <button class="btn primary go" disabled=${busy}>${busy ? `Opening on ${host}…` : "Open"}${!busy && html` <kbd aria-hidden="true">enter</kbd>`}</button>
+        </div>
+      </form>
+    </div>`;
 }
 
 function askAttach(files) {
@@ -7857,7 +7999,7 @@ function marked(text, hits) {
 }
 
 const PAL_RECENT = "atc.palrecent";
-const PAL_CAP = { Sessions: 6, Pages: 4, Actions: 6, Folders: 4, Agents: 4, Earlier: 4, Bays: 4, Appearance: 4 };
+const PAL_CAP = { Sessions: 6, Shells: 4, Pages: 4, Actions: 6, Folders: 4, Agents: 4, Earlier: 4, Bays: 4, Appearance: 4 };
 const STATE_BOOST = { "needs-you": 30, "your-turn": 12, working: 6 };
 
 function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
@@ -7917,6 +8059,11 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
   }
   const action = (label, hint, sub, f, kw = "") => add("Actions", label, { key: `a:${label}`, hint, sub, kw, boost: 4, run: run(`a:${label}`, f) });
   action("New session", "+", "start a session in a folder", () => actions.create(), "start folder");
+  action("New shell", "", "a plain login shell, no Claude: pick the machine and folder", () => NEW_SHELL(), "terminal zsh bash tmux console escape hatch");
+  for (const h of hosts) action(MULTI ? `Shell on ${h}` : "Shell in ~", "", `a login shell in your home folder${MULTI ? ` on ${h}` : ""}, at once`,
+    () => startShell(h, "~").catch((e) => say(e.message)), "terminal zsh bash tmux console home");
+  for (const x of SHELLS.list || []) add("Shells", tilde(x.dir), { key: `sh:${x.id}`, shell: true, mono: true, kw: "shell terminal", sub: shellWhere(x) || "shell",
+    ago: ago({ startedAt: x.started }), run: run(`sh:${x.id}`, () => (location.hash = shellHash(x))) });
   action("Session", "s", "the open session of this bay", () => goBay(BAY.only, live, true));
   action("Board", "b", "every session of this bay", () => { rememberBay(BAY.only, { view: "board" }); go(null); });
   action("Pages", "g", "every page your sessions showed you", () => (location.hash = pagesHash()), "shown html reports gallery");
@@ -8009,7 +8156,7 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
     return () => removeEventListener("keydown", k, true);
   }, []);
   const lead = (it) => it.s ? html`<${StateBlock} s=${it.s} />` : it.agent ? html`<${AgentMark} a=${it.agent} />` : it.b ? html`<span class="ic">${it.bayN}</span>`
-    : html`<span class="ic" aria-hidden="true">${it.page ? "pg" : it.mono ? "dir" : ""}</span>`;
+    : html`<span class="ic" aria-hidden="true">${it.page ? "pg" : it.shell ? "$" : it.mono ? "dir" : ""}</span>`;
   const rt = (it) => it.bay !== undefined && (it.s || it.page) ? html`<span class="bay">${it.bay}</span><span class="ago">${it.ago}</span>`
     : it.b ? html`<span class="cts" aria-hidden="true">${it.b.needs + it.b.turn > 0 && html`<i class="cn n">${it.b.needs + it.b.turn}</i>`}${it.b.work > 0 && html`<i class="cn w">${it.b.work}</i>`}</span>${it.hint && html`<kbd>${it.hint}</kbd>`}`
     : it.hint ? it.hint.split(" ").map((k) => html`<kbd>${k}</kbd>`) : "";

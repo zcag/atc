@@ -42,6 +42,7 @@ import (
 	"github.com/zcag/atc/internal/resources"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/settings"
+	"github.com/zcag/atc/internal/shells"
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/usage"
 	"github.com/zcag/atc/internal/whatsapp"
@@ -59,6 +60,7 @@ type Server struct {
 	Res     *resources.Sampler
 	Ends    *ends.Watcher
 	Term    *attach.Hub
+	Shells  *shells.Shells
 	Web     fs.FS
 	Token   string
 	Roots   []string
@@ -273,6 +275,7 @@ func (s *Server) Handler() http.Handler {
 		s.nameViewer(r)
 		s.Term.Serve(w, r, r.PathValue("id"))
 	})
+	s.routeShells(mux)
 	mux.HandleFunc("GET /api/trust", s.trustState)
 	mux.HandleFunc("POST /api/call/about", s.callAbout)
 	mux.HandleFunc("POST /api/call/to", s.callTo)
@@ -788,6 +791,10 @@ func (s *Server) withUnexpected(list []sessions.Session) []sessions.Session {
 
 func (s *Server) route(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isShellPath(r.URL.Path) && s.guestCaller(r) {
+			http.Error(w, "guests get no shell", http.StatusForbidden)
+			return
+		}
 		if len(s.Peers) == 0 || !strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == pair.ClaimPath {
 			next.ServeHTTP(w, r)
 			return

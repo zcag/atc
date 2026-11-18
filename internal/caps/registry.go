@@ -86,6 +86,12 @@ func All() []Cap {
 			Cost:  "Free.",
 		},
 		{
+			ID: "shell", Title: "Shell", Group: Core, Optional: true, Why: "A plain terminal on this machine that does not need Claude Code: the way in when Claude is out of quota, broken or not running. tmux keeps each shell alive after you close its tab.",
+			Check: checkShell,
+			Fix:   Fix{Command: onMac("brew install tmux", "sudo apt install tmux"), Text: "Install tmux from your package manager, so that `tmux` is on the PATH of the user atc runs as.", Guide: "using#shells"},
+			Cost:  "Free.",
+		},
+		{
 			ID: "reach", Title: "HTTPS address", Group: Core, Optional: true, Why: "The address you reach atc at from other devices. Browsers only give a page the microphone over HTTPS.",
 			Fields: []Field{{Key: "ATC_PUBLIC_URL", Label: "Address", Hint: "https://atc.example.com", URL: true}},
 			Check:  checkReach,

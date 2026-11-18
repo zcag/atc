@@ -27,6 +27,7 @@ import (
 	"github.com/zcag/atc/internal/claude"
 
 	"github.com/zcag/atc/internal/settings"
+	"github.com/zcag/atc/internal/shells"
 )
 
 func command(ctx context.Context, bin string, args ...string) (string, error) {
@@ -240,6 +241,18 @@ func checkGit(ctx context.Context, env Env) Result {
 	out, err := exec.CommandContext(ctx, "git", "--version").Output()
 	if err != nil {
 		return Result{Missing, "git was not found on this machine's PATH."}
+	}
+	return Result{OK, strings.TrimSpace(string(out)) + "."}
+}
+
+func checkShell(ctx context.Context, env Env) Result {
+	bin, err := shells.Tmux()
+	if err != nil {
+		return Result{Missing, "tmux was not found on this machine."}
+	}
+	out, err := exec.CommandContext(ctx, bin, "-V").Output()
+	if err != nil {
+		return Result{Missing, "tmux is there but does not run: " + err.Error()}
 	}
 	return Result{OK, strings.TrimSpace(string(out)) + "."}
 }

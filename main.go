@@ -37,6 +37,7 @@ import (
 	"github.com/zcag/atc/internal/server"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/settings"
+	"github.com/zcag/atc/internal/shells"
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/summary"
 	"github.com/zcag/atc/internal/tools"
@@ -353,6 +354,7 @@ func serve(args []string) error {
 		AppDir:    cmp.Or(os.Getenv("ATC_APP_DIR"), defaultAppDir()),
 		AgentsDir: cmp.Or(os.Getenv("ATC_AGENTS"), filepath.Join(client.ConfigDir(), "agents.d")),
 		StateDir:  client.ConfigDir(),
+		Shells:    &shells.Shells{Socket: filepath.Join(client.ConfigDir(), "shells.sock")},
 		Res:       resources.New(filepath.Join(client.ConfigDir(), "resources"), claude.Homes()),
 		AssistDir: os.Getenv("ATC_ASSIST_DIR"),
 
