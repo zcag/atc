@@ -6911,9 +6911,10 @@ function Queued({ p, edit, cancel, now, undo }) {
 
 function WaitingMessage({ w }) {
   const [all, setAll] = useState(false);
-  const long = w.text.length > 600 || w.text.split("\n").length > 8;
+  const text = cleanPrompt(w.text), images = (w.text.match(/\[Image #\d+\]/g) || []).length;
+  const long = text.length > 600 || text.split("\n").length > 8;
   return html`<div class="queued" role="status"><div class="qh"><b>Waiting</b><span>sent ${txClock(w.at)}, Claude reads it when its current step ends</span></div>
-    <p class=${long && !all ? "qt clamp" : "qt"}>${w.text}</p>
+    ${text && html`<p class=${long && !all ? "qt clamp" : "qt"}>${text}</p>`}${images > 0 && html`<p class="qa">${plural(images, "image")}</p>`}
     ${long && html`<button class="kb more" onClick=${() => setAll(!all)}>${all ? "Show less" : "Show all"}</button>`}</div>`;
 }
 
@@ -7120,7 +7121,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     if (!pending.length || !idx) return;
     const head = (p) => plain(unpathed(p.text)).slice(0, 24);
     const said = (t) => plain(cleanPrompt(t.prompt));
-    const there = (p) => (head(p) && waiting.some((w) => plain(w.text).startsWith(head(p)))) || turns.some((t) => (t.at && new Date(t.at) >= p.at - 60000 && (head(p) ? said(t).startsWith(head(p)) : t.images > 0 || /\[Image #\d+\]/.test(t.prompt))) || (head(p) && (t.notes || []).some((n) => plain(n).startsWith(head(p)))));
+    const there = (p) => waiting.some((w) => head(p) ? plain(cleanPrompt(w.text)).startsWith(head(p)) : /\[Image #\d+\]/.test(w.text)) || turns.some((t) => (t.at && new Date(t.at) >= p.at - 60000 && (head(p) ? said(t).startsWith(head(p)) : t.images > 0 || /\[Image #\d+\]/.test(t.prompt))) || (head(p) && (t.notes || []).some((n) => plain(n).startsWith(head(p)))));
     const passed = (p) => turns.some((t) => t.at && new Date(t.at) > p.at + 60000);
     const stale = (p) => passed(p) || (!working && Date.now() - p.at > 5 * 60e3);
     const gone = (p) => (p.state === "sending" || p.state === "sent") && (there(p) || (p.state === "sent" && stale(p)));
