@@ -159,6 +159,27 @@ if (FRAMED) {
   addEventListener("hashchange", tell);
   addEventListener("popstate", tell);
   tell();
+  let meta = "";
+  const tellMeta = () => {
+    const link = [...document.querySelectorAll('link[rel~="icon"]')].pop();
+    const m = { type: "meta", title: document.title, icon: link ? link.href : null };
+    const k = JSON.stringify([m.title, m.icon]);
+    if (k !== meta) { meta = k; window.parent.postMessage(m, "*"); }
+  };
+  new MutationObserver(tellMeta).observe(document.head, { childList: true, subtree: true, attributes: true, characterData: true });
+  tellMeta();
+  const MODIFIERS = new Set(["Shift", "Alt", "Control", "Meta"]);
+  const editable = (t) => !!t && (t.isContentEditable || !!t.matches?.("input, textarea, select"));
+  addEventListener("keydown", (e) => {
+    const t = e.composedPath()[0];
+    if (e.isComposing || e.repeat || MODIFIERS.has(e.key) || t?.matches?.('input[type="password"]')) return;
+    setTimeout(() => {
+      if (e.defaultPrevented) return;
+      if (!(e.altKey || e.ctrlKey || e.metaKey || (e.shiftKey && !editable(t)))) return;
+      const { key, code, altKey, ctrlKey, shiftKey, metaKey } = e;
+      window.parent.postMessage({ type: "key", key, code, altKey, ctrlKey, shiftKey, metaKey }, "*");
+    }, 0);
+  });
 }
 const inSettings = () => /^#\/settings([#/]|$)/.test(location.hash);
 const CALLS_ROW = `${SETTINGS}#calls`;
