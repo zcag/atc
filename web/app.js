@@ -7196,11 +7196,11 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       if (el.scrollHeight <= el.clientHeight) atEnd.current = true;
       document.fonts.ready.then(() => requestAnimationFrame(settle));
       if (atEnd.current) markLooked(s);
-      if (!touch && document.activeElement === document.body) el.focus({ preventScroll: true });
+      if (!touch && document.hasFocus() && document.activeElement === document.body) el.focus({ preventScroll: true });
     } else if (landed.current) settle();
   }, [idx, bodies, ready, pending]);
   useEffect(() => { if (landed.current && atEnd.current) markLooked(s); }, [s.updated]);
-  useEffect(() => { if (!touch && landed.current && !pop && document.activeElement === document.body) box.current?.focus({ preventScroll: true }); });
+  useEffect(() => { if (!touch && landed.current && !pop && document.hasFocus() && document.activeElement === document.body) box.current?.focus({ preventScroll: true }); });
 
   useEffect(() => {
     const el = box.current, inner = el?.querySelector(".read");
