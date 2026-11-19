@@ -170,15 +170,19 @@ if (FRAMED) {
   tellMeta();
   const MODIFIERS = new Set(["Shift", "Alt", "Control", "Meta"]);
   const editable = (t) => !!t && (t.isContentEditable || !!t.matches?.("input, textarea, select"));
+  let parentKeys = new Set();
+  addEventListener("message", (e) => {
+    if (e.source === window.parent && e.data?.type === "keys" && Array.isArray(e.data.keys)) parentKeys = new Set(e.data.keys);
+  });
+  const combo = (e) => (e.ctrlKey ? "ctrl+" : "") + (e.altKey ? "alt+" : "") + (e.shiftKey ? "shift+" : "") + e.code;
   addEventListener("keydown", (e) => {
     const t = e.composedPath()[0];
     if (e.isComposing || e.repeat || MODIFIERS.has(e.key) || t?.matches?.('input[type="password"]')) return;
-    setTimeout(() => {
-      if (e.defaultPrevented) return;
-      if (!(e.altKey || e.ctrlKey || e.metaKey || (e.shiftKey && !editable(t)))) return;
-      const { key, code, altKey, ctrlKey, shiftKey, metaKey } = e;
-      window.parent.postMessage({ type: "key", key, code, altKey, ctrlKey, shiftKey, metaKey }, "*");
-    }, 0);
+    if (!(e.altKey || e.ctrlKey || e.metaKey || (e.shiftKey && !editable(t)))) return;
+    const { key, code, altKey, ctrlKey, shiftKey, metaKey } = e;
+    const pass = () => window.parent.postMessage({ type: "key", key, code, altKey, ctrlKey, shiftKey, metaKey }, "*");
+    if (!e.defaultPrevented && parentKeys.has(combo(e))) { e.preventDefault(); pass(); return; }
+    setTimeout(() => e.defaultPrevented || pass(), 0);
   });
 }
 const inSettings = () => /^#\/settings([#/]|$)/.test(location.hash);
