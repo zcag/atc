@@ -91,10 +91,15 @@ func Asking(id string) Block {
 	if err != nil {
 		return Block{}
 	}
+	return asking(b)
+}
+
+func asking(b []byte) Block {
 	var st struct {
-		Tempo string `json:"tempo"`
-		Needs string `json:"needs"`
-		Block *struct {
+		Tempo        string `json:"tempo"`
+		Needs        string `json:"needs"`
+		NeedsOverlay string `json:"needsOverlay"`
+		Block        *struct {
 			Questions []Question `json:"questions"`
 		} `json:"block"`
 	}
@@ -104,8 +109,11 @@ func Asking(id string) Block {
 	if st.Block != nil && len(st.Block.Questions) > 0 {
 		return Block{Questions: st.Block.Questions}
 	}
-	approve, _ := strings.CutPrefix(st.Needs, "approve ")
-	if approve == st.Needs {
+	if st.NeedsOverlay == "" || st.NeedsOverlay != st.Needs {
+		return Block{}
+	}
+	approve, ok := strings.CutPrefix(st.Needs, "approve ")
+	if !ok {
 		return Block{}
 	}
 	return Block{Approve: approve}

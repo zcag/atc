@@ -125,8 +125,11 @@ func TestAnswerRefusesAStaleAsk(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
 	os.MkdirAll(filepath.Join(dir, "jobs", "loc00001"), 0o755)
-	os.WriteFile(filepath.Join(dir, "jobs", "loc00001", "state.json"), []byte(`{"tempo":"blocked","needs":"approve Bash: rm -rf build"}`), 0o644)
-	ts := newTestServer(t, nil, Voice{})
+	os.WriteFile(filepath.Join(dir, "jobs", "loc00001", "state.json"), []byte(`{"tempo":"blocked","needs":"approve Bash: rm -rf build","needsOverlay":"approve Bash: rm -rf build"}`), 0o644)
+	bin := fakeClaude(t)
+	b, _ := os.ReadFile(bin)
+	os.WriteFile(bin, []byte(strings.Replace(string(b), "attach) IFS=", "attach) printf 'Do you want to proceed?  1. Yes  2. No'; IFS=", 1)), 0o755)
+	ts := serverWith(t, bin, nil, Voice{})
 	res, body := do(t, "POST", ts.URL+"/api/sessions/l1/asks/claude?via=push&key=0123456789ab", "tok", `{"reply":"once"}`)
 	if res.StatusCode != 409 || !strings.Contains(body, "no longer asks that") {
 		t.Fatalf("an answer meant for an earlier ask must not reach this one: %d %q", res.StatusCode, body)

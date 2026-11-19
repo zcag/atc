@@ -167,11 +167,7 @@ func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string
 	}
 	if b.Approve != "" {
 		log.Printf("approve %s: reject=%v %q", id, a.Reject, b.Approve)
-		err := s.Term.Drive(r.Context(), id, func(t *attach.Typist) error { return claudeApprove(t, a.Reject) })
-		if errors.Is(err, errNoDialog) {
-			err = s.Term.Send(r.Context(), id, map[bool]string{false: "yes", true: "no"}[a.Reject])
-		}
-		done(id, err)
+		done(id, s.Term.Drive(r.Context(), id, func(t *attach.Typist) error { return claudeApprove(t, a.Reject) }))
 		return
 	}
 	qs := b.Questions
