@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -12,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zcag/atc/internal/push"
 )
 
 var cgnat = mustCIDR("100.64.0.0/10")
@@ -29,6 +33,7 @@ type Proxies struct {
 	containers []string
 	mu         sync.Mutex
 	ips        map[string]bool
+	gateways   map[string]bool
 	at         time.Time
 }
 
@@ -61,16 +66,38 @@ func (p *Proxies) Trusts(ip net.IP) bool {
 	if p.ips[ip.String()] && time.Since(p.at) < time.Minute {
 		return true
 	}
-	if time.Since(p.at) > 5*time.Second {
-		p.ips, p.at = map[string]bool{}, time.Now()
-		for _, c := range p.containers {
-			out, _ := exec.Command("docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", c).Output()
-			for _, a := range strings.Fields(string(out)) {
-				p.ips[a] = true
+	p.inspect()
+	return p.ips[ip.String()]
+}
+
+// Hides is whether a forwarded address is the gateway of a proxy container's own network: the proxy saw the
+// connection come from the bridge, so something on the way (a NAT rule, a userland port forward) replaced the
+// device's address, and atc can't tell who is asking.
+func (p *Proxies) Hides(ip net.IP) bool {
+	if p == nil || len(p.containers) == 0 {
+		return false
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.inspect()
+	return p.gateways[ip.String()]
+}
+
+func (p *Proxies) inspect() {
+	if time.Since(p.at) < 5*time.Second {
+		return
+	}
+	p.ips, p.gateways, p.at = map[string]bool{}, map[string]bool{}, time.Now()
+	for _, c := range p.containers {
+		out, _ := exec.Command("docker", "inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}}/{{.Gateway}} {{end}}", c).Output()
+		for _, pair := range strings.Fields(string(out)) {
+			addr, gw, _ := strings.Cut(pair, "/")
+			p.ips[addr] = true
+			if gw != "" {
+				p.gateways[gw] = true
 			}
 		}
 	}
-	return p.ips[ip.String()]
 }
 
 type tailnet struct {
@@ -138,6 +165,50 @@ func (t *tailnet) mine(ctx context.Context, ip string) bool {
 	t.known[ip] = tailnetEntry{ok, name, time.Now()}
 	t.mu.Unlock()
 	return ok
+}
+
+// hidden is the last time a request reached atc through the proxy with the proxy's own gateway as its address.
+type hidden struct {
+	mu       sync.Mutex
+	ip       string
+	at, told time.Time
+}
+
+const hiddenFor = 10 * time.Minute
+
+func (s *Server) noteHidden(ip net.IP) {
+	s.hidden.mu.Lock()
+	s.hidden.ip, s.hidden.at = ip.String(), time.Now()
+	tell := time.Since(s.hidden.told) > time.Hour
+	if tell {
+		s.hidden.told = time.Now()
+	}
+	s.hidden.mu.Unlock()
+	if !tell {
+		return
+	}
+	text := hiddenText(ip.String())
+	log.Printf("auth: %s", text)
+	if s.Push != nil {
+		go s.pushAll([]push.Message{{Title: "atc", Body: text, Tag: "atc/proxy-hides", URL: "/#/settings"}}, true)
+	}
+}
+
+// hiddenNow is, for Settings and atc doctor, the address and time of the last such request, while recent.
+func (s *Server) hiddenNow() string {
+	s.hidden.mu.Lock()
+	defer s.hidden.mu.Unlock()
+	if s.hidden.ip == "" || time.Since(s.hidden.at) > hiddenFor {
+		return ""
+	}
+	return fmt.Sprintf("%s at %s", s.hidden.ip, s.hidden.at.Format("15:04"))
+}
+
+func hiddenText(ip string) string {
+	return fmt.Sprintf("Your devices are asked for a token: the proxy in front of atc sees them as %s, its own network's gateway, "+
+		"so atc can't tell they are on your tailnet. Something between them and the proxy rewrites their address; on Linux, "+
+		"often Tailscale's subnet SNAT (sudo tailscale set --snat-subnet-routes=false). Connections opened before the fix keep "+
+		"the old address until they close, so restart the app or reload the page.", ip)
 }
 
 func (s *Server) clientIP(r *http.Request) net.IP {

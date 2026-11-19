@@ -56,6 +56,7 @@ func (s *Server) capsEnv(f settings.File) caps.Env {
 		Get:    func(k string) string { return set.Value(f, k) },
 		Source: func(k string) string { return set.Source(f, k) },
 		Bin:    s.M.CLI.Bin, Self: s.aloneAt,
+		Hidden: s.hiddenNow(),
 	}
 	for _, p := range s.Peers {
 		env.Peers = append(env.Peers, caps.Peer{Name: p.Name, URL: p.URL, Token: p.Token})

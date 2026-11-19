@@ -110,6 +110,7 @@ type Server struct {
 	TrustTailnet   string
 	TrustedProxies *Proxies
 	tailnet        *tailnet
+	hidden         hidden
 
 	fleet     *fleet
 	feed      *feed
@@ -372,7 +373,11 @@ func (s *Server) auth(next http.Handler) http.Handler {
 		}
 		if !s.fromMyTailnet(r) {
 			if s.tailnet != nil {
-				log.Printf("auth: refused %s (seen as %s)", r.URL.Path, s.clientIP(r))
+				ip := s.clientIP(r)
+				log.Printf("auth: refused %s (seen as %s)", r.URL.Path, ip)
+				if s.TrustedProxies.Hides(ip) {
+					s.noteHidden(ip)
+				}
 			}
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return

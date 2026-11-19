@@ -66,6 +66,7 @@ type Env struct {
 	Self    string
 	Devices []string
 	Deaf    []string
+	Hidden  string
 	Peers   []Peer
 	Engines []Engine
 }

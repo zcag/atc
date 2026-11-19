@@ -327,3 +327,11 @@ func TestOlder(t *testing.T) {
 		}
 	}
 }
+
+func TestReachBrokenWhenProxyHidesClients(t *testing.T) {
+	env := envOf("", map[string]string{})
+	env.Hidden = "172.30.0.1 at 19:24"
+	if r := checkReach(t.Context(), env); r.Status != Broken || !strings.Contains(r.Detail, "172.30.0.1 at 19:24") {
+		t.Fatalf("got %+v", r)
+	}
+}

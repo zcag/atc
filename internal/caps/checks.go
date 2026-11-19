@@ -282,6 +282,9 @@ func checkServer(ctx context.Context, env Env) Result {
 }
 
 func checkReach(ctx context.Context, env Env) Result {
+	if env.Hidden != "" {
+		return Result{Broken, fmt.Sprintf("The proxy hides who is asking: a device reached atc as %s, the proxy's own network gateway, so it was asked for a token. Something rewrites the address on the way to the proxy; on Linux, often Tailscale's subnet SNAT (sudo tailscale set --snat-subnet-routes=false).", env.Hidden)}
+	}
 	u := env.Get("ATC_PUBLIC_URL")
 	if u == "" {
 		return Result{Missing, "No address set: links in messages and pushes have nowhere to point, and browsers won't give this page the microphone over plain HTTP."}
