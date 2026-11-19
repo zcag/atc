@@ -152,6 +152,14 @@ const USAGE = "#/usage", RESOURCES = "#/resources", PAGES = "#/pages", SETTINGS 
   const m = location.pathname.match(/^\/(?:pages|p)(?:\/([^/]+))?\/?$/);
   if (m) history.replaceState(null, "", m[1] ? `/#/p/+pinned/${m[1]}` : `/${location.hash || PAGES}`);
 }
+if (FRAMED) {
+  let posted = "";
+  const tell = () => { if (location.href !== posted) window.parent.postMessage({ type: "location", href: (posted = location.href) }, "*"); };
+  for (const k of ["pushState", "replaceState"]) { const f = history[k].bind(history); history[k] = (...a) => { f(...a); tell(); }; }
+  addEventListener("hashchange", tell);
+  addEventListener("popstate", tell);
+  tell();
+}
 const inSettings = () => /^#\/settings([#/]|$)/.test(location.hash);
 const CALLS_ROW = `${SETTINGS}#calls`;
 let SETTINGS_FROM = "#/";
