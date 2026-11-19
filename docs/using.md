@@ -65,6 +65,13 @@ running: open it again from **Shells** in the list. **Close** ends it, as does `
 wheel (or a drag on a phone) scrolls back through its output. Shells need tmux on that machine
 (Settings, Shell); they are behind the same login as everything else in atc.
 
+To run one command and be done, type `$` and the command in the palette (`$ df -h`): it runs in
+the folder of the session or shell you have open (else your home folder), on that machine, as
+your login shell would run it (aliases and functions work). When it finishes it shows its exit
+status and closes on the next key, taking you back to where you were. The **Command** field of
+**New shell** does the same with a folder and machine you pick. **Close** on a shell sitting at
+its prompt closes it without asking.
+
 ## From a terminal
 
 ```sh

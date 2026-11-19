@@ -54,15 +54,15 @@ func (s *Server) shellStart(w http.ResponseWriter, r *http.Request) {
 	if !s.shellsUsable(w, r) {
 		return
 	}
-	var req struct{ Dir string }
+	var req struct{ Dir, Run string }
 	json.NewDecoder(r.Body).Decode(&req)
-	sh, err := s.Shells.Start(r.Context(), strings.TrimSpace(req.Dir))
+	sh, err := s.Shells.Start(r.Context(), strings.TrimSpace(req.Dir), strings.TrimSpace(req.Run))
 	if err != nil {
 		s.shellErr(w, err)
 		return
 	}
 	sh.Host = s.Host
-	log.Printf("shell %s started in %s", sh.ID, sh.Dir)
+	log.Printf("shell %s started in %s %q", sh.ID, sh.Dir, sh.Run)
 	reply(w, sh)
 }
 

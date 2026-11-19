@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestShells(t *testing.T) {
@@ -25,10 +26,10 @@ func TestShells(t *testing.T) {
 	if l, err := s.List(ctx); err != nil || len(l) != 0 {
 		t.Fatalf("before any shell: %v %v", l, err)
 	}
-	if _, err := s.Start(ctx, filepath.Join(dir, "nope")); err == nil {
+	if _, err := s.Start(ctx, filepath.Join(dir, "nope"), ""); err == nil {
 		t.Fatal("started in a folder that does not exist")
 	}
-	sh, err := s.Start(ctx, dir)
+	sh, err := s.Start(ctx, dir, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,6 +49,30 @@ func TestShells(t *testing.T) {
 	}
 	if s.Has(ctx, sh.ID) {
 		t.Fatal("still there after kill")
+	}
+
+	t.Setenv("SHELL", "/bin/sh")
+	run, err := s.Start(ctx, dir, "echo ran-$((40+2)) | tr a-z A-Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := s.List(ctx); len(l) != 1 || l[0].Run != run.Run {
+		t.Fatalf("run shell listed as %+v", l)
+	}
+	var screen string
+	for i := 0; i < 50 && !strings.Contains(screen, "any key closes"); i++ {
+		time.Sleep(100 * time.Millisecond)
+		screen, _ = s.run(ctx, "capture-pane", "-p", "-t", prefix+run.ID)
+	}
+	if !strings.Contains(screen, "RAN-42") || !strings.Contains(screen, "[exit 0") {
+		t.Fatalf("screen after the command:\n%s", screen)
+	}
+	s.run(ctx, "send-keys", "-t", prefix+run.ID, "q")
+	for i := 0; i < 50 && s.Has(ctx, run.ID); i++ {
+		time.Sleep(100 * time.Millisecond)
+	}
+	if s.Has(ctx, run.ID) {
+		t.Fatal("run shell still there after a key")
 	}
 }
 

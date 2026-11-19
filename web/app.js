@@ -2864,7 +2864,13 @@ function Term({ s, say, sh }) {
   const [gen, setGen] = useState(0);
   const [st, setSt] = useState({ cover: null, foreign: null, retrying: false });
   const { cover, foreign, retrying } = st;
-  useEffect(() => { if (sh && cover === "detached") SHELLS.load(); }, [cover]);
+  useEffect(() => {
+    if (sh && cover === "detached") SHELLS.load().then(() => {
+      if ((SHELLS.list || []).some((x) => x.id === sh.id) || location.hash !== shellHash(sh)) return;
+      DOCK.get(key_)?.dispose();
+      location.replace(SHELL_FROM || "#/");
+    });
+  }, [cover]);
   const [ctrl, setCtrl] = useState(false);
   const ctrlRef = useRef(false);
   ctrlRef.current = ctrl;
@@ -2939,6 +2945,7 @@ const SHELLS = {
   load() { SHELLS.at = Date.now(); return api("/api/shells").then((l) => SHELLS.set(l), () => {}); },
 };
 let NEW_SHELL = () => {};
+let SHELL_FROM = null;
 const shellKey = (sh) => `sh-${sh.id}`;
 const shellHash = (sh) => `#/sh/${encodeURIComponent(sh.host || HERE)}/${sh.id}`;
 const shellRoute = () => {
@@ -2959,24 +2966,28 @@ function useShells() {
   return list;
 }
 
-async function startShell(host, dir) {
-  const sh = await api(`/api/shells${hostQ(host, HERE)}`, { method: "POST", body: { dir } });
+async function startShell(host, dir, run) {
+  const sh = await api(`/api/shells${hostQ(host, HERE)}`, { method: "POST", body: { dir, run } });
   SHELLS.set([...(SHELLS.list || []).filter((x) => x.id !== sh.id), sh]);
+  if (!shellRoute()) SHELL_FROM = location.hash;
   location.hash = shellHash(sh);
   return sh;
 }
 
-const closeShell = (sh, say) => ask({ title: "Close this shell?", body: `Whatever runs in it on ${sh.host || HERE} stops.`, ok: "Close", busy: "Closing…", danger: true,
-  run: () => api(`/api/shells/${sh.id}${hostQ(sh.host, HERE)}`, { method: "DELETE" }) })
+const shellIdle = (sh) => !sh.run && /^-?(zsh|bash|fish|sh|dash|ksh|tcsh)$/.test(sh.cmd || "");
+const killShell = (sh) => api(`/api/shells/${sh.id}${hostQ(sh.host, HERE)}`, { method: "DELETE" });
+const closeShell = (sh, say) => (shellIdle(sh) ? killShell(sh).then(() => true, (e) => say(e.message))
+  : ask({ title: "Close this shell?", body: `Whatever runs in it on ${sh.host || HERE} stops.`, ok: "Close", busy: "Closing…", danger: true, run: () => killShell(sh) }))
   .then((r) => {
     if (!r) return;
     DOCK.get(shellKey(sh))?.dispose();
     SHELLS.set((SHELLS.list || []).filter((x) => x.id !== sh.id));
-    if (location.hash === shellHash(sh)) location.replace("#/");
+    if (location.hash === shellHash(sh)) location.replace(SHELL_FROM || "#/");
     say("Shell closed.");
   });
 
-const shellWhere = (sh) => [MULTI && sh.host, sh.cmd].filter(Boolean).join(" · ");
+const shellWhere = (sh) => [MULTI && sh.host, sh.run ? "" : sh.cmd].filter(Boolean).join(" · ");
+const shellName = (sh) => sh.run || (sh.dir ? tilde(sh.dir) : "Shell");
 
 function ShellGroup({ cur }) {
   const list = useShells();
@@ -2984,7 +2995,7 @@ function ShellGroup({ cur }) {
   return html`<section class="shgrp">
     <h2 class="grp"><b>Shells</b><span class="c">${list.length}</span><span class="r"><button class="kb" onClick=${() => NEW_SHELL()}>New shell</button></span></h2>
     ${list.map((x) => html`<button class="shrow ${cur?.id === x.id ? "on" : ""}" aria-current=${cur?.id === x.id ? "page" : null} onClick=${() => (location.hash = shellHash(x))}>
-      <span class="ic" aria-hidden="true">$</span><span class="t">${tilde(x.dir)}</span><span class="m">${shellWhere(x)}</span><span class="ago">${ago({ startedAt: x.started })}</span>
+      <span class="ic" aria-hidden="true">$</span><span class="t">${shellName(x)}</span><span class="m">${shellWhere(x)}</span><span class="ago">${ago({ startedAt: x.started })}</span>
     </button>`)}
   </section>`;
 }
@@ -2997,8 +3008,8 @@ function ShellView({ at, say }) {
       <div class="l1">
         <button class="kb back" onClick=${() => go(null)} aria-label="Back">Back</button>
         <span class="shmark" aria-hidden="true">$</span>
-        <h1 title=${sh.dir}>${sh.dir ? tilde(sh.dir) : "Shell"}</h1>
-        <span class="where">${MULTI ? `shell on ${sh.host}` : "shell"}${sh.cmd ? `, running ${sh.cmd}` : ""}</span>
+        <h1 title=${sh.run || sh.dir}>${shellName(sh)}</h1>
+        <span class="where">${MULTI ? `shell on ${sh.host}` : "shell"}${sh.run ? ` in ${tilde(sh.dir)}` : sh.cmd ? `, running ${sh.cmd}` : ""}</span>
         <span class="r">
           <button class="kb" onClick=${() => NEW_SHELL({ host: sh.host, dir: sh.dir })}>New shell</button>
           <button class="kb" onClick=${() => closeShell(sh, say)}>Close</button>
@@ -3013,6 +3024,7 @@ function ShellView({ at, say }) {
 function NewShell({ start, hosts, down = [], home, live, onClose }) {
   const [host, setHost] = useState(() => (start?.host && hosts.includes(start.host) ? start.host : home));
   const [dir, setDir] = useState(() => (start?.dir ? tilde(start.dir) : "~"));
+  const [run, setRun] = useState("");
   const dirs = useDirs(host, home);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -3027,7 +3039,7 @@ function NewShell({ start, hosts, down = [], home, live, onClose }) {
     setBusy(true);
     setErr(null);
     try {
-      await startShell(host, dir.trim() || "~");
+      await startShell(host, dir.trim() || "~", run.trim());
       onClose();
     } catch (e) {
       setErr(e.message);
@@ -3039,14 +3051,16 @@ function NewShell({ start, hosts, down = [], home, live, onClose }) {
       <form class="nsdlg" role="dialog" aria-modal="true" aria-label="New shell" onSubmit=${(e) => { e.preventDefault(); open(); }}>
         <div class="dh"><b>New shell</b><span class="r"><button type="button" class="kb" onClick=${onClose} aria-keyshortcuts="Escape">Close <kbd aria-hidden="true">esc</kbd></button></span></div>
         <div class="db">
-          <p class="nshint">A login shell with no Claude in it. It keeps running when you close the tab; close it from its header or with <code>exit</code>.</p>
+          <p class="nshint">A login shell with no Claude in it. It keeps running when you close the tab; close it from its header or with <code>exit</code>. With a command, it runs only that and closes on a key when done; <code>$ command</code> in the palette does the same.</p>
           <${FolderField} dirs=${dirs} folder=${dir} pick=${setDir} host=${host} live=${live} home=${home} onStart=${open} />
+          <div class="nsfld"><label class="nslb" for="ns-run">Command <span>optional</span></label>
+            <input id="ns-run" class="nsin mono" value=${run} onInput=${(e) => setRun(e.target.value)} placeholder="Leave empty for a shell" autocomplete="off" spellcheck="false" /></div>
           ${hosts.length > 1 && html`<div class="nsrow2"><div class="nsfld"><div class="nslb" id="ns-hl">Host</div>
             <${HostPick} hosts=${hosts} down=${down} host=${host} setHost=${(h) => { setHost(h); setDir("~"); setErr(null); }} /></div></div>`}
           ${err && html`<div class="nserr" role="alert" ref=${intoView}><b>Couldn't open a shell on ${host}.</b> ${err}</div>`}
         </div>
         <div class="df">
-          <span class="sum"><b>${dir}</b> on ${host}</span>
+          <span class="sum">${run.trim() && html`<b>${run.trim()}</b> in `}<b>${dir}</b> on ${host}</span>
           <button type="button" class="btn nsx" onClick=${onClose}>Cancel</button>
           <button class="btn primary go" disabled=${busy}>${busy ? `Opening on ${host}…` : "Open"}${!busy && html` <kbd aria-hidden="true">enter</kbd>`}</button>
         </div>
@@ -8093,10 +8107,18 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
   }
   const action = (label, hint, sub, f, kw = "") => add("Actions", label, { key: `a:${label}`, hint, sub, kw, boost: 4, run: run(`a:${label}`, f) });
   action("New session", "+", "start a session in a folder", () => actions.create(), "start folder");
-  action("New shell", "", "a plain login shell, no Claude: pick the machine and folder", () => NEW_SHELL(), "terminal zsh bash tmux console escape hatch");
+  action("New shell", "", "a plain login shell, no Claude: pick the machine and folder. $ command runs just one", () => NEW_SHELL(), "terminal zsh bash tmux console escape hatch");
   for (const h of hosts) action(MULTI ? `Shell on ${h}` : "Shell in ~", "", `a login shell in your home folder${MULTI ? ` on ${h}` : ""}, at once`,
     () => startShell(h, "~").catch((e) => say(e.message)), "terminal zsh bash tmux console home");
-  for (const x of SHELLS.list || []) add("Shells", tilde(x.dir), { key: `sh:${x.id}`, shell: true, mono: true, kw: "shell terminal", sub: shellWhere(x) || "shell",
+  const runCmd = q.match(/^\s*[$!]\s*(.*)$/)?.[1].trim();
+  if (runCmd !== undefined) {
+    const at = shellRoute(), shNow = at && (SHELLS.list || []).find((x) => x.id === at.id);
+    const where = shNow ? { host: shNow.host || HERE, dir: shNow.dir } : cur && sel ? { host: cur.s.host || home, dir: cur.s.cwd } : { host: home, dir: "~" };
+    add("Run", runCmd ? runCmd : "Type a command after $", { key: null, shell: true, mono: true,
+      sub: `in ${tilde(where.dir || "~")}${MULTI ? ` on ${where.host}` : ""}, closes on a key once it is done`,
+      run: runCmd ? run(null, () => startShell(where.host, where.dir || "~", runCmd).catch((e) => say(e.message))) : () => {} });
+  }
+  for (const x of SHELLS.list || []) add("Shells", shellName(x), { key: `sh:${x.id}`, shell: true, mono: true, kw: "shell terminal", sub: shellWhere(x) || "shell",
     ago: ago({ startedAt: x.started }), run: run(`sh:${x.id}`, () => (location.hash = shellHash(x))) });
   action("Session", "s", "the open session of this bay", () => goBay(BAY.only, live, true));
   action("Board", "b", "every session of this bay", () => { rememberBay(BAY.only, { view: "board" }); go(null); });
@@ -8135,7 +8157,8 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
 
   const ql = q.trim().toLowerCase();
   let groups;
-  if (!ql) {
+  if (runCmd !== undefined) groups = [["Run", items.filter((it) => it.group === "Run")]];
+  else if (!ql) {
     const byKey = Object.fromEntries(items.filter((it) => it.key).map((it) => [it.key, it]));
     const recent = [...new Set([...stored(PAL_RECENT, []).map((k) => byKey[k]).filter(Boolean),
       ...items.filter((it) => it.group === "Sessions" && !away(it.s)).sort((x, y) => (Date.parse(y.s.updated || 0) || 0) - (Date.parse(x.s.updated || 0) || 0))])].slice(0, 6);

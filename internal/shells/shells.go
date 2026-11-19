@@ -22,6 +22,7 @@ type Shell struct {
 	Host    string    `json:"host,omitempty"`
 	Dir     string    `json:"dir"`
 	Cmd     string    `json:"cmd"`
+	Run     string    `json:"run,omitempty"`
 	Started time.Time `json:"started"`
 	Viewers int       `json:"viewers"`
 }
@@ -116,7 +117,10 @@ var options = [][]string{
 	{"history-limit", "50000"}, {"set-clipboard", "on"}, {"default-terminal", "tmux-256color"}, {"focus-events", "on"},
 }
 
-func (s *Shells) Start(ctx context.Context, dir string) (Shell, error) {
+const runThenWait = `"$0" -lic "$1"; s=$?; printf '\n\033[2m[exit %s, any key closes]\033[0m' "$s"; stty -icanon -echo min 1 2>/dev/null; head -c1 >/dev/null`
+
+// Start opens a login shell in dir, or with run, a shell that runs that one command line and closes on the next key once it is done.
+func (s *Shells) Start(ctx context.Context, dir, run string) (Shell, error) {
 	home, _ := os.UserHomeDir()
 	switch {
 	case dir == "" || dir == "~":
@@ -137,19 +141,27 @@ func (s *Shells) Start(ctx context.Context, dir string) (Shell, error) {
 	for _, o := range options {
 		args = append(args, ";", "set-option", "-g", o[0], o[1])
 	}
+	command := []string{loginShell(), "-l"}
+	if run != "" {
+		command = []string{"/bin/sh", "-c", runThenWait, loginShell(), run}
+	}
 	args = append(args, ";", "set-option", "-sa", "terminal-features", "xterm-256color:RGB:clipboard:focus",
-		";", "new-session", "-d", "-s", prefix+id, "-c", dir, "-x", "120", "-y", "40", "--", loginShell(), "-l")
+		";", "new-session", "-d", "-s", prefix+id, "-c", dir, "-x", "120", "-y", "40", "--")
+	args = append(args, command...)
+	if run != "" {
+		args = append(args, ";", "set-option", "@run", run)
+	}
 	if _, err := s.run(ctx, args...); err != nil {
 		return Shell{}, err
 	}
-	return Shell{ID: id, Dir: dir, Started: time.Now()}, nil
+	return Shell{ID: id, Dir: dir, Run: run, Started: time.Now()}, nil
 }
 
 func (s *Shells) List(ctx context.Context) ([]Shell, error) {
 	if _, err := os.Stat(s.Socket); err != nil {
 		return nil, nil
 	}
-	out, err := s.run(ctx, "list-sessions", "-F", "#{session_name}|#{session_created}|#{session_attached}|#{pane_current_command}|#{pane_current_path}")
+	out, err := s.run(ctx, "list-sessions", "-F", strings.Join([]string{"#{session_name}", "#{session_created}", "#{session_attached}", "#{pane_current_command}", "#{pane_current_path}", "#{@run}"}, "\t"))
 	if err != nil {
 		if strings.Contains(err.Error(), "no server running") || strings.Contains(err.Error(), "error connecting") {
 			return nil, nil
@@ -157,14 +169,14 @@ func (s *Shells) List(ctx context.Context) ([]Shell, error) {
 		return nil, err
 	}
 	var list []Shell
-	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
-		f := strings.SplitN(line, "|", 5)
-		if len(f) < 5 || !strings.HasPrefix(f[0], prefix) {
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		f := strings.SplitN(line, "\t", 6)
+		if len(f) < 6 || !strings.HasPrefix(f[0], prefix) {
 			continue
 		}
 		at, _ := strconv.ParseInt(f[1], 10, 64)
 		n, _ := strconv.Atoi(f[2])
-		list = append(list, Shell{ID: strings.TrimPrefix(f[0], prefix), Started: time.Unix(at, 0), Viewers: n, Dir: f[4], Cmd: f[3]})
+		list = append(list, Shell{ID: strings.TrimPrefix(f[0], prefix), Started: time.Unix(at, 0), Viewers: n, Dir: f[4], Cmd: f[3], Run: f[5]})
 	}
 	return list, nil
 }
