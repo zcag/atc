@@ -87,6 +87,77 @@ class ByeWait(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(t.more_than_bye(heard), heard)
         self.assertTrue(t.more_than_bye("bi de şunu sormak istiyordum"))
 
+    def test_asking_again_to_hang_up_is_a_goodbye(self):
+        t = leaving(2500)
+        self.assertFalse(t.more_than_bye("Yine kapatamadın, bir problem var galiba, bir şey çalışmıyor"))
+        self.assertTrue(t.more_than_bye("kapatma, bi de şunu soracaktım"))
+
+    async def test_no_wait_when_they_asked_for_it(self):
+        t, start = leaving(2500), time.monotonic()
+        await t.bye_wait(asked=True)
+        self.assertAlmostEqual(time.monotonic() - start, 0.5, delta=0.1)
+
+
+class Brain:
+    def __init__(self, events):
+        self.events, self.taken, self.interrupted = events, 0, False
+
+    async def turn(self, _):
+        for e in self.events:
+            self.taken += 1
+            yield e
+        await asyncio.Event().wait()
+
+    def interrupt(self):
+        self.interrupted = True
+
+
+def replying(events, wait_ms=0):
+    t = leaving(wait_ms)
+    t.a.ack_ms = 0
+    t.brain, t.hangup, t.picker = Brain(events), talk.hangup_tags(t.packs), None
+    t.commit, t.may_speak = asyncio.Event(), asyncio.Event()
+    t.commit.set(), t.may_speak.set()
+    t.checked, t.history, t.speaking, t.said = [], [], [], []
+    t.unfinished = t.opened = t.heard = None
+    t.cut, t.moving, t.opening, t.holding, t.leaving = False, True, False, False, False
+    t.line_check, t.rate, t.app, t.a.prebuffer, t.a.topic_pause_ms, t.a.chunk_sentences = lambda _: False, talk.RATE, False, 0, 0, 2
+    t.show = lambda **kw: None
+    t.log, t.cmds = lambda **kw: None, []
+
+    async def speak_all(sentence, rate):
+        t.said.append(sentence)
+        yield b""
+    t.tts, t.queue = speak_all, lambda item, pcm=b"", last=False, rate=None: last and t.speaking.remove(item)
+
+    async def send_cmd(c):
+        t.cmds.append(c)
+    t.send_cmd = send_cmd
+
+    async def nothing():
+        await asyncio.Event().wait()
+    t.hold_on = nothing
+    return t
+
+
+class HangUp(unittest.IsolatedAsyncioTestCase):
+    async def run_reply(self, t, text="Tamam, kapat"):
+        await asyncio.wait_for(t.respond_claude(text, {}, lambda _: None), 3)
+
+    async def test_hangs_up_when_the_goodbye_is_said_though_tools_follow(self):
+        t = replying([("text", "Tamamdır, WhatsApp'tan yazarım. Görüşürüz.\n\n[KAPAT]"), ("tool", "Bash"), ("tool_done", ""), ("tool", "Bash")])
+        await self.run_reply(t)
+        self.assertEqual(t.cmds, [{"cmd": "hangup"}])
+        self.assertEqual(t.said, ["Tamamdır, WhatsApp'tan yazarım.", "Görüşürüz."])
+        self.assertEqual(t.brain.taken, 2)
+        self.assertFalse(t.brain.interrupted)
+
+    async def test_a_reply_without_the_tag_keeps_the_call(self):
+        t = replying([("text", "Bakıyorum."), ("tool", "Bash")])
+        with self.assertRaises(TimeoutError):
+            await asyncio.wait_for(t.respond_claude("Şuna bak", {}, lambda _: None), 0.3)
+        self.assertEqual(t.cmds, [])
+
 
 
 class CalloutHello(unittest.IsolatedAsyncioTestCase):

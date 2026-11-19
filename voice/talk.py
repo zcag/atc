@@ -984,6 +984,8 @@ class Talk:
 
         try:
             async for kind, value in self.brain.turn(sent):
+                if kind != "text" and self.hangup.search(reply):
+                    break
                 if "llm_first" not in timing and value.strip():
                     mark("llm_first")
                 if kind == "tool":
@@ -1042,15 +1044,16 @@ class Talk:
         if self.hangup.search(reply):
             while self.speaking:
                 await asyncio.sleep(0.1)
-            await self.bye_wait()
+            await self.bye_wait(asked=bool(self.pack.HANG_UP_ASK.search(text)))
             self.log(event="hangup")
             await self.send_cmd({"cmd": "hangup"})
 
-    async def bye_wait(self):
+    async def bye_wait(self, asked=False):
         """--bye-wait-ms: after delta's goodbye, room for theirs: hang up once they have said it (0.5 s after they stop),
         or after bye_wait_ms if they say nothing, 5 s at most. Hanging up 0.5 s after its own last word left their
-        goodbye unsaid on most calls. Words that are more than a goodbye («Bi de şunu...») keep the call (more_than_bye)."""
-        if not self.a.bye_wait_ms:
+        goodbye unsaid on most calls. Words that are more than a goodbye («Bi de şunu...») keep the call (more_than_bye).
+        When they asked for the hang-up themselves (asked), they have said their goodbye: 0.5 s, as when it is off."""
+        if asked or not self.a.bye_wait_ms:
             await asyncio.sleep(0.5)
             return
         self.bye_waiting, start = True, time.monotonic()
@@ -1064,6 +1067,8 @@ class Talk:
             self.bye_waiting = False
 
     def more_than_bye(self, heard):
+        if self.pack.HANG_UP_ASK.search(heard):
+            return False
         words = [w for w in re.findall(r"\w+", heard.lower()) if w not in self.pack.BACKCHANNEL and not self.pack.BYE.fullmatch(w)]
         return len(words) >= self.a.barge_words
 

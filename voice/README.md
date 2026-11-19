@@ -70,7 +70,7 @@ it finds, which can be newer than onnxruntime's wheels. On Linux it isn't, to le
 Copy `lang/en.json` to `lang/<code>.json`, translate it and point `STT` at a streaming sherpa-onnx transducer (`hf`
 for a Hugging Face repo, or `base` and `dir` for files at a URL); `test/test_lang.py` checks the keys and slots match.
 Everything heard and said follows the call's language: its word lists (`BACKCHANNEL`, `STOP`, ...), `STT`,
-voice, markers and spoken lines. Any language's hangup tag ends a call, whichever language it is in.
+voice, markers and spoken lines. Any language's hangup tag ends a call, whichever language it is in, as soon as the goodbye before it has been said: a reply that goes on with tool calls after it hangs up there and the turn keeps running in the hub, without the call. After the goodbye `--bye-wait-ms` leaves room for theirs, except when their own turn asked for the hang-up (`HANG_UP_ASK`); asking again during that wait («Yine kapatamadın») ends the call rather than keeping it.
 `GARBLES_OTHERS` says this language's transcriber turns the call's other languages into noise (English's does, Turkish's spells
 English well enough): then a turn also carries another transcriber's reading when the two disagree, so the assistant can
 tell the user switched. The built-in modes

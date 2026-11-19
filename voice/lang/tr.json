@@ -28,6 +28,7 @@
   "LINE_CHECK": ["allo", "alo", "aloo", "beni", "burada", "duyabiliyor", "duymuyor", "duyuyor", "duyuyormusun", "geliyor", "gelmiyor", "hello", "hey", "misin", "mu", "musun", "musunuz", "mı", "mısın", "orada", "orda", "ses", "sesim", "sesimi"],
   "LINE_CORE": ["allo", "alo", "aloo", "duyabiliyor", "duymuyor", "duyuyor", "duyuyormusun", "hello", "orada", "orda", "ses", "sesim", "sesimi"],
   "HANGUP": ["[KAPAT]", "[HANGUP]"],
+  "HANG_UP_ASK": "\\bkapat(?!ma)\\w*|\\bhang (it )?up\\b",
   "CUT_OFF": "(sözünü kestim; cevabından sadece şunu duydum: «{heard}») {text}",
   "HALF_SENT": "(önceki mesajım yarımdı, tamamı şu) {text}",
   "LINE_TESTED": "(hattı denedi: «{tried}»; sen hemen «{line_ok}» dedin) {text}",
