@@ -222,6 +222,10 @@ html.pal-bar .tx .toc { top: calc(104px + var(--pal-bar-h, 0px)); }
 .uchip span { opacity: .7; font-size: var(--fs-ui); line-height: 1; }
 .ufloor { margin: 0; font-size: var(--fs-small); color: var(--faint); }
 .utime .ugrid { margin-top: var(--s4); }
+.utime .fold { display: inline-flex; align-items: center; gap: var(--s2); margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.utime .fold .chev { flex: none; width: 6px; height: 6px; border-right: 1.5px solid var(--faint); border-bottom: 1.5px solid var(--faint); transform: rotate(-45deg); }
+.utime .fold[aria-expanded="true"] .chev { transform: rotate(45deg); }
+.utime .sh { align-items: center; }
 .ukpis { display: grid; grid-template-columns: 1.5fr repeat(4, minmax(0, 1fr)); gap: var(--s4); }
 .ukpi { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .ukpi .l { font-size: var(--fs-small); color: var(--faint); }
@@ -436,6 +440,7 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
   .hm i { aspect-ratio: 0.8; }
   .uspend { gap: var(--s4); }
   :is(.ubar, .utime) > .sh { flex-wrap: nowrap; }
+  .utime .fold { min-height: var(--hit); }
   .ubar .sh .n { display: none; }
   .ubody :is(.ubar, .utime) > .sh .r { margin-left: auto; width: auto; flex: 0 1 300px; }
   :is(.ubar, .utime) .seg { display: flex; width: 100%; }

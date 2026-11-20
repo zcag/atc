@@ -3989,11 +3989,14 @@ function TimeSpent({ onOpen }) {
   const total = rows.reduce((a, r) => a + r.secs, 0);
   const def = TIME_RANGES.find((r) => r[0] === range) || TIME_RANGES[1];
   const secsOf = (r) => r.secs;
+  const [open, setOpen] = useState(() => stored("atc.time.open", false));
+  const toggle = () => { setOpen(!open); store("atc.time.open", !open); };
   return html`
     <section class="sec utime" aria-labelledby="u-time">
-      <div class="sh"><h2 id="u-time">Your time</h2>
-        <span class="r"><span class="seg" role="group" aria-label="Range">${TIME_RANGES.map((r) => html`<button aria-pressed=${r[0] === def[0]} aria-label=${r[2]} onClick=${() => { setRange(r[0]); store("atc.time.range", r[0]); }}>${r[1]}</button>`)}</span></span></div>
-      <p class="ufloor">${rows.length > 0 && html`<b>${span(total)}</b> in sessions ${def[2]}. `}${TIME_RULE}</p>
+      <div class="sh"><h2 id="u-time"><button class="fold" aria-expanded=${open} onClick=${toggle}><span class="chev" aria-hidden="true"></span>Your time</button></h2>
+        ${!open && t && !t.failed && html`<span class="n">${span(total)}, ${def[2]}</span>`}
+        ${open && html`<span class="r"><span class="seg" role="group" aria-label="Range">${TIME_RANGES.map((r) => html`<button aria-pressed=${r[0] === def[0]} aria-label=${r[2]} onClick=${() => { setRange(r[0]); store("atc.time.range", r[0]); }}>${r[1]}</button>`)}</span></span>`}</div>
+      ${open && html`<p class="ufloor">${rows.length > 0 && html`<b>${span(total)}</b> in sessions ${def[2]}. `}${TIME_RULE}</p>
       ${!t ? html`<p class="none">Adding up…</p>` : t.failed ? html`<p class="none">Couldn't read the time log.</p>`
       : !rows.length ? html`<p class="none">Nothing counted ${def[2]}.</p>`
       : html`<div class="ugrid">
@@ -4001,7 +4004,7 @@ function TimeSpent({ onOpen }) {
             onPick=${(id) => onOpen(rows.find((r) => r.sessionId === id))} name=${(r) => r.title || r.sessionId.slice(0, 8)}
             sub=${(r) => [!on && r.bay, MULTI && r.host, ago({ updated: r.last })].filter(Boolean).join(", ")} amount=${secsOf} val=${span} /></div>
           <div class="ubreak"><${PickSection} title="Per bay" rows=${bays} on=${on} onPick=${setBay} sub=${(r) => plural(r.sessions, "session")} amount=${secsOf} val=${span} /></div>
-        </div>`}
+        </div>`}`}
     </section>`;
 }
 
