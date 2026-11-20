@@ -633,6 +633,7 @@ function App() {
   const sel = route && (all.find((s) => s.id === route || s.sessionId === route) || past[route]);
   const assistView = assisting || (sel?.kind === "hub" && sel.agent === "assistant");
   const screen = assistView ? "assistant" : route || shellAt ? "session" : pagesAt ? "pages" : scr || "board";
+  TIME_ON = sel?.sessionId && !assistView && !shellAt ? { sessionId: sel.sessionId, title: sel.title || "", cwd: sel.cwd || "", host: sel.host || "" } : null;
   const bays = baysOf(onBays, only);
   const inBay = (live || []).filter((x) => x.state !== "stopped" && (only ? bayOf(x) === only : !homeless(x))).length;
   const remember = rememberPast;
@@ -2643,8 +2644,29 @@ const beat = () => {
   fetch("/api/presence", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device: DEVICE }) }).catch(() => {});
 };
 for (const ev of ["keydown", "pointerdown", "wheel", "touchstart"]) addEventListener(ev, () => { lastInput = Date.now(); beat(); }, { passive: true, capture: true });
+addEventListener("mousemove", () => { lastInput = Date.now(); }, { passive: true, capture: true });
 addEventListener("focus", beat);
 setInterval(beat, 30000);
+
+let TIME_ON = null;
+const TICKS = new Map();
+const tickTime = () => {
+  const v = TIME_ON;
+  if (!v || document.visibilityState !== "visible" || !document.hasFocus() || Date.now() - lastInput > 60000) return;
+  const e = TICKS.get(v.sessionId) || { ...v, slots: [] };
+  e.slots.push(Math.floor(Date.now() / 5000));
+  TICKS.set(v.sessionId, e);
+};
+const sendTicks = () => {
+  if (!TICKS.size) return;
+  const body = JSON.stringify({ sessions: [...TICKS.values()] });
+  TICKS.clear();
+  fetch("/api/time", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
+};
+setInterval(tickTime, 5000);
+setInterval(sendTicks, 30000);
+addEventListener("visibilitychange", () => document.visibilityState === "hidden" && sendTicks());
+addEventListener("pagehide", sendTicks);
 
 const markFocus = () => document.documentElement.classList.toggle("unfocused", !document.hasFocus());
 addEventListener("focus", markFocus);
@@ -3425,17 +3447,19 @@ const bucketName = (k) => k.length > 10
 const bucketTick = (k, n) => k.length > 10 ? `${k.slice(11)}` : n <= 7 ? dayOf(k, { weekday: "short" }) : dayOf(k, { day: "numeric", month: "short" });
 const tickEvery = (hourly, n) => (hourly ? 6 : n <= 7 ? 1 : n <= 16 ? 2 : n <= 40 ? 7 : 14);
 
-function PickSection({ title, rows, on, onPick, name = (r) => r.name, sub, color }) {
+const costVal = (c) => html`${dollars(c)}<small>${wk(c)}</small>`;
+
+function PickSection({ title, rows, on, onPick, name = (r) => r.name, sub, color, amount = (r) => r.cost, val = costVal }) {
   const [all, setAll] = useState(false);
   const top = all ? rows : rows.slice(0, 8);
-  const total = rows.reduce((a, r) => a + r.cost, 0);
+  const total = rows.reduce((a, r) => a + amount(r), 0);
   return html`
     <section class="sec"><div class="sh"><h2>${title}</h2></div>
     <div class="upicks">
       ${top.map((r) => html`<button class="upick" aria-pressed=${on === r.name} onClick=${() => onPick(on === r.name ? null : r.name)}>
         <span class="nm">${color && html`<i class="umsw" style=${`background:${color(r.name)}`}></i>`}${name(r)}${sub && html`<small>${sub(r)}</small>`}</span>
-        <span class="v">${dollars(r.cost)}<small>${wk(r.cost)}</small></span>
-        <i class="b" style=${`width:${total > 0 ? Math.max(0.5, (r.cost / total) * 100) : 0}%`}></i></button>`)}
+        <span class="v">${val(amount(r))}</span>
+        <i class="b" style=${`width:${total > 0 ? Math.max(0.5, (amount(r) / total) * 100) : 0}%`}></i></button>`)}
       ${rows.length > 8 && html`<button class="clr" onClick=${() => setAll(!all)}>${all ? "Show fewer" : `Show all ${rows.length}`}</button>`}
     </div></section>`;
 }
@@ -3941,6 +3965,46 @@ function ResourceChip() {
   return html`<button class="kb reschip" onClick=${openResources} title=${`Memory ${gb(b.machine.memUsed)} of ${gb(b.machine.memTotal)}, CPU ${Math.round(b.machine.cpu / b.machine.cores)}%`}>mem ${pct}%</button>`;
 }
 
+const TIME_RANGES = [["1", "Today", "today"], ["7", "7d", "the last 7 days"], ["30", "30d", "the last 30 days"], ["all", "All", "all time"]];
+const TIME_RULE = "Counted in 5-second ticks while a session is open on a visible, focused atc page and you typed, clicked, scrolled, touched or moved the mouse in the last minute. Two devices at once count once.";
+
+function TimeSpent({ onOpen }) {
+  const [range, setRange] = useState(() => stored("atc.time.range", "7"));
+  const [t, setT] = useState(null);
+  const [bay, setBay] = useState(null);
+  useEffect(() => {
+    let on = true;
+    const load = () => api(`/api/time?days=${range}`).then((x) => on && setT(x), () => on && setT((x) => x || { sessions: [], failed: true }));
+    load();
+    const i = setInterval(load, 60000);
+    return () => { on = false; clearInterval(i); };
+  }, [range]);
+  const rows = useMemo(() => (t?.sessions || []).map((x) => ({ ...x, name: x.sessionId, bay: project(x.cwd).name || "other" })), [t]);
+  const bays = useMemo(() => {
+    const m = new Map();
+    for (const r of rows) { const b = m.get(r.bay) || { name: r.bay, secs: 0, sessions: 0 }; b.secs += r.secs; b.sessions++; m.set(r.bay, b); }
+    return [...m.values()].sort((a, b) => b.secs - a.secs);
+  }, [rows]);
+  const on = bays.some((b) => b.name === bay) ? bay : null;
+  const total = rows.reduce((a, r) => a + r.secs, 0);
+  const def = TIME_RANGES.find((r) => r[0] === range) || TIME_RANGES[1];
+  const secsOf = (r) => r.secs;
+  return html`
+    <section class="sec utime" aria-labelledby="u-time">
+      <div class="sh"><h2 id="u-time">Your time</h2>
+        <span class="r"><span class="seg" role="group" aria-label="Range">${TIME_RANGES.map((r) => html`<button aria-pressed=${r[0] === def[0]} aria-label=${r[2]} onClick=${() => { setRange(r[0]); store("atc.time.range", r[0]); }}>${r[1]}</button>`)}</span></span></div>
+      <p class="ufloor">${rows.length > 0 && html`<b>${span(total)}</b> in sessions ${def[2]}. `}${TIME_RULE}</p>
+      ${!t ? html`<p class="none">Adding up…</p>` : t.failed ? html`<p class="none">Couldn't read the time log.</p>`
+      : !rows.length ? html`<p class="none">Nothing counted ${def[2]}.</p>`
+      : html`<div class="ugrid">
+          <div class="usess"><${PickSection} key=${on || ""} title=${on ? `Sessions in ${on}` : "Sessions"} rows=${on ? rows.filter((r) => r.bay === on) : rows} on=${null}
+            onPick=${(id) => onOpen(rows.find((r) => r.sessionId === id))} name=${(r) => r.title || r.sessionId.slice(0, 8)}
+            sub=${(r) => [!on && r.bay, MULTI && r.host, ago({ updated: r.last })].filter(Boolean).join(", ")} amount=${secsOf} val=${span} /></div>
+          <div class="ubreak"><${PickSection} title="Per bay" rows=${bays} on=${on} onPick=${setBay} sub=${(r) => plural(r.sessions, "session")} amount=${secsOf} val=${span} /></div>
+        </div>`}
+    </section>`;
+}
+
 function UsagePage({ limits: mine, live, down, onOpen }) {
   useNow(60000);
   const [v, setV] = useState(() => {
@@ -4069,6 +4133,7 @@ function UsagePage({ limits: mine, live, down, onOpen }) {
               </div>`)}
             ${rows.length > 0 && html`<div class="legend"><span><i class="u"></i>used</span><span><i class="p"></i>at this rate, by the reset</span><span><i class="t"></i>even pace: where you would be if it lasted exactly</span></div>`}
           </section>
+          <${TimeSpent} onOpen=${onOpen} />
           <div class="uspend ${rep?.loading ? "loading" : ""}">
             <div class="ubar">
               <div class="sh"><h2>Spend</h2><span class="n">${prof ? `the ${prof} account, at API prices` : "API prices; a plan is not billed per token"}</span>

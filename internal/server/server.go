@@ -117,6 +117,7 @@ type Server struct {
 	rv        *reviver
 	contained time.Time
 	here      presence
+	ticks     ticks
 	scanner   outputs.Scanner
 	stats     usage.Scanner
 	limits    usage.LimitsClient
@@ -236,6 +237,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/presence", s.presencePost)
 	mux.HandleFunc("POST /api/termlog", s.termLog)
 	mux.HandleFunc("GET /api/presence", s.presenceGet)
+	mux.HandleFunc("POST /api/time", s.timePost)
+	mux.HandleFunc("GET /api/time", s.timeGet)
 	mux.HandleFunc("GET /api/sessions/{sid}/outputs", s.outputs)
 	mux.HandleFunc("GET /api/sessions/{sid}/usage", s.sessionUsage)
 	mux.HandleFunc("GET /api/sessions/{sid}/ref/file", s.refFile)
