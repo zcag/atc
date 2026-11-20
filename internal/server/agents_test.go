@@ -74,8 +74,7 @@ func agentServer(t *testing.T) (*Server, *httptest.Server, string, *store.Store)
 	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
 	s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st},
 		Term: &attach.Hub{Bin: bin}, Web: fstest.MapFS{}, Token: "tok", Host: "here", AgentsDir: root, StateDir: t.TempDir()}
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(ts.Close)
+	ts := serve(t, s)
 	return s, ts, bin, st
 }
 

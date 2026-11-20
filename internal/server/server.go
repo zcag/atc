@@ -121,6 +121,11 @@ type Server struct {
 	stats     usage.Scanner
 	limits    usage.LimitsClient
 
+	life   context.Context
+	end    context.CancelFunc
+	loopMu sync.Mutex
+	loops  sync.WaitGroup
+
 	prefMu sync.Mutex
 	mu     sync.Mutex
 	subs   map[chan []byte]bool
@@ -140,6 +145,7 @@ type Server struct {
 }
 
 func (s *Server) Handler() http.Handler {
+	s.life, s.end = context.WithCancel(context.Background())
 	s.subs = map[chan []byte]bool{}
 	s.held = map[string]held{}
 	if s.TrustTailnet != "" {
@@ -175,7 +181,7 @@ func (s *Server) Handler() http.Handler {
 	if s.Hub != nil {
 		s.startHub()
 	}
-	go s.poll()
+	s.spawn(s.poll)
 	s.startResources()
 	s.watchOpenCode()
 	go s.schedule()
@@ -1225,7 +1231,27 @@ func (s *Server) refresh() {
 	}
 }
 
-func (s *Server) poll() {
+func (s *Server) spawn(loop func(context.Context)) {
+	s.loopMu.Lock()
+	defer s.loopMu.Unlock()
+	if s.life.Err() != nil {
+		return
+	}
+	s.loops.Add(1)
+	go func() {
+		defer s.loops.Done()
+		loop(s.life)
+	}()
+}
+
+func (s *Server) Close() {
+	s.loopMu.Lock()
+	s.end()
+	s.loopMu.Unlock()
+	s.loops.Wait()
+}
+
+func (s *Server) poll(ctx context.Context) {
 	t := time.NewTicker(2 * time.Second)
 	defer t.Stop()
 	var idle int
@@ -1233,6 +1259,8 @@ func (s *Server) poll() {
 		select {
 		case <-t.C:
 		case <-s.kick:
+		case <-ctx.Done():
+			return
 		}
 		s.mu.Lock()
 		n := len(s.subs)

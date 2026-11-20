@@ -29,8 +29,7 @@ func boardServer(t *testing.T) (*httptest.Server, string) {
 	s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st},
 		Term: &attach.Hub{Bin: bin}, Token: "tok", Host: "here", Pages: ps,
 		Web: fstest.MapFS{"index.html": {Data: []byte("<!doctype html>atc")}}}
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(ts.Close)
+	ts := serve(t, s)
 	repo := t.TempDir()
 	os.Mkdir(filepath.Join(repo, ".git"), 0o755)
 	return ts, repo

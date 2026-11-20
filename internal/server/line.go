@@ -72,9 +72,9 @@ func (s *Server) syncLines(open []hub.Line) {
 		if s.lines[o.Name] == nil {
 			l := s.newHubLink(o.Name, hub.NewClient(s.Hub.URL+"/lines/"+o.Name), "")
 			l.path = ""
-			l.ctx, l.cancel = context.WithCancel(context.Background())
+			l.ctx, l.cancel = context.WithCancel(s.life)
 			s.lines[o.Name] = l
-			go s.watchHub(l, func(hub.Event) {})
+			s.spawn(func(context.Context) { s.watchHub(l, func(hub.Event) {}) })
 			log.Printf("agent %s: on the line", o.Name)
 		}
 	}

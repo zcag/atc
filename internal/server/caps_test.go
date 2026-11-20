@@ -29,8 +29,7 @@ func capsServer(t *testing.T, bin, host string, peers []Peer) (*httptest.Server,
 	s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st},
 		Web:   fstest.MapFS{"index.html": {Data: []byte("<!doctype html>atc")}},
 		Token: "tok", Host: host, Peers: peers, Settings: set, StateDir: dir, Version: "1.2.3"}
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(ts.Close)
+	ts := serve(t, s)
 	return ts, dir
 }
 

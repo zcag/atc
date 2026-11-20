@@ -112,8 +112,7 @@ func hubServer(t *testing.T, f *fakeHub, wa *whatsapp.Client) (*Server, *httptes
 		Term: &attach.Hub{Bin: bin}, Token: "tok", Host: "here", Web: fstest.MapFS{}, StateDir: t.TempDir(),
 		Hub: hub.NewClient(f.srv.URL), WhatsApp: wa,
 	}
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(ts.Close)
+	ts := serve(t, s)
 	eventually(t, "hub connected", func() bool { return s.hubUp() })
 	return s, ts
 }

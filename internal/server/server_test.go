@@ -45,6 +45,14 @@ func newTestServer(t *testing.T, peers []Peer, voice Voice, roots ...string) *ht
 	return serverWith(t, fakeClaude(t), peers, voice, roots...)
 }
 
+func serve(t *testing.T, s *Server) *httptest.Server {
+	h := s.Handler()
+	t.Cleanup(s.Close)
+	ts := httptest.NewServer(h)
+	t.Cleanup(ts.Close)
+	return ts
+}
+
 func serverWith(t *testing.T, bin string, peers []Peer, voice Voice, roots ...string) *httptest.Server {
 	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
 	s := &Server{
@@ -53,8 +61,7 @@ func serverWith(t *testing.T, bin string, peers []Peer, voice Voice, roots ...st
 		Web:   fstest.MapFS{"index.html": {Data: []byte("<!doctype html>atc")}, "vendor/fonts/f.woff2": {Data: []byte("font")}, "board.js": {Data: []byte("export {}")}},
 		Token: "tok", Host: "here", Peers: peers, Voice: voice,
 	}
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(ts.Close)
+	ts := serve(t, s)
 	return ts
 }
 
@@ -395,8 +402,7 @@ func TestWidgetList(t *testing.T) {
 func TestOutputFileLinks(t *testing.T) {
 	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
 	s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: fakeClaude(t)}, Index: history.New(t.TempDir()), Store: st}, Term: &attach.Hub{}, Web: fstest.MapFS{}, Token: "tok"}
-	ts := httptest.NewServer(s.Handler())
-	defer ts.Close()
+	ts := serve(t, s)
 	dir := filepath.Join(t.TempDir(), "my site")
 	os.MkdirAll(filepath.Join(dir, "css"), 0o755)
 	os.WriteFile(filepath.Join(dir, "index.html"), []byte("<h1>hi</h1>"), 0o644)
@@ -438,8 +444,7 @@ func TestStartFromPreset(t *testing.T) {
 	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
 	s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st}, Term: &attach.Hub{}, Web: fstest.MapFS{}, Token: "tok", Host: "here",
 		Presets: []Preset{{Name: "helper", Dir: dir, Brief: "brief.md"}}}
-	ts := httptest.NewServer(s.Handler())
-	defer ts.Close()
+	ts := serve(t, s)
 	if res, body := do(t, "POST", ts.URL+"/api/sessions", "tok", `{"preset":"helper","prompt":"hi"}`); res.StatusCode != 200 {
 		t.Fatalf("start: %d %s", res.StatusCode, body)
 	}

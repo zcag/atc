@@ -3,7 +3,6 @@ package server
 import (
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -104,8 +103,7 @@ func TestAScheduledAgentInANewFolderWakes(t *testing.T) {
 	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
 	s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st},
 		Term: &attach.Hub{Bin: bin}, Web: fstest.MapFS{}, Token: "tok", Host: "here", AgentsDir: root, StateDir: t.TempDir()}
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(ts.Close)
+	serve(t, s)
 	a, _ := s.agentNamed("mail")
 	s.tick(a)
 	if _, err := os.Stat(filepath.Join(filepath.Dir(bin), "started")); err != nil {

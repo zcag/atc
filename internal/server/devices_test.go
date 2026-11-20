@@ -35,8 +35,7 @@ func pairedServer(t *testing.T, configure func(*Server)) (*Server, *httptest.Ser
 	if configure != nil {
 		configure(s)
 	}
-	ts := httptest.NewServer(s.Handler())
-	t.Cleanup(ts.Close)
+	ts := serve(t, s)
 	return s, ts
 }
 

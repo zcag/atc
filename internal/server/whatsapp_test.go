@@ -86,8 +86,7 @@ func TestWhatsAppHook(t *testing.T) {
 		M:    &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st},
 		Term: &attach.Hub{Bin: bin}, Token: "tok", Host: "here", WhatsApp: whatsapp.FromEnv(), Web: fstest.MapFS{},
 	}
-	ts := httptest.NewServer(s.Handler())
-	defer ts.Close()
+	ts := serve(t, s)
 
 	post := func(body, sig string) int {
 		req, _ := http.NewRequest("POST", ts.URL+"/api/whatsapp/hook", strings.NewReader(body))

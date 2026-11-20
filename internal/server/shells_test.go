@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -31,8 +30,7 @@ func TestShellSurvivesItsTab(t *testing.T) {
 	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
 	s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: fakeClaude(t)}, Index: history.New(t.TempDir()), Store: st},
 		Term: &attach.Hub{}, Shells: sh, Web: fstest.MapFS{}, Token: "tok", Host: "here"}
-	ts := httptest.NewServer(s.Handler())
-	defer ts.Close()
+	ts := serve(t, s)
 
 	if res, _ := do(t, "POST", ts.URL+"/api/shells", "", `{"dir":"`+dir+`"}`); res.StatusCode != 401 {
 		t.Fatalf("a shell without logging in: %d", res.StatusCode)

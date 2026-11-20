@@ -123,7 +123,7 @@ type hubLink struct {
 }
 
 func (s *Server) newHubLink(name string, c *hub.Client, state string) *hubLink {
-	l := &hubLink{name: name, c: c, ctx: context.Background(), streams: map[chan hub.Event]string{}, wa: make(chan hub.Event, 4096)}
+	l := &hubLink{name: name, c: c, ctx: s.life, streams: map[chan hub.Event]string{}, wa: make(chan hub.Event, 4096)}
 	if s.StateDir != "" {
 		l.path = filepath.Join(s.StateDir, state)
 		var saved struct{ Session string }
@@ -141,11 +141,13 @@ func (s *Server) startHub() {
 		go s.waHubLoop()
 		go s.guestsDaily()
 	}
-	go s.watchHub(s.hub, s.hubEvent)
-	go s.watchHub(s.guests, func(e hub.Event) {
-		if e.Type == "session" {
-			go s.guestsClaim(e.Text)
-		}
+	s.spawn(func(context.Context) { s.watchHub(s.hub, s.hubEvent) })
+	s.spawn(func(context.Context) {
+		s.watchHub(s.guests, func(e hub.Event) {
+			if e.Type == "session" {
+				go s.guestsClaim(e.Text)
+			}
+		})
 	})
 	go s.watchLines()
 }
@@ -184,8 +186,9 @@ func (s *Server) watchHub(l *hubLink, also func(hub.Event)) {
 		l.up = false
 		l.mu.Unlock()
 		s.refresh()
-		if l.ctx.Err() == nil {
-			time.Sleep(3 * time.Second)
+		select {
+		case <-l.ctx.Done():
+		case <-time.After(3 * time.Second):
 		}
 	}
 }

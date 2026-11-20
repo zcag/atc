@@ -2,7 +2,6 @@ package server
 
 import (
 	"encoding/json"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -21,8 +20,7 @@ func TestPalOnlyWhenSet(t *testing.T) {
 		st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
 		s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st}, Term: &attach.Hub{Bin: bin},
 			Web: fstest.MapFS{"index.html": {Data: []byte("atc")}}, Token: "tok", Host: "here", Pal: pal, PalToken: "pt"}
-		ts := httptest.NewServer(s.Handler())
-		defer ts.Close()
+		ts := serve(t, s)
 
 		res, _ := get(t, ts.URL+"/", "tok")
 		csp := res.Header.Get("Content-Security-Policy")

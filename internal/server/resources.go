@@ -2,7 +2,6 @@ package server
 
 import (
 	"cmp"
-	"context"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -31,14 +30,14 @@ func (s *Server) startResources() {
 		title := cmp.Or(s.M.Store.Get(found.SessionID).Name, found.Title, found.AITitle, found.AgentName)
 		return title, found.SessionID
 	}
-	go s.Res.Run(context.Background())
+	s.spawn(s.Res.Run)
 	dir := ""
 	if s.StateDir != "" {
 		dir = filepath.Join(s.StateDir, "ends")
 	}
 	s.Ends = ends.New(dir, daemonLogs(), s.Host, s.Res)
 	s.Ends.Title = s.Res.Resolve
-	go s.Ends.Run(context.Background())
+	s.spawn(s.Ends.Run)
 }
 
 func (s *Server) resourcesIncidents(w http.ResponseWriter, r *http.Request) {
