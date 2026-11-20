@@ -160,7 +160,8 @@ func (s *Server) openCodeFound(ctx context.Context, sid string) ([]outputs.File,
 
 func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string, a opencode.Answer, key string, done func(string, error)) {
 	id := s.agentID(r.Context(), sid)
-	b := claude.Asking(id)
+	t, found := s.M.Index.Find(sid)
+	b := claude.Asking(id, t.Pending != "")
 	if key != "" && sessions.ClaudeAsk(id, b).Fingerprint() != key {
 		http.Error(w, "it no longer asks that: open it to see what it asks now", http.StatusConflict)
 		return
@@ -175,7 +176,7 @@ func (s *Server) answerClaude(w http.ResponseWriter, r *http.Request, sid string
 		http.Error(w, "Claude is not asking anything right now", http.StatusConflict)
 		return
 	}
-	if t, ok := s.M.Index.Find(sid); ok {
+	if found {
 		multi := history.LastAsk(t.Path)
 		for i := range qs {
 			qs[i].MultiSelect = qs[i].MultiSelect || multi[qs[i].Question]

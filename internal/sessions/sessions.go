@@ -152,7 +152,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 			s.Profile = profileName(p)
 		}
 		s.State, s.Attachable, s.PID = state(a), a.Kind == "background" && a.PID > 0, a.PID
-		if b := claude.Asking(a.ID); a.Kind == "background" && (len(b.Questions) > 0 || b.Approve != "") {
+		if b := claude.Asking(a.ID, byID[a.SessionID].Pending != ""); a.Kind == "background" && (len(b.Questions) > 0 || b.Approve != "") {
 			s.State, s.Asks = NeedsYou, []opencode.Ask{claudeAsk(a.ID, b, history.LastAsk(t.Path))}
 			s.Activity = s.Asks[0].Activity()
 		} else if s.State == NeedsYou && a.Kind == "background" && byID[a.SessionID].Pending == "" {

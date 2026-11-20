@@ -86,15 +86,15 @@ func Background(id string) []Task {
 	return out
 }
 
-func Asking(id string) Block {
+func Asking(id string, toolPending bool) Block {
 	b, err := jobState(id)
 	if err != nil {
 		return Block{}
 	}
-	return asking(b)
+	return asking(b, toolPending)
 }
 
-func asking(b []byte) Block {
+func asking(b []byte, toolPending bool) Block {
 	var st struct {
 		Tempo        string `json:"tempo"`
 		Needs        string `json:"needs"`
@@ -109,7 +109,7 @@ func asking(b []byte) Block {
 	if st.Block != nil && len(st.Block.Questions) > 0 {
 		return Block{Questions: st.Block.Questions}
 	}
-	if st.NeedsOverlay == "" || st.NeedsOverlay != st.Needs {
+	if st.NeedsOverlay != st.Needs && !toolPending {
 		return Block{}
 	}
 	approve, ok := strings.CutPrefix(st.Needs, "approve ")
