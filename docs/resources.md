@@ -1,6 +1,6 @@
 # Resources
 
-**Resources** (command palette, or `mem` in the console line and on the phone's board) shows what
+**Resources** (command palette, Search on the phone, or `mem` in the console line) shows what
 agents cost each machine, with sessions totalled per bay; `atc top` prints the same. A session's
 State pane shows what it spends on by what it runs (the app, Claude, the browser tool), six hours of
 history, and what its worktree holds. Secrets in command lines are hidden. Every 10 seconds atc

@@ -341,6 +341,7 @@ function App() {
   const togglePane = (k) => setPanesRaw((p) => { const n = { ...p, [k]: !p[k] }; store("atc.panes", n); return n; });
   const only = useBay();
   const wide = useWide();
+  const phone = usePhone();
   const [peek, setPeek] = useState(null);
   useNow(30000);
 
@@ -642,7 +643,7 @@ function App() {
   };
 
   return html`
-    <div class="app ${assistView ? "assisting" : ""}">
+    <div class="app ${assistView ? "assisting" : ""} ${phone && (screen === "board" || screen === "session") ? "nobays" : ""} ${phone && screen === "session" ? "insession" : ""}">
     <${BayBar} bays=${bays} only=${only} view=${screen} panes=${panes} togglePane=${togglePane} up=${up} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
     ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} onBays=${onBays} say=${say} onClose=${() => setPeek(null)} />`}
     ${assistView ? html`<${AssistantView} hub=${hub} live=${all} loaded=${!!runs} agents=${agents} say=${say} panes=${panes} togglePane=${togglePane} />`
@@ -651,6 +652,7 @@ function App() {
       : scr === "resources" ? html`<${ResourcesPage} hosts=${(me.hosts || [me.host]).filter((h) => h)} home=${me.host} live=${all} />`
       : scr === "backlog" ? html`<${BacklogPage} live=${all} say=${say} onAdd=${setCreating} only=${only} />`
       : html`<${AgentsPage} name=${agentName} agents=${agents} live=${all} past=${past} remember=${rememberPast} say=${say} reload=${loadAgents} panes=${panes} togglePane=${togglePane} />`}</main>`
+    : !route && !shellAt && phone ? html`<${PhoneHome} live=${live} hist=${hist} only=${only} bays=${bays} cursor=${cursor} say=${say} />`
     : !route && !shellAt ? html`<div class="shell boardv"><${BoardView} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} say=${say} index=${panes.index && wide} /></div>` : html`
     <div class="shell open ${!panes.rail ? "norail" : ""}">
       <aside class="side">
@@ -661,7 +663,6 @@ function App() {
         <${UsageFoot} limits=${limits} onOpen=${openUsage} />
       </aside>
       <main class="main">
-        ${sel && !wide && !shellAt && html`<${SessionStrip} live=${live} sel=${sel} />`}
         ${shellAt ? html`<${ShellView} key=${shellAt.id} at=${shellAt} say=${say} />`
         : sel
           ? html`<${Session} key=${sel.sessionId} s=${sel} say=${say} live=${all} panes=${panes} togglePane=${togglePane} />`
@@ -670,7 +671,7 @@ function App() {
     </div>`}
     <${Console} hub=${hub} agents=${agents} runs=${runs} onTalk=${openAssistant} onKeys=${() => setHelp(true)} />
     ${!calling && html`<${CallPill} hub=${hub} />`}
-    <${TabBar} view=${calling ? "assistant" : screen} onTalk=${openAssistant} />
+    <${TabBar} view=${calling ? "assistant" : screen} onTalk=${openAssistant} waits=${(live || []).filter(waiting).length} />
     </div>
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${me.hosts || [me.host]} down=${down} home=${me.host} live=${all}
       start=${creating === true ? null : creating} context=${creating === true ? here(sel, live) : null} />`}
@@ -833,22 +834,6 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
     </nav>`;
 }
 
-function SessionStrip({ live, sel }) {
-  const bay = bayOf(sel);
-  const ring = railRing(bayLists(live, null, bay));
-  const items = ring.some((x) => x.sessionId === sel.sessionId) ? ring : [sel, ...ring];
-  const box = useRef();
-  useLayoutEffect(() => {
-    const el = box.current?.querySelector(".on");
-    if (el) box.current.scrollLeft = el.offsetLeft - 16;
-  }, [sel.sessionId]);
-  if (items.length < 2) return null;
-  return html`<nav class="sstrip" ref=${box} aria-label=${`Sessions in ${bay || "this bay"}`}>
-    ${items.map((x) => html`<button class=${x.sessionId === sel.sessionId ? "on" : ""} aria-current=${x.sessionId === sel.sessionId ? "true" : null} onClick=${() => go(keyOf(x))}>
-      <${StateBlock} s=${x} /><span>${x.title || "Untitled"}</span></button>`)}
-  </nav>`;
-}
-
 function BayPeek({ bay, live, onBays, say, onClose }) {
   const phone = usePhone();
   const box = useRef();
@@ -920,16 +905,36 @@ function Console({ hub, agents, runs, onTalk, onKeys }) {
     </footer>`;
 }
 
-function TabBar({ view, onTalk }) {
-  const tab = (on, label, run) => html`<button class=${on ? "on" : ""} aria-current=${on ? "page" : null} onClick=${run}>${label}</button>`;
+function TabBar({ view, onTalk, waits }) {
+  const tab = (on, icon, label, run, badge) => html`<button class=${on ? "on" : ""} aria-current=${on ? "page" : null} onClick=${run}>
+    ${badge > 0 && html`<i class="cn n" aria-label=${`${badge} waiting on you`}>${badge}</i>`}${icon}<span>${label}</span></button>`;
   return html`
     <nav class="tabbar" aria-label="Views">
-      ${tab(view === "board", "Board", () => { rememberBay(BAY.only, { view: "board" }); go(null); })}
-      ${tab(view === "pages", "Pages", () => (location.hash = pagesHash()))}
-      ${tab(view === "assistant", "Assistant", onTalk)}
-      ${tab(false, "Go", () => PALETTE_OPEN())}
-      ${PAL_TOGGLE && tab(false, "pal", PAL_TOGGLE)}
+      ${tab(view === "board", ICON.list, "Sessions", () => go(null), waits)}
+      ${tab(view === "pages", ICON.page, "Pages", () => (location.hash = pagesHash()))}
+      ${tab(view === "assistant", ICON.mic, "Assistant", onTalk)}
+      ${tab(false, ICON.search, "Search", () => PALETTE_OPEN())}
+      ${PAL_TOGGLE && tab(false, ICON.layout, "pal", PAL_TOGGLE)}
     </nav>`;
+}
+
+function PhoneHome({ live, hist, only, bays, cursor, say }) {
+  const chip = (on, label, n, run) => html`<button class="bchip ${on ? "on" : ""}" aria-pressed=${on} onClick=${run}>${label}${n > 0 && html`<i class="cn n">${n}</i>`}</button>`;
+  return html`<div class="shell phomev">
+    <div class="phead">
+      <button class="psearch" onClick=${() => PALETTE_OPEN()}>${ICON.search}<span>Search sessions, pages, actions</span></button>
+      <button class="pib" aria-label="Settings" onClick=${() => (location.hash = SETTINGS)}>${ICON.gear}</button>
+    </div>
+    <nav class="bchips" aria-label="Bays">
+      ${chip(only === null, "All", 0, () => BAY.set(null))}
+      ${bays.map((b) => chip(only === b.name, b.name, b.needs + b.turn, () => BAY.set(only === b.name ? null : b.name)))}
+    </nav>
+    <${RailList} live=${live} hist=${hist} only=${only} cursor=${cursor} say=${say} />
+    <div class="pfabs">
+      <button class="pfab ghost" onClick=${() => NEW_SHELL()} title="A plain login shell, no Claude">Shell</button>
+      <button class="pfab" onClick=${() => NEW_SESSION()}>${ICON.plus}New</button>
+    </div>
+  </div>`;
 }
 
 const KEYMAP = [
@@ -1028,12 +1033,14 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
   const owed = s.state !== "working" ? LIVE.filter((y) => y.reportsTo && y.reportsTo === (s.root || s.sessionId) && (y.state === "working" || y.state === "needs-you")) : [];
   const cls = `brow ${g} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""} ${open ? "open" : ""} ${fresh ? "fresh" : ""}`;
   const title = html`<span class="t">${s.title || "Untitled"}</span>`;
+  const answer = rail && say && s.state === "needs-you" && s.asks?.length > 0;
   if (rail) return html`
     <button class=${cls} data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
       <${StateBlock} s=${s} />
       <span class="c">${title}<span class="s">${cutOff(s) ? s.ended.text : status}</span><${CardGist} s=${s} />${s.state === "working" && html`<span class="s2 mono">${doing(s)}</span>`}</span>
       <span class="e"><span class="ago">${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${s.profile && html`<${ProfileTag} s=${s} />`}${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>
-    </button>`;
+    </button>
+    ${answer && html`<div class="rask"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}`;
   return html`
     <div class="bwrap ${open ? "open" : ""} ${g}">
       <div class=${cls} data-sid=${s.sessionId} role="button" tabindex="0" aria-expanded=${open} aria-description=${fresh ? "new since you looked" : null} ...${events}
@@ -1104,7 +1111,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
         <div class="bhead">
           <div class="b1"><h1>${only || "Every bay"}</h1>${path && html`<span class="w">${tilde(baseDir(path.cwd))}</span>`}
             <span class="r">${byPark.length > 0 && html`<button class="kb parkall" onClick=${() => unparkAll()} title=${`Unpark the ${byPark.length} your last Park all here set aside`}>Unpark all</button>`}${parkable.length > 0 && html`<button class="kb parkall" onClick=${parkAll} title=${`Park every session in ${only}; each comes back when it needs you`}>Park all</button>`}<${BacklogLine} only=${only} /><button class="kb keep" onClick=${() => NEW_SHELL()} title="A plain login shell, no Claude">Shell</button><button class="kb" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts="/">Search <kbd aria-hidden="true">/</kbd></button></span></div>
-          <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${{ waiting: html`waiting<span class="wide"> on you</span>`, working: "working", cut: html`stopped<span class="wide"> unexpectedly</span>`, parked: "parked" }[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}${innerWidth < 900 && html`<${ResourceChip} />`}</div>
+          <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${{ waiting: html`waiting<span class="wide"> on you</span>`, working: "working", cut: html`stopped<span class="wide"> unexpectedly</span>`, parked: "parked" }[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}</div>
         </div>
         <div class="bcols" aria-hidden="true"><span></span><span>Session</span><span>Status, and what it last said or is doing</span><span>Context</span><span>Steps</span><span>Running, made</span><span>Since</span><span></span></div>
         ${GROUPS.map(([k, title]) => {
@@ -1143,23 +1150,23 @@ function EarlierHead({ open, toggle, n, note }) {
   return html`<h2 class="grp earlierh"><button aria-expanded=${open} onClick=${toggle}><span class="chev" aria-hidden="true"></span><b>Earlier</b><span class="c">${n}</span></button>${note && html`<span class="r">${note}</span>`}</h2>`;
 }
 
-function RailList({ live, hist, only, sel, cursor, shell }) {
+function RailList({ live, hist, only, sel, cursor, shell, say }) {
   const by = bayLists(live, hist, only);
   const active = [...by.waiting, ...by.working];
   const [earlierOpen, flipEarlier] = useEarlierOpen();
   const earlier = earlierOpen ? by.earlier.slice(0, 8) : by.earlier.filter((s) => s.sessionId === sel?.sessionId), np = by.pinned.length;
   return html`<div class="rail" id="rscroll">
     ${np > 0 && html`<h2 class="grp"><b>Pinned</b><span class="c">${np}</span></h2>
-      ${by.pinned.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[i]} />`)}
+      ${by.pinned.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} say=${say} cursor=${cursor} qk=${QWERTY[i]} />`)}
       ${active.length > 0 && html`<h2 class="grp"><b>Now</b><span class="c">${active.length}</span></h2>`}`}
-    ${active.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + i]} />`)}
+    ${active.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} say=${say} cursor=${cursor} qk=${QWERTY[np + i]} />`)}
     ${by.cut.length > 0 && html`<h2 class="grp cut"><b>Stopped unexpectedly</b><span class="c">${by.cut.length}</span></h2>
-      ${by.cut.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + i]} />`)}`}
+      ${by.cut.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} say=${say} cursor=${cursor} qk=${QWERTY[np + active.length + i]} />`)}`}
     ${by.parked.length > 0 && html`<h2 class="grp"><b>Parked</b><span class="c">${by.parked.length}</span><span class="r">to resume later</span></h2>
-      ${by.parked.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + by.cut.length + i]} />`)}`}
+      ${by.parked.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} say=${say} cursor=${cursor} qk=${QWERTY[np + active.length + by.cut.length + i]} />`)}`}
     <${ShellGroup} cur=${shell} />
     ${by.earlier.length > 0 && html`<${EarlierHead} open=${earlierOpen} toggle=${flipEarlier} n=${by.earlier.length} />
-      ${earlier.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} cursor=${cursor} qk=${QWERTY[np + active.length + by.cut.length + by.parked.length + i]} />`)}`}
+      ${earlier.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} say=${say} cursor=${cursor} qk=${QWERTY[np + active.length + by.cut.length + by.parked.length + i]} />`)}`}
     ${!np && !active.length && !by.cut.length && !by.parked.length && !by.earlier.length && html`<p class="calm">Nothing here yet.</p>`}
   </div>`;
 }
@@ -2009,6 +2016,7 @@ const ICON = {
   list: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 4h7.5M6 8h7.5M6 12h7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2.5 3.3l.8.8 1.4-1.6M2.5 7.3l.8.8 1.4-1.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="3.4" cy="12" r="1" fill="currentColor"/></svg>`,
   gear: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M3.6 12.4L5 11M11 5l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
   check: html`<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
+  back: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
   more: html`<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="12.5" cy="8" r="1.3" fill="currentColor"/></svg>`,
 };
 
@@ -2291,7 +2299,7 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
     if (!p || (mode === "page" && (pg === p.name || sideBySide))) return;
     const idle = Date.now() - LAST_KEY > 8000 && !document.activeElement?.closest?.("textarea, input, .xterm");
     if (idle && wideNow && split && mode !== "page" && p.kind !== "browser" && !document.body.classList.contains("zen")) openPage(pageRef(p));
-    else say(p.kind === "browser" ? "It opened a browser tab. It's on the page button up top." : `Showing you “${pageTitle(p)}”. It's on the page button up top.`);
+    else { const where = isPhone() ? "It's in the Page tab." : "It's on the page button up top."; say(p.kind === "browser" ? `It opened a browser tab. ${where}` : `Showing you “${pageTitle(p)}”. ${where}`); }
   }, [shown.map((p) => p.name + p.shown).join()]);
   const [busy, setBusy] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -2326,15 +2334,16 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
       if (e.key === "Enter") { patch({ name: e.target.value }); setRenaming(false); }
       if (e.key === "Escape") setRenaming(false);
     }} onBlur=${() => setRenaming(false)} />`;
-  const [stateSheet, setStateSheet] = useState(false);
   const phoneNow = usePhone();
-  const openState = () => (phoneNow ? setStateSheet(true) : togglePane("state"));
+  const openState = () => (phoneNow ? setMode("state") : togglePane("state"));
   const showStateSection = (sel) => {
-    if (phoneNow) return setStateSheet(true);
+    if (phoneNow) { setMode("state"); return scrollWhenThere(`.stab ${sel}`); }
     if (!panes?.state) togglePane("state");
     scrollWhenThere(`.statep ${sel}`);
   };
   const where = [MULTI && s.host, s.profile, s.branch && s.branch !== "HEAD" && s.branch].filter(Boolean).join(" ");
+  const elsewhere = phoneNow ? (live || []).filter((x) => x.sessionId !== s.sessionId && x.state === "needs-you" && !away(x) && !hiddenRun(x)).length : 0;
+  const pagesFresh = phoneNow && shown.some(pageFresh);
   useEffect(() => {
     const k = (e) => {
       const t = e.target;
@@ -2378,7 +2387,7 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
   return html`
     <header class="hd">
       <div class="l1">
-        <button class="kb back" onClick=${back} aria-label="Back">Back</button>
+        <button class="kb back" onClick=${back} aria-label="Back">${ICON.back}<span class="bk">Back</span>${elsewhere > 0 && html`<i class="bdot" title=${`${elsewhere} more waiting on you`}></i>`}</button>
         <${StateBlock} s=${s} />
         ${renaming ? renameBox : html`<h1 onDblClick=${() => setRenaming(true)} title=${s.title}>${s.title || "Untitled"}</h1>`}
         ${where && html`<span class="where">${where}</span>`}
@@ -2388,9 +2397,8 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
             onClick=${() => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }).catch((e) => say(e.message))}>${ICON.pin}</button>
           ${hasTerm && html`<button class="kb ${mode === "term" ? "on" : ""}" aria-pressed=${mode === "term"} aria-keyshortcuts="\`" onClick=${() => choose(mode === "term" ? "chat" : "term")}>Terminal <kbd aria-hidden="true">\`</kbd></button>`}
           ${!phoneNow && (mode === "chat" || sideBySide) && html`<button class="kb" aria-keyshortcuts="z" title="Only the words, nothing around them" onClick=${() => TX_API?.zen()}>Zen <kbd aria-hidden="true">z</kbd></button>`}
-          <div class="more"><${Menu} cls="kb" busy=${busy} aria="Session menu" label=${html`More <kbd aria-hidden="true">x</kbd>`}
+          <div class="more"><${Menu} cls="kb" busy=${busy} aria="Session menu" label=${phoneNow ? ICON.more : html`More <kbd aria-hidden="true">x</kbd>`}
             items=${[
-              ...(phoneNow && hasTerm ? [{ label: mode === "term" ? "Transcript" : "Terminal", run: () => choose(mode === "term" ? "chat" : "term") }] : []),
               callSession(s, say),
               ...(onPage && !sideBySide ? [{ label: "Zen", run: () => setPageZen(true) }] : []),
               ...(mode === "chat" || sideBySide ? [{ label: "Zen", run: () => TX_API?.zen() }, { label: "Find in the transcript", run: () => TX_API?.find() }, { label: "Contents", run: () => TX_API?.contents() }, { label: "Outline, story or everything", run: () => TX_API?.level() }, { label: "Files, commits and deploys", run: () => TX_API?.results() }] : []),
@@ -2404,12 +2412,19 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
         ${use?.total > 0 && html`<button class="rd" title="Estimated at API prices. Usage has the breakdown." onClick=${() => setShowUse(true)}>${withWk(use.cost, usd)}</button>`}
         ${s.load && html`<button class="rd ${hotLoad(s.load) ? "hotrd" : ""}" title="This session's processes, in State" onClick=${() => showStateSection(".sres")}>${shortLoad(s.load)}</button>`}
       </div>
+      ${phoneNow && html`<nav class="stabs" aria-label="View">
+        ${[["chat", "Chat"], hasTerm && ["term", "Terminal"], shown.length > 0 && ["page", "Page"], ["state", "State"]].filter(Boolean).map(([m, label]) => {
+          const on = m === "chat" ? mode === "chat" || mode === "out" : mode === m;
+          return html`<button class=${on ? "on" : ""} aria-current=${on ? "page" : null} onClick=${() => (m === "state" ? setMode("state") : choose(m))}>${label}${m === "page" && !on && pagesFresh && html`<i class="dot" aria-label="new"></i>`}</button>`;
+        })}
+      </nav>`}
     </header>
     <div class="sbody ${panes?.state && !phoneNow ? "withstate" : ""}">
     <div class="smain">
     ${mode !== "chat" && !sideBySide && !pageZen && s.asks?.length > 0 && html`<div class="askstrip"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}
-    ${mode !== "chat" && !sideBySide && !pageZen && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
-    ${mode === "page" && shown.length > 0
+    ${mode !== "chat" && mode !== "state" && !sideBySide && !pageZen && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
+    ${mode === "state" ? html`<div class="stab">${statePane}</div>`
+    : mode === "page" && shown.length > 0
       ? (() => {
           const pane = html`<${PagePane} s=${s} list=${shown} cur=${pg} at=${at} pick=${openPage} split=${sideBySide} setSplit=${wideNow ? setSplit : null} say=${say} onZen=${() => setPageZen(true)}
             onClose=${() => leavePage(paneFor(s))} />`;
@@ -2426,7 +2441,6 @@ function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
     ${panes?.state && !phoneNow && html`<aside class="statep" aria-label="State">${statePane}</aside>`}
     </div>
     ${pageZen && html`<button class="kb pzenout" onClick=${() => setPageZen(false)}>Leave zen <kbd aria-hidden="true">z</kbd></button>`}
-    ${stateSheet && html`<${Sheet} cls="statesheet" title="State" onClose=${() => setStateSheet(false)}>${statePane}<//>`}
     ${showUse && html`<${SessionUsage} s=${s} use=${use} onClose=${() => setShowUse(false)} />`}
   `;
 }
@@ -3006,7 +3020,7 @@ function ShellView({ at, say }) {
   return html`
     <header class="hd">
       <div class="l1">
-        <button class="kb back" onClick=${() => go(null)} aria-label="Back">Back</button>
+        <button class="kb back" onClick=${() => go(null)} aria-label="Back">${ICON.back}<span class="bk">Back</span></button>
         <span class="shmark" aria-hidden="true">$</span>
         <h1 title=${sh.run || sh.dir}>${shellName(sh)}</h1>
         <span class="where">${MULTI ? `shell on ${sh.host}` : "shell"}${sh.run ? ` in ${tilde(sh.dir)}` : sh.cmd ? `, running ${sh.cmd}` : ""}</span>
@@ -4950,7 +4964,7 @@ function PagesView({ at, live, bays, say, index }) {
   const header = p && html`
     <header class="hd pghd">
       <div class="l1">
-        <button class="kb back" onClick=${back} aria-label="Back to the pages">Back</button>
+        <button class="kb back" onClick=${back} aria-label="Back to the pages">${ICON.back}<span class="bk">Back</span></button>
         ${s ? html`<${StateBlock} s=${s} />` : isPin(p) ? html`<span class="sb earlier" role="img" aria-label=${p.unpinned ? "unpinned" : "pinned"}>P</span>` : html`<span class="sb earlier" role="img" aria-label="ended">E</span>`}
         <h1 title=${pageTitle(p)}>${pageTitle(p)}</h1>
         <span class="where">${(KIND_LABEL[p.kind] || "Page").toLowerCase()}  ${p.name}</span>

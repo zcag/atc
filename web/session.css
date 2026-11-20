@@ -47,7 +47,6 @@
 .statep-in .outputs { padding: 0; background: none; overflow: visible; }
 .statep-in .outputs .inner { padding: 0; max-width: none; }
 .statep-in .outputs .cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
-.statesheet .statep-in { padding: var(--s3) var(--s4) calc(var(--s6) + env(safe-area-inset-bottom)); overflow-y: auto; max-height: 75vh; }
 
 @media (max-width: 899px) {
   .hd { padding: 4px var(--s2) 6px; }

@@ -8,6 +8,11 @@
 - Sessions are grouped by what they need: **needs you** (waiting for a permission or an answer),
   **your turn** (finished, waiting for your next message), **working**, and **stopped**.
 - Open one to get its terminal. Close the tab whenever you like; the session keeps going.
+- **On a phone** (under 900px wide) the same pieces show one at a time. Home is the session list,
+  with a search box and a chip per bay, and a question or a permission request can be answered from
+  its row. A session has one header (back, which shows a dot while another session needs you, and
+  the ••• menu) and tabs for **Chat**, **Terminal**, **Page** and **State**; the bar at the bottom
+  (Sessions, Pages, Assistant, Search) comes back when you go back to the list.
 - **Transcript** is the conversation as something to read, and it opens at the end: your last
   prompt at the top, Claude's reply below it, and the turns you have already read folded into one
   line each above (the ones that arrived since you last looked stay open). It covers the whole
@@ -21,7 +26,7 @@
   timer on the running one.
   - **Outline**, **Story** and **Everything** (`l`) choose how much to show; Settings, Reading sets
     the typeface, size and line length.
-  - **Zen** (`z`, or More on the phone) leaves only the words: your prompts and its replies, without
+  - **Zen** (`z`, or the ••• menu on the phone) leaves only the words: your prompts and its replies, without
     the steps, the panes or the box. It keeps your place in the text. `z`, `esc`, the back button or
     Leave zen ends it, and Enter ends it and goes to the box. **Aa** (`a`) sets the size (also `-` and
     `=`), typeface, line length, line spacing and colours: the theme, or warm Paper, Sepia, Dusk or
