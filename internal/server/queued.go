@@ -10,7 +10,7 @@ import (
 
 const queuedPoll = 2 * time.Second
 
-func askingUser(id string) bool {
+func AskingUser(id string) bool {
 	b := claude.Asking(id, true)
 	return len(b.Questions) > 0 || b.Approve != ""
 }

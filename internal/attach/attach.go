@@ -37,6 +37,7 @@ type Hub struct {
 	Bin    string
 	Attach func(id string) *exec.Cmd
 	Env    func(id string) []string
+	Asking func(id string) bool
 	mu     sync.Mutex
 	groups map[string]*group
 	typing map[string]*sync.Mutex
@@ -435,6 +436,9 @@ func (h *Hub) Keys(ctx context.Context, id string, keys ...string) error {
 	for i, k := range keys {
 		if i > 0 {
 			time.Sleep(keyGap)
+			if err := h.untilAnswered(ctx, id); err != nil {
+				return err
+			}
 		}
 		live, cols, rows := h.owner(id)
 		if live == nil {
@@ -472,13 +476,29 @@ func (h *Hub) owner(id string) (*os.File, uint16, uint16) {
 
 func (h *Hub) typeIn(ctx context.Context, id string, cols, rows uint16, keys []string) error {
 	return h.drive(ctx, id, cols, rows, func(t *Typist) error {
-		for _, k := range keys {
+		for i, k := range keys {
+			if i > 0 {
+				if err := h.untilAnswered(ctx, id); err != nil {
+					return err
+				}
+			}
 			if err := t.Key(k); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+func (h *Hub) untilAnswered(ctx context.Context, id string) error {
+	for h.Asking != nil && h.Asking(id) {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
+	return nil
 }
 
 type Typist struct {

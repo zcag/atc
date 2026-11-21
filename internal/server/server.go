@@ -154,7 +154,7 @@ func (s *Server) Handler() http.Handler {
 	s.subs = map[chan []byte]bool{}
 	s.held = map[string]held{}
 	if s.asking == nil {
-		s.asking = askingUser
+		s.asking = AskingUser
 	}
 	if s.TrustTailnet != "" {
 		s.tailnet = &tailnet{bin: s.TrustTailnet}
@@ -991,7 +991,7 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 		reply(w, map[string]any{"id": id, "held": true})
 		return
 	}
-	s.done(w, id, s.Term.Send(r.Context(), id, req.Text))
+	s.done(w, id, s.Term.Send(context.WithoutCancel(r.Context()), id, req.Text))
 }
 
 func (s *Server) keys(w http.ResponseWriter, r *http.Request) {

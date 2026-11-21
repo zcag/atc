@@ -568,3 +568,22 @@ func TestSendFromSessionWaitsForAnswer(t *testing.T) {
 	}
 	t.Fatal("the held message never arrived after the answer")
 }
+
+func TestEnterWaitsForQuestionOpenedAfterPaste(t *testing.T) {
+	bin := fakeClaude(t)
+	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
+	var asking atomic.Bool
+	s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st},
+		Term: &attach.Hub{Bin: bin, Asking: func(string) bool { return asking.Load() }}, Web: fstest.MapFS{}, Token: "tok", Host: "here", asking: func(string) bool { return false }}
+	ts := serve(t, s)
+	sent := filepath.Join(filepath.Dir(bin), "sent")
+	asking.Store(true)
+	go func() { time.Sleep(4 * time.Second); asking.Store(false) }()
+	start := time.Now()
+	if res, body := do(t, "POST", ts.URL+"/api/sessions/loc00001/send", "tok", `{"text":"heads-up","from":"other"}`); res.StatusCode != 200 {
+		t.Fatalf("send: %d %s", res.StatusCode, body)
+	}
+	if b, _ := os.ReadFile(sent); string(b) != "\x1b[200~heads-up\x1b[201~" || time.Since(start) < 4*time.Second {
+		t.Fatalf("Enter went in while a question was open: %q after %s", b, time.Since(start))
+	}
+}
