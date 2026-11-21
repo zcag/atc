@@ -147,6 +147,10 @@ const engineTag = (s) => s.harness && s.kind !== "hub"
   : (s.engine || local(s.model)) && html`<span class="eng" title=${`Runs on ${s.engine || s.model}, not Claude`}>${s.engine || model(s.model)}</span>`;
 const keyOf = (s) => s.id || s.sessionId;
 const go = (k) => (location.hash = k ? `#/s/${k}` : "#/");
+const isHome = (h) => h === "" || h === "#" || h === "#/";
+let FROM_HOME = false;
+addEventListener("hashchange", (e) => { FROM_HOME = isHome(new URL(e.oldURL).hash) && location.hash.startsWith("#/s/"); });
+const backHome = () => (FROM_HOME ? history.back() : go(null));
 const USAGE = "#/usage", RESOURCES = "#/resources", PAGES = "#/pages", SETTINGS = "#/settings";
 {
   const m = location.pathname.match(/^\/(?:pages|p)(?:\/([^/]+))?\/?$/);
@@ -2242,7 +2246,7 @@ function scrollWhenThere(sel, tries = 20) {
   else if (tries > 0) setTimeout(() => scrollWhenThere(sel, tries - 1), 100);
 }
 
-function Session({ s, say, live, panes, togglePane, back = () => go(null) }) {
+function Session({ s, say, live, panes, togglePane, back = backHome }) {
   const canAttach = s.attachable;
   const hasTerm = s.kind !== "hub";
   const auto = useRef(AUTO_PANE);
@@ -6427,7 +6431,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
           <div class="box" onClick=${(e) => e.target === e.currentTarget && ta.current?.focus()}>
             ${prompt}
             <${AttChips} atts=${atts} up=${(a) => !a.path} zoom=${setBig} remove=${(a) => setAtts(atts.filter((x) => x.id !== a.id))} />
-            <button class="kb att-b" title="Attach files (or paste, or drop them on the transcript)" onClick=${() => file.current?.click()}>Attach</button>
+            <button class="kb att-b" title="Attach files (or paste, or drop them on the transcript)" aria-label="Attach files" onClick=${() => file.current?.click()}>${ICON.plus}<span class="lbl">Attach</span></button>
             <input type="file" multiple hidden ref=${file} onChange=${(e) => { upload([...e.target.files]); e.target.value = ""; }} />
             <textarea ref=${ta} rows="1" value=${draft} placeholder=${hint} aria-label=${`Reply to ${s.title || "the session"}`} enterkeyhint=${touch ? "enter" : "send"}
               onInput=${(e) => { setDraft(e.target.value); setSlash(0); if (confirm) setConfirm(false); }} onKeyDown=${onKey}
