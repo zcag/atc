@@ -644,7 +644,7 @@ function App() {
   };
 
   return html`
-    <div class="app ${assistView ? "assisting" : ""} ${phone && (screen === "board" || screen === "session") ? "nobays" : ""} ${phone && screen === "session" ? "insession" : ""}">
+    <div class="app ${assistView ? "assisting" : ""} ${phone && screen === "session" ? "insession" : ""}">
     <${BayBar} bays=${bays} only=${only} view=${screen} panes=${panes} togglePane=${togglePane} up=${up} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
     ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} onBays=${onBays} say=${say} onClose=${() => setPeek(null)} />`}
     ${assistView ? html`<${AssistantView} hub=${hub} live=${all} loaded=${!!runs} agents=${agents} say=${say} panes=${panes} togglePane=${togglePane} />`
@@ -2563,6 +2563,17 @@ function Unattachable(s, resume, busy, setMode) {
 function Menu({ busy, items, render, label = "•••", cls = "icon", aria = "More actions", width = 190, left, up, sheetCls = "" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(), sheet = useRef();
+  const bottom = usePhone() && !render;
+  useEffect(() => {
+    if (!open || !bottom) return;
+    const k = (e) => e.key === "Escape" && (e.stopPropagation(), setOpen(false));
+    addEventListener("keydown", k, true);
+    return () => removeEventListener("keydown", k, true);
+  }, [open, bottom]);
+  const item = (it) => {
+    const b = html`<button class="btn ${it.danger ? "danger" : ""} ${it.cls || ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`;
+    return it.side ? html`<div class="mrow">${b}${it.side}</div>` : b;
+  };
   useLayoutEffect(() => {
     const el = sheet.current;
     if (!el) return;
@@ -2578,12 +2589,11 @@ function Menu({ busy, items, render, label = "•••", cls = "icon", aria = "
   return html`
     <div ref=${ref} style="position: relative">
       <button class=${cls} aria-label=${aria} aria-expanded=${open} onClick=${() => setOpen(!open)}>${label}</button>
-      ${open && html`
+      ${open && bottom && html`<div class="veil mveil" onPointerDown=${(e) => e.target === e.currentTarget && setOpen(false)}>
+        <div class="msheet ${sheetCls}" role="menu" aria-label=${aria}><i class="grab" aria-hidden="true"></i>${items.map(item)}</div></div>`}
+      ${open && !bottom && html`
         <div ref=${sheet} class="sheet ${sheetCls}" style="position: absolute; ${left ? "left" : "right"}: 0; ${up ? "bottom" : "top"}: calc(100% + 6px); ${typeof width !== "number" ? `width: ${width}` : render ? `width: min(${width}px, calc(100vw - 16px))` : `width: max-content; min-width: min(${width}px, calc(100vw - 16px)); max-width: calc(100vw - 16px)`}; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
-          ${render ? render(() => setOpen(false)) : items.map((it) => {
-            const b = html`<button class="btn ${it.danger ? "danger" : ""} ${it.cls || ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`;
-            return it.side ? html`<div class="mrow">${b}${it.side}</div>` : b;
-          })}
+          ${render ? render(() => setOpen(false)) : items.map(item)}
         </div>`}
     </div>
   `;
