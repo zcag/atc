@@ -127,6 +127,10 @@ type Server struct {
 	loopMu sync.Mutex
 	loops  sync.WaitGroup
 
+	queuedMu sync.Mutex
+	queued   map[string][]string
+	asking   func(id string) bool
+
 	prefMu sync.Mutex
 	mu     sync.Mutex
 	subs   map[chan []byte]bool
@@ -149,6 +153,9 @@ func (s *Server) Handler() http.Handler {
 	s.life, s.end = context.WithCancel(context.Background())
 	s.subs = map[chan []byte]bool{}
 	s.held = map[string]held{}
+	if s.asking == nil {
+		s.asking = askingUser
+	}
 	if s.TrustTailnet != "" {
 		s.tailnet = &tailnet{bin: s.TrustTailnet}
 	}
@@ -978,6 +985,11 @@ func (s *Server) send(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.From == "" {
 		s.unparkOnInput(r.Context(), id)
+	} else if s.asking(id) {
+		s.queue(id, req.Text)
+		s.refresh()
+		reply(w, map[string]any{"id": id, "held": true})
+		return
 	}
 	s.done(w, id, s.Term.Send(r.Context(), id, req.Text))
 }

@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -541,4 +542,29 @@ func TestClaudeApprovePicksYesFromTheScreen(t *testing.T) {
 			t.Errorf("%q: got %s %v, want %s", screen, got, err, want)
 		}
 	}
+}
+
+func TestSendFromSessionWaitsForAnswer(t *testing.T) {
+	bin := fakeClaude(t)
+	st, _ := store.Open(filepath.Join(t.TempDir(), "meta.json"))
+	var asking atomic.Bool
+	asking.Store(true)
+	s := &Server{M: &sessions.Manager{CLI: claude.CLI{Bin: bin}, Index: history.New(t.TempDir()), Store: st},
+		Term: &attach.Hub{Bin: bin}, Web: fstest.MapFS{}, Token: "tok", Host: "here", asking: func(string) bool { return asking.Load() }}
+	ts := serve(t, s)
+	sent := filepath.Join(filepath.Dir(bin), "sent")
+	if res, body := do(t, "POST", ts.URL+"/api/sessions/loc00001/send", "tok", `{"text":"heads-up","from":"other"}`); res.StatusCode != 200 || !strings.Contains(body, `"held":true`) {
+		t.Fatalf("send: %d %s", res.StatusCode, body)
+	}
+	time.Sleep(3 * time.Second)
+	if _, err := os.Stat(sent); err == nil {
+		t.Fatal("a session's message was typed into an open question")
+	}
+	asking.Store(false)
+	for end := time.Now().Add(10 * time.Second); time.Now().Before(end); time.Sleep(200 * time.Millisecond) {
+		if b, _ := os.ReadFile(sent); string(b) == "\x1b[200~heads-up\x1b[201~" {
+			return
+		}
+	}
+	t.Fatal("the held message never arrived after the answer")
 }

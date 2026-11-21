@@ -817,9 +817,12 @@ func sendTo(args []string) error {
 	if err != nil {
 		return err
 	}
-	_, resumed, err := c.Deliver(context.Background(), s, text, *report, *wake, *approved)
-	if resumed {
+	d, err := c.Deliver(context.Background(), s, text, *report, *wake, *approved)
+	if d.Resumed {
 		fmt.Printf("resumed %s first\n", s.Title)
+	}
+	if d.Held {
+		fmt.Printf("%s is waiting on an answer to a question; it gets this once that is answered\n", s.Title)
 	}
 	return err
 }

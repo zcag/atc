@@ -642,13 +642,15 @@ func (t *tools) send(ctx context.Context, _ *mcp.CallToolRequest, in sendIn) (*m
 	if err != nil {
 		return nil, done{}, err
 	}
-	id, resumed, err := t.c.Deliver(ctx, x, in.Text, in.Report, in.Wake, in.Approved)
+	d, err := t.c.Deliver(ctx, x, in.Text, in.Report, in.Wake, in.Approved)
 	if err != nil {
 		return nil, done{}, err
 	}
-	out := done{Ref: id, Title: x.Title, State: "sent"}
-	if resumed {
+	out := done{Ref: d.ID, Title: x.Title, State: "sent"}
+	if d.Resumed {
 		out.Note = "resumed it first"
+	} else if d.Held {
+		out.State, out.Note = "held", "it is waiting on the user's answer to a question or approval; atc types this in once that is answered"
 	} else if x.State == sessions.Working {
 		out.Note = "it is mid-turn: it reads this when its current step ends, and read lists it under waiting until then"
 	}

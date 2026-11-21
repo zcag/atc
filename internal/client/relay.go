@@ -40,46 +40,51 @@ func (c *Client) Launch(ctx context.Context, l Launch) (id, dir string, err erro
 	return id, dir, nil
 }
 
-func (c *Client) Deliver(ctx context.Context, x sessions.Session, text string, report, wake, approved bool) (id string, resumed bool, err error) {
+type Delivered struct {
+	ID            string
+	Resumed, Held bool
+}
+
+func (c *Client) Deliver(ctx context.Context, x sessions.Session, text string, report, wake, approved bool) (d Delivered, err error) {
 	live, _ := c.Live()
 	me, isSession := Self(live)
 	if x.Retired {
 		signed, err := Signed(live, Sign{Report: report, Approved: approved}, text)
 		if err != nil {
-			return "", false, err
+			return d, err
 		}
-		id, err = c.Message(HubAgent, signed)
-		return id, false, err
+		d.ID, err = c.Message(HubAgent, signed)
+		return d, err
 	}
 	switch {
 	case isSession && me.SessionID == x.SessionID:
-		return "", false, fmt.Errorf("that is this session itself")
+		return d, fmt.Errorf("that is this session itself")
 	case x.Kind == "interactive" && x.PID > 0:
-		return "", false, fmt.Errorf("%q is open in a terminal, so it cannot take messages from here; the user has to type into it there", x.Title)
+		return d, fmt.Errorf("%q is open in a terminal, so it cannot take messages from here; the user has to type into it there", x.Title)
 	case !x.Attachable && isSession && !wake && me.ReportsTo != x.Lineage():
-		return "", false, fmt.Errorf("%q is stopped and is not waiting on a report from you, so it stays stopped; leave the outcome in your final message, or pass wake if the user asked for this message", x.Title)
+		return d, fmt.Errorf("%q is stopped and is not waiting on a report from you, so it stays stopped; leave the outcome in your final message, or pass wake if the user asked for this message", x.Title)
 	}
 	signed, err := Signed(live, Sign{Report: report, Approved: approved}, text)
 	if err != nil {
-		return "", false, err
+		return d, err
 	}
-	id = x.ID
+	d.ID = x.ID
 	if !x.Attachable {
-		if id, err = c.Resume(x.SessionID); err != nil {
-			return "", false, fmt.Errorf("resume %q: %w", x.Title, err)
+		if d.ID, err = c.Resume(x.SessionID); err != nil {
+			return d, fmt.Errorf("resume %q: %w", x.Title, err)
 		}
-		if err = c.Until(ctx, id, 30*time.Second, func(s sessions.Session) bool { return s.Attachable }); err != nil {
-			return "", false, err
+		if err = c.Until(ctx, d.ID, 30*time.Second, func(s sessions.Session) bool { return s.Attachable }); err != nil {
+			return d, err
 		}
-		resumed = true
+		d.Resumed = true
 	}
-	if err = c.Send(id, signed); err != nil {
-		return "", resumed, err
+	if d.Held, err = c.Send(d.ID, signed); err != nil {
+		return d, err
 	}
 	if report && isSession {
 		c.Patch(x.Lineage(), map[string]any{"reportsTo": me.Lineage()})
 	}
-	return id, resumed, nil
+	return d, nil
 }
 
 func (c *Client) Until(ctx context.Context, key string, limit time.Duration, ok func(sessions.Session) bool) error {

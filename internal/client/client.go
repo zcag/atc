@@ -318,8 +318,10 @@ func (c *Client) AgentLine(agent string) (int, []byte, error) {
 
 // Send types text into a session. From inside a Claude session it says which one sent it,
 // so the hub hears it as another session rather than the user typing.
-func (c *Client) Send(id, text string) error {
-	return c.do("POST", "/api/sessions/"+id+"/send", map[string]string{"text": text, "from": os.Getenv("CLAUDE_CODE_SESSION_ID")}, nil)
+func (c *Client) Send(id, text string) (held bool, err error) {
+	var r struct{ Held bool }
+	err = c.do("POST", "/api/sessions/"+id+"/send", map[string]string{"text": text, "from": os.Getenv("CLAUDE_CODE_SESSION_ID")}, &r)
+	return r.Held, err
 }
 
 func (c *Client) Call(req map[string]any) (string, error) {
