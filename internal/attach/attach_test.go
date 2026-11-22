@@ -242,3 +242,27 @@ func TestShortKeysLogsByTheUniquePart(t *testing.T) {
 		}
 	}
 }
+
+func TestSendChecksClaudeTookIt(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "claude")
+	os.WriteFile(bin, []byte(`#!/bin/bash
+while IFS= read -r line; do
+  [ -n "$line" ] && printf '%s' "${line//\"/\\\"}" > "$TX.box"
+  echo >> "$TX.enters"
+  [ $(wc -l < "$TX.enters") -ge $TAKE_AT ] && printf '{"type":"user","message":{"content":"%s"}}\n' "$(cat "$TX.box")" >> "$TX"
+done
+`), 0o755)
+	landWait = time.Second
+	for _, c := range []struct {
+		takeAt string
+		ok     bool
+	}{{"1", true}, {"2", true}, {"9", false}} {
+		tx := filepath.Join(dir, "tx"+c.takeAt+".jsonl")
+		os.WriteFile(tx, []byte("{\"type\":\"user\",\"message\":{\"content\":\"hello older\"}}\n"), 0o644)
+		h := &Hub{Bin: bin, Env: func(string) []string { return []string{"TX=" + tx, "TAKE_AT=" + c.takeAt} }, Transcript: func(string) string { return tx }}
+		if err := h.Send(context.Background(), "s"+c.takeAt, `hello "there"`); (err == nil) != c.ok {
+			t.Errorf("taken at Enter %s: err %v", c.takeAt, err)
+		}
+	}
+}

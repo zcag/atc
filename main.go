@@ -324,7 +324,7 @@ func serve(args []string) error {
 	index := history.New(claude.ProjectRoots()...)
 	index.Forks, index.Price = claude.Forks, server.Priced
 	srv := &server.Server{
-		Term:     &attach.Hub{Bin: bin, Env: func(id string) []string { return claude.ProfileOf(id).Env() }, Asking: server.AskingUser(index)},
+		Term:     &attach.Hub{Bin: bin, Env: func(id string) []string { return claude.ProfileOf(id).Env() }, Asking: server.AskingUser(index), Transcript: server.TranscriptOf(index)},
 		Web:      web.FS,
 		Host:     strings.Split(host, ".")[0],
 		Settings: conf,

@@ -23,6 +23,16 @@ func AskingUser(index *history.Index) func(id string) bool {
 	}
 }
 
+func TranscriptOf(index *history.Index) func(id string) string {
+	return func(id string) string {
+		if sid := claude.JobSession(id); sid != "" && index != nil {
+			t, _ := index.Find(sid)
+			return t.Path
+		}
+		return ""
+	}
+}
+
 func (s *Server) queue(id, text string) {
 	s.queuedMu.Lock()
 	defer s.queuedMu.Unlock()

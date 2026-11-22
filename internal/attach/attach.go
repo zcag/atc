@@ -34,14 +34,15 @@ type Control struct {
 }
 
 type Hub struct {
-	Bin    string
-	Attach func(id string) *exec.Cmd
-	Env    func(id string) []string
-	Asking func(id string) bool
-	mu     sync.Mutex
-	groups map[string]*group
-	typing map[string]*sync.Mutex
-	seq    int
+	Bin        string
+	Attach     func(id string) *exec.Cmd
+	Env        func(id string) []string
+	Asking     func(id string) bool
+	Transcript func(id string) string
+	mu         sync.Mutex
+	groups     map[string]*group
+	typing     map[string]*sync.Mutex
+	seq        int
 }
 
 type group struct {
@@ -423,8 +424,58 @@ func (g *group) apply() {
 	}
 }
 
+var landWait = 5 * time.Second
+
 func (h *Hub) Send(ctx context.Context, id, text string) error {
-	return h.Keys(ctx, id, "\x1b[200~"+text+"\x1b[201~", "\r")
+	took := h.watch(id, text)
+	if err := h.Keys(ctx, id, "\x1b[200~"+text+"\x1b[201~", "\r"); err != nil || took == nil || took(landWait) {
+		return err
+	}
+	log.Printf("send %s: the message is typed in but Claude did not take the Enter, pressing it again", id)
+	if err := h.untilAnswered(ctx, id); err != nil {
+		return err
+	}
+	if err := h.Keys(ctx, id, "\r"); err != nil || took(landWait) {
+		return err
+	}
+	log.Printf("send %s: Claude did not take the message", id)
+	return errors.New("the message is typed into the session's input box, but Claude did not take it: press Enter there")
+}
+
+func (h *Hub) watch(id, text string) func(time.Duration) bool {
+	first, _, _ := strings.Cut(strings.TrimSpace(text), "\n")
+	if r := []rune(first); len(r) > 40 {
+		first = string(r[:40])
+	}
+	if h.Transcript == nil || first == "" || strings.ContainsAny(first[:1], "/!") {
+		return nil
+	}
+	path := h.Transcript(id)
+	st, err := os.Stat(path)
+	if path == "" || err != nil {
+		return nil
+	}
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	enc.Encode(first)
+	needle := bytes.Trim(bytes.TrimSpace(b.Bytes()), `"`)
+	return func(wait time.Duration) bool {
+		for end := time.Now().Add(wait); ; time.Sleep(200 * time.Millisecond) {
+			if f, err := os.Open(path); err == nil {
+				f.Seek(st.Size(), 0)
+				var got bytes.Buffer
+				got.ReadFrom(f)
+				f.Close()
+				if bytes.Contains(got.Bytes(), needle) {
+					return true
+				}
+			}
+			if time.Now().After(end) {
+				return false
+			}
+		}
+	}
 }
 
 const keyGap = 1200 * time.Millisecond
