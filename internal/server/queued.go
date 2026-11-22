@@ -6,13 +6,21 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/claude"
+	"github.com/zcag/atc/internal/history"
 )
 
 const queuedPoll = 2 * time.Second
 
-func AskingUser(id string) bool {
-	b := claude.Asking(id, true)
-	return len(b.Questions) > 0 || b.Approve != ""
+func AskingUser(index *history.Index) func(id string) bool {
+	return func(id string) bool {
+		pending := false
+		if sid := claude.JobSession(id); sid != "" && index != nil {
+			t, _ := index.Find(sid)
+			pending = t.Pending != ""
+		}
+		b := claude.Asking(id, pending)
+		return len(b.Questions) > 0 || b.Approve != ""
+	}
 }
 
 func (s *Server) queue(id, text string) {

@@ -45,6 +45,15 @@ func jobState(id string) ([]byte, error) {
 	return os.ReadFile(filepath.Join(ProfileOf(id).Home(), "jobs", id, "state.json"))
 }
 
+func JobSession(id string) string {
+	b, _ := jobState(id)
+	var st struct {
+		SessionID string `json:"sessionId"`
+	}
+	json.Unmarshal(b, &st)
+	return st.SessionID
+}
+
 type Question struct {
 	Question string `json:"question"`
 	Header   string `json:"header"`

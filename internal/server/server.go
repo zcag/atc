@@ -154,7 +154,7 @@ func (s *Server) Handler() http.Handler {
 	s.subs = map[chan []byte]bool{}
 	s.held = map[string]held{}
 	if s.asking == nil {
-		s.asking = AskingUser
+		s.asking = AskingUser(s.M.Index)
 	}
 	if s.TrustTailnet != "" {
 		s.tailnet = &tailnet{bin: s.TrustTailnet}
