@@ -108,6 +108,7 @@ const (
 	maxOutLines   = 80
 	maxInputLines = 240
 	maxImage      = 400 << 10
+	maxSentImage  = 20 << 20
 )
 
 func (x *Index) Find(sid string) (Transcript, bool) {
@@ -334,10 +335,12 @@ func sent(o *Output, raw json.RawMessage) {
 	files := []string{}
 	for _, a := range r.Attachments {
 		if a.IsImage && strings.HasPrefix(a.MediaType, "image/") {
-			if st, err := os.Stat(a.Path); err == nil && st.Size() <= maxImage*3/4 {
+			if st, err := os.Stat(a.Path); err == nil && st.Size() <= maxSentImage {
 				if b, err := os.ReadFile(a.Path); err == nil {
-					o.Images = append(o.Images, "data:"+a.MediaType+";base64,"+base64.StdEncoding.EncodeToString(b))
-					continue
+					if img := dataURL(a.MediaType, b); img != "" {
+						o.Images = append(o.Images, img)
+						continue
+					}
 				}
 			}
 		}
@@ -393,10 +396,17 @@ func meta(raw json.RawMessage) map[string]any {
 }
 
 func image(b block) string {
-	if b.Type != "image" || b.Source == nil || b.Source.Type != "base64" || len(b.Source.Data) > maxImage {
+	if b.Type != "image" || b.Source == nil || b.Source.Type != "base64" {
 		return ""
 	}
-	return "data:" + b.Source.MediaType + ";base64," + b.Source.Data
+	if len(b.Source.Data) <= maxImage {
+		return "data:" + b.Source.MediaType + ";base64," + b.Source.Data
+	}
+	raw, err := base64.StdEncoding.DecodeString(b.Source.Data)
+	if err != nil {
+		return ""
+	}
+	return dataURL(b.Source.MediaType, raw)
 }
 
 func clipLines(s string, n int) (string, int) {
