@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Left list, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.rail { background: var(--bg); }
+.rail .phd { background: var(--bg); }
+.rr { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 2px 10px; margin: 0 6px; padding: 8px 10px; border-radius: var(--r2); align-items: start; position: relative; }
+.rr + .rr { margin-top: 1px; }
+.rr .ti { font-weight: 600; font-size: var(--f-body); }
+.rr .su { color: var(--dim); font-size: var(--f-ui); grid-column: 2; }
+.rr .rt { grid-row: 1 / span 2; grid-column: 3; display: flex; flex-direction: column; align-items: end; gap: 2px; font-size: var(--f-small); color: var(--faint); }
+.rr .rt .q { font: 500 var(--f-small)/1 var(--mono); color: var(--faint); opacity: .8; padding-top: 3px; }
+.rr.sel { background: var(--paper); box-shadow: 0 0 0 1px var(--line); }
+.rr.hov { background: var(--hi); }
+.rr.nd::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 3px; border-radius: 0 2px 2px 0; background: var(--needs); }
+.rr.ended .ti { font-weight: 500; }
+.rr .ans { grid-column: 2 / span 2; display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.rr .ans .btn { height: 26px; padding: 0 8px 0 5px; gap: 6px; }
+.filt { display: flex; align-items: center; gap: 8px; height: 30px; margin: 2px 12px 8px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--r2); background: var(--paper); color: var(--faint); font-size: var(--f-ui); }
+.fold { display: flex; align-items: center; gap: 6px; padding: 14px 16px 4px; font-size: var(--f-ui); font-weight: 600; }
+.day { padding: 8px 16px 4px 44px; font-size: var(--f-small); color: var(--faint); }
+.rr .rt .resume { height: 24px; padding: 0 8px; font-size: var(--f-small); }
+.rr .rt .resume .i { width: 12px; height: 12px; }
+.rgrp { display: flex; align-items: baseline; gap: 8px; padding: 14px 16px 6px; font-size: var(--f-ui); font-weight: 600; }
+.btn.icon[aria-pressed="true"] { background: var(--hi); color: var(--ink); }
+.ctx { display: inline-flex; align-items: center; gap: 6px; font: var(--f-small) var(--mono); color: var(--faint); margin-right: 6px; }
+.tr { max-width: 720px; margin: 0 auto; padding: 20px 32px 32px; font: var(--f-title)/1.6 var(--read); }
+.tr p { margin: 0 0 14px; }
+.tr .you { background: var(--sunk); border-radius: var(--r2); padding: 10px 14px; margin: 0 0 16px; color: var(--ink); }
+.tr .you small { display: block; font: var(--f-small) var(--sans); color: var(--faint); margin-bottom: 2px; }
+.step { display: flex; align-items: center; gap: 6px; font: var(--f-ui)/1.4 var(--sans); color: var(--dim); margin: 0 0 14px; }
+.step .i { width: 14px; height: 14px; color: var(--faint); }
+.step .tm { margin-left: auto; font: var(--f-small) var(--mono); color: var(--faint); }
+.step .bad { color: var(--fail); }
+.since { display: flex; align-items: center; gap: 10px; font: 600 var(--f-small) var(--sans); color: var(--ink); margin: 22px 0 14px; }
+.since::after { content: ""; flex: 1; height: 1px; background: var(--edge); }
+.tr code { font: 0.88em var(--mono); background: var(--code); padding: 1px 4px; border-radius: var(--r1); }
+.comp { border-top: 1px solid var(--line); padding: 10px 32px 12px; background: var(--paper); }
+.comp .in { max-width: 720px; margin: 0 auto; }
+.chips { display: flex; gap: 6px; margin-bottom: 8px; }
+.chip { height: 26px; padding: 0 10px; border-radius: var(--pill); border: 1px solid var(--line); background: var(--paper); font-size: var(--f-ui); }
+.box { display: flex; align-items: center; gap: 8px; border: 1px solid var(--edge); border-radius: var(--r3); padding: 6px 6px 6px 8px; }
+.box .hint { flex: 1; color: var(--faint); font-size: var(--f-body); }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay on"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">2</span><span class="wk">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button aria-pressed="true">Session</button><button>Board</button><button>Pages</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="body3">
+    <section class="pane rail">
+      <header class="phd">
+        <h1>api</h1><span class="where">~/code/api</span>
+        <div class="acts">
+          <button class="btn quiet"><i data-i="plus"></i>New</button>
+          <button class="btn icon" title="Hide the list ([)"><i data-i="list"></i></button>
+        </div>
+      </header>
+      <div class="scroll">
+        <div class="rgrp">Waiting on you <span class="count n">2</span></div>
+        <div class="rr nd"><span class="sb n">N</span><div class="ti ell">Rate limit retries</div><div class="su ell">Wants to run <span class="mono">go test ./... -run Retry -count 20</span></div><div class="rt"><span>4m</span></div>
+          <div class="ans"><button class="btn"><kbd>1</kbd>Allow once</button><button class="btn"><kbd>2</kbd>Always</button><button class="btn quiet"><kbd>3</kbd>Deny</button></div></div>
+        <div class="rr"><span class="sb t">T</span><div class="ti ell">Invoice export as CSV</div><div class="su ell">Done: CSV export with a header row; 14 tests pass.</div><div class="rt"><span>22m</span></div></div>
+        <div class="rgrp">Working <span class="count w">1</span></div>
+        <div class="rr"><span class="sb w">W</span><div class="ti ell">Migrate sessions table to UUID keys</div><div class="su ell">Writing the backfill; 2 of 5 tables done.</div><div class="rt"><span>now</span></div></div>
+        <div class="rgrp">Earlier <span class="count faint">2 today</span></div>
+        <div class="filt"><i data-i="search"></i><span class="grow">Search earlier sessions</span><kbd>/</kbd></div>
+        <div class="rr ended hov"><span class="sb e">E</span><div class="ti ell">Fix flaky upload test</div><div class="su ell">Ended: test made deterministic, merged.</div><div class="rt"><button class="btn resume"><i data-i="play"></i>Resume</button></div></div>
+        <div class="rr ended sel" lang="tr"><span class="sb e">E</span><div class="ti ell">Fatura PDF'inde Türkçe karakterler bozuk</div><div class="su ell">Ended: ğ, ş ve ı artık doğru gömülüyor.</div><div class="rt"><span>3h</span></div></div>
+        <div class="fold"><i data-i="down"></i>Older <span class="count faint">46</span></div>
+        <div class="day">Yesterday</div>
+        <div class="rr ended"><span class="sb e">E</span><div class="ti ell">Review webhook signature check</div><div class="su ell">Ended: two comments posted.</div><div class="rt"><span>18:40</span></div></div>
+        <div class="rr ended"><span class="sb e">E</span><div class="ti ell">Bump Go to 1.25</div><div class="su ell">Ended: CI green on main.</div><div class="rt"><span>11:02</span></div></div>
+        <div class="day">Mon 24 Nov</div>
+        <div class="rr ended"><span class="sb e">E</span><div class="ti ell">Health check for the load balancer</div><div class="su ell">Ended: <span class="mono">/healthz</span> returns the build and DB state.</div><div class="rt"><span>16:15</span></div></div>
+        <div class="rr ended"><span class="sb e">E</span><div class="ti ell">Drop the v1 invoice routes</div><div class="su ell">Ended: routes removed, clients already on v2.</div><div class="rt"><span>09:30</span></div></div>
+        <button class="btn quiet" style="margin:6px 10px"><i data-i="down"></i>Show more</button>
+      </div>
+    </section>
+
+    <section class="pane">
+      <header class="phd">
+        <span class="sb e">E</span><h1 lang="tr">Fatura PDF'inde Türkçe karakterler bozuk</h1><span class="where">devbox · pdf-fonts</span>
+        <div class="acts">
+          <span class="ctx">ended 3h ago</span>
+          <button class="btn icon" title="Zen (z)"><i data-i="zen"></i></button>
+          <button class="btn icon" title="State (\)"><i data-i="board"></i></button>
+          <button class="btn icon" title="Park, stop, rename (x)"><i data-i="more"></i></button>
+        </div>
+      </header>
+      <div class="scroll">
+        <div class="tr">
+          <div class="you" lang="tr"><small>You, 10:41</small>Fatura PDF'inde ğ, ş ve ı kutu olarak çıkıyor. Bir bak.</div>
+          <div class="step"><i data-i="fwd"></i>read 3 files, ran 1 command <span class="tm">7s · 10:42</span></div>
+          <p>The PDF writer embeds a Latin-1 subset of the font, so ğ, ş and ı have no glyphs and print as boxes. I'll embed the full font for invoices; it adds about 40 KB per file.</p>
+          <div class="step"><i data-i="fwd"></i>edited 2 files, ran tests <span class="tm">31s · 10:47</span></div>
+          <p><b>Done: ğ, ş and ı render correctly; the sample invoice is regenerated.</b> 2 files, <a href="#">a page</a> with before and after.</p>
+          <div class="step"><i data-i="fwd"></i>merged <span class="mono">pdf-fonts</span> into main <span class="tm">10:58</span></div>
+        </div>
+      </div>
+      <div class="comp"><div class="in">
+        <div class="box"><span class="hint">Ended 3h ago. Resume picks it up with its full history.</span><button class="btn primary"><i data-i="play"></i>Resume</button></div>
+      </div></div>
+    </section>
+  </div>
+
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">Started the CSV export session in api and told it to keep the header row.</span>
+    <span class="faint">12m</span>
+    <span class="ask">Talk to the assistant</span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet">Agents <span class="count n">1</span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

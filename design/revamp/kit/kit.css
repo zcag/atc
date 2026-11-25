@@ -1,0 +1,142 @@
+/* atc revamp kit: the proposed tokens and components every mock in design/revamp/mocks is drawn with.
+   Mocks only; nothing here is wired into web/. Light and dark in one line per colour, as tokens.css does. */
+@font-face { font-family: "Recursive"; src: url(fonts/recursive-sans-latin.woff2) format("woff2"); font-weight: 300 1000; font-display: swap; }
+@font-face { font-family: "Recursive Mono"; src: url(fonts/recursive-mono-latin.woff2) format("woff2"); font-weight: 300 1000; font-display: swap; }
+
+:root {
+  color-scheme: light dark;
+
+  --bg:    light-dark(oklch(95.5% 0.003 250), oklch(17% 0.006 250));
+  --paper: light-dark(oklch(98.4% 0.002 250), oklch(19.5% 0.006 250));
+  --sunk:  light-dark(oklch(93% 0.004 250), oklch(14.5% 0.006 250));
+  --hi:    light-dark(oklch(91.5% 0.005 250), oklch(24% 0.007 250));
+  --sel:   light-dark(oklch(89% 0.008 250), oklch(27% 0.01 250));
+  --code:  light-dark(oklch(94% 0.003 250), oklch(22% 0.006 250));
+  --chrome: light-dark(oklch(93% 0.004 250), oklch(22% 0.007 250));
+
+  --ink:   light-dark(oklch(21% 0.01 250), oklch(93% 0.005 250));
+  --dim:   light-dark(oklch(40% 0.01 250), oklch(77% 0.007 250));
+  --faint: light-dark(oklch(52% 0.01 250), oklch(64% 0.008 250));
+
+  --line:  light-dark(oklch(87% 0.005 250), oklch(29% 0.007 250));
+  --hair:  light-dark(oklch(91% 0.004 250), oklch(24% 0.006 250));
+  --edge:  light-dark(oklch(62% 0.006 250), oklch(50% 0.006 250));
+
+  --needs:      light-dark(oklch(80% 0.15 75), oklch(79% 0.14 75));
+  --needs-ink:  light-dark(oklch(24% 0.03 70), oklch(20% 0.03 70));
+  --needs-text: light-dark(oklch(48% 0.11 65), oklch(81% 0.13 75));
+  --needs-wash: light-dark(oklch(80% 0.15 75 / .16), oklch(79% 0.14 75 / .08));
+  --work:       light-dark(oklch(48% 0.1 245), oklch(73% 0.09 240));
+  --work-wash:  light-dark(oklch(48% 0.1 245 / .09), oklch(73% 0.09 240 / .11));
+  --fail:       light-dark(oklch(50% 0.15 25), oklch(71% 0.14 25));
+  --fail-wash:  light-dark(oklch(50% 0.15 25 / .08), oklch(71% 0.14 25 / .1));
+  --ok:         light-dark(oklch(46% 0.11 150), oklch(76% 0.11 150));
+  --focus:      light-dark(oklch(52% 0.16 255), oklch(73% 0.13 255));
+
+  --primary: var(--ink);
+  --on-primary: var(--paper);
+  --scrim: light-dark(oklch(21% 0.01 250 / .28), oklch(5% 0.005 250 / .6));
+  --toast-bg: light-dark(oklch(24% 0.01 250), oklch(93% 0.005 250));
+  --toast-ink: light-dark(oklch(96% 0.004 250), oklch(18% 0.01 250));
+
+  --sans: "Recursive", ui-sans-serif, system-ui, sans-serif;
+  --mono: "Recursive Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --read: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --casual: "CASL" 1;
+
+  --f-micro: 11px; --f-small: 12px; --f-ui: 13px; --f-body: 14px;
+  --f-title: 16px; --f-read: 17.5px; --f-h: 22px; --f-display: 30px;
+
+  --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px; --s6: 32px; --s7: 48px;
+  --r1: 4px; --r2: 7px; --r3: 10px; --pill: 999px;
+  --hit: 44px; --ctl: 28px; --bar: 40px;
+
+  --pop: 0 0 0 1px var(--line), 0 12px 32px light-dark(oklch(21% 0.01 250 / .14), oklch(4% 0.005 250 / .55));
+  --t: 120ms; --ease: cubic-bezier(.2, .7, .2, 1);
+}
+:root[data-scheme="light"] { color-scheme: light; }
+:root[data-scheme="dark"] { color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html, body { margin: 0; overflow-x: clip; }
+body { background: var(--bg); color: var(--ink); font: var(--f-body)/1.4 var(--sans); -webkit-font-smoothing: antialiased; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.mono { font-family: var(--mono); }
+.dim { color: var(--dim); } .faint { color: var(--faint); }
+.grow { flex: 1; min-width: 0; }
+.row-flex { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
+.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.num { font-variant-numeric: tabular-nums; }
+.i { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; }
+
+/* state language: one block shape, a letter, a colour; amber is the only fill */
+.sb { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: var(--r1); font: 600 11px/1 var(--mono); flex: none; }
+.sb.n { background: var(--needs); color: var(--needs-ink); }
+.sb.t { box-shadow: inset 0 0 0 1.5px var(--edge); color: var(--ink); }
+.sb.w { color: var(--work); box-shadow: inset 2px 0 0 var(--work); background: var(--work-wash); }
+.sb.p { color: var(--faint); box-shadow: inset 0 0 0 1px var(--line); border-radius: 50%; }
+.sb.e { color: var(--faint); }
+.sb.x { color: var(--fail); box-shadow: inset 0 0 0 1.5px var(--fail); }
+
+/* controls: four buttons, one segmented control, one input */
+.btn { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl); padding: 0 10px; border-radius: var(--r2); border: 1px solid var(--line); background: var(--paper); font-size: var(--f-ui); font-weight: 500; white-space: nowrap; }
+.btn:hover { background: var(--hi); }
+.btn.primary { background: var(--primary); color: var(--on-primary); border-color: var(--primary); }
+.btn.quiet { border-color: transparent; background: none; color: var(--dim); }
+.btn.quiet:hover { background: var(--hi); color: var(--ink); }
+.btn.danger { color: var(--fail); }
+.btn.danger.primary { background: var(--fail); border-color: var(--fail); color: var(--paper); }
+.btn.icon { width: var(--ctl); padding: 0; justify-content: center; border-color: transparent; background: none; color: var(--dim); }
+.btn.icon:hover { background: var(--hi); color: var(--ink); }
+.btn:disabled { opacity: .45; cursor: default; }
+.seg { display: inline-flex; padding: 2px; gap: 2px; border-radius: var(--r2); background: var(--sunk); }
+.seg button { height: 24px; padding: 0 10px; border: 0; border-radius: 5px; background: none; color: var(--dim); font-size: var(--f-ui); }
+.seg button[aria-pressed="true"] { background: var(--paper); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+.field { height: 32px; padding: 0 10px; border-radius: var(--r2); border: 1px solid var(--edge); background: var(--paper); font-size: var(--f-body); width: 100%; }
+kbd, .kbd { display: inline-grid; place-items: center; min-width: 16px; height: 16px; padding: 0 3px; border-radius: 3px; font: 500 10.5px/1 var(--mono); color: var(--faint); box-shadow: inset 0 0 0 1px var(--line); }
+.count { display: inline-grid; place-items: center; min-width: 18px; height: 16px; padding: 0 5px; border-radius: var(--pill); font: 600 11px/1 var(--sans); font-variant-numeric: tabular-nums; }
+.count.n { background: var(--needs-wash); color: var(--needs-text); }
+.count.w { color: var(--work); }
+.tag { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: var(--r1); font-size: var(--f-micro); color: var(--dim); background: var(--sunk); }
+a, .link { color: inherit; text-decoration: underline; text-decoration-color: var(--edge); text-underline-offset: 2px; }
+a:hover, .link:hover { text-decoration-color: currentColor; }
+
+/* shell */
+.app { display: grid; grid-template-rows: var(--bar) minmax(0, 1fr) 32px; height: 100vh; }
+.baybar { display: flex; align-items: stretch; gap: 0; background: var(--chrome); border-bottom: 1px solid var(--line); padding: 0 8px; font-size: var(--f-ui); }
+.bay { display: flex; align-items: center; gap: 6px; padding: 0 10px; color: var(--dim); position: relative; white-space: nowrap; }
+.bay b { font-weight: 500; color: var(--faint); font-family: var(--mono); font-size: var(--f-small); }
+.bay.on { color: var(--ink); font-weight: 600; }
+.bay.on::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; background: var(--ink); }
+.bay.quietbay { color: var(--faint); }
+.views { display: flex; align-items: center; gap: 2px; margin-left: auto; }
+.views button { height: 26px; padding: 0 9px; border: 0; background: none; border-radius: var(--r2); color: var(--dim); font-size: var(--f-ui); }
+.views button[aria-current] { background: var(--paper); color: var(--ink); box-shadow: 0 0 0 1px var(--line); font-weight: 600; }
+.console { display: flex; align-items: center; gap: var(--s3); padding: 0 var(--s4); border-top: 1px solid var(--line); background: var(--chrome); font-size: var(--f-ui); color: var(--dim); }
+
+/* lists */
+.grp { display: flex; align-items: baseline; gap: 8px; padding: 14px 16px 6px; font-size: var(--f-ui); font-weight: 600; }
+.grp .count { font-weight: 500; }
+.srow { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 16px; border-top: 1px solid var(--hair); align-items: start; }
+.srow:hover { background: var(--hi); }
+.srow.sel { background: var(--sel); }
+.srow.nd { box-shadow: inset 3px 0 0 var(--needs); }
+.srow .t { font-weight: 600; font-size: var(--f-body); }
+.srow .s { color: var(--dim); font-size: var(--f-ui); }
+.srow .m { color: var(--faint); font-size: var(--f-small); font-family: var(--mono); }
+.srow .e { display: flex; flex-direction: column; align-items: end; gap: 4px; font-size: var(--f-small); color: var(--faint); }
+
+/* overlays */
+.scrim { position: fixed; inset: 0; background: var(--scrim); }
+.pop { background: var(--paper); border-radius: var(--r3); box-shadow: var(--pop); }
+.toast { display: inline-flex; align-items: center; gap: 12px; padding: 8px 8px 8px 14px; border-radius: var(--r3); background: var(--toast-bg); color: var(--toast-ink); font-size: var(--f-ui); }
+.toast button { border: 0; background: none; color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+
+/* mock-page chrome: the frame label only appears on spec sheets */
+.spec { padding: 28px 32px; display: grid; gap: 22px; }
+.spec h2 { margin: 0 0 6px; font-size: var(--f-title); }
+.spec .cap { font-size: var(--f-small); color: var(--faint); margin: 6px 0 0; }
+.spec .cell { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); padding: 16px; }

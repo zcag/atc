@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Browser view, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.body4 { display: grid; grid-template-columns: 300px minmax(0, 1fr) minmax(0, 1.15fr); min-height: 0; }
+.rl { background: var(--bg); }
+.rl .phd { background: var(--bg); }
+.rl .phd h1 { font-size: var(--f-body); }
+.rl .grp { padding: 12px 14px 4px; }
+.rl .srow { padding: 8px 14px; grid-template-columns: 18px minmax(0, 1fr) 12px; background: none; border-top-color: transparent; }
+.rl .srow.sel { background: var(--paper); box-shadow: inset 0 0 0 1px var(--line), inset 3px 0 0 var(--needs); border-radius: var(--r2); margin: 0 6px; padding: 8px 8px; }
+.rl .srow.nd { box-shadow: inset 3px 0 0 var(--needs); }
+.rl .srow .t { font-size: var(--f-ui); }
+.rl .srow .s { font-size: var(--f-small); }
+.rl .qk { font: 500 var(--f-micro)/18px var(--mono); color: var(--faint); text-align: right; }
+.sh h1 { font-size: var(--f-title); overflow: hidden; text-overflow: ellipsis; }
+.tx { max-width: 600px; margin: 0 auto; padding: 8px 20px 24px; }
+.turn { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 0 8px; margin: 16px 0 0; }
+.turn .clk { font: var(--f-micro)/26px var(--mono); color: var(--faint); }
+.say { font: var(--f-read)/1.5 var(--read); margin: 0; }
+.say code { font: .86em var(--mono); background: var(--code); padding: 0 3px; border-radius: 3px; }
+.me { background: var(--sunk); border-radius: var(--r2); padding: 8px 12px; font-size: var(--f-body); }
+.fold { display: flex; align-items: center; gap: 6px; font-size: var(--f-ui); color: var(--faint); margin-top: 8px; }
+.fold .i { width: 12px; height: 12px; }
+.since { display: flex; align-items: center; gap: 10px; margin: 22px 0 0; font-size: var(--f-small); color: var(--needs-text); font-weight: 600; }
+.since::before, .since::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.comp { margin: 0 16px 14px; border: 1px solid var(--edge); border-radius: var(--r3); background: var(--paper); padding: 8px 8px 6px 12px; }
+.comp .cph { color: var(--faint); font-size: var(--f-body); padding: 4px 0 10px; }
+.comp .bot { display: flex; align-items: center; gap: 6px; }
+
+.bp .phd h1 { font-size: var(--f-body); }
+.btabs { display: flex; gap: 2px; padding: 6px 12px 0; border-bottom: 1px solid var(--line); background: var(--chrome); }
+.btab2 { display: flex; align-items: center; gap: 6px; max-width: 240px; height: 30px; padding: 0 10px; border-radius: var(--r2) var(--r2) 0 0; font-size: var(--f-ui); color: var(--dim); }
+.btab2.on { background: var(--paper); color: var(--ink); font-weight: 600; box-shadow: 0 0 0 1px var(--line); clip-path: inset(-1px -1px 0 -1px); }
+.bbar { display: flex; align-items: center; gap: 2px; padding: 6px 12px; border-bottom: 1px solid var(--line); }
+.bbar .field { height: 28px; font: var(--f-ui) var(--mono); color: var(--dim); display: flex; align-items: center; margin: 0 6px; border-color: var(--line); background: var(--sunk); }
+.bbar .field b { color: var(--ink); font-weight: 500; }
+.drv { display: flex; align-items: center; gap: 10px; padding: 8px 12px 8px 14px; background: var(--sel); border-bottom: 1px solid var(--line); font-size: var(--f-ui); }
+.drv .i { color: var(--focus); }
+.drv b { font-weight: 650; }
+.stage { flex: 1; min-height: 0; padding: 14px; background: var(--sunk); display: flex; }
+.shot { flex: 1; border-radius: var(--r2); background: var(--paper); box-shadow: 0 0 0 2px var(--focus); display: grid; place-items: center; position: relative; overflow: hidden; }
+.site { position: absolute; inset: 0 0 auto; height: 46px; border-bottom: 1px solid var(--hair); display: flex; align-items: center; gap: 10px; padding: 0 20px; font: 650 var(--f-body) var(--sans); }
+.site .logo { width: 20px; height: 20px; border-radius: 5px; background: var(--ink); }
+.login { width: 320px; display: grid; gap: 12px; font-size: var(--f-ui); }
+.login h2 { font-size: var(--f-h); margin: 0 0 4px; }
+.login label { display: grid; gap: 4px; color: var(--dim); }
+.login .field { color: var(--ink); display: flex; align-items: center; }
+.cap { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 8px; align-items: stretch; }
+.cap .img { height: 40px; border-radius: var(--r2); background: var(--hi); text-decoration: line-through 2px var(--faint); display: grid; place-items: center; font: italic 700 20px/1 var(--mono); letter-spacing: 5px; color: var(--dim); transform: skewX(-6deg); }
+.cap .field { height: 40px; box-shadow: 0 0 0 2px var(--focus); border-color: transparent; }
+.caret { display: inline-block; width: 1.5px; height: 18px; background: var(--ink); margin-left: 1px; }
+.login .go { height: 36px; border-radius: var(--r2); background: var(--ink); color: var(--paper); display: grid; place-items: center; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay on"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button aria-pressed="true">Session</button><button>Board</button><button>Pages</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="body4">
+    <aside class="pane rl">
+      <header class="phd"><h1>billing</h1><span class="where">~/code/billing</span>
+        <div class="acts"><button class="btn icon" title="Search (/)"><i data-i="search"></i></button><button class="btn icon" title="New session (n)"><i data-i="plus"></i></button></div></header>
+      <div class="scroll">
+        <div class="grp">Waiting on you <span class="count n">1</span></div>
+        <div class="srow sel"><span class="sb n">N</span><div class="grow"><div class="t ell">Reconcile sandbox payouts</div><div class="s ell">Wants you in its browser: the login has a captcha.</div></div><span class="qk">q</span></div>
+        <div class="grp">Earlier today <span class="count faint">3</span></div>
+        <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t ell" style="font-weight:500">Invoice export as CSV</div><div class="s ell">Ended: CSV export merged.</div></div><span class="qk"></span></div>
+        <div class="srow" lang="tr"><span class="sb e">E</span><div class="grow"><div class="t ell" style="font-weight:500">Fatura PDF'inde Türkçe karakterler bozuk</div><div class="s ell">Ended: ğ, ş ve ı artık doğru gömülüyor.</div></div><span class="qk"></span></div>
+        <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t ell" style="font-weight:500">Round tax per line, not per invoice</div><div class="s ell">Ended: 3 fixtures updated.</div></div><span class="qk"></span></div>
+      </div>
+    </aside>
+
+    <section class="pane sh">
+      <header class="phd"><span class="sb n">N</span><h1>Reconcile sandbox payouts</h1><span class="where ell">laptop · payouts</span>
+        <div class="acts"><button class="btn icon" title="Browser (b), open beside" style="color:var(--ink);background:var(--hi)"><i data-i="globe"></i></button><button class="btn icon" title="Terminal (`)"><i data-i="term"></i></button><button class="btn icon" title="More"><i data-i="more"></i></button></div></header>
+      <div class="scroll">
+        <div class="tx">
+          <div class="turn"><span class="clk">10:40</span><div class="me">Pull last week's payouts from the sandbox and match them to our ledger rows.</div></div>
+          <div class="turn"><span class="clk">10:41</span><div><p class="say">I'll read the payouts report from the sandbox dashboard, since its API only goes back three days.</p>
+            <div class="fold"><i data-i="fwd"></i>ran 3 commands, browser ×4 · 22s</div></div></div>
+          <div class="since">Since you last looked, 10:43</div>
+          <div class="turn"><span class="clk">10:43</span><div><p class="say">The sandbox login asks for a captcha I can't read. The tab is open in Browser: sign in there and release it, and I'll carry on from the payouts page.</p></div></div>
+        </div>
+      </div>
+      <div class="comp">
+        <div class="cph">Reply</div>
+        <div class="bot"><button class="btn icon" title="Attach"><i data-i="attach"></i></button><span class="faint" style="font-size:var(--f-small)">/ for commands</span><span class="grow"></span><button class="btn" disabled title="Send (enter)"><i data-i="send"></i>Send</button></div>
+      </div>
+    </section>
+
+    <section class="pane bp">
+      <header class="phd"><h1>Browser</h1><span class="faint" style="font-size:var(--f-small)">laptop · 2 tabs</span>
+        <div class="acts">
+          <button class="btn icon" title="Open in your browser"><i data-i="out"></i></button>
+          <button class="btn icon" title="Close (esc)"><i data-i="x"></i></button>
+        </div></header>
+      <div class="btabs">
+        <span class="btab2 on"><i data-i="globe"></i><span class="ell">Sign in · Ledgerline sandbox</span></span>
+        <span class="btab2"><i data-i="globe"></i><span class="ell">Payout reports</span></span>
+      </div>
+      <form class="bbar">
+        <button type="button" class="btn icon" title="Back"><i data-i="back"></i></button>
+        <button type="button" class="btn icon" title="Forward" disabled><i data-i="fwd"></i></button>
+        <button type="button" class="btn icon" title="Reload"><i data-i="refresh"></i></button>
+        <div class="field"><span class="ell">https://<b>sandbox.ledgerline.test</b>/login?next=/payouts</span></div>
+        <button type="button" class="btn icon" title="Type into the page" style="color:var(--focus);background:var(--hi)"><i data-i="keys"></i></button>
+      </form>
+      <div class="drv" role="status"><i data-i="user"></i><span class="grow"><b>You are driving.</b> <span class="dim">Your clicks and keys go to the page; the agent waits.</span></span><button class="btn primary">Release</button></div>
+      <div class="stage">
+        <div class="shot">
+          <div class="site"><span class="logo"></span>Ledgerline <span class="faint" style="font-weight:400">sandbox</span></div>
+          <div class="login">
+            <h2>Sign in</h2>
+            <label>Email<span class="field">ops@example.test</span></label>
+            <label>Password<span class="field">••••••••••••</span></label>
+            <label>Type the characters<span class="cap"><span class="img">k7RqW</span><span class="field">k7R<span class="caret"></span></span></span></label>
+            <span class="go">Sign in</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">The payouts session in billing is waiting on a captcha in its browser.</span>
+    <span class="faint">2m</span>
+    <span class="ask">Talk to the assistant</span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet">Agents <span class="count n">1</span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

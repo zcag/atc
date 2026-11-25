@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CLI, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<style>
+body { padding: 24px 28px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.grid .full { grid-column: 1 / -1; }
+.term { border-radius: var(--r3); box-shadow: 0 0 0 1px var(--line); background: var(--paper); overflow: hidden; }
+.term .tb { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; background: var(--chrome); border-bottom: 1px solid var(--line); font-size: var(--f-small); color: var(--dim); }
+.term .tb b { color: var(--ink); font-weight: 600; }
+.term .tb .note { margin-left: auto; color: var(--faint); }
+pre { margin: 0; padding: 12px 14px 14px; font: 12.5px/1.5 var(--mono); color: var(--ink); white-space: pre; overflow: hidden; }
+pre b { font-weight: 650; }
+.p { color: var(--faint); }
+.h { color: var(--faint); }
+.f { color: var(--faint); }
+.k { color: var(--ink); font-weight: 600; }
+.ok { color: var(--ok); font-weight: 600; }
+.x { color: var(--fail); font-weight: 650; }
+.fix { color: var(--ink); font-weight: 650; text-decoration: underline; text-decoration-color: var(--edge); text-underline-offset: 3px; }
+.bN { background: var(--needs); color: var(--needs-ink); font-weight: 700; }
+.bW { background: var(--work-wash); color: var(--work); font-weight: 700; }
+.bT { background: var(--hi); color: var(--ink); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="term full"><div class="tb"><i data-i="term"></i><b>atc ls</b> then two commands that say what they did <span class="note">one aligned table, headers in sentence case</span></div>
+<pre><span class="p">❯</span> <b>atc ls</b>
+<span class="h"> #  State      Title                                       Host    Bay      Branch       Age</span>
+ 1  <span class="bN">N</span> needs    Rate limit retries                          devbox   api      <span class="f">rate-limit</span>    <span class="f">4m</span>
+ 2  <span class="bN">N</span> needs    Fatura PDF&#x27;inde Türkçe karakterler bozuk    laptop  billing  <span class="f">pdf-font</span>      <span class="f">9m</span>
+ 3  <span class="bN">N</span> needs    Session list loses scroll on reconnect      devbox   web      <span class="f">main</span>         <span class="f">31m</span>
+ 4  <span class="bT">T</span> turn     Invoice export as CSV                       devbox   api      <span class="f">csv-export</span>   <span class="f">22m</span>
+ 5  <span class="bT">T</span> turn     Bump Go to 1.25                             laptop  infra    <span class="f">main</span>          <span class="f">1h</span>
+ 6  <span class="bW">W</span> working  Migrate sessions table to UUID keys         laptop  api      <span class="f">uuid-keys</span>    <span class="f">now</span>
+ 7  <span class="bW">W</span> working  Fix flaky upload test                       devbox   web      <span class="f">upload-test</span>  <span class="f">now</span>
+<span class="f">7 sessions, 3 need you. --json for the full rows, --all for ended ones.</span>
+
+<span class="p">❯</span> <b>atc park 7</b>
+Parked Fix flaky upload test.
+
+<span class="p">❯</span> <b>atc rename 4 "CSV export"</b>
+Renamed Invoice export as CSV to CSV export.</pre></div>
+  <div class="term"><div class="tb"><i data-i="term"></i><b>atc doctor</b> <span class="note">plain text, a fix under what is broken</span></div>
+<pre><span class="p">❯</span> <b>atc doctor</b>
+<b>devbox</b> <span class="f">atc 0.9.4</span>
+
+<b>Core</b>
+<span class="ok">ok</span>      Claude Code       2.1.326
+<span class="ok">ok</span>      Signed in         claude.ai, max plan
+<span class="ok">ok</span>      atc server        running on :7272
+
+<b>Calls</b>
+<span class="ok">ok</span>      Call line         answers on :8807
+<span class="x">broken</span>  Voice engine      nothing answers on :8812
+        <span class="fix">fix</span>  run atc voice install --only tts
+
+<b>Phone</b>
+<span class="ok">ok</span>      Notifications     1 device registered
+<span class="ok">ok</span>      Android app       0.813 ready to install
+
+<b>Machines</b>
+<span class="ok">ok</span>      laptop            answers, same version
+
+<span class="x">1 broken</span><span class="f">, 8 ok. --json for scripts.</span></pre></div>
+  <div class="term"><div class="tb"><i data-i="term"></i><b>atc park -h</b> <span class="note">the one help template</span></div>
+<pre><span class="p">❯</span> <b>atc park -h</b>
+<b>atc park</b>: put a session away until it is needed again.
+
+<b>Usage</b>
+  atc park &lt;session&gt;... [flags]
+
+<b>Flags</b>
+  <span class="k">--all</span>         park every ended session in the bay
+  <span class="k">--bay</span> <span class="f">NAME</span>    the bay to look in (default: this folder's)
+  <span class="k">--json</span>        print what was parked as JSON
+  <span class="k">-h, --help</span>    show this help
+
+<b>Examples</b>
+  atc park 7
+  atc park "Fix flaky upload test"
+  atc park --all --bay api
+
+<span class="f">&lt;session&gt; is a number from atc ls, a title or an id.</span></pre></div>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

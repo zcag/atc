@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Composer, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.body3 { grid-template-columns: 320px minmax(0, 1fr); }
+.body3.withstate { grid-template-columns: 320px minmax(0, 1fr) 340px; }
+.rail { background: var(--bg); }
+.rail .phd { border-bottom-color: var(--hair); }
+.rail .phd h1 { font-size: var(--f-body); }
+.rl { padding: 2px 8px 16px; overflow: auto; flex: 1; min-height: 0; }
+.rgrp { display: flex; align-items: baseline; gap: 8px; padding: 14px 10px 6px; font-size: var(--f-small); font-weight: 600; color: var(--dim); }
+.rrow { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 3px 10px; padding: 9px 10px; border-radius: var(--r2); align-items: center; }
+.rrow + .rrow { margin-top: 1px; }
+.rrow .t { font-weight: 600; font-size: var(--f-body); }
+.rrow .s { grid-column: 2; color: var(--dim); font-size: var(--f-ui); }
+.rrow .age { font: var(--f-small) var(--mono); color: var(--faint); }
+.rrow .qk { grid-column: 3; justify-self: end; font: var(--f-small) var(--mono); color: var(--faint); }
+.rrow .x3 { grid-column: 2 / 4; }
+.rrow.sel { background: var(--paper); box-shadow: 0 0 0 1px var(--line); }
+.rrow.nd { box-shadow: inset 3px 0 0 var(--needs); }
+.rrow.ended .t { font-weight: 500; color: var(--dim); }
+.rl.focus .qk { color: var(--dim); }
+.mini { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.mini .btn { height: 26px; padding: 0 8px; font-size: var(--f-small); }
+code { font: .86em var(--mono); background: var(--code); padding: 1px 5px; border-radius: var(--r1); }
+
+.shd { gap: 10px; }
+.shd h1 { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.shd .where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.shd .acts { flex: none; }
+.btn[aria-pressed="true"] { background: var(--hi); color: var(--ink); }
+.btn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
+
+.tx { flex: 1; overflow: auto; min-height: 0; background: var(--paper); }
+.col { width: min(680px, 100% - 176px); margin: 0 auto; padding: 28px 0 32px; position: relative; }
+.turn { position: relative; }
+.clk { position: absolute; left: -84px; width: 60px; text-align: right; top: 6px; font: var(--f-small)/1 var(--mono); color: var(--faint); }
+.say { font: var(--f-read)/1.58 var(--read); color: var(--ink); margin: 0 0 6px; }
+.say p { margin: 0 0 12px; }
+.say ul { margin: 0 0 12px; padding-left: 22px; }
+.say li { margin: 4px 0; }
+.say code { font-size: .8em; }
+.me { font: 400 var(--f-title)/1.5 var(--sans); background: var(--sunk); border-radius: var(--r3); padding: 10px 14px; margin: 4px 0 22px; }
+.me .clk { top: 14px; }
+.fold { display: flex; align-items: center; gap: 6px; min-height: 26px; font-size: var(--f-ui); color: var(--faint); margin: 0 0 18px -2px; white-space: nowrap; }
+.fold .i { width: 14px; height: 14px; }
+.fold .n { color: var(--dim); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fold .dur { font: var(--f-small) var(--mono); flex: none; }
+.fold .bad { color: var(--fail); }
+.fold.open { margin-bottom: 6px; }
+.steps { margin: 0 0 20px 5px; border-left: 1px solid var(--line); padding: 2px 0 2px 16px; font-size: var(--f-ui); display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: 5px 12px; color: var(--dim); }
+.steps .k { color: var(--faint); }
+.steps .v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.steps .v .mono { font-size: var(--f-small); color: var(--ink); }
+.steps .r { font: var(--f-small) var(--mono); color: var(--faint); text-align: right; }
+.steps .ok { color: var(--ok); }
+.fail1 { display: flex; align-items: center; gap: 8px; font-size: var(--f-ui); color: var(--fail); background: var(--fail-wash); border-radius: var(--r2); padding: 7px 10px; margin: -8px 0 20px; }
+.fail1 code { background: none; padding: 0; color: var(--fail); }
+.fail1 .grow { color: var(--dim); }
+.fail1 a { color: var(--ink); flex: none; }
+.since { display: flex; align-items: center; gap: 10px; margin: 30px 0 6px; font-size: var(--f-small); color: var(--needs-text); font-weight: 600; }
+.since::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.catch { font-size: var(--f-body); color: var(--dim); margin: 0 0 26px; }
+.catch b { color: var(--ink); font-weight: 600; }
+.made { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: var(--f-ui); color: var(--dim); margin: 2px 0 8px; }
+.made .row-flex { gap: 6px; }
+.pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--work); flex: none; animation: pl 1.6s var(--ease) infinite; }
+@keyframes pl { 50% { opacity: .35; } }
+.working { color: var(--work); }
+
+.cmp { padding: 6px 0 16px; background: var(--paper); }
+.cmp .box { width: min(680px, 100% - 176px); margin: 0 auto; }
+.box { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); padding: 8px; display: grid; gap: 6px; }
+.box.focus { border-color: var(--edge); }
+.sugs { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: var(--pill); border: 1px solid var(--line); background: var(--bg); font-size: var(--f-ui); color: var(--ink); white-space: nowrap; }
+.att { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 8px; border-radius: var(--r2); border: 1px solid var(--line); background: var(--bg); font-size: var(--f-ui); max-width: 100%; }
+.att .faint { font: var(--f-small) var(--mono); }
+.att .btn.icon { width: 22px; height: 22px; }
+.ta { min-height: 26px; padding: 3px 6px; font: var(--f-title)/1.5 var(--sans); color: var(--faint); }
+.ta.typed { color: var(--ink); }
+.ta.typed::after { content: ""; display: inline-block; width: 1.5px; height: 1.1em; background: var(--ink); vertical-align: -3px; margin-left: 1px; }
+.brow { display: flex; align-items: center; gap: 4px; }
+.brow .hint { font-size: var(--f-small); color: var(--faint); margin-left: 2px; }
+.brow .hint .mono { color: var(--dim); }
+
+.pht { display: flex; align-items: center; gap: 4px; height: 52px; padding: 0 4px; }
+.pht h1 { font-size: var(--f-title); margin: 0; font-weight: 650; }
+.pht .btn.icon { width: 44px; height: 44px; }
+.ptabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+.ptabs button { height: 40px; border: 0; background: none; font-size: var(--f-ui); color: var(--dim); position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.ptabs button[aria-current] { color: var(--ink); font-weight: 650; }
+.ptabs button[aria-current]::after { content: ""; position: absolute; left: 16px; right: 16px; bottom: -1px; height: 2px; background: var(--ink); }
+.ptabs .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--dim); }
+.ph .col { width: auto; padding: 8px 16px 20px; }
+.ph .clk { position: static; float: right; width: auto; margin: 6px 0 0 12px; }
+.ph .me .clk { margin-top: 3px; }
+.ph .steps { grid-template-columns: 50px minmax(0, 1fr) auto; }
+.ph .cmp { padding: 6px 10px 10px; border-top: 1px solid var(--hair); }
+.ph .cmp .box { width: auto; }
+.ph .brow .btn.icon { width: 40px; height: 40px; }
+.ph .brow .btn.send { height: 40px; padding: 0 14px; }
+@media (max-width: 899px) { .deskonly { display: none; } }
+@media (min-width: 900px) { .phoneonly { display: none; } }
+
+body { background: var(--bg); }
+.spec { gap: 18px; }
+.spec > header h2 { font-size: var(--f-h); font-weight: 650; margin: 0 0 4px; }
+.spec > header p { margin: 0; color: var(--dim); font-size: var(--f-body); max-width: 900px; }
+.lbl { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; }
+.lbl h3 { margin: 0; font-size: var(--f-ui); font-weight: 650; }
+.lbl span { font-size: var(--f-small); color: var(--faint); }
+.g2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.g3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.half { border-radius: var(--r3); padding: 16px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); min-width: 0; }
+.dk { color-scheme: dark; }
+.frag { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); padding: 14px 18px; min-width: 0; }
+.frag .say { font-size: var(--f-read); }
+.frag .fold { margin-bottom: 12px; }
+
+.cell2 { display: grid; gap: 10px; align-content: start; }
+.scr { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); padding: 14px 18px 16px; position: relative; min-width: 0; }
+.scr .say { font-size: var(--f-read); margin-bottom: 4px; }
+.scr .say p { margin: 0 0 6px; }
+.scr .fold { margin-bottom: 10px; }
+.wk { display: flex; align-items: center; gap: 8px; font-size: var(--f-ui); color: var(--work); margin: 0 0 10px; }
+.wk .faint { font: var(--f-small) var(--mono); }
+.queued { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; border-radius: var(--r2); background: var(--work-wash); font-size: var(--f-ui); min-width: 0; }
+.queued .i { color: var(--work); }
+.queued .faint { font-size: var(--f-small); flex: none; }
+.queued .btn { height: 24px; padding: 0 8px; font-size: var(--f-small); }
+.confirm { display: flex; align-items: center; gap: 8px; font-size: var(--f-ui); }
+.confirm b { font-weight: 600; }
+.slash { position: absolute; left: 18px; right: 18px; bottom: 110px; padding: 4px; font-size: var(--f-ui); z-index: 2; }
+.slash .sr { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 12px; align-items: center; height: 32px; padding: 0 10px; border-radius: 5px; }
+.slash .sr.on { background: var(--hi); }
+.slash .sr .mono { color: var(--dim); font-size: var(--f-ui); }
+.slash .sr .mono u { text-decoration: none; color: var(--ink); font-weight: 650; }
+.slash .sr .d { color: var(--dim); }
+.slash .sr .src { font-size: var(--f-small); color: var(--faint); }
+.slash .foot { display: flex; gap: 14px; border-top: 1px solid var(--hair); margin-top: 4px; padding: 6px 10px 2px; font-size: var(--f-small); color: var(--faint); }
+.box.drop { border: 1.5px dashed var(--focus); background: light-dark(oklch(52% 0.16 255 / .05), oklch(73% 0.13 255 / .08)); }
+.dropmsg { display: flex; align-items: center; justify-content: center; gap: 8px; height: 76px; font-size: var(--f-body); color: var(--focus); font-weight: 600; }
+.ghost { position: absolute; right: 120px; top: 54px; display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border-radius: var(--r2); background: var(--paper); box-shadow: var(--pop); font-size: var(--f-ui); }
+.scr.over { box-shadow: inset 0 0 0 1px var(--focus); }
+</style>
+</head>
+<body>
+<div class="deskonly"><div class="spec">
+  <header><h2>Composer</h2><p>One box: suggestions as chips in its top row, attachments under them, the text, then attach, the slash hint and Send. The Enter hint lives in Send's tooltip.</p></header>
+  <div class="g2"><div class="cell2"><div class="lbl"><h3>Empty, with suggestions</h3><span>Suggestions are chips inside the box; placeholder just "Reply".</span></div>
+      <div class="scr"><div class="say"><p>Done. The export button is on the invoices page; amounts follow the account's locale.</p></div><div class="fold"><i data-i="fwd"></i><span class="n">Edited 1 file, ran 3 commands</span><span>·</span><span class="dur">41s</span></div>
+      <div class="box"><div class="sugs"><button class="chip">Ship it</button><button class="chip">Install Playwright and rerun e2e</button></div><div class="ta">Reply</div><div class="brow"><button class="btn icon" title="Attach a file"><i data-i="attach"></i></button><span class="hint"><span class="mono">/</span> for commands</span><span class="grow"></span><button class="btn" disabled title="Send (Enter)"><i data-i="send"></i>Send</button></div></div></div></div><div class="cell2"><div class="lbl"><h3>Typing, with an attachment</h3><span>Attachments under the suggestions; Send turns primary.</span></div>
+      <div class="scr"><div class="say"><p>Done. The export button is on the invoices page; amounts follow the account's locale.</p></div><div class="fold"><i data-i="fwd"></i><span class="n">Edited 1 file, ran 3 commands</span><span>·</span><span class="dur">41s</span></div>
+      <div class="box focus"><div class="sugs"><button class="chip">Ship it</button><button class="chip">Install Playwright and rerun e2e</button></div><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="att"><i data-i="file"></i><span class="ell">invoices-march.csv</span><span class="faint">12 KB</span><button class="btn icon" title="Remove"><i data-i="x"></i></button></span><span class="att"><i data-i="file"></i><span class="ell">screenshot.png</span><span class="faint">240 KB</span><button class="btn icon" title="Remove"><i data-i="x"></i></button></span></div><div class="ta typed">Order it by number instead, and add a totals row like this file</div><div class="brow"><button class="btn icon" title="Attach a file"><i data-i="attach"></i></button><span class="hint"><span class="mono">/</span> for commands</span><span class="grow"></span><button class="btn primary" title="Send (Enter)"><i data-i="send"></i>Send</button></div></div></div></div></div>
+  <div class="g2"><div class="cell2"><div class="lbl"><h3>Queued while it works</h3><span>"Queue a reply"; a queued message waits in the box until the turn ends.</span></div>
+      <div class="scr"><div class="wk"><span class="pulse"></span>Working<span class="faint">ran 3 commands · 42s</span></div>
+      <div class="box"><div class="queued"><i data-i="clock"></i><span class="grow ell">Also add a totals row at the bottom.</span><span class="faint">sends when this turn ends</span><button class="btn quiet">Edit</button><button class="btn quiet">Cancel</button></div><div class="ta">Queue a reply</div><div class="brow"><button class="btn icon" title="Attach a file"><i data-i="attach"></i></button><span class="hint"><span class="mono">/</span> for commands</span><span class="grow"></span><button class="btn quiet" title="Stop the turn (Esc)"><i data-i="stop"></i>Stop</button><button class="btn" disabled title="Queue (Enter)"><i data-i="send"></i>Queue</button></div></div></div></div><div class="cell2"><div class="lbl"><h3>Stop, confirmed in place</h3><span>The bottom row asks; nothing pops up.</span></div>
+      <div class="scr"><div class="wk"><span class="pulse"></span>Working<span class="faint">ran 3 commands · 42s</span></div>
+      <div class="box"><div class="ta">Queue a reply</div><div class="brow"><span class="confirm"><b>Stop this turn?</b><span class="dim">What it has done so far stays.</span></span><span class="grow"></span><button class="btn">Keep going</button><button class="btn danger primary"><i data-i="stop"></i>Stop</button></div></div></div></div></div>
+  <div class="g2"><div class="cell2"><div class="lbl"><h3>Slash menu</h3><span>Opens above the box as you type "/"; Claude's commands and atc's in one list.</span></div>
+      <div class="scr" style="padding-top:200px">
+      <div class="slash pop">
+        <div class="sr on"><span class="mono">/<u>co</u>mpact</span><span class="d ell">Summarize the conversation to free context</span><span class="src">Claude</span></div>
+        <div class="sr"><span class="mono">/<u>co</u>ntext</span><span class="d ell">Show what fills the context</span><span class="src">Claude</span></div>
+        <div class="sr"><span class="mono">/<u>co</u>st</span><span class="d ell">Spend of this session</span><span class="src">Claude</span></div>
+        <div class="sr"><span class="mono">/<u>co</u>py</span><span class="d ell">Copy the last reply</span><span class="src">atc</span></div>
+        <div class="foot"><span>Enter runs</span><span>Tab completes</span><span>Esc closes</span></div>
+      </div>
+      <div class="box focus"><div class="ta typed">/co</div><div class="brow"><button class="btn icon" title="Attach a file"><i data-i="attach"></i></button><span class="hint"><span class="mono">/</span> for commands</span><span class="grow"></span><button class="btn primary" title="Run (Enter)"><i data-i="send"></i>Run</button></div></div></div></div><div class="cell2"><div class="lbl"><h3>Drop target</h3><span>A file dragged anywhere over the session outlines the box.</span></div>
+      <div class="scr over"><div class="say"><p>Done. The export button is on the invoices page; amounts follow the account's locale.</p></div><div class="fold"><i data-i="fwd"></i><span class="n">Edited 1 file, ran 3 commands</span><span>·</span><span class="dur">41s</span></div>
+      <span class="ghost"><i data-i="file"></i>invoices-march.csv</span>
+      <div class="box drop"><div class="dropmsg"><i data-i="upload"></i>Drop to attach</div></div></div></div></div>
+</div></div>
+<div class="ph phoneonly">
+    <div><div class="pht">
+      <button class="btn icon" title="Back"><i data-i="back"></i></button>
+      <span class="sb t" style="margin-right:6px">T</span><h1 class="grow ell">Invoice export as CSV</h1>
+      <button class="btn icon" title="More"><i data-i="more"></i></button>
+    </div>
+    <nav class="ptabs"><button aria-current=page>Chat</button><button>Terminal</button><button>Page<span class=dot></span></button><button>State</button></nav></div>
+    <div class="tx"><div class="col">
+      <div class="since" id="since">Since you last looked, 09:16</div>
+      <p class="catch"><b>Done: CSV export with a header row; 14 tests pass.</b> 3 replies, 4 files, a page, 1 failure.</p>
+      <div class="turn"><span class="clk">09:21</span><div class="say"><p>The test failed on the amounts: <code>fmt</code> printed <code>1234.5</code> where the account expects <code>1.234,50</code>. I'm formatting with the account's locale instead of the server's.</p></div></div>
+      <div class="fold open"><i data-i="down"></i><span class="n">Edited 2 files, ran 5 commands, browser ×6</span><span>·</span><span class="dur">2m 40s</span></div>
+      <div class="steps">
+        <span class="k">Edit</span><span class="v"><span class="mono">invoice/csv.go</span></span><span class="r">+42 −3</span>
+        <span class="k">Edit</span><span class="v"><span class="mono">invoice/csv_test.go</span></span><span class="r">+61</span>
+        <span class="k">Ran</span><span class="v"><span class="mono">go test ./invoice/...</span></span><span class="r ok">14 passed</span>
+        <span class="k">Ran</span><span class="v"><span class="mono">npm run dev</span> <span class="faint">in the background</span></span><span class="r">stopped</span>
+        <span class="k">Browser</span><span class="v">×6: opened /invoices, pressed Export, read the file</span><span class="r">48s</span>
+      </div>
+      <div class="turn"><span class="clk">09:24</span><div class="say"><p>Exports match the page now. <code>make e2e</code> wants a Playwright browser that isn't installed on devbox, so it stopped before any test ran.</p></div></div>
+      <div class="fold"><i data-i="fwd"></i><span class="n">Ran 2 commands,</span><span class="bad">1 failed</span><span>·</span><span class="dur">12s</span></div>
+      <div class="fail1"><i data-i="x"></i><code>make e2e</code><span class="grow ell">failed, exit 2: browserType.launch: Executable doesn't exist</span><a href="#">Output</a></div>
+      <div class="turn"><span class="clk">09:27</span><div class="say">
+        <p>Done. The export button is on the invoices page.</p>
+        <ul><li><code>GET /invoices/export.csv</code> streams rows from the page's own query.</li>
+        <li>Amounts use the account's locale, so a lira account gets <code>1.234,50</code>.</li>
+        <li>The header row is the column labels shown on the page.</li></ul></div></div>
+      <div class="made"><span class="row-flex"><i data-i="page"></i><a href="#">CSV export: what changed</a></span><span class="row-flex"><i data-i="file"></i><a href="#">4 files</a></span><span class="row-flex"><i data-i="branch"></i>csv-export, 2 commits</span></div>
+    </div></div>
+    <div class="cmp"><div class="box focus">
+        <div class="sugs"><button class="chip">Ship it</button><button class="chip">Install Playwright and rerun e2e</button></div><div><span class="att"><i data-i="file"></i><span class="ell">invoices-march.csv</span><span class="faint">12 KB</span><button class="btn icon" title="Remove"><i data-i="x"></i></button></span></div><div class="ta typed">Order it by number instead, and add a totals row</div>
+        <div class="brow"><button class="btn icon" title="Attach a file"><i data-i="attach"></i></button><button class="btn icon" title="Commands (/)"><span class="mono" style="font-size:15px">/</span></button><span class="grow"></span><button class="btn primary send" title="Send (Enter)"><i data-i="send"></i>Send</button></div>
+      </div></div>
+  </div>
+<script src="../kit/kit.js"></script>
+
+</body>
+</html>

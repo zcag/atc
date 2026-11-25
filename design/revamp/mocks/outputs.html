@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outputs, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.body4 { display: grid; grid-template-columns: 300px minmax(0, 1fr) 380px; min-height: 0; }
+.rl { background: var(--bg); }
+.rl .phd { background: var(--bg); }
+.rl .phd h1 { font-size: var(--f-body); }
+.rl .grp { padding: 12px 14px 4px; }
+.rl .srow { padding: 8px 14px; grid-template-columns: 18px minmax(0, 1fr) 12px; background: none; border-top-color: transparent; }
+.rl .srow.sel { background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r2); margin: 0 6px; padding: 8px 8px; }
+.rl .srow.nd { box-shadow: inset 3px 0 0 var(--needs); }
+.rl .srow .t { font-size: var(--f-ui); }
+.rl .srow .s { font-size: var(--f-small); }
+.rl .qk { font: 500 var(--f-micro)/18px var(--mono); color: var(--faint); text-align: right; }
+.rl .ans { display: flex; gap: 4px; margin-top: 6px; }
+.rl .ans .btn { height: 24px; padding: 0 8px; font-size: var(--f-small); }
+
+.vw .phd { gap: 4px; padding-left: 8px; }
+.clipstart { direction: rtl; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; font: 500 var(--f-ui) var(--mono); color: var(--dim); padding: 0 6px; }
+.clipstart b { color: var(--ink); font-weight: 650; }
+.vw .pos { font: var(--f-small) var(--mono); color: var(--faint); padding: 0 4px; white-space: nowrap; }
+.vw .sub { display: flex; align-items: center; gap: 10px; padding: 6px 16px; border-bottom: 1px solid var(--hair); font-size: var(--f-small); color: var(--faint); }
+.data { border-collapse: collapse; font: var(--f-ui)/1.4 var(--mono); width: 100%; }
+.data th, .data td { padding: 5px 14px; border-bottom: 1px solid var(--hair); text-align: left; white-space: nowrap; }
+.data th { position: sticky; top: 0; background: var(--paper); color: var(--faint); font-weight: 600; border-bottom-color: var(--line); }
+.data td.r, .data th.r { text-align: right; }
+.data .ln { color: var(--faint); width: 1%; padding-right: 4px; }
+
+.st .phd h1 { font-size: var(--f-body); }
+.st .sec { padding: 12px 16px 6px; display: flex; align-items: baseline; gap: 8px; font-size: var(--f-ui); font-weight: 650; }
+.st .sum { padding: 0 16px 12px; font-size: var(--f-ui); color: var(--dim); border-bottom: 1px solid var(--line); }
+.st .sum b { color: var(--ink); font-weight: 600; }
+.sg { padding: 8px 16px 2px; font-size: var(--f-small); color: var(--faint); }
+.orow { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 1px 10px; padding: 6px 16px; align-items: start; font-size: var(--f-ui); }
+.orow:hover { background: var(--hi); }
+.orow.sel { background: var(--sel); }
+.orow .i { color: var(--faint); margin-top: 1px; }
+.orow .n { font-weight: 500; }
+.orow .m { grid-column: 2; color: var(--faint); font-size: var(--f-small); }
+.orow .a { color: var(--faint); font-size: var(--f-small); white-space: nowrap; }
+.orow .run { color: var(--work); }
+.facts { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; padding: 4px 16px 16px; font-size: var(--f-ui); }
+.facts dt { color: var(--faint); }
+.facts dd { margin: 0; }
+.st .div { border-top: 1px solid var(--line); margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay on"><b>2</b>api <span class="count n">1</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button aria-pressed="true">Session</button><button>Board</button><button>Pages</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="body4">
+    <aside class="pane rl">
+      <header class="phd"><h1>api</h1><span class="where">~/code/api</span>
+        <div class="acts"><button class="btn icon" title="Search (/)"><i data-i="search"></i></button><button class="btn icon" title="New session (n)"><i data-i="plus"></i></button></div></header>
+      <div class="scroll">
+        <div class="grp">Waiting on you <span class="count n">1</span></div>
+        <div class="srow nd"><span class="sb n">N</span><div class="grow"><div class="t ell">Rate limit retries</div><div class="s ell">Wants to run <code class="mono">go test ./... -run Retry</code></div>
+          <div class="ans"><button class="btn">1 Allow once</button><button class="btn">2 Always</button><button class="btn quiet">3 Deny</button></div></div><span class="qk">q</span></div>
+        <div class="grp">Your turn <span class="count faint">1</span></div>
+        <div class="srow sel"><span class="sb t">T</span><div class="grow"><div class="t ell">Invoice export as CSV</div><div class="s ell">Done: CSV export with a header row; 14 tests pass.</div></div><span class="qk">w</span></div>
+        <div class="grp">Working <span class="count w">1</span></div>
+        <div class="srow"><span class="sb w">W</span><div class="grow"><div class="t ell">Migrate sessions table to UUID keys</div><div class="s ell">Writing the backfill; 2 of 5 tables done.</div></div><span class="qk">e</span></div>
+        <div class="grp">Earlier today <span class="count faint">3</span></div>
+        <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t ell" style="font-weight:500">Fix flaky upload test</div><div class="s ell">Ended: test made deterministic, merged.</div></div><span class="qk"></span></div>
+        <div class="srow" lang="tr"><span class="sb e">E</span><div class="grow"><div class="t ell" style="font-weight:500">Fatura PDF'inde Türkçe karakterler bozuk</div><div class="s ell">Ended: ğ, ş ve ı artık doğru gömülüyor.</div></div><span class="qk"></span></div>
+        <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t ell" style="font-weight:500">Review webhook signature check</div><div class="s ell">Ended: two comments posted.</div></div><span class="qk"></span></div>
+      </div>
+    </aside>
+
+    <section class="pane vw" role="dialog" aria-label="invoices-2026-11.csv">
+      <header class="phd">
+        <button class="btn icon" title="Close (esc)"><i data-i="x"></i></button>
+        <span class="clipstart" title="~/code/api/internal/invoices/export/testdata/golden/invoices-2026-11.csv"><bdi>~/code/api/internal/invoices/export/testdata/golden/<b>invoices-2026-11.csv</b></bdi></span>
+        <span class="pos">2 of 5</span>
+        <button class="btn icon" title="Previous (←)"><i data-i="back"></i></button>
+        <button class="btn icon" title="Next (→)"><i data-i="fwd"></i></button>
+        <button class="btn quiet" title="Open in a new tab"><i data-i="out"></i>New tab</button>
+      </header>
+      <div class="sub"><span>Table · 48 rows · 6.2 KB</span><span>written 22m ago</span><span class="grow"></span><span>esc closes, ← → step through outputs</span></div>
+      <div class="scroll">
+        <table class="data">
+          <thead><tr><th class="ln"></th><th>number</th><th>issued</th><th>customer</th><th class="r">total</th><th>currency</th></tr></thead>
+          <tbody>
+            <tr><td class="ln">1</td><td>INV-20481</td><td>2026-11-03</td><td>Northwind Supply</td><td class="r">1,240.00</td><td>EUR</td></tr>
+            <tr><td class="ln">2</td><td>INV-20482</td><td>2026-11-03</td><td>Harbor &amp; Pine</td><td class="r">86.50</td><td>EUR</td></tr>
+            <tr><td class="ln">3</td><td>INV-20483</td><td>2026-11-04</td><td>Kestrel Labs</td><td class="r">4,900.00</td><td>USD</td></tr>
+            <tr><td class="ln">4</td><td>INV-20484</td><td>2026-11-05</td><td>Ayvalık Zeytin Ltd.</td><td class="r">12,300.00</td><td>TRY</td></tr>
+            <tr><td class="ln">5</td><td>INV-20485</td><td>2026-11-06</td><td>Northwind Supply</td><td class="r">310.00</td><td>EUR</td></tr>
+            <tr><td class="ln">6</td><td>INV-20486</td><td>2026-11-07</td><td>Blue Fern Studio</td><td class="r">1,075.25</td><td>EUR</td></tr>
+            <tr><td class="ln">7</td><td>INV-20487</td><td>2026-11-10</td><td>Kestrel Labs</td><td class="r">640.00</td><td>USD</td></tr>
+            <tr><td class="ln">8</td><td>INV-20488</td><td>2026-11-11</td><td>Harbor &amp; Pine</td><td class="r">92.00</td><td>EUR</td></tr>
+            <tr><td class="ln">9</td><td>INV-20489</td><td>2026-11-12</td><td>Orchard Row Bakery</td><td class="r">218.40</td><td>EUR</td></tr>
+            <tr><td class="ln">10</td><td>INV-20490</td><td>2026-11-13</td><td>Ayvalık Zeytin Ltd.</td><td class="r">8,450.00</td><td>TRY</td></tr>
+            <tr><td class="ln">11</td><td>INV-20491</td><td>2026-11-14</td><td>Northwind Supply</td><td class="r">1,240.00</td><td>EUR</td></tr>
+            <tr><td class="ln">12</td><td>INV-20492</td><td>2026-11-14</td><td>Granite Bay Co.</td><td class="r">3,300.00</td><td>USD</td></tr>
+            <tr><td class="ln">13</td><td>INV-20493</td><td>2026-11-17</td><td>Blue Fern Studio</td><td class="r">560.00</td><td>EUR</td></tr>
+            <tr><td class="ln">14</td><td>INV-20494</td><td>2026-11-18</td><td>Kestrel Labs</td><td class="r">1,980.00</td><td>USD</td></tr>
+            <tr><td class="ln">15</td><td>INV-20495</td><td>2026-11-19</td><td>Orchard Row Bakery</td><td class="r">74.90</td><td>EUR</td></tr>
+            <tr><td class="ln">16</td><td>INV-20496</td><td>2026-11-20</td><td>Harbor &amp; Pine</td><td class="r">145.00</td><td>EUR</td></tr>
+            <tr><td class="ln">17</td><td>INV-20497</td><td>2026-11-21</td><td>Granite Bay Co.</td><td class="r">2,210.00</td><td>USD</td></tr>
+            <tr><td class="ln">18</td><td>INV-20498</td><td>2026-11-24</td><td>Northwind Supply</td><td class="r">980.00</td><td>EUR</td></tr>
+            <tr><td class="ln">19</td><td>INV-20499</td><td>2026-11-25</td><td>Ayvalık Zeytin Ltd.</td><td class="r">5,120.00</td><td>TRY</td></tr>
+            <tr><td class="ln">20</td><td>INV-20500</td><td>2026-11-26</td><td>Blue Fern Studio</td><td class="r">330.00</td><td>EUR</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside class="pane st">
+      <header class="phd"><h1>State</h1><span class="faint" style="font-size:var(--f-small)">Invoice export as CSV</span>
+        <div class="acts"><button class="btn icon" title="Close state (\)"><i data-i="x"></i></button></div></header>
+      <div class="scroll">
+        <div class="sec">Summary</div>
+        <div class="sum"><b>Done:</b> CSV export with a header row, same columns as the PDF; 14 tests pass. <b>Open:</b> date format and voided invoices, on its page.</div>
+        <div class="sec">Outputs <span class="count faint">9</span></div>
+        <div class="sg">Pages</div>
+        <div class="orow"><i data-i="page"></i><div class="n ell">CSV export: what changed</div><span class="a">22m</span></div>
+        <div class="sg">Running</div>
+        <div class="orow"><i data-i="play"></i><div class="n ell mono">devbox:8081</div><span class="a">up 28m</span><div class="m">Dev server, started by this session</div></div>
+        <div class="sg">Files</div>
+        <div class="orow"><i data-i="file"></i><div class="n ell">export-sample.png</div><span class="a">31m</span><div class="m">Image · 84 KB</div></div>
+        <div class="orow sel"><i data-i="file"></i><div class="n ell">invoices-2026-11.csv</div><span class="a">22m</span><div class="m">Table · 48 rows</div></div>
+        <div class="sg">Commits</div>
+        <div class="orow"><i data-i="branch"></i><div class="n ell">Add CSV export for invoices</div><span class="a mono">a3f9c12</span><div class="m">csv-export · 4 files</div></div>
+        <div class="orow"><i data-i="branch"></i><div class="n ell">Share the column list with the PDF</div><span class="a mono">7be0d41</span><div class="m">csv-export · 2 files</div></div>
+        <div class="sg">Code it touched</div>
+        <div class="orow"><i data-i="file"></i><div class="n ell"><span class="mono">export.go</span> <span class="faint" style="font-size:var(--f-small)">internal/invoices</span></div><span class="a">edited</span></div>
+        <div class="orow"><i data-i="file"></i><div class="n ell"><span class="mono">columns.go</span> <span class="faint" style="font-size:var(--f-small)">internal/invoices</span></div><span class="a">new</span></div>
+        <div class="orow"><i data-i="file"></i><div class="n ell"><span class="mono">export_test.go</span> <span class="faint" style="font-size:var(--f-small)">internal/invoices</span></div><span class="a">new</span></div>
+        <div class="div"></div>
+        <div class="sec">Facts</div>
+        <dl class="facts">
+          <dt>Machine</dt><dd>devbox</dd>
+          <dt>Worktree</dt><dd class="mono ell">…/worktrees/csv-export</dd>
+          <dt>Model</dt><dd>opus</dd>
+          <dt>Context</dt><dd><span class="meter"><i style="width:42%"></i></span> 84k</dd>
+          <dt>Started</dt><dd>14:02, 31m</dd>
+        </dl>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">Started the CSV export session in api and told it to keep the header row.</span>
+    <span class="faint">12m</span>
+    <span class="ask">Talk to the assistant</span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet">Agents <span class="count n">1</span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

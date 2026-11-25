@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New session, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+</head>
+<style>
+@media (min-width: 900px) {
+.ph, .pscrim, .sheet { display: none; }
+.dlg { position: fixed; left: 50%; top: 88px; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); display: grid; }
+.dlg .phd { border-bottom: 0; padding-top: 4px; }
+.dlg .bd { padding: 0 16px 16px; display: grid; gap: 12px; }
+.prompt { border: 1px solid var(--focus); box-shadow: 0 0 0 1px var(--focus); border-radius: var(--r3); background: var(--paper); padding: 12px 12px 8px; display: grid; gap: 8px; }
+.prompt .txt { min-height: 132px; font: var(--f-read)/1.5 var(--read); }
+.prompt .txt .caret { display: inline-block; width: 1.5px; height: 20px; background: var(--ink); vertical-align: -4px; }
+.prompt .bot { display: flex; align-items: center; gap: 6px; font-size: var(--f-small); color: var(--faint); }
+.picks { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.pick { display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r2); background: var(--paper); font-size: var(--f-ui); min-width: 0; }
+.pick .k { color: var(--faint); }
+.pick .v { font-family: var(--mono); font-weight: 500; }
+.pick .i:last-child { color: var(--faint); margin-left: auto; }
+.opts { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 4px; font-size: var(--f-ui); color: var(--dim); min-width: 0; }
+.opts b { color: var(--ink); font-weight: 600; }
+.opts .vals { color: var(--faint); }
+.opts .vals span { color: var(--dim); }
+.ft { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--line); font-size: var(--f-small); color: var(--faint); }
+}
+@media (max-width: 899px) {
+.app, .dscrim, .dlg { display: none; }
+.ph .top { padding: 12px 12px 4px 16px; }
+.ph .top h1 { font-size: var(--f-title); }
+.srow { padding: 12px 16px; grid-template-columns: 18px minmax(0, 1fr) auto; }
+.srow .t { font-size: 15px; }
+.srow .s { font-size: var(--f-body); }
+.answers { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.answers .btn { height: 36px; padding: 0 12px; font-size: var(--f-body); }
+.grp { padding: 16px 16px 6px; }
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; border-radius: var(--r3) var(--r3) 0 0; display: grid; grid-template-columns: minmax(0, 1fr); padding-bottom: 10px; }
+.grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 8px auto 0; }
+.sheet .phd { border-bottom: 0; min-height: 48px; }
+.sheet .bd { padding: 0 16px 12px; display: grid; gap: 10px; grid-template-columns: minmax(0, 1fr); }
+.prompt { border: 1px solid var(--focus); box-shadow: 0 0 0 1px var(--focus); border-radius: var(--r3); background: var(--paper); padding: 12px 12px 6px; display: grid; gap: 6px; }
+.prompt .txt { min-height: 150px; font: var(--f-read)/1.5 var(--read); }
+.caret { display: inline-block; width: 1.5px; height: 20px; background: var(--ink); vertical-align: -4px; }
+.prompt .bot { display: flex; align-items: center; gap: 4px; font-size: var(--f-small); color: var(--faint); }
+.prompt .bot .btn.icon { width: 40px; height: 40px; }
+.picks { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto); gap: 8px; }
+.pick { display: flex; align-items: center; gap: 6px; height: var(--hit); padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r2); background: var(--paper); font-size: var(--f-body); min-width: 0; }
+.pick .v { font-family: var(--mono); font-weight: 500; font-size: var(--f-ui); }
+.pick .i:last-child { color: var(--faint); margin-left: auto; }
+.opts { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 2px 8px; align-items: center; padding: 8px 4px; border: 0; background: none; text-align: left; min-height: var(--hit); }
+.opts b { font-size: var(--f-body); font-weight: 600; }
+.opts .vals { grid-column: 2; color: var(--dim); font-size: var(--f-ui); }
+.ft { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 8px; padding: 4px 16px 6px; }
+.ft .btn { height: var(--hit); justify-content: center; font-size: var(--f-body); }
+}
+</style>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay on"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button>Session</button><button aria-pressed="true">Board</button><button>Pages</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="body3 wide">
+    <section class="pane">
+      <header class="phd">
+        <h1>api</h1><span class="where">~/code/api</span>
+        <span class="count n" style="margin-left:8px">2 waiting</span><span class="count w">1 working</span>
+        <div class="acts">
+          <button class="btn quiet"><i data-i="search"></i>Search</button>
+          <button class="btn icon" title="More: Park all, Shell, Backlog"><i data-i="more"></i></button>
+          <button class="btn primary"><i data-i="plus"></i>New session</button>
+        </div>
+      </header>
+      <div class="scroll">
+        <table class="btab">
+          <colgroup><col style="width:30%"><col><col style="width:84px"></colgroup>
+          <thead><tr><th style="padding-left:16px">Session</th><th>Status</th><th style="text-align:right">Since</th></tr></thead>
+          <tbody>
+            <tr class="g"><td colspan="3">Waiting on you <span class="count n">2</span></td></tr>
+            <tr class="nd"><td style="padding-left:16px"><div class="row-flex"><span class="sb n">N</span><span class="t">Rate limit retries</span></div><div class="w" style="margin-left:26px">devbox · rate-limit</div></td>
+              <td><div class="st">Wants to run <code class="mono">go test ./... -run Retry -count 20</code></div><div class="row-flex" style="margin-top:8px;gap:6px"><button class="btn">1 Allow once</button><button class="btn">2 Always for go test</button><button class="btn quiet">3 Deny</button></div></td>
+              <td class="since">4m<br><span class="faint">q</span></td></tr>
+            <tr><td style="padding-left:16px"><div class="row-flex"><span class="sb t">T</span><span class="t">Invoice export as CSV</span></div><div class="w" style="margin-left:26px">devbox · csv-export</div></td>
+              <td><div class="st">Done: CSV export with a header row; 14 tests pass.</div><div class="st2">Made <a href="#">a page</a> and 3 files · <span class="meter"><i style="width:42%"></i></span> 84k</div></td>
+              <td class="since">22m<br><span class="faint">w</span></td></tr>
+            <tr class="g"><td colspan="3">Working <span class="count w">1</span></td></tr>
+            <tr><td style="padding-left:16px"><div class="row-flex"><span class="sb w">W</span><span class="t">Migrate sessions table to UUID keys</span></div><div class="w" style="margin-left:26px">laptop · …/worktrees/uuid-keys</div></td>
+              <td><div class="st">Writing the backfill; 2 of 5 tables done.</div><div class="st2">23 steps, <span style="color:var(--fail)">1 failed</span> · running <a href="#">a dev server</a> · <span class="meter"><i style="width:68%"></i></span> 136k</div></td>
+              <td class="since">now<br><span class="faint">e</span></td></tr>
+            <tr class="g"><td colspan="3">Earlier today <span class="count faint">4</span></td></tr>
+            <tr><td style="padding-left:16px"><div class="row-flex"><span class="sb e">E</span><span class="t" style="font-weight:500">Fix flaky upload test</span></div></td><td class="st2">Ended: test made deterministic, merged.</td><td class="since">2h</td></tr>
+            <tr><td style="padding-left:16px"><div class="row-flex"><span class="sb e">E</span><span class="t" style="font-weight:500">Fatura PDF'inde Türkçe karakterler bozuk</span></div></td><td class="st2" lang="tr">Ended: ğ, ş ve ı artık doğru gömülüyor; PDF yeniden üretildi.</td><td class="since">3h</td></tr>
+            <tr><td style="padding-left:16px"><div class="row-flex"><span class="sb e">E</span><span class="t" style="font-weight:500">Review webhook signature check</span></div></td><td class="st2">Ended: two comments posted.</td><td class="since">5h</td></tr>
+            <tr><td style="padding-left:16px"><div class="row-flex"><span class="sb e">E</span><span class="t" style="font-weight:500">Bump Go to 1.25</span></div></td><td class="st2">Ended: CI green on main.</td><td class="since">7h</td></tr>
+            <tr><td colspan="3" style="padding-left:16px"><button class="btn quiet"><i data-i="down"></i>Older, 31 more</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <aside class="pane side">
+      <header class="phd"><h1 style="font-size:var(--f-body)">Pages</h1><span class="faint" style="font-size:var(--f-small)">6</span>
+        <div class="acts"><button class="btn icon" title="Hide the page index"><i data-i="x"></i></button></div></header>
+      <div class="scroll" style="font-size:var(--f-ui)">
+        <div style="padding:10px 14px;border-bottom:1px solid var(--hair)"><div class="row-flex"><b class="grow ell">CSV export: what changed</b><span class="faint">22m</span></div><div class="dim clamp2" style="margin-top:2px">The new endpoint, the column order, and two choices to make.</div><div class="faint" style="margin-top:3px">Invoice export as CSV</div></div>
+        <div style="padding:10px 14px;border-bottom:1px solid var(--hair)"><div class="row-flex"><span class="grow ell">UUID migration plan</span><span class="faint">3h</span></div><div class="dim clamp2" style="margin-top:2px">Order of tables, the backfill, and how to roll it back.</div><div class="faint" style="margin-top:3px">Migrate sessions table to UUID keys</div></div>
+        <div style="padding:10px 14px;border-bottom:1px solid var(--hair)"><div class="row-flex"><span class="grow ell">Rate limiter options</span><span class="faint">1d</span></div><div class="dim clamp2" style="margin-top:2px">Token bucket against sliding window, measured on staging.</div><div class="faint" style="margin-top:3px">Rate limit retries</div></div>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">Started the CSV export session in api and told it to keep the header row.</span>
+    <span class="faint">12m</span>
+    <span class="ask">Talk to the assistant</span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet">Agents <span class="count n">1</span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<div class="scrim dscrim"></div>
+<div class="dlg pop" role="dialog" aria-label="New session">
+  <header class="phd"><h1>New session</h1><span class="faint" style="font-size:var(--f-small)">in api</span>
+    <div class="acts"><button class="btn icon" title="Close (esc)"><i data-i="x"></i></button></div></header>
+  <div class="bd">
+    <div class="prompt">
+      <div class="txt">Retries on 429 should back off with jitter and give up after five tries. Add a test that fakes the clock<span class="caret"></span></div>
+      <div class="bot"><button class="btn icon" title="Attach, or paste and drop files"><i data-i="attach"></i></button><span>Paste or drop images and files</span><span class="grow"></span><span>Leave it empty to start with the composer ready</span></div>
+    </div>
+    <div class="picks">
+      <button class="pick" title="Folder (type to search)"><i data-i="folder"></i><span class="k">Folder</span><span class="v ell">~/code/api</span><i data-i="down"></i></button>
+      <button class="pick" title="Machine"><i data-i="term"></i><span class="k">Machine</span><span class="v">devbox</span><i data-i="down"></i></button>
+    </div>
+    <button class="opts btn quiet" style="justify-content:flex-start;height:32px" aria-expanded="false"><i data-i="fwd"></i><b>Options</b><span class="vals ell"><span>New worktree</span> · <span>Claude, opus</span> · <span>name from the prompt</span> · <span>personal account</span></span></button>
+  </div>
+  <footer class="ft"><span class="ell">Starts in a new worktree of <span class="mono" style="color:var(--dim)">~/code/api</span> on devbox</span><span class="grow"></span><button class="btn quiet" title="Put it on the backlog">Later</button><button class="btn primary" title="Start (ctrl enter)">Start</button></footer>
+</div>
+<div class="ph">
+  <div>
+    <div class="top">
+      <h1>Sessions</h1>
+      <span class="count n" style="margin-left:4px">7 waiting</span>
+      <span class="grow"></span>
+      <button class="btn icon" style="width:40px;height:40px" title="Settings"><i data-i="gear"></i></button>
+    </div>
+    <nav class="baystrip">
+      <span class="bay"><b>0</b>All</span>
+      <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+      <span class="bay on"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+      <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+      <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+      <span class="bay"><b>5</b>docs</span>
+    </nav>
+  </div>
+  <div class="scroll">
+    <div class="grp">Waiting on you <span class="count n">2</span></div>
+    <div class="srow nd">
+      <span class="sb n">N</span>
+      <div class="grow"><div class="t">Rate limit retries</div><div class="s" style="margin-top:2px">Wants to run <code class="mono" style="font-size:12.5px">go test ./... -run Retry</code></div>
+        <div class="answers"><button class="btn">1 Allow once</button><button class="btn">2 Always</button><button class="btn quiet">3 Deny</button></div></div>
+      <div class="e"><span>4m</span></div>
+    </div>
+    <div class="srow">
+      <span class="sb t">T</span>
+      <div class="grow"><div class="t">Invoice export as CSV</div><div class="s clamp2">Done: CSV export with a header row; 14 tests pass.</div></div>
+      <div class="e"><span>22m</span><i data-i="page"></i></div>
+    </div>
+    <div class="grp">Working <span class="count w">1</span></div>
+    <div class="srow">
+      <span class="sb w">W</span>
+      <div class="grow"><div class="t">Migrate sessions table to UUID keys</div><div class="s clamp2">Writing the backfill; 2 of 5 tables done.</div></div>
+      <div class="e"><span>now</span></div>
+    </div>
+    <div class="grp">Earlier today <span class="count faint">4</span></div>
+    <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t" style="font-weight:500">Fix flaky upload test</div><div class="s ell">Ended: test made deterministic, merged.</div></div><div class="e"><span>2h</span></div></div>
+    <div class="srow"><span class="sb e">E</span><div class="grow" lang="tr"><div class="t" style="font-weight:500">Fatura PDF'inde Türkçe karakterler bozuk</div><div class="s ell">Ended: ğ, ş ve ı artık doğru gömülüyor.</div></div><div class="e"><span>3h</span></div></div>
+    <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t" style="font-weight:500">Review webhook signature check</div><div class="s ell">Ended: two comments posted.</div></div><div class="e"><span>5h</span></div></div>
+  </div>
+  <nav class="tabbar">
+    <button><i data-i="list"></i>Sessions<span class="count n">7</span></button>
+    <button><i data-i="page"></i>Pages</button>
+    <button><i data-i="mic"></i>Assistant</button>
+    <button><i data-i="search"></i>Search</button>
+    <button aria-current="page"><i data-i="plus"></i>New</button>
+  </nav>
+</div>
+<div class="scrim pscrim"></div>
+<div class="sheet pop" role="dialog" aria-label="New session">
+  <div class="grab"></div>
+  <header class="phd"><h1>New session</h1>
+    <div class="acts"><button class="btn icon" style="width:40px;height:40px" title="Close"><i data-i="x"></i></button></div></header>
+  <div class="bd">
+    <div class="prompt">
+      <div class="txt">Retries on 429 should back off with jitter and give up after five tries<span class="caret"></span></div>
+      <div class="bot"><button class="btn icon" title="Attach"><i data-i="attach"></i></button><button class="btn icon" title="Dictate"><i data-i="mic"></i></button><span class="grow"></span><span>Empty starts a blank session</span></div>
+    </div>
+    <div class="picks">
+      <button class="pick"><i data-i="folder"></i><span class="v ell">~/code/api</span><i data-i="down"></i></button>
+      <button class="pick"><i data-i="term"></i><span class="v">devbox</span><i data-i="down"></i></button>
+    </div>
+    <button class="opts" aria-expanded="false"><i data-i="fwd"></i><b>Options</b><span class="vals">New worktree · Claude, opus · name from the prompt · personal account</span></button>
+  </div>
+  <footer class="ft"><button class="btn">Later</button><button class="btn primary">Start</button></footer>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

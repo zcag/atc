@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TUI, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<style>
+body { padding: 24px 28px; }
+.desk { display: flex; gap: 24px; align-items: start; }
+.term { border-radius: var(--r3); box-shadow: 0 0 0 1px var(--line); background: var(--paper); overflow: hidden; flex: none; }
+.term .tb { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 12px; background: var(--chrome); border-bottom: 1px solid var(--line); font-size: var(--f-small); color: var(--dim); }
+.term .tb b { color: var(--ink); font-weight: 600; }
+pre { margin: 0; padding: 10px 12px 12px; font: 12.5px/1.7 var(--mono); color: var(--ink); }
+pre b { font-weight: 650; }
+pre u { text-decoration-thickness: 1.5px; text-underline-offset: 3px; font-weight: 650; }
+.f { color: var(--faint); } .d { color: var(--dim); } .ink { color: var(--ink); }
+.cn, .gn { color: var(--needs-text); } .cw, .gw { color: var(--work); }
+.bN { background: var(--needs); color: var(--needs-ink); font-weight: 700; }
+.bW { background: var(--work-wash); color: var(--work); font-weight: 700; }
+.bT { background: var(--hi); color: var(--ink); font-weight: 700; box-shadow: inset 0 0 0 1px var(--edge); }
+.sel { background: var(--sel); }
+.cap { margin-top: 10px; font-size: var(--f-small); color: var(--faint); max-width: 860px; }
+.cap b { color: var(--dim); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="desk">
+  <div>
+    <div class="term"><div class="tb"><i data-i="term"></i><b>ssh devbox</b> atc · 108 × 31</div>
+<pre><b>atc</b> <span class="f">devbox + laptop</span>   <u>Live 7</u>  <span class="f">History</span>                                                  <span class="cn">3 need you</span> <span class="f">·</span> <span class="cw">2 working</span>
+
+ <b class="gn">Waiting on you</b> <span class="f">3</span>
+<span class="sel"> <span class="bN"> N </span> <b>Rate limit retries                                                  </b><span class="f">devbox   api · rate-limit         4m</span></span>
+<span class="sel">     <span class="ink">Wants to run go test ./... -run Retry -count 20                                                        </span></span>
+ <span class="bN"> N </span> <b>Fatura PDF&#x27;inde Türkçe karakterler bozuk                            </b><span class="f">laptop  billing · pdf-font       9m</span>
+     <span class="ink">Asks: embed the font, or switch to the system one?                                                     </span>
+ <span class="bN"> N </span> <b>Session list loses scroll on reconnect                              </b><span class="f">devbox   web                     31m</span>
+     <span class="ink">Wants to edit web/app.js (3 changes)                                                                   </span>
+
+ <b class="gt">Your turn</b> <span class="f">2</span>
+ <span class="bT"> T </span> <b>Invoice export as CSV                                               </b><span class="f">devbox   api · csv-export        22m</span>
+     <span class="d">Done: CSV export with a header row; 14 tests pass.                                                     </span>
+ <span class="bT"> T </span> <b>Bump Go to 1.25                                                     </b><span class="f">laptop  infra                    1h</span>
+     <span class="d">Done: CI green on main; two deprecations noted.                                                        </span>
+
+ <b class="gw">Working</b> <span class="f">2</span>
+ <span class="bW"> W </span> <b>Migrate sessions table to UUID keys                                 </b><span class="f">laptop  api · uuid-keys         now</span>
+     <span class="d">Writing the backfill; 2 of 5 tables done.                                                              </span>
+ <span class="bW"> W </span> <b>Fix flaky upload test                                               </b><span class="f">devbox   web · upload-test       now</span>
+     <span class="d">Running the test 50 times to be sure.                                                                  </span>
+
+
+
+
+
+
+
+
+
+ <b>enter</b> attach   <b>n</b> new   <b>/</b> filter   <b>x</b> stop   <b>?</b> keys                                                  <span class="f">week 31%</span></pre></div>
+    <p class="cap"><b>Two lines a row,</b> host on every row, groups as on the web. N is amber (ANSI 214 on 235), W steel (ANSI 24 on 153), T outlined as far as a terminal can: ink on pale grey (ANSI 255). Five keys in the footer, the rest behind <b>?</b>.</p>
+  </div>
+  <div>
+    <div class="term"><div class="tb"><i data-i="term"></i><b>ssh laptop</b> atc · 58 × 31, keys open</div>
+<pre><b>atc</b> <span class="f">devbox + laptop</span>   <u>Live 7</u>  <span class="f">History</span>            <span class="cn">3 need you</span>
+
+  ┌─ <b>Keys</b> ─────────────────────────────────────────────┐
+  │ <b>    enter</b>  attach         <b>        n</b>  new session   │
+  │ <b>        /</b>  filter         <b>        x</b>  stop          │
+  │ <b>        h</b>  history        <b>        r</b>  rename        │
+  │ <b>        p</b>  pin            <b>        z</b>  park          │
+  │ <b>        d</b>  delete         <b>        o</b>  outputs       │
+  │ <b>        U</b>  usage          <b>      tab</b>  next group    │
+  │ <b>      j k</b>  move           <b>      g G</b>  top, bottom   │
+  │ <b>pgup pgdn</b>  page           <b>        q</b>  quit          │
+  │                                                    │
+  │ <span class="f">Same keys as the web list. ? or esc closes.</span>        │
+  └────────────────────────────────────────────────────┘
+
+ <b class="gn">Waiting on you</b> <span class="f">3</span>
+ <span class="bN"> N </span> <b>Rate limit retries                       </b><span class="f">devbox    4m</span>
+     <span class="ink">Wants to run go test ./... -run Retry -count 20      </span>
+ <span class="bN"> N </span> <b>Fatura PDF&#x27;inde Türkçe karakterler bozuk </b><span class="f">laptop   9m</span>
+     <span class="ink">Asks: embed the font, or switch to the system one?   </span>
+ <span class="bN"> N </span> <b>Session list loses scroll on reconnect   </b><span class="f">devbox   31m</span>
+     <span class="ink">Wants to edit web/app.js (3 changes)                 </span>
+
+
+
+
+
+
+
+
+ <b>enter</b> attach   <b>n</b> new   <b>/</b> filter   <b>x</b> stop   <b>?</b> keys        <span class="f"></span></pre></div>
+    <p class="cap"><b>A narrow terminal</b> keeps the five keys whole and drops the branch column; <b>?</b> lists every key, including the ones that worked but were never shown.</p>
+  </div>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

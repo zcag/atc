@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>atc revamp</title>
+<link rel="stylesheet" href="kit/kit.css">
+<style>
+body { background: var(--bg); }
+main { max-width: 1240px; margin: 0 auto; padding: 28px 24px 80px; }
+h1 { font-size: var(--f-h); margin: 0 0 6px; }
+h2 { font-size: var(--f-title); margin: 40px 0 4px; padding-top: 12px; border-top: 2px solid var(--ink); }
+h3 { font-size: var(--f-body); margin: 0; }
+p, li { max-width: 78ch; }
+.lead { color: var(--dim); font-size: var(--f-body); margin: 0 0 18px; }
+.toc { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--f-ui); margin: 14px 0 0; }
+.toc a { text-decoration: none; color: var(--dim); }
+.toc a:hover { color: var(--ink); }
+.dir { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr)); gap: 12px; margin-top: 14px; }
+.dir .cell { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); padding: 14px 16px; }
+.dir h3 { margin-bottom: 6px; }
+.dir p, .dir li { font-size: var(--f-ui); color: var(--dim); margin: 4px 0; }
+.dir ul { margin: 0; padding-left: 18px; }
+.item { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); margin: 14px 0; padding: 16px 18px 18px; scroll-margin-top: 12px; }
+.ihead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.ihead h3 { font-size: var(--f-title); }
+.eff { font: 600 11px/1 var(--mono); padding: 3px 6px; border-radius: var(--r1); background: var(--sunk); color: var(--dim); }
+.ihead .job { color: var(--faint); font-size: var(--f-ui); flex-basis: 100%; }
+.note { font-size: var(--f-ui); color: var(--dim); background: var(--sunk); border-radius: var(--r2); padding: 8px 10px; margin: 10px 0 0; max-width: none; }
+.note b { color: var(--ink); }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; margin-top: 12px; }
+.cols h4 { margin: 0 0 4px; font-size: var(--f-small); color: var(--faint); font-weight: 600; }
+.cols ul { margin: 0; padding-left: 18px; font-size: var(--f-ui); }
+.cols li { margin: 3px 0; }
+.why { font-size: var(--f-ui); color: var(--dim); margin: 10px 0 0; }
+.shots { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+.shots > div > h4 { margin: 0 0 6px; font-size: var(--f-small); color: var(--faint); font-weight: 600; display: flex; gap: 8px; }
+figure { margin: 0 0 10px; }
+figure a { display: block; border: 1px solid var(--line); border-radius: var(--r2); overflow: hidden; background: var(--sunk); }
+figure img { display: block; width: 100%; height: auto; }
+figure.phone a { max-width: 260px; }
+figcaption { font-size: var(--f-small); color: var(--faint); margin-top: 4px; }
+.missing { font-size: var(--f-small); color: var(--faint); padding: 18px; border: 1px dashed var(--line); border-radius: var(--r2); }
+.wisp { font-size: var(--f-ui); margin: 10px 0 0; color: var(--dim); }
+.wisp b { color: var(--ink); }
+table.inv { width: 100%; border-collapse: collapse; font-size: var(--f-ui); margin-top: 10px; }
+table.inv th, table.inv td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--hair); vertical-align: top; }
+table.inv th { color: var(--faint); font-weight: 600; font-size: var(--f-small); }
+table.inv td:first-child { white-space: nowrap; }
+code { font-family: var(--mono); font-size: .92em; background: var(--code); padding: 0 3px; border-radius: 3px; }
+@media (max-width: 899px) {
+  main { padding: 18px 16px 60px; }
+  .cols, .shots { grid-template-columns: minmax(0, 1fr); }
+  table.inv td:nth-child(3) { display: none; }
+}
+</style>
+</head>
+<body>
+<main>
+<header id="top">
+  <h1>atc revamp: audit and mocks</h1>
+  <p class="lead">Every screen, state and surface, as it is today next to what it should be. One card per item on the project board: move it in, out or maybe. Nothing here changes the running app.</p>
+  <p class="note"><b>Today's screenshots</b> come from the live app and show real sessions, so they stay on this machine (<code>design/revamp/current/</code> is not committed). <b>Proposed</b> mocks use invented content and are plain HTML in <code>mocks/</code>: open one to see it at any width, light or dark (<code>?dark</code>). <code>node reshoot.js [item]</code> redraws their screenshots.</p>
+  <nav class="toc" id="toc"></nav>
+</header>
+
+<section id="direction">
+  <h2>Direction: finish the instrument</h2>
+  <p>atc already has a point of view, chosen in November: an instrument, not an app. Grey paper, Recursive, colour only for state, amber only for "needs you", dense rows, keyboard first. It is right, and this revamp keeps it. What went wrong since is drift: two type scales, eighteen button classes, the phone growing its own rounded look, hints that point at the wrong key, the same thing said five ways. So the direction is not a new look; it is <b>one grammar</b>, applied everywhere including the TUI, the CLI and the Android shell, and then a pass on each screen to remove what does not earn its place.</p>
+  <div class="dir">
+    <div class="cell"><h3>Layout</h3><ul>
+      <li>Three bands on desk: bay bar 40, body, console 32. Every screen lives inside them, Settings and Login included.</li>
+      <li>Every pane has the same header: one 44px line, title left, actions right, pane toggles as icons in the pane they toggle.</li>
+      <li>Phone is the desk folded to one column (your call, Nov 21): same components, same tabs, only the CSS differs.</li></ul></div>
+    <div class="cell"><h3>Type</h3><ul>
+      <li>Recursive for the interface, its mono cut only for data (paths, counts, keys, clocks). The reading face for what agents say, as today.</li>
+      <li>Eight sizes by role: 11 12 13 14 16 17.5 22 30. Nothing else.</li>
+      <li>Sentence case everywhere; no uppercase labels (the "PARKED" divider goes).</li></ul></div>
+    <div class="cell"><h3>Colour</h3><ul>
+      <li>Amber: needs you, the only fill. Steel: working, always with motion or a bar. Red: failed. Nothing else is coloured.</li>
+      <li>Links are ink with an underline, never steel.</li>
+      <li>Identity (bays, agents) is a 3px tick in a hue from one recipe, never a fill.</li>
+      <li>Dark mode chrome sits a step above the canvas, not below.</li></ul></div>
+    <div class="cell"><h3>Density and shape</h3><ul>
+      <li>Two lines per list row; a third only when it needs you.</li>
+      <li>Radii 4 / 7 / 10 (tag, control, sheet), pills only for counts and answer chips. Same as Wisp.</li>
+      <li>28px controls on desk, 44px targets on phone.</li></ul></div>
+    <div class="cell"><h3>Motion</h3><ul>
+      <li>120ms, one ease, only in answer to an action. The working pulse is the one ambient motion.</li>
+      <li>No entrance animations. Scroll keeps your place; nothing jumps when data arrives.</li></ul></div>
+    <div class="cell"><h3>Icons and keys</h3><ul>
+      <li>One 16px set at 1.5 stroke; no Unicode glyphs as icons.</li>
+      <li>Key hints from one table, so they cannot lie. Chips only where the key is the label (quick keys, answer numbers).</li></ul></div>
+    <div class="cell"><h3>Copy voice</h3><ul>
+      <li>Plain, short, the interface talking, not a person. "Couldn't" not "Could not". "…" the character.</li>
+      <li>Empty: what is empty and the one action that fills it. Error: what, why, the one fix.</li>
+      <li>One verb per action, kept through the toast: Park, Parked.</li></ul></div>
+  </div>
+</section>
+
+<section id="wisp">
+  <h2>Shared language with Wisp</h2>
+  <p>Wisp is getting the same pass in parallel. They are two apps by one person, used side by side all day; they should feel like siblings, not twins (Wisp is a reader of people, atc an instrument for agents). Share these:</p>
+  <div class="dir">
+    <div class="cell"><h3>Share outright</h3><ul>
+      <li>Recursive Mono for data (Wisp already ships it).</li>
+      <li>Radii 4 / 7 / 10 and the ease <code>cubic-bezier(.2,.7,.2,1)</code> (already identical).</li>
+      <li>The palette: ⌘K / Ctrl K, grouped results, Enter opens, Tab previews, Esc closes.</li>
+      <li>The keys overlay on <kbd>?</kbd>, generated from a key table.</li>
+      <li>Toast: atc's ink toast, what happened + one action, bottom centre, 6s (8s with Undo, on <kbd>z</kbd>). Wisp's pass picked the same.</li>
+      <li>Keycaps and shortcut words: <kbd>?</kbd> keys, <kbd>Ctrl K</kbd> and <kbd>/</kbd> the palette, <kbd>j</kbd> <kbd>k</kbd> move.</li>
+      <li>The greys: Wisp moves its neutrals onto atc's OKLCH slate ramp (hue 250), and its "waits on you" onto atc's amber.</li>
+      <li>The offline line: "Offline since 15:41. Showing what was there. Retry."</li>
+      <li>Times: age, clock, stamp, duration in the four forms on the Times item.</li></ul></div>
+    <div class="cell"><h3>Align names, keep values</h3><ul>
+      <li>Token names for the same roles: atc <code>--dim</code> / Wisp <code>--muted</code>; atc <code>--fail</code> / Wisp <code>--bad</code>. Pick one name per role so pages and agents can target both.</li>
+      <li>A row's anatomy: title, one line of preview, meta right (age on top, a mark under it).</li>
+      <li>Empty and error copy rules.</li></ul></div>
+    <div class="cell"><h3>Keep different</h3><ul>
+      <li>Body face: Wisp's Geist reads messages; atc's Recursive is an instrument.</li>
+      <li>Accent: Wisp has a brand accent (teal); atc has none, only state colours.</li>
+      <li>Density: atc stays denser.</li></ul></div>
+  </div>
+</section>
+
+<section id="inventory">
+  <h2>Inventory</h2>
+  <p class="lead">Everything a person sees or does in atc, from the code (web/app.js, internal/tui, the CLI, android/) and the live app. Each row links to its item below.</p>
+  <table class="inv" id="invtable"><thead><tr><th>Item</th><th>Covers</th><th>Effort</th></tr></thead><tbody></tbody></table>
+</section>
+
+<div id="items"></div>
+</main>
+<script src="items.js"></script>
+<script src="kit/kit.js"></script>
+<script>
+const COVERS = {
+  tokens: 'tokens.css, both size and spacing scales, radii, shadows, breakpoints',
+  color: 'light, dark, themes (atc, Frappé and Dawn, Nord), state colours, identity hues',
+  controls: 'buttons, segmented controls, inputs, chips, the eight states',
+  icons: 'ICON, APP_ICONS, glyph icons',
+  time: 'ages, clocks, dates, durations in web, TUI and CLI',
+  copy: 'empty, loading and error states across every screen',
+  keys: 'key hints, the key table, focus rings',
+  trunc: 'long titles, Turkish text, paths, line clamps',
+  baybar: 'bays, counts, parked, view switches, pane toggles, clock',
+  console: 'assistant line, talk input, call, agents, memory',
+  phonehome: 'phone home, bay chips, tab bar, floating buttons, pal strip',
+  offline: 'reconnecting, machine down, terminal lost, Android offline',
+  toast: 'toasts, Undo',
+  keysov: 'the ? overlay',
+  palette: 'palette, search, history search, actions',
+  board: 'board view, columns, header, expanded row, shells group',
+  rail: 'left list, groups (Pinned, Now, Parked, Earlier), inline answers',
+  earlier: 'Earlier, history, Load more, resume',
+  peek: 'bay peek popover and sheet',
+  quick: 'right-click and long-press menu, swipe actions',
+  header: 'session header, More menu, phone tabs (Chat, Terminal, Page, State)',
+  transcript: 'reading, folds, since-you-looked, background commands, find, contents, zen',
+  ask: 'questions, permissions, answer states',
+  composer: 'composer, suggestions, attach, paste, drop, slash menu, queue, stop',
+  endbar: 'stopped bar, Why, Resume',
+  terminal: 'xterm, size owner, reconnect, phone key strip',
+  statepane: 'State pane, summary bar',
+  pagepane: 'page beside a session, page tab on phone',
+  browser: 'agent browser view',
+  outputs: 'outputs, results, file viewer, commit view',
+  newsession: 'new session sheet, folder picker, host, worktree, later',
+  pages: 'Pages gallery, reader, index, pinned, page alone',
+  assistant: 'assistant view, touched today',
+  call: 'call dock, call screen, call pill, talk button',
+  hold: 'side-key screen',
+  agents: 'agents page, agent detail',
+  backlog: 'backlog page, backlog line',
+  usage: 'Usage, Time, Resources, session usage',
+  settings: 'Settings pages, set-up checks, devices, persons, reading',
+  login: 'login, set-up screen',
+  pit: 'the project board pages (pit)',
+  tui: 'bare atc in a terminal',
+  cli: 'atc ls, doctor, show, board, help pages, errors',
+  android: 'server setup, pairing, certificate trust, update, offline overlay',
+  push: 'notifications, answer actions, widget, quick tile',
+};
+const esc = (s) => s;
+const fig = (src, cap, phone) => `<figure class="${phone ? 'phone' : ''}"><a href="${src}" target="_blank"><img loading="lazy" src="${src}" alt="${cap}" onerror="this.parentNode.outerHTML='<div class=missing>${src} not here yet</div>'"></a><figcaption>${cap}</figcaption></figure>`;
+const isPhone = (n) => /-(400|620)(-|$)|phone/.test(n);
+const toc = document.getElementById('toc');
+toc.innerHTML = '<a href="#direction">Direction</a><a href="#wisp">Wisp</a><a href="#inventory">Inventory</a>' + SECTIONS.map(([id, name]) => `<a href="#sec-${id}">${name}</a>`).join('');
+document.querySelector('#invtable tbody').innerHTML = ITEMS.map((it) => `<tr><td><a href="#${it.id}">${it.title}</a></td><td>${COVERS[it.id] || ''}</td><td>${it.effort}</td></tr>`).join('');
+document.getElementById('items').innerHTML = SECTIONS.map(([sid, name, blurb]) => `
+  <section id="sec-${sid}"><h2>${name}</h2><p class="lead">${blurb}</p>
+  ${ITEMS.filter((it) => it.sec === sid).map((it) => `
+    <article class="item" id="${it.id}">
+      <div class="ihead"><h3>${it.title}</h3><span class="eff" title="Effort">${it.effort}</span>${it.mock ? `<a class="dim" style="font-size:12px" href="mocks/${it.mock}.html" target="_blank">open mock</a>` : ''}<span class="job">${it.job}</span></div>
+      ${it.deliberate ? `<p class="note"><b>Designed on purpose:</b> ${it.deliberate}</p>` : ''}
+      <div class="cols">
+        <div><h4>Today</h4><ul>${it.today.map((t) => `<li>${t}</li>`).join('')}</ul></div>
+        <div><h4>Proposed</h4><ul>${it.prop.map((t) => `<li>${t}</li>`).join('')}</ul></div>
+      </div>
+      ${it.why ? `<p class="why"><b>Why:</b> ${it.why}</p>` : ''}
+      ${it.alt ? `<p class="note"><b>Torn; the alternative:</b> ${it.alt}</p>` : ''}
+      ${it.wisp ? `<p class="wisp"><b>With Wisp:</b> ${it.wisp}</p>` : ''}
+      <div class="shots">
+        <div><h4>Today</h4>${(it.cur || []).length ? it.cur.map((c) => fig(`current/${c}.png`, c.replace(/-/g, ' '), isPhone(c))).join('') : `<div class="missing">${it.curNote || 'Not a screen of its own; the Today list points at the code.'}</div>`}</div>
+        <div><h4>Proposed</h4>${(it.shots || []).length ? it.shots.map(([s, cap]) => fig(`shots/${s}.webp`, cap, isPhone(s))).join('') : '<div class="missing">No mock: a token change only.</div>'}</div>
+      </div>
+    </article>`).join('')}
+  </section>`).join('');
+</script>
+</body>
+</html>

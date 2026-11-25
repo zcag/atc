@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Questions and permissions, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.body3 { grid-template-columns: 320px minmax(0, 1fr); }
+.body3.withstate { grid-template-columns: 320px minmax(0, 1fr) 340px; }
+.rail { background: var(--bg); }
+.rail .phd { border-bottom-color: var(--hair); }
+.rail .phd h1 { font-size: var(--f-body); }
+.rl { padding: 2px 8px 16px; overflow: auto; flex: 1; min-height: 0; }
+.rgrp { display: flex; align-items: baseline; gap: 8px; padding: 14px 10px 6px; font-size: var(--f-small); font-weight: 600; color: var(--dim); }
+.rrow { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 3px 10px; padding: 9px 10px; border-radius: var(--r2); align-items: center; }
+.rrow + .rrow { margin-top: 1px; }
+.rrow .t { font-weight: 600; font-size: var(--f-body); }
+.rrow .s { grid-column: 2; color: var(--dim); font-size: var(--f-ui); }
+.rrow .age { font: var(--f-small) var(--mono); color: var(--faint); }
+.rrow .qk { grid-column: 3; justify-self: end; font: var(--f-small) var(--mono); color: var(--faint); }
+.rrow .x3 { grid-column: 2 / 4; }
+.rrow.sel { background: var(--paper); box-shadow: 0 0 0 1px var(--line); }
+.rrow.nd { box-shadow: inset 3px 0 0 var(--needs); }
+.rrow.ended .t { font-weight: 500; color: var(--dim); }
+.rl.focus .qk { color: var(--dim); }
+.mini { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.mini .btn { height: 26px; padding: 0 8px; font-size: var(--f-small); }
+code { font: .86em var(--mono); background: var(--code); padding: 1px 5px; border-radius: var(--r1); }
+
+.shd { gap: 10px; }
+.shd h1 { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.shd .where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.shd .acts { flex: none; }
+.btn[aria-pressed="true"] { background: var(--hi); color: var(--ink); }
+.btn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
+
+.tx { flex: 1; overflow: auto; min-height: 0; background: var(--paper); }
+.col { width: min(680px, 100% - 176px); margin: 0 auto; padding: 28px 0 32px; position: relative; }
+.turn { position: relative; }
+.clk { position: absolute; left: -84px; width: 60px; text-align: right; top: 6px; font: var(--f-small)/1 var(--mono); color: var(--faint); }
+.say { font: var(--f-read)/1.58 var(--read); color: var(--ink); margin: 0 0 6px; }
+.say p { margin: 0 0 12px; }
+.say ul { margin: 0 0 12px; padding-left: 22px; }
+.say li { margin: 4px 0; }
+.say code { font-size: .8em; }
+.me { font: 400 var(--f-title)/1.5 var(--sans); background: var(--sunk); border-radius: var(--r3); padding: 10px 14px; margin: 4px 0 22px; }
+.me .clk { top: 14px; }
+.fold { display: flex; align-items: center; gap: 6px; min-height: 26px; font-size: var(--f-ui); color: var(--faint); margin: 0 0 18px -2px; white-space: nowrap; }
+.fold .i { width: 14px; height: 14px; }
+.fold .n { color: var(--dim); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fold .dur { font: var(--f-small) var(--mono); flex: none; }
+.fold .bad { color: var(--fail); }
+.fold.open { margin-bottom: 6px; }
+.steps { margin: 0 0 20px 5px; border-left: 1px solid var(--line); padding: 2px 0 2px 16px; font-size: var(--f-ui); display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: 5px 12px; color: var(--dim); }
+.steps .k { color: var(--faint); }
+.steps .v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.steps .v .mono { font-size: var(--f-small); color: var(--ink); }
+.steps .r { font: var(--f-small) var(--mono); color: var(--faint); text-align: right; }
+.steps .ok { color: var(--ok); }
+.fail1 { display: flex; align-items: center; gap: 8px; font-size: var(--f-ui); color: var(--fail); background: var(--fail-wash); border-radius: var(--r2); padding: 7px 10px; margin: -8px 0 20px; }
+.fail1 code { background: none; padding: 0; color: var(--fail); }
+.fail1 .grow { color: var(--dim); }
+.fail1 a { color: var(--ink); flex: none; }
+.since { display: flex; align-items: center; gap: 10px; margin: 30px 0 6px; font-size: var(--f-small); color: var(--needs-text); font-weight: 600; }
+.since::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.catch { font-size: var(--f-body); color: var(--dim); margin: 0 0 26px; }
+.catch b { color: var(--ink); font-weight: 600; }
+.made { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: var(--f-ui); color: var(--dim); margin: 2px 0 8px; }
+.made .row-flex { gap: 6px; }
+.pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--work); flex: none; animation: pl 1.6s var(--ease) infinite; }
+@keyframes pl { 50% { opacity: .35; } }
+.working { color: var(--work); }
+
+.cmp { padding: 6px 0 16px; background: var(--paper); }
+.cmp .box { width: min(680px, 100% - 176px); margin: 0 auto; }
+.box { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); padding: 8px; display: grid; gap: 6px; }
+.box.focus { border-color: var(--edge); }
+.sugs { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: var(--pill); border: 1px solid var(--line); background: var(--bg); font-size: var(--f-ui); color: var(--ink); white-space: nowrap; }
+.att { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 8px; border-radius: var(--r2); border: 1px solid var(--line); background: var(--bg); font-size: var(--f-ui); max-width: 100%; }
+.att .faint { font: var(--f-small) var(--mono); }
+.att .btn.icon { width: 22px; height: 22px; }
+.ta { min-height: 26px; padding: 3px 6px; font: var(--f-title)/1.5 var(--sans); color: var(--faint); }
+.ta.typed { color: var(--ink); }
+.ta.typed::after { content: ""; display: inline-block; width: 1.5px; height: 1.1em; background: var(--ink); vertical-align: -3px; margin-left: 1px; }
+.brow { display: flex; align-items: center; gap: 4px; }
+.brow .hint { font-size: var(--f-small); color: var(--faint); margin-left: 2px; }
+.brow .hint .mono { color: var(--dim); }
+
+.pht { display: flex; align-items: center; gap: 4px; height: 52px; padding: 0 4px; }
+.pht h1 { font-size: var(--f-title); margin: 0; font-weight: 650; }
+.pht .btn.icon { width: 44px; height: 44px; }
+.ptabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+.ptabs button { height: 40px; border: 0; background: none; font-size: var(--f-ui); color: var(--dim); position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.ptabs button[aria-current] { color: var(--ink); font-weight: 650; }
+.ptabs button[aria-current]::after { content: ""; position: absolute; left: 16px; right: 16px; bottom: -1px; height: 2px; background: var(--ink); }
+.ptabs .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--dim); }
+.ph .col { width: auto; padding: 8px 16px 20px; }
+.ph .clk { position: static; float: right; width: auto; margin: 6px 0 0 12px; }
+.ph .me .clk { margin-top: 3px; }
+.ph .steps { grid-template-columns: 50px minmax(0, 1fr) auto; }
+.ph .cmp { padding: 6px 10px 10px; border-top: 1px solid var(--hair); }
+.ph .cmp .box { width: auto; }
+.ph .brow .btn.icon { width: 40px; height: 40px; }
+.ph .brow .btn.send { height: 40px; padding: 0 14px; }
+@media (max-width: 899px) { .deskonly { display: none; } }
+@media (min-width: 900px) { .phoneonly { display: none; } }
+
+body { background: var(--bg); }
+.spec { gap: 18px; }
+.spec > header h2 { font-size: var(--f-h); font-weight: 650; margin: 0 0 4px; }
+.spec > header p { margin: 0; color: var(--dim); font-size: var(--f-body); max-width: 900px; }
+.lbl { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; }
+.lbl h3 { margin: 0; font-size: var(--f-ui); font-weight: 650; }
+.lbl span { font-size: var(--f-small); color: var(--faint); }
+.g2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.g3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.half { border-radius: var(--r3); padding: 16px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); min-width: 0; }
+.dk { color-scheme: dark; }
+.frag { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); padding: 14px 18px; min-width: 0; }
+.frag .say { font-size: var(--f-read); }
+.frag .fold { margin-bottom: 12px; }
+
+.ask { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); box-shadow: inset 3px 0 0 var(--needs); padding: 14px 16px 14px 18px; display: grid; gap: 10px; }
+.ask .aq { display: flex; align-items: center; gap: 10px; font-size: var(--f-title); font-weight: 600; min-width: 0; }
+.ask .aq code { font-size: 13px; font-weight: 500; }
+.ask .am { font-size: var(--f-ui); color: var(--dim); margin-top: -4px; padding-left: 28px; }
+.ask .ao { display: flex; gap: 8px; flex-wrap: wrap; padding-left: 28px; }
+.ask .ao .btn { height: 32px; font-size: var(--f-body); }
+.ask .other { padding-left: 28px; }
+.ask .field { height: 32px; color: var(--faint); display: flex; align-items: center; font-size: var(--f-ui); }
+.ask .step { margin-left: auto; font: var(--f-small) var(--mono); color: var(--faint); font-weight: 400; }
+.opts { display: grid; gap: 6px; padding-left: 28px; }
+.opt { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 2px 10px; align-items: baseline; padding: 9px 12px; border: 1px solid var(--line); border-radius: var(--r2); background: var(--paper); }
+.opt b { font-weight: 600; font-size: var(--f-body); }
+.opt span.d { grid-column: 2; font-size: var(--f-ui); color: var(--dim); }
+.opt.on { box-shadow: inset 0 0 0 1px var(--ink); border-color: var(--ink); }
+.st { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--r2); font-size: var(--f-ui); color: var(--dim); min-width: 0; }
+.st b { color: var(--ink); font-weight: 600; }
+.st + .st { margin-top: 8px; }
+.st .i { color: var(--faint); }
+.st.bad { background: var(--fail-wash); color: var(--ink); }
+.st.bad b { color: var(--fail); }
+.st .btn { margin-left: auto; }
+.st .faint { margin-left: auto; font: var(--f-small) var(--mono); }
+.note { display: grid; gap: 4px; background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font-size: var(--f-ui); }
+.note .nh { display: flex; align-items: center; gap: 6px; font-size: var(--f-small); color: var(--faint); }
+.note .nh .app { width: 16px; height: 16px; border-radius: 4px; background: var(--dim); color: var(--paper); display: grid; place-items: center; font: 700 9px/1 var(--mono); }
+.note .nt { font-weight: 650; font-size: var(--f-body); }
+.note .na { display: flex; gap: 18px; margin-top: 6px; font-weight: 600; font-size: var(--f-ui); }
+.wdg { background: var(--paper); border: 1px solid var(--line); border-radius: 16px; padding: 12px; font-size: var(--f-ui); display: grid; gap: 8px; }
+.wdg .wh { display: flex; align-items: center; gap: 8px; font-weight: 650; }
+.wdg .wr { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 2px 8px; align-items: center; padding-top: 8px; border-top: 1px solid var(--hair); }
+.wdg .wr .s { grid-column: 2; color: var(--dim); }
+.wdg .mini { grid-column: 2; }
+.compact { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.compact .railbox { background: var(--bg); border: 1px solid var(--line); border-radius: var(--r3); padding: 6px; }
+</style>
+</head>
+<body>
+<div class="spec">
+  <header><h2>Questions and permissions</h2>
+    <p>One Ask, full in the transcript and compact in lists, pushes and the widget. Numbers are positions in what is shown, so a compact ask with two choices reads 1 and 2. One phrasing everywhere: "Wants to run <code>cmd</code>".</p></header>
+  <div>
+    <div class="lbl"><h3>Full, at the end of the transcript</h3><span>A permission: the command, where it runs, its choices, and room to say something else.</span></div>
+    <div class="g2">
+      <div class="half"><div class="frag" style="border:0;padding:6px 6px 0;background:none"><div class="fold"><i data-i="fwd"></i><span class="n">Read 4 files, ran 2 commands</span><span>·</span><span class="dur">22s</span></div></div><div class="ask">
+      <div class="aq"><span class="sb n">N</span><span class="ell">Wants to run <code>go test ./... -run Retry -count 20</code></span></div>
+      <div class="am">In <span class="mono">~/code/api</span> on devbox, to repeat the retry tests until the flake shows.</div>
+      <div class="ao"><button class="btn"><kbd>1</kbd>Allow once</button><button class="btn"><kbd>2</kbd>Always for go test</button><button class="btn"><kbd>3</kbd>Deny</button></div>
+      <div class="other"><div class="field">Or tell it what to do instead…</div></div>
+    </div></div>
+      <div class="half dk" data-scheme="dark" style="color-scheme:dark;background:var(--bg);color:var(--ink)"><div class="frag" style="border:0;padding:6px 6px 0;background:none"><div class="fold"><i data-i="fwd"></i><span class="n">Read 4 files, ran 2 commands</span><span>·</span><span class="dur">22s</span></div></div><div class="ask">
+      <div class="aq"><span class="sb n">N</span><span class="ell">Wants to run <code>go test ./... -run Retry -count 20</code></span></div>
+      <div class="am">In <span class="mono">~/code/api</span> on devbox, to repeat the retry tests until the flake shows.</div>
+      <div class="ao"><button class="btn"><kbd>1</kbd>Allow once</button><button class="btn"><kbd>2</kbd>Always for go test</button><button class="btn"><kbd>3</kbd>Deny</button></div>
+      <div class="other"><div class="field">Or tell it what to do instead…</div></div>
+    </div></div>
+    </div>
+  </div>
+  <div class="g2">
+    <div>
+      <div class="lbl"><h3>Full, a question with options</h3><span>Picking one answers; 3 types an answer.</span></div>
+      <div class="ask">
+        <div class="aq"><span class="sb n">N</span><span class="ell">Which column order should the CSV use?</span><span class="step">1 of 2</span></div>
+        <div class="opts">
+          <div class="opt on"><kbd>1</kbd><b>Same as the page</b><span class="d">Date, number, customer, amount, status</span></div>
+          <div class="opt"><kbd>2</kbd><b>Accounting order</b><span class="d">Number, date, amount, currency, customer</span></div>
+          <div class="opt"><kbd>3</kbd><b class="faint" style="font-weight:500">Type an answer…</b></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="lbl"><h3>After answering</h3><span>The ask folds to one line; a failed send keeps the choice and offers Retry.</span></div>
+      <div class="frag" style="padding:10px">
+        <div class="st"><span class="pulse"></span><span class="ell">Sending <b>1, Allow once</b>…</span></div>
+        <div class="st"><i data-i="check"></i><span class="ell">You answered <b>1, Allow once</b></span><span class="faint">09:31</span></div>
+        <div class="st"><i data-i="phone"></i><span class="ell">You answered <b>2, Deny</b> on your phone</span><span class="faint">09:33</span></div>
+        <div class="st"><i data-i="clock"></i><span class="ell">No answer was given; the session stopped first</span><span class="faint">09:40</span></div>
+        <div class="st bad"><i data-i="warn" style="color:var(--fail)"></i><span class="grow"><b>Not sent.</b> Couldn't reach devbox. Your choice is kept.</span><button class="btn">Retry</button></div>
+      </div>
+    </div>
+  </div>
+  <div>
+    <div class="lbl"><h3>Compact: list row, widget, push</h3><span>Same words, same numbers, two choices: 1 Allow once, 2 Deny.</span></div>
+    <div class="g2">
+      <div class="half"><div class="compact">
+      <div style="display:grid;gap:14px">
+        <div class="railbox">
+          <div class="rrow nd">
+            <span class="sb n">N</span><span class="t ell">Rate limit retries</span><span class="age">4m</span>
+            <span class="s ell">Wants to run <code>go test ./... -run Retry</code></span><span class="qk">q</span>
+            <div class="x3"><div class="mini" style="margin-top:2px"><button class="btn"><kbd>1</kbd>Allow once</button><button class="btn"><kbd>2</kbd>Deny</button></div></div>
+          </div>
+        </div>
+        <div class="wdg">
+          <div class="wh">Waiting on you <span class="count n">2</span></div>
+          <div class="wr"><span class="sb n">N</span><b class="ell">Rate limit retries</b><span class="s ell">Wants to run <code>go test ./... -run Retry</code></span>
+            <div class="mini"><button class="btn"><kbd>1</kbd>Allow once</button><button class="btn"><kbd>2</kbd>Deny</button></div></div>
+          <div class="wr"><span class="sb n">N</span><b class="ell">Invoice export as CSV</b><span class="s ell">Which column order should the CSV use?</span></div>
+        </div>
+      </div>
+      <div style="display:grid;gap:14px"><div class="note">
+        <div class="nh"><span class="app">a</span>atc · api · 4m</div>
+        <div class="nt">Rate limit retries</div>
+        <div class="ell">Wants to run <span class="mono" style="font-size:12px">go test ./... -run Retry</span></div>
+        <div class="na"><span>1 Allow once</span><span>2 Deny</span></div>
+      </div>
+      <div class="note">
+        <div class="nh"><span class="app">a</span>atc · api · 1m</div>
+        <div class="nt">Invoice export as CSV</div>
+        <div class="ell">Which column order should the CSV use?</div>
+        <div class="na"><span>1 Same as the page</span><span>2 Accounting order</span></div>
+      </div></div>
+    </div></div>
+      <div class="half dk" data-scheme="dark" style="color-scheme:dark;background:var(--bg);color:var(--ink)"><div class="compact">
+      <div style="display:grid;gap:14px">
+        <div class="railbox">
+          <div class="rrow nd">
+            <span class="sb n">N</span><span class="t ell">Rate limit retries</span><span class="age">4m</span>
+            <span class="s ell">Wants to run <code>go test ./... -run Retry</code></span><span class="qk">q</span>
+            <div class="x3"><div class="mini" style="margin-top:2px"><button class="btn"><kbd>1</kbd>Allow once</button><button class="btn"><kbd>2</kbd>Deny</button></div></div>
+          </div>
+        </div>
+        <div class="wdg">
+          <div class="wh">Waiting on you <span class="count n">2</span></div>
+          <div class="wr"><span class="sb n">N</span><b class="ell">Rate limit retries</b><span class="s ell">Wants to run <code>go test ./... -run Retry</code></span>
+            <div class="mini"><button class="btn"><kbd>1</kbd>Allow once</button><button class="btn"><kbd>2</kbd>Deny</button></div></div>
+          <div class="wr"><span class="sb n">N</span><b class="ell">Invoice export as CSV</b><span class="s ell">Which column order should the CSV use?</span></div>
+        </div>
+      </div>
+      <div style="display:grid;gap:14px"><div class="note">
+        <div class="nh"><span class="app">a</span>atc · api · 4m</div>
+        <div class="nt">Rate limit retries</div>
+        <div class="ell">Wants to run <span class="mono" style="font-size:12px">go test ./... -run Retry</span></div>
+        <div class="na"><span>1 Allow once</span><span>2 Deny</span></div>
+      </div>
+      <div class="note">
+        <div class="nh"><span class="app">a</span>atc · api · 1m</div>
+        <div class="nt">Invoice export as CSV</div>
+        <div class="ell">Which column order should the CSV use?</div>
+        <div class="na"><span>1 Same as the page</span><span>2 Accounting order</span></div>
+      </div></div>
+    </div></div>
+    </div>
+  </div>
+</div>
+<script src="../kit/kit.js"></script>
+
+</body>
+</html>

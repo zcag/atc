@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Controls, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.spec { padding: 24px; gap: 16px; }
+.lt { color-scheme: light; background: var(--bg); color: var(--ink); }
+.dk { color-scheme: dark; background: var(--bg); color: var(--ink); }
+.sheet { border: 1px solid var(--line); border-radius: var(--r3); overflow: hidden; }
+.sheet > h3 { margin: 0; padding: 10px 14px; font-size: var(--f-ui); font-weight: 650; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: baseline; }
+.sheet > h3 .faint { font-weight: 400; }
+.cmp { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--paper); }
+.cmp col.k { width: 104px; }
+.cmp th { text-align: left; padding: 8px; font-size: var(--f-small); font-weight: 600; vertical-align: top; border-bottom: 1px solid var(--line); background: var(--bg); }
+.cmp th small { display: block; font-weight: 400; color: var(--faint); font-size: var(--f-micro); margin-top: 1px; }
+.cmp td { padding: 9px 8px; border-top: 1px solid var(--hair); vertical-align: middle; height: 50px; }
+.cmp td:first-child { font-size: var(--f-small); color: var(--dim); padding-left: 14px; }
+.cmp td:first-child small { display: block; font-size: var(--f-micro); color: var(--faint); }
+.cmp .seg button { padding: 0 8px; }
+.cmp .field { height: var(--ctl); font-size: var(--f-ui); padding: 0 8px; }
+.msg { font-size: var(--f-micro); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.msg.bad { color: var(--fail); } .msg.good { color: var(--ok); }
+.spin { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; flex: none; opacity: .8; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl); padding: 0 11px; border-radius: var(--pill); border: 1px solid var(--line); background: var(--paper); font-size: var(--f-ui); font-weight: 500; white-space: nowrap; }
+.chip kbd { box-shadow: none; padding: 0; min-width: 0; }
+.fw { position: relative; }
+.fw .in { position: absolute; right: 8px; top: 8px; display: flex; color: var(--faint); }
+.fw .in .i { width: 13px; height: 13px; }
+
+.is-hover.btn, .is-hover.chip { background: var(--hi); }
+.is-hover.btn.quiet, .is-hover.btn.icon { color: var(--ink); }
+.is-hover.btn.primary { background: color-mix(in srgb, var(--primary) 84%, var(--paper)); }
+.is-hover.btn.danger.primary { background: color-mix(in srgb, var(--fail) 86%, var(--paper)); }
+.is-hover.field { border-color: var(--dim); }
+.seg button.is-hover { background: var(--hi); color: var(--ink); }
+.is-focus { outline: 2px solid var(--focus); outline-offset: 2px; }
+.is-active.btn, .is-active.chip, .seg button.is-active { background: var(--sel); color: var(--ink); }
+.is-active.btn.primary { background: color-mix(in srgb, var(--primary) 72%, var(--paper)); color: var(--on-primary); }
+.is-active.btn.danger.primary { background: color-mix(in srgb, var(--fail) 72%, var(--paper)); color: var(--paper); }
+.is-active.field { border-color: var(--ink); }
+.off { opacity: .45; cursor: default; }
+.is-error.btn:not(.primary), .is-error.chip, .is-error.field { border-color: var(--fail); color: var(--fail); }
+.is-error.field { color: var(--ink); }
+.is-error.seg { box-shadow: inset 0 0 0 1px var(--fail); }
+.is-ok .i, .is-ok.i { color: var(--ok); }
+.btn.primary.is-ok .i { color: var(--on-primary); }
+</style>
+</head>
+<body>
+<div class="spec">
+  <div>
+    <h2>Controls</h2>
+    <p class="cap">Four buttons (primary, default, quiet, icon), danger as a tone, one segmented control, one input, one answer chip, one count. 28px on desk, 44px targets on phone, 7px corners; pills only for chips and counts. States are drawn, not left to the browser.</p>
+  </div>
+
+  <div class="sheet lt">
+    <h3>Light <span class="faint">every control in every state</span></h3>
+    <div id="lt">
+      <table class="cmp">
+        <colgroup><col class="k"><col><col><col><col><col><col><col><col></colgroup>
+        <thead><tr><th></th>
+          <th>Default<small>at rest</small></th><th>Hover<small>--hi under it</small></th><th>Focus<small>2px --focus, 2px off</small></th><th>Active<small>--sel while pressed</small></th>
+          <th>Disabled<small>.45, says why on hover</small></th><th>Loading<small>"Verb…", keeps its width</small></th><th>Error<small>fail edge, says why</small></th><th>Success<small>check, past tense, 2s</small></th></tr></thead>
+        <tbody>
+          <tr><td>Primary<small>one per view</small></td>
+            <td><button class="btn primary"><i data-i="plus"></i>New session</button></td>
+            <td><button class="btn primary is-hover"><i data-i="plus"></i>New session</button></td>
+            <td><button class="btn primary is-focus"><i data-i="plus"></i>New session</button></td>
+            <td><button class="btn primary is-active"><i data-i="plus"></i>New session</button></td>
+            <td><button class="btn primary off"><i data-i="plus"></i>New session</button></td>
+            <td><button class="btn primary"><span class="spin"></span>Starting…</button></td>
+            <td><button class="btn primary"><i data-i="refresh"></i>Try again</button><div class="msg bad">Couldn't start: offline</div></td>
+            <td><button class="btn primary is-ok"><i data-i="check"></i>Started</button></td></tr>
+          <tr><td>Default</td>
+            <td><button class="btn">Park</button></td>
+            <td><button class="btn is-hover">Park</button></td>
+            <td><button class="btn is-focus">Park</button></td>
+            <td><button class="btn is-active">Park</button></td>
+            <td><button class="btn off">Park</button></td>
+            <td><button class="btn"><span class="spin"></span>Parking…</button></td>
+            <td><button class="btn is-error"><i data-i="warn"></i>Park</button><div class="msg bad">Couldn't park: working</div></td>
+            <td><button class="btn is-ok"><i data-i="check"></i>Parked</button></td></tr>
+          <tr><td>Quiet<small>toolbars</small></td>
+            <td><button class="btn quiet"><i data-i="search"></i>Search</button></td>
+            <td><button class="btn quiet is-hover"><i data-i="search"></i>Search</button></td>
+            <td><button class="btn quiet is-focus"><i data-i="search"></i>Search</button></td>
+            <td><button class="btn quiet is-active"><i data-i="search"></i>Search</button></td>
+            <td><button class="btn quiet off"><i data-i="search"></i>Search</button></td>
+            <td><button class="btn quiet"><span class="spin"></span>Searching…</button></td>
+            <td><button class="btn quiet is-error"><i data-i="warn"></i>Search</button><div class="msg bad">Couldn't read the index</div></td>
+            <td><button class="btn quiet is-ok"><i data-i="check"></i>Copied</button></td></tr>
+          <tr><td>Icon<small>with a tooltip</small></td>
+            <td><button class="btn icon"><i data-i="more"></i></button></td>
+            <td><button class="btn icon is-hover"><i data-i="more"></i></button></td>
+            <td><button class="btn icon is-focus"><i data-i="more"></i></button></td>
+            <td><button class="btn icon is-active"><i data-i="more"></i></button></td>
+            <td><button class="btn icon off"><i data-i="more"></i></button></td>
+            <td><button class="btn icon"><span class="spin"></span></button></td>
+            <td><button class="btn icon is-error" style="color:var(--fail)"><i data-i="warn"></i></button></td>
+            <td><button class="btn icon is-ok"><i data-i="check"></i></button></td></tr>
+          <tr><td>Danger tone<small>primary or default</small></td>
+            <td><button class="btn danger primary"><i data-i="stop"></i>Stop</button></td>
+            <td><button class="btn danger primary is-hover"><i data-i="stop"></i>Stop</button></td>
+            <td><button class="btn danger primary is-focus"><i data-i="stop"></i>Stop</button></td>
+            <td><button class="btn danger primary is-active"><i data-i="stop"></i>Stop</button></td>
+            <td><button class="btn danger primary off"><i data-i="stop"></i>Stop</button></td>
+            <td><button class="btn danger primary"><span class="spin"></span>Stopping…</button></td>
+            <td><button class="btn danger"><i data-i="refresh"></i>Try again</button><div class="msg bad">Couldn't stop: no answer</div></td>
+            <td><button class="btn is-ok"><i data-i="check"></i>Stopped</button></td></tr>
+          <tr><td>Segmented<small>sunk track, raised cell</small></td>
+            <td><div class="seg"><button aria-pressed="true">Day</button><button>Week</button><button>All</button></div></td>
+            <td><div class="seg"><button aria-pressed="true">Day</button><button class="is-hover">Week</button><button>All</button></div></td>
+            <td><div class="seg"><button aria-pressed="true">Day</button><button class="is-focus">Week</button><button>All</button></div></td>
+            <td><div class="seg"><button aria-pressed="true">Day</button><button class="is-active">Week</button><button>All</button></div></td>
+            <td><div class="seg off"><button aria-pressed="true">Day</button><button>Week</button><button>All</button></div></td>
+            <td><div class="seg"><button>Day</button><button aria-pressed="true" style="display:inline-flex;align-items:center;gap:5px"><span class="spin" style="width:10px;height:10px"></span>Week</button><button>All</button></div></td>
+            <td><div class="seg is-error"><button aria-pressed="true">Day</button><button>Week</button><button>All</button></div><div class="msg bad">Couldn't add up Week</div></td>
+            <td><div class="seg"><button>Day</button><button aria-pressed="true">Week</button><button>All</button></div><div class="msg good">Saved as your default</div></td></tr>
+          <tr><td>Input</td>
+            <td><input class="field" placeholder="~/code/…"></td>
+            <td><input class="field is-hover" placeholder="~/code/…"></td>
+            <td><input class="field is-focus" style="border-color:var(--focus)" placeholder="~/code/…"></td>
+            <td><input class="field is-active mono" value="~/code/ap"></td>
+            <td><input class="field off" placeholder="~/code/…"></td>
+            <td><div class="fw"><input class="field mono" value="~/code/api"><span class="in"><span class="spin" style="width:11px;height:11px"></span></span></div></td>
+            <td><input class="field mono is-error" value="~/code/apii"><div class="msg bad">No folder there on devbox</div></td>
+            <td><div class="fw"><input class="field mono" value="~/code/api"><span class="in is-ok"><i data-i="check"></i></span></div><div class="msg good">A git repo, on master</div></td></tr>
+          <tr><td>Answer chip<small>the number is its key</small></td>
+            <td><span class="chip"><kbd>1</kbd>Allow once</span></td>
+            <td><span class="chip is-hover"><kbd>1</kbd>Allow once</span></td>
+            <td><span class="chip is-focus"><kbd>1</kbd>Allow once</span></td>
+            <td><span class="chip is-active"><kbd>1</kbd>Allow once</span></td>
+            <td><span class="chip off"><kbd>1</kbd>Allow once</span></td>
+            <td><span class="chip"><span class="spin"></span>Sending…</span></td>
+            <td><span class="chip is-error"><i data-i="warn"></i>Allow once</span><div class="msg bad">Couldn't send: too late</div></td>
+            <td><span class="chip is-ok"><i data-i="check"></i>Allowed</span></td></tr>
+          <tr><td>Count<small>takes its host's state</small></td>
+            <td><button class="btn quiet">Agents <span class="count n">1</span></button></td>
+            <td><button class="btn quiet is-hover">Agents <span class="count n">1</span></button></td>
+            <td><button class="btn quiet is-focus">Agents <span class="count n">1</span></button></td>
+            <td><button class="btn quiet is-active">Agents <span class="count n">1</span></button></td>
+            <td><button class="btn quiet off">Agents <span class="count n">1</span></button></td>
+            <td><button class="btn quiet">Agents <span class="count faint">…</span></button></td>
+            <td><button class="btn quiet">Agents <span class="count" style="background:var(--fail-wash);color:var(--fail)">?</span></button><div class="msg bad">Couldn't reach the hub</div></td>
+            <td><button class="btn quiet">Agents <span class="count is-ok" style="color:var(--ok)">0</span></button><div class="msg good">All answered</div></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="sheet dk">
+    <h3>Dark <span class="faint">the same tokens; the ring and the fail edge hold their contrast</span></h3>
+    <div id="dk"></div>
+  </div>
+</div>
+<script>document.getElementById('dk').innerHTML = document.getElementById('lt').innerHTML;</script>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

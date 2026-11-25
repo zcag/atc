@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Times, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.spec { padding: 24px; gap: 16px; }
+.ft { width: 100%; border-collapse: collapse; background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); overflow: hidden; }
+.ft th { text-align: left; font-size: var(--f-small); font-weight: 500; color: var(--faint); padding: 9px 14px; border-bottom: 1px solid var(--line); background: var(--bg); }
+.ft td { padding: 12px 14px; border-top: 1px solid var(--hair); vertical-align: top; font-size: var(--f-ui); }
+.ft td.f b { display: block; font-size: var(--f-body); }
+.ft td.f span { color: var(--faint); font-size: var(--f-small); }
+.ft .rule { font: var(--f-small) var(--mono); color: var(--dim); line-height: 1.6; }
+.ex { display: flex; flex-wrap: wrap; gap: 6px; }
+.ex code { font: var(--f-ui) var(--mono); padding: 2px 6px; border-radius: var(--r1); background: var(--sunk); white-space: nowrap; }
+.ex .when { display: block; font-size: var(--f-micro); color: var(--faint); margin-top: 2px; text-align: center; }
+.ex > span { display: inline-grid; }
+.ft .old { font: var(--f-small) var(--mono); color: var(--faint); text-decoration: line-through; text-decoration-color: var(--edge); line-height: 1.7; }
+.ft ul { margin: 0; padding-left: 16px; display: grid; gap: 2px; color: var(--dim); }
+.three { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.cell h3 { margin: 0 0 10px; font-size: var(--f-ui); font-weight: 650; }
+.mini { border: 1px solid var(--line); border-radius: var(--r2); overflow: visible; background: var(--paper); }
+.mini .srow { padding: 9px 12px; }
+.mini .srow:first-child { border-top: 0; }
+.tip { position: absolute; right: -6px; top: 26px; z-index: 2; padding: 5px 8px; border-radius: var(--r2); font-size: var(--f-small); white-space: nowrap; background: var(--toast-bg); color: var(--toast-ink); }
+.tsep { display: flex; align-items: center; gap: 10px; font-size: var(--f-small); color: var(--faint); margin: 4px 0 10px; }
+.tsep::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.step { display: flex; gap: 8px; align-items: baseline; font-size: var(--f-ui); color: var(--dim); padding: 4px 0; }
+.step .num { margin-left: auto; font: var(--f-small) var(--mono); color: var(--faint); }
+.term { font: var(--f-small)/1.7 var(--mono); background: var(--code); border-radius: var(--r2); padding: 10px 12px; color: var(--ink); white-space: pre; overflow: hidden; }
+.term .d { color: var(--faint); }
+</style>
+</head>
+<body>
+<div class="spec">
+  <div>
+    <h2>Times, dates and durations</h2>
+    <p class="cap">Four forms from one module shared by the web UI, the TUI and the CLI. Day first, 24 hour clock, English month abbreviations, mono digits. Twenty formatters today become four.</p>
+  </div>
+
+  <table class="ft">
+    <colgroup><col style="width:150px"><col style="width:270px"><col style="width:330px"><col><col style="width:230px"></colgroup>
+    <thead><tr><th>Form</th><th>Rule</th><th>Examples</th><th>Where it is used</th><th>Replaces</th></tr></thead>
+    <tbody>
+      <tr><td class="f"><b>Age</b><span>how long ago</span></td>
+        <td class="rule">&lt; 45s → now<br>&lt; 1h → 4m<br>&lt; 1d → 3h<br>else → 2d, 5w</td>
+        <td><div class="ex"><span><code>now</code><small class="when">12s</small></span><span><code>4m</code><small class="when">4m 20s</small></span><span><code>3h</code><small class="when">3h 50m</small></span><span><code>2d</code><small class="when">50h</small></span><span><code>5w</code><small class="when">36d</small></span></div></td>
+        <td><ul><li>The right of every row: rail list, Board, phone list, Pages index</li><li>Bay bar staleness, the console's last line</li><li>Hover or long-press shows its stamp</li></ul></td>
+        <td class="old">1h ago<br>an hour ago<br>18d</td></tr>
+      <tr><td class="f"><b>Clock</b><span>today, to the minute</span></td>
+        <td class="rule">HH:MM, 24 hour<br>only for today</td>
+        <td><div class="ex"><span><code>09:07</code></span><span><code>14:05</code></span><span><code>23:58</code></span></div></td>
+        <td><ul><li>The console clock, the offline line ("Offline since 15:41")</li><li>Transcript turns from today</li><li>Errors: "laptop didn't answer at 15:30"</li></ul></td>
+        <td class="old">hhmm, hm (two copies)<br>3:05 PM</td></tr>
+      <tr><td class="f"><b>Stamp</b><span>a moment, any day</span></td>
+        <td class="rule">this week → Tue 14:05<br>this year → 3 Nov 14:05<br>older → 3 Nov 2025 14:05</td>
+        <td><div class="ex"><span><code>Tue 14:05</code></span><span><code>3 Nov 14:05</code></span><span><code>3 Nov 2025 14:05</code></span></div></td>
+        <td><ul><li>Transcript day breaks and turns before today</li><li>Tooltips on every age; Pages, History, Usage rows</li><li>CLI <span class="mono">atc ls</span>, <span class="mono">history</span> and the TUI</li></ul></td>
+        <td class="old">Nov 17 19:02<br>Wed, Nov 18 01:06<br>Jan 2 15:04 · Mon Jan 02</td></tr>
+      <tr><td class="f"><b>Duration</b><span>how long it took</span></td>
+        <td class="rule">&lt; 1m → 45s<br>&lt; 1h → 4m 05s<br>&lt; 1d → 3h 05m<br>else → 2d 4h</td>
+        <td><div class="ex"><span><code>45s</code></span><span><code>4m 05s</code></span><span><code>3h 05m</code></span><span><code>2d 4h</code></span></div></td>
+        <td><ul><li>Steps and tool runs in the transcript, calls</li><li>Time page: stretches, hours in a bay</li><li>Timers in the CLI and TUI</li></ul></td>
+        <td class="old">3h 5m · 12m 05s<br>1h0m0s · 3m05s</td></tr>
+    </tbody>
+  </table>
+
+  <div class="three">
+    <div class="cell">
+      <h3>Age, with its stamp on hover</h3>
+      <div class="mini">
+        <div class="srow nd"><span class="sb n">N</span><div class="grow"><div class="t">Rate limit retries</div><div class="s">Wants to run go test</div></div><div class="e" style="position:relative"><span style="color:var(--ink);text-decoration:underline;text-decoration-color:var(--edge);text-underline-offset:2px">4m</span><span class="tip num">Since 14:01 · 4m 20s</span></div></div>
+        <div class="srow"><span class="sb t">T</span><div class="grow"><div class="t">Invoice export as CSV</div><div class="s">Done: 14 tests pass.</div></div><div class="e"><span>22m</span></div></div>
+        <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t" style="font-weight:500">Bump Go to 1.25</div><div class="s">Ended: CI green on main.</div></div><div class="e"><span>2d</span></div></div>
+      </div>
+    </div>
+    <div class="cell">
+      <h3>Stamp, clock and duration in a transcript</h3>
+      <div class="tsep">Tue 18:40</div>
+      <div class="step"><i data-i="term"></i>ran 3 commands, edited 1 file<span class="num">14s · 18:42</span></div>
+      <div class="tsep">14:01</div>
+      <div class="step"><i data-i="term"></i>ran 7 commands, build <span style="color:var(--fail)">1 failed</span><span class="num">4m 05s · 14:01</span></div>
+      <div class="step"><i data-i="phone"></i>call with the assistant<span class="num">3m 12s · 14:05</span></div>
+    </div>
+    <div class="cell">
+      <h3>The same forms in the CLI and TUI</h3>
+      <div class="term">$ atc ls
+<span class="d">  age  session                     host</span>
+  4m   Rate limit retries          devbox
+  22m  Invoice export as CSV       devbox
+  now  Migrate sessions table…     laptop
+$ atc history --since '1 Nov'
+<span class="d">  Tue 14:05    3h 05m  Fix flaky upload test</span>
+<span class="d">  3 Nov 09:12  45s     Bump Go to 1.25</span></div>
+    </div>
+  </div>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

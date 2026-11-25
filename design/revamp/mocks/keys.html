@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Keys, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.rail .srow { grid-template-columns: 18px minmax(0, 1fr) auto; padding: 10px 14px; }
+.rail .srow .e kbd { margin-top: 1px; }
+.rhd { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px 0 16px; border-bottom: 1px solid var(--line); font-size: var(--f-ui); }
+.shd { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 8px 12px 8px 16px; border-bottom: 1px solid var(--line); min-height: 56px; }
+.shd h1 { margin: 0; font-size: var(--f-title); font-weight: 650; }
+.shd .meta { grid-column: 2; font: var(--f-small) var(--mono); color: var(--faint); display: flex; gap: 10px; align-items: center; }
+.shd .acts { grid-row: 1 / span 2; grid-column: 3; display: flex; gap: 2px; align-items: center; position: relative; }
+.shd .acts .btn.icon.is-hover { background: var(--hi); color: var(--ink); }
+.tip { position: absolute; top: 34px; z-index: 3; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 10px; border-radius: var(--r2); font-size: var(--f-small); white-space: nowrap; background: var(--paper); box-shadow: var(--pop); }
+.tip kbd { color: var(--ink); }
+.tip .faint { margin-left: 2px; }
+.tx { max-width: 720px; margin: 0 auto; padding: 18px 24px 24px; display: grid; gap: 14px; }
+.say { font: var(--f-read)/1.5 var(--read); margin: 0; }
+.you { justify-self: end; max-width: 78%; padding: 8px 12px; border-radius: var(--r3); background: var(--sunk); font-size: var(--f-body); }
+.step { display: flex; gap: 8px; align-items: center; font-size: var(--f-ui); color: var(--dim); }
+.step .num { margin-left: auto; font: var(--f-small) var(--mono); color: var(--faint); }
+.perm { border-radius: var(--r3); background: var(--needs-wash); box-shadow: inset 3px 0 0 var(--needs); padding: 12px 14px 12px 16px; display: grid; gap: 10px; }
+.perm code { font: var(--f-ui) var(--mono); background: var(--paper); padding: 2px 6px; border-radius: var(--r1); }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl); padding: 0 11px; border-radius: var(--pill); border: 1px solid var(--line); background: var(--paper); font-size: var(--f-ui); font-weight: 500; white-space: nowrap; }
+.chip kbd { box-shadow: none; padding: 0; min-width: 0; }
+.comp { border-top: 1px solid var(--line); padding: 10px 16px 12px; }
+.cbox { max-width: 720px; margin: 0 auto; display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 6px 0 12px; border-radius: var(--r3); border: 1px solid var(--focus); background: var(--paper); outline: 2px solid var(--focus); outline-offset: 2px; }
+.cbox .phx { flex: 1; color: var(--faint); font-size: var(--f-body); }
+.note { max-width: 720px; margin: 6px auto 0; font-size: var(--f-small); color: var(--faint); display: flex; gap: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay on"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button aria-pressed="true">Session</button><button>Board</button><button>Pages</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="body3">
+    <section class="pane rail">
+      <header class="rhd"><b>api</b><span class="faint">4 sessions</span><span class="grow"></span><button class="btn quiet"><i data-i="shell"></i>Shell</button><button class="btn icon" title="New session (n)"><i data-i="plus"></i></button></header>
+      <div class="scroll">
+        <div class="grp">Waiting on you <span class="count n">2</span></div>
+        <div class="srow nd sel"><span class="sb n">N</span><div class="grow"><div class="t">Rate limit retries</div><div class="s ell">Wants to run go test ./... -run Retry</div></div><div class="e"><span>4m</span><kbd>q</kbd></div></div>
+        <div class="srow"><span class="sb t">T</span><div class="grow"><div class="t">Invoice export as CSV</div><div class="s ell">Done: CSV export with a header row.</div></div><div class="e"><span>22m</span><kbd>w</kbd></div></div>
+        <div class="grp">Working <span class="count w">1</span></div>
+        <div class="srow"><span class="sb w">W</span><div class="grow"><div class="t">Migrate sessions table to UUID keys</div><div class="s ell">Writing the backfill; 2 of 5 tables done.</div></div><div class="e"><span>now</span><kbd>e</kbd></div></div>
+        <div class="grp">Earlier today <span class="count faint">4</span></div>
+        <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t" style="font-weight:500">Fix flaky upload test</div><div class="s ell">Ended: test made deterministic, merged.</div></div><div class="e"><span>2h</span><kbd>r</kbd></div></div>
+        <div class="srow"><span class="sb e">E</span><div class="grow" lang="tr"><div class="t" style="font-weight:500">Fatura PDF'inde Türkçe karakterler bozuk</div><div class="s ell">Ended: ğ, ş ve ı artık doğru gömülüyor.</div></div><div class="e"><span>3h</span><kbd>t</kbd></div></div>
+      </div>
+    </section>
+
+    <section class="pane">
+      <header class="shd">
+        <span class="sb n">N</span>
+        <h1>Rate limit retries</h1>
+        <div class="acts">
+          <button class="btn quiet"><i data-i="page"></i>Page</button>
+          <button class="btn icon is-hover" title="Terminal"><i data-i="term"></i></button>
+          <button class="btn icon" title="State"><i data-i="board"></i></button>
+          <button class="btn icon" title="Zen"><i data-i="zen"></i></button>
+          <button class="btn">Park</button>
+          <button class="btn icon" title="More"><i data-i="more"></i></button>
+          <div class="tip" style="left:38px">Terminal <kbd>`</kbd></div>
+        </div>
+        <div class="meta"><span>devbox</span><span>~/code/api · rate-limit</span><span>opus</span><span><span class="meter"><i style="width:42%"></i></span> 84k</span></div>
+      </header>
+      <div class="scroll">
+        <div class="tx">
+          <div class="you">Retries on 429 should back off with jitter and give up after five tries.</div>
+          <p class="say">The client retries 429s in a tight loop today. I added exponential backoff with full jitter, capped at 8s, and a limit of five tries.</p>
+          <div class="step"><i data-i="term"></i>ran 4 commands, edited 2 files<span class="num">38s · 14:02</span></div>
+          <p class="say">The tests pass once each. Before I call it done I want to run the retry tests twenty times, since a timing bug would only show up some of the time.</p>
+          <div class="perm">
+            <div style="font-size:var(--f-body)">Wants to run <code>go test ./... -run Retry -count 20</code></div>
+            <div class="row-flex" style="gap:6px"><span class="chip"><kbd>1</kbd>Allow once</span><span class="chip"><kbd>2</kbd>Always for go test</span><span class="chip"><kbd>3</kbd>Deny</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="comp">
+        <div class="cbox"><button class="btn icon" title="Attach"><i data-i="attach"></i></button><span class="phx">Reply to Rate limit retries</span><button class="btn icon" title="Send"><i data-i="send"></i></button></div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">Started the CSV export session in api and told it to keep the header row.</span>
+    <span class="faint">12m</span>
+    <span class="ask">Talk to the assistant</span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet">Agents <span class="count n">1</span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

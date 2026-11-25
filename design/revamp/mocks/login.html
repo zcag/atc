@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Login, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.mark { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: var(--r3); background: var(--ink); color: var(--paper); font: 700 15px/1 var(--mono); }
+.baybar .brand { display: flex; align-items: center; gap: 5px; padding: 0 8px; font-weight: 650; }
+.baybar .brand .mark { width: 22px; height: 22px; border-radius: var(--r1); font-size: 10px; }
+.stage { display: grid; place-items: center; background: var(--bg); padding: 24px 16px; overflow: auto; }
+.box { width: 100%; max-width: 400px; }
+.box h1 { font-size: var(--f-h); margin: 16px 0 4px; font-weight: 650; }
+.box .lede { color: var(--dim); margin: 0 0 20px; }
+.box label { display: block; font-size: var(--f-ui); font-weight: 600; margin-bottom: 6px; }
+.box .frm { display: flex; gap: 8px; }
+.box .field { font-family: var(--mono); font-size: var(--f-ui); }
+.box .frm .btn { height: 32px; }
+.ways { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 14px; font-size: var(--f-ui); }
+.ways .h { color: var(--faint); font-size: var(--f-small); margin-bottom: 8px; }
+.ways .w { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 8px; padding: 6px 0; color: var(--dim); }
+.ways .w .i { color: var(--faint); margin-top: 2px; }
+.ways code { font-family: var(--mono); color: var(--ink); background: var(--code); padding: 1px 5px; border-radius: var(--r1); }
+.ways b { color: var(--ink); font-weight: 600; }
+@media (max-width: 899px) {
+  .app { grid-template-rows: 48px minmax(0, 1fr) 0; }
+  .console { display: none; }
+  .stage { place-items: start center; padding-top: 48px; }
+  .box .frm { flex-direction: column; }
+  .box .field, .box .frm .btn { height: var(--hit); font-size: var(--f-body); }
+  .box .frm .btn { justify-content: center; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="brand"><span class="faint" style="font-weight:500">atc on</span> devbox</span>
+  </nav>
+
+  <main class="stage">
+    <div class="box">
+      <span class="mark">atc</span>
+      <h1>Log in to devbox</h1>
+      <p class="lede">This device has no token for devbox yet.</p>
+      <label for="tok">Token</label>
+      <div class="frm">
+        <input id="tok" class="field" placeholder="Paste a token" style="box-shadow:0 0 0 1px var(--focus);border-color:var(--focus)">
+        <button class="btn primary">Log in</button>
+      </div>
+      <div class="ways">
+        <div class="h">Two ways to get one</div>
+        <div class="w"><i data-i="term"></i><div>On devbox, run <code>atc token</code> and paste what it prints.</div></div>
+        <div class="w"><i data-i="link"></i><div>On a device that is logged in: <b>Settings, Devices, Pair by QR</b>, then scan it here.</div></div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="console">
+    <span class="line">Not logged in on this device.</span>
+    <span class="faint mono" style="font-size:var(--f-small)">https://devbox:7272</span>
+  </footer>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

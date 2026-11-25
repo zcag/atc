@@ -6,3 +6,4 @@ test/shots/
 test/ui/*/shots/
 .playwright-mcp/
 CLAUDE.local.md
+design/revamp/current/

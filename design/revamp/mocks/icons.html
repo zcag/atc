@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Icons, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.spec { padding: 24px; gap: 16px; }
+.lt { color-scheme: light; background: var(--bg); color: var(--ink); }
+.dk { color-scheme: dark; background: var(--bg); color: var(--ink); }
+.duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.half { border: 1px solid var(--line); border-radius: var(--r3); overflow: hidden; }
+.half > h3 { margin: 0; padding: 10px 14px; font-size: var(--f-ui); font-weight: 650; border-bottom: 1px solid var(--line); display: flex; gap: 8px; align-items: baseline; }
+.half > h3 .faint { font-weight: 400; }
+.grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); background: var(--paper); }
+.ic { display: grid; justify-items: center; gap: 6px; padding: 12px 4px 9px; border-right: 1px solid var(--hair); border-bottom: 1px solid var(--hair); min-width: 0; }
+.ic:nth-child(7n) { border-right: 0; }
+.ic .pair { display: flex; align-items: center; gap: 12px; height: 22px; color: var(--ink); }
+.ic .pair span:last-child .i { width: 20px; height: 20px; }
+.ic .nm { font: var(--f-micro) var(--mono); color: var(--dim); }
+.legend { display: flex; gap: 16px; padding: 8px 14px; font-size: var(--f-small); color: var(--faint); border-top: 1px solid var(--line); background: var(--bg); }
+.use { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.repl { width: 100%; border-collapse: collapse; font-size: var(--f-ui); }
+.repl th { text-align: left; font-size: var(--f-small); font-weight: 500; color: var(--faint); padding: 0 10px 6px 0; }
+.repl td { padding: 6px 10px 6px 0; border-top: 1px solid var(--hair); vertical-align: middle; }
+.repl .was { font: var(--f-body) var(--mono); color: var(--dim); }
+.repl .now { display: inline-flex; align-items: center; gap: 6px; font: var(--f-small) var(--mono); }
+.rules { margin: 0; padding-left: 18px; font-size: var(--f-ui); display: grid; gap: 6px; }
+.demo { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.tabdemo { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid var(--line); background: var(--chrome); margin-top: 12px; border-radius: 0 0 var(--r2) var(--r2); }
+.tabdemo span { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 0 6px; font-size: var(--f-micro); color: var(--dim); }
+.tabdemo span .i { width: 20px; height: 20px; }
+.tabdemo span:first-child { color: var(--ink); font-weight: 650; }
+</style>
+</head>
+<body>
+<div class="spec">
+  <div>
+    <h2>Icons</h2>
+    <p class="cap">One set: 16px grid, 1.5 stroke, round caps and joins, drawn to sit with Recursive's weight. Each glyph shown at 16 (desk) and 20 (phone tab bar). No Unicode glyphs as icons, no filled set, no text standing in for an icon.</p>
+  </div>
+  <div class="duo">
+    <div class="half lt"><h3>Light <span class="faint">--ink on --paper</span></h3><div class="grid" data-grid></div><div class="legend"><span>left 16px</span><span>right 20px</span><span id="cnt"></span></div></div>
+    <div class="half dk"><h3>Dark <span class="faint">same strokes, no weight change</span></h3><div class="grid" data-grid></div><div class="legend"><span>left 16px</span><span>right 20px</span></div></div>
+  </div>
+  <div class="use">
+    <div class="cell">
+      <h2 style="font-size:var(--f-ui)">What they replace</h2>
+      <table class="repl">
+        <thead><tr><th>Today</th><th>Where</th><th>Becomes</th></tr></thead>
+        <tbody>
+          <tr><td class="was">✕</td><td>close buttons, 11 places</td><td><span class="now"><i data-i="x"></i>x</span></td></tr>
+          <tr><td class="was">✓ ■</td><td>done marks, the stop button</td><td><span class="now"><i data-i="check"></i>check <i data-i="stop"></i>stop</span></td></tr>
+          <tr><td class="was">← → ‹ ›</td><td>back, viewer arrows</td><td><span class="now"><i data-i="back"></i>back <i data-i="fwd"></i>fwd</span></td></tr>
+          <tr><td class="was">⟳ ⌨ ⇧</td><td>reload, keys overlay, send</td><td><span class="now"><i data-i="refresh"></i>refresh <i data-i="keys"></i>keys <i data-i="send"></i>send</span></td></tr>
+          <tr><td class="was">•••</td><td>the Menu default label</td><td><span class="now"><i data-i="more"></i>more</span></td></tr>
+          <tr><td class="was">pg $ dir</td><td>palette result leads</td><td><span class="now"><i data-i="page"></i>page <i data-i="shell"></i>shell <i data-i="folder"></i>folder</span></td></tr>
+          <tr><td class="was">Material phone</td><td>side-key screen, filled</td><td><span class="now"><i data-i="phone"></i>phone</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="cell">
+      <h2 style="font-size:var(--f-ui)">Where an icon leads</h2>
+      <ul class="rules">
+        <li>Desk: primary actions keep their word; the icon is optional and comes first.</li>
+        <li>Icon alone only where the word is obvious: back, close, more, attach, send, stop. Each has a tooltip with its key.</li>
+        <li>Phone tab bar: icon over label, 20px, never an icon alone.</li>
+        <li>Icons take the text colour around them; state colour only on warn and check inside a message.</li>
+      </ul>
+      <div class="demo">
+        <button class="btn primary"><i data-i="plus"></i>New session</button>
+        <button class="btn quiet"><i data-i="search"></i>Search</button>
+        <button class="btn icon" title="Attach"><i data-i="attach"></i></button>
+        <button class="btn icon" title="More"><i data-i="more"></i></button>
+        <button class="btn icon" title="Close"><i data-i="x"></i></button>
+      </div>
+      <div class="tabdemo"><span><i data-i="list"></i>Sessions</span><span><i data-i="page"></i>Pages</span><span><i data-i="mic"></i>Assistant</span><span><i data-i="search"></i>Search</span><span><i data-i="plus"></i>New</span></div>
+    </div>
+  </div>
+</div>
+<script src="../kit/kit.js"></script>
+<script>
+const names = Object.keys(window.kitIcons);
+document.querySelectorAll('[data-grid]').forEach((g) => {
+  g.innerHTML = names.map((n) => `<div class="ic"><div class="pair"><span><i data-i="${n}"></i></span><span><i data-i="${n}"></i></span></div><div class="nm">${n}</div></div>`).join('');
+});
+document.getElementById('cnt').textContent = `${names.length} glyphs`;
+window.kitDraw();
+</script>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Side-key screen, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.hold { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; height: 100vh; background: var(--paper); }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--chrome); border-bottom: 1px solid var(--line); }
+.tile { display: grid; gap: 2px; padding: 10px 12px 10px; border: 0; background: none; text-align: left; min-width: 0; min-height: 60px; }
+.tile + .tile { border-left: 1px solid var(--line); }
+.tile span { font-size: var(--f-small); color: var(--faint); }
+.tile b { font: 650 var(--f-title)/1.2 var(--mono); display: flex; align-items: center; gap: 6px; }
+.tile b.up { color: var(--ok); }
+.tile b.up::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.tile .meter { width: 100%; }
+.tabs { padding: 10px 12px; border-bottom: 1px solid var(--line); }
+.tabs .seg { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+.tabs .seg button { height: 38px; font-size: var(--f-body); display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.list { overflow: auto; min-height: 0; }
+.hr { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 2px 12px; padding: 12px 16px; border-bottom: 1px solid var(--hair); align-items: start; }
+.hr.nd { box-shadow: inset 3px 0 0 var(--needs); }
+.hr .t { font-weight: 600; font-size: 15px; }
+.hr .s { color: var(--dim); font-size: var(--f-ui); }
+.hr .b { display: flex; align-items: center; gap: 6px; font: var(--f-small) var(--mono); color: var(--faint); padding-top: 2px; }
+.hr .answers { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.hr .answers .btn { height: 36px; padding: 0 12px; font-size: var(--f-body); }
+.tick { display: inline-block; width: 3px; height: 11px; border-radius: 1px; flex: none; background: light-dark(oklch(58% 0.11 var(--h)), oklch(74% 0.1 var(--h))); }
+.h-web { --h: 190; } .h-api { --h: 305; } .h-home { --h: 130; } .h-bill { --h: 100; }
+
+.band { color-scheme: dark; background: var(--sunk); color: var(--ink); position: relative; }
+.base { display: grid; gap: 6px; padding: 16px 112px 14px 16px; border: 0; background: none; text-align: left; width: 100%; }
+.base .ttl { display: flex; align-items: center; gap: 4px; font: 650 var(--f-h)/1.1 var(--sans); }
+.base .ttl .i { width: 18px; height: 18px; color: var(--dim); }
+.hline { display: flex; align-items: center; gap: 2px; height: 14px; }
+.hline i { width: 3px; height: 12px; border-radius: 1px; background: var(--needs); flex: none; }
+.hline i.w { background: var(--work); height: 8px; width: 2px; }
+.hline .rest { flex: 1; height: 1px; background: var(--line); margin-left: 4px; }
+.base .c { display: flex; gap: 14px; font-size: var(--f-ui); color: var(--dim); }
+.base .c em { font: normal 650 var(--f-ui) var(--mono); }
+.base .c .a em { color: var(--needs-text); }
+.base .c .wk em { color: var(--work); }
+.dial { position: absolute; right: 18px; top: -30px; width: 76px; height: 76px; border-radius: 50%; border: 0; background: var(--ink); color: var(--sunk); display: grid; place-items: center; box-shadow: 0 0 0 6px var(--sunk); }
+.dial .i { width: 30px; height: 30px; stroke-width: 1.6; }
+.keys { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); padding-bottom: 8px; }
+.keys button { border: 0; background: none; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0 8px; min-height: 58px; font-size: var(--f-small); color: var(--dim); }
+.keys button + button { box-shadow: inset 1px 0 0 var(--line); }
+.keys .i { width: 20px; height: 20px; color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="hold">
+  <div class="tiles">
+    <div class="tile"><span>devbox</span><b class="up">up</b></div>
+    <div class="tile"><span>laptop</span><b class="up">up</b></div>
+    <button class="tile"><span>usage</span><b>31%</b><span class="meter"><i style="width:31%"></i></span></button>
+    <button class="tile"><span>memory</span><b>72%</b><span class="meter"><i style="width:72%"></i></span></button>
+  </div>
+  <div class="tabs">
+    <div class="seg" role="group" aria-label="Show">
+      <button aria-pressed="true">Waiting <span class="count n">4</span></button>
+      <button>Working <span class="count w">2</span></button>
+      <button>Recent</button>
+    </div>
+  </div>
+  <div class="list">
+    <div class="hr nd"><span class="sb n">N</span><div class="grow"><div class="t ell">Rate limit retries</div><div class="s ell">Wants to run <code class="mono">go test ./... -run Retry</code></div>
+      <div class="answers"><button class="btn">1 Allow once</button><button class="btn">2 Always</button><button class="btn quiet">3 Deny</button></div></div><span class="b"><span class="tick h-api"></span>api</span></div>
+    <div class="hr nd"><span class="sb t">T</span><div class="grow"><div class="t ell">Invoice export as CSV</div><div class="s ell">Done: CSV export with a header row; 14 tests pass.</div></div><span class="b"><span class="tick h-api"></span>api</span></div>
+    <div class="hr nd"><span class="sb t">T</span><div class="grow"><div class="t ell">Landing page variants</div><div class="s ell">Three variants on a page; pick one to keep.</div></div><span class="b"><span class="tick h-web"></span>web</span></div>
+    <div class="hr nd" lang="tr"><span class="sb t">T</span><div class="grow"><div class="t ell">Fatura PDF'inde Türkçe karakterler bozuk</div><div class="s ell">Fix ready locally, not pushed.</div></div><span class="b"><span class="tick h-bill"></span>billing</span></div>
+  </div>
+  <div class="band">
+    <button class="base" title="Sessions (b)">
+      <span class="ttl">Sessions<i data-i="fwd"></i></span>
+      <span class="hline" aria-hidden="true"><i></i><i></i><i></i><i></i><i class="w"></i><i class="w"></i><span class="rest"></span></span>
+      <span class="c"><span class="a"><em>4</em> waiting</span><span class="wk"><em>2</em> working</span></span>
+    </button>
+    <button class="dial" title="Call the assistant (.)" aria-label="Call the assistant"><i data-i="phone"></i></button>
+    <nav class="keys">
+      <button><i data-i="mic"></i>Assistant</button>
+      <button><i data-i="plus"></i>New</button>
+      <button><i data-i="page"></i>Pages</button>
+      <button><i data-i="inbox"></i>Backlog</button>
+    </nav>
+  </div>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

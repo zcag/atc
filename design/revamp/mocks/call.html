@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Call controls, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.body4 { display: grid; grid-template-columns: 300px minmax(0, 1fr) 360px; min-height: 0; }
+.rl { background: var(--bg); }
+.rl .phd { background: var(--bg); }
+.rl .phd h1 { font-size: var(--f-body); }
+.rl .grp { padding: 12px 14px 4px; }
+.rl .srow { padding: 8px 14px; grid-template-columns: 18px minmax(0, 1fr) auto; background: none; border-top-color: transparent; }
+.rl .srow.nd { box-shadow: inset 3px 0 0 var(--needs); }
+.rl .srow .t { font-size: var(--f-ui); }
+.rl .srow .s { font-size: var(--f-small); display: flex; align-items: center; gap: 6px; }
+.rl .srow .e { font-size: var(--f-micro); }
+.rl .ans { display: flex; gap: 4px; margin-top: 6px; }
+.rl .ans .btn { height: 24px; padding: 0 8px; font-size: var(--f-small); }
+.rl .foot { padding: 10px 14px; font-size: var(--f-small); color: var(--faint); }
+.tick { display: inline-block; width: 3px; height: 11px; border-radius: 1px; flex: none; background: light-dark(oklch(58% 0.11 var(--h)), oklch(74% 0.1 var(--h))); }
+.h-web { --h: 190; } .h-api { --h: 305; } .h-home { --h: 130; } .h-bill { --h: 100; } .h-infra { --h: 275; }
+.sh h1 { font-size: var(--f-title); }
+.am { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: var(--r1); box-shadow: inset 0 0 0 1.5px var(--edge); }
+.am .i { width: 12px; height: 12px; }
+.tx { max-width: 640px; margin: 0 auto; padding: 8px 20px 24px; }
+.turn { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 0 8px; margin: 16px 0 0; }
+.turn .clk { font: var(--f-micro)/26px var(--mono); color: var(--faint); }
+.say { font: var(--f-read)/1.5 var(--read); margin: 0; }
+.say + .say { margin-top: 10px; }
+.say code { font: .86em var(--mono); background: var(--code); padding: 0 3px; border-radius: 3px; }
+.me { background: var(--sunk); border-radius: var(--r2); padding: 8px 12px; font-size: var(--f-body); }
+.me .via { display: flex; align-items: center; gap: 5px; color: var(--faint); font-size: var(--f-small); margin-bottom: 2px; }
+.me .via .i { width: 12px; height: 12px; }
+.fold { display: flex; align-items: center; gap: 6px; font-size: var(--f-ui); color: var(--faint); margin-top: 8px; }
+.fold .i { width: 12px; height: 12px; }
+.ref { display: inline-flex; align-items: center; gap: 6px; font: 500 var(--f-ui) var(--sans); }
+.since { display: flex; align-items: center; gap: 10px; margin: 22px 0 0; font-size: var(--f-small); color: var(--needs-text); font-weight: 600; }
+.since::before, .since::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.made { display: grid; gap: 0; margin-top: 10px; border: 1px solid var(--line); border-radius: var(--r2); }
+.made > div { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 10px; font-size: var(--f-ui); }
+.made > div + div { border-top: 1px solid var(--hair); }
+.made .w { display: flex; align-items: center; gap: 6px; color: var(--faint); font-size: var(--f-small); }
+.comp { margin: 0 auto 14px; width: min(640px, calc(100% - 32px)); border: 1px solid var(--edge); border-radius: var(--r3); background: var(--paper); padding: 8px 8px 6px 12px; }
+.comp .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: var(--pill); border: 1px solid var(--line); font-size: var(--f-small); background: var(--paper); }
+.comp .cph { color: var(--faint); font-size: var(--f-body); padding: 8px 0 10px; }
+.comp .bot { display: flex; align-items: center; gap: 4px; }
+.callp { border-left: 1px solid var(--line); }
+.callp .phd .live { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; font-size: var(--f-body); }
+.callp .phd .tm { font: var(--f-small) var(--mono); color: var(--faint); }
+.charph { margin: 14px 16px 0; height: 300px; border: 1px dashed var(--edge); border-radius: var(--r3); display: grid; place-items: center; color: var(--faint); font: var(--f-small) var(--mono); background: var(--sunk); }
+.word { text-align: center; font-size: var(--f-body); color: var(--dim); margin: 10px 0 0; }
+.cnow { margin: 14px 16px 0; }
+.cnow h4 { margin: 0 0 4px; font-size: var(--f-small); color: var(--faint); font-weight: 600; }
+.cnow .r { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 5px 0; font-size: var(--f-ui); border-top: 1px solid var(--hair); }
+.cnow .r .w { color: var(--faint); font-size: var(--f-small); }
+.caps { margin: 14px 16px 0; font-size: var(--f-ui); display: grid; gap: 6px; }
+.caps p { margin: 0; color: var(--dim); }
+.caps b { color: var(--ink); font-weight: 600; }
+.ctl { margin-top: auto; padding: 12px 16px 14px; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; position: relative; }
+.ctl .btn { height: 36px; justify-content: center; padding: 0 14px; }
+.ctl .talk { font-size: var(--f-body); }
+.tip { position: absolute; bottom: 56px; right: 70px; background: var(--toast-bg); color: var(--toast-ink); font-size: var(--f-small); padding: 4px 8px; border-radius: var(--r1); white-space: nowrap; }
+.tip kbd { color: inherit; box-shadow: inset 0 0 0 1px currentColor; opacity: .8; margin-left: 4px; }
+.trace { display: inline-flex; align-items: center; gap: 2px; height: 14px; }
+.trace i { width: 2px; border-radius: 1px; background: var(--dim); }
+.callline .w { font-weight: 650; color: var(--ink); }
+.callline .btn { height: 24px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button aria-pressed="true">Session</button><button>Board</button><button>Pages</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="body4">
+    <aside class="pane rl">
+      <header class="phd"><h1>Touched today</h1><span class="faint" style="font-size:var(--f-small)">7</span>
+        <div class="acts"><button class="btn icon" title="Search (/)"><i data-i="search"></i></button></div></header>
+      <div class="scroll">
+        <div class="grp">Waiting on you <span class="count n">2</span></div>
+        <div class="srow nd"><span class="sb n">N</span><div class="grow"><div class="t ell">Rate limit retries</div><div class="s"><span class="tick h-api"></span><span class="ell">Wants to run <code class="mono">go test ./... -run Retry</code></span></div>
+          <div class="ans"><button class="btn">1 Allow once</button><button class="btn">2 Always</button><button class="btn quiet">3 Deny</button></div></div><div class="e">4m</div></div>
+        <div class="srow"><span class="sb t">T</span><div class="grow"><div class="t ell">Invoice export as CSV</div><div class="s"><span class="tick h-api"></span><span class="ell">Started it, said keep the header row</span></div></div><div class="e">22m</div></div>
+        <div class="grp">Working <span class="count w">2</span></div>
+        <div class="srow"><span class="sb w">W</span><div class="grow"><div class="t ell">Migrate sessions table to UUID keys</div><div class="s"><span class="tick h-api"></span><span class="ell">Passed on your note about rollback</span></div></div><div class="e">now</div></div>
+        <div class="srow"><span class="sb w">W</span><div class="grow"><div class="t ell">Node pool upgrade</div><div class="s"><span class="tick h-infra"></span><span class="ell">Started it on laptop</span></div></div><div class="e">1h</div></div>
+        <div class="grp">Ended <span class="count faint">3</span></div>
+        <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t ell" style="font-weight:500">Fix flaky upload test</div><div class="s"><span class="tick h-web"></span><span class="ell">Asked it to merge</span></div></div><div class="e">2h</div></div>
+        <div class="srow" lang="tr"><span class="sb e">E</span><div class="grow"><div class="t ell" style="font-weight:500">Fatura PDF'inde Türkçe karakterler bozuk</div><div class="s" lang="en"><span class="tick h-bill"></span><span class="ell">Started it from your call</span></div></div><div class="e">3h</div></div>
+        <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t ell" style="font-weight:500">Weekly dependency bumps</div><div class="s"><span class="tick h-home"></span><span class="ell">Read its summary to you</span></div></div><div class="e">6h</div></div>
+        <div class="foot">Sessions the assistant started or messaged since 06:00.</div>
+      </div>
+    </aside>
+
+    <section class="pane sh">
+      <header class="phd"><span class="am"><i data-i="mic"></i></span><h1>Assistant</h1><span class="where ell">devbox · since 06:00</span>
+        <div class="acts">
+          <button class="btn" title="On a call; the panel is on the right (.)" disabled><i data-i="phone"></i>On a call</button>
+          <button class="btn icon" title="Terminal (`)"><i data-i="term"></i></button>
+          <button class="btn icon" title="More: Start over, Agents, Reminders"><i data-i="more"></i></button>
+        </div></header>
+      <div class="scroll">
+        <div class="tx">
+          <div class="turn"><span class="clk">13:58</span><div class="me"><div class="via"><i data-i="phone"></i>on a call</div>Start something in api for the invoice CSV export, same columns as the PDF.</div></div>
+          <div class="turn"><span class="clk">14:02</span><div><p class="say">Started it on devbox and told it to keep the header row and reuse the PDF's column list.</p>
+            <div class="fold"><i data-i="fwd"></i>started 1 session · 6s</div></div></div>
+          <div class="since">Since you last looked, 14:20</div>
+          <div class="turn"><span class="clk">14:31</span><div>
+            <p class="say">Two things want you. The CSV export is done and put its two open choices on a page. Rate limit retries is asking to run its test suite twenty times in a row.</p>
+            <div class="made">
+              <div><span class="sb n">N</span><span class="ell">Rate limit retries</span><span class="w"><span class="tick h-api"></span>api · 4m</span></div>
+              <div><span class="sb t">T</span><span class="ell">Invoice export as CSV</span><span class="w"><span class="tick h-api"></span>api · 22m</span></div>
+            </div>
+            <div class="fold"><i data-i="fwd"></i>read 2 sessions · 3s</div>
+          </div></div>
+        </div>
+      </div>
+      <div class="comp">
+        <div class="chips"><span class="chip">Allow it once</span><span class="chip">Open the CSV page</span></div>
+        <div class="cph">Ask the assistant</div>
+        <div class="bot"><button class="btn icon" title="Attach"><i data-i="attach"></i></button><button class="btn icon" title="Dictate"><i data-i="mic"></i></button><span class="faint" style="font-size:var(--f-small)">/ for commands</span><span class="grow"></span><button class="btn" disabled title="Send (enter)"><i data-i="send"></i>Send</button></div>
+      </div>
+    </section>
+
+    <aside class="pane callp" aria-label="Call with the assistant">
+      <header class="phd"><span class="live"><i data-i="phone"></i>Assistant</span><span class="tm">4:12</span>
+        <div class="acts"><button class="btn icon" title="Minimize (esc)"><i data-i="down"></i></button></div></header>
+      <div class="charph">character</div>
+      <p class="word" aria-live="polite">Listening</p>
+      <div class="cnow"><h4>On this call</h4>
+        <div class="r"><span class="sb n">N</span><span class="ell">Rate limit retries</span><span class="w">waiting</span></div>
+        <div class="r"><span class="sb t">T</span><span class="ell">Invoice export as CSV</span><span class="w">your turn</span></div>
+      </div>
+      <div class="caps">
+        <p><b>You</b> What does the retry session want?</p>
+        <p><b>Assistant</b> To run its retry test twenty times in a row, to be sure it isn't flaky. Shall I allow it once?</p>
+      </div>
+      <div class="ctl">
+        <button class="btn talk" title="Hold to talk (space)"><i data-i="mic"></i>Talk</button>
+        <button class="btn" title="Mute (m)" style="background:var(--hi)"><i data-i="off"></i>Mute</button>
+        <button class="btn danger primary" title="End (shift E)"><i data-i="x"></i>End</button>
+        <span class="tip" role="tooltip">Mute <kbd>m</kbd></span>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="console callline" aria-label="Call">
+    <i data-i="phone"></i><span class="trace" aria-hidden="true"><i style="height:4px"></i><i style="height:9px"></i><i style="height:13px"></i><i style="height:7px"></i><i style="height:11px"></i><i style="height:5px"></i><i style="height:8px"></i></span>
+    <span class="w">assistant</span>
+    <span class="line ell">To run its retry test twenty times in a row, to be sure it isn't flaky. Shall I allow it once?</span>
+    <span class="mono faint">4:12</span>
+    <button class="btn" title="Hold to talk (space)"><i data-i="mic"></i>Talk</button>
+    <button class="btn" title="Mute (m)"><i data-i="off"></i>Mute</button>
+    <button class="btn danger" title="End (shift E)">End</button>
+  </footer>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

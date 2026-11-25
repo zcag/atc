@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pages, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.gal { padding: 4px 20px 24px; }
+.gal .grp { padding: 16px 2px 8px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.card { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); overflow: hidden; min-width: 0; }
+.card:hover { border-color: var(--edge); }
+.cap { padding: 8px 12px 10px; display: grid; gap: 2px; }
+.cap .t { display: flex; align-items: center; gap: 7px; font-size: var(--f-body); font-weight: 500; min-width: 0; }
+.card.new .cap .t { font-weight: 700; }
+.card.new .cap .t::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); flex: none; }
+.cap .m { display: flex; align-items: center; gap: 6px; font-size: var(--f-small); color: var(--faint); }
+.tick { display: inline-block; width: 3px; height: 11px; border-radius: 1px; flex: none; background: light-dark(oklch(58% 0.11 var(--h)), oklch(74% 0.1 var(--h))); }
+.h-web { --h: 190; } .h-api { --h: 305; } .h-home { --h: 130; } .h-dot { --h: 335; } .h-docs { --h: 160; } .h-bill { --h: 100; } .h-infra { --h: 275; }
+
+.th { aspect-ratio: 16 / 10; background: var(--paper); border-bottom: 1px solid var(--line); padding: 12px 14px; display: flex; flex-direction: column; gap: 5px; overflow: hidden; }
+.th i { display: block; height: 4px; border-radius: 2px; background: var(--line); flex: none; }
+.th i.h { height: 8px; width: 52%; background: var(--dim); margin-bottom: 4px; }
+.th i.s { width: 68%; } .th i.xs { width: 40%; }
+.th .row { display: flex; gap: 6px; }
+.th .row i { flex: 1; }
+.th .tb { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 6px 8px; margin-top: 4px; }
+.th .tb i { height: 4px; }
+.th .tb i.k { background: var(--faint); }
+.th .bars { display: flex; align-items: flex-end; gap: 5px; flex: 1; padding-top: 6px; border-bottom: 1px solid var(--line); }
+.th .bars i { flex: 1; height: auto; border-radius: 2px 2px 0 0; background: var(--line); }
+.th .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; flex: 1; }
+.th .cards b { border: 1px solid var(--line); border-radius: 3px; display: flex; flex-direction: column; gap: 3px; padding: 5px; }
+.th .cards b i { height: 3px; }
+.th .callout { border-left: 2px solid var(--needs); padding-left: 6px; display: flex; flex-direction: column; gap: 4px; }
+.th.dk { background: var(--bg); }
+.th .code { background: var(--code); border-radius: 3px; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.th .code i { background: var(--edge); }
+.gal .hint { font-size: var(--f-small); color: var(--faint); margin-left: auto; font-weight: 400; }
+@media (min-width: 900px) { .ph { display: none; } }
+@media (max-width: 899px) {
+.app, .app ~ .scrim, .dlg { display: none; }
+
+.ph .top { padding: 12px 12px 4px 16px; }
+.gal { padding: 0 12px 20px; background: var(--bg); }
+.gal .grp { padding: 14px 2px 8px; }
+.grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.th { padding: 9px 10px; gap: 4px; }
+.th i.h { height: 6px; margin-bottom: 2px; }
+.th i { height: 3px; }
+.cap { padding: 7px 10px 9px; }
+.cap .t { font-size: var(--f-ui); }
+.cap .t { align-items: flex-start; }
+.card.new .cap .t::before { margin-top: 6px; }
+.cap .t .ell { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ph .scroll { background: var(--bg); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay on"><b>0</b>All</span>
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button>Session</button><button>Board</button><button aria-pressed="true">Pages</button>
+      </div>
+    </div>
+  </nav>
+
+  <section class="pane" style="background:var(--bg)">
+    <header class="phd" style="background:var(--paper)">
+      <h1>Pages</h1><span class="faint" style="font-size:var(--f-small)">every bay · 3 new</span>
+      <div class="acts">
+        <button class="btn quiet"><i data-i="search"></i>Search</button>
+        <button class="btn icon" title="Page index (])"><i data-i="list"></i></button>
+      </div>
+    </header>
+    <div class="scroll">
+      <div class="gal">
+        <div class="grp">Pinned <span class="count faint">4</span><span class="hint">pages you keep, at /p/name</span></div>
+        <div class="grid">
+          <div class="card new"><div class="th"><i class="h"></i><div class="callout"><i class="s"></i><i class="xs"></i></div><div class="tb"><i class="k"></i><i></i><i></i><i></i><i class="k"></i><i></i><i></i><i></i><i class="k"></i><i></i><i></i><i></i><i class="k"></i><i></i><i></i><i></i></div><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">Open items</span></div><div class="m"><span class="tick h-home"></span>~ · 2h</div></div></div>
+          <div class="card"><div class="th"><i class="h"></i><div class="bars"><i style="height:40%"></i><i style="height:62%"></i><i style="height:55%"></i><i style="height:80%"></i><i style="height:48%"></i><i style="height:70%"></i><i style="height:90%"></i></div><div class="row"><i></i><i></i><i></i></div></div>
+            <div class="cap"><div class="t"><span class="ell">Error budget, last 30 days</span></div><div class="m"><span class="tick h-infra"></span>infra · 9h</div></div></div>
+          <div class="card"><div class="th dk" style="color-scheme:dark"><i class="h"></i><div class="cards"><b><i></i><i class="s"></i></b><b><i></i><i></i></b><b><i class="s"></i><i></i></b><b><i></i><i class="xs"></i></b><b><i></i><i></i></b><b><i class="xs"></i><i></i></b></div></div>
+            <div class="cap"><div class="t"><span class="ell">Release board</span></div><div class="m"><span class="tick h-web"></span>web · 1d</div></div></div>
+          <div class="card"><div class="th"><i class="h"></i><i></i><i class="s"></i><i></i><i class="xs"></i><div class="code"><i class="s"></i><i></i><i class="xs"></i></div><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">Dotfiles: what each machine runs</span></div><div class="m"><span class="tick h-dot"></span>dotfiles · 4d</div></div></div>
+        </div>
+
+        <div class="grp">This week <span class="count faint">8</span></div>
+        <div class="grid">
+          <div class="card new"><div class="th"><i class="h"></i><i class="s"></i><div class="code"><i></i><i class="s"></i></div><div class="tb"><i class="k"></i><i></i><i></i><i></i><i class="k"></i><i></i><i></i><i></i></div><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">CSV export: what changed</span></div><div class="m"><span class="tick h-api"></span>api · 22m</div></div></div>
+          <div class="card new"><div class="th"><i class="h"></i><div class="row"><i></i><i></i></div><i class="s"></i><div class="callout"><i></i><i class="s"></i></div><i class="xs"></i><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t" lang="tr"><span class="ell">Fatura PDF'i: önce ve sonra</span></div><div class="m"><span class="tick h-bill"></span>billing · 3h</div></div></div>
+          <div class="card"><div class="th"><i class="h"></i><div class="tb"><i class="k"></i><i></i><i></i><i></i><i class="k"></i><i></i><i></i><i></i><i class="k"></i><i></i><i></i><i></i></div><i class="s"></i><i></i><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">UUID migration plan</span></div><div class="m"><span class="tick h-api"></span>api · 3h</div></div></div>
+          <div class="card"><div class="th"><i class="h"></i><div class="bars"><i style="height:70%"></i><i style="height:30%"></i><i style="height:52%"></i><i style="height:44%"></i><i style="height:66%"></i></div><i class="s"></i></div>
+            <div class="cap"><div class="t"><span class="ell">Rate limiter options</span></div><div class="m"><span class="tick h-api"></span>api · 1d</div></div></div>
+          <div class="card"><div class="th"><i class="h"></i><i></i><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">Docs site: broken links found</span></div><div class="m"><span class="tick h-docs"></span>docs · 2d</div></div></div>
+          <div class="card"><div class="th dk" style="color-scheme:dark"><i class="h"></i><div class="code"><i></i><i class="s"></i><i></i><i class="xs"></i><i class="s"></i></div><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">Node pool upgrade runbook</span></div><div class="m"><span class="tick h-infra"></span>infra · 2d</div></div></div>
+          <div class="card"><div class="th"><i class="h"></i><div class="cards"><b><i></i><i class="s"></i></b><b><i></i><i></i></b><b><i class="s"></i><i></i></b></div><i class="s"></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">Landing page variants</span></div><div class="m"><span class="tick h-web"></span>web · 3d</div></div></div>
+          <div class="card"><div class="th"><i class="h"></i><i class="s"></i><div class="row"><i></i><i></i><i></i></div><div class="bars"><i style="height:20%"></i><i style="height:35%"></i><i style="height:60%"></i><i style="height:85%"></i></div></div>
+            <div class="cap"><div class="t"><span class="ell">Test suite timings</span></div><div class="m"><span class="tick h-web"></span>web · 5d</div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">Started the CSV export session in api and told it to keep the header row.</span>
+    <span class="faint">12m</span>
+    <span class="ask">Talk to the assistant</span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet">Agents <span class="count n">1</span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<div class="ph">
+  <div>
+    <div class="top">
+      <h1>Pages</h1>
+      <span class="faint" style="font-size:var(--f-small);margin-left:4px">3 new</span>
+      <span class="grow"></span>
+      <button class="btn icon" style="width:40px;height:40px" title="Search"><i data-i="search"></i></button>
+    </div>
+    <nav class="baystrip">
+      <span class="bay on"><b>0</b>All</span>
+      <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+      <span class="bay"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+      <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+      <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+      <span class="bay"><b>5</b>docs</span>
+    </nav>
+  </div>
+  <div class="scroll">
+    <div class="gal">
+      <div class="grp">Pinned <span class="count faint">4</span></div>
+      <div class="grid">
+        <div class="card new"><div class="th"><i class="h"></i><div class="callout"><i class="s"></i><i class="xs"></i></div><div class="tb"><i class="k"></i><i></i><i></i><i></i><i class="k"></i><i></i><i></i><i></i><i class="k"></i><i></i><i></i><i></i><i class="k"></i><i></i><i></i><i></i></div><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">Open items</span></div><div class="m"><span class="tick h-home"></span>~ · 2h</div></div></div>
+        <div class="card"><div class="th"><i class="h"></i><div class="bars"><i style="height:40%"></i><i style="height:62%"></i><i style="height:55%"></i><i style="height:80%"></i><i style="height:48%"></i><i style="height:70%"></i><i style="height:90%"></i></div><div class="row"><i></i><i></i><i></i></div></div>
+            <div class="cap"><div class="t"><span class="ell">Error budget, last 30 days</span></div><div class="m"><span class="tick h-infra"></span>infra · 9h</div></div></div>
+        <div class="card"><div class="th dk" style="color-scheme:dark"><i class="h"></i><div class="cards"><b><i></i><i class="s"></i></b><b><i></i><i></i></b><b><i class="s"></i><i></i></b><b><i></i><i class="xs"></i></b><b><i></i><i></i></b><b><i class="xs"></i><i></i></b></div></div>
+            <div class="cap"><div class="t"><span class="ell">Release board</span></div><div class="m"><span class="tick h-web"></span>web · 1d</div></div></div>
+        <div class="card"><div class="th"><i class="h"></i><i></i><i class="s"></i><i></i><i class="xs"></i><div class="code"><i class="s"></i><i></i><i class="xs"></i></div><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">Dotfiles: what each machine runs</span></div><div class="m"><span class="tick h-dot"></span>dotfiles · 4d</div></div></div>
+      </div>
+      <div class="grp">This week <span class="count faint">8</span></div>
+      <div class="grid">
+        <div class="card new"><div class="th"><i class="h"></i><i class="s"></i><div class="code"><i></i><i class="s"></i></div><div class="tb"><i class="k"></i><i></i><i></i><i></i><i class="k"></i><i></i><i></i><i></i></div><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">CSV export: what changed</span></div><div class="m"><span class="tick h-api"></span>api · 22m</div></div></div>
+        <div class="card new"><div class="th"><i class="h"></i><div class="row"><i></i><i></i></div><i class="s"></i><div class="callout"><i></i><i class="s"></i></div><i class="xs"></i><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t" lang="tr"><span class="ell">Fatura PDF'i: önce ve sonra</span></div><div class="m"><span class="tick h-bill"></span>billing · 3h</div></div></div>
+        <div class="card"><div class="th"><i class="h"></i><div class="tb"><i class="k"></i><i></i><i></i><i></i><i class="k"></i><i></i><i></i><i></i><i class="k"></i><i></i><i></i><i></i></div><i class="s"></i><i></i><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">UUID migration plan</span></div><div class="m"><span class="tick h-api"></span>api · 3h</div></div></div>
+        <div class="card"><div class="th"><i class="h"></i><div class="bars"><i style="height:70%"></i><i style="height:30%"></i><i style="height:52%"></i><i style="height:44%"></i><i style="height:66%"></i></div><i class="s"></i></div>
+            <div class="cap"><div class="t"><span class="ell">Rate limiter options</span></div><div class="m"><span class="tick h-api"></span>api · 1d</div></div></div>
+        <div class="card"><div class="th"><i class="h"></i><i></i><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">Docs site: broken links found</span></div><div class="m"><span class="tick h-docs"></span>docs · 2d</div></div></div>
+        <div class="card"><div class="th dk" style="color-scheme:dark"><i class="h"></i><div class="code"><i></i><i class="s"></i><i></i><i class="xs"></i><i class="s"></i></div><i></i><i class="s"></i><i></i><i class="xs"></i><i></i><i class="s"></i><i></i><i></i></div>
+            <div class="cap"><div class="t"><span class="ell">Node pool upgrade runbook</span></div><div class="m"><span class="tick h-infra"></span>infra · 2d</div></div></div>
+      </div>
+    </div>
+  </div>
+  <nav class="tabbar">
+    <button><i data-i="list"></i>Sessions<span class="count n">7</span></button>
+    <button aria-current="page"><i data-i="page"></i>Pages</button>
+    <button><i data-i="mic"></i>Assistant</button>
+    <button><i data-i="search"></i>Search</button>
+    <button><i data-i="plus"></i>New</button>
+  </nav>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

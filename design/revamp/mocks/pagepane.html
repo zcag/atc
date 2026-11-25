@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Page beside its session, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.body4 { display: grid; grid-template-columns: 300px minmax(0, 1fr) minmax(0, 1.3fr); min-height: 0; }
+.rl { background: var(--bg); }
+.rl .phd { background: var(--bg); }
+.rl .phd h1 { font-size: var(--f-body); }
+.rl .grp { padding: 12px 14px 4px; }
+.rl .srow { padding: 8px 14px; grid-template-columns: 18px minmax(0, 1fr) 12px; background: none; border-top-color: transparent; }
+.rl .srow.sel { background: var(--paper); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r2); margin: 0 6px; padding: 8px 8px; }
+.rl .srow.nd { box-shadow: inset 3px 0 0 var(--needs); }
+.rl .srow .t { font-size: var(--f-ui); }
+.rl .srow .s { font-size: var(--f-small); }
+.rl .qk { font: 500 var(--f-micro)/18px var(--mono); color: var(--faint); text-align: right; }
+.rl .ans { display: flex; gap: 4px; margin-top: 6px; }
+.rl .ans .btn { height: 24px; padding: 0 8px; font-size: var(--f-small); }
+.sh h1 { font-size: var(--f-title); overflow: hidden; text-overflow: ellipsis; }
+.tx { max-width: 600px; margin: 0 auto; padding: 8px 20px 24px; }
+.turn { display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 0 8px; margin: 16px 0 0; }
+.turn .clk { font: var(--f-micro)/26px var(--mono); color: var(--faint); }
+.say { font: var(--f-read)/1.5 var(--read); margin: 0; }
+.say code, .pg code { font: .86em var(--mono); background: var(--code); padding: 0 3px; border-radius: 3px; }
+.me { background: var(--sunk); border-radius: var(--r2); padding: 8px 12px; font-size: var(--f-body); }
+.fold { display: flex; align-items: center; gap: 6px; font-size: var(--f-ui); color: var(--faint); margin-top: 8px; }
+.fold .i { width: 12px; height: 12px; }
+.since { display: flex; align-items: center; gap: 10px; margin: 22px 0 0; font-size: var(--f-small); color: var(--needs-text); font-weight: 600; }
+.since::before, .since::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.catch { font-size: var(--f-ui); color: var(--dim); margin: 6px 0 0 48px; }
+.comp { margin: 0 16px 14px; border: 1px solid var(--edge); border-radius: var(--r3); background: var(--paper); padding: 8px 8px 6px 12px; }
+.comp .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: var(--pill); border: 1px solid var(--line); font-size: var(--f-small); background: var(--paper); }
+.comp .cph { color: var(--faint); font-size: var(--f-body); padding: 8px 0 10px; }
+.comp .bot { display: flex; align-items: center; gap: 6px; }
+.pgp .phd h1 { font-size: var(--f-body); overflow: hidden; text-overflow: ellipsis; }
+.pgp .scroll { background: var(--paper); }
+.pg { max-width: 640px; padding: 26px 32px 40px; font: var(--f-body)/1.55 var(--read); }
+.pg h2 { font: 650 var(--f-h)/1.25 var(--sans); margin: 0 0 6px; }
+.pg h3 { font: 650 var(--f-body)/1.3 var(--sans); margin: 22px 0 6px; }
+.pg p { margin: 0 0 10px; color: var(--ink); }
+.pg .lede { color: var(--dim); font-size: var(--f-title); }
+.pg table { border-collapse: collapse; width: 100%; font-size: var(--f-ui); }
+.pg th, .pg td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--hair); }
+.pg th { color: var(--faint); font-weight: 600; font-size: var(--f-small); }
+.pg pre { font: var(--f-small)/1.5 var(--mono); background: var(--code); padding: 10px 12px; border-radius: var(--r2); margin: 0 0 10px; overflow: hidden; }
+.pg .opt { border: 1px solid var(--line); border-radius: var(--r2); padding: 10px 12px; margin: 0 0 8px; }
+.pg .opt b { font-family: var(--sans); }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay on"><b>2</b>api <span class="count n">1</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button aria-pressed="true">Session</button><button>Board</button><button>Pages</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="body4">
+    <aside class="pane rl">
+      <header class="phd"><h1>api</h1><span class="where">~/code/api</span>
+        <div class="acts"><button class="btn icon" title="Search (/)"><i data-i="search"></i></button><button class="btn icon" title="New session (n)"><i data-i="plus"></i></button></div></header>
+      <div class="scroll">
+        <div class="grp">Waiting on you <span class="count n">1</span></div>
+        <div class="srow nd"><span class="sb n">N</span><div class="grow"><div class="t ell">Rate limit retries</div><div class="s ell">Wants to run <code class="mono">go test ./... -run Retry</code></div>
+          <div class="ans"><button class="btn">1 Allow once</button><button class="btn">2 Always</button><button class="btn quiet">3 Deny</button></div></div><span class="qk">q</span></div>
+        <div class="grp">Your turn <span class="count faint">1</span></div>
+        <div class="srow sel"><span class="sb t">T</span><div class="grow"><div class="t ell">Invoice export as CSV</div><div class="s ell">Done: CSV export with a header row; 14 tests pass.</div></div><span class="qk">w</span></div>
+        <div class="grp">Working <span class="count w">1</span></div>
+        <div class="srow"><span class="sb w">W</span><div class="grow"><div class="t ell">Migrate sessions table to UUID keys</div><div class="s ell">Writing the backfill; 2 of 5 tables done.</div></div><span class="qk">e</span></div>
+        <div class="grp">Earlier today <span class="count faint">3</span></div>
+        <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t ell" style="font-weight:500">Fix flaky upload test</div><div class="s ell">Ended: test made deterministic, merged.</div></div><span class="qk"></span></div>
+        <div class="srow" lang="tr"><span class="sb e">E</span><div class="grow"><div class="t ell" style="font-weight:500">Fatura PDF'inde Türkçe karakterler bozuk</div><div class="s ell">Ended: ğ, ş ve ı artık doğru gömülüyor.</div></div><span class="qk"></span></div>
+        <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t ell" style="font-weight:500">Review webhook signature check</div><div class="s ell">Ended: two comments posted.</div></div><span class="qk"></span></div>
+      </div>
+    </aside>
+
+    <section class="pane sh">
+      <header class="phd"><span class="sb t">T</span><h1>Invoice export as CSV</h1><span class="where ell">devbox · csv-export</span>
+        <div class="acts"><button class="btn icon" title="Page (p), open beside" style="color:var(--ink);background:var(--hi)"><i data-i="page"></i></button><button class="btn icon" title="Terminal (`)"><i data-i="term"></i></button><button class="btn icon" title="More"><i data-i="more"></i></button></div></header>
+      <div class="scroll">
+        <div class="tx">
+          <div class="turn"><span class="clk">14:02</span><div class="me">Add a CSV export to invoices, same columns as the PDF. Keep the header row.</div></div>
+          <div class="turn"><span class="clk">14:03</span><div><p class="say">I'll add an export endpoint next to the PDF one and reuse its column list, so the two can't drift.</p>
+            <div class="fold"><i data-i="fwd"></i>ran 4 commands, edited 3 files · 38s</div></div></div>
+          <div class="since">Since you last looked, 14:09</div>
+          <p class="catch">Finished with a reply and a page; 14 tests pass.</p>
+          <div class="turn"><span class="clk">14:11</span><div><p class="say">Done: <code>GET /invoices/export.csv</code> streams the same columns as the PDF, header row first. Two things are your call, so I put them on a page beside this: the date format and whether voided invoices are included.</p>
+            <div class="fold"><i data-i="fwd"></i>ran 2 commands, test · 14s</div></div></div>
+        </div>
+      </div>
+      <div class="comp">
+        <div class="chips"><span class="chip">ISO dates, skip voided</span><span class="chip">Show me the diff</span></div>
+        <div class="cph">Reply</div>
+        <div class="bot"><button class="btn icon" title="Attach"><i data-i="attach"></i></button><span class="faint" style="font-size:var(--f-small)">/ for commands</span><span class="grow"></span><button class="btn" disabled title="Send (enter)"><i data-i="send"></i>Send</button></div>
+      </div>
+    </section>
+
+    <section class="pane pgp">
+      <header class="phd"><h1>CSV export: what changed</h1><span class="faint" style="font-size:var(--f-small);white-space:nowrap">updated 22m</span>
+        <div class="acts">
+          <button class="btn icon" title="Full (z)"><i data-i="zen"></i></button>
+          <button class="btn icon" title="Open in Pages"><i data-i="out"></i></button>
+          <button class="btn icon" title="More: Copy link, Send a note, Reload"><i data-i="more"></i></button>
+          <button class="btn icon" title="Close (esc)"><i data-i="x"></i></button>
+        </div></header>
+      <div class="scroll">
+        <article class="pg">
+          <h2>CSV export: what changed</h2>
+          <p class="lede">One new endpoint, the same columns as the PDF, and two choices before it ships.</p>
+          <h3>The endpoint</h3>
+          <pre>GET /invoices/export.csv?from=2026-11-01&amp;to=2026-11-30
+Content-Type: text/csv; charset=utf-8</pre>
+          <p>It streams rows as it reads them, so a year of invoices doesn't sit in memory. The column list now lives in one place and the PDF reads it too.</p>
+          <h3>Column order</h3>
+          <table>
+            <tr><th style="width:32px">#</th><th>Column</th><th>Example</th></tr>
+            <tr><td class="mono">1</td><td>number</td><td class="mono">INV-20481</td></tr>
+            <tr><td class="mono">2</td><td>issued</td><td class="mono">2026-11-14</td></tr>
+            <tr><td class="mono">3</td><td>customer</td><td>Northwind Supply</td></tr>
+            <tr><td class="mono">4</td><td>total</td><td class="mono">1,240.00</td></tr>
+            <tr><td class="mono">5</td><td>currency</td><td class="mono">EUR</td></tr>
+          </table>
+          <h3>Two choices</h3>
+          <div class="opt"><b>Dates.</b> ISO (<code>2026-11-14</code>) sorts and imports cleanly; the PDF's <code>14 Nov 2026</code> reads better in a sheet.</div>
+          <div class="opt"><b>Voided invoices.</b> Left out today. Including them adds a status column so totals still add up.</div>
+        </article>
+      </div>
+    </section>
+  </div>
+
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">Started the CSV export session in api and told it to keep the header row.</span>
+    <span class="faint">12m</span>
+    <span class="ask">Talk to the assistant</span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet">Agents <span class="count n">1</span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

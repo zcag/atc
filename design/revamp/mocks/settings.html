@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.body2 { display: grid; grid-template-columns: 220px minmax(0, 1fr); min-height: 0; }
+.snav { background: var(--bg); border-right: 1px solid var(--line); padding: 10px 8px; display: flex; flex-direction: column; gap: 1px; font-size: var(--f-ui); }
+.snav a { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 10px; border-radius: var(--r2); color: var(--dim); text-decoration: none; }
+.snav a:hover { background: var(--hi); }
+.snav a[aria-current] { background: var(--sel); color: var(--ink); font-weight: 600; }
+.snav a .x { margin-left: auto; color: var(--fail); font-size: var(--f-small); display: inline-flex; align-items: center; gap: 4px; }
+.snav hr { border: 0; border-top: 1px solid var(--line); margin: 8px 4px; }
+.wrap { max-width: 940px; padding: 4px 32px 40px; }
+.sec { display: flex; align-items: baseline; gap: 10px; padding: 22px 0 8px; border-bottom: 1px solid var(--line); }
+.sec h2 { margin: 0; font-size: var(--f-title); font-weight: 650; }
+.sec .faint { font-size: var(--f-small); }
+.set { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 24px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--hair); }
+.set .k { font-weight: 600; font-size: var(--f-ui); }
+.set .d { color: var(--dim); font-size: var(--f-ui); max-width: 460px; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px 0 4px; }
+.card { border-radius: var(--r3); box-shadow: 0 0 0 1px var(--line); overflow: hidden; background: var(--paper); }
+.card.on { box-shadow: 0 0 0 2px var(--ink); }
+.card .pv { display: grid; grid-template-columns: 1fr 1fr; height: 96px; }
+.card .meta { padding: 10px 12px; font-size: var(--f-ui); }
+.card .meta b { display: flex; justify-content: space-between; font-weight: 600; }
+.card .meta b span { font-weight: 400; color: var(--faint); font-size: var(--f-small); }
+.card .meta div { color: var(--dim); margin-top: 2px; }
+.half { background: var(--pb); color: var(--pi); padding: 8px; display: grid; gap: 6px; align-content: start; position: relative; }
+.half .r { display: flex; gap: 5px; align-items: center; }
+.half .blk { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.half .ln { height: 3px; border-radius: 2px; background: var(--pi); opacity: .85; }
+.half .ln.d { opacity: .35; }
+.half .tg { position: absolute; right: 6px; bottom: 4px; font: 10px var(--mono); opacity: .6; }
+.th-atc { --pb: var(--paper); --pi: var(--ink); }
+.th-frappe { --pb: oklch(from var(--paper) calc(l + 0.01) 0.02 60); --pi: oklch(from var(--ink) l 0.06 280); }
+.th-frappe.dk { --pb: oklch(from var(--paper) calc(l + 0.08) 0.035 280); --pi: oklch(from var(--ink) l 0.04 280); }
+.th-nord { --pb: oklch(from var(--paper) l 0.012 250); --pi: oklch(from var(--ink) calc(l + 0.08) 0.04 250); }
+.th-nord.dk { --pb: oklch(from var(--paper) calc(l + 0.1) 0.03 255); --pi: oklch(from var(--ink) l 0.03 250); }
+.reading { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 28px; padding-top: 6px; }
+.rp .set { grid-template-columns: 110px minmax(0, 1fr); }
+.rp .set .k { font-weight: 500; color: var(--dim); }
+.rp .seg { justify-self: start; }
+.aa button { font-family: var(--read); }
+.preview { border-radius: var(--r3); background: var(--paper); box-shadow: 0 0 0 1px var(--line); padding: 16px 18px; font: 17.5px/1.6 var(--read); color: var(--ink); align-self: start; margin-top: 12px; }
+.preview .who { font: 500 var(--f-small) var(--sans); color: var(--faint); margin-bottom: 6px; }
+.note { font-size: var(--f-small); color: var(--faint); margin-top: 10px; display: flex; gap: 6px; align-items: center; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button>Session</button><button>Board</button><button>Pages</button><button aria-pressed="true"><i data-i="gear"></i> Settings</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="body2">
+    <nav class="snav">
+      <a href="#" aria-current="page">Appearance</a>
+      <a href="#">Session list</a>
+      <a href="#">Assistant</a>
+      <a href="#">Calls <span class="x"><i data-i="warn"></i>1</span></a>
+      <a href="#">Characters</a>
+      <a href="#">Devices</a>
+      <a href="#">Machines</a>
+      <hr>
+      <a href="#">Set-up checks <span class="x">1 broken</span></a>
+      <a href="#">About</a>
+    </nav>
+
+    <section class="pane">
+      <header class="phd"><h1>Appearance</h1><span class="where">theme for every device, reading for this one</span></header>
+      <div class="scroll">
+        <div class="wrap">
+          <div class="sec"><h2>Theme</h2><span class="faint">every device</span></div>
+          <div class="set">
+            <div><div class="k">Light and dark</div><div class="d">Auto follows each device's own setting, so the phone can be dark while the desk is light.</div></div>
+            <div class="seg" role="group"><button aria-pressed="true">Auto</button><button>Light</button><button>Dark</button></div>
+          </div>
+          <div class="cards">
+            <div class="card on">
+              <div class="pv">
+                <div class="half th-atc" style="color-scheme:light"><div class="r"><i class="blk" style="background:var(--needs)"></i><i class="ln" style="width:70%"></i></div><div class="r"><i class="blk" style="box-shadow:inset 0 0 0 1.5px var(--pi)"></i><i class="ln" style="width:55%"></i></div><div class="r"><i class="blk" style="background:var(--work-wash);box-shadow:inset 2px 0 0 var(--work)"></i><i class="ln d" style="width:62%"></i></div><i class="ln d" style="width:85%;margin-left:13px"></i><span class="tg">light</span></div>
+                <div class="half th-atc" style="color-scheme:dark"><div class="r"><i class="blk" style="background:var(--needs)"></i><i class="ln" style="width:70%"></i></div><div class="r"><i class="blk" style="box-shadow:inset 0 0 0 1.5px var(--pi)"></i><i class="ln" style="width:55%"></i></div><div class="r"><i class="blk" style="background:var(--work-wash);box-shadow:inset 2px 0 0 var(--work)"></i><i class="ln d" style="width:62%"></i></div><i class="ln d" style="width:85%;margin-left:13px"></i><span class="tg">dark</span></div>
+              </div>
+              <div class="meta"><b>atc <span>In use</span></b><div>Instrument grey; the deepest dark</div></div>
+            </div>
+            <div class="card">
+              <div class="pv">
+                <div class="half th-frappe" style="color-scheme:light"><div class="r"><i class="blk" style="background:var(--needs)"></i><i class="ln" style="width:70%"></i></div><div class="r"><i class="blk" style="box-shadow:inset 0 0 0 1.5px var(--pi)"></i><i class="ln" style="width:55%"></i></div><div class="r"><i class="blk" style="background:var(--work-wash);box-shadow:inset 2px 0 0 var(--work)"></i><i class="ln d" style="width:62%"></i></div><i class="ln d" style="width:85%;margin-left:13px"></i><span class="tg">light</span></div>
+                <div class="half th-frappe dk" style="color-scheme:dark"><div class="r"><i class="blk" style="background:var(--needs)"></i><i class="ln" style="width:70%"></i></div><div class="r"><i class="blk" style="box-shadow:inset 0 0 0 1.5px var(--pi)"></i><i class="ln" style="width:55%"></i></div><div class="r"><i class="blk" style="background:var(--work-wash);box-shadow:inset 2px 0 0 var(--work)"></i><i class="ln d" style="width:62%"></i></div><i class="ln d" style="width:85%;margin-left:13px"></i><span class="tg">dark</span></div>
+              </div>
+              <div class="meta"><b>Frappé and Dawn</b><div>Catppuccin Frappé, with Rosé Pine Dawn for light</div></div>
+            </div>
+            <div class="card">
+              <div class="pv">
+                <div class="half th-nord" style="color-scheme:light"><div class="r"><i class="blk" style="background:var(--needs)"></i><i class="ln" style="width:70%"></i></div><div class="r"><i class="blk" style="box-shadow:inset 0 0 0 1.5px var(--pi)"></i><i class="ln" style="width:55%"></i></div><div class="r"><i class="blk" style="background:var(--work-wash);box-shadow:inset 2px 0 0 var(--work)"></i><i class="ln d" style="width:62%"></i></div><i class="ln d" style="width:85%;margin-left:13px"></i><span class="tg">light</span></div>
+                <div class="half th-nord dk" style="color-scheme:dark"><div class="r"><i class="blk" style="background:var(--needs)"></i><i class="ln" style="width:70%"></i></div><div class="r"><i class="blk" style="box-shadow:inset 0 0 0 1.5px var(--pi)"></i><i class="ln" style="width:55%"></i></div><div class="r"><i class="blk" style="background:var(--work-wash);box-shadow:inset 2px 0 0 var(--work)"></i><i class="ln d" style="width:62%"></i></div><i class="ln d" style="width:85%;margin-left:13px"></i><span class="tg">dark</span></div>
+              </div>
+              <div class="meta"><b>Nord</b><div>Nord's blue-grey; a softer dark</div></div>
+            </div>
+          </div>
+
+          <div class="sec"><h2>Reading</h2><span class="faint">what agents say, on this device</span></div>
+          <div class="reading">
+            <div class="rp">
+              <div class="set"><div class="k">Typeface</div><div class="seg" role="group"><button aria-pressed="true">System</button><button>Literata</button><button>Recursive</button></div></div>
+              <div class="set"><div class="k">Size</div><div class="seg aa" role="group" aria-label="Size"><button style="font-size:12px">A</button><button style="font-size:14px">A</button><button aria-pressed="true" style="font-size:16px">A</button><button style="font-size:18px">A</button><button style="font-size:20px">A</button></div></div>
+              <div class="set"><div class="k">Line length</div><div class="seg" role="group"><button>Narrow</button><button aria-pressed="true">Normal</button><button>Wide</button></div></div>
+              <div class="set"><div class="k">Line spacing</div><div class="seg" role="group"><button>Tight</button><button aria-pressed="true">Normal</button><button>Loose</button></div></div>
+              <div class="set"><div class="k">Paper</div><div class="seg" role="group"><button aria-pressed="true">Plain</button><button>Warm</button><button>Grey</button></div></div>
+              <div class="note"><i data-i="zen"></i>The same panel opens from zen, with <kbd>A</kbd>.</div>
+            </div>
+            <div class="preview">
+              <div class="who">Rate limit retries, 4m</div>
+              The retries now back off from 1 second to 30, with jitter, so a slow receiver is no longer hit twenty times a minute. Fourteen tests cover it.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">Started the CSV export session in api and told it to keep the header row.</span>
+    <span class="faint">12m</span>
+    <span class="ask">Talk to the assistant</span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet">Agents <span class="count n">1</span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

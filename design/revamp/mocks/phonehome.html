@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone home, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.ph .top { padding: 12px 12px 4px 16px; }
+.ph .top h1 { font-size: var(--f-title); }
+.srow { padding: 12px 16px; grid-template-columns: 18px minmax(0, 1fr) auto; }
+.srow .t { font-size: 15px; }
+.srow .s { font-size: var(--f-body); }
+.answers { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.answers .btn { height: 36px; padding: 0 12px; font-size: var(--f-body); }
+.grp { padding: 16px 16px 6px; }
+</style>
+</head>
+<body>
+<div class="ph">
+  <div>
+    <div class="top">
+      <h1>Sessions</h1>
+      <span class="count n" style="margin-left:4px">7 waiting</span>
+      <span class="grow"></span>
+      <button class="btn icon" style="width:40px;height:40px" title="Settings"><i data-i="gear"></i></button>
+    </div>
+    <nav class="baystrip">
+      <span class="bay"><b>0</b>All</span>
+      <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+      <span class="bay on"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+      <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+      <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+      <span class="bay"><b>5</b>docs</span>
+    </nav>
+  </div>
+  <div class="scroll">
+    <div class="grp">Waiting on you <span class="count n">2</span></div>
+    <div class="srow nd">
+      <span class="sb n">N</span>
+      <div class="grow"><div class="t">Rate limit retries</div><div class="s" style="margin-top:2px">Wants to run <code class="mono" style="font-size:12.5px">go test ./... -run Retry</code></div>
+        <div class="answers"><button class="btn">1 Allow once</button><button class="btn">2 Always</button><button class="btn quiet">3 Deny</button></div></div>
+      <div class="e"><span>4m</span></div>
+    </div>
+    <div class="srow">
+      <span class="sb t">T</span>
+      <div class="grow"><div class="t">Invoice export as CSV</div><div class="s clamp2">Done: CSV export with a header row; 14 tests pass.</div></div>
+      <div class="e"><span>22m</span><i data-i="page"></i></div>
+    </div>
+    <div class="grp">Working <span class="count w">1</span></div>
+    <div class="srow">
+      <span class="sb w">W</span>
+      <div class="grow"><div class="t">Migrate sessions table to UUID keys</div><div class="s clamp2">Writing the backfill; 2 of 5 tables done.</div></div>
+      <div class="e"><span>now</span></div>
+    </div>
+    <div class="grp">Earlier today <span class="count faint">4</span></div>
+    <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t" style="font-weight:500">Fix flaky upload test</div><div class="s ell">Ended: test made deterministic, merged.</div></div><div class="e"><span>2h</span></div></div>
+    <div class="srow"><span class="sb e">E</span><div class="grow" lang="tr"><div class="t" style="font-weight:500">Fatura PDF'inde Türkçe karakterler bozuk</div><div class="s ell">Ended: ğ, ş ve ı artık doğru gömülüyor.</div></div><div class="e"><span>3h</span></div></div>
+    <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t" style="font-weight:500">Review webhook signature check</div><div class="s ell">Ended: two comments posted.</div></div><div class="e"><span>5h</span></div></div>
+  </div>
+  <nav class="tabbar">
+    <button aria-current="page"><i data-i="list"></i>Sessions<span class="count n">7</span></button>
+    <button><i data-i="page"></i>Pages</button>
+    <button><i data-i="mic"></i>Assistant</button>
+    <button><i data-i="search"></i>Search</button>
+    <button><i data-i="plus"></i>New</button>
+  </nav>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

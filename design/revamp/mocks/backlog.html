@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Backlog, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.wrap { max-width: 880px; padding: 16px 24px 40px; }
+.add { display: flex; gap: 8px; align-items: center; }
+.add .field { flex: 1; }
+.tk { display: grid; grid-template-columns: minmax(0, 1fr) 150px 48px 150px; gap: 2px 16px; align-items: center; padding: 9px 12px 9px 16px; border-top: 1px solid var(--hair); font-size: var(--f-ui); }
+.tk .t { font-size: var(--f-body); font-weight: 600; }
+.tk .s { color: var(--dim); }
+.tk .by { color: var(--dim); }
+.tk .age { color: var(--faint); text-align: right; }
+.tk .go { display: flex; justify-content: end; gap: 4px; visibility: hidden; }
+.tk.sel { background: var(--sel); }
+.tk.sel .go { visibility: visible; }
+.tk .lk { color: var(--faint); font-family: var(--mono); font-size: var(--f-small); }
+.grp { padding: 18px 16px 6px; }
+.grp.more { color: var(--dim); font-weight: 500; display: flex; align-items: center; gap: 6px; border-top: 1px solid var(--line); margin-top: 12px; }
+.blk { color: var(--fail); }
+.empty { margin-top: 36px; padding: 18px 16px; border: 1px dashed var(--line); border-radius: var(--r3); }
+.empty .lbl { font-size: var(--f-small); color: var(--faint); margin-bottom: 8px; }
+.empty p { margin: 0; color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay on"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button>Session</button><button>Board</button><button>Pages</button><button aria-pressed="true">Backlog</button>
+      </div>
+    </div>
+  </nav>
+
+  <section class="pane">
+    <header class="phd">
+      <h1>Backlog</h1><span class="where">api · ~/code/api</span>
+      <span class="faint num" style="font-size:var(--f-small);margin-left:6px">7 open</span>
+      <div class="acts">
+        <div class="seg" role="group" aria-label="Order"><button aria-pressed="true">By stage</button><button>Newest</button></div>
+        <div class="seg" role="group" aria-label="Which bays"><button aria-pressed="true">api</button><button>All bays</button></div>
+      </div>
+    </header>
+    <div class="scroll">
+      <div class="wrap">
+        <div class="add">
+          <input class="field" placeholder="A task for api; Enter adds it" value="">
+          <button class="btn">Add</button>
+        </div>
+
+        <div class="grp">Ready <span class="count faint">3</span></div>
+        <div class="tk sel"><div><div class="t">Retry webhooks with backoff, not a fixed 30s</div><div class="s ell">From Rate limit retries: the fixed delay hammers a slow receiver.</div></div><span class="by">you</span><span class="age">2d</span><span class="go"><button class="btn primary"><i data-i="play"></i>Start <kbd style="color:inherit;box-shadow:inset 0 0 0 1px currentColor">⏎</kbd></button><button class="btn icon" title="Done (d)"><i data-i="check"></i></button></span></div>
+        <div class="tk"><div><div class="t">Drop the v1 invoice endpoint</div><div class="s ell">Nothing has called it since September.</div></div><span class="by">@deploys</span><span class="age">4d</span><span class="go"></span></div>
+        <div class="tk"><div><div class="t">Add an index on sessions.updated_at</div></div><span class="by">you</span><span class="age">1w</span><span class="go"></span></div>
+
+        <div class="grp">Started <span class="count w">1</span></div>
+        <div class="tk"><div><div class="t">Migrate sessions table to UUID keys</div><div class="s ell"><span style="color:var(--work)">Working</span> in its session on laptop, 2 of 5 tables done.</div></div><span class="by">you</span><span class="age">3h</span><span class="go"></span></div>
+
+        <div class="grp">Blocked <span class="count faint">1</span></div>
+        <div class="tk"><div><div class="t">Move file uploads to the new bucket</div><div class="s ell"><span class="blk">Blocked:</span> waiting on the bucket's access policy.</div></div><span class="by">you</span><span class="age">6d</span><span class="go"></span></div>
+
+        <div class="grp">Suggested by agents <span class="count faint">2</span></div>
+        <div class="tk"><div><div class="t">Split the upload test into fast and slow</div><div class="s ell">After Fix flaky upload test: the slow half runs on every push.</div></div><span class="by">@ci</span><span class="age">5h</span><span class="go"></span></div>
+        <div class="tk"><div><div class="t">Answer the October invoice question</div></div><span class="by">@inbox</span><span class="age">5h</span><span class="go"></span></div>
+
+        <div class="grp more"><i data-i="fwd"></i>Done <span class="count faint">12</span></div>
+
+        <div class="empty">
+          <div class="lbl">A bay with nothing open (docs)</div>
+          <p>Nothing on the docs backlog. Add a task above, or press <kbd>+</kbd> on any session.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">Started the CSV export session in api and told it to keep the header row.</span>
+    <span class="faint">12m</span>
+    <span class="ask">Talk to the assistant</span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet">Agents <span class="count n">1</span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

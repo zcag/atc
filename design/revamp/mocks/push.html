@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notifications and widget, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+body { background: var(--sunk); padding: 16px 12px; display: flex; flex-direction: column; gap: 10px; min-height: 100vh; }
+.h { font-size: var(--f-small); color: var(--faint); margin: 6px 4px 0; }
+.nt { background: var(--paper); border-radius: 18px; padding: 12px 14px 12px; box-shadow: 0 0 0 1px var(--hair); }
+.nt .top { display: flex; align-items: center; gap: 6px; font-size: var(--f-small); color: var(--faint); }
+.nt .appi { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--ink); color: var(--paper); font: 700 9px/1 var(--mono); }
+.nt .top .an { color: var(--dim); font-weight: 500; }
+.nt .ttl { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-weight: 650; font-size: var(--f-body); min-width: 0; }
+.nt .ttl .bay { padding: 0; font-weight: 400; color: var(--faint); font-size: var(--f-ui); }
+.nt .body { color: var(--dim); font-size: var(--f-ui); margin-top: 3px; padding-left: 26px; }
+.nt .body code { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+.nt .ans { display: flex; gap: 6px; margin-top: 10px; padding-left: 26px; flex-wrap: wrap; }
+.nt .ans button { height: 32px; padding: 0 12px; border-radius: var(--pill); border: 1px solid var(--line); background: var(--paper); font-size: var(--f-ui); font-weight: 500; }
+.nt .ans button.o { border-color: transparent; color: var(--dim); }
+.nt .ans .n { font: 600 11px/1 var(--mono); color: var(--faint); margin-right: 4px; }
+.nt .reply { display: flex; align-items: center; gap: 8px; margin: 10px 0 0 26px; height: 36px; border-radius: var(--pill); background: var(--sunk); padding: 0 6px 0 12px; font-size: var(--f-ui); color: var(--faint); }
+.nt .reply .send { margin-left: auto; display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--hi); color: var(--dim); }
+.nt.sys .ttl { font-weight: 600; }
+.wg { background: var(--paper); border-radius: 22px; padding: 14px 14px 10px; box-shadow: 0 0 0 1px var(--hair); margin-top: 6px; }
+.wg .wh { display: flex; align-items: center; gap: 8px; }
+.wg .wh b { font-size: var(--f-body); }
+.wg .wh .acts { margin-left: auto; display: flex; gap: 2px; }
+.wg .wh .acts .btn.icon { width: 36px; height: 36px; }
+.wg .wr { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 2px; border-top: 1px solid var(--hair); font-size: var(--f-ui); }
+.wg .wr .t { font-weight: 600; }
+.wg .wr .s { color: var(--dim); font-size: var(--f-small); }
+.wg .wr .a { color: var(--faint); font-size: var(--f-small); }
+.wg .ft { font-size: var(--f-micro); color: var(--faint); text-align: right; margin-top: 2px; }
+</style>
+</head>
+<body>
+<div class="h">Notifications</div>
+<div class="nt">
+  <div class="top"><span class="appi">a</span><span class="an">atc</span>· devbox · 4m</div>
+  <div class="ttl"><span class="sb n">N</span><span class="ell">Rate limit retries</span><span class="bay">api</span></div>
+  <div class="body">Wants to run <code>go test ./... -run Retry -count 20</code></div>
+  <div class="ans"><button><span class="n">1</span>Allow once</button><button><span class="n">2</span>Deny</button><button class="o">Open</button></div>
+</div>
+<div class="nt">
+  <div class="top"><span class="appi">a</span><span class="an">atc</span>· devbox · 22m</div>
+  <div class="ttl"><span class="sb t">T</span><span class="ell">Invoice export as CSV</span><span class="bay">api</span></div>
+  <div class="body">Done: CSV export with a header row; 14 tests pass. Merge it, or keep the old column order?</div>
+  <div class="ans"><button>Merge it</button><button>Keep the old order</button><button class="o">Open</button></div>
+  <div class="reply">Reply to Invoice export as CSV…<span class="send"><i data-i="send"></i></span></div>
+</div>
+<div class="nt sys">
+  <div class="top"><span class="appi">a</span><span class="an">atc</span>· 1h</div>
+  <div class="ttl">atc</div>
+  <div class="body" style="padding-left:0">laptop is back: 3 sessions running there again.</div>
+</div>
+
+<div class="h">Widget, 4 × 2</div>
+<div class="wg">
+  <div class="wh"><b>atc</b><span class="count n">3 need you</span><span class="count w">2 working</span><div class="acts"><button class="btn icon" title="Talk to the assistant"><i data-i="mic"></i></button><button class="btn icon" title="New session"><i data-i="plus"></i></button></div></div>
+  <div class="wr"><span class="sb n">N</span><div class="ell"><span class="t">Rate limit retries</span> <span class="s">api</span></div><span class="a">4m</span></div>
+  <div class="wr"><span class="sb n">N</span><div class="ell" lang="tr"><span class="t">Fatura PDF'inde Türkçe karakterler bozuk</span> <span class="s">billing</span></div><span class="a">9m</span></div>
+  <div class="wr"><span class="sb t">T</span><div class="ell"><span class="t">Invoice export as CSV</span> <span class="s">api</span></div><span class="a">22m</span></div>
+  <div class="ft">Colours from the default theme on every Android version</div>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Console, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.app { position: relative; }
+.baybar .mach { display: flex; align-items: center; gap: 6px; margin-left: 12px; font-size: var(--f-small); color: var(--dim); }
+.baybar .mach .meter { width: 28px; }
+.console { gap: 10px; padding: 0 8px 0 16px; }
+.console .who { display: inline-flex; align-items: center; gap: 6px; }
+.console .ask2 { flex: 0 0 40%; display: flex; align-items: center; gap: 6px; height: 24px; padding: 0 4px 0 10px; border-radius: var(--r2); border: 1px solid var(--focus); background: var(--paper); color: var(--ink); font-size: var(--f-ui); box-shadow: 0 0 0 1px var(--focus); }
+.console .ask2 .caret { width: 1px; height: 14px; background: var(--ink); }
+.console .ask2 kbd { margin-left: auto; }
+.console .btn { height: 24px; }
+.agdot { width: 6px; height: 6px; border-radius: 50%; background: var(--needs); }
+.agents { position: absolute; right: 8px; bottom: 36px; width: 360px; padding: 4px; font-size: var(--f-ui); }
+.agents .ah { display: flex; align-items: baseline; gap: 8px; padding: 8px 10px 6px; font-weight: 600; }
+.agents .ar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 10px; padding: 7px 10px; border-radius: var(--r1); }
+.agents .ar:hover, .agents .ar.hov { background: var(--hi); }
+.agents .ar .nm { font-weight: 600; }
+.agents .ar .k { color: var(--dim); grid-column: 1; }
+.agents .ar .ag { color: var(--faint); font-size: var(--f-small); grid-row: 1; grid-column: 2; }
+.agents .ar.nd { box-shadow: inset 3px 0 0 var(--needs); }
+.agents .more { padding: 6px 10px 8px; color: var(--dim); border-top: 1px solid var(--hair); margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay on"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button>Session</button><button aria-pressed="true">Board</button><button>Pages</button>
+      </div>
+      <span class="mach" title="Shown only above 85%"><i data-i="warn"></i>devbox memory <span class="meter"><i style="width:91%"></i></span> <span class="num">91%</span></span>
+    </div>
+  </nav>
+
+  <div class="body3 wide">
+    <section class="pane">
+      <header class="phd">
+        <h1>api</h1><span class="where">~/code/api</span>
+        <span class="count n" style="margin-left:8px">2 waiting</span><span class="count w">1 working</span>
+        <div class="acts">
+          <button class="btn quiet"><i data-i="search"></i>Search</button>
+          <button class="btn icon" title="More: Park all, Shell, Backlog"><i data-i="more"></i></button>
+          <button class="btn primary"><i data-i="plus"></i>New session</button>
+        </div>
+      </header>
+      <div class="scroll">
+        <table class="btab">
+          <colgroup><col style="width:30%"><col><col style="width:84px"></colgroup>
+          <thead><tr><th style="padding-left:16px">Session</th><th>Status</th><th style="text-align:right">Since</th></tr></thead>
+          <tbody>
+            <tr class="g"><td colspan="3">Waiting on you <span class="count n">2</span></td></tr>
+            <tr class="nd"><td style="padding-left:16px"><div class="row-flex"><span class="sb n">N</span><span class="t">Rate limit retries</span></div><div class="w" style="margin-left:26px">devbox · rate-limit</div></td>
+              <td><div class="st">Wants to run <code class="mono">go test ./... -run Retry -count 20</code></div><div class="row-flex" style="margin-top:8px;gap:6px"><button class="btn">1 Allow once</button><button class="btn">2 Always for go test</button><button class="btn quiet">3 Deny</button></div></td>
+              <td class="since">4m<br><span class="faint">q</span></td></tr>
+            <tr><td style="padding-left:16px"><div class="row-flex"><span class="sb t">T</span><span class="t">Invoice export as CSV</span></div><div class="w" style="margin-left:26px">devbox · csv-export</div></td>
+              <td><div class="st">Done: CSV export with a header row; 14 tests pass.</div><div class="st2">Made <a href="#">a page</a> and 3 files · <span class="meter"><i style="width:42%"></i></span> 84k</div></td>
+              <td class="since">22m<br><span class="faint">w</span></td></tr>
+            <tr class="g"><td colspan="3">Working <span class="count w">1</span></td></tr>
+            <tr><td style="padding-left:16px"><div class="row-flex"><span class="sb w">W</span><span class="t">Migrate sessions table to UUID keys</span></div><div class="w" style="margin-left:26px">laptop · …/worktrees/uuid-keys</div></td>
+              <td><div class="st">Writing the backfill; 2 of 5 tables done.</div><div class="st2">23 steps, <span style="color:var(--fail)">1 failed</span> · running <a href="#">a dev server</a> · <span class="meter"><i style="width:68%"></i></span> 136k</div></td>
+              <td class="since">now<br><span class="faint">e</span></td></tr>
+            <tr class="g"><td colspan="3">Earlier today <span class="count faint">4</span></td></tr>
+            <tr><td style="padding-left:16px"><div class="row-flex"><span class="sb e">E</span><span class="t" style="font-weight:500">Fix flaky upload test</span></div></td><td class="st2">Ended: test made deterministic, merged.</td><td class="since">2h</td></tr>
+            <tr><td style="padding-left:16px"><div class="row-flex"><span class="sb e">E</span><span class="t" style="font-weight:500">Fatura PDF'inde Türkçe karakterler bozuk</span></div></td><td class="st2" lang="tr">Ended: ğ, ş ve ı artık doğru gömülüyor; PDF yeniden üretildi.</td><td class="since">3h</td></tr>
+            <tr><td style="padding-left:16px"><div class="row-flex"><span class="sb e">E</span><span class="t" style="font-weight:500">Review webhook signature check</span></div></td><td class="st2">Ended: two comments posted.</td><td class="since">5h</td></tr>
+            <tr><td style="padding-left:16px"><div class="row-flex"><span class="sb e">E</span><span class="t" style="font-weight:500">Bump Go to 1.25</span></div></td><td class="st2">Ended: CI green on main.</td><td class="since">7h</td></tr>
+            <tr><td colspan="3" style="padding-left:16px"><button class="btn quiet"><i data-i="down"></i>Older, 31 more</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <aside class="pane side">
+      <header class="phd"><h1 style="font-size:var(--f-body)">Pages</h1><span class="faint" style="font-size:var(--f-small)">6</span>
+        <div class="acts"><button class="btn icon" title="Hide the page index"><i data-i="x"></i></button></div></header>
+      <div class="scroll" style="font-size:var(--f-ui)">
+        <div style="padding:10px 14px;border-bottom:1px solid var(--hair)"><div class="row-flex"><b class="grow ell">CSV export: what changed</b><span class="faint">22m</span></div><div class="dim clamp2" style="margin-top:2px">The new endpoint, the column order, and two choices to make.</div><div class="faint" style="margin-top:3px">Invoice export as CSV</div></div>
+        <div style="padding:10px 14px;border-bottom:1px solid var(--hair)"><div class="row-flex"><span class="grow ell">UUID migration plan</span><span class="faint">3h</span></div><div class="dim clamp2" style="margin-top:2px">Order of tables, the backfill, and how to roll it back.</div><div class="faint" style="margin-top:3px">Migrate sessions table to UUID keys</div></div>
+        <div style="padding:10px 14px;border-bottom:1px solid var(--hair)"><div class="row-flex"><span class="grow ell">Rate limiter options</span><span class="faint">1d</span></div><div class="dim clamp2" style="margin-top:2px">Token bucket against sliding window, measured on staging.</div><div class="faint" style="margin-top:3px">Rate limit retries</div></div>
+      </div>
+    </aside>
+  </div>
+
+  <div class="pop agents">
+    <div class="ah">Agents <span class="count faint">14</span><span class="grow"></span><span class="faint" style="font-weight:400;font-size:var(--f-small)">what each keeps</span></div>
+    <div class="ar nd"><span class="nm">@deploys</span><span class="k ell">Release checklist for api 2.14: waits on your go-ahead</span><span class="ag">3m</span></div>
+    <div class="ar hov"><span class="nm">@notes</span><span class="k ell">Meeting notes, 212; last: planning, Tuesday</span><span class="ag">1h</span></div>
+    <div class="ar"><span class="nm">@reading</span><span class="k ell">Reading list, 38 open</span><span class="ag">4h</span></div>
+    <div class="ar"><span class="nm">@billing-watch</span><span class="k ell">Failed charges this month, 6</span><span class="ag">6h</span></div>
+    <div class="ar"><span class="nm">@garden</span><span class="k ell">Watering plan and frost dates</span><span class="ag">2d</span></div>
+    <div class="more">All 14 agents…</div>
+  </div>
+
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">Started the CSV export session in api and told it to keep the header row.</span>
+    <span class="faint">12m</span>
+    <span class="ask2">Ask the CSV session whether quoting every field breaks the importer<span class="caret"></span><kbd>enter</kbd></span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet" aria-expanded="true" style="background:var(--hi);color:var(--ink)">Agents <span class="num">14</span><span class="agdot"></span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stopped session bar, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.body3 { grid-template-columns: 320px minmax(0, 1fr); }
+.body3.withstate { grid-template-columns: 320px minmax(0, 1fr) 340px; }
+.rail { background: var(--bg); }
+.rail .phd { border-bottom-color: var(--hair); }
+.rail .phd h1 { font-size: var(--f-body); }
+.rl { padding: 2px 8px 16px; overflow: auto; flex: 1; min-height: 0; }
+.rgrp { display: flex; align-items: baseline; gap: 8px; padding: 14px 10px 6px; font-size: var(--f-small); font-weight: 600; color: var(--dim); }
+.rrow { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 3px 10px; padding: 9px 10px; border-radius: var(--r2); align-items: center; }
+.rrow + .rrow { margin-top: 1px; }
+.rrow .t { font-weight: 600; font-size: var(--f-body); }
+.rrow .s { grid-column: 2; color: var(--dim); font-size: var(--f-ui); }
+.rrow .age { font: var(--f-small) var(--mono); color: var(--faint); }
+.rrow .qk { grid-column: 3; justify-self: end; font: var(--f-small) var(--mono); color: var(--faint); }
+.rrow .x3 { grid-column: 2 / 4; }
+.rrow.sel { background: var(--paper); box-shadow: 0 0 0 1px var(--line); }
+.rrow.nd { box-shadow: inset 3px 0 0 var(--needs); }
+.rrow.ended .t { font-weight: 500; color: var(--dim); }
+.rl.focus .qk { color: var(--dim); }
+.mini { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.mini .btn { height: 26px; padding: 0 8px; font-size: var(--f-small); }
+code { font: .86em var(--mono); background: var(--code); padding: 1px 5px; border-radius: var(--r1); }
+
+.shd { gap: 10px; }
+.shd h1 { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.shd .where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.shd .acts { flex: none; }
+.btn[aria-pressed="true"] { background: var(--hi); color: var(--ink); }
+.btn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
+
+.tx { flex: 1; overflow: auto; min-height: 0; background: var(--paper); }
+.col { width: min(680px, 100% - 176px); margin: 0 auto; padding: 28px 0 32px; position: relative; }
+.turn { position: relative; }
+.clk { position: absolute; left: -84px; width: 60px; text-align: right; top: 6px; font: var(--f-small)/1 var(--mono); color: var(--faint); }
+.say { font: var(--f-read)/1.58 var(--read); color: var(--ink); margin: 0 0 6px; }
+.say p { margin: 0 0 12px; }
+.say ul { margin: 0 0 12px; padding-left: 22px; }
+.say li { margin: 4px 0; }
+.say code { font-size: .8em; }
+.me { font: 400 var(--f-title)/1.5 var(--sans); background: var(--sunk); border-radius: var(--r3); padding: 10px 14px; margin: 4px 0 22px; }
+.me .clk { top: 14px; }
+.fold { display: flex; align-items: center; gap: 6px; min-height: 26px; font-size: var(--f-ui); color: var(--faint); margin: 0 0 18px -2px; white-space: nowrap; }
+.fold .i { width: 14px; height: 14px; }
+.fold .n { color: var(--dim); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fold .dur { font: var(--f-small) var(--mono); flex: none; }
+.fold .bad { color: var(--fail); }
+.fold.open { margin-bottom: 6px; }
+.steps { margin: 0 0 20px 5px; border-left: 1px solid var(--line); padding: 2px 0 2px 16px; font-size: var(--f-ui); display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: 5px 12px; color: var(--dim); }
+.steps .k { color: var(--faint); }
+.steps .v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.steps .v .mono { font-size: var(--f-small); color: var(--ink); }
+.steps .r { font: var(--f-small) var(--mono); color: var(--faint); text-align: right; }
+.steps .ok { color: var(--ok); }
+.fail1 { display: flex; align-items: center; gap: 8px; font-size: var(--f-ui); color: var(--fail); background: var(--fail-wash); border-radius: var(--r2); padding: 7px 10px; margin: -8px 0 20px; }
+.fail1 code { background: none; padding: 0; color: var(--fail); }
+.fail1 .grow { color: var(--dim); }
+.fail1 a { color: var(--ink); flex: none; }
+.since { display: flex; align-items: center; gap: 10px; margin: 30px 0 6px; font-size: var(--f-small); color: var(--needs-text); font-weight: 600; }
+.since::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.catch { font-size: var(--f-body); color: var(--dim); margin: 0 0 26px; }
+.catch b { color: var(--ink); font-weight: 600; }
+.made { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: var(--f-ui); color: var(--dim); margin: 2px 0 8px; }
+.made .row-flex { gap: 6px; }
+.pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--work); flex: none; animation: pl 1.6s var(--ease) infinite; }
+@keyframes pl { 50% { opacity: .35; } }
+.working { color: var(--work); }
+
+.cmp { padding: 6px 0 16px; background: var(--paper); }
+.cmp .box { width: min(680px, 100% - 176px); margin: 0 auto; }
+.box { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); padding: 8px; display: grid; gap: 6px; }
+.box.focus { border-color: var(--edge); }
+.sugs { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: var(--pill); border: 1px solid var(--line); background: var(--bg); font-size: var(--f-ui); color: var(--ink); white-space: nowrap; }
+.att { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 8px; border-radius: var(--r2); border: 1px solid var(--line); background: var(--bg); font-size: var(--f-ui); max-width: 100%; }
+.att .faint { font: var(--f-small) var(--mono); }
+.att .btn.icon { width: 22px; height: 22px; }
+.ta { min-height: 26px; padding: 3px 6px; font: var(--f-title)/1.5 var(--sans); color: var(--faint); }
+.ta.typed { color: var(--ink); }
+.ta.typed::after { content: ""; display: inline-block; width: 1.5px; height: 1.1em; background: var(--ink); vertical-align: -3px; margin-left: 1px; }
+.brow { display: flex; align-items: center; gap: 4px; }
+.brow .hint { font-size: var(--f-small); color: var(--faint); margin-left: 2px; }
+.brow .hint .mono { color: var(--dim); }
+
+.pht { display: flex; align-items: center; gap: 4px; height: 52px; padding: 0 4px; }
+.pht h1 { font-size: var(--f-title); margin: 0; font-weight: 650; }
+.pht .btn.icon { width: 44px; height: 44px; }
+.ptabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+.ptabs button { height: 40px; border: 0; background: none; font-size: var(--f-ui); color: var(--dim); position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.ptabs button[aria-current] { color: var(--ink); font-weight: 650; }
+.ptabs button[aria-current]::after { content: ""; position: absolute; left: 16px; right: 16px; bottom: -1px; height: 2px; background: var(--ink); }
+.ptabs .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--dim); }
+.ph .col { width: auto; padding: 8px 16px 20px; }
+.ph .clk { position: static; float: right; width: auto; margin: 6px 0 0 12px; }
+.ph .me .clk { margin-top: 3px; }
+.ph .steps { grid-template-columns: 50px minmax(0, 1fr) auto; }
+.ph .cmp { padding: 6px 10px 10px; border-top: 1px solid var(--hair); }
+.ph .cmp .box { width: auto; }
+.ph .brow .btn.icon { width: 40px; height: 40px; }
+.ph .brow .btn.send { height: 40px; padding: 0 14px; }
+@media (max-width: 899px) { .deskonly { display: none; } }
+@media (min-width: 900px) { .phoneonly { display: none; } }
+
+body { background: var(--bg); }
+.spec { gap: 18px; }
+.spec > header h2 { font-size: var(--f-h); font-weight: 650; margin: 0 0 4px; }
+.spec > header p { margin: 0; color: var(--dim); font-size: var(--f-body); max-width: 900px; }
+.lbl { display: flex; align-items: baseline; gap: 10px; margin: 0 0 10px; }
+.lbl h3 { margin: 0; font-size: var(--f-ui); font-weight: 650; }
+.lbl span { font-size: var(--f-small); color: var(--faint); }
+.g2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.g3 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 18px; }
+.half { border-radius: var(--r3); padding: 16px; border: 1px solid var(--line); background: var(--bg); color: var(--ink); min-width: 0; }
+.dk { color-scheme: dark; }
+.frag { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); padding: 14px 18px; min-width: 0; }
+.frag .say { font-size: var(--f-read); }
+.frag .fold { margin-bottom: 12px; }
+
+.endpane { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); overflow: hidden; display: flex; flex-direction: column; min-width: 0; }
+.endpane .ph2 { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 12px 0 16px; border-bottom: 1px solid var(--line); font-weight: 650; }
+.endpane .ph2 .where { font: var(--f-small) var(--mono); color: var(--faint); font-weight: 400; }
+.endpane .bodyx { padding: 16px 20px 6px; }
+.endpane .say { font-size: var(--f-read); }
+.end { border-top: 1px solid var(--line); background: var(--chrome); padding: 12px 16px; display: flex; gap: 16px; align-items: center; }
+.end .why { flex: 1; min-width: 0; font-size: var(--f-ui); color: var(--dim); line-height: 1.5; }
+.end .why b { color: var(--ink); font-weight: 650; }
+.end .why .clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.end .why a { color: var(--ink); }
+.end .bt { display: flex; gap: 8px; flex: none; }
+.end.narrow { flex-direction: column; align-items: stretch; gap: 10px; }
+.end.narrow .bt .btn { flex: 1; justify-content: center; height: 36px; }
+.end.bad .why b { color: var(--fail); }
+.end dl { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 4px 10px; margin: 8px 0 0; font-size: var(--f-small); }
+.end dt { color: var(--faint); }
+.end dd { margin: 0; color: var(--ink); }
+.capl { font-size: var(--f-small); color: var(--faint); margin: 8px 2px 0; }
+</style>
+</head>
+<body>
+<div class="spec">
+  <header><h2>Stopped session bar</h2><p>Why it stopped comes first and gets the full width; the buttons sit beside it on a wide pane and below it on a narrow one. Resume's key is Enter, named in its tooltip.</p></header>
+  <div><div class="lbl"><h3>Wide pane</h3><span>Reason on the left, at most two lines; buttons beside it.</span></div>
+      <div class="endpane"><div class="ph2"><span class="sb e">E</span>Invoice export as CSV<span class="where">devbox · csv-export</span></div>
+        <div class="bodyx"><div class="fold"><i data-i="fwd"></i><span class="n">Edited 1 file, ran 3 commands</span><span>·</span><span class="dur">41s</span></div><div class="say"><p>Done. The export button is on the invoices page; amounts follow the account's locale.</p></div></div>
+        <div class="end"><div class="why"><span class="clamp2"><b>Stopped 19:08.</b> The machine closed it to free memory: memory stayed low after everything else had closed, and this session had been waiting on you for 66h.</span></div><div class="bt"><button class="btn quiet">Why</button><button class="btn">Dismiss</button><button class="btn primary" title="Resume (Enter)"><i data-i="play"></i>Resume</button></div></div>
+      </div></div>
+  <div><div class="lbl"><h3>Narrow pane, as on Agents</h3><span>Reason on top, two lines with Why; buttons below. Why opens the facts in place; a failure says what to do instead.</span></div>
+  <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:18px;align-items:stretch"><div class="endpane" style="height:100%"><div class="ph2"><span class="sb e">E</span><span class="ell">Rate limit retries</span></div>
+        <div class="bodyx" style="flex:1"><div class="say" style="font-size:16px"><p>Retries now back off up to 30s and give up after 5 tries.</p></div></div><div class="end narrow"><div class="why"><span class="clamp2"><b>Stopped 19:08.</b> The machine closed it to free memory: memory stayed low after everything else had closed, and this session had been waiting on you for 66h.</span> <a href="#">Why</a></div><div class="bt"><button class="btn">Dismiss</button><button class="btn primary" title="Resume (Enter)"><i data-i="play"></i>Resume</button></div></div></div><div class="endpane" style="height:100%"><div class="ph2"><span class="sb e">E</span><span class="ell">Rate limit retries</span></div>
+        <div class="bodyx" style="flex:1"><div class="say" style="font-size:16px"><p>Retries now back off up to 30s and give up after 5 tries.</p></div></div><div class="end narrow"><div class="why"><b>Stopped 19:08.</b> The machine closed it to free memory: memory stayed low after everything else had closed, and this session had been waiting on you for 66h. <a href="#">Less</a>
+        <dl><dt>Stopped by</dt><dd>devbox, low memory</dd><dt>Waiting since</dt><dd>Mon 17:02, 66h</dd><dt>Last reply</dt><dd>Mon 17:02</dd><dt>Resume</dt><dd>reopens the same conversation</dd></dl></div>
+        <div class="bt"><button class="btn">Dismiss</button><button class="btn primary" title="Resume (Enter)"><i data-i="play"></i>Resume</button></div></div></div><div class="endpane" style="height:100%"><div class="ph2"><span class="sb x">X</span><span class="ell">Rate limit retries</span></div>
+        <div class="bodyx" style="flex:1"><div class="say" style="font-size:16px"><p>Retries now back off up to 30s and give up after 5 tries.</p></div></div><div class="end narrow bad"><div class="why"><span class="clamp2"><b>Couldn't resume.</b> Its worktree <span class="mono">rate-limit</span> was removed, so the conversation can't reopen there.</span></div><div class="bt"><button class="btn">Dismiss</button><button class="btn primary"><i data-i="plus"></i>Start in ~/code/api</button></div></div></div></div></div>
+</div>
+<script src="../kit/kit.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session header, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.body3 { grid-template-columns: 320px minmax(0, 1fr); }
+.body3.withstate { grid-template-columns: 320px minmax(0, 1fr) 340px; }
+.rail { background: var(--bg); }
+.rail .phd { border-bottom-color: var(--hair); }
+.rail .phd h1 { font-size: var(--f-body); }
+.rl { padding: 2px 8px 16px; overflow: auto; flex: 1; min-height: 0; }
+.rgrp { display: flex; align-items: baseline; gap: 8px; padding: 14px 10px 6px; font-size: var(--f-small); font-weight: 600; color: var(--dim); }
+.rrow { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 3px 10px; padding: 9px 10px; border-radius: var(--r2); align-items: center; }
+.rrow + .rrow { margin-top: 1px; }
+.rrow .t { font-weight: 600; font-size: var(--f-body); }
+.rrow .s { grid-column: 2; color: var(--dim); font-size: var(--f-ui); }
+.rrow .age { font: var(--f-small) var(--mono); color: var(--faint); }
+.rrow .qk { grid-column: 3; justify-self: end; font: var(--f-small) var(--mono); color: var(--faint); }
+.rrow .x3 { grid-column: 2 / 4; }
+.rrow.sel { background: var(--paper); box-shadow: 0 0 0 1px var(--line); }
+.rrow.nd { box-shadow: inset 3px 0 0 var(--needs); }
+.rrow.ended .t { font-weight: 500; color: var(--dim); }
+.rl.focus .qk { color: var(--dim); }
+.mini { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.mini .btn { height: 26px; padding: 0 8px; font-size: var(--f-small); }
+code { font: .86em var(--mono); background: var(--code); padding: 1px 5px; border-radius: var(--r1); }
+
+.shd { gap: 10px; }
+.shd h1 { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.shd .where { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.shd .acts { flex: none; }
+.btn[aria-pressed="true"] { background: var(--hi); color: var(--ink); }
+.btn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
+
+.tx { flex: 1; overflow: auto; min-height: 0; background: var(--paper); }
+.col { width: min(680px, 100% - 176px); margin: 0 auto; padding: 28px 0 32px; position: relative; }
+.turn { position: relative; }
+.clk { position: absolute; left: -84px; width: 60px; text-align: right; top: 6px; font: var(--f-small)/1 var(--mono); color: var(--faint); }
+.say { font: var(--f-read)/1.58 var(--read); color: var(--ink); margin: 0 0 6px; }
+.say p { margin: 0 0 12px; }
+.say ul { margin: 0 0 12px; padding-left: 22px; }
+.say li { margin: 4px 0; }
+.say code { font-size: .8em; }
+.me { font: 400 var(--f-title)/1.5 var(--sans); background: var(--sunk); border-radius: var(--r3); padding: 10px 14px; margin: 4px 0 22px; }
+.me .clk { top: 14px; }
+.fold { display: flex; align-items: center; gap: 6px; min-height: 26px; font-size: var(--f-ui); color: var(--faint); margin: 0 0 18px -2px; white-space: nowrap; }
+.fold .i { width: 14px; height: 14px; }
+.fold .n { color: var(--dim); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.fold .dur { font: var(--f-small) var(--mono); flex: none; }
+.fold .bad { color: var(--fail); }
+.fold.open { margin-bottom: 6px; }
+.steps { margin: 0 0 20px 5px; border-left: 1px solid var(--line); padding: 2px 0 2px 16px; font-size: var(--f-ui); display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: 5px 12px; color: var(--dim); }
+.steps .k { color: var(--faint); }
+.steps .v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.steps .v .mono { font-size: var(--f-small); color: var(--ink); }
+.steps .r { font: var(--f-small) var(--mono); color: var(--faint); text-align: right; }
+.steps .ok { color: var(--ok); }
+.fail1 { display: flex; align-items: center; gap: 8px; font-size: var(--f-ui); color: var(--fail); background: var(--fail-wash); border-radius: var(--r2); padding: 7px 10px; margin: -8px 0 20px; }
+.fail1 code { background: none; padding: 0; color: var(--fail); }
+.fail1 .grow { color: var(--dim); }
+.fail1 a { color: var(--ink); flex: none; }
+.since { display: flex; align-items: center; gap: 10px; margin: 30px 0 6px; font-size: var(--f-small); color: var(--needs-text); font-weight: 600; }
+.since::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.catch { font-size: var(--f-body); color: var(--dim); margin: 0 0 26px; }
+.catch b { color: var(--ink); font-weight: 600; }
+.made { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: var(--f-ui); color: var(--dim); margin: 2px 0 8px; }
+.made .row-flex { gap: 6px; }
+.pulse { width: 6px; height: 6px; border-radius: 50%; background: var(--work); flex: none; animation: pl 1.6s var(--ease) infinite; }
+@keyframes pl { 50% { opacity: .35; } }
+.working { color: var(--work); }
+
+.cmp { padding: 6px 0 16px; background: var(--paper); }
+.cmp .box { width: min(680px, 100% - 176px); margin: 0 auto; }
+.box { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); padding: 8px; display: grid; gap: 6px; }
+.box.focus { border-color: var(--edge); }
+.sugs { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: var(--pill); border: 1px solid var(--line); background: var(--bg); font-size: var(--f-ui); color: var(--ink); white-space: nowrap; }
+.att { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 4px 0 8px; border-radius: var(--r2); border: 1px solid var(--line); background: var(--bg); font-size: var(--f-ui); max-width: 100%; }
+.att .faint { font: var(--f-small) var(--mono); }
+.att .btn.icon { width: 22px; height: 22px; }
+.ta { min-height: 26px; padding: 3px 6px; font: var(--f-title)/1.5 var(--sans); color: var(--faint); }
+.ta.typed { color: var(--ink); }
+.ta.typed::after { content: ""; display: inline-block; width: 1.5px; height: 1.1em; background: var(--ink); vertical-align: -3px; margin-left: 1px; }
+.brow { display: flex; align-items: center; gap: 4px; }
+.brow .hint { font-size: var(--f-small); color: var(--faint); margin-left: 2px; }
+.brow .hint .mono { color: var(--dim); }
+
+.pht { display: flex; align-items: center; gap: 4px; height: 52px; padding: 0 4px; }
+.pht h1 { font-size: var(--f-title); margin: 0; font-weight: 650; }
+.pht .btn.icon { width: 44px; height: 44px; }
+.ptabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-bottom: 1px solid var(--line); }
+.ptabs button { height: 40px; border: 0; background: none; font-size: var(--f-ui); color: var(--dim); position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.ptabs button[aria-current] { color: var(--ink); font-weight: 650; }
+.ptabs button[aria-current]::after { content: ""; position: absolute; left: 16px; right: 16px; bottom: -1px; height: 2px; background: var(--ink); }
+.ptabs .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--dim); }
+.ph .col { width: auto; padding: 8px 16px 20px; }
+.ph .clk { position: static; float: right; width: auto; margin: 6px 0 0 12px; }
+.ph .me .clk { margin-top: 3px; }
+.ph .steps { grid-template-columns: 50px minmax(0, 1fr) auto; }
+.ph .cmp { padding: 6px 10px 10px; border-top: 1px solid var(--hair); }
+.ph .cmp .box { width: auto; }
+.ph .brow .btn.icon { width: 40px; height: 40px; }
+.ph .brow .btn.send { height: 40px; padding: 0 14px; }
+@media (max-width: 899px) { .deskonly { display: none; } }
+@media (min-width: 900px) { .phoneonly { display: none; } }
+
+.shd { position: relative; }
+.menu { position: absolute; top: 40px; right: 10px; width: 280px; padding: 4px; z-index: 5; font-size: var(--f-ui); }
+.menu .mg + .mg { border-top: 1px solid var(--hair); margin-top: 4px; padding-top: 4px; }
+.menu button { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; height: 30px; padding: 0 10px; border: 0; border-radius: 5px; background: none; text-align: left; color: var(--ink); }
+.menu button .i { color: var(--dim); }
+.menu button.on { background: var(--hi); }
+.menu .k { font: var(--f-small) var(--mono); color: var(--faint); }
+.menu .del, .menu .del .i { color: var(--fail); }
+
+.ph { position: relative; }
+.ph .scrim { position: absolute; }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--paper); border-radius: var(--r3) var(--r3) 0 0; box-shadow: var(--pop); padding: 6px 8px 14px; font-size: var(--f-body); }
+.sheet .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 4px auto 8px; }
+.sheet .mg + .mg { border-top: 1px solid var(--hair); margin-top: 4px; padding-top: 4px; }
+.sheet button { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: center; gap: 14px; width: 100%; height: var(--hit); padding: 0 12px; border: 0; background: none; text-align: left; color: var(--ink); border-radius: var(--r2); }
+.sheet button .i { color: var(--dim); }
+.sheet .del, .sheet .del .i { color: var(--fail); }
+</style>
+</head>
+<body>
+<div class="app deskonly">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay on"><b>2</b>api <span class="count n">1</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button aria-pressed="true">Session</button><button>Board</button><button>Pages</button>
+      </div>
+    </div>
+  </nav>
+  <div class="body3">
+    <section class="pane rail">
+      <header class="phd"><h1>api</h1><span class="faint" style="font-size:var(--f-small)">7 sessions</span>
+        <div class="acts"><button class="btn icon" title="Search (/)"><i data-i="search"></i></button><button class="btn icon" title="New session (n)"><i data-i="plus"></i></button></div></header>
+      <div class="rl focus">
+        <div class="rgrp">Waiting on you <span class="count n">1</span></div>
+        <div class="rrow nd">
+          <span class="sb n">N</span><span class="t ell">Rate limit retries</span><span class="age">4m</span>
+          <span class="s ell">Wants to run <code>go test ./... -run Retry</code></span><span class="qk">q</span>
+          <div class="x3"><div class="mini" style="margin-top:2px"><button class="btn"><kbd>1</kbd>Allow once</button><button class="btn"><kbd>2</kbd>Deny</button></div></div>
+        </div>
+        <div class="rgrp">Your turn <span class="count faint">1</span></div>
+        <div class="rrow sel">
+          <span class="sb t">T</span><span class="t ell">Invoice export as CSV</span><span class="age">22m</span>
+          <span class="s ell">Done: CSV export with a header row; 14 tests pass.</span><span class="qk">w</span>
+        </div>
+        <div class="rgrp">Working <span class="count w">1</span></div>
+        <div class="rrow">
+          <span class="sb w">W</span><span class="t ell">Migrate sessions table to UUID keys</span><span class="age">now</span>
+          <span class="s ell">Writing the backfill; 2 of 5 tables done.</span><span class="qk">e</span>
+        </div>
+        <div class="rgrp">Earlier today <span class="count faint">4</span></div>
+        <div class="rrow ended"><span class="sb e">E</span><span class="t ell">Fix flaky upload test</span><span class="age">2h</span><span class="s ell">Ended: test made deterministic, merged.</span><span class="qk">r</span></div>
+        <div class="rrow ended" lang="tr"><span class="sb e">E</span><span class="t ell">Fatura PDF'inde Türkçe karakterler bozuk</span><span class="age">3h</span><span class="s ell">Ended: ğ, ş ve ı artık doğru gömülüyor.</span><span class="qk">t</span></div>
+        <div class="rrow ended"><span class="sb e">E</span><span class="t ell">Review webhook signature check</span><span class="age">5h</span><span class="s ell">Ended: two comments posted.</span><span class="qk">y</span></div>
+        <div class="rrow ended"><span class="sb e">E</span><span class="t ell">Bump Go to 1.25</span><span class="age">7h</span><span class="s ell">Ended: CI green on main.</span><span class="qk">u</span></div>
+        <div style="padding:8px 4px"><button class="btn quiet"><i data-i="down"></i>Older, 31 more</button></div>
+      </div>
+    </section>
+    <section class="pane">
+      <header class="phd shd">
+        <span class="sb t">T</span><h1>Invoice export as CSV</h1><span class="where">devbox · ~/code/api · csv-export</span>
+        <div class="acts">
+          <button class="btn quiet" title="Page (p)"><i data-i="page"></i>Page<span class="dot"></span></button>
+          <button class="btn quiet" title="Terminal (`)"><i data-i="term"></i>Terminal</button>
+          <button class="btn icon" title="State and outputs (\)"><svg class="i" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M10 2.5v11"/></svg></button>
+          <button class="btn icon" aria-pressed="true" title="More (x)"><i data-i="more"></i></button>
+        </div>
+      <div class="menu pop" role="menu">
+        <div class="mg"><button class="on"><i data-i="zen"></i><span class="ell">Zen</span><span class="k">z</span></button><button class=""><i data-i="search"></i><span class="ell">Find in the transcript</span><span class="k">f</span></button><button class=""><i data-i="list"></i><span class="ell">Contents</span><span class="k">c</span></button><button class=""><i data-i="page"></i><span class="ell">Outline, story or everything</span><span class="k">l</span></button></div>
+        <div class="mg"><button class=""><i data-i="phone"></i><span class="ell">Call about this</span><span class="k"></span></button><button class=""><i data-i="folder"></i><span class="ell">Files, commits and deploys</span><span class="k"></span></button><button class=""><i data-i="chart"></i><span class="ell">Usage</span><span class="k"></span></button></div>
+        <div class="mg"><button class=""><span></span><span class="ell">Rename…</span><span class="k"></span></button><button class=""><i data-i="pin"></i><span class="ell">Pin</span><span class="k"></span></button><button class=""><i data-i="clock"></i><span class="ell">Park</span><span class="k"></span></button><button class=""><i data-i="inbox"></i><span class="ell">Send to backlog</span><span class="k"></span></button></div>
+        <div class="mg"><button class=""><i data-i="stop"></i><span class="ell">Stop</span><span class="k"></span></button><button class="del"><i data-i="x"></i><span class="ell">Delete…</span><span class="k"></span></button></div>
+      </div></header>
+      <div class="tx"><div class="col">
+      <div class="turn me"><span class="clk">09:12</span>Add a CSV export to the invoices page. Keep the header row, and amounts in the account's currency.</div>
+      <div class="turn"><span class="clk">09:12</span><div class="say"><p>I'll add <code>GET /invoices/export.csv</code> next to the JSON endpoint and stream rows from the same query, so a large account never loads everything into memory.</p></div></div>
+      <div class="fold"><i data-i="fwd"></i><span class="n">Read 6 files, searched 3 times</span><span>·</span><span class="dur">18s</span></div>
+      <div class="turn"><span class="clk">09:14</span><div class="say"><p>The query already sorts by issue date, so the export keeps that order. Writing the handler and a test with three invoices in two currencies.</p></div></div>
+      <div class="fold"><i data-i="fwd"></i><span class="n">Edited 3 files, ran 4 commands, 1 background stopped</span><span>·</span><span class="dur">1m 04s</span></div>
+      <div class="since" id="since">Since you last looked, 09:16</div>
+      <p class="catch"><b>Done: CSV export with a header row; 14 tests pass.</b> 3 replies, 4 files, a page, 1 failure.</p>
+      <div class="turn"><span class="clk">09:21</span><div class="say"><p>The test failed on the amounts: <code>fmt</code> printed <code>1234.5</code> where the account expects <code>1.234,50</code>. I'm formatting with the account's locale instead of the server's.</p></div></div>
+      <div class="fold open"><i data-i="down"></i><span class="n">Edited 2 files, ran 5 commands, browser ×6</span><span>·</span><span class="dur">2m 40s</span></div>
+      <div class="steps">
+        <span class="k">Edit</span><span class="v"><span class="mono">invoice/csv.go</span></span><span class="r">+42 −3</span>
+        <span class="k">Edit</span><span class="v"><span class="mono">invoice/csv_test.go</span></span><span class="r">+61</span>
+        <span class="k">Ran</span><span class="v"><span class="mono">go test ./invoice/...</span></span><span class="r ok">14 passed</span>
+        <span class="k">Ran</span><span class="v"><span class="mono">npm run dev</span> <span class="faint">in the background</span></span><span class="r">stopped</span>
+        <span class="k">Browser</span><span class="v">×6: opened /invoices, pressed Export, read the file</span><span class="r">48s</span>
+      </div>
+      <div class="turn"><span class="clk">09:24</span><div class="say"><p>Exports match the page now. <code>make e2e</code> wants a Playwright browser that isn't installed on devbox, so it stopped before any test ran.</p></div></div>
+      <div class="fold"><i data-i="fwd"></i><span class="n">Ran 2 commands,</span><span class="bad">1 failed</span><span>·</span><span class="dur">12s</span></div>
+      <div class="fail1"><i data-i="x"></i><code>make e2e</code><span class="grow ell">failed, exit 2: browserType.launch: Executable doesn't exist</span><a href="#">Output</a></div>
+      <div class="turn"><span class="clk">09:27</span><div class="say">
+        <p>Done. The export button is on the invoices page.</p>
+        <ul><li><code>GET /invoices/export.csv</code> streams rows from the page's own query.</li>
+        <li>Amounts use the account's locale, so a lira account gets <code>1.234,50</code>.</li>
+        <li>The header row is the column labels shown on the page.</li></ul></div></div>
+      <div class="made"><span class="row-flex"><i data-i="page"></i><a href="#">CSV export: what changed</a></span><span class="row-flex"><i data-i="file"></i><a href="#">4 files</a></span><span class="row-flex"><i data-i="branch"></i>csv-export, 2 commits</span></div>
+    </div></div>
+      <div class="cmp"><div class="box">
+        <div class="sugs"><button class="chip">Ship it</button><button class="chip">Install Playwright and rerun e2e</button></div><div class="ta">Reply</div>
+        <div class="brow"><button class="btn icon" title="Attach a file"><i data-i="attach"></i></button><span class="hint"><span class="mono">/</span> for commands</span><span class="grow"></span><button class="btn send" disabled title="Send (Enter)"><i data-i="send"></i>Send</button></div>
+      </div></div>
+    </section>
+    
+  </div>
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">Started the CSV export session in api and told it to keep the header row.</span>
+    <span class="faint">12m</span>
+    <span class="ask">Talk to the assistant</span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet">Agents <span class="count n">1</span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<div class="ph phoneonly">
+    <div><div class="pht">
+      <button class="btn icon" title="Back"><i data-i="back"></i></button>
+      <span class="sb t" style="margin-right:6px">T</span><h1 class="grow ell">Invoice export as CSV</h1>
+      <button class="btn icon" title="More"><i data-i="more"></i></button>
+    </div>
+    <nav class="ptabs"><button aria-current=page>Chat</button><button>Terminal</button><button>Page<span class=dot></span></button><button>State</button></nav></div>
+    <div class="tx"><div class="col">
+      <div class="since" id="since">Since you last looked, 09:16</div>
+      <p class="catch"><b>Done: CSV export with a header row; 14 tests pass.</b> 3 replies, 4 files, a page, 1 failure.</p>
+      <div class="turn"><span class="clk">09:21</span><div class="say"><p>The test failed on the amounts: <code>fmt</code> printed <code>1234.5</code> where the account expects <code>1.234,50</code>. I'm formatting with the account's locale instead of the server's.</p></div></div>
+      <div class="fold open"><i data-i="down"></i><span class="n">Edited 2 files, ran 5 commands, browser ×6</span><span>·</span><span class="dur">2m 40s</span></div>
+      <div class="steps">
+        <span class="k">Edit</span><span class="v"><span class="mono">invoice/csv.go</span></span><span class="r">+42 −3</span>
+        <span class="k">Edit</span><span class="v"><span class="mono">invoice/csv_test.go</span></span><span class="r">+61</span>
+        <span class="k">Ran</span><span class="v"><span class="mono">go test ./invoice/...</span></span><span class="r ok">14 passed</span>
+        <span class="k">Ran</span><span class="v"><span class="mono">npm run dev</span> <span class="faint">in the background</span></span><span class="r">stopped</span>
+        <span class="k">Browser</span><span class="v">×6: opened /invoices, pressed Export, read the file</span><span class="r">48s</span>
+      </div>
+      <div class="turn"><span class="clk">09:24</span><div class="say"><p>Exports match the page now. <code>make e2e</code> wants a Playwright browser that isn't installed on devbox, so it stopped before any test ran.</p></div></div>
+      <div class="fold"><i data-i="fwd"></i><span class="n">Ran 2 commands,</span><span class="bad">1 failed</span><span>·</span><span class="dur">12s</span></div>
+      <div class="fail1"><i data-i="x"></i><code>make e2e</code><span class="grow ell">failed, exit 2: browserType.launch: Executable doesn't exist</span><a href="#">Output</a></div>
+      <div class="turn"><span class="clk">09:27</span><div class="say">
+        <p>Done. The export button is on the invoices page.</p>
+        <ul><li><code>GET /invoices/export.csv</code> streams rows from the page's own query.</li>
+        <li>Amounts use the account's locale, so a lira account gets <code>1.234,50</code>.</li>
+        <li>The header row is the column labels shown on the page.</li></ul></div></div>
+      <div class="made"><span class="row-flex"><i data-i="page"></i><a href="#">CSV export: what changed</a></span><span class="row-flex"><i data-i="file"></i><a href="#">4 files</a></span><span class="row-flex"><i data-i="branch"></i>csv-export, 2 commits</span></div>
+    </div></div>
+    <div class="cmp"><div class="box">
+        <div class="sugs"><button class="chip">Ship it</button><button class="chip">Install Playwright and rerun e2e</button></div><div class="ta">Reply</div>
+        <div class="brow"><button class="btn icon" title="Attach a file"><i data-i="attach"></i></button><button class="btn icon" title="Commands (/)"><span class="mono" style="font-size:15px">/</span></button><span class="grow"></span><button class="btn send" disabled title="Send (Enter)"><i data-i="send"></i>Send</button></div>
+      </div></div>
+  <div class="scrim"></div><div class="sheet" role="menu"><div class="grab"></div>
+      <div class="mg"><button class=""><i data-i="search"></i><span class="ell">Find in the transcript</span></button><button class=""><i data-i="list"></i><span class="ell">Contents</span></button><button class=""><i data-i="page"></i><span class="ell">Outline, story or everything</span></button></div>
+      <div class="mg"><button class=""><i data-i="phone"></i><span class="ell">Call about this</span></button><button class=""><i data-i="folder"></i><span class="ell">Files, commits and deploys</span></button><button class=""><i data-i="chart"></i><span class="ell">Usage</span></button></div>
+      <div class="mg"><button class=""><span></span><span class="ell">Rename…</span></button><button class=""><i data-i="pin"></i><span class="ell">Pin</span></button><button class=""><i data-i="clock"></i><span class="ell">Park</span></button><button class=""><i data-i="inbox"></i><span class="ell">Send to backlog</span></button></div>
+      <div class="mg"><button class=""><i data-i="stop"></i><span class="ell">Stop</span></button><button class="del"><i data-i="x"></i><span class="ell">Delete…</span></button></div>
+    </div>
+  </div>
+<script src="../kit/kit.js"></script>
+<script>const t=document.querySelector('.app .tx'),s=t&&t.querySelector('#since');if(s)t.scrollTop=Math.min(s.offsetTop-20,t.scrollHeight);</script>
+</body>
+</html>

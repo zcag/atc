@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tokens, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.lt { color-scheme: light; background: var(--bg); color: var(--ink); }
+.dk { color-scheme: dark; background: var(--bg); color: var(--ink); }
+.top2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.half { border-radius: var(--r3); padding: 16px; border: 1px solid var(--line); display: grid; gap: 14px; }
+.half > h3, .cell h3 { margin: 0; font-size: var(--f-ui); font-weight: 650; display: flex; gap: 8px; align-items: baseline; }
+.half > h3 .faint, .cell h3 .faint { font-weight: 400; }
+.ts { display: grid; grid-template-columns: 70px 46px minmax(0, 1fr) 150px; align-items: baseline; gap: 10px; padding: 7px 0; border-top: 1px solid var(--hair); }
+.ts:first-of-type { border-top: 0; }
+.ts .n { font-size: var(--f-small); font-weight: 600; }
+.ts .px { font: var(--f-small) var(--mono); color: var(--faint); }
+.ts .u { font-size: var(--f-small); color: var(--faint); text-align: right; }
+.faces { display: grid; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.face { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.face .k { font: var(--f-small) var(--mono); color: var(--faint); }
+.sp { display: grid; grid-template-columns: 34px 34px minmax(0, 1fr); align-items: center; gap: 8px; font: var(--f-small) var(--mono); color: var(--faint); height: 20px; }
+.sp i { display: block; height: 10px; background: var(--edge); border-radius: 2px; }
+.rad { display: flex; gap: 14px; align-items: end; }
+.rad div { display: grid; gap: 6px; justify-items: center; font-size: var(--f-small); color: var(--faint); }
+.rad span { display: block; background: var(--paper); box-shadow: inset 0 0 0 1.5px var(--edge); }
+.kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 4px 10px; font-size: var(--f-ui); }
+.kv dt { font: var(--f-small) var(--mono); color: var(--faint); padding-top: 1px; }
+.kv dd { margin: 0; }
+.bp { display: grid; grid-template-columns: 900fr 300fr 240fr; height: 22px; border-radius: var(--r1); overflow: hidden; font-size: var(--f-micro); margin-top: 6px; }
+.bp span { display: flex; align-items: center; padding: 0 6px; background: var(--sunk); border-right: 1px solid var(--line); color: var(--dim); }
+.bp span:nth-child(2) { background: var(--hi); }
+.bp span:nth-child(3) { background: var(--sel); border: 0; }
+.bpx { display: grid; grid-template-columns: 900fr 300fr 240fr; font: var(--f-micro) var(--mono); color: var(--faint); margin-top: 2px; }
+.sw-grp { display: grid; gap: 6px; }
+.sw-grp > div:first-child { font-size: var(--f-small); color: var(--faint); }
+.sws { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 10px; }
+.sw { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 2px 8px; align-items: center; min-width: 0; }
+.sw > span { grid-row: span 2; height: 30px; border-radius: var(--r1); box-shadow: inset 0 0 0 1px var(--line); }
+.sw b { font: 600 var(--f-small) var(--mono); }
+.sw small { font-size: var(--f-micro); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.onpaper { background: var(--paper); }
+.id [style*="--h"] { --idc: light-dark(oklch(58% 0.11 var(--h)), oklch(74% 0.1 var(--h))); }
+.idrow { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: var(--f-ui); }
+.idrow span { display: inline-flex; align-items: center; gap: 6px; }
+.idrow span::before { content: ""; width: 3px; height: 14px; border-radius: 1px; background: var(--idc); }
+.idrow em { font: normal var(--f-micro) var(--mono); color: var(--faint); }
+.mono-tag { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: var(--r1); background: var(--sunk); font: 600 11px/1 var(--mono); box-shadow: inset 3px 0 0 var(--idc); padding-left: 2px; }
+</style>
+</head>
+<body>
+<div class="spec">
+  <div>
+    <h2>Tokens</h2>
+    <p class="cap">One scale per axis, named by role. The old <span class="mono">--fs-3xs..--fs-hero</span>, <span class="mono">--sp-*</span> and hex aliases go; <span class="mono">make check</span> fails on a new use of a removed name.</p>
+  </div>
+
+  <div class="top2">
+    <div class="cell">
+      <h3>Type <span class="faint">eight sizes, Recursive for the interface</span></h3>
+      <div style="margin-top:8px">
+        <div class="ts"><span class="n">display</span><span class="px">30</span><span style="font-size:var(--f-display);font-weight:650;line-height:1.1">$41.20 this week</span><span class="u">Usage totals</span></div>
+        <div class="ts"><span class="n">h</span><span class="px">22</span><span style="font-size:var(--f-h);font-weight:650;line-height:1.15">Invoice export as CSV</span><span class="u">Page and sheet titles</span></div>
+        <div class="ts"><span class="n">read</span><span class="px">17.5</span><span style="font:var(--f-read)/1.45 var(--read)">Done: CSV export with a header row; 14 tests pass.</span><span class="u">What agents say</span></div>
+        <div class="ts"><span class="n">title</span><span class="px">16</span><span style="font-size:var(--f-title);font-weight:650">api <span class="mono faint" style="font-size:var(--f-small);font-weight:400">~/code/api</span></span><span class="u">Pane headers</span></div>
+        <div class="ts"><span class="n">body</span><span class="px">14</span><span style="font-size:var(--f-body);font-weight:600">Migrate sessions table to UUID keys</span><span class="u">Row titles, inputs</span></div>
+        <div class="ts"><span class="n">ui</span><span class="px">13</span><span style="font-size:var(--f-ui)">Writing the backfill; 2 of 5 tables done.</span><span class="u">Buttons, statuses</span></div>
+        <div class="ts"><span class="n">small</span><span class="px">12</span><span style="font-size:var(--f-small);color:var(--faint)" class="mono">laptop · …/worktrees/uuid-keys · 4m</span><span class="u">Meta, ages, paths</span></div>
+        <div class="ts"><span class="n">micro</span><span class="px">11</span><span style="font-size:var(--f-micro);color:var(--dim)">Sessions · Pages · Assistant</span><span class="u">Tab bar, tags</span></div>
+      </div>
+      <div class="faces">
+        <div class="face"><span class="k">--sans</span><span>Recursive: the instrument. Weights 400, 500, 600, 650.</span></div>
+        <div class="face"><span class="k">--mono</span><span class="mono" style="font-size:var(--f-ui)">Recursive Mono: data only. 14:05 · 136k · ~/code/api · q w e</span></div>
+        <div class="face"><span class="k">--read</span><span style="font-family:var(--read)" lang="tr">System face for agents' prose: ğ, ş ve ı artık doğru gömülüyor.</span></div>
+      </div>
+    </div>
+
+    <div style="display:grid;gap:16px">
+      <div class="cell" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px">
+        <div>
+          <h3>Spacing <span class="faint">4pt grid</span></h3>
+          <div style="margin-top:10px;display:grid;gap:2px">
+            <div class="sp"><span>s1</span><span>4</span><i style="width:4px"></i></div>
+            <div class="sp"><span>s2</span><span>8</span><i style="width:8px"></i></div>
+            <div class="sp"><span>s3</span><span>12</span><i style="width:12px"></i></div>
+            <div class="sp"><span>s4</span><span>16</span><i style="width:16px"></i></div>
+            <div class="sp"><span>s5</span><span>24</span><i style="width:24px"></i></div>
+            <div class="sp"><span>s6</span><span>32</span><i style="width:32px"></i></div>
+            <div class="sp"><span>s7</span><span>48</span><i style="width:48px"></i></div>
+          </div>
+        </div>
+        <div>
+          <h3>Radii <span class="faint">same as Wisp</span></h3>
+          <div class="rad" style="margin-top:12px">
+            <div><span style="width:44px;height:30px;border-radius:var(--r1)"></span>r1 4<br><span class="faint" style="background:none;box-shadow:none">tag</span></div>
+            <div><span style="width:44px;height:30px;border-radius:var(--r2)"></span>r2 7<br><span class="faint" style="background:none;box-shadow:none">control</span></div>
+            <div><span style="width:44px;height:30px;border-radius:var(--r3)"></span>r3 10<br><span class="faint" style="background:none;box-shadow:none">sheet</span></div>
+            <div><span style="width:44px;height:18px;border-radius:var(--pill)"></span>pill<br><span class="faint" style="background:none;box-shadow:none">counts</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="cell">
+        <h3>Sizes, motion, breakpoints</h3>
+        <dl class="kv" style="margin:10px 0 0">
+          <dt>--ctl 28</dt><dd>Every control on desk. <span class="dim">Segment cells 24 inside a 2px track.</span></dd>
+          <dt>--hit 44</dt><dd>Every target on phone, the tab bar included.</dd>
+          <dt>--bar 40</dt><dd>Bay bar; pane header 44; console 32.</dd>
+          <dt>--t 120ms</dt><dd>One duration, <span class="mono" style="font-size:var(--f-small)">cubic-bezier(.2,.7,.2,1)</span>, only in answer to an action.</dd>
+          <dt>--pop</dt><dd>The one shadow: menus, popovers, the palette.</dd>
+        </dl>
+        <div class="bp"><span>phone</span><span>narrow</span><span>wide</span></div>
+        <div class="bpx"><span>0</span><span>900</span><span>1200</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="duo">
+    <div class="half lt">
+      <h3>Colour, light <span class="faint">OKLCH, hue 250 for every grey</span></h3>
+      <div class="sw-grp"><div>Surfaces</div><div class="sws">
+        <div class="sw"><span style="background:var(--bg)"></span><b>--bg</b><small>canvas</small></div>
+        <div class="sw"><span style="background:var(--paper)"></span><b>--paper</b><small>panes, controls</small></div>
+        <div class="sw"><span style="background:var(--chrome)"></span><b>--chrome</b><small>bay bar, console</small></div>
+        <div class="sw"><span style="background:var(--sunk)"></span><b>--sunk</b><small>tracks, tags</small></div>
+        <div class="sw"><span style="background:var(--hi)"></span><b>--hi</b><small>hover</small></div>
+        <div class="sw"><span style="background:var(--sel)"></span><b>--sel</b><small>selected, pressed</small></div>
+        <div class="sw"><span style="background:var(--code)"></span><b>--code</b><small>code blocks</small></div>
+        <div class="sw"><span style="background:var(--scrim)"></span><b>--scrim</b><small>behind sheets</small></div>
+      </div></div>
+      <div class="sw-grp"><div>Text and lines</div><div class="sws">
+        <div class="sw"><span style="background:var(--ink)"></span><b>--ink</b><small>text, links, primary</small></div>
+        <div class="sw"><span style="background:var(--dim)"></span><b>--dim</b><small>secondary</small></div>
+        <div class="sw"><span style="background:var(--faint)"></span><b>--faint</b><small>meta</small></div>
+        <div class="sw"><span style="background:var(--edge)"></span><b>--edge</b><small>input borders</small></div>
+        <div class="sw"><span style="background:var(--line)"></span><b>--line</b><small>dividers</small></div>
+        <div class="sw"><span style="background:var(--hair)"></span><b>--hair</b><small>row rules</small></div>
+        <div class="sw"><span style="background:var(--focus)"></span><b>--focus</b><small>the one ring</small></div>
+        <div class="sw"><span style="background:var(--toast-bg)"></span><b>--toast-bg</b><small>toast</small></div>
+      </div></div>
+      <div class="sw-grp"><div>State: the only colour</div><div class="sws">
+        <div class="sw"><span style="background:var(--needs)"></span><b>--needs</b><small>needs you, the fill</small></div>
+        <div class="sw"><span class="onpaper" style="background:var(--needs-wash)"></span><b>--needs-wash</b><small>count behind</small></div>
+        <div class="sw"><span style="background:var(--needs-text)"></span><b>--needs-text</b><small>amber words</small></div>
+        <div class="sw"><span style="background:var(--work)"></span><b>--work</b><small>working, only</small></div>
+        <div class="sw"><span style="background:var(--work-wash)"></span><b>--work-wash</b><small>W block</small></div>
+        <div class="sw"><span style="background:var(--fail)"></span><b>--fail</b><small>failed</small></div>
+        <div class="sw"><span style="background:var(--fail-wash)"></span><b>--fail-wash</b><small>error row</small></div>
+        <div class="sw"><span style="background:var(--ok)"></span><b>--ok</b><small>done, saved</small></div>
+      </div></div>
+      <div class="sw-grp id"><div>Identity: <span class="mono">oklch(58% .11 h)</span>, h from the name, skipping the state hues; a 3px tick, never a fill</div>
+        <div class="idrow">
+          <span style="--h:190">web <em>190</em></span><span style="--h:305">api <em>305</em></span><span style="--h:130">~ <em>130</em></span><span style="--h:335">dotfiles <em>335</em></span><span style="--h:160">docs <em>160</em></span><span style="--h:100">billing <em>100</em></span><span style="--h:275">infra <em>275</em></span><span style="--h:215">garden <em>215</em></span><span style="--h:0">archive <em>0</em></span>
+        </div>
+        <div class="row-flex" style="gap:8px;font-size:var(--f-small)"><span class="mono-tag" style="--h:190">as</span><span class="mono-tag" style="--h:305">tr</span><span class="mono-tag" style="--h:130">dg</span><span class="faint">agent monograms: a sunk tile with the tick, not nine saturated fills</span></div>
+      </div>
+    </div>
+
+    <div class="half dk">
+      <h3>Colour, dark <span class="faint">chrome sits a step above the canvas</span></h3>
+      <div class="sw-grp"><div>Surfaces</div><div class="sws">
+        <div class="sw"><span style="background:var(--bg)"></span><b>--bg</b><small>canvas, 17%</small></div>
+        <div class="sw"><span style="background:var(--paper)"></span><b>--paper</b><small>panes, 19.5%</small></div>
+        <div class="sw"><span style="background:var(--chrome)"></span><b>--chrome</b><small>bars, 22%</small></div>
+        <div class="sw"><span style="background:var(--sunk)"></span><b>--sunk</b><small>tracks, 14.5%</small></div>
+        <div class="sw"><span style="background:var(--hi)"></span><b>--hi</b><small>hover</small></div>
+        <div class="sw"><span style="background:var(--sel)"></span><b>--sel</b><small>selected, pressed</small></div>
+        <div class="sw"><span style="background:var(--code)"></span><b>--code</b><small>code blocks</small></div>
+        <div class="sw"><span style="background:var(--scrim)"></span><b>--scrim</b><small>behind sheets</small></div>
+      </div></div>
+      <div class="sw-grp"><div>Text and lines</div><div class="sws">
+        <div class="sw"><span style="background:var(--ink)"></span><b>--ink</b><small>text, links, primary</small></div>
+        <div class="sw"><span style="background:var(--dim)"></span><b>--dim</b><small>secondary</small></div>
+        <div class="sw"><span style="background:var(--faint)"></span><b>--faint</b><small>meta</small></div>
+        <div class="sw"><span style="background:var(--edge)"></span><b>--edge</b><small>input borders</small></div>
+        <div class="sw"><span style="background:var(--line)"></span><b>--line</b><small>dividers</small></div>
+        <div class="sw"><span style="background:var(--hair)"></span><b>--hair</b><small>row rules</small></div>
+        <div class="sw"><span style="background:var(--focus)"></span><b>--focus</b><small>the one ring</small></div>
+        <div class="sw"><span style="background:var(--toast-bg)"></span><b>--toast-bg</b><small>toast</small></div>
+      </div></div>
+      <div class="sw-grp"><div>State: the only colour</div><div class="sws">
+        <div class="sw"><span style="background:var(--needs)"></span><b>--needs</b><small>needs you, the fill</small></div>
+        <div class="sw"><span class="onpaper" style="background:var(--needs-wash)"></span><b>--needs-wash</b><small>count behind</small></div>
+        <div class="sw"><span style="background:var(--needs-text)"></span><b>--needs-text</b><small>amber words</small></div>
+        <div class="sw"><span style="background:var(--work)"></span><b>--work</b><small>working, only</small></div>
+        <div class="sw"><span style="background:var(--work-wash)"></span><b>--work-wash</b><small>W block</small></div>
+        <div class="sw"><span style="background:var(--fail)"></span><b>--fail</b><small>failed</small></div>
+        <div class="sw"><span style="background:var(--fail-wash)"></span><b>--fail-wash</b><small>error row</small></div>
+        <div class="sw"><span style="background:var(--ok)"></span><b>--ok</b><small>done, saved</small></div>
+      </div></div>
+      <div class="sw-grp id"><div>Identity: <span class="mono">oklch(74% .10 h)</span> in dark, same hues</div>
+        <div class="idrow">
+          <span style="--h:190">web <em>190</em></span><span style="--h:305">api <em>305</em></span><span style="--h:130">~ <em>130</em></span><span style="--h:335">dotfiles <em>335</em></span><span style="--h:160">docs <em>160</em></span><span style="--h:100">billing <em>100</em></span><span style="--h:275">infra <em>275</em></span><span style="--h:215">garden <em>215</em></span><span style="--h:0">archive <em>0</em></span>
+        </div>
+        <div class="row-flex" style="gap:8px;font-size:var(--f-small)"><span class="mono-tag" style="--h:190">as</span><span class="mono-tag" style="--h:305">tr</span><span class="mono-tag" style="--h:130">dg</span><span class="faint">chart series use the same hue as their bay</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

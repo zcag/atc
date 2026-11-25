@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Truncation, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.spec { padding: 20px; gap: 14px; }
+.cols { display: grid; grid-template-columns: 340px 620px 400px; gap: 20px; align-items: start; }
+.lab { font-size: var(--f-ui); font-weight: 650; margin-bottom: 6px; display: flex; gap: 8px; align-items: baseline; }
+.lab span { font-weight: 400; color: var(--faint); font-size: var(--f-small); }
+.fr { background: var(--paper); border: 1px solid var(--line); border-radius: var(--r3); overflow: visible; }
+.hd { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 10px 0 14px; border-bottom: 1px solid var(--line); position: relative; min-width: 0; }
+.hd h1 { margin: 0; font-size: var(--f-title); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.hd .btn.icon { flex: none; }
+.ph-hd { min-height: 52px; }
+.ph-hd .btn.icon { width: 40px; height: 40px; }
+.tip { position: absolute; left: 34px; top: 40px; z-index: 3; max-width: 300px; padding: 6px 10px; border-radius: var(--r2); font-size: var(--f-small); background: var(--paper); box-shadow: var(--pop); white-space: normal; }
+.list .srow { padding: 10px 14px; }
+.list .t { overflow-wrap: normal; hyphens: auto; }
+.list .t.clamp2 { word-break: normal; }
+.ph .x { display: none; }
+.phn .srow { padding: 12px 16px; }
+.phn .srow .t { font-size: 15px; }
+.phn .srow .s { font-size: var(--f-body); }
+.lclip { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+.metaline { display: flex; gap: 6px; min-width: 0; font: var(--f-small) var(--mono); color: var(--faint); margin-top: 2px; }
+.metaline .host { flex: none; }
+.rules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; font-size: var(--f-ui); }
+.rules div { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; }
+.rules .i { color: var(--ok); margin-top: 2px; }
+.rules code { font: var(--f-small) var(--mono); background: var(--sunk); padding: 1px 4px; border-radius: var(--r1); }
+</style>
+</head>
+<body>
+<div class="spec">
+  <div>
+    <h2>Long titles, long paths, Turkish</h2>
+    <p class="cap">The same five sessions at the three widths he uses: the desk rail at 1440 (340 wide), his phone (620) and a small phone (400). Titles wrap to two lines and never clip mid-word; headers keep one line with the full title on hover; paths clip from the start.</p>
+  </div>
+
+  <div class="cols">
+    <div>
+      <div class="lab">Desk, 1440 <span>the rail, 340 wide</span></div>
+      <div class="fr list" data-list="desk">
+        <div class="hd"><span class="sb t">T</span><h1 lang="tr">Fatura PDF'inde Türkçe karakterler bozuk: İstanbul şubesinin faturalarında ğ, ş ve ı görünmüyor</h1><button class="btn icon"><i data-i="more"></i></button>
+          <div class="tip" lang="tr">Fatura PDF'inde Türkçe karakterler bozuk: İstanbul şubesinin faturalarında ğ, ş ve ı görünmüyor</div></div>
+      </div>
+    </div>
+    <div>
+      <div class="lab">Phone, 620 <span>his phone</span></div>
+      <div class="fr list phn" data-list="p620">
+        <div class="hd ph-hd"><button class="btn icon"><i data-i="back"></i></button><h1 lang="tr">Fatura PDF'inde Türkçe karakterler bozuk: İstanbul şubesinin faturalarında ğ, ş ve ı görünmüyor</h1><button class="btn icon"><i data-i="more"></i></button></div>
+      </div>
+    </div>
+    <div>
+      <div class="lab">Phone, 400 <span>the narrowest</span></div>
+      <div class="fr list phn" data-list="p400">
+        <div class="hd ph-hd"><button class="btn icon"><i data-i="back"></i></button><h1 lang="tr">Fatura PDF'inde Türkçe karakterler bozuk: İstanbul şubesinin faturalarında ğ, ş ve ı görünmüyor</h1><button class="btn icon"><i data-i="more"></i></button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="rules cell">
+    <div><i data-i="check"></i><span>List titles: two lines, then "…" at a word break. One line only in tabs and headers, where hover or long-press shows the whole title.</span></div>
+    <div><i data-i="check"></i><span>Paths drop whole folders from the start until they fit: <code>…/worktrees/migrate-uuid-keys</code>, then <code>…/migrate-uuid-keys</code>. The end is what differs; the host never clips.</span></div>
+    <div><i data-i="check"></i><span>Turkish text carries <code>lang="tr"</code>, so it breaks and hyphenates as Turkish and <code>ı İ</code> case correctly. No fixed character cuts (28, 56, 200) in JS.</span></div>
+  </div>
+</div>
+<template id="rows">
+  <div class="srow nd"><span class="sb n">N</span><div class="grow"><div class="t clamp2">Rate limit retries</div><div class="s ell">Wants to run go test ./... -run Retry -count 20</div><div class="metaline"><span class="host">devbox ·</span><span class="lclip"><span>~/code/api</span></span></div></div><div class="e"><span>4m</span></div></div>
+  <div class="srow"><span class="sb w">W</span><div class="grow"><div class="t clamp2">Migrate sessions table to UUID keys and backfill the audit log without any downtime for the billing service</div><div class="s ell">Writing the backfill; 2 of 5 tables done, sessions and runs next.</div><div class="metaline"><span class="host">laptop ·</span><span class="lclip"><span>{P1}</span></span></div></div><div class="e"><span>now</span></div></div>
+  <div class="srow" lang="tr"><span class="sb t">T</span><div class="grow"><div class="t clamp2">Fatura PDF'inde Türkçe karakterler bozuk: İstanbul şubesinin faturalarında ğ, ş ve ı görünmüyor</div><div class="s ell">Yazı tipi artık gömülüyor; ıslak imzalı sayfalar için ayrı bir test eklendi.</div><div class="metaline"><span class="host">devbox ·</span><span class="lclip"><span>{P2}</span></span></div></div><div class="e"><span>22m</span></div></div>
+  <div class="srow"><span class="sb e">E</span><div class="grow"><div class="t clamp2" style="font-weight:500">Investigate intermittent websocket disconnects after the laptop wakes from sleep on a captive portal network</div><div class="s ell">Ended: the reconnect now waits for the first successful ping.</div></div><div class="e"><span>3h</span></div></div>
+  <div class="srow" lang="tr"><span class="sb e">E</span><div class="grow"><div class="t clamp2" style="font-weight:500">Sözleşme taslağındaki ıslak imza alanını düzelt</div><div class="s ell">Ended: alan sağa hizalandı, İngilizce sürüm de güncellendi.</div></div><div class="e"><span>5h</span></div></div>
+</template>
+<script>
+const rows = document.getElementById('rows').innerHTML;
+const paths = {
+  desk: ['…/migrate-uuid-keys', '…/fatura-pdf-turkce'],
+  p620: ['~/code/api/.claude/worktrees/migrate-uuid-keys', '~/code/billing/.claude/worktrees/fatura-pdf-turkce'],
+  p400: ['…/worktrees/migrate-uuid-keys', '…/worktrees/fatura-pdf-turkce'],
+};
+document.querySelectorAll('[data-list]').forEach((el) => {
+  const [a, b] = paths[el.dataset.list];
+  el.insertAdjacentHTML('beforeend', rows.replace('{P1}', a).replace('{P2}', b));
+});
+</script>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

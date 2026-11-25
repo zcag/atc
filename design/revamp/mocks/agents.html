@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.mono2 { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: var(--r1); background: var(--sunk); color: var(--dim); font: 600 11px/1 var(--mono); box-shadow: inset 3px 0 0 var(--id); flex: none; padding-left: 2px; }
+
+.arow { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 2px 10px; padding: 10px 14px 10px 16px; border-top: 1px solid var(--hair); align-items: start; }
+.arow .n { font-weight: 600; font-size: var(--f-body); display: flex; align-items: center; gap: 6px; }
+.arow .k { color: var(--dim); font-size: var(--f-ui); }
+.arow .wk { font-size: var(--f-small); font-weight: 400; color: var(--faint); white-space: nowrap; }
+.arow.sel { background: var(--sel); }
+.awake { display: inline-flex; align-items: center; gap: 4px; font-size: var(--f-small); font-weight: 500; color: var(--work); }
+.awake::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--work); }
+.page { max-width: 760px; padding: 24px 32px 40px; }
+.page h2 { font-size: var(--f-h); margin: 0 0 6px; font-weight: 650; }
+.page .lede { font: var(--f-read)/1.5 var(--read); color: var(--ink); margin: 0 0 14px; }
+.stats { display: flex; gap: 28px; margin: 0 0 22px; font-size: var(--f-ui); color: var(--dim); }
+.stats b { font: 600 var(--f-title) var(--mono); color: var(--ink); margin-right: 4px; }
+.pg-h { display: flex; align-items: baseline; gap: 8px; font-weight: 650; font-size: var(--f-body); padding: 12px 0 6px; border-bottom: 1px solid var(--line); }
+.it { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 2px 10px; padding: 10px 0; border-bottom: 1px solid var(--hair); font-size: var(--f-ui); }
+.it .t { font-weight: 600; font-size: var(--f-body); }
+.chk { width: 16px; height: 16px; border-radius: var(--r1); box-shadow: inset 0 0 0 1.5px var(--edge); margin-top: 2px; }
+.lastsaid { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--bg); font-size: var(--f-ui); }
+.lastsaid .q { font-family: var(--read); color: var(--dim); }
+</style>
+</head>
+<body>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button>Session</button><button>Board</button><button>Pages</button><button aria-pressed="true">Agents</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="body3">
+    <section class="pane" style="background:var(--bg)">
+      <header class="phd"><h1>Agents</h1><span class="faint num" style="font-size:var(--f-small)">8</span>
+        <div class="acts"><button class="btn icon" title="Find an agent"><i data-i="search"></i></button><button class="btn quiet"><i data-i="plus"></i>New agent</button></div></header>
+      <div class="scroll">
+        <div class="arow sel"><span class="mono2" style="--id:oklch(from var(--work) l 0.11 245)">IN</span><div class="grow"><div class="n">@inbox<span class="grow"></span><span class="wk">next 14:00, every 3h</span></div><div class="k ell">Keeps your mail: what needs you, what can wait</div></div></div>
+        <div class="arow"><span class="mono2" style="--id:oklch(from var(--work) l 0.11 150)">IV</span><div class="grow"><div class="n">@invoices <span class="awake">awake</span><span class="grow"></span><span class="wk">next Fri, every 2w</span></div><div class="k ell">Keeps invoices: due, sent, paid</div></div></div>
+        <div class="arow"><span class="mono2" style="--id:oklch(from var(--work) l 0.11 30)">DP</span><div class="grow"><div class="n">@deploys<span class="grow"></span><span class="wk">when messaged</span></div><div class="k ell">Keeps what is on staging and production</div></div></div>
+        <div class="arow"><span class="mono2" style="--id:oklch(from var(--work) l 0.11 300)">RV</span><div class="grow"><div class="n">@reviewer<span class="grow"></span><span class="wk">next 13:30, every 2h</span></div><div class="k ell">Keeps open pull requests waiting on a review</div></div></div>
+        <div class="arow"><span class="mono2" style="--id:oklch(from var(--work) l 0.11 200)">CI</span><div class="grow"><div class="n">@ci <span class="awake">awake</span><span class="grow"></span><span class="wk">on a push</span></div><div class="k ell">Keeps failing builds on main</div></div></div>
+        <div class="arow"><span class="mono2" style="--id:oklch(from var(--work) l 0.11 90)">GD</span><div class="grow"><div class="n">@garden<span class="grow"></span><span class="wk">next 07:00, daily</span></div><div class="k ell">Keeps the watering plan and the weather</div></div></div>
+        <div class="arow"><span class="mono2" style="--id:oklch(from var(--work) l 0.11 60)">ST</span><div class="grow"><div class="n">@standup<span class="grow"></span><span class="wk">next 09:00, weekdays</span></div><div class="k ell">Keeps yesterday's work, for the morning note</div></div></div>
+        <div class="arow"><span class="mono2" style="--id:oklch(from var(--work) l 0.11 340)">NW</span><div class="grow"><div class="n">@news<span class="grow"></span><span class="wk">doesn't wake</span></div><div class="k ell">Keeps nothing</div></div></div>
+      </div>
+    </section>
+
+    <section class="pane">
+      <header class="phd">
+        <span class="mono2" style="--id:oklch(from var(--work) l 0.11 245)">IN</span><h1>@inbox</h1><span class="where">devbox · woke 11:00, 1h ago</span>
+        <div class="seg" role="tablist" style="margin-left:12px"><button aria-pressed="true"><i data-i="page"></i> Page</button><button>Conversation</button></div>
+        <div class="acts">
+          <button class="btn quiet"><i data-i="refresh"></i>Wake now</button>
+          <button class="btn icon" title="Open in Pages"><i data-i="out"></i></button>
+          <button class="btn icon" title="More: Schedule, Rename, Stop"><i data-i="more"></i></button>
+        </div>
+      </header>
+      <div class="scroll">
+        <div class="page">
+          <h2>Inbox</h2>
+          <p class="lede">Two threads need you: the staging certificate expires Friday, and the invoice for October has a question on it. Everything else is read.</p>
+          <div class="stats"><span><b>2</b>need you</span><span><b>5</b>can wait</span><span><b>41</b>marked read</span></div>
+          <div class="pg-h">Needs you <span class="count n">2</span></div>
+          <div class="it"><span class="chk"></span><div><div class="t">Staging certificate expires Friday</div><div class="dim">Renewal failed twice; the DNS check can't reach the zone.</div></div><span class="faint">2h</span></div>
+          <div class="it"><span class="chk"></span><div><div class="t">October invoice: which rate applies?</div><div class="dim">Asks whether the new rate starts this month or next.</div></div><span class="faint">5h</span></div>
+          <div class="pg-h">Can wait <span class="count faint">5</span></div>
+          <div class="it"><span class="chk"></span><div><div class="t">CI failed on main, then passed on retry</div><div class="dim">Fix flaky upload test is already open for it.</div></div><span class="faint">1h</span></div>
+          <div class="it"><span class="chk"></span><div><div class="t">Library update: 3 minor versions</div><div class="dim">No breaking changes listed.</div></div><span class="faint">6h</span></div>
+          <div class="it"><span class="chk"></span><div><div class="t">Meeting notes from Tuesday</div><div class="dim">Two action items, neither yours.</div></div><span class="faint">1d</span></div>
+          <div class="row-flex" style="margin-top:16px"><button class="btn">Mark read</button><button class="btn quiet">Select all that can wait</button></div>
+        </div>
+      </div>
+      <div class="lastsaid">
+        <span class="faint">Last said, 1h</span>
+        <span class="q grow ell">Caught up: two threads need you, both on the page; the rest is read.</span>
+        <button class="btn quiet">Open conversation</button>
+      </div>
+    </section>
+  </div>
+
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">Started the CSV export session in api and told it to keep the header row.</span>
+    <span class="faint">12m</span>
+    <span class="ask">Talk to the assistant</span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet">Agents <span class="count n">1</span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<script src="../kit/kit.js"></script>
+</body>
+</html>

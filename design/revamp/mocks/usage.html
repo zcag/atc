@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Usage, proposed</title>
+<link rel="stylesheet" href="../kit/kit.css">
+<link rel="stylesheet" href="../kit/shell.css">
+<style>
+.wrap { padding: 0 24px 32px; }
+.sec { display: flex; align-items: center; gap: 10px; padding: 18px 0 8px; border-bottom: 1px solid var(--line); }
+.sec h2 { margin: 0; font-size: var(--f-body); font-weight: 650; }
+.sec .acts { margin-left: auto; }
+.info { display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--faint); vertical-align: -3px; cursor: help; }
+.gauge { display: grid; grid-template-columns: 250px minmax(0, 1fr) 80px 340px; gap: 16px; align-items: center; padding: 10px 0 14px; border-bottom: 1px solid var(--hair); font-size: var(--f-ui); }
+.gauge .nm { font-weight: 600; }
+.gauge .sub { color: var(--faint); font-size: var(--f-small); font-family: var(--mono); }
+.track { position: relative; height: 14px; border-radius: 2px; box-shadow: inset 0 0 0 1px var(--edge); }
+.track .used { position: absolute; inset: 0 auto 0 0; background: var(--ink); border-radius: 2px 0 0 2px; }
+.track .proj { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, var(--dim) 0 1.2px, transparent 1.2px 5px); box-shadow: inset 0 0 0 1px var(--dim); }
+.track .pace { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
+.track .pl { position: absolute; top: 19px; transform: translateX(-50%); font: var(--f-micro) var(--mono); color: var(--faint); white-space: nowrap; }
+.pct { font: 650 var(--f-h)/1 var(--mono); text-align: right; white-space: nowrap; }
+.pct small { font-size: var(--f-small); color: var(--faint); font-weight: 500; }
+.gauge .say { color: var(--dim); }
+.gauge.warn .say b { color: var(--needs-text); font-weight: 600; }
+.legend { display: flex; gap: 20px; padding: 10px 0 0; font-size: var(--f-small); color: var(--faint); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { width: 18px; height: 9px; border-radius: 1px; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding: 14px 0 10px; }
+.stat .k { font-size: var(--f-small); color: var(--faint); display: flex; align-items: center; gap: 4px; }
+.stat .v { font: 650 var(--f-h)/1.2 var(--mono); }
+.stat .d { font-size: var(--f-small); color: var(--dim); }
+.chart { position: relative; height: 130px; margin: 8px 0 0 44px; border-bottom: 1px solid var(--edge); display: flex; align-items: end; gap: 6px; }
+.chart .gl { position: absolute; left: -44px; right: 0; border-top: 1px solid var(--hair); font: var(--f-micro) var(--mono); color: var(--faint); }
+.chart .gl span { position: absolute; top: -8px; left: 0; }
+.bar { flex: 1; background: var(--edge); border-radius: 2px 2px 0 0; position: relative; }
+.bar.wk { background: var(--dim); }
+.bar.today { background: var(--ink); }
+.xl { display: flex; gap: 6px; margin: 4px 0 0 44px; font: var(--f-micro) var(--mono); color: var(--faint); }
+.xl span { flex: 1; text-align: center; white-space: nowrap; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 32px; }
+.tbl { width: 100%; border-collapse: collapse; font-size: var(--f-ui); }
+.tbl th { text-align: left; font-weight: 500; color: var(--faint); font-size: var(--f-small); padding: 8px 8px 6px 0; }
+.tbl td { padding: 7px 8px 7px 0; border-top: 1px solid var(--hair); }
+.tbl .r { text-align: right; font-family: var(--mono); white-space: nowrap; }
+.tbl .tick { display: inline-block; width: 3px; height: 12px; margin-right: 8px; vertical-align: -1px; border-radius: 1px; }
+.mb { display: inline-block; height: 4px; border-radius: 2px; background: var(--dim); vertical-align: middle; }
+.sk { height: 10px; border-radius: 3px; background: var(--hi); display: inline-block; }
+.loading { display: flex; align-items: center; gap: 8px; font-size: var(--f-small); color: var(--faint); }
+.loading .bar2 { width: 60px; height: 3px; border-radius: 2px; background: var(--hi); position: relative; overflow: hidden; }
+.loading .bar2 i { position: absolute; inset: 0 60% 0 0; background: var(--work); }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><symbol id="info" viewBox="0 0 16 16"><circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M8 7.3v3.6M8 5.2v0" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol></svg>
+<div class="app">
+  <nav class="baybar">
+    <span class="bay"><b>1</b>web <span class="count n">3</span></span>
+    <span class="bay"><b>2</b>api <span class="count n">2</span><span class="wk">1</span></span>
+    <span class="bay"><b>3</b>~ <span class="count n">1</span></span>
+    <span class="bay"><b>4</b>dotfiles <span class="wk">1</span></span>
+    <span class="bay"><b>5</b>docs</span>
+    <span class="bay"><b>6</b>billing <span class="count n">1</span></span>
+    <span class="bay"><b>7</b>infra <span class="wk">2</span></span>
+    <span class="sep"></span>
+    <span class="bay rest"><b>8</b>garden</span>
+    <span class="bay rest"><b>9</b>archive</span>
+    <div class="views">
+      <div class="seg" role="group" aria-label="View">
+        <button>Session</button><button>Board</button><button>Pages</button><button aria-pressed="true">Usage</button>
+      </div>
+    </div>
+  </nav>
+
+  <section class="pane">
+    <header class="phd">
+      <h1>Usage</h1><span class="where">Claude Code, devbox and laptop · limits read 1m ago</span>
+      <div class="acts">
+        <div class="seg" role="group" aria-label="Account"><button aria-pressed="true">personal</button><button>work</button></div>
+        <div class="seg" role="group" aria-label="Show"><button aria-pressed="true">Spend</button><button>Time</button></div>
+      </div>
+    </header>
+    <div class="scroll">
+      <div class="wrap">
+        <div class="sec"><h2>Limits</h2></div>
+        <div class="gauge">
+          <div><div class="nm">This week, all models</div><div class="sub">resets Mon 02:00 · $536 so far</div></div>
+          <div class="track"><div class="used" style="width:31%"></div><div class="proj" style="left:31%;width:41%"></div><div class="pace" style="left:43%"><span class="pl">pace 43%</span></div></div>
+          <div class="pct num">31<small>%</small> <svg class="info"><use href="#info"/></svg></div>
+          <div class="say">Lasts to the reset at this rate: about 72% by Mon 02:00.</div>
+        </div>
+        <div class="gauge warn">
+          <div><div class="nm">This session, 5 hours</div><div class="sub">resets 04:00 · started 23:00</div></div>
+          <div class="track"><div class="used" style="width:64%"></div><div class="proj" style="left:64%;width:36%"></div><div class="pace" style="left:62%"><span class="pl">pace 62%</span></div></div>
+          <div class="pct num">64<small>%</small> <svg class="info"><use href="#info"/></svg></div>
+          <div class="say"><b>Runs out about 03:40</b>, 20 minutes before it resets.</div>
+        </div>
+        <div class="gauge">
+          <div><div class="nm">This week, Opus</div><div class="sub">resets Mon 02:00</div></div>
+          <div class="track"><div class="used" style="width:18%"></div><div class="proj" style="left:18%;width:24%"></div><div class="pace" style="left:43%"><span class="pl">pace 43%</span></div></div>
+          <div class="pct num">18<small>%</small> <svg class="info"><use href="#info"/></svg></div>
+          <div class="say">Lasts to the reset at this rate: about 42%.</div>
+        </div>
+        <div class="legend">
+          <span><i class="sw" style="background:var(--ink)"></i>used</span>
+          <span><i class="sw" style="background:repeating-linear-gradient(135deg, var(--dim) 0 1.2px, transparent 1.2px 5px);box-shadow:inset 0 0 0 1px var(--dim)"></i>at this rate, by the reset</span>
+          <span><i class="sw" style="width:2px;height:13px;background:var(--ink)"></i>even pace</span>
+        </div>
+
+        <div class="sec"><h2>Spend</h2><span class="faint" style="font-size:var(--f-small)">at API prices <svg class="info"><use href="#info"/></svg></span>
+          <div class="acts"><div class="seg" role="group" aria-label="Range"><button>24h</button><button>Week</button><button>7d</button><button aria-pressed="true">30d</button><button>90d</button><button>All</button></div></div></div>
+        <div class="stats">
+          <div class="stat"><div class="k">30 days <svg class="info"><use href="#info"/></svg></div><div class="v num">$1,284</div><div class="d">74% of a month's limit</div></div>
+          <div class="stat"><div class="k">Per active day <svg class="info"><use href="#info"/></svg></div><div class="v num">$49</div><div class="d">26 of 30 days</div></div>
+          <div class="stat"><div class="k">This week <svg class="info"><use href="#info"/></svg></div><div class="v num">$536</div><div class="d">31% of the weekly limit</div></div>
+          <div class="stat"><div class="k">Per hour of yours <svg class="info"><use href="#info"/></svg></div><div class="v num">$30</div><div class="d">17h 50m with atc in front of you</div></div>
+        </div>
+        <div class="chart" id="chart">
+          <div class="gl" style="bottom:100%"><span>$120</span></div>
+          <div class="gl" style="bottom:66.6%"><span>$80</span></div>
+          <div class="gl" style="bottom:33.3%"><span>$40</span></div>
+        </div>
+        <div class="xl" id="xl"></div>
+
+        <div class="two" style="margin-top:22px">
+          <div>
+            <div class="sec" style="padding-top:6px"><h2>Per bay</h2></div>
+            <table class="tbl">
+              <tr><th>Bay</th><th>Sessions</th><th style="width:40%"></th><th class="r">Spend</th></tr>
+              <tr><td><i class="tick" style="background:oklch(from var(--work) l 0.11 245)"></i>api</td><td class="num dim">41</td><td><i class="mb" style="width:100%"></i></td><td class="r">$482</td></tr>
+              <tr><td><i class="tick" style="background:oklch(from var(--work) l 0.11 150)"></i>web</td><td class="num dim">33</td><td><i class="mb" style="width:68%"></i></td><td class="r">$331</td></tr>
+              <tr><td><i class="tick" style="background:oklch(from var(--work) l 0.11 30)"></i>billing</td><td class="num dim">12</td><td><i class="mb" style="width:38%"></i></td><td class="r">$184</td></tr>
+              <tr><td><i class="tick" style="background:oklch(from var(--work) l 0.11 300)"></i>infra</td><td class="num dim">17</td><td><i class="mb" style="width:31%"></i></td><td class="r">$151</td></tr>
+              <tr><td><i class="tick" style="background:oklch(from var(--work) l 0.11 90)"></i>~</td><td class="num dim">22</td><td><i class="mb" style="width:20%"></i></td><td class="r">$97</td></tr>
+            </table>
+          </div>
+          <div>
+            <div class="sec" style="padding-top:6px"><h2>Per session</h2><div class="acts loading"><span class="bar2"><i></i></span>Adding up older transcripts, 212 of 340</div></div>
+            <table class="tbl">
+              <tr><th>Session</th><th>Bay</th><th class="r">Time</th><th class="r">Spend</th></tr>
+              <tr><td>Migrate sessions table to UUID keys</td><td class="dim">api</td><td class="r dim">2h 19m</td><td class="r">$88</td></tr>
+              <tr><td>Rate limit retries</td><td class="dim">api</td><td class="r dim">1h 41m</td><td class="r">$61</td></tr>
+              <tr><td lang="tr">Fatura PDF'inde Türkçe karakterler bozuk</td><td class="dim">billing</td><td class="r dim">1h 2m</td><td class="r">$44</td></tr>
+              <tr><td><span class="sk" style="width:62%"></span></td><td><span class="sk" style="width:36px"></span></td><td class="r"><span class="sk" style="width:40px"></span></td><td class="r"><span class="sk" style="width:30px"></span></td></tr>
+              <tr><td><span class="sk" style="width:48%"></span></td><td><span class="sk" style="width:28px"></span></td><td class="r"><span class="sk" style="width:40px"></span></td><td class="r"><span class="sk" style="width:30px"></span></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="console">
+    <span class="who">assistant</span>
+    <span class="line ell">Started the CSV export session in api and told it to keep the header row.</span>
+    <span class="faint">12m</span>
+    <span class="ask">Talk to the assistant</span>
+    <button class="btn quiet"><i data-i="phone"></i>Call</button>
+    <button class="btn quiet">Agents <span class="count n">1</span></button>
+    <button class="btn icon" title="Keys (?)"><i data-i="keys"></i></button>
+  </footer>
+</div>
+<script src="../kit/kit.js"></script>
+<script>
+const v = [22, 41, 38, 0, 12, 55, 61, 47, 52, 33, 0, 18, 64, 71, 58, 49, 44, 0, 9, 62, 80, 66, 54, 39, 0, 27, 96, 112, 88, 41];
+const days = ['Wed', 'Thu', 'Fri', 'Sat', 'Sun', 'Mon', 'Tue'];
+const chart = document.getElementById('chart');
+const xl = document.getElementById('xl');
+v.forEach((d, k) => {
+  const b = document.createElement('div');
+  b.className = 'bar' + (k === v.length - 1 ? ' today' : k >= v.length - 4 ? ' wk' : '');
+  b.style.height = (d / 120 * 100) + '%';
+  b.title = '$' + d;
+  chart.appendChild(b);
+  const l = document.createElement('span');
+  const date = 28 + k;
+  l.textContent = k % 5 === 4 || k === v.length - 1 ? (k === v.length - 1 ? 'today' : (date > 31 ? 'Nov ' + (date - 31) : 'Oct ' + date)) : '';
+  xl.appendChild(l);
+});
+</script>
+</body>
+</html>
