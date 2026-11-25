@@ -22,7 +22,7 @@
 .scrpane .seg button:hover { color: var(--ink); }
 .scrpane .seg button[aria-pressed="true"] { background: var(--ink); color: var(--strip); font-weight: 600; }
 .scrpane .seg .c { font-family: var(--mono); font-size: var(--fs-micro); opacity: .8; }
-.usage .hd .uprof { margin-left: auto; }
+.usage .hd .utabs { margin-left: auto; flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
 
 .toast .tundo { height: 26px; margin-left: var(--s3); background: none; box-shadow: none; color: inherit; text-decoration: underline; text-underline-offset: 3px; font-weight: 650; }
 .toast .tundo kbd { margin-left: 4px; opacity: .7; }
@@ -221,11 +221,15 @@ html.pal-bar .tx .toc { top: calc(104px + var(--pal-bar-h, 0px)); }
 .uchip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 var(--s2); border: 0; border-radius: var(--r-sm); background: var(--ink); color: var(--strip); font-size: var(--fs-small); font-weight: 600; }
 .uchip span { opacity: .7; font-size: var(--fs-ui); line-height: 1; }
 .ufloor { margin: 0; font-size: var(--fs-small); color: var(--faint); }
-.utime .ugrid { margin-top: var(--s4); }
-.utime .fold { display: inline-flex; align-items: center; gap: var(--s2); margin: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
-.utime .fold .chev { flex: none; width: 6px; height: 6px; border-right: 1.5px solid var(--faint); border-bottom: 1.5px solid var(--faint); transform: rotate(-45deg); }
-.utime .fold[aria-expanded="true"] .chev { transform: rotate(45deg); }
-.utime .sh { align-items: center; }
+.dl-rows { display: grid; grid-template-columns: minmax(0, 130px) minmax(0, 1fr) max-content; gap: 4px var(--s3); align-items: center; font-size: var(--fs-small); }
+.dl-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dim); }
+.dl-v { font-family: var(--mono); color: var(--dim); text-align: right; }
+.dl-t { position: relative; height: 18px; background: var(--sunk); }
+.dl-t em { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--hair); }
+.dl-t i { position: absolute; top: 2px; bottom: 2px; min-width: 2px; border-radius: 1px; }
+.dl-t i.on { outline: 2px solid var(--focus); z-index: 1; }
+.dl-x { position: relative; height: 14px; font-family: var(--mono); font-size: var(--fs-micro); color: var(--faint); }
+.dl-x em { position: absolute; transform: translateX(-50%); font-style: normal; }
 .ukpis { display: grid; grid-template-columns: 1.5fr repeat(4, minmax(0, 1fr)); gap: var(--s4); }
 .ukpi { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .ukpi .l { font-size: var(--fs-small); color: var(--faint); }
@@ -439,12 +443,11 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
   .hm .dl { font-size: var(--fs-micro); }
   .hm i { aspect-ratio: 0.8; }
   .uspend { gap: var(--s4); }
-  :is(.ubar, .utime) > .sh { flex-wrap: nowrap; }
-  .utime .fold { min-height: var(--hit); }
+  .ubar > .sh { flex-wrap: nowrap; }
   .ubar .sh .n { display: none; }
-  .ubody :is(.ubar, .utime) > .sh .r { margin-left: auto; width: auto; flex: 0 1 300px; }
-  :is(.ubar, .utime) .seg { display: flex; width: 100%; }
-  :is(.ubar, .utime) .seg button { flex: 1; justify-content: center; padding: 0; }
+  .ubody .ubar > .sh .r { margin-left: auto; width: auto; flex: 0 1 300px; }
+  .ubar .seg { display: flex; width: 100%; }
+  .ubar .seg button { flex: 1; justify-content: center; padding: 0; }
   .uchip { height: 36px; }
   .ukpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s3); }
   .ukpi.big { grid-column: 1 / 3; }
@@ -453,6 +456,9 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
   .ulegend button { height: 36px; }
   .ubars .ro .wide { display: none; }
   .ugrid { display: flex; flex-direction: column; gap: var(--s5); }
+  .dl-rows { grid-template-columns: minmax(0, 84px) minmax(0, 1fr) max-content; gap: 4px var(--s2); }
+  .dl-t { height: 26px; }
+  .usage .hd .where { display: none; }
   .upick { min-height: var(--hit); padding: 10px var(--s1) 12px; }
   .usess { scroll-margin-top: 120px; }
   .ubody .c-m, .ubody .c-st, .ubody .c-wk, .ubody .c-sh, .ubody .c-bay { display: none; }
@@ -462,6 +468,7 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
   .uses { flex-wrap: wrap; }
   .uses a { min-height: var(--hit); display: inline-flex; align-items: center; }
   .uses .bay2 { display: block; flex-basis: 100%; margin-top: -10px; padding-left: 26px; font-size: var(--fs-small); color: var(--faint); }
+  .uses .scn + .bay2 { margin-top: 0; padding-left: 0; }
   .ubody .tools { width: 100%; }
   .ubody .sh .r { margin-left: 0; width: 100%; }
   .filt { width: 100%; flex: 1; }

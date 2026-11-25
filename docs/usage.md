@@ -12,6 +12,22 @@ what this week has spent so far divided by its percentage. That one rate is used
 whichever weeks it was spent in, so $8,000 over a month reads as, say, 270% wk. All time reaches as far back as
 the transcripts on disk: Claude Code deletes old ones (`cleanupPeriodDays` in its settings).
 
+## Your time
+
+**Time**, beside Spend at the top right (or `#/time`, or Time in the palette), is how long you were at atc: today, the last 7
+or 30 days or all of it, for every Claude account or one. It has your time per day and bay, when in a day
+you were in which bay, your stretches and how often you switched sessions in them, the hours, the devices, and each session's
+time beside what Claude spent in it. Pick a day or a bay and the rest narrows to it.
+
+The page counts 5-second ticks while it is visible and focused, for the session that is open, or for the screen (the board,
+pages, settings) when none is. Typing, clicking, scrolling, touching or moving the mouse, also inside a page a session showed
+you, keeps it counting for a minute. A pause of up to 3 minutes, such as reading a long reply, counts once you move again or
+switch away; of a longer one only the first minute does. Two devices at once count once, and atc open in a session's browser
+tab doesn't count. Ticks that couldn't be sent go out with the next ones, up to 14 minutes later.
+
+It leaves out other apps and tabs, `atc attach` in a terminal, and calls, so it is less than the time you worked.
+`time.json` in atc's config folder keeps each session's total per day and `time/<day>.jsonl` the times of day.
+
 ## Where the limits come from
 
 Claude Code hands the current limits to its status line command each time it draws the line. `atc
