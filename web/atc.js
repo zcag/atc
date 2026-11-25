@@ -122,6 +122,9 @@
     parent.postMessage({ atc: 1, op: "key", arg: { key: e.key, code: e.code, altKey: e.altKey, shiftKey: e.shiftKey } }, "*");
   });
   addEventListener("pointerdown", () => parent.postMessage({ atc: 1, op: "press" }, "*"), true);
+  let told = 0;
+  const active = () => { if (Date.now() - told > 5000) { told = Date.now(); parent.postMessage({ atc: 1, op: "active" }, "*"); } };
+  for (const ev of ["pointermove", "pointerdown", "wheel", "touchstart", "keydown"]) addEventListener(ev, active, { passive: true, capture: true });
   let t = 0;
   addEventListener("scroll", () => {
     clearTimeout(t);

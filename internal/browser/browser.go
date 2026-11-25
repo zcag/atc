@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -133,6 +134,22 @@ func (b *Browser) Tabs(ctx context.Context) (map[string][]Tab, error) {
 		b.save()
 	}
 	return tabs, nil
+}
+
+// Shows is whether a session's tab is on host.
+func (b *Browser) Shows(ctx context.Context, host string) bool {
+	all, err := b.Tabs(ctx)
+	if err != nil {
+		return false
+	}
+	for _, tabs := range all {
+		for _, t := range tabs {
+			if u, err := url.Parse(t.URL); err == nil && u.Host == host {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Of is the session's tabs as of the last look, never waiting on Chrome; a stale
