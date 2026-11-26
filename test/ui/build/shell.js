@@ -8,6 +8,7 @@ const ok = (c, m) => console.log(c ? 'ok  ' : 'FAIL', m);
   const errs = [];
   p.on('pageerror', (e) => errs.push(e.message));
   await p.route('**/api/**', (r) => r.request().method() === 'GET' ? r.continue() : r.fulfill({ status: 204 }));
+  await p.addInitScript(() => { try { localStorage.setItem('atc.notifask', '1'); } catch {} });
   await p.goto(base + '/');
   await p.waitForTimeout(2500);
   const bays = await p.locator('.bays .bay[data-bay]').count();
