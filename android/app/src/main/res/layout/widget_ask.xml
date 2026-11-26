@@ -18,6 +18,7 @@
 
         <ImageView
             android:id="@+id/ask_edge"
+            android:tint="@color/needs"
             android:layout_width="3dp"
             android:layout_height="match_parent"
             android:importantForAccessibility="no"
@@ -39,6 +40,8 @@
 
                 <TextView
                     android:id="@+id/ask_sb"
+                    android:backgroundTint="@color/needs"
+                    android:textColor="@color/on_needs"
                     style="@style/WidgetBlock"
                     android:background="@drawable/w_fill"
                     android:text="N" />
@@ -51,7 +54,7 @@
                     android:layout_weight="1"
                     android:ellipsize="end"
                     android:singleLine="true"
-                    android:textColor="@color/w_ink"
+                    android:textColor="@color/ink"
                     android:textSize="12sp"
                     android:textStyle="bold" />
 
@@ -62,7 +65,7 @@
                     android:layout_marginStart="6dp"
                     android:fontFamily="monospace"
                     android:singleLine="true"
-                    android:textColor="@color/w_faint"
+                    android:textColor="@color/faint"
                     android:textSize="10sp" />
             </LinearLayout>
 
@@ -72,7 +75,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:lineSpacingMultiplier="1.1"
-                android:textColor="@color/w_ink"
+                android:textColor="@color/ink"
                 android:textSize="12sp" />
 
             <LinearLayout
@@ -85,18 +88,22 @@
 
                 <TextView
                     android:id="@+id/opt0"
+                    android:backgroundTint="@color/ink"
+                    android:textColor="@color/board"
                     style="@style/WidgetChip"
                     android:background="@drawable/w_chip_fill"
                     android:textStyle="bold" />
 
                 <TextView
                     android:id="@+id/opt1"
+                    android:backgroundTint="@color/line_strong"
                     style="@style/WidgetChip"
                     android:layout_marginStart="4dp"
                     android:background="@drawable/w_chip_line" />
 
                 <TextView
                     android:id="@+id/opt2"
+                    android:backgroundTint="@color/line_strong"
                     style="@style/WidgetChip"
                     android:layout_marginStart="4dp"
                     android:background="@drawable/w_chip_line" />
@@ -108,7 +115,7 @@
                 android:layout_height="wrap_content"
                 android:gravity="center_vertical"
                 android:minHeight="48dp"
-                android:textColor="@color/w_dim"
+                android:textColor="@color/dim"
                 android:textSize="12sp"
                 android:visibility="gone" />
         </LinearLayout>

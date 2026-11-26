@@ -1,18 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="w_bg">#e9ecf1</color>
-    <color name="w_row">#fbfaf5</color>
-    <color name="w_row_line">#d5dae3</color>
-    <color name="w_ink">#1d2533</color>
-    <color name="w_dim">#5d6778</color>
-    <color name="w_faint">#8a93a3</color>
-    <color name="needs">#efb13e</color>
-    <color name="turn">#1d2533</color>
-    <color name="work">#2477d1</color>
     <dimen name="widget_radius">22dp</dimen>
     <string name="widget_description">What needs you, answered from the home screen, and the assistant a tap away</string>
     <string name="tile_label">Talk to assistant</string>
-    <string name="widget_loading">Loading</string>
+    <string name="widget_loading">Loading…</string>
     <string name="preview_title">Own dialogs instead of confirm()</string>
     <string name="preview_ask">Esc on phone Back: close the dialog or go back a screen?</string>
     <string name="preview_a">1 Close the dialog</string>
@@ -27,14 +18,14 @@
         <item name="android:includeFontPadding">false</item>
         <item name="android:textSize">10sp</item>
         <item name="android:textStyle">bold</item>
-        <item name="android:textColor">@color/w_ink</item>
+        <item name="android:textColor">@color/ink</item>
     </style>
 
     <style name="WidgetSmall">
         <item name="android:layout_width">wrap_content</item>
         <item name="android:layout_height">wrap_content</item>
         <item name="android:textSize">12sp</item>
-        <item name="android:textColor">@color/w_dim</item>
+        <item name="android:textColor">@color/dim</item>
     </style>
 
     <style name="WidgetRule">
@@ -42,6 +33,7 @@
         <item name="android:layout_height">1dp</item>
         <item name="android:scaleType">fitXY</item>
         <item name="android:src">@drawable/w_fill</item>
+        <item name="android:tint">@color/line</item>
         <item name="android:importantForAccessibility">no</item>
     </style>
 
@@ -55,6 +47,6 @@
         <item name="android:paddingHorizontal">10dp</item>
         <item name="android:textSize">12sp</item>
         <item name="android:lineSpacingMultiplier">0.95</item>
-        <item name="android:textColor">@color/w_ink</item>
+        <item name="android:textColor">@color/ink</item>
     </style>
 </resources>

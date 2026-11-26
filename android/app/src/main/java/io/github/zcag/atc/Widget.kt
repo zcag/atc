@@ -248,7 +248,7 @@ object Live {
         setTextViewText(R.id.ask_where, listOf(r.bay, ago(now, r.since)).filter { it.isNotEmpty() }.joinToString("  "))
         setTextViewText(R.id.ask_q, when {
             a == null -> r.summary.ifEmpty { "Needs you" }
-            a.tool == "Bash" -> SpannableStringBuilder("Run ").append(a.cmd, TypefaceSpan("monospace"), 0)
+            a.tool == "Bash" -> SpannableStringBuilder("Wants to run ").append(a.cmd, TypefaceSpan("monospace"), 0)
             else -> a.says()
         })
         val open = activity(c, "/#/s/${r.key}")

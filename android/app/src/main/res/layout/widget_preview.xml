@@ -18,7 +18,7 @@
             android:layout_height="wrap_content"
             android:layout_marginEnd="6dp"
             android:text="@string/app_name"
-            android:textColor="@color/w_ink"
+            android:textColor="@color/ink"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -27,7 +27,7 @@
             android:background="@drawable/w_fill"
             android:backgroundTint="@color/needs"
             android:text="1"
-            android:textColor="#2b2215" />
+            android:textColor="@color/on_needs" />
 
         <FrameLayout
             android:layout_width="0dp"
@@ -58,7 +58,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/preview_title"
-                android:textColor="@color/w_ink"
+                android:textColor="@color/ink"
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
@@ -67,7 +67,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:text="@string/preview_ask"
-                android:textColor="@color/w_ink"
+                android:textColor="@color/ink"
                 android:textSize="12sp" />
 
             <LinearLayout
@@ -79,16 +79,16 @@
                 <TextView
                     style="@style/WidgetChip"
                     android:background="@drawable/w_chip_fill"
-                    android:backgroundTint="@color/w_ink"
+                    android:backgroundTint="@color/ink"
                     android:text="@string/preview_a"
-                    android:textColor="@color/w_bg"
+                    android:textColor="@color/board"
                     android:textStyle="bold" />
 
                 <TextView
                     style="@style/WidgetChip"
                     android:layout_marginStart="4dp"
                     android:background="@drawable/w_chip_line"
-                    android:backgroundTint="@color/w_faint"
+                    android:backgroundTint="@color/line_strong"
                     android:text="@string/preview_b" />
             </LinearLayout>
         </LinearLayout>
@@ -111,7 +111,7 @@
             android:layout_weight="1"
             android:fontFamily="serif"
             android:text="@string/preview_said"
-            android:textColor="@color/w_ink"
+            android:textColor="@color/ink"
             android:textSize="12sp" />
 
         <TextView
@@ -119,10 +119,10 @@
             android:layout_height="56dp"
             android:layout_marginStart="10dp"
             android:background="@drawable/w_talk"
-            android:backgroundTint="@color/w_ink"
+            android:backgroundTint="@color/ink"
             android:gravity="center"
             android:text="Talk"
-            android:textColor="@color/w_bg"
+            android:textColor="@color/board"
             android:textSize="14sp"
             android:textStyle="bold" />
     </LinearLayout>

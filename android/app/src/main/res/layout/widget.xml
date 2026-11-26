@@ -27,6 +27,8 @@
 
             <TextView
                 android:id="@+id/big_sb"
+                android:backgroundTint="@color/needs"
+                android:textColor="@color/on_needs"
                 android:layout_width="30dp"
                 android:layout_height="30dp"
                 android:background="@drawable/w_fill"
@@ -45,7 +47,7 @@
                 android:fontFamily="monospace"
                 android:includeFontPadding="false"
                 android:letterSpacing="-0.03"
-                android:textColor="@color/w_ink"
+                android:textColor="@color/ink"
                 android:textSize="34sp"
                 android:textStyle="bold" />
         </LinearLayout>
@@ -55,7 +57,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="need you"
-            android:textColor="@color/w_dim"
+            android:textColor="@color/dim"
             android:textSize="14sp" />
 
         <ImageView
@@ -72,6 +74,7 @@
 
             <TextView
                 android:id="@+id/big_turn_n"
+                android:backgroundTint="@color/ink"
                 style="@style/WidgetBlock"
                 android:background="@drawable/w_box" />
 
@@ -91,6 +94,7 @@
 
             <ImageView
                 android:id="@+id/big_work_bar"
+                android:tint="@color/work"
                 android:layout_width="2dp"
                 android:layout_height="11dp"
                 android:importantForAccessibility="no"
@@ -124,7 +128,7 @@
                 android:layout_marginTop="6dp"
                 android:ellipsize="end"
                 android:maxLines="2"
-                android:textColor="@color/w_ink"
+                android:textColor="@color/ink"
                 android:textSize="12sp"
                 android:textStyle="bold" />
 
@@ -134,7 +138,7 @@
                 android:layout_height="wrap_content"
                 android:fontFamily="monospace"
                 android:singleLine="true"
-                android:textColor="@color/w_faint"
+                android:textColor="@color/faint"
                 android:textSize="10sp" />
         </LinearLayout>
     </LinearLayout>
@@ -154,7 +158,7 @@
         android:gravity="center"
         android:paddingVertical="24dp"
         android:text="Nothing needs you."
-        android:textColor="@color/w_dim"
+        android:textColor="@color/dim"
         android:textSize="14sp"
         android:visibility="gone" />
 
@@ -180,6 +184,7 @@
 
             <ImageView
                 android:id="@+id/wk_bar"
+                android:tint="@color/work"
                 android:layout_width="2dp"
                 android:layout_height="11dp"
                 android:layout_marginEnd="4dp"
@@ -193,7 +198,7 @@
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:singleLine="true"
-                android:textColor="@color/w_dim"
+                android:textColor="@color/dim"
                 android:textSize="12sp" />
         </LinearLayout>
     </LinearLayout>
@@ -233,11 +238,13 @@
                 android:ellipsize="end"
                 android:lineSpacingMultiplier="1.1"
                 android:maxLines="4"
-                android:textColor="@color/w_ink"
+                android:textColor="@color/ink"
                 android:textSize="12sp" />
 
             <TextView
                 android:id="@+id/talk"
+                android:backgroundTint="@color/ink"
+                android:textColor="@color/board"
                 android:layout_width="64dp"
                 android:layout_height="56dp"
                 android:layout_marginStart="10dp"
@@ -263,7 +270,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:gravity="center"
-            android:textColor="@color/w_ink"
+            android:textColor="@color/ink"
             android:textSize="14sp"
             android:textStyle="bold" />
 
@@ -273,7 +280,7 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:gravity="center"
-            android:textColor="@color/w_dim"
+            android:textColor="@color/dim"
             android:textSize="12sp" />
     </LinearLayout>
 </LinearLayout>

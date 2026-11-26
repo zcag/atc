@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="board">#151c27</color>
     <style name="Theme.Atc" parent="android:Theme.DeviceDefault.DayNight">
         <item name="android:windowBackground">@color/board</item>
         <item name="android:windowActionBar">false</item>

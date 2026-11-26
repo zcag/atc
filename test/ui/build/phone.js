@@ -21,7 +21,7 @@ const fake = (list) => {
     window.__feeds = [];
     window.AtcApp = {
       setLook: (j) => { window.__look = j; }, setSessions: (j) => { window.__feeds.push(j); },
-      version: () => 999, versionName: () => 'test', pushStatus: () => 'ok', shared: () => '', clearShared: () => {}, setTargets: () => {},
+      shared: () => '', clearShared: () => {}, setTargets: () => {},
       openExternal: () => {}, checkUpdate: () => {}, keepScreenOn: () => {}, speak: () => {}, stopSpeaking: () => {},
     };
   });

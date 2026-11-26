@@ -8,9 +8,6 @@ import java.net.URI
 import java.security.MessageDigest
 
 class Bridge(private val a: MainActivity) {
-    @JavascriptInterface fun version() = BuildConfig.VERSION_CODE
-    @JavascriptInterface fun versionName() = BuildConfig.VERSION_NAME
-    @JavascriptInterface fun pushStatus() = Push.status(a)
     @JavascriptInterface fun shared() = Shared.json()
     @JavascriptInterface fun clearShared() = Shared.clear(a)
     @JavascriptInterface fun setTargets(json: String) { Targets.update(a, Targets.parse(json)) }

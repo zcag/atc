@@ -1,16 +1,19 @@
 package io.github.zcag.atc
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Color
 import androidx.core.graphics.ColorUtils
 import org.json.JSONObject
 
 class Palette(
-    val dark: Boolean, val board: Int, val strip: Int, val line: Int,
+    val dark: Boolean, val board: Int, val line: Int,
     val ink: Int, val dim: Int, val faint: Int, val needs: Int, val turn: Int, val work: Int,
 ) {
     val onNeeds get() = ColorUtils.blendARGB(needs, Color.BLACK, .82f)
     val lineStrong get() = ColorUtils.blendARGB(line, ink, .35f)
+    val needsText get() = if (dark) needs else ColorUtils.blendARGB(needs, ink, .45f)
+    val wash get() = ColorUtils.blendARGB(board, needs, if (dark) .1f else .2f)
 }
 
 object Look {
@@ -37,10 +40,13 @@ object Look {
         val dark = dark(c)
         val theme = look(c).optString("theme").ifEmpty { "atc" }
         val o = runCatching { JSONObject(Prefs(c).palettes!!).getJSONObject(theme).getJSONObject(if (dark) "dark" else "light") }.getOrNull()
-        fun color(k: String, fallback: Int) = o?.optString(k)?.let { runCatching { Color.parseColor(it) }.getOrNull() } ?: c.getColor(fallback)
+        val res = c.createConfigurationContext(Configuration(c.resources.configuration).apply {
+            uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or (if (dark) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
+        })
+        fun color(k: String, fallback: Int) = o?.optString(k)?.let { runCatching { Color.parseColor(it) }.getOrNull() } ?: res.getColor(fallback)
         return Palette(
-            dark, color("board", R.color.board), color("strip", R.color.w_row), color("line", R.color.w_row_line),
-            color("ink", R.color.w_ink), color("dim", R.color.w_dim), color("faint", R.color.w_faint),
+            dark, color("board", R.color.board), color("line", R.color.line),
+            color("ink", R.color.ink), color("dim", R.color.dim), color("faint", R.color.faint),
             color("needs", R.color.needs), color("turn", R.color.turn), color("work", R.color.work),
         )
     }
