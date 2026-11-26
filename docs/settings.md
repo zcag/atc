@@ -2,7 +2,7 @@
 
 ## Check what is set up
 
-`atc doctor [-json]` lists what each feature needs and how it stands, with the fix beside anything
+`atc doctor [--json]` lists what each feature needs and how it stands, with the fix beside anything
 not working and what it costs (a GPU, a paid key, plan tokens). Settings shows the same list, and the
 page opens on it when Claude Code is missing or signed out. The list is one registry in the code
 (`internal/caps`), and each check really probes: it runs `claude --version` and

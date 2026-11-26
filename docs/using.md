@@ -92,20 +92,21 @@ atc resume "auth bug"                            # continue one
 atc stop 2 · atc rm 2 · atc rename 2 "name" · atc pin 2
 atc summary 2                                    # its final message in short
 atc outputs 2                                    # what it produced, with links to open its files
-atc state 2 inbox                                # a page's state as JSON; -set merges stdin into it
+atc state 2 inbox                                # a page's state as JSON; --set merges stdin into it
 atc usage                                        # plan limits and tokens per day
 atc usage 2                                      # one session's tokens, turns and estimated cost
-atc limits -short                                # session 4% · week 73% · resets 28m
+atc limits --short                               # session 4% · week 73% · resets 3h 05m
 atc top                                          # memory, CPU, disk per session, and what outlived its session
 atc top api                                      # one session's processes
 ```
 
-Commands that print something take `-json`. `atc limits -short` is one line, for a status line or
+Commands that print something take `--json`. `atc limits --short` is one line, for a status line or
 a shell prompt. `atc help` lists every command.
 
-In the terminal UI, the line above the keys shows your plan limits, checked every two minutes. `o`
-shows the highlighted session's outputs, `u` its tokens and estimated cost, and `U` the plan
-limits with tokens per day.
+The terminal UI groups sessions as the web list does, two lines a row, with the machine when there
+are several. The footer shows five keys and your plan limits (checked every two minutes); `?` lists
+every key. `o` shows the highlighted session's outputs, `u` its tokens and estimated cost, and `U`
+the plan limits with tokens per day.
 
 `atc new` without a folder uses the current one, written relative to your home folder, so the
 same path works on a server where your projects live under the same names.
