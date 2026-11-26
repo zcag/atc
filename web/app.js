@@ -2287,6 +2287,7 @@ const ICON_PATHS = {
   side: '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M10 2.5v11"/>',
   rail: '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6 2.5v11"/>',
   info: '<circle cx="8" cy="8" r="6"/><path d="M8 7.3V11M8 5.2v0"/>',
+  attach: '<path d="M12.5 7.5 7.8 12.2a2.8 2.8 0 0 1-4-4l5-5a1.9 1.9 0 0 1 2.7 2.7L6.6 10.8a.9.9 0 0 1-1.3-1.3L9.8 5"/>',
   link: '<path d="M7 9a2.5 2.5 0 0 0 3.5 0l2-2A2.5 2.5 0 0 0 9 3.5l-.8.8M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l.8-.8"/>',
   attach: '<path d="M12.5 7.5 7.8 12.2a2.8 2.8 0 0 1-4-4l5-5a1.9 1.9 0 0 1 2.7 2.7L6.6 10.8a.9.9 0 0 1-1.3-1.3L9.8 5"/>',
   send: '<path d="M8 13V3M4 7l4-4 4 4"/>',
@@ -8219,7 +8220,7 @@ function rankFolder(q, path) {
   return hits.length === q.length ? { r: 1, hits } : null;
 }
 
-function FolderField({ dirs, folder, pick, host, listHost = host, live, presets = [], preset, setPreset = () => {}, onStart, home }) {
+function FolderField({ dirs, folder, pick, host, listHost = host, live, presets = [], preset, setPreset = () => {}, onStart, home, focus }) {
   const [q, setQ] = useState("");
   const [hi, setHi] = useState(-1);
   const [more, setMore] = useState(false);
@@ -8271,7 +8272,7 @@ function FolderField({ dirs, folder, pick, host, listHost = host, live, presets 
   return html`
     <div class="nsfld">
       <label class="nslb" for="ns-folder">Folder <span class="now">${preset ? `preset ${preset.name}` : folder}</span></label>
-      <input id="ns-folder" class="nsin mono" value=${q} onInput=${(e) => setQ(e.target.value)} onKeyDown=${key} placeholder="Search folders, or type a path"
+      <input id="ns-folder" class="nsin mono" value=${q} onInput=${(e) => setQ(e.target.value)} onKeyDown=${key} placeholder="Search folders, or type a path" ref=${focus && !touch ? focusOnMount : null}
         role="combobox" aria-expanded="true" aria-controls="ns-fl" aria-activedescendant=${shown.length ? `ns-fo${cur}` : ""} autocapitalize="off" autocomplete="off" spellcheck="false" />
       <div class="nsfl" id="ns-fl" role="listbox" aria-label="Folders" ref=${box} onPointerLeave=${() => setHi(-1)}>
         ${shown.map((r, i) => {
@@ -8345,7 +8346,6 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
   const [dropping, setDropping] = useState(false);
   const pickFile = useRef();
   const [name, setName] = useState(from?.title || "");
-  const [naming, setNaming] = useState(false);
   const [wt, setWt] = useState(null);
   const [presets, setPresets] = useState([]);
   const [preset, setPreset] = useState(null);
@@ -8357,6 +8357,8 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
   const [profs, setProfs] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [opts, setOpts] = useState(false);
   const up = hosts.filter((h) => !isDown(h));
   const listHost = isDown(host) ? up[0] || home : host;
   const dirs = useDirs(listHost, home);
@@ -8400,12 +8402,12 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
     nsDraft.set(prompt.trim() || (folder && folder !== ctxDir) ? { prompt, folder, host } : null);
   }, [prompt, folder, host]);
   useEffect(() => {
-    const f = (e) => { if (e.key === "Escape") big ? setBig(null) : onClose(); };
+    const f = (e) => { if (e.key === "Escape") big ? setBig(null) : picking ? (setPicking(false), document.getElementById("ns-prompt")?.focus()) : onClose(); };
     addEventListener("keydown", f);
     return () => removeEventListener("keydown", f);
-  }, [big]);
+  }, [big, picking]);
   const setHost = (h) => { setHostRaw(h); setWt(null); setErr(null); };
-  const pick = (p) => { setFolder(p); setWt(null); setErr(null); const h = stored(NS_HOSTS, {})[p]; if (h && hosts.includes(h) && !isDown(h)) setHostRaw(h); };
+  const pick = (p) => { setFolder(p); setWt(null); setErr(null); setPicking(false); const h = stored(NS_HOSTS, {})[p]; if (h && hosts.includes(h) && !isDown(h)) setHostRaw(h); };
   const clear = () => { nsDraft.set(null); setFiles([]); setPrompt(""); setFolder(ctxDir); setHostRaw(context?.host || home); setPreset(null); setWt(null); setErr(null); };
 
   const withFiles = async (h) => {
@@ -8462,6 +8464,16 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
   const hasFiles = (e) => e.dataTransfer?.types?.includes("Files");
   const engLine = eng ? `${eng.name}${eng.harness ? `, ${eng.harness}` : ""}${eng.model ? `, ${eng.model}` : ""}` : "Claude, as configured";
   const startLabel = busy ? `Starting on ${busy}…` : later ? "Add to backlog" : hostDown && other ? `Start on ${other} instead` : "Start";
+  const pickPreset = (p) => { setPreset(p); setPicking(false); };
+  const profName = profile || byFolder || "default";
+  const optLine = [
+    !later && preset ? `preset ${preset.name}` : null,
+    git && !harness && !preset ? (wtOn ? "New worktree" : "In the folder") : null,
+    !later && (eng ? engLine : "Claude, as configured"),
+    !later && (name.trim() ? `named “${name.trim()}”` : "name from the prompt"),
+    !later && !harness && profs?.profiles.length > 1 && `${profName} account`,
+  ].filter(Boolean).join(" · ");
+  const where = preset ? html`preset <b>${preset.name}</b>, ${tilde(preset.dir)}` : html`${wtOn ? "a new worktree of " : ""}<b>${dir}</b> on ${hostDown && other ? other : host}`;
   return html`
     <div class="nsveil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}
       onDragOver=${(e) => { if (hasFiles(e)) { e.preventDefault(); setDropping(true); } }}
@@ -8469,51 +8481,59 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
       onDrop=${(e) => { if (hasFiles(e)) { e.preventDefault(); e.stopPropagation(); addFiles([...e.dataTransfer.files]); } setDropping(false); }}>
       <form class="nsdlg" role="dialog" aria-modal="true" aria-label=${later ? "Put on the backlog" : "New session"} onSubmit=${submit}
         onPaste=${(e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); addFiles(fs); } }}>
-        <div class="dh"><b>${later ? "Put on the backlog" : "New session"}</b><span class="r"><button type="button" class="kb" onClick=${onClose} aria-keyshortcuts="Escape" title="Close (esc)">Close</button></span></div>
+        <i class="grab" aria-hidden="true"></i>
+        <div class="dh"><b>${later ? "Put on the backlog" : "New session"}</b>${ctxDir && !later && html`<span class="in">in ${project(ctxDir).name}</span>`}
+          <span class="r">${draft && html`<button type="button" class="btn sm quiet clr" onClick=${clear} title="Empty the sheet; it keeps what you typed until you start or clear it">Clear</button>`}
+            <button type="button" class="btn sm quiet icon" onClick=${onClose} aria-keyshortcuts="Escape" aria-label="Close" title="Close (esc)">${ICON.x}</button></span></div>
         <div class="db">
           ${later && html`<div class="nsfld"><label class="nslb" for="ns-title">Title <span>what the backlog shows, in a few words</span></label>
             <input id="ns-title" class="nsin" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} ref=${touch ? null : focusOnMount} /></div>`}
-          <div class="nsfld"><label class="nslb" for="ns-prompt">Prompt <span>${later ? "the session's first message when you start it" : "optional; without one you start in an empty session with the composer ready"}</span></label>
-            <div class="nsbox ${dropping ? "drop" : ""}">
-              <${AttChips} atts=${files} up=${() => !!busy} zoom=${setBig} remove=${(a) => setFiles(files.filter((x) => x.id !== a.id))} />
-              <textarea id="ns-prompt" class="nsprompt" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} onKeyDown=${submitOnEnter}
-                ref=${touch || later ? null : focusOnMount} placeholder="What should it do?"></textarea>
-              <div class="nsatt"><button type="button" class="kb" onClick=${() => pickFile.current?.click()}>Attach</button><span>${dropping ? "Drop to attach" : "or paste or drop images and files"}</span>
-                <input type="file" multiple hidden ref=${pickFile} onChange=${(e) => { addFiles([...e.target.files]); e.target.value = ""; }} /></div>
-            </div></div>
-          <${FolderField} dirs=${dirs} folder=${dir} pick=${pick} host=${target} listHost=${listHost} live=${live} presets=${later ? [] : presets} preset=${preset} setPreset=${setPreset} home=${home}
-            onStart=${() => start(hostDown && !later && other ? other : null)} />
+          <div class="nsbox ${dropping ? "drop" : ""}">
+            <${AttChips} atts=${files} up=${() => !!busy} zoom=${setBig} remove=${(a) => setFiles(files.filter((x) => x.id !== a.id))} />
+            <textarea id="ns-prompt" class="nsprompt" value=${prompt} onInput=${(e) => setPrompt(e.target.value)} onKeyDown=${submitOnEnter} aria-label="Prompt"
+              ref=${touch || later ? null : focusOnMount} placeholder=${later ? "The session's first message when you start it" : "What should it do?"}></textarea>
+            <div class="nsatt"><button type="button" class="btn sm quiet" onClick=${() => pickFile.current?.click()}>${ICON.attach}<span>${dropping ? "Drop to attach" : "Paste or drop images and files"}</span></button>
+              ${!later && html`<span class="hint">Leave it empty to start with the composer ready</span>`}
+              <input type="file" multiple hidden ref=${pickFile} onChange=${(e) => { addFiles([...e.target.files]); e.target.value = ""; }} /></div>
+          </div>
+          <div class="nspicks">
+            <button type="button" class="nspick folder" aria-expanded=${picking} aria-controls="ns-fl" onClick=${() => setPicking(!picking)}>
+              ${ICON.folder}<span class="l">Folder</span><span class="v">${preset ? `preset ${preset.name}` : dir}</span>${ICON.down}</button>
+            ${!preset && hosts.length > 1 && html`<${Menu} cls="nspick host" width=${220} aria="Machine" items=${hosts.map((h) => {
+              const o = down.find((p) => p.name === h);
+              return { label: h, on: h === host, icon: h === host ? "check" : null, sub: o ? "unreachable" : lastHosts[dir] === h ? "last used here" : "", run: () => !o && setHost(h) };
+            })} label=${html`${ICON.term}<span class="l">Machine</span><span class="v">${host}</span>${ICON.down}`} />`}
+          </div>
+          ${picking && html`<${FolderField} dirs=${dirs} folder=${dir} pick=${pick} host=${target} listHost=${listHost} live=${live} presets=${later ? [] : presets} preset=${preset} setPreset=${pickPreset} home=${home} focus
+            onStart=${() => start(hostDown && !later && other ? other : null)} />`}
+          ${why && html`<div class="why nswhy">${why}</div>`}
           ${trust === "home" && html`<div class="nstrust"><b>Claude Code trusts the home folder one session at a time,</b> so a background session can't start here. Pick a project folder.</div>`}
-          <div class="nsrow2">
-            ${!preset && hosts.length > 1 && html`<div class="nsfld"><div class="nslb" id="ns-hl">Host</div><${HostPick} hosts=${hosts} down=${down} host=${host} setHost=${setHost} />
-              ${why && html`<div class="why">${why}</div>`}</div>`}
+          ${optLine && html`<button type="button" class="nsopts" aria-expanded=${opts} onClick=${() => setOpts(!opts)}>${ICON.fwd}<b>Options</b><span>${optLine}</span></button>`}
+          ${opts && html`<div class="nsoptb">
             ${!later && git && !harness && !preset && html`<${WorktreeSwitch} on=${wtOn} setOn=${setWt} why=${wtWhy(busyHere.length, dir, target)} />`}
             ${later && git && html`<${WorktreeSwitch} on=${wtOn} setOn=${setWt} why="The session starts in its own checkout when you start it." />`}
-          </div>
-          ${!later && html`<div class="nsfld"><div class="nslb">Engine</div>
-            <div class="nseng">
-              ${engOpen && usable.length
-                ? html`<select aria-label="Engine" value=${engine} onChange=${(e) => setEngine(e.target.value)} ref=${focusOnMount}>
-                    ${[{ name: "" }, ...usable].map((e) => html`<option value=${e.name}>${e.name ? `${e.name}${e.harness ? `, ${e.harness}` : ""}${e.model ? `, ${e.model}` : ""}` : "Claude, as configured"}</option>`)}</select>`
-                : html`<span>${engLine}</span>${usable.length > 0 && html`<button type="button" class="kb" onClick=${() => setEngOpen(true)}>Change</button>`}`}
-              ${naming
-                ? html`<input class="nsin nsname" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} placeholder=${preset ? preset.name : "Session name"} aria-label="Session name" ref=${focusOnMount} />`
-                : html`<button type="button" class="kb" title=${`Without one, ${harness || "Claude"} titles the session from what you ask`} onClick=${() => setNaming(true)}>Name it</button>`}
-            </div></div>`}
-          ${!later && !harness && profs?.profiles.length > 1 && html`<div class="nsfld"><div class="nslb">Claude account <span>the sign-in it runs and is billed on</span></div>
-            <div class="nseng">
-              ${profOpen
-                ? html`<select aria-label="Claude account" value=${profile} onChange=${(e) => setProfile(e.target.value)} ref=${focusOnMount}>
-                    ${[{ name: "" }, ...profs.profiles].map((p) => html`<option value=${p.name}>${p.name || `By folder (${byFolder || "default"})`}</option>`)}</select>`
-                : html`<span>${profLine}</span><button type="button" class="kb" onClick=${() => setProfOpen(true)}>Change</button>`}
-            </div></div>`}
+            ${!later && html`<div class="nsfld"><div class="nslb">Engine</div>
+              <div class="nseng">
+                ${engOpen && usable.length
+                  ? html`<select aria-label="Engine" value=${engine} onChange=${(e) => setEngine(e.target.value)} ref=${focusOnMount}>
+                      ${[{ name: "" }, ...usable].map((e) => html`<option value=${e.name}>${e.name ? `${e.name}${e.harness ? `, ${e.harness}` : ""}${e.model ? `, ${e.model}` : ""}` : "Claude, as configured"}</option>`)}</select>`
+                  : html`<span>${engLine}</span>${usable.length > 0 && html`<button type="button" class="btn sm" onClick=${() => setEngOpen(true)}>Change</button>`}`}
+              </div></div>`}
+            ${!later && html`<div class="nsfld"><label class="nslb" for="ns-name">Name <span>without one, ${harness || "Claude"} titles it from what you ask</span></label>
+              <input id="ns-name" class="nsin nsname" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} placeholder=${preset ? preset.name : "From the prompt"} /></div>`}
+            ${!later && !harness && profs?.profiles.length > 1 && html`<div class="nsfld"><div class="nslb">Claude account <span>the sign-in it runs and is billed on</span></div>
+              <div class="nseng">
+                ${profOpen
+                  ? html`<select aria-label="Claude account" value=${profile} onChange=${(e) => setProfile(e.target.value)} ref=${focusOnMount}>
+                      ${[{ name: "" }, ...profs.profiles].map((p) => html`<option value=${p.name}>${p.name || `By folder (${byFolder || "default"})`}</option>`)}</select>`
+                  : html`<span>${profLine}</span><button type="button" class="btn sm" onClick=${() => setProfOpen(true)}>Change</button>`}
+              </div></div>`}
+          </div>`}
           ${err && html`<div class="nserr" role="alert" ref=${intoView}><b>Couldn't ${later ? "add it" : `start on ${preset ? preset.host || home : host}`}.</b> ${err}</div>`}
         </div>
         <div class="df">
-          <span class="sum">${preset ? html`preset <b>${preset.name}</b>, ${tilde(preset.dir)}` : html`<b>${dir}</b> on ${hostDown && other ? other : host}${wtOn ? ", own worktree" : ""}`}</span>
-          ${draft && html`<button type="button" class="btn clr" onClick=${clear} title="Empty the sheet; it keeps what you typed until you start or clear it">Clear</button>`}
-          <button type="button" class="btn nsx" onClick=${onClose}>Cancel</button>
-          ${!later && !preset && html`<button type="button" class="btn" title="Put it on the backlog to start later" disabled=${!dir.trim() || !(name.trim() || prompt.trim() || files.length) || !!busy} onClick=${putAside}>Later</button>`}
+          <span class="sum">${later ? html`On the backlog of ${where}` : html`Starts in ${where}`}</span>
+          ${!later && !preset && html`<button type="button" class="btn quiet" title="Put it on the backlog to start later" disabled=${!dir.trim() || !(name.trim() || prompt.trim() || files.length) || !!busy} onClick=${putAside}>Later</button>`}
           <button class="btn primary go" disabled=${(!preset && !dir.trim()) || (later && !(name.trim() || prompt.trim() || files.length)) || !!busy || (hostDown && !other && !later)}>${startLabel}</button>
         </div>
       </form>

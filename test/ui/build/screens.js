@@ -32,9 +32,11 @@ async function desktop(b) {
     await wait(p, 900);
     ok(await p.isVisible('.nsdlg'), 'new session: + opens the sheet');
     ok(await p.evaluate(() => document.activeElement?.id === 'ns-prompt'), 'new session: the prompt has focus');
-    ok(await p.locator('.nsfl .fo').count() > 0, 'new session: folders listed');
+    ok(await p.locator('.nsfl').count() === 0 && await p.isVisible('.nspick.folder'), 'new session: the folder is a picker under the prompt');
     await p.keyboard.type('Make the page tabs reachable by keyboard');
-    await p.locator('#ns-folder').click();
+    await p.locator('.nspick.folder').click();
+    await wait(p, 200);
+    ok(await p.locator('.nsfl .fo').count() > 0, 'new session: the picker lists folders');
     await p.keyboard.type('atc');
     await wait(p, 200);
     const first = await p.locator('.nsfl .fo').first().innerText();
@@ -42,7 +44,7 @@ async function desktop(b) {
     await p.screenshot({ path: `${OUT}s7-new-search-1400-light.png` });
     await p.keyboard.press('Enter');
     await wait(p, 200);
-    ok(/atc/.test(await p.locator('label[for=ns-folder] span').innerText()), 'new session: enter picks the folder');
+    ok(/atc/.test(await p.locator('.nspick.folder .v').innerText()) && await p.locator('.nsfl').count() === 0, 'new session: enter picks the folder and closes the list');
     await p.screenshot({ path: `${OUT}s7-new-1400-light.png` });
     await p.keyboard.press('Escape');
     await wait(p, 200);
