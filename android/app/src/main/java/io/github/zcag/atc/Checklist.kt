@@ -14,7 +14,6 @@ import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
 import android.view.Gravity
-import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -59,9 +58,10 @@ class ChecklistActivity : Activity() {
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
     private fun render() {
-        val pal = Look.palette(this)
+        val k = Ui(this)
+        val pal = k.pal
         list.removeAllViews()
-        list.addView(TextView(this).apply { text = "Set up this phone"; textSize = 22f; setTextColor(pal.ink) })
+        list.addView(k.heading("Set up this phone"))
         list.addView(TextView(this).apply {
             text = "Each one is optional. Come back any time from Settings › Devices or the back-twice menu."
             setTextColor(pal.dim)
@@ -77,14 +77,15 @@ class ChecklistActivity : Activity() {
                         LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
                     addView(TextView(context).apply {
                         text = item.state.word
-                        setTextColor(if (item.state == State.TODO) pal.needs else pal.dim)
+                        setTextColor(if (item.state == State.TODO) pal.needsText else pal.dim)
                     })
                 })
                 addView(TextView(context).apply { text = item.why; setTextColor(pal.dim); setPadding(0, dp(2), 0, dp(6)) })
-                if (item.state == State.TODO) addView(Button(context).apply { text = item.button; setOnClickListener { item.go() } })
+                if (item.state == State.TODO) addView(k.actions(listOf(k.button(item.button) { item.go() })).apply { gravity = Gravity.START })
             })
         }
-        list.addView(Button(this).apply { text = "Done"; setOnClickListener { finish() } })
+        val done = k.button("Done", primary = true) { finish() }
+        list.addView(k.actions(listOf(done), grow = done).apply { setPadding(0, dp(8), 0, 0) })
     }
 
     private fun items() = listOf(

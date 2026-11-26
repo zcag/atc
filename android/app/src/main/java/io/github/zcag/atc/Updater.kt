@@ -1,6 +1,5 @@
 package io.github.zcag.atc
 
-import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
@@ -41,15 +40,20 @@ class Updater(private val a: MainActivity) {
         if (a.packageManager.canRequestPackageInstalls()) install(apk) else fallback("Installing apps from atc is not allowed.")
     }
 
-    private fun offer(server: String, r: Release) = AlertDialog.Builder(a)
-        .setTitle("Update available (${r.versionName})")
-        .setPositiveButton("Update") { _, _ -> download(server, r) }
-        .setNegativeButton("Later", null)
-        .show()
+    private fun offer(server: String, r: Release) {
+        val k = Ui(a)
+        val changes = r.changes(BuildConfig.VERSION_CODE)
+        val meta = listOfNotNull(r.size.takeIf { it > 0 }?.let(::megabytes), Uri.parse(server).host?.let { "from $it" }, "you have ${BuildConfig.VERSION_NAME}")
+        k.dialog("Update to ${r.versionName}", meta = meta.joinToString(" · "), body = when {
+            changes.isEmpty() -> k.text("This version lists no changes.", 14f, k.pal.dim)
+            else -> k.column(k.dp(6), k.bullets(changes.take(5)),
+                (changes.size - 5).takeIf { it > 0 }?.let { k.text("and $it more", 13f, k.pal.faint) })
+        }, acts = listOf(Ui.Act("Later"), Ui.Act("Update", primary = true) { download(server, r) }))
+    }
 
     private fun download(server: String, r: Release) {
         val path = r.localApk ?: return refuse("The server names an update outside itself (${r.apk}).")
-        toast("Downloading update")
+        toast("Downloading update…")
         thread {
             val apk = File(a.cacheDir, "update/atc.apk")
             val result = runCatching {
@@ -73,11 +77,7 @@ class Updater(private val a: MainActivity) {
     private fun signers(p: PackageInfo?) = p?.signingInfo?.apkContentsSigners.orEmpty().map { sha256(it.toByteArray()) }.toSet()
 
     private fun refuse(why: String) {
-        AlertDialog.Builder(a)
-            .setTitle("Update refused")
-            .setMessage("$why\n\natc did not install it. The server may be misconfigured or compromised: check it before updating.")
-            .setPositiveButton("OK", null)
-            .show()
+        Ui(a).message("Update refused", "$why\n\natc did not install it. The server may be misconfigured or compromised: check it before updating.")
     }
 
     private fun install(apk: File) {
@@ -95,15 +95,10 @@ class Updater(private val a: MainActivity) {
 
     private fun fallback(reason: String?) {
         val link = "${prefs.server}/app/atc.apk"
-        AlertDialog.Builder(a)
-            .setTitle("Update failed")
-            .setMessage("${reason ?: "Something went wrong."}\n\nYou can download the new version from:\n$link")
-            .setPositiveButton("Open in browser") { _, _ -> a.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }
-            .setNeutralButton("Copy link") { _, _ ->
-                a.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("atc", link))
-            }
-            .setNegativeButton("Later", null)
-            .show()
+        Ui(a).message("Update failed", "${reason ?: "Something went wrong."}\n\nYou can download the new version from:\n$link",
+            Ui.Act("Copy link") { a.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("atc", link)) },
+            Ui.Act("Later"),
+            Ui.Act("Open in browser", primary = true) { a.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) })
     }
 
     private fun toast(text: String) = Toast.makeText(a, text, Toast.LENGTH_SHORT).show()

@@ -19,17 +19,24 @@ fun pretty(hex: String) = hex.uppercase().chunked(2).joinToString(":")
 fun serverUrl(input: String): String? =
     input.trim().trimEnd('/').takeIf { Regex("^https?://[^/\\s?#]+(/\\S*)?$").matches(it) }
 
-class Release(val versionCode: Int, val versionName: String, val apk: String, val sha256: String) {
+class Release(val versionCode: Int, val versionName: String, val apk: String, val sha256: String, val size: Long = 0, val notes: List<Pair<Int, String>> = emptyList()) {
     fun newerThan(own: Int) = versionCode > own
     val localApk get() = apk.takeIf(Pairing::isLocalPath)
+
+    /** What changed since [own], newest first. */
+    fun changes(own: Int) = notes.filter { it.first in (own + 1)..versionCode }.map { it.second }
 
     companion object {
         fun parse(json: String) = JSONObject(json).run {
             val code = getInt("versionCode")
-            Release(code, optString("versionName", "$code"), optString("apk", "/app/atc.apk"), getString("sha256").lowercase())
+            val notes = optJSONArray("notes")?.let { a -> List(a.length()) { a.optJSONObject(it) } }.orEmpty()
+                .mapNotNull { o -> o?.optString("text")?.trim()?.takeIf { it.isNotEmpty() }?.let { o.optInt("v") to it } }
+            Release(code, optString("versionName", "$code"), optString("apk", "/app/atc.apk"), getString("sha256").lowercase(), optLong("size"), notes)
         }
     }
 }
+
+fun megabytes(bytes: Long) = String.format(java.util.Locale.ROOT, "%.1f MB", bytes / 1_000_000.0)
 
 /** Why an update must not be offered for install, or null when it is this app from the same signer. */
 fun apkProblem(ownPackage: String, ownSigners: Set<String>, apkPackage: String?, apkSigners: Set<String>) = when {
@@ -85,11 +92,11 @@ class Ask(
         else -> text
     }
 
-    /** A permission is 1 Allow once (behind the unlock), 3 Deny and Open, never Always; a question its options in
+    /** A permission is 1 Allow once (behind the unlock), 2 Deny and Open, never Always; a question its options in
      *  order, at most [max] buttons in all, with Open last when some are left out. */
     fun choices(max: Int = 3): List<Choice> {
         val open = Choice("", "Open", "", open = true)
-        if (perm) return listOf(Choice("1", "Allow once", """{"reply":"once"}""", unlock = true), Choice("3", "Deny", """{"reject":true}"""), open).take(max)
+        if (perm) return listOf(Choice("1", "Allow once", """{"reply":"once"}""", unlock = true), Choice("2", "Deny", """{"reject":true}"""), open).take(max)
         val all = options.mapIndexed { i, o -> Choice("${i + 1}", o, JSONObject().put("answers", JSONArray().put(JSONArray().put(o))).toString()) }
         return if (all.isNotEmpty() && all.size <= max) all else all.take(max - 1) + open
     }

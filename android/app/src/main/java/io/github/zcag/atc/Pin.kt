@@ -43,6 +43,19 @@ object Pin {
         }
     }
 
+    fun names(leaf: X509Certificate): List<String> =
+        runCatching { leaf.subjectAlternativeNames?.filter { it[0] == 2 || it[0] == 7 }?.map { it[1].toString() } }.getOrNull().orEmpty()
+
+    /** Why [leaf] is not a certificate for [host], or null when it is. */
+    fun wrongName(leaf: X509Certificate, host: String): String? {
+        val names = names(leaf)
+        val h = host.lowercase()
+        if (names.any { n -> n.lowercase().let { it == h || (it.startsWith("*.") && h.substringAfter('.', "") == it.drop(2) && h.indexOf('.') > 0) } }) return null
+        return if (names.isEmpty()) "its certificate names no host" else "its certificate is for ${names.joinToString(", ")}, not $host"
+    }
+
+    fun day(d: Date): String = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).format(d)
+
     fun chainOf(host: String, port: Int): List<X509Certificate> {
         var seen = emptyList<X509Certificate>()
         val ctx = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trustManager(null) { seen = it; true }), null) }

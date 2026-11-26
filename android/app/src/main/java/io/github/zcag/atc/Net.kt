@@ -8,6 +8,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.KeyStore
@@ -15,6 +16,7 @@ import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
 import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
+import javax.net.ssl.SSLException
 import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
@@ -77,6 +79,31 @@ object Net {
         cookie(url)?.let { setRequestProperty("Cookie", it) }
     }
 
+    /** Whether [server] answers and how its certificate stands with this phone, before anything is sent to it. */
+    fun reach(server: String, trusted: X509Certificate?): Reach {
+        val u = URL(server)
+        val conn = u.openConnection() as HttpURLConnection
+        conn.connectTimeout = 10_000
+        conn.readTimeout = 10_000
+        try {
+            conn.responseCode
+            return Reach.Ok
+        } catch (e: SSLException) {
+            if (conn !is HttpsURLConnection) return Reach.Down(e.message ?: "TLS failed")
+        } catch (e: IOException) {
+            return Reach.Down(e.message ?: e.javaClass.simpleName)
+        } finally {
+            conn.disconnect()
+        }
+        val chain = runCatching { Pin.chainOf(u.host, if (u.port > 0) u.port else 443) }
+            .getOrElse { return Reach.Refused("the TLS handshake failed (${it.message ?: it.javaClass.simpleName})") }
+        val leaf = chain.firstOrNull() ?: return Reach.Refused("it sent no certificate")
+        Pin.wrongName(leaf, u.host)?.let { return Reach.Refused(it) }
+        if (runCatching { leaf.checkValidity() }.isFailure) return Reach.Refused("its certificate is not valid today (valid ${Pin.day(leaf.notBefore)} to ${Pin.day(leaf.notAfter)})")
+        if (trusted != null && Pin.validates(chain, trusted)) return Reach.Ok
+        return Reach.Untrusted(caFor(server, chain) ?: chain.last(), replaces = trusted != null)
+    }
+
     fun caFor(server: String, chain: List<X509Certificate>): X509Certificate? = casAt(server, chain).firstOrNull { Pin.validates(chain, it) }
 
     /** The server's /app/ca.crt, from the connection that presents this chain. It proves nothing by itself: callers check it. */
@@ -103,4 +130,11 @@ object Net {
 
     private fun factory(tm: X509TrustManager): SSLSocketFactory =
         SSLContext.getInstance("TLS").apply { init(null, arrayOf(tm), null) }.socketFactory
+}
+
+sealed class Reach {
+    data object Ok : Reach()
+    class Untrusted(val anchor: X509Certificate, val replaces: Boolean) : Reach()
+    class Refused(val why: String) : Reach()
+    class Down(val why: String) : Reach()
 }

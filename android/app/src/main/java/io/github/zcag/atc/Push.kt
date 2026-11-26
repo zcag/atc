@@ -2,7 +2,6 @@ package io.github.zcag.atc
 
 import android.Manifest
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -116,14 +115,9 @@ class Push : PushService() {
             val p = Prefs(a)
             if (p.hinted != null) return
             p.hinted = "1"
-            AlertDialog.Builder(a)
-                .setTitle("Notifications")
-                .setMessage("atc delivers notifications through UnifiedPush. To get them, install a distributor such as ntfy, then open atc again.")
-                .setPositiveButton("Get ntfy") { _, _ ->
-                    a.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://f-droid.org/packages/io.heckel.ntfy/")))
-                }
-                .setNegativeButton("Not now", null)
-                .show()
+            Ui(a).message("Notifications", "atc delivers notifications through UnifiedPush. To get them, install a distributor such as ntfy, then open atc again.",
+                Ui.Act("Not now"),
+                Ui.Act("Get ntfy", primary = true) { a.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://f-droid.org/packages/io.heckel.ntfy/"))) })
         }
 
         private const val LINE = "atc.line"

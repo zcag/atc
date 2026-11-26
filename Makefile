@@ -52,7 +52,9 @@ android:
 	mkdir -p android/dist
 	cp android/app/build/outputs/apk/release/app-release.apk android/dist/atc.apk
 	n=$$(( $$(git rev-list --count HEAD) + $$(cat android/version-base) )); sum=$$( (sha256sum 2>/dev/null || shasum -a 256) < android/dist/atc.apk | cut -d' ' -f1); \
-	printf '{"versionCode":%s,"versionName":"0.%s","apk":"/app/atc.apk","sha256":"%s"}\n' $$n $$n $$sum > android/dist/version.json
+	size=$$(wc -c < android/dist/atc.apk | tr -d ' '); \
+	notes=$$(git log -n 30 --format=%s | tr '\t' ' ' | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' | awk -v n=$$n '{ printf "%s{\"v\":%d,\"text\":\"%s\"}", (NR > 1 ? "," : ""), n - NR + 1, $$0 }'); \
+	printf '{"versionCode":%s,"versionName":"0.%s","apk":"/app/atc.apk","sha256":"%s","size":%s,"notes":[%s]}\n' $$n $$n $$sum $$size "$$notes" > android/dist/version.json
 
 android-publish:
 	@test -n "$(APP_HOST)" || { echo "set APP_HOST: the machine atc serves the app from"; exit 1; }

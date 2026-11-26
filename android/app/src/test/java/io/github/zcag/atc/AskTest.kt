@@ -14,7 +14,7 @@ class AskTest {
         val a = ask("""{"sid":"s1","id":"claude","key":"abc","tool":"Bash","cmd":"bundle exec rspec"}""")
         assertEquals("Wants to run bundle exec rspec", a.says())
         val c = a.choices()
-        assertEquals(listOf("1 Allow once", "3 Deny", "Open"), c.map { it.button })
+        assertEquals(listOf("1 Allow once", "2 Deny", "Open"), c.map { it.button })
         assertTrue(c[0].unlock)
         assertFalse(c[1].unlock)
         assertTrue(c[2].open)

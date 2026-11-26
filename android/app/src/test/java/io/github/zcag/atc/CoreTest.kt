@@ -82,6 +82,15 @@ class CoreTest {
         assertTrue(r.newerThan(41))
         assertFalse(r.newerThan(42))
         assertFalse(r.newerThan(43))
+        assertEquals(0L, r.size)
+        assertEquals(emptyList<String>(), r.changes(41))
+    }
+
+    @Test fun releaseChanges() {
+        val r = Release.parse("""{"versionCode":42,"sha256":"ab","size":4200000,"notes":[{"v":42,"text":"Newest"},{"v":41,"text":"Older"},{"v":40,"text":"Had it"},{"v":39,"text":" "}]}""")
+        assertEquals(4_200_000L, r.size)
+        assertEquals(listOf("Newest", "Older"), r.changes(40))
+        assertEquals("4.2 MB", megabytes(r.size))
     }
 
     @Test fun note() {

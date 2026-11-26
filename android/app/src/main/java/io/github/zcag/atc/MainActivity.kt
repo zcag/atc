@@ -1,7 +1,6 @@
 package io.github.zcag.atc
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.app.KeyguardManager
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -30,9 +29,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import com.google.zxing.integration.android.IntentIntegrator
-import android.widget.Button
 import android.widget.Chronometer
-import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -233,12 +230,9 @@ class MainActivity : Activity() {
 
     private fun confirmPair(p: Pairing) {
         val old = prefs.server?.takeIf { Uri.parse(it).host != p.host }
-        AlertDialog.Builder(this)
-            .setTitle("Pair with ${p.host}?")
-            .setMessage("This phone will use the atc server at ${p.url}." + old?.let { " It replaces $it." }.orEmpty() + " Continue only if you started this pairing yourself.")
-            .setPositiveButton("Pair") { _, _ -> pair(p) }
-            .setNegativeButton("Cancel", null)
-            .show()
+        Ui(this).message("Pair with ${p.host}?",
+            "This phone will use the atc server at ${p.url}." + old?.let { " It replaces $it." }.orEmpty() + " Continue only if you started this pairing yourself.",
+            Ui.Act("Cancel"), Ui.Act("Pair", primary = true) { pair(p) })
     }
 
     private fun scanned(text: String?) {
@@ -267,16 +261,13 @@ class MainActivity : Activity() {
     }
 
     private fun pairFailed(p: Pairing, e: Throwable) {
-        AlertDialog.Builder(this).apply {
-            if (e is CertificateMismatch) {
-                setTitle("Certificate does not match")
-                setMessage("${e.host} presented a certificate that is not the one this pairing names, so atc did not connect and sent it nothing.\n\nExpected:\n${pretty(e.want)}\n\nPresented:\n${e.got?.let(::pretty) ?: "none"}")
-            } else {
-                setTitle("Could not pair")
-                setMessage("${p.host}: ${e.message ?: "no answer"}")
-            }
-            setPositiveButton("OK", null)
-        }.show()
+        val k = Ui(this)
+        if (e !is CertificateMismatch) return run { k.message("Could not pair", "${p.host}: ${e.message ?: "no answer"}") }
+        k.dialog("Certificate does not match", body = k.column(k.dp(10),
+            k.text("${e.host} presented a certificate that is not the one this pairing names, so atc did not connect and sent it nothing.", 14f, k.pal.dim),
+            k.check("Expected", detail = pretty(e.want)),
+            k.check("Presented", detail = e.got?.let(::pretty) ?: "none"),
+        ), acts = listOf(Ui.Act("OK", primary = true)))
     }
 
     private fun restoreLogin(server: String, replace: Boolean = false, then: () -> Unit = {}) {
@@ -361,48 +352,97 @@ class MainActivity : Activity() {
         ui.post(check)
     }
 
-    private fun menu() = AlertDialog.Builder(this)
-        .setItems(arrayOf("Change server", "Set up this phone", "Check for updates", "Close atc")) { _, i ->
-            when (i) {
-                0 -> setup()
-                1 -> startActivity(Intent(this, ChecklistActivity::class.java))
-                2 -> updater.check(manual = true)
-                else -> finish()
-            }
-        }
-        .show()
+    private fun menu() = Ui(this).menu("atc", listOf(
+        Ui.Act("Change server") { setup() },
+        Ui.Act("Set up this phone") { startActivity(Intent(this, ChecklistActivity::class.java)) },
+        Ui.Act("Check for updates") { updater.check(manual = true) },
+        Ui.Act("Close atc") { finish() },
+    ))
 
     private fun setup() {
         web?.destroy()
         web = null
-        val field = EditText(this).apply {
-            hint = "https://atc.example"
+        val ui = Ui(this)
+        val pal = ui.pal
+        val field = ui.field("https://atc.example").apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
             imeOptions = EditorInfo.IME_ACTION_GO
-            isSingleLine = true
             setText(prefs.server ?: "https://")
         }
-        val go = Button(this).apply { text = "Continue" }
-        go.setOnClickListener {
-            val url = serverUrl(field.text.toString())
-                ?: return@setOnClickListener run { field.error = "Enter a URL starting with https:// or http://" }
-            adopt(url, null)
+        val status = ui.column(ui.dp(10))
+        var trust: Pair<String, String>? = null
+        var asked = 0
+        lateinit var go: TextView
+        fun say(vararg rows: View) {
+            status.removeAllViews()
+            rows.forEachIndexed { i, v -> status.addView(v, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { if (i > 0) topMargin = ui.dp(10) }) }
+        }
+        fun connect(url: String, pin: String?) {
+            adopt(url, pin)
             browse(url)
             firstRun()
             started()
         }
+        go = ui.button("Connect", primary = true) {
+            val url = serverUrl(field.text.toString())
+                ?: return@button run { field.error = "Enter an address starting with https:// or http://" }
+            trust?.takeIf { it.first == url }?.let { return@button connect(url, it.second) }
+            val host = Uri.parse(url).host!!
+            val pinned = prefs.pinFor(host)
+            val n = ++asked
+            say(ui.text("Checking $host…", 13f, pal.dim))
+            Thread {
+                val r = Net.reach(url, Pin.decode(pinned))
+                runOnUiThread {
+                    if (n != asked || web != null) return@runOnUiThread
+                    val answers = ui.check("$host answers", ok = true)
+                    when (r) {
+                        Reach.Ok -> connect(url, pinned?.let { "$host $it" })
+                        is Reach.Untrusted -> {
+                            trust = url to "$host ${Pin.encode(r.anchor)}"
+                            go.text = "Trust and connect"
+                            say(answers, ui.check(
+                                if (r.replaces) "Its certificate authority is not the one you trusted." else "Its certificate is not one this phone trusts.",
+                                "Trust it only if this is your server's own certificate authority (pairing with a QR code checks it for you). atc then accepts any certificate it signs, so renewals keep working.",
+                                "${r.anchor.subjectX500Principal.name}\nSHA-256 ${pretty(sha256(r.anchor.encoded))}",
+                            ))
+                        }
+                        is Reach.Refused -> say(answers, ui.check("atc won't connect: ${r.why}.", "It sent the server nothing. Fix the certificate, or check the address."))
+                        is Reach.Down -> say(ui.check("$host did not answer.", "${r.why}. If you reach it over Tailscale, check that Tailscale is connected."))
+                    }
+                }
+            }.start()
+        }
+        field.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                if (trust == null && status.childCount == 0) return
+                trust = null
+                asked++
+                go.text = "Connect"
+                status.removeAllViews()
+            }
+        })
         field.setOnEditorActionListener { _, _, _ -> go.performClick() }
-        val pad = (24 * resources.displayMetrics.density).toInt()
-        show(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(pad, pad, pad, pad)
-            addView(TextView(this@MainActivity).apply { text = "atc server"; textSize = 22f })
-            addView(TextView(this@MainActivity).apply { text = "Scan the code from atc pair, or Settings › Devices on a device already logged in." })
-            addView(Button(this@MainActivity).apply { text = "Scan QR"; setOnClickListener { scan() } })
-            addView(TextView(this@MainActivity).apply { text = "Or enter the address you open atc at in a browser."; setPadding(0, pad, 0, 0) })
-            addView(field)
-            addView(go)
+        val back = prefs.server?.let { s -> ui.button("Cancel", quiet = true) { browse("$s/") } }
+        val gap = ui.dp(10)
+        show(android.widget.ScrollView(this).apply {
+            isFillViewport = true
+            addView(ui.column(gap,
+                ui.mark(),
+                ui.heading("Connect to your atc").apply { setPadding(0, ui.dp(4), 0, 0) },
+                ui.text("Scan the code from atc pair, or from Settings › Devices on a device already logged in.", 14f, pal.dim),
+                ui.actions(listOf(ui.button("Scan QR") { scan() }), null).apply { gravity = Gravity.START },
+                ui.text("Or enter the address you open atc at in a browser.", 14f, pal.dim).apply { setPadding(0, ui.dp(8), 0, 0) },
+                ui.text("Server address", 13f, bold = true),
+                field,
+                status,
+                ui.actions(listOfNotNull(back, go), grow = go),
+            ).apply {
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(ui.dp(18), ui.dp(22), ui.dp(18), ui.dp(16))
+            })
         })
     }
 
@@ -468,27 +508,31 @@ class MainActivity : Activity() {
             .onFailure { android.util.Log.w("atc", "no bridge for $origins", it) }
     }
 
-    private fun unreachable(url: String, why: String) {
+    private fun unreachable(url: String, why: String, refused: Boolean = false) {
         failed = url
         ui.removeCallbacks(retry)
         ui.postDelayed(retry, 10_000)
         if (offline != null) return
-        val tailscale = packageManager.getLaunchIntentForPackage("com.tailscale.ipn")
-        val pad = (24 * resources.displayMetrics.density).toInt()
-        val v = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(pad, pad, pad, pad)
-            setBackgroundColor(Look.palette(this@MainActivity).board)
+        val k = Ui(this)
+        val tailscale = packageManager.getLaunchIntentForPackage("com.tailscale.ipn")?.takeIf { !refused }
+        val since = java.text.SimpleDateFormat("HH:mm", java.util.Locale.ROOT).format(java.util.Date())
+        val retryNow = k.button("Retry", primary = true) { ui.removeCallbacks(retry); retry.run() }
+        val v = k.column(k.dp(10),
+            k.heading(if (refused) "atc refused ${serverHost()}" else "Offline since $since"),
+            k.text(if (refused) "${why.replaceFirstChar { it.uppercase() }}, so atc did not connect and sent it nothing."
+                else "${serverHost()} did not answer ($why). atc tries again on its own and opens as soon as it answers.", 14f, k.pal.dim),
+            if (refused) k.text("If its certificate changed on purpose, choose Change server and enter the address again.", 14f, k.pal.dim)
+            else tailscale?.let { k.text("If you reach it over Tailscale, check that Tailscale is connected.", 14f, k.pal.dim) },
+            k.actions(listOfNotNull(
+                if (refused) k.button("Change server", quiet = true) { setup() } else null,
+                tailscale?.let { t -> k.button("Open Tailscale") { startActivity(t) } },
+                retryNow,
+            ), grow = retryNow),
+        ).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(k.dp(18), k.dp(22), k.dp(18), k.dp(16))
+            setBackgroundColor(k.pal.board)
             setOnClickListener {}
-            addView(TextView(context).apply { text = "Can't reach atc"; textSize = 22f; gravity = Gravity.CENTER })
-            addView(TextView(context).apply {
-                text = "${serverHost()} did not answer ($why).\n\nIf you reach it over Tailscale, check that Tailscale is connected. atc retries on its own and opens as soon as the server answers."
-                gravity = Gravity.CENTER
-                setPadding(0, pad / 2, 0, pad)
-            })
-            if (tailscale != null) addView(Button(context).apply { text = "Open Tailscale"; setOnClickListener { startActivity(tailscale) } })
-            addView(Button(context).apply { text = "Retry now"; setOnClickListener { ui.removeCallbacks(retry); retry.run() } })
         }
         offline = v
         root?.addView(v, FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT)
@@ -581,8 +625,13 @@ class MainActivity : Activity() {
         val leaf = error.certificate.x509Certificate
         val url = Uri.parse(error.url)
         val host = url.host ?: return handler.cancel()
-        if (leaf == null || error.hasError(SslError.SSL_IDMISMATCH)) return handler.cancel()
-        if (host != serverHost()) return signedByServerAuthority(handler, host, url.port, leaf)
+        val main = host == serverHost()
+        val refuse = { why: String -> handler.cancel(); refused(host, main, error.url, why) }
+        if (leaf == null) return refuse("it sent no certificate atc could read")
+        if (error.hasError(SslError.SSL_IDMISMATCH)) return refuse(Pin.wrongName(leaf, host) ?: "its certificate is not for $host")
+        if (error.hasError(SslError.SSL_EXPIRED) || error.hasError(SslError.SSL_NOTYETVALID))
+            return refuse("its certificate is not valid today (valid ${Pin.day(leaf.notBefore)} to ${Pin.day(leaf.notAfter)})")
+        if (!main) return signedByServerAuthority(handler, host, url.port, leaf, refuse)
         sslWaiting += handler
         if (sslWaiting.size > 1) return
         val server = prefs.server ?: return handler.cancel()
@@ -592,41 +641,51 @@ class MainActivity : Activity() {
             sslWaiting.clear()
         }
         Thread {
-            val chain = runCatching { Pin.chainOf(host, if (url.port > 0) url.port else 443) }.getOrDefault(emptyList())
-                .takeIf { it.firstOrNull()?.encoded?.contentEquals(leaf.encoded) == true }
+            val fetched = runCatching { Pin.chainOf(host, if (url.port > 0) url.port else 443) }
+            val chain = fetched.getOrDefault(emptyList()).takeIf { it.firstOrNull()?.encoded?.contentEquals(leaf.encoded) == true }
             val candidate = if (chain == null || pinned != null) null else Net.caFor(server, chain) ?: chain.last()
             runOnUiThread {
+                val k = Ui(this)
                 when {
-                    chain == null -> decide(false)
+                    chain == null -> {
+                        decide(false)
+                        refused(host, true, error.url, fetched.exceptionOrNull()?.let { "atc could not fetch its certificate to check it (${it.message ?: it.javaClass.simpleName})" }
+                            ?: "the certificate it sent when atc checked it is not the one the page got")
+                    }
                     pinned != null && Pin.validates(chain, pinned) -> decide(true)
                     pinned != null -> {
                         decide(false)
-                        unreachable(error.url, "its certificate is not from the authority you trusted")
-                        AlertDialog.Builder(this)
-                            .setTitle("Certificate changed")
-                            .setMessage("$host presented a certificate that is not signed by the authority you trusted, so atc refused to connect.\n\nIf the server's certificate authority was replaced on purpose, choose Change server and enter it again.")
-                            .setPositiveButton("OK", null)
-                            .setNeutralButton("Change server") { _, _ -> setup() }
-                            .show()
+                        refused(host, true, error.url, "its certificate is not signed by the authority you trusted")
                     }
-                    else -> AlertDialog.Builder(this)
-                        .setTitle("Trust this server?")
-                        .setMessage("$host uses a certificate this device does not trust. Trust it only if the fingerprint matches your server's certificate authority. atc will then accept any certificate it signs, so renewals keep working.\n\nAuthority:\n${candidate!!.subjectX500Principal.name}\n\nSHA-256:\n${pretty(sha256(candidate.encoded))}")
-                        .setPositiveButton("Trust") { _, _ -> prefs.pin = "$host ${Pin.encode(candidate)}"; decide(true) }
-                        .setNegativeButton("Cancel") { _, _ -> decide(false) }
-                        .setCancelable(false)
-                        .show()
+                    else -> k.dialog("Trust $host?", meta = candidate!!.subjectX500Principal.name, body = k.column(k.dp(10),
+                        k.text("Its certificate is not one this phone trusts. Trust it only if this is your server's own certificate authority. atc then accepts any certificate it signs, so renewals keep working.", 14f, k.pal.dim),
+                        k.check("SHA-256", detail = pretty(sha256(candidate.encoded))),
+                    ), acts = listOf(
+                        Ui.Act("Cancel") { decide(false) },
+                        Ui.Act("Trust and connect", primary = true) { prefs.pin = "$host ${Pin.encode(candidate)}"; decide(true) },
+                    ), cancelable = false)
                 }
             }
         }.start()
     }
 
-    private fun signedByServerAuthority(handler: SslErrorHandler, host: String, port: Int, leaf: X509Certificate) {
-        val anchor = Pin.decode(prefs.pinFor(serverHost())) ?: return handler.cancel()
+    private val refusedHosts = mutableSetOf<String>()
+
+    /** Says why atc did not connect: for the server, its offline screen and a dialog; for anything else on the page, once per host. */
+    private fun refused(host: String, main: Boolean, url: String, why: String) {
+        if (!main) {
+            if (refusedHosts.add(host)) Toast.makeText(this, "atc refused $host: $why.", Toast.LENGTH_LONG).show()
+            return
+        }
+        unreachable(url, why, refused = true)
+    }
+
+    private fun signedByServerAuthority(handler: SslErrorHandler, host: String, port: Int, leaf: X509Certificate, refuse: (String) -> Unit) {
+        val anchor = Pin.decode(prefs.pinFor(serverHost())) ?: return refuse("this phone does not trust its certificate")
         Thread {
             val chain = runCatching { Pin.chainOf(host, if (port > 0) port else 443) }.getOrDefault(emptyList())
             val ok = chain.firstOrNull()?.encoded?.contentEquals(leaf.encoded) == true && Pin.validates(chain, anchor)
-            runOnUiThread { if (ok) handler.proceed() else handler.cancel() }
+            runOnUiThread { if (ok) handler.proceed() else refuse("its certificate is not signed by the authority you trusted for ${serverHost()}") }
         }.start()
     }
 
