@@ -25,6 +25,7 @@ const LOOK = () => {
     for (const s of list) {
       await p.goto(`${base}/#/s/${s.sessionId}`);
       await p.waitForTimeout(2000);
+      if (!(await p.$('.tx')) && await p.$('.stabs')) { await p.locator('.stabs button', { hasText: 'Chat' }).click(); await p.waitForTimeout(2000); }
       if (!(await p.$('.tx [data-you], .tx [data-said]'))) continue;
       const w = await p.evaluate(LOOK);
       if (w.since) continue;
