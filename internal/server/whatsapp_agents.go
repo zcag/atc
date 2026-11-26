@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,6 +40,9 @@ const (
 type waBinding struct {
 	Agents   map[string]string `json:"agents"`
 	Sessions string            `json:"sessions,omitempty"`
+	// Looks is the tile each group's picture was drawn from, so it is drawn again when the agent's icon, colour or
+	// title changes.
+	Looks map[string]string `json:"looks,omitempty"`
 }
 
 // waGroupState is the groups atc talks in as someone's own, and who wrote what in Sessions.
@@ -185,12 +189,71 @@ func (s *Server) waOwnGroup(ctx context.Context, id string) bool {
 // waPlainName is a group name a maker can type (adb types no emoji): the first of these an agent has goes to it.
 var waPlainName = regexp.MustCompile(`^[A-Za-z0-9 ._-]+$`)
 
-// waGroupName is what an agent's group is called: its icon when that is an emoji, and its title.
-func waGroupName(a Agent) string {
+// waGroupName is what an agent's group is called: its icon when that is an emoji, its title, and the account's
+// name, so it reads as the account's in the user's chat list.
+func waGroupName(a Agent, self string) string {
+	name := a.label()
 	if r := []rune(a.Icon); len(r) > 0 && r[0] > unicode.MaxLatin1 {
-		return a.Icon + " " + a.label()
+		name = a.Icon + " " + name
 	}
-	return a.label()
+	if self != "" && !strings.HasPrefix(self, "+") {
+		name += " - " + self
+	}
+	return name
+}
+
+type waLook struct {
+	id, name string
+	a        Agent
+}
+
+// waDress keeps each group of atc's own named as it should be and its picture the agent's tile, drawn by atc's
+// browser from avatar.html.
+func (s *Server) waDress(ctx context.Context, looks []waLook) error {
+	wa, g := s.WhatsApp, &s.wa.groups
+	list, err := wa.Groups(ctx)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, l := range looks {
+		i := slices.IndexFunc(list, func(x whatsapp.Group) bool { return x.ID == l.id })
+		if l.id == "" || i < 0 {
+			continue
+		}
+		if list[i].Name != l.name {
+			if err := wa.RenameGroup(ctx, l.id, l.name); err != nil {
+				errs = append(errs, fmt.Errorf("rename %q: %w", list[i].Name, err))
+			} else {
+				log.Printf("whatsapp: renamed the group %q to %q", list[i].Name, l.name)
+			}
+		}
+		look := l.a.Icon + "|" + l.a.Color + "|" + l.a.label()
+		g.mu.Lock()
+		done := g.b.Looks[l.id] == look
+		g.mu.Unlock()
+		if done || s.Browser == nil || s.LocalURL == "" {
+			continue
+		}
+		q := url.Values{"name": {l.a.Name}, "icon": {l.a.Icon}, "color": {l.a.Color}}
+		png, err := s.Browser.Shot(ctx, s.LocalURL+"/avatar.html?"+q.Encode(), 640, 640)
+		if err == nil {
+			err = wa.GroupPicture(ctx, l.id, png)
+		}
+		if err != nil {
+			errs = append(errs, fmt.Errorf("picture of %q: %w", l.name, err))
+			continue
+		}
+		log.Printf("whatsapp: drew the picture of %q", l.name)
+		g.mu.Lock()
+		if g.b.Looks == nil {
+			g.b.Looks = map[string]string{}
+		}
+		g.b.Looks[l.id] = look
+		g.save()
+		g.mu.Unlock()
+	}
+	return errors.Join(errs...)
 }
 
 // waAgentGroups keeps every agent that asks for a group in one, now and then: a new agent gets its group within
@@ -298,10 +361,22 @@ func (s *Server) ensureAgentGroups(ctx context.Context) error {
 			errs = append(errs, fmt.Errorf("%s: %w", key, err))
 		}
 	}
-	for _, a := range want {
-		bind("@"+a.Name, []string{waGroupName(a), a.label(), a.Name}, g.agentGroup(a.Name), func(id string) { g.b.Agents[a.Name] = id })
+	self := ""
+	if _, err := wa.Self(ctx); err == nil {
+		self = wa.SelfName()
 	}
-	bind("sessions", []string{waSessionsGroup}, g.sessionsGroup(), func(id string) { g.b.Sessions = id })
+	var looks []waLook
+	for _, a := range want {
+		name := waGroupName(a, self)
+		bind("@"+a.Name, []string{name, waGroupName(a, ""), a.label(), a.Name}, g.agentGroup(a.Name), func(id string) { g.b.Agents[a.Name] = id })
+		looks = append(looks, waLook{g.agentGroup(a.Name), name, a})
+	}
+	sessions := Agent{Name: "sessions", Title: waSessionsGroup, Icon: "people"}
+	bind("sessions", []string{waGroupName(sessions, self), waSessionsGroup}, g.sessionsGroup(), func(id string) { g.b.Sessions = id })
+	looks = append(looks, waLook{g.sessionsGroup(), waGroupName(sessions, self), sessions})
+	if err := s.waDress(ctx, looks); err != nil {
+		errs = append(errs, err)
+	}
 	if changed {
 		wa.Bind(g.ids())
 		if err := wa.EnsureHook(ctx); err != nil && !errors.Is(err, whatsapp.ErrNoVotes) {

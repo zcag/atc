@@ -2,6 +2,7 @@ package whatsapp
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"net/url"
 	"os"
@@ -151,6 +152,14 @@ func (c *Client) CreateGroup(ctx context.Context, name string) (Group, error) {
 		return g, errors.New("openwa: the new group has no id")
 	}
 	return g, c.LockGroup(ctx, g.ID)
+}
+
+func (c *Client) RenameGroup(ctx context.Context, id, name string) error {
+	return c.do(ctx, "PUT", "/groups/"+url.PathEscape(id)+"/subject", map[string]any{"subject": name}, nil)
+}
+
+func (c *Client) GroupPicture(ctx context.Context, id string, png []byte) error {
+	return c.do(ctx, "PUT", "/groups/"+url.PathEscape(id)+"/picture", map[string]any{"base64": base64.StdEncoding.EncodeToString(png), "mimetype": "image/png"}, nil)
 }
 
 // LockGroup lets only admins rename the group or add people to it.

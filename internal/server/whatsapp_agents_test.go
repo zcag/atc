@@ -47,7 +47,11 @@ type gateway struct {
 func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	b, _ := io.ReadAll(r.Body)
 	g.mu.Lock()
-	g.calls = append(g.calls, r.Method+" "+r.URL.Path+" "+string(b))
+	seen := r.URL.Path
+	if r.URL.RawQuery != "" {
+		seen += "?" + r.URL.RawQuery
+	}
+	g.calls = append(g.calls, r.Method+" "+seen+" "+string(b))
 	g.n++
 	n := g.n
 	g.mu.Unlock()
@@ -61,9 +65,9 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			out = append(out, map[string]string{"id": id, "name": name})
 		}
 		json.NewEncoder(w).Encode(out)
-	case strings.HasPrefix(r.URL.Path, "/make/"):
+	case r.URL.Path == "/make":
 		g.mu.Lock()
-		g.groups[fmt.Sprintf("6%d@g.us", n)] = strings.TrimPrefix(r.URL.Path, "/make/")
+		g.groups[fmt.Sprintf("6%d@g.us", n)] = r.URL.Query().Get("n")
 		g.mu.Unlock()
 	case path == "/groups" && r.Method == "POST" && g.noCreate:
 		http.Error(w, `{"message":"Operation not supported by the active engine: createGroup"}`, http.StatusNotImplemented)
@@ -318,7 +322,7 @@ func TestAgentGroupsAreMadeOrTaken(t *testing.T) {
 	if g.agentGroup("ops") != "50@g.us" || g.sessionsGroup() != "40@g.us" {
 		t.Fatalf("bound %+v", g.b)
 	}
-	if gw.count("POST /api/sessions/bot/groups ", `"name":"Ops"`, `"participants":["`+ownerChat+`"]`) != 1 {
+	if gw.count("POST /api/sessions/bot/groups ", `"name":"Ops - bot"`, `"participants":["`+ownerChat+`"]`) != 1 {
 		t.Errorf("ops' group not made:\n%s", gw.dump())
 	}
 	if gw.count("PUT", "/groups/50@g.us/settings", `"locked":true`, `"memberAddMode":"admins"`) != 1 {
@@ -326,6 +330,9 @@ func TestAgentGroupsAreMadeOrTaken(t *testing.T) {
 	}
 	if gw.count("POST /api/sessions/bot/webhooks", "bound=1", "40@g.us", "50@g.us") != 1 {
 		t.Errorf("no hook for the bound groups' reactions and votes:\n%s", gw.dump())
+	}
+	if gw.count("PUT", "/groups/40@g.us/subject", `"subject":"Sessions - bot"`) != 1 {
+		t.Errorf("a group taken under another name is not renamed:\n%s", gw.dump())
 	}
 	b, _ := os.ReadFile(filepath.Join(s.StateDir, "whatsapp-groups.json"))
 	if !strings.Contains(string(b), "50@g.us") {
@@ -346,7 +353,7 @@ func TestAGroupOpenWACantMakeIsMadeByTheMaker(t *testing.T) {
 	gw.groups = map[string]string{}
 	gw.mu.Unlock()
 	maker := filepath.Join(t.TempDir(), "maker")
-	os.WriteFile(maker, []byte("#!/bin/sh\ncurl -s -X POST \""+s.WhatsApp.URL+"/make/$1\"\n"), 0o755)
+	os.WriteFile(maker, []byte("#!/bin/sh\ncurl -s -X POST -G --data-urlencode \"n=$1\" \""+s.WhatsApp.URL+"/make\"\n"), 0o755)
 	s.WhatsApp.Maker = maker
 	if err := s.ensureAgentGroups(context.Background()); err != nil {
 		t.Fatal(err)
@@ -355,7 +362,7 @@ func TestAGroupOpenWACantMakeIsMadeByTheMaker(t *testing.T) {
 	if g.agentGroup("ops") == "" || g.sessionsGroup() == "" || g.agentGroup("ops") == g.sessionsGroup() {
 		t.Fatalf("bound %+v\n%s", g.b, gw.dump())
 	}
-	if gw.count("POST /make/Ops") != 1 || gw.count("POST /make/Sessions") != 1 {
+	if gw.count("POST /make", "Ops+-+bot") != 1 || gw.count("POST /make", "Sessions+-+bot") != 1 {
 		t.Errorf("the maker was not asked for both:\n%s", gw.dump())
 	}
 	if gw.count("PUT", "/groups/"+g.agentGroup("ops")+"/settings", `"locked":true`) != 1 {
@@ -365,7 +372,7 @@ func TestAGroupOpenWACantMakeIsMadeByTheMaker(t *testing.T) {
 	gw.mu.Lock()
 	gw.groups = map[string]string{}
 	gw.mu.Unlock()
-	if err := s.ensureAgentGroups(context.Background()); err == nil || !strings.Contains(err.Error(), `a group called "Ops"`) {
+	if err := s.ensureAgentGroups(context.Background()); err == nil || !strings.Contains(err.Error(), `a group called "Ops - bot"`) {
 		t.Errorf("without a maker the error says what to make: %v", err)
 	}
 }
