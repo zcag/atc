@@ -9,7 +9,7 @@ const [base = 'http://127.0.0.1:7299', bay = 'listings'] = process.argv.slice(2)
     await p.route('**/api/**', (r) => r.request().method() === 'GET' ? r.continue() : r.fulfill({ status: 204 }));
     await p.goto(base + '/');
     await p.waitForTimeout(3000);
-    console.log(w, 'backlog line:', await p.locator('.bhead .blline').innerText());
+    console.log(w, 'bay head:', await p.locator(w < 900 ? '.phead' : '.bhead').innerText());
     await p.screenshot({ path: `${__dirname}/../../shots/build/final-bay-${w}.png` });
     await ctx.close();
   }

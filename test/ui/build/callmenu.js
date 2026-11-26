@@ -47,10 +47,10 @@ const toSession = async (p, s) => {
 };
 const menu = async (p) => {
   await p.click('.hd .more button.kb');
-  await p.waitForSelector('.hd .more .sheet');
-  return p.$$eval('.hd .more .sheet button', (l) => l.map((x) => x.textContent.trim()));
+  await p.waitForSelector('.hd .more .menu');
+  return p.$$eval('.hd .more .menu .mitem .lb', (l) => l.map((x) => x.textContent.trim()));
 };
-const press = (p, label) => p.locator('.hd .more .sheet button', { hasText: new RegExp(`^${label}$`) }).click();
+const press = (p, label) => p.locator('.hd .more .menu .mitem .lb', { hasText: new RegExp(`^${label}$`) }).click();
 const palette = async (p) => {
   await p.keyboard.press('Control+k');
   await p.waitForSelector('.pal input');
@@ -124,7 +124,7 @@ const palette = async (p) => {
     const { ctx, p } = await open(b, { width, scheme });
     await toSession(p, FOCUS);
     await menu(p);
-    const fits = await p.$eval('.hd .more .sheet', (e) => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; });
+    const fits = await p.$eval('.hd .more .menu', (e) => { const r = e.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth; });
     ok(fits, `${width} ${scheme}: the menu fits`);
     await p.screenshot({ path: `${OUT}callmenu-${width}-${scheme}.png` });
     await ctx.close();

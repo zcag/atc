@@ -36,7 +36,7 @@ const ok = (c, m) => console.log(c ? 'ok  ' : 'FAIL', m);
     await p.click('.hd h1');
     await p.keyboard.press('x');
     await p.waitForTimeout(200);
-    ok(await p.isVisible('.hd .more .sheet'), `${scheme}: x opens the session menu`);
+    ok(await p.isVisible('.hd .more .menu'), `${scheme}: x opens the session menu`);
     await p.keyboard.press('Escape');
     ok(!errs.length, `${scheme}: no page errors ` + errs.join(' | '));
     await ctx.close();

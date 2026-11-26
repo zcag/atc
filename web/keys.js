@@ -6,7 +6,7 @@ export const KEY_GROUPS = [
     ["keys", "?", "Keys: this list"],
     ["bay", "1 … 9", "That bay, as you left it; again: its next session"],
     ["all", "0", "Every bay"],
-    ["peek", "shift alt 1 … 9", "Peek at that bay: answer without going there"],
+    ["peek", "shift alt 1 … 9", "Peek at that bay, or hover its tab: answer without going there"],
     ["next", "n", "Next session waiting on you, any bay"],
     ["session", "s", "Session: the bay's last open one"],
     ["board", "b", "Board"],

@@ -4,7 +4,7 @@ const exe = process.env.CHROME_BIN;
 const base = process.argv[2] || 'http://127.0.0.1:7299';
 const ok = (c, m) => console.log(c ? 'ok  ' : 'FAIL', m);
 const COVERED = () => {
-  const sheet = document.querySelector('.hd .more .sheet'), r = sheet.getBoundingClientRect(), over = new Set();
+  const sheet = document.querySelector('.hd .more .menu'), r = sheet.getBoundingClientRect(), over = new Set();
   for (let y = r.top + 2; y < Math.min(r.bottom, innerHeight); y += 8) for (let x = r.left + 2; x < r.right; x += 8) {
     const t = document.elementFromPoint(x, y);
     if (t && !sheet.contains(t)) over.add(`${t.tagName.toLowerCase()}.${t.className}`);
@@ -40,9 +40,9 @@ const STRAY_Z = () => [...document.querySelectorAll('.statep *, .tx *')].filter(
   ok(!(await p.$('.statep .peek, .tx .peek')), 'the bay peek popover class is not used inside a session');
   await p.$eval('.statep .card', (c) => c.scrollIntoView({ block: 'start' }));
   await p.click('.hd .more button.kb');
-  await p.waitForSelector('.hd .more .sheet');
+  await p.waitForSelector('.hd .more .menu');
   const under = await p.evaluate(() => {
-    const r = document.querySelector('.hd .more .sheet').getBoundingClientRect();
+    const r = document.querySelector('.hd .more .menu').getBoundingClientRect();
     return [...document.querySelectorAll('.statep .card .pv')].filter((e) => { const c = e.getBoundingClientRect(); return c.left < r.right && c.right > r.left && c.top < r.bottom && c.bottom > r.top; }).length;
   });
   ok(under > 0, `${under} card previews lie under the open menu`);

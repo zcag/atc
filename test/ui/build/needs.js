@@ -22,7 +22,7 @@ const fake = (list) => needsIn(list, 2, ['shop', 'site', 'notes', 'api', 'docs']
     ok(await p.locator('.bgrp.waiting .brow').count() >= 5, `${scheme}: board groups what needs you first`);
     await p.locator('.bgrp.waiting .brow').first().click({ position: { x: 600, y: 10 } });
     await p.waitForTimeout(300);
-    ok(await p.isVisible('.bexp .ask.compact'), `${scheme}: an opened needs row carries its ask`);
+    ok(await p.isVisible('.bgrp.waiting .bask .ask.compact'), `${scheme}: a needs row carries its ask inline`);
     await p.screenshot({ path: `${OUT}s4-needs-1400-${scheme}.png` });
     await p.keyboard.press('Escape');
     const bays = await p.locator('.bays .bay[data-bay]').count();

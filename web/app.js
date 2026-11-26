@@ -535,7 +535,7 @@ function App() {
     const onKey = (e) => {
       const k = keys.current;
       if (k.creating) return;
-      if (!document.querySelector(".veil, .keys-ov, .pal") && !e.metaKey && !e.ctrlKey && !e.altKey)
+      if (!document.querySelector(".veil, .keys-ov, .pal, .peek, [role=menu]") && !e.metaKey && !e.ctrlKey && !e.altKey)
         for (const f of [...KEYLAYERS].reverse()) if (f(e)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
       if (e.altKey && !e.ctrlKey && !e.metaKey && (e.code === "KeyJ" || e.code === "KeyK")) {
         const next = step(k.route, e.code === "KeyK" ? -1 : 1);
@@ -548,7 +548,7 @@ function App() {
         return;
       }
       const typing = t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable;
-      const digit = /^Digit\d$/.test(e.code) && !e.metaKey && !e.ctrlKey && ((e.altKey && e.shiftKey) || (!e.altKey && !e.shiftKey && !typing && !t.closest?.(".ask, [data-ask]") && !document.querySelector(".veil, .pghome, .palone, .keys-ov, .peek")));
+      const digit = /^Digit\d$/.test(e.code) && !e.metaKey && !e.ctrlKey && ((e.altKey && e.shiftKey) || (!e.altKey && !e.shiftKey && !typing && !t.closest?.(".ask, [data-ask]") && !document.querySelector(".veil, .pghome, .palone, .keys-ov, .peek, [role=menu]")));
       if (digit) {
         const n = +e.code.slice(5), bays = baysOf(k.onBays, BAY.only);
         e.preventDefault();
@@ -567,7 +567,7 @@ function App() {
         return goBay(b.name, k.live);
       }
       if (e.metaKey || e.ctrlKey || e.altKey || typing) return;
-      if (document.querySelector(".veil, .pghome, .palone, .keys-ov, .pal")) {
+      if (document.querySelector(".veil, .pghome, .palone, .keys-ov, .pal, .peek, [role=menu]")) {
         if (e.key === "Escape") setHelp(false);
         if (e.key === "?") setHelp((h) => !h);
         return;
@@ -640,6 +640,7 @@ function App() {
   TIME_ON = openNow({ sel: alone ? all.find((x) => x.sessionId === alone.sid) : assistView || shellAt || settings ? null : sel, screen: alone ? "pages" : settings ? "settings" : shellAt ? "shell" : screen });
   const bays = baysOf(onBays, only);
   const inBay = (live || []).filter((x) => x.state !== "stopped" && (only ? bayOf(x) === only : !homeless(x))).length;
+  const railPath = only && (live || []).find((x) => bayOf(x) === only);
   const remember = rememberPast;
   const openFromUsage = async (x) => {
     if (!all.some((s) => s.sessionId === x.sessionId) && !past[x.sessionId])
@@ -658,15 +659,13 @@ function App() {
       : scr === "resources" ? html`<${ResourcesPage} hosts=${(me.hosts || [me.host]).filter((h) => h)} home=${me.host} live=${all} />`
       : scr === "backlog" ? html`<${BacklogPage} live=${all} say=${say} onAdd=${setCreating} only=${only} />`
       : html`<${AgentsPage} name=${agentName} agents=${agents} live=${all} past=${past} remember=${rememberPast} say=${say} reload=${loadAgents} panes=${panes} togglePane=${togglePane} />`}</main>`
-    : !route && !shellAt && phone ? html`<${PhoneHome} live=${live} hist=${hist} only=${only} bays=${bays} cursor=${cursor} say=${say} />`
+    : !route && !shellAt && phone ? html`<${PhoneHome} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} bays=${bays} cursor=${cursor} say=${say} />`
     : !route && !shellAt ? html`<div class="shell boardv"><${BoardView} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} say=${say} index=${panes.index && wide} /></div>` : html`
     <div class="shell open ${!panes.rail ? "norail" : ""}">
       <aside class="side">
-        <div class="ph"><b>${only || "Every bay"}</b><span>${plural(inBay, "session")}</span>
-          <span class="r"><button class="kb" onClick=${() => setShelling(true)} title="A plain login shell, no Claude">Shell</button><button class="kb" onClick=${() => setCreating(true)} aria-keyshortcuts="+" title=${tip("new")}>New session</button></span></div>
-        <${RailList} live=${live} hist=${hist} only=${only} sel=${sel} cursor=${cursor} shell=${shellAt} />
-        <${BacklogLine} only=${only} />
-        <${UsageFoot} limits=${limits} onOpen=${openUsage} />
+        <div class="ph"><b>${only || "Every bay"}</b>${railPath ? html`<span class="w" title=${tilde(baseDir(railPath.cwd))}>${clipPath(tilde(baseDir(railPath.cwd)))}</span>` : html`<span class="w">${plural(inBay, "session")}</span>`}
+          <span class="r"><button class="btn quiet" onClick=${() => setCreating(true)} aria-keyshortcuts=${ariaKeys("new")} title=${tip("new")}>${ICON.plus}New</button><${BayMore} only=${only} live=${live} say=${say} /></span></div>
+        <${RailList} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} shell=${shellAt} say=${say} />
       </aside>
       <main class="main">
         ${shellAt ? html`<${ShellView} key=${shellAt.id} at=${shellAt} say=${say} />`
@@ -810,7 +809,7 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
         ${only === null && html`<span class="bay on"><button class="bn" aria-current="true" title=${tip("all")}><span class="k">0</span><span class="n">All</span></button></span>`}
         ${bays.map((b, i) => html`
           ${b.parked && !bays[i - 1]?.parked && html`<span class="bay-rest" aria-hidden="true">parked</span>`}
-          <span class="bay ${only === b.name ? "on" : ""} ${peek === b.name ? "peeking" : ""} ${b.parked ? "rest" : ""}" data-bay=${b.name}>
+          <span class="bay ${only === b.name ? "on" : ""} ${peek === b.name ? "peeking" : ""} ${b.parked ? "rest" : ""}" data-bay=${b.name} ...${peekOnHover(b, only, peek, onPeek)}>
             <button class="bn" aria-current=${only === b.name ? "true" : null} aria-label=${bayWords(b, i)}
               aria-keyshortcuts=${i < 9 ? `${i + 1}` : null} onClick=${() => goBay(b.name, live)}
               onContextMenu=${(e) => { e.preventDefault(); onPeek(b.name); }}>
@@ -840,43 +839,89 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
     </nav>`;
 }
 
+const PEEK_HOVER = { open: 0, close: 0, on: false };
+const peekOnHover = (b, only, peek, onPeek) => ({
+  onPointerEnter: (e) => {
+    clearTimeout(PEEK_HOVER.close);
+    if (e.pointerType !== "mouse" || b.name === only || !(b.needs + b.turn + b.work) || (peek && !PEEK_HOVER.on)) return;
+    PEEK_HOVER.open = setTimeout(() => { PEEK_HOVER.on = true; onPeek(b.name); }, 400);
+  },
+  onPointerLeave: () => { clearTimeout(PEEK_HOVER.open); if (PEEK_HOVER.on) PEEK_HOVER.close = setTimeout(() => PEEK_HOVER.on && onPeek(null), 300); },
+});
+
+function PeekReply({ s, say }) {
+  const [text, setText] = useState("");
+  const send = (e) => {
+    e.preventDefault();
+    const t = text.trim();
+    if (!t) return;
+    setText("");
+    api(`/api/sessions/${s.id}/send`, { method: "POST", body: { text: t } }).then(() => say(`Sent to ${s.title || "the session"}.`), (err) => { setText(t); say(err.message); });
+  };
+  return html`<form class="preply" onSubmit=${send}><input value=${text} onInput=${(e) => setText(e.target.value)} placeholder=${`Reply to ${s.title || "Untitled"}`} aria-label=${`Reply to ${s.title || "Untitled"}`}
+    onKeyDown=${(e) => e.key === "Escape" && text && (e.stopPropagation(), setText(""))} /><button class="btn sm primary" disabled=${!text.trim()}>Send</button></form>`;
+}
+
 function BayPeek({ bay, live, onBays, say, onClose }) {
   const phone = usePhone();
   const box = useRef();
-  useEffect(() => {
-    const k = (e) => e.key === "Escape" && (e.stopPropagation(), onClose());
-    const out = (e) => !box.current?.contains(e.target) && !e.target.closest?.(".bays") && onClose();
-    addEventListener("keydown", k, true);
-    addEventListener("pointerdown", out);
-    return () => { removeEventListener("keydown", k, true); removeEventListener("pointerdown", out); };
-  }, []);
-  useLayoutEffect(() => {
-    const at = document.querySelector(every ? ".bays .offneeds" : `.bays .bay[data-bay="${CSS.escape(bay)}"]`)?.getBoundingClientRect(), el = box.current;
-    if (!phone && at && el) el.style.left = `${Math.max(8, Math.min(at.left, innerWidth - el.offsetWidth - 8))}px`;
-  });
   const every = bay === "*";
   const mine = (onBays || []).filter((s) => (every ? waiting(s) : bayOf(s) === bay) && countsOnBay(s));
   const pins = pinnedOf(mine), rest = mine.filter((s) => !pins.includes(s)), waits = mine.filter(waiting).length;
   const wait = rest.filter(waiting).sort((a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1)), work = rest.filter((s) => s.state === "working");
+  const order = [...pins, ...wait, ...work];
+  const [at, setAt] = useState(0);
+  const keys = useRef({});
+  const nav = useRef();
+  nav.current = (e) => {
+    if (e.key === "Escape") { e.stopPropagation(); return onClose(); }
+    if (e.target.matches?.("input, textarea") || e.altKey || e.ctrlKey || e.metaKey) return;
+    const d = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[e.key];
+    if (d) { e.preventDefault(); e.stopPropagation(); setAt((i) => Math.max(0, Math.min(order.length - 1, i + d))); }
+    else if (/^[1-9]$/.test(e.key) && keys.current[order[at]?.sessionId]) { e.preventDefault(); e.stopPropagation(); keys.current[order[at].sessionId](+e.key); }
+    else if (e.key === "Enter" && order[at] && !e.target.closest?.("button, a")) { e.preventDefault(); open(order[at]); }
+  };
+  useEffect(() => {
+    const k = (e) => nav.current(e);
+    const out = (e) => !box.current?.contains(e.target) && !e.target.closest?.(".bays") && onClose();
+    addEventListener("keydown", k, true);
+    addEventListener("pointerdown", out);
+    return () => { removeEventListener("keydown", k, true); removeEventListener("pointerdown", out); PEEK_HOVER.on = false; clearTimeout(PEEK_HOVER.close); };
+  }, []);
+  useLayoutEffect(() => {
+    const a = document.querySelector(every ? ".bays .offneeds" : `.bays .bay[data-bay="${CSS.escape(bay)}"]`)?.getBoundingClientRect(), el = box.current;
+    if (!phone && a && el) el.style.left = `${Math.max(8, Math.min(a.left, innerWidth - el.offsetWidth - 8))}px`;
+  });
   const open = (s) => { onClose(); go(keyOf(s)); };
-  const row = (s) => html`<div class="pk ${s.state}" key=${s.sessionId}>
-    <div class="row"><${StateBlock} s=${s} /><a class="ti" href=${`#/s/${keyOf(s)}`} onClick=${(e) => { e.preventDefault(); open(s); }}>${s.title || "Untitled"}</a><span class="ago" title=${stamp(rowAt(s))}>${every && html`<span class="bayn">${bayOf(s)}</span>`}${ago(s)}</span></div>
-    <p class="what">${s.state === "working" ? doing(s) : headline(s)}</p>
-    ${s.asks?.length > 0 && html`<${Ask} compact=${!phone} sheet=${phone} s=${s} a=${s.asks[0]} say=${say} />`}
-    ${replyable(s) && html`<div class="ask"><${CardReplies} s=${s} /></div>`}
-  </div>`;
+  const path = !every && mine[0]?.cwd && tilde(baseDir(mine[0].cwd));
+  const n = baysOf(onBays, BAY.only).findIndex((b) => b.name === bay) + 1;
+  const row = (s) => {
+    const line = lineOf(s), ref = { current: null };
+    keys.current[s.sessionId] = (k) => ref.current?.(k);
+    return html`<div class="pk ${s.state} ${!phone && order[at] === s ? "on" : ""}" key=${s.sessionId} onPointerMove=${() => order[at] !== s && setAt(order.indexOf(s))}>
+      <${StateBlock} s=${s} /><a class="ti" lang=${langOf(s.title)} href=${`#/s/${keyOf(s)}`} onClick=${(e) => { e.preventDefault(); open(s); }}>${s.title || "Untitled"}</a>
+      <span class="ago" title=${stamp(rowAt(s))}>${every && html`<span class="bayn">${bayOf(s)}</span>`}${ago(s)}</span>
+      <p class="what" lang=${typeof line === "string" ? langOf(line) : null}>${line}</p>
+      ${s.asks?.length > 0 && html`<div class="pka"><${Ask} compact=${!phone} sheet=${phone} s=${s} a=${s.asks[0]} say=${say} keyRef=${ref} /></div>`}
+      ${replyable(s) && html`<div class="pka"><${CardReplies} s=${s} /></div>`}
+      ${!phone && s.state === "your-turn" && s.attachable && !s.asks?.length && html`<div class="pka"><${PeekReply} s=${s} say=${say} /></div>`}
+    </div>`;
+  };
+  const group = (title, l) => l.length > 0 && html`<h3 class="grp"><b>${title}</b><span class="c">${l.length}</span></h3>${l.map(row)}`;
   const body = html`
-    ${pins.length > 0 && html`<h3 class="grp"><b>Pinned</b><span class="c">${pins.length}</span></h3>${pins.map(row)}`}
-    ${wait.length > 0 && html`<h3 class="grp"><b>Waiting on you</b><span class="c">${wait.length}</span></h3>${wait.map(row)}`}
-    ${work.length > 0 && html`<h3 class="grp"><b>Working</b><span class="c">${work.length}</span></h3>${work.map(row)}`}
-    ${!mine.length && html`<p class="pkf"><span>Nothing running in ${bay}.</span></p>`}
-    ${!every && html`<div class="pkf"><button class="kb" onClick=${() => { onClose(); goBay(bay, live); }}>Go to ${bay}</button><button class="kb" onClick=${() => { onClose(); BAY.set(bay); rememberBay(bay, { view: "board" }); go(null); }}>Its board</button></div>`}`;
-  return phone
-    ? html`<${Sheet} cls="peeksheet" title=${every ? "Every bay" : bay} onClose=${onClose}><div class="peek" ref=${box}>${body}</div><//>`
-    : html`<div class="peek" ref=${box} role="dialog" aria-label=${`Peek at ${bay}`}>
-        <div class="pkh"><b>${bay}</b><span>${waits ? `${waits} waiting on you` : ""}</span><span class="r"><button class="kb" onClick=${onClose} title="Close (esc)">Close</button></span></div>
-        ${body}
-      </div>`;
+    ${group("Pinned", pins)}${group("Waiting on you", wait)}${group("Working", work)}
+    ${!mine.length && html`<p class="pkn">Nothing running in ${bay}.</p>`}`;
+  if (phone) return html`<${Sheet} cls="peeksheet" title=${every ? "Every bay" : bay} onClose=${onClose}><div class="peek" ref=${box}>${body}
+    ${!every && html`<div class="pkf"><button class="btn" onClick=${() => { onClose(); goBay(bay, live); }}>Go to ${bay}</button></div>`}</div><//>`;
+  return html`<div class="peek" ref=${box} role="dialog" aria-label=${`Peek at ${bay}`}
+      onPointerEnter=${() => clearTimeout(PEEK_HOVER.close)} onPointerDown=${() => (PEEK_HOVER.on = false)}
+      onPointerLeave=${() => PEEK_HOVER.on && (PEEK_HOVER.close = setTimeout(onClose, 300))}>
+    <div class="pkh"><b>${every ? "Every bay" : bay}</b>${path && html`<span class="w">${clipPath(path)}</span>`}${waits > 0 && html`<span class="bc n">${waits} waiting</span>`}
+      ${!every && html`<span class="r"><button class="btn sm quiet" onClick=${() => { onClose(); BAY.set(bay); rememberBay(bay, { view: "board" }); go(null); }}>Board</button>
+        <button class="btn sm quiet" onClick=${() => { onClose(); goBay(bay, live); }}>Go to ${bay}${n > 0 && n < 10 && html`<kbd>${n}</kbd>`}</button></span>`}</div>
+    <div class="pkb">${body}</div>
+    ${order.length > 0 && html`<div class="pkf"><span><kbd>1</kbd>…<kbd>9</kbd> answers the highlighted one</span><span><kbd>j</kbd><kbd>k</kbd> moves</span><span><kbd>esc</kbd> closes</span></div>`}
+  </div>`;
 }
 
 const hubLine = (hub) => {
@@ -912,34 +957,39 @@ function Console({ hub, agents, runs, onTalk, onKeys }) {
 }
 
 function TabBar({ view, onTalk, waits }) {
+  const [adding, setAdding] = useState(false);
   const tab = (on, icon, label, run, badge) => html`<button class=${on ? "on" : ""} aria-current=${on ? "page" : null} onClick=${run}>
     ${badge > 0 && html`<i class="cn n" aria-label=${`${badge} waiting on you`}>${badge}</i>`}${icon}<span>${label}</span></button>`;
+  const pick = (f) => () => { setAdding(false); f(); };
   return html`
     <nav class="tabbar" aria-label="Views">
       ${tab(view === "board", ICON.list, "Sessions", () => go(null), waits)}
       ${tab(view === "pages", ICON.page, "Pages", () => (location.hash = pagesHash()))}
       ${tab(view === "assistant", ICON.mic, "Assistant", onTalk)}
       ${tab(false, ICON.search, "Search", () => PALETTE_OPEN())}
-      ${PAL_TOGGLE && tab(false, ICON.layout, "pal", PAL_TOGGLE)}
-    </nav>`;
+      ${tab(adding, ICON.plus, "New", () => setAdding(true))}
+    </nav>
+    ${adding && html`<${MenuSheet} aria="New" onClose=${() => setAdding(false)}><${MenuItems} sheet onPick=${(it) => { setAdding(false); it.run(); }} items=${[
+      { label: "New session", icon: "plus", run: () => NEW_SESSION() },
+      { label: "New shell", icon: "term", run: () => NEW_SHELL() },
+    ]} /><//>`}`;
 }
 
-function PhoneHome({ live, hist, only, bays, cursor, say }) {
-  const chip = (on, label, n, run) => html`<button class="bchip ${on ? "on" : ""}" aria-pressed=${on} onClick=${run}>${label}${n > 0 && html`<i class="cn n">${n}</i>`}</button>`;
+function PhoneHome({ live, hist, more, only, bays, cursor, say }) {
+  const strip = useRef();
+  useLayoutEffect(() => strip.current?.querySelector(".bay.on")?.scrollIntoView({ block: "nearest", inline: "nearest" }), [only]);
+  const waits = (live || []).filter(waiting).length;
+  const tab = (on, k, name, b, rest) => html`<span class="bay ${on ? "on" : ""} ${rest ? "rest" : ""}" key=${name}>
+    <button class="bn" aria-current=${on ? "true" : null} onClick=${() => BAY.set(b ? b.name : null)}><span class="k" aria-hidden="true">${k}</span><span class="n">${name}</span>
+      ${b && (b.needs + b.turn > 0 || b.work > 0) && html`<span class="cts">${b.needs + b.turn > 0 && html`<i class="cn n">${b.needs + b.turn}</i>`}${b.work > 0 && html`<i class="cn w">${b.work}</i>`}</span>`}</button></span>`;
   return html`<div class="shell phomev">
-    <div class="phead">
-      <button class="psearch" onClick=${() => PALETTE_OPEN()}>${ICON.search}<span>Search sessions, pages, actions</span></button>
-      <button class="pib" aria-label="Settings" onClick=${() => (location.hash = SETTINGS)}>${ICON.gear}</button>
-    </div>
-    <nav class="bchips" aria-label="Bays">
-      ${chip(only === null, "All", 0, () => BAY.set(null))}
-      ${bays.map((b) => chip(only === b.name, b.name, b.needs + b.turn, () => BAY.set(only === b.name ? null : b.name)))}
+    <div class="phead"><h1>Sessions</h1>${waits > 0 && html`<span class="bc n">${waits} waiting</span>`}
+      <button class="btn icon pib" aria-label="Settings" title=${tip("settings", "Settings")} onClick=${() => (location.hash = SETTINGS)}>${ICON.gear}</button></div>
+    <nav class="ptabs" aria-label="Bays" ref=${strip}>
+      ${tab(only === null, 0, "All", null)}
+      ${bays.map((b, i) => tab(only === b.name, i + 1, b.name, b, b.parked))}
     </nav>
-    <${RailList} live=${live} hist=${hist} only=${only} cursor=${cursor} say=${say} />
-    <div class="pfabs">
-      <button class="pfab ghost" onClick=${() => NEW_SHELL()} title="A plain login shell, no Claude">Shell</button>
-      <button class="pfab" onClick=${() => NEW_SESSION()}>${ICON.plus}New</button>
-    </div>
+    <${RailList} live=${live} hist=${hist} more=${more} only=${only} cursor=${cursor} say=${say} />
   </div>`;
 }
 
@@ -974,7 +1024,6 @@ const groupOf = (s) => (away(s) ? "parked" : s.pinned ? "pinned" : waiting(s) ? 
 const byUrgency = (a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1) || (Date.parse(b.updated || 0) || 0) - (Date.parse(a.updated || 0) || 0);
 const doingLine = (s) => s.state === "working" ? doing(s) : s.state === "needs-you" && s.asks?.[0] ? oneLine(s.asks[0].questions?.[0]?.question || (s.asks[0].permission && `Wants to use ${s.asks[0].permission}`)) : "";
 const runningOf = (s) => [s.background?.length > 0 && plural(s.background.length, "task"), ...(s.servers || []).slice(0, 2).map((p) => `:${p}`), s.tabs?.length > 0 && plural(s.tabs.length, "tab")].filter(Boolean);
-const madeOf = (s) => [s.shown?.length > 0 && plural(s.shown.length, "page"), s.files > 0 && plural(s.files, "file")].filter(Boolean);
 
 function useBayHistory(enabled, onPast) {
   const [hist, setHist] = useState(null);
@@ -1018,46 +1067,80 @@ function CardGist({ s }) {
   return length === "long" && waiting(s) && s.summary?.gist?.length > 0 && html`<span class="gl">${s.summary.gist.map((x) => html`<span>${x}</span>`)}</span>`;
 }
 
-function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
-  const tap = rail ? null : () => toggle(s.sessionId);
-  const { events } = useRowEvents(s, tap, !rail && s.state !== "past" && s.state !== "stopped");
-  const on = sel?.sessionId === s.sessionId, run = runningOf(s), made = madeOf(s), g = s.pinned && waiting(s) ? "pinned waiting" : groupOf(s);
-  const branch = s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch;
-  const where = [MULTI && s.host, s.profile, branch && clipPath(branch, 28, "-")].filter(Boolean).join(" ");
-  const status = (s.state === "needs-you" ? oneLine(s.summary?.status) || oneLine(s.preview || s.lastReply) || "Needs you" : headline(s)) || WORD[s.state] || "";
-  const second = doingLine(s) || (cutOff(s) ? s.ended.text : "");
-  const fresh = unread(s);
+const askLine = (s) => {
+  const a = s.state === "needs-you" && s.asks?.[0];
+  if (!a) return null;
+  if (a.permission) { const cmd = (a.patterns || []).join(" "); return cmd ? html`Wants to run <code class="mono">${cmd}</code>` : `Wants to use ${toolName(a.permission)}`; }
+  return oneLine(a.questions?.[0]?.question) || null;
+};
+const statusOf = (s) => (s.state === "needs-you" ? oneLine(s.summary?.status) || oneLine(s.preview || s.lastReply) || "Needs you" : headline(s)) || WORD[s.state] || "";
+const lineOf = (s) => askLine(s) || (s.state === "working" ? doing(s) : cutOff(s) ? s.ended.text : statusOf(s));
+const canResume = (s) => (s.state === "past" || s.state === "stopped") && !s.attachable && s.kind !== "interactive";
+const resumeFrom = (s, say) => resumeSession(s).then((r) => go(r.id), (e) => say?.(e.message));
+const branchOf = (s) => s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch;
+const swipeable = (s) => s.state !== "past" && s.state !== "stopped";
+
+function ResumeBtn({ s, say }) {
+  const [busy, setBusy] = useState(false);
+  return html`<button class="btn sm rsm" aria-busy=${busy} onClick=${(e) => { e.stopPropagation(); setBusy(true); resumeFrom(s, say).finally(() => setBusy(false)); }}>${ICON.play}Resume</button>`;
+}
+
+function RailRow({ s, sel, cursor, say, qk, when }) {
+  const { events } = useRowEvents(s, null, swipeable(s));
+  const on = sel?.sessionId === s.sessionId, fresh = unread(s), g = s.pinned && waiting(s) ? "pinned waiting" : groupOf(s);
+  const line = lineOf(s), ask = say && s.state === "needs-you" && s.asks?.length > 0;
+  return html`<div class="rr ${g} ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""} ${fresh ? "fresh" : ""}">
+    <button class="brow ${on ? "sel" : ""}" data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
+      <${StateBlock} s=${s} />
+      <span class="t" lang=${langOf(s.title)}>${s.title || "Untitled"}</span>
+      <span class="s ${ask ? "q" : ""}" lang=${typeof line === "string" ? langOf(line) : null}>${line}</span>
+      <span class="e"><span class="ago" title=${stamp(rowAt(s))}>${fresh && html`<i class="dot" aria-hidden="true"></i>`}${when || ago(s)}</span>
+        <span class="e2">${s.load && hotLoad(s.load) && html`<${LoadTag} s=${s} />`}${s.shown?.length > 0 && html`<span class="pg" title=${plural(s.shown.length, "page")}>${ICON.page}</span>`}${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span></span>
+    </button>
+    ${canResume(s) && html`<${ResumeBtn} s=${s} say=${say} />`}
+    ${ask && html`<div class="rask"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}
+  </div>`;
+}
+
+function madeLine(s) {
+  const pages = s.shown?.length || 0, files = s.files || 0, run = runningOf(s);
+  const pg = pages > 0 && html`<a href=${pageLink(keyOf(s), s.shown[0].name)} onClick=${(e) => e.stopPropagation()}>${pages === 1 ? "a page" : plural(pages, "page")}</a>`;
+  const made = (pg || files > 0) && html`Made ${pg}${pg && files > 0 && " and "}${files > 0 && plural(files, "file")}`;
+  const parts = [
+    s.steps > 0 && html`${plural(s.steps, "step")}${s.failed > 0 && html`, <span class="f">${s.failed} failed</span>`}`,
+    run.length > 0 && html`running <span class="mono">${run.join(", ")}</span>`,
+    made,
+    s.context > 0 && html`<${CtxMeter} n=${s.context} /> ${Math.round(s.context / 1000)}k`,
+  ].filter(Boolean);
+  return parts.length ? parts.map((p, i) => html`${i > 0 && html`<span class="sep" aria-hidden="true"> · </span>`}<span class="part">${p}</span>`) : null;
+}
+
+function BoardRow({ s, open, toggle, sel, cursor, say, qk, when }) {
+  const { events } = useRowEvents(s, () => toggle(s.sessionId), swipeable(s));
+  const on = sel?.sessionId === s.sessionId, g = s.pinned && waiting(s) ? "pinned waiting" : groupOf(s), branch = branchOf(s);
+  const where = [MULTI && s.host, s.profile, branch && clipPath(branch, 28, "-")].filter(Boolean).join(" · ");
+  const fresh = unread(s), line = lineOf(s), ask = s.state === "needs-you" && s.asks?.length > 0;
+  const meta = g !== "earlier" && !ask && madeLine(s);
   const owed = s.state !== "working" ? LIVE.filter((y) => y.reportsTo && y.reportsTo === (s.root || s.sessionId) && (y.state === "working" || y.state === "needs-you")) : [];
   const cls = `brow ${g} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""} ${open ? "open" : ""} ${fresh ? "fresh" : ""}`;
-  const title = html`<span class="t" lang=${langOf(s.title)}>${s.title || "Untitled"}</span>`;
-  const answer = rail && say && s.state === "needs-you" && s.asks?.length > 0;
-  if (rail) return html`
-    <button class=${cls} data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
-      <${StateBlock} s=${s} />
-      <span class="c">${title}<span class="s" lang=${langOf(cutOff(s) ? s.ended.text : status)}>${cutOff(s) ? s.ended.text : status}</span><${CardGist} s=${s} />${s.state === "working" && html`<span class="s2 mono">${doing(s)}</span>`}</span>
-      <span class="e"><span class="ago" title=${stamp(rowAt(s))}>${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}${ago(s)}</span>${s.profile && html`<${ProfileTag} s=${s} />`}${made[0] && s.shown?.length > 0 && html`<b>${made[0]}</b>`}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>
-    </button>
-    ${answer && html`<div class="rask"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}`;
   return html`
-    <div class="bwrap ${open ? "open" : ""} ${g}">
+    <div class="bwrap ${open ? "open" : ""} ${g} ${s.state}">
       <div class=${cls} data-sid=${s.sessionId} role="button" tabindex="0" aria-expanded=${open} aria-description=${fresh ? "new since you looked" : null} ...${events}
         onDblClick=${() => go(keyOf(s))} onKeyDown=${(e) => e.target === e.currentTarget && (e.key === "Enter" ? go(keyOf(s)) : e.key === " " && (e.preventDefault(), toggle(s.sessionId)))}>
         <${StateBlock} s=${s} />
         <span class="ses"><a class="t" lang=${langOf(s.title)} href=${`#/s/${keyOf(s)}`} onClick=${(e) => e.stopPropagation()}>${s.title || "Untitled"}</a>${where && html`<span class="w" title=${branch || null}>${where}</span>`}${s.lastFrom && html`<span class="from" title=${`The last message came from ${s.lastFrom}, not from you`}>${ICON.recv}${s.lastFrom}</span>`}${owed.length > 0 && html`<span class="from owed" title="It asked for these reports and they haven't come back yet">waiting on ${owed.map((y) => y.title || "a session").join(", ")}</span>`}</span>
-        <span class="st"><span class="l1" lang=${langOf(status)}>${status}</span>${!open && html`<${CardGist} s=${s} />`}${second && html`<span class="l2 ${s.state === "working" ? "mono" : ""}">${second}</span>`}</span>
-        <span class="ctx">${s.context > 0 && html`<${CtxMeter} n=${s.context} /><span>${Math.round(s.context / 1000)}k</span>`}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>
-        <span class="stp">${s.steps > 0 && s.steps}${s.failed > 0 && html`<span class="f">${s.failed} failed</span>`}</span>
-        <span class="mk">${run.length > 0 && html`<span class="run">${run.join(" ")}</span>`}${made.length > 0 && html`<span>${made.join(" ")}</span>`}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>
-        <span class="since" title=${stamp(rowAt(s))}>${fresh && html`<i class="dot" aria-hidden="true"></i>`}${ago(s)}${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span>
-        <span class="chev" aria-hidden="true"></span>
+        <span class="st"><span class="l1" lang=${typeof line === "string" ? langOf(line) : null}>${line}</span>${!open && html`<${CardGist} s=${s} />`}
+          ${meta && html`<span class="l2">${meta}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>`}
+          ${ask && html`<div class="bask" onClick=${(e) => e.stopPropagation()} onPointerDown=${(e) => e.stopPropagation()}><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}</span>
+        <span class="since" title=${stamp(rowAt(s))}><span>${fresh && html`<i class="dot" aria-hidden="true"></i>`}${when || ago(s)}</span>${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span>
       </div>
+      ${canResume(s) && html`<${ResumeBtn} s=${s} say=${say} />`}
       ${open && html`<div class="bexp">
         <div class="gx">
           ${s.summary?.gist?.length > 0 && html`<ul>${s.summary.gist.map((x) => html`<li>${x}</li>`)}</ul>`}
           <p class="facts">${[engineTag(s) || (s.model && model(s.model)), s.permissionMode === "bypassPermissions" ? "no permission prompts" : s.permissionMode, tilde(s.cwd || "")].filter(Boolean).join(", ")}</p>
         </div>
         <div class="ax">
-          ${s.asks?.length > 0 && html`<${Ask} compact s=${s} a=${s.asks[0]} say=${say} />`}
           ${replyable(s) && html`<${CardReplies} s=${s} />`}
           <div class="acts"><button class="btn" onClick=${() => go(keyOf(s))}>Open</button>${cutOff(s) && html`<button class="btn" onClick=${() => dismissEnded([s], say)}>Dismiss</button>`}
             ${s.shown?.length > 0 && html`<button class="btn" onClick=${() => (location.hash = pageLink(keyOf(s), s.shown[0].name))}>${pageTitle(s.shown[0])}</button>`}</div>
@@ -1066,7 +1149,90 @@ function BoardRow({ s, open, toggle, sel, cursor, rail, say, qk }) {
     </div>`;
 }
 
-function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) {
+const GROUP_COUNT = { waiting: "n", working: "w" };
+const GroupHead = ({ k, title, n, children }) => html`<h2 class="grp ${k}"><b>${title}</b><span class="c ${GROUP_COUNT[k] || ""}">${n}</span>${children}</h2>`;
+
+function setParked(list, parked) {
+  return Promise.allSettled(list.map((s) => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { parked } })))
+    .then((r) => ({ done: list.filter((_, i) => r[i].status === "fulfilled"), bad: r.filter((x) => x.status === "rejected").length }));
+}
+
+function BayMore({ only, live, say, cls = "btn icon" }) {
+  const counts = backlogCounts(useBacklog(), only);
+  const mine = only ? (live || []).filter((s) => bayOf(s) === only) : [];
+  const parkable = mine.filter((s) => !s.parked && s.kind !== "hub" && s.state !== "stopped" && s.state !== "past");
+  const byPark = only ? (bayMem(only).parked || []).map((sid) => mine.find((s) => s.sessionId === sid && s.parked)).filter(Boolean) : [];
+  const unparkAll = async (bay = only, list = byPark) => {
+    const { done, bad } = await setParked(list, false);
+    rememberBay(bay, { parked: [] });
+    say(bad ? `Couldn't unpark ${bad} of ${list.length} in ${bay}.` : `Unparked ${done.length} in ${bay}.`);
+  };
+  const parkAll = async () => {
+    const bay = only, { done, bad } = await setParked(parkable, true);
+    rememberBay(bay, { parked: done.map((s) => s.sessionId) });
+    say(bad ? `Couldn't park ${bad} of ${parkable.length} in ${bay}.` : `Parked ${done.length} in ${bay}.`, { undo: () => unparkAll(bay, done) });
+  };
+  return html`<${Menu} cls=${cls} aria=${only ? `More for ${only}` : "More"} title="Park all, Shell, Backlog" items=${[
+    byPark.length > 0 && { label: "Unpark all", icon: "park", sub: `the ${byPark.length} your last Park all set aside`, run: () => unparkAll() },
+    parkable.length > 0 && { label: "Park all", icon: "park", sub: "each comes back when it needs you", run: parkAll },
+    "-",
+    { label: "New shell", icon: "term", sub: "a plain login shell, no Claude", run: () => NEW_SHELL() },
+    { label: "Backlog", icon: "inbox", sub: counts || "", run: () => (location.hash = BACKLOG) },
+    { label: "Usage", icon: "chart", sub: "limits and the week", run: openUsage },
+  ]} />`;
+}
+
+const dayStart = (t) => { const d = new Date(t); d.setHours(0, 0, 0, 0); return d.getTime(); };
+const dayHead = (t) => (dayStart(t) === dayStart(Date.now() - 86400000) ? "Yesterday" : dayLabel(t));
+
+function useHistorySearch(q, only) {
+  const [res, setRes] = useState(null);
+  useEffect(() => {
+    if (!q.trim()) return setRes(null);
+    const t = setTimeout(() => api(`/api/history?limit=40&q=${encodeURIComponent(q.trim())}`).then((l) => setRes(l || []), () => setRes([])), 150);
+    return () => clearTimeout(t);
+  }, [q]);
+  if (!res) return null;
+  const ids = new Set((LIVE || []).filter((s) => s.state !== "past" && s.state !== "stopped").map((s) => s.sessionId));
+  const all = res.filter((s) => !ids.has(s.sessionId));
+  return only ? [all.filter((s) => bayOf(s) === only), all.filter((s) => bayOf(s) !== only)] : [all, []];
+}
+
+function EarlierSection({ list, row, start = 0, sel, more }) {
+  const [q, setQ] = useState("");
+  const [olderOpen, flipOlder] = useEarlierOpen();
+  const [shown, setShown] = useState(10);
+  const found = useHistorySearch(q, BAY.only);
+  if (!list.length && !q) return null;
+  const t0 = startOfDay();
+  const today = list.filter((s) => rowAt(s) >= t0), older = list.filter((s) => rowAt(s) < t0);
+  let qn = start;
+  const rows = (l, clock) => l.map((s) => row(s, QWERTY[qn++], clock && rowAt(s) < t0 ? hhmm(rowAt(s)) : ""));
+  const byDay = (l) => {
+    const out = [];
+    let last = "";
+    for (const s of l) { const d = dayHead(rowAt(s)); if (d !== last) out.push(html`<div class="eday" key=${`d${d}`}>${d}</div>`); last = d; out.push(...rows([s], true)); }
+    return out;
+  };
+  const visible = older.slice(0, shown), selOlder = !olderOpen && older.find((s) => s.sessionId === sel?.sessionId);
+  const canMore = older.length > shown || !!more;
+  return html`<section class="earlier">
+    <h2 class="grp earlierh"><b>Earlier</b><span class="c">${today.length ? `${today.length} today` : ""}</span></h2>
+    <label class="efilter">${ICON.search}<input value=${q} placeholder="Search earlier sessions" aria-label="Search earlier sessions" autocomplete="off" spellcheck="false"
+      onInput=${(e) => setQ(e.target.value)} onKeyDown=${(e) => e.key === "Escape" && q && (e.stopPropagation(), setQ(""))} /></label>
+    ${found ? html`
+      ${found[0].length + found[1].length === 0 && html`<p class="enone">No earlier session matches “${q.trim()}”.</p>`}
+      ${byDay(found[0])}
+      ${found[1].length > 0 && html`<div class="eday">In other bays</div>${rows(found[1], true)}`}`
+    : html`
+      ${rows(today)}
+      ${selOlder && rows([selOlder], true)}
+      ${older.length > 0 && html`<button class="efold" aria-expanded=${olderOpen} onClick=${flipOlder}>${ICON.down}<b>Older</b><span class="c">${older.length}${more ? "+" : ""}</span></button>
+        ${olderOpen && html`${byDay(visible)}${canMore && html`<button class="btn quiet emore" onClick=${() => (older.length > shown ? setShown(shown + 20) : more())}>${ICON.down}Show more</button>`}`}`}`}
+  </section>`;
+}
+
+function BoardView({ live, hist, more, only, sel, cursor, say, index }) {
   const [open, setOpen] = useState(() => new Set());
   const toggle = (sid) => setOpen((o) => { const n = new Set(o); n.has(sid) ? n.delete(sid) : n.add(sid); return n; });
   useEffect(() => {
@@ -1079,54 +1245,32 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index, onPast }) 
   }, [cursor]);
   const by = bayLists(live, hist, only);
   let qn = 0;
-  const letter = { waiting: ["N", "needs"], working: ["W", "working"], cut: ["S", "stopped"], parked: ["P", "parked"] };
   const pinnedIn = { waiting: by.pinned.filter(waiting).length, working: by.pinned.filter((s) => s.state === "working").length };
-  const counts = GROUPS.filter(([k]) => k in letter).map(([k]) => [k, by[k].length + (pinnedIn[k] || 0)]).filter(([, n]) => n > 0);
+  const n = (k) => by[k].length + (pinnedIn[k] || 0);
+  const counts = [["waiting", "n", "waiting"], ["working", "w", "working"], ["cut", "f", "stopped"], ["parked", "", "parked"]].filter(([k]) => n(k) > 0);
   const path = only && (live || []).find((s) => bayOf(s) === only);
-  const parkable = only ? (live || []).filter((s) => bayOf(s) === only && !s.parked && s.kind !== "hub" && s.state !== "stopped" && s.state !== "past") : [];
-  const setParked = (list, parked) => Promise.allSettled(list.map((s) => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { parked } })))
-    .then((r) => ({ done: list.filter((_, i) => r[i].status === "fulfilled"), bad: r.filter((x) => x.status === "rejected").length }));
-  const byPark = only ? (bayMem(only).parked || []).map((sid) => (live || []).find((s) => s.sessionId === sid && s.parked)).filter(Boolean) : [];
-  const unparkAll = async (bay = only, list = byPark) => {
-    const { done, bad } = await setParked(list, false);
-    rememberBay(bay, { parked: [] });
-    say(bad ? `Couldn't unpark ${bad} of ${list.length} in ${bay}.` : `Unparked ${done.length} in ${bay}.`);
-  };
-  const parkAll = async () => {
-    const bay = only, { done, bad } = await setParked(parkable, true);
-    rememberBay(bay, { parked: done.map((s) => s.sessionId) });
-    say(bad ? `Couldn't park ${bad} of ${parkable.length} in ${bay}.` : `Parked ${done.length} in ${bay}.`, { undo: () => unparkAll(bay, done) });
-  };
-  const [earlierAll, setEarlierAll] = useState(false);
-  const [earlierOpen, flipEarlier] = useEarlierOpen();
-  const recentEarlier = by.earlier.filter((s) => Date.now() - (Date.parse(s.updated || s.startedAt || 0) || 0) < 2 * 86400000).slice(0, 12);
-  const shownEarlier = earlierAll ? by.earlier : recentEarlier.length ? recentEarlier : by.earlier.slice(0, 12);
   const pages = index && [...new Map((live || []).filter((s) => (only ? bayOf(s) === only : !homeless(s))).flatMap((s) => (s.shown || []).map((p) => [pkey(p), { p, s }]))).values()]
     .sort((a, b) => (Date.parse(b.p.updated || b.p.shown) || 0) - (Date.parse(a.p.updated || a.p.shown) || 0));
+  const row = (s, qk, when) => html`<${BoardRow} key=${s.sessionId} s=${s} open=${open.has(s.sessionId)} toggle=${toggle} sel=${sel} cursor=${cursor} say=${say} qk=${qk} when=${when} />`;
+  const busy = GROUPS.filter(([k]) => k !== "earlier" && by[k].length);
   return html`
     <div class="bview ${index ? "withindex" : ""}">
       <div class="bmain" id="bscroll">
         <div class="bhead">
-          <div class="b1"><h1>${only || "Every bay"}</h1>${path && html`<span class="w" title=${tilde(baseDir(path.cwd))}>${clipPath(tilde(baseDir(path.cwd)))}</span>`}
-            <span class="r">${byPark.length > 0 && html`<button class="kb parkall" onClick=${() => unparkAll()} title=${`Unpark the ${byPark.length} your last Park all here set aside`}>Unpark all</button>`}${parkable.length > 0 && html`<button class="kb parkall" onClick=${parkAll} title=${`Park every session in ${only}; each comes back when it needs you`}>Park all</button>`}<${BacklogLine} only=${only} /><button class="kb keep" onClick=${() => NEW_SHELL()} title="A plain login shell, no Claude">Shell</button><button class="kb" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts=${ariaKeys("palette")} title=${tip("palette", "Search and commands")}>Search</button></span></div>
-          <div class="b2">${counts.length ? counts.map(([k, n]) => html`<span class="cnt"><span class="sb mini ${letter[k][1]}" aria-hidden="true">${letter[k][0]}</span>${n} ${{ waiting: html`waiting<span class="wide"> on you</span>`, working: "working", cut: html`stopped<span class="wide"> unexpectedly</span>`, parked: "parked" }[k]}</span>`) : html`<span class="cnt">Nothing running${only ? ` in ${only}` : ""}.</span>`}</div>
+          <h1>${only || "Every bay"}</h1>${path && html`<span class="w" title=${tilde(baseDir(path.cwd))}>${clipPath(tilde(baseDir(path.cwd)))}</span>`}
+          <span class="bcs">${counts.map(([k, c, w]) => html`<span class="bc ${c}">${n(k)} ${w}</span>`)}</span>
+          <span class="r"><button class="btn quiet" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts=${ariaKeys("palette")} title=${tip("palette", "Search and commands")}>${ICON.search}<span class="wide">Search</span></button>
+            <${BayMore} only=${only} live=${live} say=${say} />
+            <button class="btn primary" onClick=${() => NEW_SESSION()} aria-keyshortcuts=${ariaKeys("new")} title=${tip("new")}>${ICON.plus}New session</button></span>
         </div>
-        <div class="bcols" aria-hidden="true"><span></span><span>Session</span><span>Status, and what it last said or is doing</span><span>Context</span><span>Steps</span><span>Running, made</span><span>Since</span><span></span></div>
-        ${GROUPS.map(([k, title]) => {
-          const isEarlier = k === "earlier";
-          if (isEarlier && !by.earlier.length) return html`<${ShellGroup} />`;
-          if (!isEarlier && !by[k].length) return null;
-          const list = !isEarlier ? by[k] : earlierOpen ? shownEarlier : [];
-          return html`${isEarlier && html`<${ShellGroup} />`}<section class="bgrp ${k}">
-            ${isEarlier
-              ? html`<${EarlierHead} open=${earlierOpen} toggle=${flipEarlier} n=${by.earlier.length} note=${earlierOpen && (earlierAll ? "all loaded" : recentEarlier.length ? "today and yesterday" : "")} />`
-              : html`<h2 class="grp"><b>${title}</b><span class="c">${list.length}</span>${k === "cut" && html`<button class="kb seenall" title="Move all of these to Earlier: you know why they stopped and have decided what to do" onClick=${() => dismissEnded(list, say)}>Dismiss all</button>`}</h2>`}
-            ${list.map((s) => html`<${BoardRow} key=${s.sessionId} s=${s} open=${open.has(s.sessionId)} toggle=${toggle} sel=${sel} cursor=${cursor} say=${say} qk=${QWERTY[qn++]} />`)}
-            ${isEarlier && earlierOpen && (!earlierAll && by.earlier.length > shownEarlier.length
-              ? html`<button class="kb bmore" onClick=${() => setEarlierAll(true)}>Show more, ${by.earlier.length - shownEarlier.length}</button>`
-              : earlierAll && more && html`<button class="kb bmore" onClick=${more}>Show more</button>`)}
-          </section>`;
-        })}
+        <div class="bcols" aria-hidden="true"><span></span><span>Session</span><span>Status</span><span>Since</span></div>
+        ${busy.map(([k, title]) => html`<section class="bgrp ${k}">
+          <${GroupHead} k=${k} title=${title} n=${by[k].length}>${k === "cut" && html`<button class="btn sm quiet seenall" title="Move all of these to Earlier: you know why they stopped and have decided what to do" onClick=${() => dismissEnded(by[k], say)}>Dismiss all</button>`}<//>
+          ${by[k].map((s) => row(s, QWERTY[qn++]))}
+        </section>`)}
+        <${ShellGroup} />
+        <${EarlierSection} list=${by.earlier} row=${row} start=${qn} sel=${sel} more=${more} />
+        ${!busy.length && !by.earlier.length && html`<p class="calm">Nothing running${only ? ` in ${only}` : ""}. <button class="vlink" onClick=${() => NEW_SESSION()}>Start a session</button></p>`}
       </div>
       ${index && html`<aside class="pindex" aria-label="Pages">
         <div class="ph"><b>Pages</b><span>${pages.length ? `${plural(pages.length, "page")}, newest first` : "No pages yet"}</span></div>
@@ -1144,32 +1288,19 @@ const useEarlierOpen = () => {
   return [open, () => { store("atc.earlier", !open); set(!open); }];
 };
 
-function EarlierHead({ open, toggle, n, note }) {
-  return html`<h2 class="grp earlierh"><button aria-expanded=${open} onClick=${toggle}><span class="chev" aria-hidden="true"></span><b>Earlier</b><span class="c">${n}</span></button>${note && html`<span class="r">${note}</span>`}</h2>`;
-}
-
-function RailList({ live, hist, only, sel, cursor, shell, say }) {
+function RailList({ live, hist, more, only, sel, cursor, shell, say }) {
   const by = bayLists(live, hist, only);
-  const active = [...by.waiting, ...by.working];
-  const [earlierOpen, flipEarlier] = useEarlierOpen();
-  const earlier = earlierOpen ? by.earlier.slice(0, 8) : by.earlier.filter((s) => s.sessionId === sel?.sessionId), np = by.pinned.length;
+  let qn = 0;
+  const row = (s, qk, when) => html`<${RailRow} key=${s.sessionId} s=${s} sel=${sel} say=${say} cursor=${cursor} qk=${qk} when=${when} />`;
+  const busy = GROUPS.filter(([k]) => k !== "earlier" && by[k].length);
   return html`<div class="rail" id="rscroll">
-    ${np > 0 && html`<h2 class="grp"><b>Pinned</b><span class="c">${np}</span></h2>
-      ${by.pinned.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} say=${say} cursor=${cursor} qk=${QWERTY[i]} />`)}
-      ${active.length > 0 && html`<h2 class="grp"><b>Now</b><span class="c">${active.length}</span></h2>`}`}
-    ${active.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} say=${say} cursor=${cursor} qk=${QWERTY[np + i]} />`)}
-    ${by.cut.length > 0 && html`<h2 class="grp cut"><b>Stopped unexpectedly</b><span class="c">${by.cut.length}</span></h2>
-      ${by.cut.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} say=${say} cursor=${cursor} qk=${QWERTY[np + active.length + i]} />`)}`}
-    ${by.parked.length > 0 && html`<h2 class="grp"><b>Parked</b><span class="c">${by.parked.length}</span><span class="r">to resume later</span></h2>
-      ${by.parked.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} say=${say} cursor=${cursor} qk=${QWERTY[np + active.length + by.cut.length + i]} />`)}`}
+    ${busy.map(([k, title]) => html`<${GroupHead} k=${k} title=${title} n=${by[k].length}>${k === "parked" && html`<span class="r">to resume later</span>`}<//>
+      ${by[k].map((s) => row(s, QWERTY[qn++]))}`)}
     <${ShellGroup} cur=${shell} />
-    ${by.earlier.length > 0 && html`<${EarlierHead} open=${earlierOpen} toggle=${flipEarlier} n=${by.earlier.length} />
-      ${earlier.map((s, i) => html`<${BoardRow} key=${s.sessionId} s=${s} rail sel=${sel} say=${say} cursor=${cursor} qk=${QWERTY[np + active.length + by.cut.length + by.parked.length + i]} />`)}`}
-    ${!np && !active.length && !by.cut.length && !by.parked.length && !by.earlier.length && html`<p class="calm">Nothing here yet.</p>`}
+    <${EarlierSection} list=${by.earlier} row=${row} start=${qn} sel=${sel} more=${more} />
+    ${!busy.length && !by.earlier.length && html`<p class="calm">Nothing here yet. <button class="vlink" onClick=${() => NEW_SESSION()}>Start a session</button></p>`}
   </div>`;
 }
-
-
 
 const byStart = (a, b) => (Date.parse(a.startedAt || 0) || 0) - (Date.parse(b.startedAt || 0) || 0) || a.sessionId.localeCompare(b.sessionId);
 const pinnedOf = (list) => (list || []).filter((x) => x.pinned && !away(x)).sort(byStart);
@@ -2035,6 +2166,10 @@ const ICON_PATHS = {
   chart: '<path d="M2.5 13.5h11M4.5 11V8M8 11V4.5M11.5 11V7"/>',
   pr: '<circle cx="4" cy="4" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><path d="M4 5.6v4.8M12 10.4V6.5a2 2 0 0 0-2-2H7.5m0 0 1.6-1.6M7.5 4.5l1.6 1.6"/>',
   pulse: '<path d="M2 8h2.7l1.6-4 2.7 8 1.6-4H14"/>',
+  term: '<rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="m5 6.5 2 1.5-2 1.5M8.5 10h3"/>',
+  zen: '<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/>',
+  file: '<path d="M4 2h5.5L12 4.5V14H4z"/>',
+  folder: '<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>',
 };
 const svgIcon = (d) => html`<svg class="i" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" dangerouslySetInnerHTML=${{ __html: d }}></svg>`;
 const ICON = Object.fromEntries(Object.entries(ICON_PATHS).map(([k, d]) => [k, svgIcon(d)]));
@@ -2078,7 +2213,7 @@ function CardReplies({ s }) {
 
 function useRowEvents(s, tap, swipes) {
   const press = useRef({ t: 0, fired: false, x: 0, y: 0 });
-  const menu = (e) => { e?.preventDefault(); e?.stopPropagation(); QUICK(s, e?.currentTarget?.getBoundingClientRect()); };
+  const menu = (e) => { e?.preventDefault(); e?.stopPropagation(); QUICK(s, e?.clientX ? { left: e.clientX, top: e.clientY, bottom: e.clientY } : e?.currentTarget?.getBoundingClientRect()); };
   const hover = useRef(0);
   const swipe = useRef(null);
   const swipeAct = (dx) => dx > 0
@@ -2193,6 +2328,13 @@ function ProjectTag({ path, full }) {
     onClick=${(e) => { e.stopPropagation(); BAY.set(p.name); }}>${p.name}</span>${full && p.rest && html`<span class="rest">${p.rest}</span>`}</span>`;
 }
 
+const resumeSession = (s) => api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" });
+const openTerm = (s, tries = 30) => {
+  if (!SESSION_API || SESSION_API.s.sessionId !== s.sessionId) go(keyOf(s));
+  const t = () => (SESSION_API?.s.sessionId === s.sessionId ? SESSION_API.canAttach && SESSION_API.mode("term") : tries-- > 0 && setTimeout(t, 100));
+  t();
+};
+
 function sessionActions(s, say, { rename, open, after } = {}) {
   const run = (fn, done) => async () => {
     try {
@@ -2205,48 +2347,51 @@ function sessionActions(s, say, { rename, open, after } = {}) {
   };
   const patch = (body) => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body });
   const items = [];
-  if (open) items.push({ label: "Open", run: () => go(keyOf(s)) });
-  items.push({ label: "Rename", run: rename || (() => ask({ title: "Rename session", input: { value: s.title, placeholder: "Session name" }, ok: "Rename", busy: "Renaming…",
+  if (open) items.push({ label: "Open", icon: "fwd", key: "open", run: () => go(keyOf(s)) });
+  if (open && s.attachable) items.push({ label: "Open the terminal", icon: "term", key: "term", run: () => openTerm(s) });
+  items.push("-", { label: "Rename…", icon: "file", run: rename || (() => ask({ title: "Rename session", input: { value: s.title, placeholder: "Session name" }, ok: "Rename", busy: "Renaming…",
     run: (name) => name !== s.title && patch({ name }) }).then(after)) });
-  items.push({ label: s.pinned ? "Unpin" : "Pin", run: run(() => patch({ pinned: !s.pinned }), () => say(s.pinned ? "Unpinned." : "Pinned.")) });
-  items.push({ label: s.parked ? "Unpark" : "Park", run: run(() => patch({ parked: !s.parked }), () => say(s.parked ? "Unparked." : "Parked.", { undo: () => patch({ parked: !!s.parked }) })) });
-  items.push({ label: "Put on the backlog", title: "Stop it and take it off the list; its backlog item resumes the same conversation. A working session stops when its turn ends", run: () => putAside(s, say).then(() => after && after()) });
-  if (s.agent && s.state !== "past") items.push({ label: "Start over", title: "It writes a handover note and a new conversation starts from it", run: run(() => agentApi(s.agent, "reset"), () => say(`${s.title} is starting over.`)) });
-  if (s.attachable) items.push({ label: "Stop", run: run(() => api(`/api/sessions/${s.id}/stop?device=${encodeURIComponent(DEVICE)}`, { method: "POST" }), () => say("Stopped. Resume it any time.")) });
+  items.push({ label: s.pinned ? "Unpin" : "Pin to the top", icon: "pin", run: run(() => patch({ pinned: !s.pinned }), () => say(s.pinned ? "Unpinned." : "Pinned.")) });
+  items.push("-", { label: s.parked ? "Unpark" : "Park", icon: "park", sub: s.parked ? "back in the list" : "out of the list until it needs you", run: run(() => patch({ parked: !s.parked }), () => say(s.parked ? "Unparked." : "Parked.", { undo: () => patch({ parked: !!s.parked }) })) });
   if (!s.attachable && s.kind !== "interactive")
-    items.push({ label: "Resume", run: run(() => api(`/api/sessions/${s.sessionId}/resume`, { method: "POST" }), (r) => go(r.id)) });
+    items.push({ label: "Resume", icon: "play", run: run(() => resumeSession(s), (r) => go(r.id)) });
+  items.push({ label: "Put on the backlog", icon: "inbox", title: "Stop it and take it off the list; its backlog item resumes the same conversation. A working session stops when its turn ends", run: () => putAside(s, say).then(() => after && after()) });
+  if (s.agent && s.state !== "past") items.push({ label: "Start over", icon: "refresh", title: "It writes a handover note and a new conversation starts from it", run: run(() => agentApi(s.agent, "reset"), () => say(`${s.title} is starting over.`)) });
+  items.push("-");
+  if (s.attachable) items.push({ label: "Stop", icon: "stop", run: run(() => api(`/api/sessions/${s.id}/stop?device=${encodeURIComponent(DEVICE)}`, { method: "POST" }), () => say("Stopped. Resume it any time.")) });
   if (s.id)
-    items.push({ label: "Delete", danger: true, run: () => ask({ title: `Delete “${s.title || "Untitled"}”?`, body: "Its conversation stays in history, where you can resume it.",
+    items.push({ label: "Delete…", icon: "x", danger: true, run: () => ask({ title: `Delete “${s.title || "Untitled"}”?`, body: "Its conversation stays in history, where you can resume it.",
       ok: "Delete", busy: "Deleting…", danger: true, run: () => api(`/api/sessions/${s.id}`, { method: "DELETE" }) })
       .then((r) => { r && [s.id, s.sessionId].some((k) => location.hash.startsWith(`#/s/${k}`)) && location.replace("#/"); after && after(); }) });
+  items.push("-");
   return items;
 }
 
 function QuickMenu({ quick, say, onClose }) {
-  useEffect(() => {
-    const f = (e) => e.key === "Escape" && onClose();
-    addEventListener("keydown", f);
-    return () => removeEventListener("keydown", f);
-  }, []);
   const { s, rect } = quick;
+  const sheet = usePhone() || touch || !rect;
   const items = sessionActions(s, say, { open: true });
   const box = useRef();
+  const pick = (it) => { onClose(); it.run(); };
+  useMenuKeys(box, true, onClose);
+  useEffect(() => {
+    const rows = document.querySelectorAll(`[data-sid="${CSS.escape(s.sessionId)}"]`);
+    rows.forEach((el) => el.classList.add("ctx"));
+    return () => rows.forEach((el) => el.classList.remove("ctx"));
+  }, []);
   useLayoutEffect(() => {
     const el = box.current;
-    if (touch || !rect || !el) return;
+    if (sheet || !el) return;
     const h = el.offsetHeight, below = rect.bottom + 4, above = rect.top - 4 - h;
     el.style.top = `${Math.max(8, below + h <= innerHeight - 8 ? below : above >= 8 ? above : innerHeight - 8 - h)}px`;
     el.style.left = `${Math.max(8, Math.min(rect.left, innerWidth - 8 - el.offsetWidth))}px`;
   }, [rect]);
-  const style = touch || !rect ? "" : "position: fixed; max-height: calc(100vh - 16px); overflow-y: auto";
-  return html`
-    <div class="veil quick ${touch ? "sheetish" : ""}" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
-      <div class="sheet qmenu" ref=${box} style=${style}>
-        <div class="qtitle">${s.title || "Untitled"}</div>
-        ${items.map((it) => html`<button class="btn ${it.danger ? "danger" : ""}" onClick=${() => { onClose(); it.run(); }}>${it.label}</button>`)}
-      </div>
-    </div>
-  `;
+  if (sheet) return html`<${MenuSheet} aria=${`Actions for ${s.title || "Untitled"}`} onClose=${onClose}
+    head=${html`<div class="mhead"><${StateBlock} s=${s} /><span class="tx"><b lang=${langOf(s.title)}>${s.title || "Untitled"}</b><small>${[s.host, s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch, ago(s)].filter(Boolean).join(" · ")}</small></span></div>`}
+    foot=${s.state !== "past" && s.state !== "stopped" && html`<p class="mtip">In the list, swipe right to park and left to reply.</p>`}>
+    <div ref=${box}><${MenuItems} items=${items} onPick=${pick} sheet /></div><//>`;
+  return html`<div class="quick"><div ref=${box} class="menu" role="menu" aria-label=${`Actions for ${s.title || "Untitled"}`} style="position: fixed; max-height: calc(100vh - 16px); overflow-y: auto">
+    <${MenuItems} items=${items} onPick=${pick} /></div></div>`;
 }
 
 const PANE = "atc.pane", SESSION_PAGE = "atc.sessionPage";
@@ -2428,10 +2573,11 @@ function Session({ s, say, live, panes, togglePane, back = backHome }) {
           ${!phoneNow && (mode === "chat" || sideBySide) && html`<button class="kb" aria-keyshortcuts="z" title=${tip("zen", "Only the words, nothing around them")} onClick=${() => TX_API?.zen()}>Zen</button>`}
           <div class="more"><${Menu} cls="kb" busy=${busy} aria="Session menu" label=${phoneNow ? ICON.more : "More"}
             items=${[
-              callSession(s, say),
-              ...(onPage && !sideBySide ? [{ label: "Zen", run: () => setPageZen(true) }] : []),
-              ...(mode === "chat" || sideBySide ? [{ label: "Zen", run: () => TX_API?.zen() }, { label: "Find in the transcript", run: () => TX_API?.find() }, { label: "Contents", run: () => TX_API?.contents() }, { label: "Outline, story or everything", run: () => TX_API?.level() }, { label: "Files, commits and deploys", run: () => TX_API?.results() }] : []),
-              ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) }), { label: "State and outputs", run: openState }, { label: "Usage", run: () => setShowUse(true) }, ...(s.agent ? [{ label: "Agent details", run: () => openAgent(s.agent, "details") }] : [])]} /></div>
+              ...(onPage && !sideBySide ? [{ label: "Zen", icon: "zen", key: "zen", run: () => setPageZen(true) }] : []),
+              ...(mode === "chat" || sideBySide ? [{ label: "Zen", icon: "zen", key: "zen", run: () => TX_API?.zen() }, { label: "Find in the transcript", icon: "search", key: "find", run: () => TX_API?.find() }, { label: "Contents", icon: "list", key: "contents", run: () => TX_API?.contents() }, { label: "Outline, story or everything", icon: "doc", key: "level", run: () => TX_API?.level() }] : []),
+              "-", { icon: "phone", ...callSession(s, say) }, ...(mode === "chat" || sideBySide ? [{ label: "Files, commits and deploys", icon: "folder", run: () => TX_API?.results() }] : []),
+              { label: "State and outputs", icon: "layout", key: "state", run: openState }, { label: "Usage", icon: "chart", run: () => setShowUse(true) }, ...(s.agent ? [{ label: "Agent details", icon: "people", run: () => openAgent(s.agent, "details") }] : []),
+              ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) })]} /></div>
         </span>
       </div>
       <div class="l2 items">
@@ -2588,40 +2734,68 @@ function Unattachable(s, resume, busy, setMode) {
   return html`<div><p class="h">${s.state === "stopped" ? "Stopped" : "Not running"}</p>${s.state === "stopped" && s.ended?.text && s.ended.cause !== "unknown" && html`<p>${s.ended.text}</p>`}<p>Resume it to pick up where it left off. The whole conversation comes back.</p><div class="row"><button class="btn primary" disabled=${busy} onClick=${resume}>${busy ? "Resuming…" : "Resume"}</button></div></div>`;
 }
 
-function Menu({ busy, items, render, label = ICON.more, cls = "icon", aria = "More actions", width = 190, left, up, sheetCls = "" }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(), sheet = useRef();
-  const bottom = usePhone() && !render;
+const menuList = (items) => {
+  const list = items.filter(Boolean), out = [];
+  const bad = list.filter((it) => it !== "-" && it.danger);
+  for (const it of [...list.filter((it) => !bad.includes(it)), ...(bad.length ? ["-", ...bad] : [])])
+    if (it !== "-" || (out.length && out.at(-1) !== "-")) out.push(it);
+  while (out.at(-1) === "-") out.pop();
+  return out;
+};
+
+function MenuItems({ items, busy, onPick, sheet }) {
+  return menuList(items).map((it) => it === "-" ? html`<hr class="msep" />` : html`
+    <button class="mitem ${it.danger ? "danger" : ""} ${it.on ? "on" : ""} ${it.cls || ""}" role="menuitem" title=${it.title} disabled=${busy} onClick=${() => onPick(it)}>
+      <span class="ic" aria-hidden="true">${it.icon && ICON[it.icon]}</span><span class="lb">${it.label}</span>${!sheet && it.sub && html`<span class="sub">${it.sub}</span>`}${!sheet && it.key && keyFor(it.key) && html`<kbd aria-hidden="true">${keyFor(it.key)}</kbd>`}
+    </button>`);
+}
+
+function useMenuKeys(box, open, close) {
   useEffect(() => {
-    if (!open || !bottom) return;
-    const k = (e) => e.key === "Escape" && (e.stopPropagation(), setOpen(false));
+    if (!open) return;
+    const back = document.activeElement;
+    const all = () => [...(box.current?.querySelectorAll(".mitem:not(:disabled)") || [])];
+    if (!touch) all()[0]?.focus({ preventScroll: true });
+    const k = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); close(); back?.focus?.({ preventScroll: true }); return; }
+      if (e.key === "Tab") return close();
+      const d = { ArrowDown: 1, ArrowUp: -1, j: 1, k: -1 }[e.key], l = all();
+      if (!d || !l.length) return;
+      e.preventDefault(); e.stopPropagation();
+      l[(l.indexOf(document.activeElement) + d + l.length) % l.length].focus();
+    };
+    const out = (e) => !box.current?.parentElement?.contains(e.target) && close();
     addEventListener("keydown", k, true);
-    return () => removeEventListener("keydown", k, true);
-  }, [open, bottom]);
-  const item = (it) => {
-    const b = html`<button class="btn ${it.danger ? "danger" : ""} ${it.cls || ""}" title=${it.title} disabled=${busy} onClick=${() => { setOpen(false); it.run(); }}>${it.label}</button>`;
-    return it.side ? html`<div class="mrow">${b}${it.side}</div>` : b;
-  };
+    addEventListener("pointerdown", out);
+    return () => { removeEventListener("keydown", k, true); removeEventListener("pointerdown", out); };
+  }, [open]);
+}
+
+function MenuSheet({ aria, head, foot, onClose, children }) {
+  return html`<div class="veil mveil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}>
+    <div class="msheet" role="menu" aria-label=${aria}><i class="grab" aria-hidden="true"></i>${head}${children}${foot}</div></div>`;
+}
+
+function Menu({ busy, items, label = ICON.more, cls = "icon", aria = "More actions", width = 200, left, up, title }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef();
+  const bottom = usePhone();
+  const close = () => setOpen(false);
+  const pick = (it) => { close(); it.run(); };
+  useMenuKeys(box, open, close);
   useLayoutEffect(() => {
-    const el = sheet.current;
-    if (!el) return;
+    const el = box.current;
+    if (!el || bottom) return;
     const r = el.getBoundingClientRect(), shift = r.left < 8 ? 8 - r.left : r.right > innerWidth - 8 ? innerWidth - 8 - r.right : 0;
     if (shift) el.style.transform = `translateX(${shift}px)`;
   }, [open]);
-  useEffect(() => {
-    if (!open) return;
-    const f = (e) => !ref.current?.contains(e.target) && setOpen(false);
-    addEventListener("pointerdown", f);
-    return () => removeEventListener("pointerdown", f);
-  }, [open]);
   return html`
-    <div ref=${ref} style="position: relative">
-      <button class=${cls} aria-label=${aria} aria-expanded=${open} onClick=${() => setOpen(!open)}>${label}</button>
-      ${open && bottom && html`<div class="veil mveil" onPointerDown=${(e) => e.target === e.currentTarget && setOpen(false)}>
-        <div class="msheet ${sheetCls}" role="menu" aria-label=${aria}><i class="grab" aria-hidden="true"></i>${items.map(item)}</div></div>`}
+    <div class="mwrap">
+      <button class=${cls} aria-label=${aria} title=${title} aria-haspopup="menu" aria-expanded=${open} onClick=${() => setOpen(!open)}>${label}</button>
+      ${open && bottom && html`<${MenuSheet} aria=${aria} onClose=${close}><div ref=${box}><${MenuItems} items=${items} busy=${busy} onPick=${pick} sheet /></div><//>`}
       ${open && !bottom && html`
-        <div ref=${sheet} class="sheet ${sheetCls}" style="position: absolute; ${left ? "left" : "right"}: 0; ${up ? "bottom" : "top"}: calc(100% + 6px); ${typeof width !== "number" ? `width: ${width}` : render ? `width: min(${width}px, calc(100vw - 16px))` : `width: max-content; min-width: min(${width}px, calc(100vw - 16px)); max-width: calc(100vw - 16px)`}; padding: 8px; display: flex; flex-direction: column; gap: 6px; z-index: 10">
-          ${render ? render(() => setOpen(false)) : items.map(item)}
+        <div ref=${box} class="menu" role="menu" aria-label=${aria} style="${left ? "left" : "right"}: 0; ${up ? "bottom" : "top"}: calc(100% + 6px); ${typeof width === "number" ? `min-width: min(${width}px, calc(100vw - 16px))` : `width: ${width}`}">
+          <${MenuItems} items=${items} busy=${busy} onPick=${pick} />
         </div>`}
     </div>
   `;
@@ -3242,20 +3416,6 @@ const shares = (use) => {
     .filter((x) => x.cost != null && x.w);
 };
 
-function UsageFoot({ limits, onOpen }) {
-  useNow(60000);
-  const ws = (limits?.windows || []).filter((w) => SHORT[w.key]);
-  const sess = ws.find((w) => w.key === "session");
-  return html`
-    <button class="usefoot" onClick=${onOpen} title="Usage and limits">
-      ${ws.length
-        ? ws.map((w) => html`<span class="mini"><span class="k">${SHORT[w.key]}</span><${Meter} p=${w.percent} /><span class="v">${Math.round(w.percent)}%</span></span>`)
-        : html`<span class="k">Usage</span>`}
-      <span class="grow"></span>
-      ${sess && Date.parse(sess.resetsAt) > Date.now() && html`<span class="r">resets in ${duration((Date.parse(sess.resetsAt) - Date.now()) / 1000)}</span>`}
-    </button>`;
-}
-
 function Dialogs() {
   const [queue, setQueue] = useState([]);
   useEffect(() => {
@@ -3594,7 +3754,6 @@ const shortLoad = (l) => [l.mem > 0 && gb(l.mem), l.cpu > 0 && `${l.cpu}% CPU`].
 const hotLoad = (l) => l.mem >= 4 * 2 ** 30 || l.cpu >= 300;
 const LoadTag = ({ s }) => s.load ? html`<span class="load ${hotLoad(s.load) ? "hot" : ""}" title=${`This session and its processes: ${[s.load.mem > 0 && gb(s.load.mem), s.load.cpu > 0 && `${s.load.cpu}% of a core`].filter(Boolean).join(", ")}`}>${shortLoad(s.load)}</span>` : null;
 
-const ProfileTag = ({ s }) => html`<span class="prof" title=${`Runs on the ${s.profile} Claude account`}>${s.profile}</span>`;
 
 const RES_RANGES = [["1h", 1], ["6h", 6], ["24h", 24], ["7d", 168]];
 const RES_SERIES = 5;
@@ -5322,11 +5481,6 @@ const backlogCounts = (items, only) => {
   for (const it of items || []) if (!only || project(it.dir).name === only) n[itemStage(it)] = (n[itemStage(it)] || 0) + 1;
   return STAGES.filter(([k]) => k !== "done" && n[k]).map(([k]) => `${n[k]} ${k}`).join(" · ");
 };
-
-function BacklogLine({ only }) {
-  const counts = backlogCounts(useBacklog(), only);
-  return html`<button class="blline" onClick=${() => (location.hash = BACKLOG)} title="Open the backlog"><span class="mi">${ICON.list}</span><span class="t">Backlog${counts ? `: ${counts}` : ""}</span></button>`;
-}
 
 const BK_FILTERS = [
   ["open", "Open", (st) => st !== "done"],
@@ -8362,8 +8516,8 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
   action("Agents", "", "standing agents and what they keep", () => (location.hash = AGENTS_ROUTE), "tracker standing");
   if (inBrowser) action("Open in browser", "", "this screen in the phone's browser instead of the app", () => inBrowser(location.href), "chrome external web");
   if (PAL_TOGGLE) {
-    action("pal", "shift P", "pal's panel: search, palettes, live views", PAL_TOGGLE, "launcher");
-    action("pal bar", "shift B", "show or hide pal's bar on this device", () => window.pal.bar(), "strip top");
+    add("pal", "pal's panel", { key: "a:pal", hint: "shift P", sub: "search, palettes, live views", kw: "pal launcher", run: run("a:pal", PAL_TOGGLE) });
+    add("pal", "pal's bar", { key: "a:pal bar", hint: "shift B", sub: "show or hide it on this device", kw: "pal strip top", run: run("a:pal bar", () => window.pal.bar()) });
   }
   action("Settings", keyFor("settings"), "appearance, reading, notifications", () => (location.hash = SETTINGS), "preferences options theme");
   action("Keys", keyFor("keys"), "every key", actions.help, "help shortcuts keyboard");
@@ -8396,6 +8550,7 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
       ["Agents", items.filter((it) => it.group === "Agents" && !recent.includes(it))],
       ["This session", items.filter((it) => it.group === "This session")],
       ["Actions", items.filter((it) => it.group === "Actions").slice(0, 5), items.filter((it) => it.group === "Actions").length - 5],
+      ["pal", items.filter((it) => it.group === "pal")],
     ].filter(([, l]) => l.length);
   } else {
     const by = {};

@@ -68,12 +68,10 @@ const stub = (p) => p.route('**/api/**', (r) => r.request().method() === 'GET' ?
   await stub(q);
   await q.goto(base + '/');
   await q.waitForTimeout(3000);
-  await q.locator('.bview .brow').first().tap();
-  await q.waitForTimeout(300);
-  ok(await q.isVisible('.bexp'), 'phone: a tap opens the row');
-  await q.screenshot({ path: `${OUT}s4-open-400-light.png` });
-  await q.locator('.bexp .btn', { hasText: 'Open' }).first().tap();
+  ok(await q.isVisible('.phomev .ptabs') && !(await q.isVisible('.pfabs')), 'phone: bays are tabs, no floating buttons');
+  await q.screenshot({ path: `${OUT}s4-home-400-light.png` });
+  await q.locator('.rail .brow').first().tap();
   await q.waitForTimeout(800);
-  ok(await q.evaluate(() => location.hash.startsWith('#/s/')), 'phone: Open goes to the session');
+  ok(await q.evaluate(() => location.hash.startsWith('#/s/')), 'phone: a tap opens the session');
   await b.close();
 })();

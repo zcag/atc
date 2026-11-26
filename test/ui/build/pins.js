@@ -49,7 +49,7 @@ const fake = (list) => {
       await p.waitForTimeout(300);
       await p.locator('.hd .more > div > button').click();
       await p.waitForTimeout(200);
-      const m = await p.locator('.hd .more .sheet').evaluate((s) => { const r = s.getBoundingClientRect(); return { fits: r.left >= 0 && r.right <= innerWidth, over: [...s.querySelectorAll('.btn')].filter((x) => x.scrollWidth > x.clientWidth + 1).map((x) => x.textContent) }; });
+      const m = await p.locator('.hd .more .menu').evaluate((s) => { const r = s.getBoundingClientRect(); return { fits: r.left >= 0 && r.right <= innerWidth, over: [...s.querySelectorAll('.mitem')].filter((x) => x.scrollWidth > x.clientWidth + 1).map((x) => x.textContent) }; });
       ok(m.fits && !m.over.length, `${scheme} ${w}: the More menu fits, nothing overflows ${m.over}`);
       await p.screenshot({ path: `${OUT}pins-more-${w}-${scheme}.png` });
       await p.locator('.hd .more > div > button').click();
