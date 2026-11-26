@@ -117,10 +117,10 @@ async function desktop(b) {
     await wait(p, 2500);
     ok(await p.isVisible('.backlogv'), 'backlog: inside the shell');
     ok(await p.isVisible('.bays .views [aria-pressed="true"] >> text=Backlog'), 'backlog: Backlog as the fourth view');
-    const all = p.locator('.backlogv .hd .kb', { hasText: 'All bays' });
+    const all = p.locator('.backlogv .phd .seg button', { hasText: 'All bays' });
     if (await all.count()) await all.click();
-    await p.locator('.bk-bar .seg button', { hasText: 'All' }).last().click();
     await wait(p, 300);
+    ok(!(await p.isVisible('.bk-f')), 'backlog: no key legend');
     const n = await p.locator('.bk-it').count();
     ok(true, `backlog: ${n} rows`);
     if (n > 1) {

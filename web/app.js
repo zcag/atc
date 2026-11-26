@@ -5595,23 +5595,15 @@ const backlogCounts = (items, only) => {
   return STAGES.filter(([k]) => k !== "done" && n[k]).map(([k]) => `${n[k]} ${k}`).join(" · ");
 };
 
-const BK_FILTERS = [
-  ["open", "Open", (st) => st !== "done"],
-  ["ready", "Ready", (st) => st === "ready"],
-  ["started", "Started", (st) => st === "started"],
-  ["blocked", "Blocked", (st) => st === "blocked"],
-  ["suggested", "Suggested", (st) => st === "suggested"],
-  ["done", "Done", (st) => st === "done"],
-  ["all", "All", () => true],
-];
-const BK_ORDER = ["started", "ready", "blocked", "suggested", "done"];
+const BK_ORDER = ["ready", "started", "blocked", "suggested"];
+const BK_SORTS = [["stage", "By stage"], ["new", "Newest"], ["bay", "By bay"]];
 
 function BacklogPage({ live, say, onAdd, only }) {
   useNow(30000);
   const list = useBacklog();
   const [scope, setScope] = useState(only ? "bay" : "all");
   const bay = scope === "bay" ? only : null;
-  const [v, setV] = useState(() => ({ f: "open", sort: "stage", ...stored("atc.backlog", {}) }));
+  const [v, setV] = useState(() => ({ sort: "stage", ...stored("atc.backlog", {}) }));
   const set = (p) => setV((x) => { const n = { ...x, ...p }; store("atc.backlog", n); return n; });
   const [sel, setSel] = useState(null);
   const [edit, setEdit] = useState(null);
@@ -5622,13 +5614,14 @@ function BacklogPage({ live, say, onAdd, only }) {
   const call = (it, method, body, sub = "") => api(`/api/backlog/${it.id}${sub}${itemQ(it)}`, { method, body });
   const all = list || [];
   const scoped = all.filter((it) => !bay || project(it.dir).name === bay);
-  const n = (st) => scoped.filter((it) => itemStage(it) === st).length;
-  const keep = BK_FILTERS.find((f) => f[0] === v.f) || BK_FILTERS[0];
-  const other = ["open", "done", "all"].map((k) => BK_FILTERS.find((f) => f[0] === k)).find((f) => f[0] !== keep[0] && scoped.some((it) => f[2](itemStage(it))));
-  const shown = scoped.filter((it) => keep[2](itemStage(it))).sort((a, b) =>
-    v.sort === "new" ? Date.parse(b.created) - Date.parse(a.created)
-    : v.sort === "bay" ? project(a.dir).name.localeCompare(project(b.dir).name) || Date.parse(b.created) - Date.parse(a.created)
-    : BK_ORDER.indexOf(itemStage(a)) - BK_ORDER.indexOf(itemStage(b)) || Date.parse(a.created) - Date.parse(b.created));
+  const sort = v.sort === "bay" && bay ? "stage" : v.sort;
+  const newest = (a, b) => Date.parse(b.created) - Date.parse(a.created);
+  const open = scoped.filter((it) => itemStage(it) !== "done");
+  const groups = sort === "stage" ? BK_ORDER.map((k) => [k, STAGES.find((x) => x[0] === k)[1], open.filter((it) => itemStage(it) === k).sort((a, b) => Date.parse(a.created) - Date.parse(b.created))])
+    : sort === "bay" ? [...new Set(open.map((it) => project(it.dir).name))].sort().map((b) => [b, b, open.filter((it) => project(it.dir).name === b).sort(newest)])
+    : [["", "", [...open].sort(newest)]];
+  const finished = scoped.filter((it) => itemStage(it) === "done").sort((a, b) => Date.parse(b.updated) - Date.parse(a.updated));
+  const shown = [...groups.flatMap((g) => g[2]), ...(v.done ? finished : [])];
   const cur = shown.find((it) => it.id === sel) || shown[0];
 
   const patch = async (it, body, verb, back) => {
@@ -5666,7 +5659,6 @@ function BacklogPage({ live, say, onAdd, only }) {
       await api(`/api/backlog${hostQ(where.host, HERE)}`, { method: "POST", body: { dir: where.dir, title: t } });
       setText("");
       await load();
-      set({ f: v.f === "done" ? "open" : v.f });
     } catch (e) { say(`Not added: ${e.message}`); }
     setAdding(false);
   };
@@ -5689,41 +5681,42 @@ function BacklogPage({ live, say, onAdd, only }) {
   }, []);
   useEffect(() => { document.querySelector(".bk-it.sel")?.scrollIntoView({ block: "nearest" }); }, [cur?.id]);
 
-  const seg = (opts, key, label) => html`<span class="seg" role="group" aria-label=${label}>${opts.map(([k, name, f]) =>
-    html`<button aria-pressed=${v[key] === k} onClick=${() => set({ [key]: k })}>${name}${f && key === "f" && html`<span class="c">${scoped.filter((it) => f(itemStage(it))).length}</span>`}</button>`)}</span>`;
-  const counts = !list ? "Loading…" : BK_ORDER.filter((k) => k !== "done" && n(k)).map((k) => `${n(k)} ${k}`).join(", ") || (scoped.length ? "None open" : "No tasks yet");
+  const row = (it) => html`<${BacklogRow} key=${it.id} it=${it} stage=${itemStage(it)} run=${run(it)} sel=${cur === it} tag=${!bay} chip=${sort !== "stage"}
+    select=${() => setSel(it.id)} primary=${primary} done=${done} block=${block} patch=${patch} remove=${remove}
+    edit=${edit?.id === it.id ? edit : null} setEdit=${setEdit} />`;
+  const clear = () => ask({ title: `Delete ${plural(finished.length, "finished item")}?`, body: "They leave the backlog for good.", ok: "Delete", busy: "Deleting…", danger: true,
+    run: () => Promise.all(finished.map((it) => call(it, "DELETE"))) }).then((ok) => ok && (say("Cleared."), load()));
   return html`
     <section class="scrpane backlogv" aria-label="Backlog">
-      <header class="hd">
-        <div class="l1"><h1>${bay ? "Backlog" : "Backlog, all bays"}</h1><span class="where">${bay ? `${bay}${where ? `, ${tilde(where.dir)}` : ""}` : plural(new Set(all.map((it) => project(it.dir).name)).size, "bay")}</span>
-          <span class="r">${only && html`<button class="kb ${scope === "all" ? "on" : ""}" aria-pressed=${scope === "all"} onClick=${() => setScope(scope === "all" ? "bay" : "all")}>All bays</button>`}</span></div>
-        <div class="l2 no-block"><span class="stat">${counts}</span><span class="rd"><span class="l">done</span>${n("done")}</span><span class="rd"><span class="l">from agents</span>${scoped.filter((it) => it.by && it.status !== "done").length}</span></div>
+      <header class="phd">
+        <h1>Backlog</h1><span class="where">${bay ? `${bay}${where ? ` · ${tilde(where.dir)}` : ""}` : `all bays · ${plural(new Set(all.map((it) => project(it.dir).name)).size, "bay")}`}</span>
+        <span class="num">${list ? `${open.length} open` : ""}</span>
+        <span class="r">
+          <span class="seg" role="group" aria-label="Order">${BK_SORTS.filter(([k]) => k !== "bay" || !bay).map(([k, name]) => html`<button aria-pressed=${sort === k} onClick=${() => set({ sort: k })}>${name}</button>`)}</span>
+          ${only && html`<span class="seg" role="group" aria-label="Which bays"><button aria-pressed=${scope === "bay"} onClick=${() => setScope("bay")}>${only}</button><button aria-pressed=${scope === "all"} onClick=${() => setScope("all")}>All bays</button></span>`}
+        </span>
       </header>
       <div class="scroll"><div class="bk ${bay ? "single" : ""}">
-        <div class="bk-bar">
-          <form class="bk-add" onSubmit=${(e) => { e.preventDefault(); addIt(); }}><span class="pr" aria-hidden="true">add</span>
-            <input id="bk-add" value=${text} onInput=${(e) => setText(e.target.value)} onKeyDown=${(e) => e.key === "Escape" && e.target.blur()} autocomplete="off"
-              placeholder=${`${bay ? `A task for ${bay}` : "A task; you pick its folder next"}${touch ? "" : ", enter adds it"}`} aria-label=${`Add a task to ${bay || "the"} backlog`} />
-            <button class="btn" disabled=${adding || !text.trim()}>${adding ? "Adding…" : "Add"}</button></form>
-          ${seg(BK_FILTERS, "f", "Show")}${seg([["stage", "Stage"], ["new", "Newest"], ...(bay ? [] : [["bay", "Bay"]])], "sort", "Order")}
-        </div>
-        <div class="bk-h" role="presentation"><span>Stage</span><span>Task</span><span class="c-bay">Bay</span><span class="c-by">Added by</span><span class="n">Age</span><span></span></div>
+        <form class="bk-add" onSubmit=${(e) => { e.preventDefault(); addIt(); }}>
+          <input id="bk-add" value=${text} onInput=${(e) => setText(e.target.value)} onKeyDown=${(e) => e.key === "Escape" && e.target.blur()} autocomplete="off"
+            placeholder=${`${bay ? `A task for ${bay}` : "A task; you pick its folder next"}${touch ? "" : "; Enter adds it"}`} aria-label=${`Add a task to ${bay || "the"} backlog`} />
+          <button class="btn" aria-busy=${adding} disabled=${!text.trim()}>Add</button></form>
         <div role="grid" aria-label="Backlog">
-          ${list && !scoped.length && html`<${Empty} act=${() => document.getElementById("bk-add")?.focus()} label="Add a task">Nothing on ${bay ? `${bay}'s` : "the"} backlog yet. Add a task above, or press + on any session.</${Empty}>`}
-          ${list && scoped.length > 0 && !shown.length && (other ? html`<${Empty} act=${() => set({ f: other[0] })} label=${`Show ${other[1].toLowerCase()}, ${scoped.filter((it) => other[2](itemStage(it))).length}`}>No ${keep[1].toLowerCase()} tasks${bay ? ` in ${bay}` : ""} yet.</${Empty}>`
-            : html`<${Empty}>No ${keep[1].toLowerCase()} tasks${bay ? ` in ${bay}` : ""} yet.</${Empty}>`)}
-          ${shown.map((it) => html`<${BacklogRow} key=${it.id} it=${it} stage=${itemStage(it)} run=${run(it)} sel=${cur === it} tag=${!bay}
-            select=${() => setSel(it.id)} primary=${primary} done=${done} block=${block} patch=${patch} remove=${remove}
-            edit=${edit?.id === it.id ? edit : null} setEdit=${setEdit} />`)}
-          ${v.f === "done" && n("done") > 0 && html`<button class="btn bk-clear" onClick=${() => ask({ title: `Delete ${plural(n("done"), "finished item")}?`, body: "They leave the backlog for good.", ok: "Delete", busy: "Deleting…", danger: true,
-            run: () => Promise.all(scoped.filter((it) => itemStage(it) === "done").map((it) => call(it, "DELETE"))) }).then((ok) => ok && (say("Cleared."), load()))}>Clear done</button>`}
+          ${!list && html`<div class="bk-skel" aria-hidden="true">${[0, 1, 2].map(() => html`<i></i>`)}</div>`}
+          ${list && !open.length && html`<${Empty} cls="bk-empty">Nothing on ${bay ? `${bay}'s` : "the"} backlog. Add a task above, or press <kbd>+</kbd> on any session.<//>`}
+          ${groups.filter((g) => g[2].length).map(([k, title, items]) => html`
+            ${title && html`<h2 class="bk-g" key=${`g-${k}`}>${title}<span class="c ${k === "started" ? "w" : ""}">${items.length}</span></h2>`}
+            ${items.map(row)}`)}
+          ${finished.length > 0 && html`
+            <h2 class="bk-g fold"><button aria-expanded=${!!v.done} onClick=${() => set({ done: !v.done })}>${ICON.fwd}Done<span class="c">${finished.length}</span></button>
+              ${v.done && html`<button class="btn sm quiet" onClick=${clear}>Clear done</button>`}</h2>
+            ${v.done && finished.map(row)}`}
         </div>
-        <div class="bk-f"><span><kbd>j</kbd><kbd>k</kbd>move</span><span><kbd>enter</kbd>start, take or open</span><span><kbd>d</kbd>done</span><span><kbd>x</kbd>blocked</span><span><kbd>a</kbd>add</span><span>with Undo, <kbd>z</kbd></span></div>
       </div></div>
     </section>`;
 }
 
-function BacklogRow({ it, stage, run, sel, tag, select, primary, done, block, patch, remove, edit, setEdit }) {
+function BacklogRow({ it, stage, run, sel, tag, chip, select, primary, done, block, patch, remove, edit, setEdit }) {
   const head = itemTitle(it);
   const ended = stage === "started" && (!run || run.state === "stopped");
   const save = () => {
@@ -5731,18 +5724,21 @@ function BacklogRow({ it, stage, run, sel, tag, select, primary, done, block, pa
     else if (edit.title.trim() || edit.prompt.trim()) patch(it, { title: edit.title, prompt: edit.prompt }, "Saved");
     setEdit(null);
   };
-  const note = it.why ? `Waiting on ${it.why}` : run || it.aside ? null : it.title && it.prompt && it.prompt !== it.title ? oneLine(it.prompt) : "";
+  const note = it.why ? html`<span class="blk">Blocked:</span> waiting on ${it.why}` : run || it.aside ? null : it.title && it.prompt && it.prompt !== it.title ? oneLine(it.prompt) : "";
   const by = it.by ? html`<span class="by" role=${it.from ? "link" : null} onClick=${it.from ? (e) => { e.stopPropagation(); go(it.from); } : null} title=${it.from ? "Open the session that added it" : ""}>@${it.by}</span>` : html`<span class="by you">you</span>`;
-  const act = (label, key, f, prime) => html`<button class="btn ${prime ? "primary" : ""}" onClick=${(e) => { e.stopPropagation(); f(it); }} aria-keyshortcuts=${key || null} title=${key ? `${label} (${key === "Enter" ? "enter" : key})` : null}>${label}</button>`;
+  const act = (label, key, f, prime, icon) => html`<button class="btn sm ${prime ? "primary" : ""}" onClick=${(e) => { e.stopPropagation(); f(it); }} aria-keyshortcuts=${key || null} title=${key ? `${label} (${key === "Enter" ? "enter" : key})` : null}>${icon && ICON[icon]}${label}</button>`;
+  const canBlock = stage === "ready" || stage === "blocked";
   const menu = [
-    { label: "Edit", run: () => setEdit({ id: it.id, mode: "text", title: it.title || "", prompt: it.prompt || "" }) },
-    !it.session && stage !== "done" && { label: it.worktree ? "Start in the folder itself" : "Start in a git worktree", run: () => patch(it, { worktree: !it.worktree }, it.worktree ? "Starts in the folder" : "Starts in a worktree") },
+    stage === "suggested" && { label: "Dismiss", icon: "x", run: () => remove(it) },
+    canBlock && { label: stage === "blocked" ? "Unblock" : "Blocked", icon: "stop", key: "backlog.block", run: () => block(it) },
+    { label: "Edit", icon: "doc", run: () => setEdit({ id: it.id, mode: "text", title: it.title || "", prompt: it.prompt || "" }) },
+    !it.session && stage !== "done" && { label: it.worktree ? "Start in the folder itself" : "Start in a git worktree", icon: "folder", run: () => patch(it, { worktree: !it.worktree }, it.worktree ? "Starts in the folder" : "Starts in a worktree") },
+    "-",
     { label: "Delete", danger: true, run: () => ask({ title: "Delete this item?", body: head, ok: "Delete", danger: true }).then((ok) => ok && remove(it)) },
   ].filter(Boolean);
   return html`
     <div class="bk-it ${stage} ${sel ? "sel" : ""}" role="row" aria-selected=${sel} tabindex=${sel ? 0 : -1} onClick=${select}>
-      <span class="stg ${stage}">${stage}</span>
-      <span class="ti">
+      <span class="ti">${chip && stage !== "ready" && html`<span class="stg ${stage}">${stage}</span>`}
         ${edit ? html`<form class="bk-edit" onSubmit=${(e) => { e.preventDefault(); save(); }} onClick=${(e) => e.stopPropagation()}>
             ${edit.mode === "why"
               ? html`<input value=${edit.why} onInput=${(e) => setEdit({ ...edit, why: e.target.value })} placeholder="Blocked: waiting on what? (optional, enter saves)" ref=${focusOnMount}
@@ -5761,11 +5757,12 @@ function BacklogRow({ it, stage, run, sel, tag, select, primary, done, block, pa
       <span class="byc">${by}</span>
       <span class="ag" title=${stamp(stage === "done" ? it.updated : it.created)}>${age(stage === "done" ? it.updated : it.created)}${it.worktree && !it.session ? html`<span class="wt" title="Starts in its own worktree">wt</span>` : ""}</span>
       <span class="acts" onClick=${(e) => e.stopPropagation()}>
-        ${stage === "suggested" ? html`${act("Take it", "Enter", primary, true)}${act("Dismiss", "", remove)}`
-          : stage === "done" ? act("Reopen", "Enter", primary)
-          : stage === "started" ? html`${!ended && run ? act("Open", "Enter", primary, true) : ""}${act("Done", "d", done, ended)}`
-          : html`${act(it.aside ? "Resume" : "Start", "Enter", primary, stage === "ready")}${act("Done", "d", done)}${act(stage === "blocked" ? "Unblock" : "Blocked", "x", block)}`}
-        <${Menu} items=${menu} cls="btn" label="More" aria="More for this task" />
+        ${stage === "suggested" ? act("Take it", "Enter", primary, true, "check")
+          : stage === "done" ? act("Reopen", "Enter", primary, false, "undo")
+          : stage === "started" ? !ended && run && act("Open", "Enter", primary, true, "fwd")
+          : act(it.aside ? "Resume" : "Start", "Enter", primary, stage === "ready", "play")}
+        ${stage !== "suggested" && stage !== "done" && html`<button class="btn sm quiet icon" onClick=${(e) => { e.stopPropagation(); done(it); }} aria-keyshortcuts="d" aria-label="Done" title="Done (d)">${ICON.check}</button>`}
+        <${Menu} items=${menu} cls="btn sm quiet icon" aria="More for this task" />
       </span>
     </div>`;
 }
