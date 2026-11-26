@@ -76,7 +76,7 @@ function Fields({ r, host, ui, reload, onTested }) {
     ${err && html`<p class="capmsg bad" role="alert">${err}</p>`}
     <div class="capbtns">
       <button type="button" class="btn" disabled=${!!busy} onClick=${test}>${busy === "test" ? "Testing" : "Test"}</button>
-      <button class="btn primary" disabled=${!dirty || !!busy}>${busy === "save" ? "Saving" : "Save"}</button>
+      <button class="btn primary" disabled=${!dirty || !!busy}>${busy === "save" ? "Saving…" : "Save"}</button>
     </div>
   </form>`;
 }
@@ -93,7 +93,7 @@ function Row({ r: live, host, ui, reload, canStart, open: opened }) {
     try {
       const s = await ui.api(`/api/sessions${ui.hostQ(host, ui.home)}`, { method: "POST", body: { dir: "~", name: `Set up ${r.title}`, prompt: r.setup } });
       ui.go(s.id);
-    } catch (e) { ui.say(`Could not start the session: ${e.message}`); }
+    } catch (e) { ui.say(`Couldn't start the session: ${e.message}`); }
     setBusy(false);
   };
   const needs = r.needs || [];
@@ -108,7 +108,7 @@ function Row({ r: live, host, ui, reload, canStart, open: opened }) {
       ${r.status !== "ok" && html`<${Fix} r=${r} ui=${ui} />`}
       ${r.cost && html`<p class="capcost">Costs: ${r.cost}</p>`}
       ${(r.fields || []).length > 0 && html`<${Fields} r=${r} host=${host} ui=${ui} reload=${reload} onTested=${setTested} />`}
-      ${r.setup && canStart && html`<div class="capbtns"><button class="btn" disabled=${busy} onClick=${start}>${busy ? "Starting" : "Set this up with Claude"}</button></div>`}
+      ${r.setup && canStart && html`<div class="capbtns"><button class="btn" disabled=${busy} onClick=${start}>${busy ? "Starting…" : "Set this up with Claude"}</button></div>`}
     </div>`}
   </div>`;
 }
@@ -135,7 +135,7 @@ function IdentityForm({ m, ui, reload }) {
       ${box("user", "Your name", "How the assistant's built-in prompts call you", "the user")}
       ${box("assistant", "Its name", "How they call it", "the assistant")}
       ${box("language", "Language", "Two letters; the language calls start in and voice notes are heard in", "en")}
-      <div class="capbtns"><button class="btn primary" disabled=${!dirty || busy}>${busy ? "Saving" : "Save"}</button></div>
+      <div class="capbtns"><button class="btn primary" disabled=${!dirty || busy}>${busy ? "Saving…" : "Save"}</button></div>
     </div>
   </form>`;
 }
@@ -195,7 +195,7 @@ export function SetupScreen({ machine, check, skip, ui }) {
         <div class="capbtns end">
           ${ui.shell && html`<button class="btn" title="A plain login shell on this machine, to run the fixes above" onClick=${ui.shell}>Open a shell</button>`}
           <button class="btn" onClick=${skip}>Continue anyway</button>
-          <button class="btn primary" disabled=${checking} onClick=${again}>${checking ? "Checking" : "Check again"}</button>
+          <button class="btn primary" disabled=${checking} onClick=${again}>${checking ? "Checking…" : "Check again"}</button>
         </div>
       </section>
     </div></div>

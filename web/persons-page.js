@@ -172,7 +172,7 @@ function Editor({ api, look, voices, rooms, reloadRooms, draft, Preview, onDone 
     if (!file) return;
     const body = new FormData();
     body.append("file", file);
-    setNote(`Adding ${file.name}`);
+    setNote(`Adding ${file.name}…`);
     try {
       const r = await fetch("/api/call/backgrounds", { method: "POST", body });
       if (!r.ok) throw new Error((await r.text()).trim());
@@ -256,6 +256,6 @@ export function PersonsPage({ api, look, sub, Preview, go }) {
   const first = look.names.find((n) => look.kinds[n] === "rig") || "orb";
   const draft = found || { name: "", character: first, background: "", voices: Object.fromEntries(Object.entries(voices || {}).map(([l, v]) => [l, v.current])) };
   /* A new person starts on today's voices, so it waits for them. */
-  if (sub === "new" && !voices) return html`<p class="sub">Loading the voices</p>`;
+  if (sub === "new" && !voices) return html`<p class="sub">Loading the voices…</p>`;
   return html`<${Editor} key=${sub} api=${api} look=${look} voices=${voices} rooms=${rooms} reloadRooms=${reloadRooms} draft=${draft} Preview=${Preview} onDone=${() => go("#/settings/persons")} />`;
 }
