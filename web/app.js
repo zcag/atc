@@ -1239,10 +1239,10 @@ function RailRow({ s, sel, cursor, say, qk, when }) {
   return html`<div class="rr ${g} ${s.state} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""} ${fresh ? "fresh" : ""}">
     <button class="brow ${on ? "sel" : ""}" data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
       <${StateBlock} s=${s} />
-      <span class="t" lang=${langOf(s.title)}>${s.title || "Untitled"}</span>
-      <span class="s ${ask ? "q" : ""}" lang=${typeof line === "string" ? langOf(line) : null}>${line}</span>
-      <span class="e"><span class="ago" title=${stamp(rowAt(s))}>${fresh && html`<i class="dot" aria-hidden="true"></i>`}${when || ago(s)}</span>
-        <span class="e2">${s.load && hotLoad(s.load) && html`<${LoadTag} s=${s} />`}${s.shown?.length > 0 && html`<span class="pg" title=${plural(s.shown.length, "page")}>${ICON.page}</span>`}${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span></span>
+      <span class="r1"><span class="t" lang=${langOf(s.title)}>${s.title || "Untitled"}</span>
+        <span class="ago" title=${stamp(rowAt(s))}>${fresh && html`<i class="dot" aria-hidden="true"></i>`}${when || ago(s)}</span></span>
+      <span class="r2"><span class="s ${ask ? "q" : ""}" lang=${typeof line === "string" ? langOf(line) : null}>${line}</span>
+        <span class="e2">${s.profile && html`<span class="prof" title=${`Runs on the ${s.profile} Claude account`}>${s.profile}</span>`}<${LoadTag} s=${s} short />${s.shown?.length > 0 && html`<span class="pg" title=${plural(s.shown.length, "page")}>${ICON.page}${s.shown.length > 1 && s.shown.length}</span>`}${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span></span>
     </button>
     ${canResume(s) && html`<${ResumeBtn} s=${s} say=${say} />`}
     <${DelX} s=${s} say=${say} />
@@ -1268,7 +1268,7 @@ function BoardRow({ s, open, toggle, sel, cursor, say, qk, when }) {
   const on = sel?.sessionId === s.sessionId, g = s.pinned && waiting(s) ? "pinned waiting" : groupOf(s), branch = branchOf(s);
   const where = [MULTI && s.host, s.profile, branch && clipPath(branch, 28, "-")].filter(Boolean).join(" · ");
   const fresh = unread(s), line = lineOf(s), ask = s.state === "needs-you" && s.asks?.length > 0;
-  const meta = g !== "earlier" && !ask && madeLine(s);
+  const meta = g !== "earlier" && madeLine(s), tags = s.load || cutOff(s);
   const owed = s.state !== "working" ? LIVE.filter((y) => y.reportsTo && y.reportsTo === (s.root || s.sessionId) && (y.state === "working" || y.state === "needs-you")) : [];
   const cls = `brow ${g} ${on ? "sel" : ""} ${cursor === s.sessionId ? "cur" : ""} ${open ? "open" : ""} ${fresh ? "fresh" : ""}`;
   return html`
@@ -1278,7 +1278,7 @@ function BoardRow({ s, open, toggle, sel, cursor, say, qk, when }) {
         <${StateBlock} s=${s} />
         <span class="ses"><a class="t" lang=${langOf(s.title)} href=${`#/s/${keyOf(s)}`} onClick=${(e) => e.stopPropagation()}>${s.title || "Untitled"}</a>${where && html`<span class="w" title=${branch || null}>${where}</span>`}${s.lastFrom && html`<span class="from" title=${`The last message came from ${s.lastFrom}, not from you`}>${ICON.recv}${s.lastFrom}</span>`}${owed.length > 0 && html`<span class="from owed" title="It asked for these reports and they haven't come back yet">waiting on ${owed.map((y) => y.title || "a session").join(", ")}</span>`}</span>
         <span class="st"><span class="l1" lang=${typeof line === "string" ? langOf(line) : null}>${line}</span>${!open && html`<${CardGist} s=${s} />`}
-          ${meta && html`<span class="l2">${meta}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>`}
+          ${(meta || tags) && html`<span class="l2">${meta}<${LoadTag} s=${s} /><${EndTag} s=${s} /></span>`}
           ${ask && html`<div class="bask" onClick=${(e) => e.stopPropagation()} onPointerDown=${(e) => e.stopPropagation()}><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}</span>
         <span class="since" title=${stamp(rowAt(s))}><span>${fresh && html`<i class="dot" aria-hidden="true"></i>`}${when || ago(s)}</span>${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span>
       </div>
@@ -3917,7 +3917,7 @@ const ioRate = (r, w) => (r + w) < 1024 ? "" : `${gb(r)}/s read, ${gb(w)}/s writ
 const ioShort = (r, w) => (r + w) < 1024 ? "" : `${gb(r + w)}/s`;
 const shortLoad = (l) => [l.mem > 0 && gb(l.mem), l.cpu > 0 && `${l.cpu}% CPU`].filter(Boolean).join(", ");
 const hotLoad = (l) => l.mem >= 4 * 2 ** 30 || l.cpu >= 300;
-const LoadTag = ({ s }) => s.load ? html`<span class="load ${hotLoad(s.load) ? "hot" : ""}" title=${`This session and its processes: ${[s.load.mem > 0 && gb(s.load.mem), s.load.cpu > 0 && `${s.load.cpu}% of a core`].filter(Boolean).join(", ")}`}>${shortLoad(s.load)}</span>` : null;
+const LoadTag = ({ s, short }) => s.load ? html`<span class="load ${hotLoad(s.load) ? "hot" : ""}" title=${`This session and its processes: ${[s.load.mem > 0 && gb(s.load.mem), s.load.cpu > 0 && `${s.load.cpu}% of a core`].filter(Boolean).join(", ")}`}>${short ? [s.load.mem > 0 && gb(s.load.mem), s.load.cpu >= 300 && `${s.load.cpu}%`].filter(Boolean).join(" ") : shortLoad(s.load)}</span>` : null;
 
 
 const RES_RANGES = [["1h", 1], ["6h", 6], ["24h", 24], ["7d", 168]];
