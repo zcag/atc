@@ -13,23 +13,12 @@ import (
 	"github.com/zcag/atc/internal/client"
 )
 
-const browserHelp = `atc browser: the shared browser, one session's tabs at a time.
-
-  atc browser mcp [playwright-mcp flags...]
-      Playwright's MCP server, connected to the browser atc shares (ATC_BROWSER on the
-      server) as this session: it sees and drives only the tabs this session opened,
-      and the user can watch and take over those tabs in atc. Playwright starts on the
-      session's first browser call; until then atc answers from its last tool list.
-      Use it as the command of a browser MCP server:
-        claude mcp add -s user browser -- atc browser mcp
-`
-
 // Bump by hand, after checking that its config still takes browser.cdpHeaders from --config: cdpConfig relies on it.
 const playwrightMCP = "@playwright/mcp@0.0.84"
 
 func browserCmd(args []string) error {
 	if len(args) == 0 || args[0] != "mcp" {
-		fmt.Print(browserHelp)
+		printHelp("browser")
 		return nil
 	}
 	sid := os.Getenv("CLAUDE_CODE_SESSION_ID")

@@ -6,7 +6,6 @@ import (
 	"embed"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,18 +25,6 @@ import (
 //go:embed deploy/atc.service deploy/atc-hub.service deploy/claude.slice deploy/atc.plist deploy/opencode.service deploy/opencode/opencode.json deploy/opencode/agent/atc.md
 var units embed.FS
 
-const serviceHelp = `Usage: atc service <install|uninstall|status> [--only atc|hub|opencode]
-
-  install     copy this binary to ~/.local/bin and run atc (and the assistant's hub) as services
-              of your user: systemd on Linux, launchd on macOS. Safe to run again to upgrade:
-              sessions keep running, and a restart waits for a call to end.
-  uninstall   stop and remove the services; your settings and sessions stay
-  status      whether each one runs
-
-  --only      one of them; by default both. opencode is only ever on request: a headless opencode server on
-              127.0.0.1:4096 with its own config folder, for opencode sessions next to Claude's
-`
-
 const macLabel = "io.github.zcag.atc"
 
 type service struct{ name, bin, unit string }
@@ -49,11 +36,9 @@ func services(only string) []service {
 
 func serviceCmd(args []string) error {
 	if len(args) == 0 {
-		fmt.Print(serviceHelp)
-		os.Exit(2)
+		usageExit("service")
 	}
-	fs := flag.NewFlagSet("service", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(serviceHelp) }
+	fs := flags("service")
 	only := fs.String("only", "", "")
 	fs.Parse(args[1:])
 	if *only != "" && *only != "atc" && *only != "hub" && *only != "opencode" {
@@ -97,8 +82,7 @@ func serviceCmd(args []string) error {
 		}
 		return nil
 	}
-	fmt.Print(serviceHelp)
-	os.Exit(2)
+	usageExit("service")
 	return nil
 }
 
@@ -137,8 +121,7 @@ func opencodeService(action string, mac bool) error {
 		fmt.Println("opencode", serviceState(opencodeUnit, mac))
 		return nil
 	}
-	fmt.Print(serviceHelp)
-	os.Exit(2)
+	usageExit("service")
 	return nil
 }
 

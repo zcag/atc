@@ -10,18 +10,6 @@ import (
 	"github.com/zcag/atc/internal/whatsapp"
 )
 
-const guestHelp = `atc guest: the people besides the user who may write to atc's WhatsApp.
-
-  atc guest                    list them
-  atc guest add NAME NUMBER    let NAME write in (NUMBER in full, with country code)
-  atc guest rm NAME            stop listening to NAME
-  atc guest call NAME [WHAT]   what a call greets NAME by, a first name ("Ayla"); none to clear
-
-A guest's message reaches the assistant on its guest channel, which answers with
-atc wa --to NAME. Add someone only when the user asks for it in their own words.
-The list lives on the machine atc's WhatsApp runs on, in ~/.config/atc/guests.
-`
-
 func waClient() *whatsapp.Client {
 	c := whatsapp.FromEnv()
 	if c != nil {
@@ -44,12 +32,15 @@ func guest(args []string) error {
 			names = append(names, n)
 		}
 		slices.Sort(names)
-		for _, n := range names {
-			fmt.Printf("%s\t+%s\n", n, list[n])
-		}
 		if len(names) == 0 {
 			fmt.Println("No guests.")
+			return nil
 		}
+		var rows [][]string
+		for _, n := range names {
+			rows = append(rows, []string{n, "+" + list[n]})
+		}
+		printLines(table([]string{"Guest", "Number"}, rows, nil, nil, painter()))
 		return nil
 	case args[0] == "add" && len(args) >= 3:
 		if err := c.GuestEdit("add", args[1], strings.Join(args[2:], "")); err != nil {
@@ -75,6 +66,5 @@ func guest(args []string) error {
 		fmt.Printf("%s is no longer a guest.\n", args[1])
 		return nil
 	}
-	fmt.Print(guestHelp)
-	return nil
+	return usageErr("guest")
 }

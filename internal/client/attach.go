@@ -162,12 +162,12 @@ func pump(conn *websocket.Conn, keys <-chan []byte, winch <-chan os.Signal, out 
 func (c *Client) Detached(id, title string) string {
 	list, err := c.Live()
 	if err != nil {
-		return fmt.Sprintf("detached from %s (%v)", title, err)
+		return fmt.Sprintf("Detached from %s (%v).", title, err)
 	}
 	for _, s := range list {
 		if s.ID == id && s.Attachable {
-			return fmt.Sprintf("detached from %s, it keeps running. atc attach %s to return", title, id)
+			return fmt.Sprintf("Detached from %s; it keeps running. atc attach %s returns to it.", title, id)
 		}
 	}
-	return fmt.Sprintf("detached from %s, it is no longer running", title)
+	return fmt.Sprintf("Detached from %s; it is no longer running.", title)
 }

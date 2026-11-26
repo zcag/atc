@@ -15,9 +15,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
 
 	"github.com/zcag/atc/internal/attach"
@@ -43,114 +45,10 @@ import (
 	"github.com/zcag/atc/internal/tools"
 	"github.com/zcag/atc/internal/tui"
 	limits "github.com/zcag/atc/internal/usage"
+	"github.com/zcag/atc/internal/when"
 	"github.com/zcag/atc/modes"
 	"github.com/zcag/atc/web"
 )
-
-const usage = `atc: every Claude Code session on a machine, in one place.
-
-SERVER
-  atc serve [-addr host:port] [-root DIR]... [-no-auth]
-      Serves the web UI and API. New sessions get the flags in $ATC_CLAUDE_ARGS.
-      A finished turn's final message is summarized with claude -p and haiku
-      ($ATC_SUMMARY_MODEL), or an OpenAI-compatible model at $ATC_SUMMARY_URL;
-      ATC_SUMMARY=off turns it off.
-  atc token                      print this machine's server token
-  atc version                    this build
-  atc doctor [-json]             what each feature needs, how it stands and the fix; atc doctor -h
-
-CLIENT (talks to $ATC_URL, a saved login, or the local server)
-  atc                            browse, start and attach in a terminal UI
-  atc login <url> <token>        save where the server is
-  atc login <pairing>            the same from the text atc pair prints: this machine gets
-                                 its own token, which Settings › Devices can revoke
-  atc pair [-url U] [-json]      a QR code and text that let one new device in (one use,
-                                 10 minutes); -url when the address it finds is not the one
-                                 the device will reach
-  atc peer add [-name N] <pairing>
-                                 from the other machine's atc pair: add it to peers.json so
-                                 this server shows its sessions (restart to take effect)
-  atc ls [-json]                 live sessions, most urgent first
-  atc attach <session>           take over this terminal; Ctrl+Z detaches
-  atc history [-json] [query]    past conversations, newest first
-  atc new [-n name] [-host machine] [-profile name] [-report] [dir] [prompt...]
-  atc new -p preset [prompt...]  start from a preset (presets.json in the server's config folder)
-      dir defaults to the current dir, with your home written as ~ so it
-      maps onto the same path under the server's home
-  atc send [-report] [-wake] <session> [text...]
-                                 type a message into a session, resuming it if stopped;
-                                 reads stdin when no text is given (cmd | atc send 2);
-                                 @name wakes that agent, starting its conversation if needed
-      from inside a Claude session, -report asks the other to report back to it;
-      without, the work is handed off and it does not. A stopped session is
-      resumed for it only when it waits on its report, or with -wake
-  atc mcp                        tools for Claude to see and drive your other sessions
-                                 (MCP over stdio): claude mcp add atc -- atc mcp
-  atc resume <session>           bring a stopped or past session back
-  atc stop <session>             stop it; the conversation is kept
-  atc rm <session>               delete a background session
-  atc rename <session> <name>    atc pin|unpin <session>
-  atc park|unpark [session]      move it out of the way: bottom of the list, no notifications;
-                                 inside a session, without one, parks that session
-  atc backlog [session]          send a session to the backlog: stopped (memory freed, a working
-                                 one when its turn ends), off the list, kept as an item that
-                                 resumes the same conversation; without one, list the backlog
-  atc summary [-json] [-again] <session>
-                                 its final message in short: a status line, the gist and
-                                 an overview; -again summarizes it anew
-  atc show <file> [--as name] [--title T] [--note N]
-                                 from inside a session: show the user a page (HTML, image,
-                                 markdown, PDF) beside the conversation, live as the file
-                                 changes; atc show -h for the full reference
-  atc pages [new|unpin|pin|rm] <name>
-                                 pinned pages: kept for the user to come back to, they belong
-                                 to no session; atc pages -h
-  atc board [add <title>]        the project's board of things to decide: agents add cards,
-                                 the user sifts them; it outlives sessions; atc board -h
-  atc open <session|@agent>/<page>[#id]
-                                 the assistant only: open a page any session or agent shows
-                                 on the user's phone screen, at a section; atc show -h
-  atc state [-set] <session> [page]
-                                 a page's state, as JSON; -set merges the JSON on stdin into
-                                 it by top-level key (null deletes a key). page can be left
-                                 out when the session shows one; @name in place of
-                                 <session> is an agent's pages
-  atc notify [--urgent] [--reply TEXT]... [message...]
-                                 from inside a session: a push to the user's phone that opens
-                                 the session; --urgent buzzes even while they use atc
-  atc wa [--file F]... [--render F.html]... [--voice TEXT] [--poll Q --option A...] [text...]
-                                 send the user files, a rendered page, a voice note, a poll or text on
-                                 WhatsApp, from the account atc answers them on; atc wa -h
-  atc group [quiet|on GROUP]     the WhatsApp groups the guests' conversation takes part in
-  atc app update|characters      download the latest Android app and characters, or only the characters
-  atc setup                      guided first run: who you are, limits, tools, reaching atc from other devices
-  atc service install|uninstall|status
-                                 run atc and the assistant's hub as services of your user
-  atc prompts [--check|--update] every text the assistant is told, your own files applied
-  atc call [--reason TEXT] [--wait] [--timeout 45s] [--whatsapp]
-                                 ring the user's phone, with the assistant on the
-                                 line; atc call -h
-  atc hub [status|reset]         run the assistant's one conversation for atc, WhatsApp and
-                                 phone calls (atc-hub.service); atc hub -h
-  atc voice [install|status|uninstall]
-                                 calls with the assistant on this machine; atc voice -h
-  atc outputs [-json] <session>  what it produced: running servers, files (with a link to
-                                 open each in a browser), links, code it touched
-  atc usage [-json] [session]    plan limits and tokens per day; with a session, its tokens,
-                                 models, turns and working time, with an estimated API cost
-  atc limits [-json] [-short]    plan limits, one line each; -short fits a status line
-  atc profile [add|rm]           Claude accounts for the sessions in some folders, such as a
-                                 company one for work; atc profile -h
-  atc top [-json] [-host name] [session]  memory, CPU and disk per session and what outlived its session;
-                                 with a session, its processes
-  atc why [-json] [-raw] [session|incident]  why a session stopped, with the log lines it rests
-                                 on (-raw prints them); with nothing, the week's memory incidents
-  atc limits -tap                record the limits from Claude Code's status line input (stdin),
-                                 so atc shows them without asking Anthropic
-
-<session> is a row number from ls, a short id, a session id prefix, or a
-unique piece of the title.
-`
 
 var conf *settings.Settings
 
@@ -171,10 +69,16 @@ func loadSettings() {
 
 func main() {
 	log.SetFlags(0)
+	if len(os.Args) > 1 && helpAsked(os.Args[2:]) {
+		if t, ok := helpFor(os.Args[1]); ok {
+			fmt.Print(t)
+			return
+		}
+	}
 	loadSettings()
 	if len(os.Args) < 2 {
 		if !term.IsTerminal(int(os.Stdout.Fd())) {
-			fmt.Print(usage)
+			fmt.Print(topUsage())
 			os.Exit(2)
 		}
 		if err := tui.Run(client.Load()); err != nil {
@@ -267,9 +171,13 @@ func main() {
 	case "resume", "stop", "rm", "rename", "pin", "unpin", "park", "unpark":
 		err = act(cmd, args)
 	case "-h", "--help", "help":
-		fmt.Print(usage)
+		if t, ok := helpFor(strings.Join(args, " ")); ok {
+			fmt.Print(t)
+		} else {
+			fmt.Print(topUsage())
+		}
 	default:
-		fmt.Fprintf(os.Stderr, "atc: unknown command %q\n\n%s", cmd, usage)
+		fmt.Fprintf(os.Stderr, "atc: unknown command %q\n\n%s", cmd, topUsage())
 		os.Exit(2)
 	}
 	if err != nil {
@@ -283,7 +191,7 @@ func (m *multi) String() string     { return strings.Join(*m, ",") }
 func (m *multi) Set(v string) error { *m = append(*m, v); return nil }
 
 func serve(args []string) error {
-	fs := flag.NewFlagSet("serve", flag.ExitOnError)
+	fs := flags("serve")
 	addr := fs.String("addr", cmp.Or(os.Getenv("ATC_ADDR"), client.DefaultListen), "listen address ($ATC_ADDR); by default every interface, answering only private addresses")
 	noAuth := fs.Bool("no-auth", false, "serve without a token (only behind something that authenticates)")
 	var roots multi
@@ -489,7 +397,7 @@ func serverToken() (string, error) {
 }
 
 func jsonFlag(name string, args []string) (*flag.FlagSet, *bool) {
-	fs := flag.NewFlagSet(name, flag.ExitOnError)
+	fs := flags(name)
 	return fs, fs.Bool("json", false, "print JSON")
 }
 
@@ -504,9 +412,21 @@ func ls(args []string) error {
 		return printJSON(list)
 	}
 	if len(list) == 0 {
-		fmt.Println("no sessions")
+		fmt.Println("No live sessions. atc new starts one.")
+		return nil
 	}
-	printRows(list)
+	printLines(lsTable(list, painter()))
+	need := 0
+	for _, s := range list {
+		if s.State == sessions.NeedsYou {
+			need++
+		}
+	}
+	sum := plural(len(list), "session", "sessions")
+	if need > 0 {
+		sum += ", " + map[bool]string{true: "1 needs you", false: fmt.Sprintf("%d need you", need)}[need == 1]
+	}
+	fmt.Printf("\n%s. --json for the full rows.\n", sum)
 	return nil
 }
 
@@ -520,15 +440,25 @@ func hist(args []string) error {
 	if *asJSON {
 		return printJSON(list)
 	}
-	printRows(list)
+	if len(list) == 0 {
+		if q := strings.Join(fs.Args(), " "); q != "" {
+			fmt.Printf("No past sessions match %q.\n", q)
+		} else {
+			fmt.Println("No past sessions.")
+		}
+		return nil
+	}
+	printLines(histTable(list))
 	return nil
 }
 
 func newSession(args []string) error {
-	fs := flag.NewFlagSet("new", flag.ExitOnError)
-	name := fs.String("n", "", "session name")
+	fs := flags("new")
+	name := fs.String("n", "", "")
+	fs.StringVar(name, "name", "", "")
 	host := fs.String("host", "", "machine to start it on, when the server lists several")
-	preset := fs.String("p", "", "start from a named preset")
+	preset := fs.String("p", "", "")
+	fs.StringVar(preset, "preset", "", "")
 	report := fs.Bool("report", false, "from inside a Claude session: ask the new session to report back to it")
 	profile := fs.String("profile", "", "Claude account to run it on (atc profile); default the one its folder belongs to")
 	fs.Parse(args)
@@ -545,7 +475,7 @@ func newSession(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("started %s in %s\n", id, dir)
+	fmt.Printf("Started %s in %s.\n", id, dir)
 	return nil
 }
 
@@ -566,7 +496,7 @@ func act(cmd string, args []string) error {
 		args = []string{sid}
 	}
 	if len(args) < 1 || strings.HasPrefix(args[0], "-") || (cmd == "rename") != (len(args) >= 2) {
-		return fmt.Errorf("usage: atc %s <session>%s", cmd, map[bool]string{true: " <name>"}[cmd == "rename"])
+		return usageErr(cmd)
 	}
 	c := client.Load()
 	s, err := c.Find(args[0], cmd != "stop" && cmd != "rm")
@@ -577,45 +507,72 @@ func act(cmd string, args []string) error {
 	case "resume":
 		id, err := c.Resume(s.SessionID)
 		if err == nil {
-			fmt.Printf("resumed %s as %s\n", s.Title, id)
+			fmt.Printf("Resumed %s as %s.\n", s.Title, id)
 		}
 		return err
 	case "stop", "rm":
 		if s.ID == "" {
 			return fmt.Errorf("%q is not a background session", s.Title)
 		}
-		if cmd == "stop" {
-			if live, err := c.Live(); err == nil {
-				if me, ok := client.Self(live); ok {
-					return c.Stop(s.ID, "session", me.Title)
-				}
-			}
-			return c.Stop(s.ID, "cli", "")
+		if cmd == "rm" {
+			err = c.Remove(s.ID)
+		} else if me, ok := client.Self(live(c)); ok {
+			err = c.Stop(s.ID, "session", me.Title)
+		} else {
+			err = c.Stop(s.ID, "cli", "")
 		}
-		return c.Remove(s.ID)
 	case "rename":
-		return c.Patch(s.SessionID, map[string]any{"name": strings.Join(args[1:], " ")})
+		name := strings.TrimSpace(strings.Join(args[1:], " "))
+		if err = c.Patch(s.SessionID, map[string]any{"name": name}); err == nil {
+			fmt.Printf("Renamed %s to %s.\n", s.Title, name)
+		}
+		return err
 	case "park", "unpark":
-		return c.Patch(s.SessionID, map[string]any{"parked": cmd == "park"})
+		err = c.Patch(s.SessionID, map[string]any{"parked": cmd == "park"})
 	default:
-		return c.Patch(s.SessionID, map[string]any{"pinned": cmd == "pin"})
+		err = c.Patch(s.SessionID, map[string]any{"pinned": cmd == "pin"})
 	}
+	if err == nil {
+		fmt.Printf("%s %s.\n", map[string]string{"stop": "Stopped", "rm": "Deleted", "park": "Parked", "unpark": "Unparked", "pin": "Pinned", "unpin": "Unpinned"}[cmd], s.Title)
+	}
+	return err
+}
+
+func live(c *client.Client) []sessions.Session {
+	l, _ := c.Live()
+	return l
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
 }
 
 func backlogCmd(args []string) error {
 	c := client.Load()
 	if len(args) == 0 {
 		items, err := c.Backlog()
+		if err != nil {
+			return err
+		}
+		var rows [][]string
 		for _, it := range items {
 			if it.Status != backlog.Done {
 				state := it.Status
 				if it.Aside {
 					state = "set aside"
 				}
-				fmt.Printf("%s  %-10s %s  (%s)\n", it.ID, state, it.Title, it.Dir)
+				rows = append(rows, []string{it.ID, state, clip(it.Title, 60), it.Dir})
 			}
 		}
-		return err
+		if len(rows) == 0 {
+			fmt.Println("The backlog is empty.")
+			return nil
+		}
+		printLines(table([]string{"Id", "State", "Title", "Folder"}, rows, nil, nil, painter()))
+		return nil
 	}
 	s, err := c.Find(args[0], true)
 	if err != nil {
@@ -623,7 +580,7 @@ func backlogCmd(args []string) error {
 	}
 	it, err := c.Shelve(s.SessionID, strings.Join(args[1:], " "))
 	if err == nil {
-		fmt.Printf("%s is on the backlog as %s\n", s.Title, it.ID)
+		fmt.Printf("Put %s on the backlog as %s.\n", s.Title, it.ID)
 	}
 	return err
 }
@@ -640,7 +597,7 @@ func showOutputs(args []string) error {
 	fs, asJSON := jsonFlag("outputs", args)
 	fs.Parse(args)
 	if fs.NArg() != 1 {
-		return fmt.Errorf("usage: atc outputs [-json] <session>")
+		return usageErr("outputs")
 	}
 	c := client.Load()
 	s, err := c.Find(fs.Arg(0), true)
@@ -663,7 +620,7 @@ func showSummary(args []string) error {
 	again := fs.Bool("again", false, "summarize the final message again")
 	fs.Parse(args)
 	if fs.NArg() != 1 {
-		return fmt.Errorf("usage: atc summary [-json] [-again] <session>")
+		return usageErr("summary")
 	}
 	c := client.Load()
 	s, err := c.Find(fs.Arg(0), true)
@@ -778,19 +735,14 @@ func showLimits(args []string) error {
 }
 
 func sendTo(args []string) error {
-	fs := flag.NewFlagSet("send", flag.ExitOnError)
+	fs := flags("send")
 	report := fs.Bool("report", false, "from inside a Claude session: ask it to answer this session")
 	wake := fs.Bool("wake", false, "from inside a Claude session: resume it although it is stopped and not waiting on this session")
 	approved := fs.Bool("approved", false, "from the assistant only: this relays the user's own go-ahead, so it counts as their approval")
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: atc send [-report] [-wake] [-approved] <session> [text...]")
-		fs.PrintDefaults()
-	}
 	fs.Parse(args)
 	args = fs.Args()
 	if len(args) < 1 {
-		fs.Usage()
-		os.Exit(2)
+		usageExit("send")
 	}
 	text := strings.Join(args[1:], " ")
 	if text == "" {
@@ -810,7 +762,9 @@ func sendTo(args []string) error {
 		if err != nil {
 			return err
 		}
-		_, err = c.Message(agent, signed)
+		if _, err = c.Message(agent, signed); err == nil {
+			fmt.Printf("Sent to @%s.\n", agent)
+		}
 		return err
 	}
 	s, err := c.Find(args[0], true)
@@ -818,18 +772,21 @@ func sendTo(args []string) error {
 		return err
 	}
 	d, err := c.Deliver(context.Background(), s, text, *report, *wake, *approved)
-	if d.Resumed {
-		fmt.Printf("resumed %s first\n", s.Title)
-	}
-	if d.Held {
-		fmt.Printf("%s is waiting on an answer to a question; it gets this once that is answered\n", s.Title)
+	switch {
+	case err != nil:
+	case d.Held:
+		fmt.Printf("%s is waiting on an answer to a question; it gets this once that is answered.\n", s.Title)
+	case d.Resumed:
+		fmt.Printf("Resumed %s and sent it the message.\n", s.Title)
+	default:
+		fmt.Printf("Sent to %s.\n", s.Title)
 	}
 	return err
 }
 
 func attachTo(args []string) error {
 	if len(args) != 1 {
-		return fmt.Errorf("usage: atc attach <session>")
+		return usageErr("attach")
 	}
 	c := client.Load()
 	s, err := c.Find(args[0], true)
@@ -859,61 +816,138 @@ func attachTo(args []string) error {
 	return nil
 }
 
-var look = map[string]struct{ glyph, word, color string }{
-	sessions.NeedsYou: {"●", "needs you", "31"},
-	sessions.YourTurn: {"○", "your turn", "33"},
-	sessions.Working:  {"◐", "working", "34"},
-	sessions.Stopped:  {"◌", "stopped", "2"},
-	sessions.Past:     {"·", "past", "2"},
+var looks = map[string]struct{ letter, word, color string }{
+	sessions.NeedsYou: {"N", "needs", "48;5;214;38;5;235;1"},
+	sessions.YourTurn: {"T", "turn", "7;1"},
+	sessions.Working:  {"W", "working", "38;5;24;48;5;153;1"},
+	sessions.Stopped:  {"E", "stopped", "2"},
+	sessions.Past:     {"E", "past", "2"},
 }
 
-func printRows(list []sessions.Session) {
-	paint := painter()
-	home := client.Load().ServerHome()
+func tags(s sessions.Session) string {
+	var t []string
+	if s.Kind == "interactive" {
+		t = append(t, "in a terminal")
+	}
+	if s.Agent != "" {
+		t = append(t, "@"+s.Agent)
+	}
+	if s.Profile != "" {
+		t = append(t, s.Profile)
+	}
+	if s.Pinned {
+		t = append(t, "pinned")
+	}
+	if s.Parked {
+		t = append(t, "parked")
+	}
+	return strings.Join(t, " · ")
+}
+
+func lsTable(list []sessions.Session, paint func(code, s string) string) []string {
+	several := len(hostsOf(list)) > 1
+	heads := []string{"#", "State", "Title", "Bay", "Branch", "Age"}
+	if several {
+		heads = []string{"#", "State", "Title", "Host", "Bay", "Branch", "Age"}
+	}
+	var rows [][]string
+	var states []string
 	for i, s := range list {
-		l, ok := look[s.State]
+		l, ok := looks[s.State]
 		if !ok {
-			l = look[sessions.Past]
-			l.word = s.State
+			l = looks[sessions.Past]
 		}
-		var tags []string
-		if s.Kind == "interactive" {
-			tags = append(tags, "in a terminal")
+		word := l.word
+		if s.Away() {
+			word = "parked"
 		}
-		if s.Profile != "" {
-			tags = append(tags, s.Profile)
+		title := clip(s.Title, 44)
+		if t := tags(s); t != "" {
+			title += "  " + t
 		}
-		if s.Pinned {
-			tags = append(tags, "pinned")
+		branch := s.Branch
+		if branch == "HEAD" {
+			branch = ""
 		}
-		if s.Parked {
-			tags = append(tags, "parked")
+		row := []string{fmt.Sprint(i + 1), " " + l.letter + "  " + word, title, s.Bay(), clip(branch, 28), s.Age()}
+		if several {
+			row = slices.Insert(row, 3, s.Host)
 		}
-		if s.Agent != "" {
-			tags = append(tags, "@"+s.Agent)
+		rows = append(rows, row)
+		states = append(states, s.State)
+	}
+	return table(heads, rows, map[int]bool{0: true, len(heads) - 1: true}, func(r, c int, cell string) string {
+		if c != 1 {
+			return cell
 		}
-		where := sessions.Tilde(s.Cwd, home)
-		if s.Host != "" && len(hostsOf(list)) > 1 {
-			where = s.Host + ":" + where
+		l, ok := looks[states[r]]
+		if !ok {
+			l = looks[sessions.Past]
 		}
-		if s.Branch != "" && s.Branch != "HEAD" {
-			where += " · " + s.Branch
-		}
-		fmt.Printf("%3d %s %-10s %-44s %5s  %s\n", i+1, paint(l.color, l.glyph), paint(l.color, l.word),
-			clip(s.Title, 44), s.Age(), paint("2", strings.Join(append([]string{where}, tags...), " · ")))
-		switch {
-		case s.Summary != nil && s.State == sessions.YourTurn:
-			fmt.Printf("%17s%s\n", "", "↳ "+clip(s.Summary.Status, 70))
-		case s.LastPrompt != "":
-			fmt.Printf("%17s%s\n", "", paint("2", "“"+clip(oneLine(s.LastPrompt), 70)+"”"))
+		return paint(l.color, " "+l.letter+" ") + strings.TrimPrefix(cell, " "+l.letter+" ")
+	}, paint)
+}
+
+func table(heads []string, rows [][]string, right map[int]bool, cell func(r, c int, s string) string, paint func(code, s string) string) []string {
+	w := make([]int, len(heads))
+	for c, h := range heads {
+		w[c] = ansi.StringWidth(h)
+	}
+	for _, r := range rows {
+		for c, v := range r {
+			w[c] = max(w[c], ansi.StringWidth(v))
 		}
 	}
+	pad := func(c int, s string) string {
+		gap := strings.Repeat(" ", w[c]-ansi.StringWidth(s))
+		if right[c] {
+			return gap + s
+		}
+		return s + gap
+	}
+	var hs []string
+	for c, h := range heads {
+		hs = append(hs, pad(c, h))
+	}
+	out := []string{paint("2", strings.TrimRight(strings.Join(hs, "  "), " "))}
+	for r, row := range rows {
+		var cs []string
+		for c, v := range row {
+			p := pad(c, v)
+			if cell != nil {
+				p = cell(r, c, p)
+			}
+			cs = append(cs, p)
+		}
+		out = append(out, strings.TrimRight(strings.Join(cs, "  "), " "))
+	}
+	return out
+}
+
+func histTable(list []sessions.Session) []string {
+	several := len(hostsOf(list)) > 1
+	heads := []string{"Id", "Last", "Title", "Bay"}
+	if several {
+		heads = append(heads, "Host")
+	}
+	now := time.Now()
+	var rows [][]string
+	for _, s := range list {
+		row := []string{s.SessionID[:min(8, len(s.SessionID))], when.Stamp(s.Last().Local(), now), clip(s.Title, 50), s.Bay()}
+		if several {
+			row = append(row, s.Host)
+		}
+		rows = append(rows, row)
+	}
+	return table(heads, rows, nil, nil, painter())
 }
 
 func hostsOf(list []sessions.Session) map[string]bool {
 	m := map[string]bool{}
 	for _, s := range list {
-		m[s.Host] = true
+		if s.Host != "" {
+			m[s.Host] = true
+		}
 	}
 	return m
 }

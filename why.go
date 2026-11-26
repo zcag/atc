@@ -1,18 +1,19 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/ends"
+	"github.com/zcag/atc/internal/when"
 )
 
 // showWhy says why a session stopped, with the log lines it rests on; with no session, the
 // memory incidents of the last week.
 func showWhy(args []string) error {
-	fs := flag.NewFlagSet("why", flag.ExitOnError)
+	fs := flags("why")
 	asJSON := fs.Bool("json", false, "print JSON")
 	host := fs.String("host", "", "which machine's incidents; default the server's own")
 	raw := fs.Bool("raw", false, "print each log line the evidence rests on")
@@ -30,7 +31,7 @@ func showWhy(args []string) error {
 			fmt.Println("No memory incidents in the last week.")
 		}
 		for _, inc := range list {
-			fmt.Printf("%s  %s\n  %s\n  atc why %s\n\n", inc.At.Format("Jan 2 15:04"), inc.Title, inc.Text, inc.ID)
+			fmt.Printf("%s  %s\n  %s\n  atc why %s\n\n", when.Stamp(inc.At.Local(), time.Now()), inc.Title, inc.Text, inc.ID)
 		}
 		return nil
 	}

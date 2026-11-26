@@ -5,7 +5,6 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -21,18 +20,6 @@ import (
 	"github.com/zcag/atc/internal/server"
 	"github.com/zcag/atc/internal/settings"
 )
-
-const setupHelp = `Usage: atc setup [--yes] [--calls] [--trust-tailnet] [--autonomy LEVEL] [--user NAME] [--assistant NAME] [--language CODE]
-
-Walks through what a new install needs: who you are, Claude Code's status line (how atc learns your
-plan limits), atc's tools for your sessions, how to reach atc from other devices, the call characters
-and calls. Safe to run again: what is already set stays, and nothing changes without asking.
-
-  --yes             accept every suggestion without asking, except the two below
-  --calls           set up calls without asking; about 2 GB, so --yes alone doesn't
-  --trust-tailnet   let your own Tailscale devices in without a token; it widens who gets in, so --yes alone doesn't
-  --autonomy        what the assistant may do alone: limited, daily (what --yes takes) or full
-`
 
 type asker struct {
 	in  *bufio.Reader
@@ -130,8 +117,7 @@ func localBinOnPath() bool {
 }
 
 func setupCmd(args []string) error {
-	fs := flag.NewFlagSet("setup", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(setupHelp) }
+	fs := flags("setup")
 	yes := fs.Bool("yes", false, "")
 	user := fs.String("user", "", "")
 	assistant := fs.String("assistant", "", "")

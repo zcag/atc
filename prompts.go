@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,17 +10,8 @@ import (
 	"github.com/zcag/atc/modes"
 )
 
-const promptsHelp = `Usage: atc prompts [--check | --update]
-
-Prints every text the assistant is told, with your own files in ~/.config/atc/modes applied.
-
-  --check    compare with prompts.golden in that folder and show what changed; exit 1 if anything did
-  --update   accept the current text as prompts.golden
-`
-
 func promptsCmd(args []string) error {
-	fs := flag.NewFlagSet("prompts", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(promptsHelp) }
+	fs := flags("prompts")
 	check := fs.Bool("check", false, "")
 	update := fs.Bool("update", false, "")
 	fs.Parse(args)

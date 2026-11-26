@@ -3,7 +3,6 @@ package main
 import (
 	"cmp"
 	"context"
-	"flag"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -41,19 +40,8 @@ func versionString() string {
 	return Version + " " + rev + dirty
 }
 
-const doctorHelp = `Usage: atc doctor [-json]
-
-What each atc feature needs and how it stands, by the same checks Settings shows: the status, what is wrong in plain
-words, and the fix. It asks the running server, with its environment and machines; with none running it does the same
-checks here, over the same files.
-
-Exits 1 only if something required is missing or something set up stopped working on the machine it asked. Optional
-features that were never set up are fine.
-`
-
 func doctor(args []string) error {
-	fs := flag.NewFlagSet("doctor", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(doctorHelp) }
+	fs := flags("doctor")
 	asJSON := fs.Bool("json", false, "print JSON")
 	fs.Parse(args)
 	c := client.Load()
@@ -89,65 +77,85 @@ func statusWord(r caps.Row) string {
 }
 
 func printDoctor(rep server.CapsReport) {
+	paint := painter()
+	counts := map[string]int{}
 	for i, m := range rep.Machines {
 		if i > 0 {
 			fmt.Println()
 		}
-		fmt.Printf("%s", m.Host)
+		head := m.Host
 		if m.Version != "" {
-			fmt.Printf(" (atc %s)", m.Version)
+			head += "  atc " + m.Version
 		}
-		fmt.Println()
+		fmt.Println(paint("1", head))
 		if m.Error != "" {
-			fmt.Println("  " + m.Error)
+			fmt.Println("  " + unticked(m.Error))
 			continue
 		}
 		if m.SettingsError != "" {
-			fmt.Println("  " + m.SettingsError)
+			fmt.Println("  " + unticked(m.SettingsError))
+		}
+		tw := 0
+		for _, r := range m.Rows {
+			tw = max(tw, len(r.Title))
 		}
 		for _, g := range rep.Groups {
-			at := slices.IndexFunc(m.Rows, func(r caps.Row) bool { return r.Group == g })
-			if at < 0 {
+			if !slices.ContainsFunc(m.Rows, func(r caps.Row) bool { return r.Group == g }) {
 				continue
 			}
-			fmt.Printf("\n  %s\n", g)
+			fmt.Printf("\n%s\n", paint("1", g))
 			for _, r := range m.Rows {
 				if r.Group == g {
-					printRow(r)
+					counts[statusWord(r)]++
+					printRow(r, tw, paint)
 				}
 			}
 		}
 		if m.RestartCmd != "" {
-			fmt.Printf("\n  Saved settings wait for a restart: %s\n", m.RestartCmd)
+			fmt.Printf("\nSaved settings wait for a restart: %s\n", m.RestartCmd)
 		}
+	}
+	var sum []string
+	for _, w := range []string{"broken", "needed", "not set up", "ok"} {
+		if counts[w] > 0 {
+			sum = append(sum, fmt.Sprintf("%d %s", counts[w], w))
+		}
+	}
+	if len(sum) > 0 {
+		fmt.Printf("\n%s. --json for scripts.\n", strings.Join(sum, ", "))
 	}
 }
 
-func printRow(r caps.Row) {
-	const pad = "               "
-	fmt.Printf("    %-11s%s: %s\n", statusWord(r), r.Title, r.Detail)
+func unticked(s string) string { return strings.ReplaceAll(s, "`", "") }
+
+var statusColor = map[string]string{"ok": "32", "broken": "31;1", "needed": "33;1", "not set up": "2"}
+
+func printRow(r caps.Row, tw int, paint func(code, s string) string) {
+	pad := strings.Repeat(" ", 2+10+2)
+	word := statusWord(r)
+	fmt.Printf("  %s  %s  %s\n", paint(statusColor[word], fmt.Sprintf("%-10s", word)), fmt.Sprintf("%-*s", tw, r.Title), unticked(r.Detail))
+	if r.Status == caps.OK {
+		return
+	}
 	var needs []string
 	for _, n := range r.Needs {
 		if n.Status != caps.OK {
 			needs = append(needs, n.Title)
 		}
 	}
-	if r.Status == caps.OK {
-		return
-	}
 	if len(needs) > 0 {
 		fmt.Println(pad + "needs " + strings.Join(needs, ", "))
 	}
 	if r.Fix.Command != "" {
-		fmt.Println(pad + "fix: " + r.Fix.Command)
+		fmt.Println(pad + paint("2", "fix") + "  " + paint("1", r.Fix.Command))
 	}
 	if r.Fix.Text != "" {
-		fmt.Println(pad + r.Fix.Text)
+		fmt.Println(pad + unticked(r.Fix.Text))
 	}
 	if r.Fix.GuideURL != "" {
 		fmt.Println(pad + "see " + r.Fix.GuideURL)
 	}
 	if r.Cost != "" {
-		fmt.Println(pad + "costs: " + r.Cost)
+		fmt.Println(pad + "costs: " + unticked(r.Cost))
 	}
 }

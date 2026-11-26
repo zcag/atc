@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"cmp"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"maps"
@@ -12,17 +11,14 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/pages"
+	"github.com/zcag/atc/internal/when"
 )
 
-const showHelp = `atc show: put a page in front of the user, in the session they are reading.
-
-  atc show <file|folder> [--as name] [--title T] [--note "what to look at"]
-           [--at id] [--action name='command args']... [--open]
-
-The user sees the page in atc next to this conversation (a button on the session's
+const showMore = `The user sees the page in atc next to this conversation (a button on the session's
 header lists its pages), gets a push on their phone, and can open it full size.
 It is live: atc serves the file where it is and redraws it every time it changes,
 so to update a page, edit the file. Run show again only to point a page at another
@@ -33,27 +29,8 @@ A page shown here belongs to this session. When it is something the user will co
 to (it keeps updating over time, or they will look things up in it later), make it a
 pinned page instead: atc pages -h.
 
-  --as name    which page this is; defaults to the file's name (a folder's for its
-               index.html). Showing a name again replaces that page. Give each different
-               thing its own name and keep it current, rather than a copy per change.
-  --title T    defaults to the page's <title> or first # heading
-  --note N     one line on what to look at or decide; it goes in the push
-  --at id      open it at one section: the element with that id, scrolled to the top
-               and briefly marked. The push, --open and the card in the transcript all
-               land there. Show again without --at to point back at the top.
-  --action name='command args'
-               a command the page may run with atc.run (repeatable). Showing the page
-               again replaces its actions, so repeat every --action you still want.
-  --open       the assistant only: also open the page on the user's phone screen right
-               away, over whatever is there (a call). Only when they asked to see it, or
-               must; never as a way to get attention.
 
-  atc open <session|@agent>/<page>[#id]
-               the assistant only: open a page another session or agent already shows on
-               the phone's screen, as --open does, at the section with that id when given
-               (atc open @reports/summary#intro). It is that page itself, with its own state,
-               so never show a copy of someone else's page. A page of your own is just
-               <page>[#id]. Same rules as --open.
+A page of another session or agent opens on the phone with atc open (atc open -h).
 
 A folder shows its index.html, and files beside it (img/, css) load by relative
 path, so keep screenshots as files instead of inlining them. HTML, images, markdown,
@@ -103,14 +80,6 @@ The classes from before still work, drawn the same way: .page, .sec with .n, .ca
 .danger .sm .icon .wide, .pill, .tag, .dot, .chip with b and span, .empty (.done), .skel
 as an empty div, .bar, .edit, and the tones t-needs t-hot t-turn t-work t-live t-stop.
 
-  atc show --list              this session's pages
-  atc show --off <name>        take a page down
-  atc show --state <name>      the page's data, as JSON (see atc.state)
-  echo '{"k":1}' | atc show --state <name> --set
-                               write it: an object replaces only the top-level keys
-                               it has, a key set to null is deleted, anything else
-                               replaces the whole state
-
 A page's state is its data: write your results there as JSON and let the page
 only draw them, while the page keeps what the user does on it under its own keys.
 Other tools read it too, with atc state <session> [page].
@@ -146,11 +115,11 @@ Inside a session atc knows which one it is; anywhere else add --session <session
 Inside an agent's conversation pages belong to the agent, not the conversation: the
 next one shows and reads the same pages and state (atc state @<name>).
 
-  --project    the page belongs to the project (the repo this folder is in; a worktree
-               counts as its main checkout) instead of this session: every session working
-               there shows it, and it and its state stay when this session ends. For what is
-               true of the project beyond today's work. Works with --list, --off and --state.
-               atc state --project [page] reads it from anywhere in the repo.
+With --project the page belongs to the project (the repo this folder is in; a worktree counts as
+its main checkout) instead of this session: every session working there shows it, and it and
+its state stay when this session ends. For what is true of the project beyond today's work.
+It works with --list, --off and --state, and atc state --project [page] reads it from anywhere
+in the repo.
 
 A project also has a board of things to decide: atc board -h.
 `
@@ -177,9 +146,6 @@ func show(args []string) error {
 				return fmt.Errorf("one file at a time; got %q and %q", path, a)
 			}
 			path = a
-		case flag == "h" || flag == "help":
-			fmt.Print(showHelp)
-			return nil
 		case flag == "as" || flag == "name":
 			name, err = val()
 		case flag == "title":
@@ -239,7 +205,7 @@ func show(args []string) error {
 			fmt.Println("This session shows no pages.")
 		}
 		for _, p := range list {
-			state := "updated " + p.Updated.Format("Jan 2 15:04")
+			state := "updated " + when.Stamp(p.Updated.Local(), time.Now())
 			if p.Gone {
 				state = "file is gone"
 			}
@@ -261,8 +227,7 @@ func show(args []string) error {
 		return pageState(c, sid, name, set)
 	}
 	if path == "" {
-		fmt.Print(showHelp)
-		os.Exit(2)
+		usageExit("show")
 	}
 	abs, err := filepath.Abs(path)
 	if err != nil {
@@ -290,9 +255,7 @@ func show(args []string) error {
 	return nil
 }
 
-const pagesHelp = `atc pages: pinned pages, the ones the user keeps.
-
-A page from atc show belongs to its session: the work in front of the user, a report,
+const pagesMore = `A page from atc show belongs to its session: the work in front of the user, a report,
 a diff, a result. It lives where its file is and goes when that does.
 
 A pinned page belongs to no session. It is for what the user comes back to: a page
@@ -301,24 +264,14 @@ will look things up in later. It is a folder atc keeps and never deletes, it sit
 the top of atc's Pages screen, and it has a short link, /p/<name>. Pin only what is
 meant to last; one-off results stay on the session.
 
-  atc pages                    every pinned page, then the unpinned ones
-  atc pages new <name>         make a pinned page and print its folder. Write
-                               index.html (or index.md) there, with any files beside it;
-                               it shows once index.html exists. To update the page, edit
-                               the files there, from this session or any later one: that
-                               folder is the only copy. An existing name gives its folder.
-  atc pages unpin <name>       take it off the Pinned list; the folder is kept, listed
-                               under Unpinned, and pin brings it back
-  atc pages pin <name>
-  atc pages rm <name>          delete an unpinned page and its folder for good. Only on
-                               the user's ask.
-  atc pages show <name> [--note N]
-                               also show it in this session, as atc show does: it lands in
-                               the session's pages with a push, and stays the one pinned
-                               page (same state, same link). atc show on its folder does
-                               the same. Taking it down there only takes it off the session.
-  atc pages state <name> [--set]
-                               its atc.state, as atc show --state
+new makes a pinned page and prints its folder: write index.html (or index.md) there, with any
+files beside it; it shows once index.html exists. To update the page, edit the files there,
+from this session or any later one: that folder is the only copy. An existing name gives its
+folder. unpin takes it off the Pinned list and keeps the folder, listed under Unpinned; pin
+brings it back. rm deletes an unpinned page and its folder for good, only on the user's ask.
+show also shows it in this session, as atc show does: it lands in the session's pages with a
+push and stays the one pinned page (same state, same link); taking it down there only takes it
+off the session. state is its atc.state, as atc show --state.
 
 Making a session page a pinned one is a move you do yourself: atc pages new, write the
 page into that folder (copy its images too, and fix any path that pointed outside it),
@@ -344,7 +297,7 @@ func pagesCmd(args []string) error {
 	}
 	switch op {
 	case "-h", "--help", "help":
-		fmt.Print(pagesHelp)
+		printHelp("pages")
 		return nil
 	case "", "ls", "list":
 		list, err := c.Pins()
@@ -359,7 +312,7 @@ func pagesCmd(args []string) error {
 			if p.Unpinned {
 				state = "unpinned"
 			}
-			fmt.Printf("%-24s %s\n%24s %s, %s · updated %s\n", p.Name, cmp.Or(p.Title, "(no title)"), "", state, tilde(filepath.Dir(p.Path)), p.Updated.Format("Jan 2 15:04"))
+			fmt.Printf("%-24s %s\n%24s %s, %s · updated %s\n", p.Name, cmp.Or(p.Title, "(no title)"), "", state, tilde(filepath.Dir(p.Path)), when.Stamp(p.Updated.Local(), time.Now()))
 		}
 		return nil
 	case "new":
@@ -371,9 +324,9 @@ func pagesCmd(args []string) error {
 			return err
 		}
 		if r.Created {
-			fmt.Printf("Pinned page %s: write index.html in %s\n", name, r.Dir)
+			fmt.Printf("Made pinned page %s: write index.html in %s.\n", name, r.Dir)
 		} else {
-			fmt.Printf("%s is already pinned; its folder is %s\n", name, r.Dir)
+			fmt.Printf("%s is already pinned; its folder is %s.\n", name, r.Dir)
 		}
 		if strings.HasPrefix(r.Link, "http") {
 			fmt.Println("Link:", r.Link)
@@ -437,8 +390,7 @@ func pagesCmd(args []string) error {
 
 func openPage(args []string) error {
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
-		fmt.Print("usage: atc open <session|@agent>/<page>[#id]   (atc show -h)\n")
-		os.Exit(2)
+		usageExit("open")
 	}
 	ref, at, _ := strings.Cut(args[0], "#")
 	owner, name := "", ref
@@ -461,7 +413,7 @@ func openPage(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Opened on the phone: %s\n", r.Link)
+	fmt.Printf("Opened %s on the phone.\n", r.Link)
 	return nil
 }
 
@@ -480,11 +432,15 @@ func pageState(c *client.Client, sid, name string, write bool) error {
 	if b = bytes.TrimSpace(b); !json.Valid(b) {
 		return fmt.Errorf("state is JSON; stdin is not")
 	}
-	return c.SetPageState(sid, name, b)
+	if err := c.SetPageState(sid, name, b); err != nil {
+		return err
+	}
+	fmt.Printf("Saved the state of %s.\n", name)
+	return nil
 }
 
 func stateCmd(args []string) error {
-	fs := flag.NewFlagSet("state", flag.ExitOnError)
+	fs := flags("state")
 	set := fs.Bool("set", false, "merge the JSON on stdin into the state")
 	project := fs.Bool("project", false, "the project this folder is in, instead of a session")
 	fs.Parse(args)
@@ -493,7 +449,7 @@ func stateCmd(args []string) error {
 		argv = append([]string{here()}, argv...)
 	}
 	if len(argv) < 1 || len(argv) > 2 {
-		return fmt.Errorf("usage: atc state [-set] <session> [page], or atc state -project [page]")
+		return usageErr("state")
 	}
 	c := client.Load()
 	sid, title := argv[0], argv[0]

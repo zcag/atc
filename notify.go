@@ -9,26 +9,6 @@ import (
 	"github.com/zcag/atc/internal/client"
 )
 
-const notifyHelp = `atc notify: tell the user something, as a push on their phone.
-
-  atc notify [--urgent] [--reply TEXT]... [--page name[#id]] [message...]
-
-From inside a session the push carries the session's title and opens it when tapped.
-Reads the message from stdin when none is given.
-
-By default it follows atc's own rules, the same as a finished turn: no push while the
-user is looking at this session or using atc anywhere, or while the session is parked.
---urgent always buzzes, whatever they are doing; keep it for things that can't wait.
-
-  --reply TEXT   a button on the push that sends TEXT back to this session when tapped
-                 (repeat for more, up to three); the user can also type a reply
-  --page name[#id]
-                 tapping it opens this session's page (atc show), at the section
-                 with that id when given
-
-Inside a session atc knows which one it is; anywhere else add --session <session>.
-`
-
 func notify(args []string) error {
 	var urgent bool
 	var ref, page string
@@ -50,9 +30,6 @@ func notify(args []string) error {
 		switch {
 		case !strings.HasPrefix(a, "-"):
 			words = append(words, a)
-		case flag == "h" || flag == "help":
-			fmt.Print(notifyHelp)
-			return nil
 		case flag == "urgent" || flag == "u":
 			urgent = true
 		case flag == "reply" || flag == "r":
@@ -79,8 +56,7 @@ func notify(args []string) error {
 		text = string(b)
 	}
 	if strings.TrimSpace(text) == "" {
-		fmt.Print(notifyHelp)
-		os.Exit(2)
+		usageExit("notify")
 	}
 	if len(replies) > 3 {
 		return fmt.Errorf("at most three replies")

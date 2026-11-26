@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"errors"
-	"flag"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -54,32 +53,9 @@ var starterEmbed embed.FS
 
 var starterAgents, _ = fs.Sub(starterEmbed, "starter/agents")
 
-const voiceHelp = `atc voice: calls with the assistant, on this machine. Add-on: the app calls it over atc, no phone needed.
-
-  atc voice install [--lang en] [--also tr] [--engine pocket-en] [--tts-url URL] [--voice alba]
-                    [--assistant NAME] [--user NAME] [--phone]
-  atc voice status
-  atc voice uninstall [--purge] [--force]
-
-install writes the call stack to ~/.local/share/atc/voice, downloads its models (~/.cache/atc/voice) and voice
-engine, and starts the services. Runs again safely; a restart waits for any call to end. Flags are kept in
-~/.config/atc/voice.env, with every other setting (voice/README.md lists them).
-
-  --lang, --also   the call's first language, and others it can switch to (voice/lang/)
-  --engine         by default what each language needs: pocket-en (CPU) for English, pocket and ahenk (CPU) for Turkish.
-                   Also piper or kokoro (English, CPU); higgs needs a GPU and setup by hand.
-                   An Intel Mac has no torch for pocket and pocket-en, so piper is its default (docs/calls.md, On a Mac)
-  --tts-url        your own voice server instead of an engine here: anything with OpenAI's /v1/audio/speech and raw PCM
-                   (voice/README.md lists its model, rate and key settings)
-  --voice          the engine's voice; empty is its default
-  --phone          also run the phone-on-USB line (voice/device/), otherwise only the app line
-uninstall stops and removes the services and the stack's files; --purge also removes models, the venv, recordings and
-voice.env; --force does it during a call.
-`
-
 func voiceCmd(args []string) error {
 	if len(args) == 0 {
-		fmt.Print(voiceHelp)
+		printHelp("voice")
 		return nil
 	}
 	switch args[0] {
@@ -92,7 +68,7 @@ func voiceCmd(args []string) error {
 	case "unit":
 		return voiceUnitCmd(args[1:])
 	}
-	fmt.Print(voiceHelp)
+	printHelp("voice")
 	return nil
 }
 
@@ -302,8 +278,7 @@ func voiceUnits(env map[string]string) []string {
 }
 
 func voiceInstall(args []string) error {
-	fs := flag.NewFlagSet("voice install", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(voiceHelp) }
+	fs := flags("voice")
 	lang := fs.String("lang", "", "")
 	also := fs.String("also", "", "")
 	engine := fs.String("engine", "", "")
@@ -662,8 +637,7 @@ func removeVoiceUnits(home string) {
 }
 
 func voiceUninstall(args []string) error {
-	flags := flag.NewFlagSet("voice uninstall", flag.ExitOnError)
-	flags.Usage = func() { fmt.Print(voiceHelp) }
+	flags := flags("voice")
 	purge := flags.Bool("purge", false, "")
 	force := flags.Bool("force", false, "")
 	flags.Parse(args)

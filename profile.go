@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -17,22 +16,6 @@ import (
 	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/client"
 )
-
-const profileHelp = `atc profile                      the Claude accounts sessions run on, and whether each is signed in
-atc profile add <name> <folder>...
-                                 a Claude account for the sessions under those folders: a config folder
-                                 of its own (~/.claude-<name>, or -dir) with its own sign-in, transcripts
-                                 and daemon, sharing your settings, CLAUDE.md, skills, commands, agents,
-                                 plugins and MCP servers. Run it again to bring over MCP servers added since.
-atc profile rm <name>            sessions under its folders go back to the default account; its folder
-                                 and transcripts are left as they are
-atc profile move <session> <name>
-                                 put a session on another account, with its whole conversation: a
-                                 session resumes on the account that keeps its transcript, so this
-                                 moves the transcript, and an open session resumes there
-
-Profiles live in profiles.json in atc's config folder; atc reads it when it starts.
-`
 
 // sharedConfig is what a profile links from the default Claude folder: everything that is how you work, nothing that
 // is one account's (sign-in, transcripts, history, the daemon).
@@ -49,10 +32,10 @@ func profileCmd(args []string) error {
 	}
 	switch args[0] {
 	case "add":
-		fs := flag.NewFlagSet("profile add", flag.ExitOnError)
+		fs := flags("profile")
 		dir := fs.String("dir", "", "its Claude config folder (default ~/.claude-<name>)")
 		if len(args) < 2 {
-			return errors.New("usage: atc profile add <name> <folder>...")
+			return usageErr("profile")
 		}
 		name := args[1]
 		fs.Parse(args[2:])
@@ -83,7 +66,7 @@ func profileCmd(args []string) error {
 		return nil
 	case "move":
 		if len(args) != 3 {
-			return errors.New("usage: atc profile move <session> <name>")
+			return usageErr("profile")
 		}
 		c := client.Load()
 		s, err := c.Find(args[1], true)
@@ -95,21 +78,25 @@ func profileCmd(args []string) error {
 			return err
 		}
 		if id != "" {
-			fmt.Printf("%s runs on %s now, as %s\n", s.Title, args[2], id)
+			fmt.Printf("Moved %s to %s; it runs there now as %s.\n", s.Title, args[2], id)
 		} else {
-			fmt.Printf("%s is on %s now; it resumes there\n", s.Title, args[2])
+			fmt.Printf("Moved %s to %s; it resumes there.\n", s.Title, args[2])
 		}
 		return nil
 	case "rm":
 		if len(args) != 2 {
-			return errors.New("usage: atc profile rm <name>")
+			return usageErr("profile")
 		}
-		return rmProfile(profilesPath(), args[1])
+		if err := rmProfile(profilesPath(), args[1]); err != nil {
+			return err
+		}
+		fmt.Printf("Removed %s; its folders' sessions run on the default account once atc restarts.\n", args[1])
+		return nil
 	case "-h", "--help", "help":
-		fmt.Print(profileHelp)
+		printHelp("profile")
 		return nil
 	}
-	return fmt.Errorf("atc profile: no command %q\n\n%s", args[0], profileHelp)
+	return fmt.Errorf("atc profile: no command %q (atc profile -h)", args[0])
 }
 
 func expandHome(p string) string {
@@ -121,8 +108,9 @@ func expandHome(p string) string {
 }
 
 func listProfiles() error {
+	var rows [][]string
 	for _, p := range claude.Profiles() {
-		where := "default"
+		where := "every other folder"
 		if !p.Default() {
 			where = strings.Join(p.Paths, ", ")
 		}
@@ -130,8 +118,9 @@ func listProfiles() error {
 		if signedInAs(p) {
 			state = "signed in"
 		}
-		fmt.Printf("%-10s %-40s %s  (%s)\n", p.Name, p.Home(), where, state)
+		rows = append(rows, []string{p.Name, state, p.Home(), where})
 	}
+	printLines(table([]string{"Profile", "Sign-in", "Config folder", "Sessions under"}, rows, nil, nil, painter()))
 	return nil
 }
 

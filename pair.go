@@ -3,9 +3,7 @@ package main
 import (
 	"cmp"
 	"errors"
-	"flag"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,13 +32,16 @@ func login(args []string) error {
 		if err := client.SaveLogin(p.URL, r.Token, r.CA); err != nil {
 			return err
 		}
-		fmt.Printf("logged in to %s as %s\n", p.URL, thisMachine())
+		fmt.Printf("Logged in to %s as %s.\n", p.URL, thisMachine())
 		return nil
 	case len(args) == 2:
-		return client.SaveLogin(args[0], args[1], "")
+		if err := client.SaveLogin(args[0], args[1], ""); err != nil {
+			return err
+		}
+		fmt.Printf("Saved: this machine talks to %s.\n", args[0])
+		return nil
 	}
-	log.Fatal("usage: atc login <url> <token>\n       atc login <pairing>")
-	return nil
+	return usageErr("login")
 }
 
 func pairCmd(args []string) error {
@@ -68,13 +69,13 @@ func pairCmd(args []string) error {
 
 func peerCmd(args []string) error {
 	if len(args) == 0 || args[0] != "add" {
-		return errors.New("usage: atc peer add [-name N] <pairing>")
+		return usageErr("peer")
 	}
-	fs := flag.NewFlagSet("peer add", flag.ExitOnError)
+	fs := flags("peer")
 	name := fs.String("name", "", "what to call it, by default the name it reports")
 	fs.Parse(args[1:])
 	if fs.NArg() != 1 {
-		return errors.New("usage: atc peer add [-name N] <pairing>")
+		return usageErr("peer")
 	}
 	p, err := pair.Parse(fs.Arg(0))
 	if err != nil {
@@ -86,12 +87,12 @@ func peerCmd(args []string) error {
 	}
 	peer := server.Peer{Name: cmp.Or(*name, r.Host), URL: p.URL, Token: r.Token, CA: r.CA}
 	if peer.Name == "" {
-		return errors.New("the other machine reports no name: pass -name")
+		return errors.New("the other machine reports no name: pass --name")
 	}
 	os.MkdirAll(client.ConfigDir(), 0o700)
 	if err := server.SavePeer(filepath.Join(client.ConfigDir(), "peers.json"), peer); err != nil {
 		return err
 	}
-	fmt.Printf("added peer %s at %s; restart atc to pick it up\n", peer.Name, peer.URL)
+	fmt.Printf("Added %s at %s; restart atc to pick it up.\n", peer.Name, peer.URL)
 	return nil
 }

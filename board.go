@@ -14,9 +14,7 @@ import (
 	"github.com/zcag/atc/internal/pages"
 )
 
-const boardHelp = `atc board: the project's board of things to decide.
-
-Every project (the repo this folder is in; a worktree counts as its main checkout) can
+const boardMore = `Every project (the repo this folder is in; a worktree counts as its main checkout) can
 have one board: a pit board on a page every session in that repo shows. Agents put
 cards on it; the user goes through them one card at a time (→ in, ← out, ↑ maybe,
 ↓ unsure, on a phone by swiping), reorders what is in, and buries what is done. The
@@ -26,21 +24,14 @@ Use it when the user has a choice to make between things you found (options to b
 picks from a list, photos to keep, ideas worth doing), or for ideas about the project
 worth keeping beyond today. A card says it came from you; you never decide for them.
 
-  atc board add <title> [--note N] [--body B] [--url U] [--img FILE|URL] [--as NAME]
-                    one card. --note is one line under the title, --body the case for
-                    it, --img a picture (a local file is copied next to the board).
-                    It is signed with your agent's name or your session's title, or NAME.
-  atc board add -   cards from stdin, a JSON array of {title, note, body, url, img}
-  atc board         every card with its lane and note, best first: in (in the user's
-                    order), maybe, unsure, then what is still waiting (unsorted) and out;
-                    a card buried as built says "out done", handed off "out handed"
-  atc board --lane in --json
-                    only one lane, or JSON with the bodies and links too
-  --project DIR     another project than the one this folder is in
-
 The first add makes the board and shows it on the sessions working in the repo. Read
 it again to see what the user decided; tell them with atc notify when a batch is
 waiting, if they are not looking. Its state, as JSON: atc state --project board.
+
+Without a command it lists every card with its lane and note, best first: in (in the user's
+order), maybe, unsure, then what is still waiting (unsorted) and out; a card buried as built
+says "out done", handed off "out handed". add - reads cards from stdin, a JSON array of
+{title, note, body, url, img}. A card is signed with your agent's name or your session's title.
 `
 
 const projectRef = "+project"
@@ -92,9 +83,6 @@ func boardCmd(args []string) error {
 		}
 		var err error
 		switch flag {
-		case "h", "help":
-			fmt.Print(boardHelp)
-			return nil
 		case "json":
 			asJSON = true
 		case "project":
@@ -150,7 +138,7 @@ func boardCmd(args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Added %d to %s's board: %s\n", len(r.IDs), filepath.Base(r.Root), r.Link)
+		fmt.Printf("Added %s to %s's board: %s\n", plural(len(r.IDs), "card", "cards"), filepath.Base(r.Root), r.Link)
 		return nil
 	case "ls", "list":
 		raw, err := c.PageState(pages.ProjectOwner(pages.ProjectRoot(dir)), pages.BoardName)

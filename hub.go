@@ -3,7 +3,6 @@ package main
 import (
 	"cmp"
 	"context"
-	"flag"
 	"fmt"
 	"log"
 	"net/http"
@@ -16,29 +15,9 @@ import (
 	"github.com/zcag/atc/internal/hub"
 	"github.com/zcag/atc/internal/server"
 	"github.com/zcag/atc/internal/startover"
+	"github.com/zcag/atc/internal/when"
 	"github.com/zcag/atc/modes"
 )
-
-const hubHelp = `atc hub: the assistant's one conversation, shared by atc, WhatsApp and phone calls.
-
-  atc hub [-addr 127.0.0.1:8820] [-model opus] [-effort medium] [-state DIR]
-  atc hub status | reset
-
-Runs Claude as a stream-json process that each channel talks into, so a reply streams to
-whoever asked while the others wait or join. Runs as its own service (atc-hub.service), so
-restarting atc never cuts a call. atc finds it at $ATC_HUB.
-
-Guests (atc guest) get a conversation of their own beside it (@guests, working in ~/guests):
-the guest and guest-call channels go there, and its API is under /guests/.
-
-  -quiet 6h -small 80000      quiet this long and past this many tokens: start over
-  -cap-quiet 10m -cap 150000  quiet this long and past this many: start over
-Starting over has the session write a handover note that opens the next one.
-
-Calls go through the call line at $ATC_CALL_LINE and only ever to
-$ATC_CALL_NUMBER (default: the first number in $ATC_WHATSAPP_OWNER).
-Its words (prompts, how to talk on each channel) override from ~/.config/atc/modes/; atc prompts prints them.
-`
 
 func hubCmd(args []string) error {
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
@@ -51,13 +30,14 @@ func hubCmd(args []string) error {
 			if err != nil {
 				return err
 			}
-			fmt.Printf("session %s, pid %d, alive %v, context %dk, quiet %s, home %s\n", st.Session, st.PID, st.Alive, st.Context/1000,
-				(time.Duration(st.IdleS) * time.Second).String(), st.Home)
+			alive := map[bool]string{true: "running", false: "not running"}[st.Alive]
+			fmt.Printf("Session %s, %s (pid %d), context %dk, quiet %s, in %s.\n", st.Session, alive, st.PID, st.Context/1000,
+				when.Duration(time.Duration(st.IdleS)*time.Second), st.Home)
 			if len(st.Owners) > 0 {
-				fmt.Printf("turn for %s (writing to %s)\n", strings.Join(st.Owners, ", "), st.Route)
+				fmt.Printf("Its turn is for %s (writing to %s).\n", strings.Join(st.Owners, ", "), st.Route)
 			}
 			for ch, n := range st.Channels {
-				fmt.Printf("connected: %s (%d)\n", ch, n)
+				fmt.Printf("Connected: %s (%d).\n", ch, n)
 			}
 			return nil
 		case "reset":
@@ -67,11 +47,9 @@ func hubCmd(args []string) error {
 			fmt.Println("Starting over: the session writes its handover note, then a new one opens with it.")
 			return nil
 		}
-		fmt.Print(hubHelp)
-		os.Exit(2)
+		usageExit("hub")
 	}
-	fs := flag.NewFlagSet("hub", flag.ExitOnError)
-	fs.Usage = func() { fmt.Print(hubHelp) }
+	fs := flags("hub")
 	addr := fs.String("addr", cmp.Or(os.Getenv("ATC_HUB_ADDR"), "127.0.0.1:8820"), "listen address")
 	model := fs.String("model", "opus", "Claude model")
 	effort := fs.String("effort", "medium", "Claude effort")
@@ -188,28 +166,6 @@ func callNumber() string {
 	return "+" + strings.TrimPrefix(owner, "+")
 }
 
-const callHelp = `atc call: ring the user, with the assistant on the line.
-
-  atc call [--reason TEXT] [--wait] [--timeout 45s] [--app | --phone | --whatsapp]
-
-It rings the atc app on their phone (a call over atc, like a WhatsApp call); when the app
-does not ring within a few seconds (no data, phone off), the phone line, when there is one,
-calls their own number instead, never another. When they pick up, the assistant (atc's hub
-session) speaks first and knows the reason; from another session, it also knows who asked
-and passes their answer back to you with send.
-
-  --reason TEXT   why you are calling and what to tell them
-  --wait          wait for the outcome and print it: answered, no-answer or busy
-  --timeout D     how long it rings (default 45s)
-  --app           only the atc app, no fallback to the phone line
-  --phone         only the phone line
-  --whatsapp      a WhatsApp voice call from the assistant's account instead;
-                  only when the user asks for a WhatsApp call
-
-Without --wait it returns at once; a call nobody picks up comes back to your session as
-a message saying so.
-`
-
 func callCmd(args []string) error {
 	var reason, via string
 	var wait bool
@@ -231,9 +187,6 @@ func callCmd(args []string) error {
 		switch {
 		case !strings.HasPrefix(a, "-"):
 			reason = strings.TrimSpace(reason + " " + a)
-		case flag == "h" || flag == "help":
-			fmt.Print(callHelp)
-			return nil
 		case flag == "reason" || flag == "r":
 			reason, err = val()
 		case flag == "wait" || flag == "w":

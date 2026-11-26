@@ -19,14 +19,6 @@ import (
 
 const appReleases = "https://github.com/zcag/atc/releases/latest/download/"
 
-const appHelp = `Usage: atc app update | characters
-
-update      downloads the latest Android app and call characters from atc's releases into the folder this server
-            offers them from (ATC_APP_DIR, by default ~/.local/share/atc/app), so phones can install it from /app/
-            and update from it.
-characters  downloads only the characters and rooms, about 10 MB.
-`
-
 func defaultAppDir() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".local", "share", "atc", "app")
@@ -36,8 +28,7 @@ func appDir() string { return cmp.Or(os.Getenv("ATC_APP_DIR"), defaultAppDir()) 
 
 func appCmd(args []string) error {
 	if len(args) != 1 || args[0] != "update" && args[0] != "characters" {
-		fmt.Print(appHelp)
-		os.Exit(2)
+		usageExit("app")
 	}
 	dir := appDir()
 	if args[0] == "characters" {
