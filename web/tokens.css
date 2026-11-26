@@ -12,6 +12,8 @@
   --strip: light-dark(oklch(97.6% 0.002 250), oklch(16.5% 0.006 250));
   --board: light-dark(oklch(95% 0.003 250), oklch(18.5% 0.006 250));
   --sunk: light-dark(oklch(92% 0.004 250), oklch(14.5% 0.006 250));
+  --chrome: light-dark(oklch(92% 0.004 250), oklch(22.5% 0.007 250));
+  --chrome-hi: light-dark(oklch(89.5% 0.005 250), oklch(26.5% 0.008 250));
   --strip-hi: light-dark(oklch(91% 0.004 250), oklch(23% 0.007 250));
   --code: light-dark(oklch(93.5% 0.003 250), oklch(20.5% 0.006 250));
   --line: light-dark(oklch(85% 0.005 250), oklch(28% 0.007 250));
@@ -62,25 +64,13 @@
   --toast-ink: light-dark(oklch(96% 0.004 250), oklch(18% 0.01 250));
   --toast-ink-2: light-dark(oklch(78% 0.006 250), oklch(38% 0.01 250));
 
-  --series-1: light-dark(#2a78d6, #3987e5);
-  --series-2: light-dark(#eb6834, #d95926);
-  --series-3: light-dark(#1baf7a, #199e70);
-  --series-4: light-dark(#eda100, #c98500);
-  --series-5: light-dark(#e87ba4, #d55181);
-
-  --app-blue: #3b82f6; --app-amber: #f59e0b; --app-violet: #8b5cf6; --app-green: #10b981; --app-red: #ef4444;
-  --app-teal: #14b8a6; --app-pink: #ec4899; --app-orange: #f97316; --app-slate: #64748b;
-
-  --proj-ink-l: 50% 34%; --proj-ink-d: 60% 72%;
-  --proj-tint-l: 45% 90%; --proj-tint-d: 30% 21%;
-  --proj-soft-l: 45% 50% / .13; --proj-soft-d: 45% 60% / .15;
-
-  --hl-key: light-dark(#7a3fb0, #c9a2f5);
-  --hl-str: light-dark(#2b7a4b, #8fd6a3);
-  --hl-num: light-dark(#b5761b, #f0b46e);
-  --hl-com: light-dark(#8a93a3, #6b7689);
-  --hl-fn: light-dark(#2f5fc4, #8fb0ff);
-  --hl-tit: light-dark(#b03a48, #f59aa3);
+  --id-light: 58% 0.11;
+  --id-dark: 74% 0.1;
+  --series-1: light-dark(oklch(var(--id-light) 190), oklch(var(--id-dark) 190));
+  --series-2: light-dark(oklch(var(--id-light) 305), oklch(var(--id-dark) 305));
+  --series-3: light-dark(oklch(var(--id-light) 135), oklch(var(--id-dark) 135));
+  --series-4: light-dark(oklch(var(--id-light) 340), oklch(var(--id-dark) 340));
+  --series-5: light-dark(oklch(var(--id-light) 215), oklch(var(--id-dark) 215));
 
   --term-bg: light-dark(oklch(98.6% 0.002 250), oklch(13.5% 0.006 250));
   --term-fg: light-dark(oklch(24% 0.01 250), oklch(89% 0.006 250));
@@ -118,58 +108,31 @@
   --mono: "Recursive Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --read: Literata, Georgia, serif;
   --text: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
-  --serif: var(--read);
   --v-you: "CASL" 1;
   --lh-ui: 1.35;
   --lh-read: 1.52;
 
-  --text-scale: 1;
-  --fs-micro: calc(11px * var(--text-scale));
-  --fs-small: calc(12px * var(--text-scale));
-  --fs-ui: calc(13px * var(--text-scale));
-  --fs-body: calc(14px * var(--text-scale));
-  --fs-title: calc(16px * var(--text-scale));
-  --fs-read: calc(17.5px * var(--text-scale));
-  --fs-text: calc(16.5px * var(--text-scale));
-  --fs-read-phone: calc(17px * var(--text-scale));
-  --fs-lead: calc(19px * var(--text-scale));
-  --fs-h: calc(22px * var(--text-scale));
-  --fs-display: calc(30px * var(--text-scale));
-  --fs-xs: var(--fs-small);
-  --fs-sm: calc(12.5px * var(--text-scale));
-  --fs-md: var(--fs-ui);
-  --fs-lg: calc(13.5px * var(--text-scale));
-  --fs-xl: var(--fs-body);
-  --fs-2xl: calc(15px * var(--text-scale));
-  --fs-3xl: var(--fs-title);
-  --fs-4xl: calc(17px * var(--text-scale));
-  --fs-3xs: calc(10px * var(--text-scale));
-  --fs-2xs: calc(11.5px * var(--text-scale));
-  --fs-5xl: calc(20px * var(--text-scale));
-  --fs-6xl: calc(26px * var(--text-scale));
-  --fs-7xl: calc(32px * var(--text-scale));
-  --fs-hero: calc(50px * var(--text-scale));
+  --fs-micro: 11px;
+  --fs-small: 12px;
+  --fs-ui: 13px;
+  --fs-body: 14px;
+  --fs-title: 16px;
+  --fs-read: 17.5px;
+  --fs-h: 22px;
+  --fs-display: 30px;
 
-  --density: 1;
-  --s1: calc(4px * var(--density));
-  --s2: calc(8px * var(--density));
-  --s3: calc(12px * var(--density));
-  --s4: calc(16px * var(--density));
-  --s5: calc(24px * var(--density));
-  --s6: calc(32px * var(--density));
-  --s7: calc(48px * var(--density));
-  --sp-1: calc(2px * var(--density));
-  --sp-2: var(--s1);
-  --sp-3: calc(6px * var(--density));
-  --sp-4: var(--s2);
-  --sp-5: calc(10px * var(--density));
-  --sp-6: var(--s3);
-  --sp-7: calc(14px * var(--density));
-  --sp-8: var(--s4);
-  --sp-9: calc(18px * var(--density));
-  --sp-10: calc(20px * var(--density));
-  --sp-11: var(--s5);
-  --sp-12: var(--s6);
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 24px;
+  --s6: 32px;
+  --s7: 48px;
+
+  --r1: 4px;
+  --r2: 7px;
+  --r3: 10px;
+  --pill: 999px;
 
   --hit: 44px;
   --btn-h: 28px;
@@ -181,60 +144,16 @@
   --toc-w: 220px;
   --read-w: 650px;
 
-  --r-sm: 3px;
-  --r-md: 5px;
-  --r-xs: var(--r-sm);
-  --r-lg: var(--r-md);
-  --r-xl: var(--r-md);
-  --r-2xl: var(--r-md);
-  --r-pill: 999px;
-
   --shade: light-dark(oklch(21% 0.01 250), oklch(5% 0.005 250));
-  --shadow-pop: 0 0 0 1px var(--line), 0 12px 32px light-dark(oklch(21% 0.01 250 / .16), oklch(5% 0.005 250 / .55));
-  --shadow-sheet: 0 -8px 30px color-mix(in oklab, var(--shade) 18%, transparent);
-  --shadow-1: 0 0 0 1px var(--line);
-  --shadow-2: var(--shadow-pop);
-  --shadow-3: var(--shadow-pop);
-  --shadow-float: var(--shadow-pop);
-  --shadow-modal: var(--shadow-pop);
-  --lift: var(--shadow-pop);
+  --pop: 0 0 0 1px var(--line), 0 12px 32px light-dark(oklch(21% 0.01 250 / .16), oklch(5% 0.005 250 / .55));
+  --pop-up: 0 -8px 30px color-mix(in oklab, var(--shade) 18%, transparent);
 
-  --t-fast: .12s;
-  --t: .15s;
-  --t-slow: .18s;
-  --t-slower: .35s;
+  --t: 120ms;
   --ease: cubic-bezier(.2, .7, .2, 1);
-  --ease-pop: var(--ease);
 
   --side: 400px;
   --measure: 760px;
   --wide: 1180px;
-
-  --pal-bg: var(--strip);
-  --pal-bg-elevated: var(--strip);
-  --pal-bg-glass: var(--strip);
-  --pal-bg-sunken: var(--sunk);
-  --pal-fg: var(--ink);
-  --pal-fg-muted: var(--dim);
-  --pal-fg-faint: var(--faint);
-  --pal-line: var(--line);
-  --pal-line-strong: var(--line-strong);
-  --pal-accent: var(--ink);
-  --pal-accent-fg: var(--strip);
-  --pal-accent-soft: var(--strip-hi);
-  --pal-selection: var(--strip-hi);
-  --pal-scrim: var(--scrim);
-  --pal-destructive: var(--fail);
-  --pal-success: var(--add);
-  --pal-font-ui: var(--sans);
-  --pal-font-mono: var(--mono);
-  --pal-radius-row: var(--r-sm);
-  --pal-radius-control: var(--r-sm);
-  --pal-radius-tag: var(--r-sm);
-  --pal-radius-kbd: var(--r-sm);
-  --pal-radius-panel: var(--r-md);
-  --pal-radius-popover: var(--r-md);
-  --pal-radius-hud: var(--r-md);
 }
 @media (prefers-color-scheme: dark) { :root:not([data-scheme="light"]) { --dark: 1; } }
 :root[data-scheme="light"] { color-scheme: light; }

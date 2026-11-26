@@ -48,7 +48,7 @@
 .pghd .more { display: none; }
 .pgbody2 { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .pgnone { padding: var(--s6) var(--s6) var(--s6) 44px; max-width: 760px; }
-.pgnone h2 { margin: 0; font-size: var(--fs-lead); font-weight: 720; line-height: 1.25; color: var(--ink); }
+.pgnone h2 { margin: 0; font-size: var(--fs-h); font-weight: 720; line-height: 1.25; color: var(--ink); }
 .pgnone p { margin: var(--s2) 0 var(--s4); font-family: var(--read); font-size: var(--fs-title); line-height: 1.5; color: var(--dim); }
 .pgnone code { font-family: var(--mono); font-size: .9em; }
 

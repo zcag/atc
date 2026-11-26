@@ -2,6 +2,8 @@
   --strip: light-dark(#eceff4, #2e3440);
   --board: light-dark(#e5e9f0, #323846);
   --sunk: light-dark(#d8dee9, #292e39);
+  --chrome: light-dark(#d8dee9, #3b4252);
+  --chrome-hi: color-mix(in oklab, var(--chrome) 88%, var(--ink));
   --strip-hi: light-dark(#dde3ec, #3b4252);
   --code: light-dark(#e5e9f0, #353b49);
   --line: light-dark(#cbd3df, #434c5e);
@@ -36,18 +38,15 @@
   --toast-ink: light-dark(#eceff4, #2e3440);
   --toast-ink-2: light-dark(#d8dee9, #4c566a);
 
-  --series-1: light-dark(#5e81ac, #81a1c1);
-  --series-2: light-dark(#d08770, #d08770);
-  --series-3: light-dark(#8fbcbb, #8fbcbb);
-  --series-4: light-dark(#ebcb8b, #ebcb8b);
-  --series-5: light-dark(#b48ead, #b48ead);
+  --id-light: 55% 0.07;
+  --id-dark: 78% 0.07;
 
-  --hl-key: light-dark(#81609a, #b48ead);
-  --hl-str: light-dark(#4e6a38, #a3be8c);
-  --hl-num: light-dark(#a05a3c, #d08770);
-  --hl-com: light-dark(#6b7589, #8a94a8);
-  --hl-fn: light-dark(#3f6f7c, #88c0d0);
-  --hl-tit: light-dark(#9c4a53, #bf616a);
+  --hl-keyword: light-dark(#81609a, #b48ead);
+  --hl-string: light-dark(#4e6a38, #a3be8c);
+  --hl-number: light-dark(#a05a3c, #d08770);
+  --hl-comment: light-dark(#6b7589, #8a94a8);
+  --hl-title: light-dark(#3f6f7c, #88c0d0);
+  --hl-type: light-dark(#9c4a53, #bf616a);
 
   --ansi-selectionBackground: light-dark(#d8dee9, #434c5e);
   --ansi-black: light-dark(#3b4252, #3b4252);

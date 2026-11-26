@@ -9,6 +9,7 @@ check:
 	go test ./...
 	go run . prompts --check
 	@if [ -f ~/.config/atc/private-words ]; then ! git grep --untracked -nIEf ~/.config/atc/private-words -- . ':!LICENSE' ; fi
+	! git grep -nE -- 'var\(--(fs-(3xs|2xs|xs|sm|md|lg|xl|[2-7]xl|text|read-phone|lead|hero)|sp-[0-9]+|r-(xs|sm|md|lg|xl|2xl|pill)|shadow-[a-z0-9]+|lift|t-(fast|slow|slower)|ease-pop|serif|text-scale|density|pal-(bg|fg|line|accent|selection|scrim|destructive|success|font|radius)[a-z-]*|app-[a-z]+|hl-(key|str|num|com|fn|tit)|proj-[a-z]+-[ld])[,)]' -- web ':!web/pit.js'
 	if command -v node >/dev/null; then for f in web/*.js; do node --check $$f || exit 1; done; node --test web/*.test.mjs; fi
 	if command -v python3 >/dev/null; then python3 voice/test/test_lang.py && python3 voice/test/test_press.py && python3 voice/test/test_turn.py && python3 voice/test/test_greet_bye.py; fi
 	if command -v uv >/dev/null; then uv run -q --script voice/test/test_remote.py && uv run -q --script voice/test/test_ring.py && uv run -q --script voice/test/test_rate.py && uv run -q --script voice/test/test_picker.py; fi

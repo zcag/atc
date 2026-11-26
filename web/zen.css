@@ -20,17 +20,15 @@ body.zen .tx .read { padding-top: var(--s7); padding-bottom: 30vh; }
 .tx-wrap .pop.zenlook { top: var(--s1); width: min(380px, calc(100% - 24px)); max-height: calc(100% - 52px); padding: var(--s4); display: grid; gap: var(--s4); }
 .zenlook .row { display: grid; gap: 6px; min-width: 0; }
 .zenlook .row > b { font-weight: 500; font-size: var(--fs-small); color: var(--dim); }
-.zenlook .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--line-strong); }
-.tx-wrap .zenlook .seg button { height: 32px; padding: 0 var(--s1); text-align: center; border-radius: var(--r-md); font-size: var(--fs-ui); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tx-wrap .zenlook .seg button:hover { color: var(--ink); }
-.tx-wrap .zenlook .seg button[aria-pressed="true"] { background: var(--ink); color: var(--strip); }
+.zenlook .seg { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.tx-wrap .zenlook .seg button { height: 28px; padding: 0 var(--s1); overflow: hidden; text-overflow: ellipsis; }
 .tx-wrap .zenlook .sizes button:nth-child(1) { font-size: 12px; }
 .tx-wrap .zenlook .sizes button:nth-child(2) { font-size: 14px; }
 .tx-wrap .zenlook .sizes button:nth-child(3) { font-size: 16px; }
 .tx-wrap .zenlook .sizes button:nth-child(4) { font-size: 19px; }
 .tx-wrap .zenlook .sizes button:nth-child(5) { font-size: 22px; }
 .zenlook .papers { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--s1); }
-.tx-wrap .zenlook .papers button { height: 44px; text-align: center; border-radius: var(--r-md); background: var(--strip); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); font-size: var(--fs-small); overflow: hidden; }
+.tx-wrap .zenlook .papers button { height: 44px; text-align: center; border-radius: var(--r2); background: var(--strip); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); font-size: var(--fs-small); overflow: hidden; }
 .tx-wrap .zenlook .papers button[aria-pressed="true"] { box-shadow: inset 0 0 0 2px var(--focus); font-weight: 620; }
 @container tx (max-width: 620px) { .zenlook .row.wide { display: none; } }
 
@@ -85,10 +83,10 @@ body.zen .tx-wrap .prose h3 { font-size: 1.16em; font-weight: 640; margin: 1.7em
 body.zen .tx-wrap .prose h4 { font-size: 1em; font-weight: 640; color: var(--dim); margin: 1.5em 0 0.35em; }
 body.zen .tx-wrap .prose > :is(h1, h2, h3, h4):first-child { margin-top: 0; }
 body.zen .tx-wrap .prose a { text-decoration-thickness: 1px; text-underline-offset: 0.2em; }
-body.zen .tx-wrap .prose :not(pre) > code { font-size: 0.86em; padding: 0.1em 0.32em; border-radius: var(--r-sm); background: color-mix(in srgb, var(--ink) 7%, var(--strip)); box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+body.zen .tx-wrap .prose :not(pre) > code { font-size: 0.86em; padding: 0.1em 0.32em; border-radius: var(--r1); background: color-mix(in srgb, var(--ink) 7%, var(--strip)); box-decoration-break: clone; -webkit-box-decoration-break: clone; }
 body.zen .tx-wrap .prose .cite { font-size: 0.78em; color: var(--faint); }
 body.zen .tx-wrap .prose .cite code { padding: 0; background: none; }
-body.zen .tx-wrap .prose pre { font-size: 0.8em; line-height: 1.62; margin: 1.3em calc(-1 * var(--s4)) 1.5em; padding: var(--s3) var(--s4); box-shadow: none; border-radius: var(--r-md); }
+body.zen .tx-wrap .prose pre { font-size: 0.8em; line-height: 1.62; margin: 1.3em calc(-1 * var(--s4)) 1.5em; padding: var(--s3) var(--s4); box-shadow: none; border-radius: var(--r3); }
 body.zen .tx-wrap .prose ul { padding-left: 1.25em; }
 body.zen .tx-wrap .prose :is(ul, ol) { margin-bottom: 1.1em; }
 body.zen .tx-wrap .prose :is(ul, ol) > li { margin-bottom: 0.4em; }

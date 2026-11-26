@@ -11,21 +11,17 @@
 .setpage .set > .ctl { grid-column: 2; grid-row: 1 / span 2; justify-self: end; }
 .setpage .set .fixed { font-family: var(--mono); font-size: var(--fs-small); color: var(--faint); }
 
-.setpage .seg { display: inline-flex; border: 0; overflow: visible; border-radius: var(--r-md); box-shadow: inset 0 0 0 1px var(--line-strong); }
-.setpage .seg button { height: var(--btn-h); padding: 0 var(--s3); border: 0; border-radius: var(--r-md); background: none; font-size: var(--fs-ui); font-weight: 500; color: var(--dim); white-space: nowrap; }
-.setpage .seg button:hover { color: var(--ink); }
-.setpage .seg button[aria-pressed="true"] { background: var(--ink); color: var(--strip); }
 
-.setpage .themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: var(--s3); padding: var(--s4) 0 var(--s1); }
-.setpage .thcard { display: flex; flex-direction: column; padding: 3px; border: 0; border-radius: var(--r-md); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line); text-align: left; color: var(--ink); }
-.setpage .thcard:hover { box-shadow: inset 0 0 0 1px var(--line-strong); }
-.setpage .thcard[aria-checked="true"] { box-shadow: inset 0 0 0 2px var(--ink); }
+.setpage .themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: 3px; margin-top: var(--s4); padding: 3px; border-radius: var(--r3); background: var(--sunk); }
+.setpage .thcard { display: flex; flex-direction: column; padding: 3px; border: 0; border-radius: calc(var(--r3) - 3px); background: none; text-align: left; color: var(--dim); }
+.setpage .thcard:hover { color: var(--ink); background: color-mix(in srgb, var(--strip) 50%, transparent); }
+.setpage .thcard[aria-checked="true"] { background: var(--strip); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
 .setpage .thcard .meta { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px var(--s2); padding: var(--s2) var(--s2) var(--s1); }
 .setpage .thcard .meta b { font-size: var(--fs-ui); font-weight: 600; }
 .setpage .thcard .meta .cur { font-family: var(--mono); font-size: var(--fs-micro); color: var(--ink); align-self: center; }
 .setpage .thcard .meta .d { grid-column: 1 / -1; font-size: var(--fs-small); color: var(--dim); }
 
-.setpage .pv { display: grid; grid-template-columns: 1fr 1fr; height: 108px; border-radius: calc(var(--r-md) - 2px); overflow: hidden; }
+.setpage .pv { display: grid; grid-template-columns: 1fr 1fr; height: 108px; border-radius: calc(var(--r3) - 2px); overflow: hidden; }
 .setpage .pv .h { position: relative; display: flex; flex-direction: column; gap: 6px; background: var(--p-strip); transition: opacity var(--t); }
 .setpage .pv .h.off { opacity: .4; }
 .setpage .pv i { display: block; flex: none; }
@@ -43,19 +39,15 @@
 .setpage .pv .prose .s { width: 60%; }
 .setpage .pv .lab { position: absolute; right: 6px; bottom: 4px; font-family: var(--mono); font-size: 9px; color: var(--p-faint); }
 
-.setpage .rsample { margin: var(--s4) 0 0; padding: var(--s4); border-radius: var(--r-md); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); text-wrap: pretty; box-sizing: content-box; }
+.setpage .rsample { margin: var(--s4) 0 0; padding: var(--s4); border-radius: var(--r3); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink); text-wrap: pretty; box-sizing: content-box; }
 
-.setpage .capsum { margin: 0 0 var(--s4); padding: var(--s2) var(--s3); border-radius: var(--r-md); background: var(--needs-wash); box-shadow: inset 0 0 0 1px var(--needs); color: var(--ink); font-size: var(--fs-ui); }
+.setpage .capsum { margin: 0 0 var(--s4); padding: var(--s2) var(--s3); border-radius: var(--r3); background: var(--needs-wash); box-shadow: inset 0 0 0 1px var(--needs); color: var(--ink); font-size: var(--fs-ui); }
 .setpage .capsum a, .setpage .capneeds a, .setpage .set p a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 .setpage .capmachines { margin-top: var(--s6); }
-.setpage .caprestart { margin-top: var(--s4); padding: var(--s3); border-radius: var(--r-md); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line); }
+.setpage .caprestart { margin-top: var(--s4); padding: var(--s3); border-radius: var(--r3); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line); }
 .setpage .caprestart p { margin: 0 0 var(--s2); font-size: var(--fs-ui); color: var(--ink); }
 .setpage .capmsg { margin: var(--s2) 0; font-size: var(--fs-small); color: var(--dim); }
 .setpage .capmsg.bad { color: var(--fail); }
-.setpage .btn { height: var(--btn-h); padding: 0 var(--s3); display: inline-flex; align-items: center; border: 0; border-radius: var(--r-sm); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink); font-size: var(--fs-ui); font-weight: 500; white-space: nowrap; }
-.setpage .btn:hover:not(:disabled) { background: var(--strip-hi); }
-.setpage .btn.primary { background: var(--ink); color: var(--strip); box-shadow: none; font-weight: 600; }
-.setpage .btn:disabled { opacity: .5; }
 
 .setpage .caprow { padding: var(--s2) 0 var(--s3); border-bottom: 1px solid var(--hair); scroll-margin-top: var(--s4); }
 .setpage .caphd { display: flex; align-items: center; gap: var(--s2); width: 100%; min-height: var(--btn-h); padding: 0; border: 0; background: none; color: var(--ink); text-align: left; }
@@ -74,10 +66,10 @@
 .setpage .capneeds .unmet { color: var(--fail); }
 .setpage .capfix { display: flex; flex-direction: column; gap: var(--s1); }
 .setpage .capcmd { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
-.setpage .capcmd code { flex: 1; min-width: 0; padding: var(--s1) var(--s2); border-radius: var(--r-sm); background: var(--code); font-family: var(--mono); font-size: var(--fs-small); color: var(--ink); overflow-wrap: anywhere; }
+.setpage .capcmd code { flex: 1; min-width: 0; padding: var(--s1) var(--s2); border-radius: var(--r1); background: var(--code); font-family: var(--mono); font-size: var(--fs-small); color: var(--ink); overflow-wrap: anywhere; }
 .setpage .capfields { display: flex; flex-direction: column; gap: var(--s2); max-width: 520px; }
 .setpage .capfield { display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-small); color: var(--ink); }
-.setpage .capfield input, .setpage .capfield select { height: var(--btn-h); min-width: 0; width: 100%; box-sizing: border-box; padding: 0 var(--s2); border: 0; border-radius: var(--r-sm); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink); font-family: var(--mono); font-size: var(--fs-small); outline: none; }
+.setpage .capfield input, .setpage .capfield select { height: var(--btn-h); min-width: 0; width: 100%; box-sizing: border-box; padding: 0 var(--s2); border: 0; border-radius: var(--r2); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink); font-family: var(--mono); font-size: var(--fs-small); outline: none; }
 .setpage .capfield input:focus, .setpage .capfield select:focus { box-shadow: inset 0 0 0 2px var(--focus); }
 .setpage .capfield input:disabled, .setpage .capfield select:disabled { background: var(--sunk); color: var(--faint); }
 .setpage .capfield small { font-family: var(--mono); font-size: var(--fs-micro); color: var(--faint); overflow-wrap: anywhere; }
@@ -86,7 +78,7 @@
 .setpage .capbtns { display: flex; flex-wrap: wrap; gap: var(--s2); }
 .setpage .capagain { margin: var(--s6) 0 var(--s5); }
 .setpage .capbtns.end { justify-content: flex-end; margin-top: var(--s4); }
-.setpage h1 { margin: 0 0 var(--s2); font-size: var(--fs-4xl); font-weight: 650; color: var(--ink); }
+.setpage h1 { margin: 0 0 var(--s2); font-size: var(--fs-title); font-weight: 650; color: var(--ink); }
 .setpage .capintro { margin: 0 0 var(--s3); max-width: 62ch; font-size: var(--fs-ui); line-height: var(--lh-ui); color: var(--dim); }
 .setup .pgbody { overflow-y: auto; }
 
@@ -101,7 +93,6 @@
   .setpage .set > .ctl { grid-column: 1; grid-row: auto; justify-self: start; margin-top: var(--s2); }
   .setpage .seg button { height: var(--hit); padding: 0 var(--s4); }
   .setpage .rsample { padding: var(--s3); }
-  .setpage .themes { gap: var(--s2); }
   .setpage .thcard { flex-direction: row; align-items: center; min-height: var(--hit); }
   .setpage .thcard .pv { flex: none; width: 148px; height: 78px; }
   .setpage .thcard .meta { flex: 1; min-width: 0; padding: var(--s1) var(--s3); }

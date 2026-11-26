@@ -4,7 +4,16 @@
    (.page .card .row .stat .fill .tbl .pill .t-needs ...) are kept at the end, drawn the same way. */
 @import url(tokens.css);
 
-:root { --on-ink: var(--on-primary); --shadow: var(--shadow-1); --r: var(--r-sm); }
+:root {
+  --on-ink: var(--on-primary); --shadow: 0 0 0 1px var(--line); --r: var(--r2);
+  --fs-3xs: var(--fs-micro); --fs-2xs: var(--fs-micro); --fs-xs: var(--fs-small); --fs-sm: var(--fs-small); --fs-md: var(--fs-ui); --fs-lg: var(--fs-ui);
+  --fs-xl: var(--fs-body); --fs-2xl: var(--fs-body); --fs-3xl: var(--fs-title); --fs-4xl: var(--fs-title); --fs-text: var(--fs-read); --fs-lead: var(--fs-h);
+  --fs-5xl: var(--fs-h); --fs-6xl: var(--fs-h); --fs-7xl: var(--fs-display); --fs-hero: calc(var(--fs-display) * 5 / 3);
+  --sp-1: 2px; --sp-2: var(--s1); --sp-3: 6px; --sp-4: var(--s2); --sp-5: 10px; --sp-6: var(--s3); --sp-7: 14px; --sp-8: var(--s4); --sp-9: 18px; --sp-10: 20px; --sp-11: var(--s5); --sp-12: var(--s6);
+  --r-xs: var(--r1); --r-sm: var(--r1); --r-md: var(--r2); --r-lg: var(--r3); --r-xl: var(--r3); --r-2xl: var(--r3); --r-pill: var(--pill);
+  --shadow-1: 0 0 0 1px var(--line); --shadow-2: var(--pop); --shadow-3: var(--pop); --shadow-pop: var(--pop); --shadow-sheet: var(--pop-up); --lift: var(--pop);
+  --t-fast: var(--t); --t-slow: var(--t); --serif: var(--read);
+}
 
 /* ---------- base ---------- */
 *, *::before, *::after { box-sizing: border-box; }
@@ -25,7 +34,7 @@ body {
 :where(img, svg, video) { display: block; max-width: 100%; height: auto; }
 :where(a) { color: inherit; text-decoration: underline; text-decoration-color: var(--line-strong); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 :where(a):hover { text-decoration-color: var(--ink); }
-:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 code, kbd, pre, samp, .mono { font-family: var(--mono); }
 b, strong { font-weight: 650; }
 kbd { font-size: var(--fs-micro); color: var(--dim); box-shadow: inset 0 0 0 1px var(--line-strong); border-radius: 2px; padding: 0 4px; line-height: 16px; display: inline-block; min-width: 16px; text-align: center; }
@@ -173,7 +182,7 @@ tr.sum td { font-weight: 620; }
 details { max-width: 100%; }
 summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: var(--s2); min-height: 28px; font-weight: 560; color: var(--dim); }
 summary::-webkit-details-marker { display: none; }
-summary::before { content: ""; flex: none; width: 0; height: 0; border: 4.5px solid transparent; border-left: 6px solid currentColor; border-right-width: 0; transition: transform var(--t-fast) var(--ease); }
+summary::before { content: ""; flex: none; width: 0; height: 0; border: 4.5px solid transparent; border-left: 6px solid currentColor; border-right-width: 0; transition: transform var(--t) var(--ease); }
 details[open] > summary::before { transform: rotate(90deg); }
 summary:hover { color: var(--ink); }
 summary small { margin-left: auto; font-weight: 400; color: var(--faint); font-family: var(--mono); }
@@ -210,7 +219,7 @@ td .ref > span { white-space: normal; }
 .refs { display: flex; flex-wrap: wrap; gap: 6px var(--s4); }
 
 /* ---------- buttons: they act through window.atc (send, state) ---------- */
-.btn { height: var(--btn-h); padding: 0 var(--s3); display: inline-flex; align-items: center; justify-content: center; gap: var(--s2); border-radius: var(--r-sm); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--strip); color: var(--ink); font-family: var(--sans); font-size: var(--fs-ui); font-weight: 500; line-height: 1; white-space: nowrap; text-decoration: none; position: relative; overflow: hidden; vertical-align: middle; }
+.btn { height: var(--btn-h); padding: 0 var(--s3); display: inline-flex; align-items: center; justify-content: center; gap: var(--s2); border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--strip); color: var(--ink); font-family: var(--sans); font-size: var(--fs-ui); font-weight: 500; line-height: 1; white-space: nowrap; text-decoration: none; position: relative; overflow: hidden; vertical-align: middle; }
 .btn:hover { box-shadow: inset 0 0 0 1px var(--dim); }
 .btn.primary { background: var(--ink); color: var(--strip); box-shadow: none; font-weight: 560; }
 .btn.primary:hover { background: var(--dim); }
@@ -340,7 +349,7 @@ figcaption b { color: var(--ink); }
 }
 
 /* ---------- the kit before the redesign, drawn in this one ---------- */
-.card { position: relative; padding: var(--s3) var(--s4); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r-sm); }
+.card { position: relative; padding: var(--s3) var(--s4); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line); border-radius: var(--r2); }
 .card + .card { margin-top: var(--s3); }
 .cols > .card + .card { margin-top: 0; }
 .card.edge { box-shadow: inset 3px 0 0 var(--tone, var(--faint)), inset 0 0 0 1px var(--line); }
@@ -361,7 +370,7 @@ figcaption b { color: var(--ink); }
 
 .tbl { font-variant-numeric: tabular-nums; }
 
-.pill { display: inline-flex; align-items: center; gap: 6px; height: 20px; padding: 0 6px; border-radius: var(--r-sm); font-size: var(--fs-small); font-weight: 500; line-height: 1; color: var(--dim); box-shadow: inset 0 0 0 1px var(--line); white-space: nowrap; vertical-align: 1px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 20px; padding: 0 6px; border-radius: var(--r1); font-size: var(--fs-small); font-weight: 500; line-height: 1; color: var(--dim); box-shadow: inset 0 0 0 1px var(--line); white-space: nowrap; vertical-align: 1px; }
 .pill b { font: 600 var(--fs-small) var(--mono); color: inherit; }
 .pill:is(.t-needs, .t-hot) { background: var(--needs); color: var(--needs-ink); box-shadow: inset 0 0 0 1px var(--needs-edge); }
 .pill.t-turn { color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
@@ -382,16 +391,16 @@ figcaption b { color: var(--ink); }
 .edit { margin: -2px -4px; padding: 2px 4px; border-radius: 2px; outline: none; }
 .edit:hover { box-shadow: inset 0 0 0 1px var(--line); }
 .edit:focus { background: var(--strip-hi); box-shadow: inset 0 0 0 1px var(--focus); }
-.toast { position: fixed; left: 16px; right: 16px; width: fit-content; max-width: calc(100% - 32px); margin: 0 auto; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 30; display: flex; align-items: center; gap: var(--s4); padding: var(--s2) var(--s2) var(--s2) var(--s4); min-height: 40px; border-radius: var(--r-md); background: var(--toast-bg); color: var(--toast-ink); font-size: var(--fs-ui); }
+.toast { position: fixed; left: 16px; right: 16px; width: fit-content; max-width: calc(100% - 32px); margin: 0 auto; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 30; display: flex; align-items: center; gap: var(--s4); padding: var(--s2) var(--s2) var(--s2) var(--s4); min-height: 40px; border-radius: var(--r3); background: var(--toast-bg); color: var(--toast-ink); font-size: var(--fs-ui); }
 .toast button { padding: var(--s1) var(--s2); color: var(--toast-ink); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
-.toast.out { opacity: 0; transition: opacity var(--t-slow); }
-.gone { opacity: 0; transition: opacity var(--t-slow); }
+.toast.out { opacity: 0; transition: opacity var(--t); }
+.gone { opacity: 0; transition: opacity var(--t); }
 
 /* ---------- phone: one column, 44px targets ---------- */
 @media (max-width: 899px) {
   :root { --btn-h: 44px; }
   :where(body > main, .pg, .page), :is(.pg, .page).wide { padding: max(var(--s4), env(safe-area-inset-top)) var(--s4) var(--s7); }
-  .head h1 { font-size: var(--fs-lead); }
+  .head h1 { font-size: var(--fs-h); }
   .lede { font-size: var(--fs-title); }
   .stats { grid-template-columns: 1fr 1fr; grid-auto-flow: row; }
   .stats:has(> :nth-child(3):last-child) { grid-template-columns: 1fr 1fr 1fr; }

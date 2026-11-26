@@ -251,7 +251,8 @@ const HOLD = "#/hold";
 let HOLD_FROM = null;
 window.leaveHold = () => { if (location.hash !== HOLD) return; HOLD_FROM ? history.back() : location.replace("#/"); };
 const CALLDOCK = { open: true, set(v) { CALLDOCK.open = v; dispatchEvent(new Event("atc-calldock")); } };
-const isPhone = () => !matchMedia("(min-width: 900px)").matches;
+const BP = { phone: "(max-width: 899px)", desk: "(min-width: 900px)" };
+const isPhone = () => matchMedia(BP.phone).matches;
 const returnToCall = () => (isPhone() ? (location.hash = CALL) : CALLDOCK.set(true));
 const callAssistant = () => {
   if (APP?.call) return APP.call();
@@ -705,12 +706,12 @@ function App() {
     ${updated && html`<div class="appbar" role="status">
       <span>atc was updated. Reload to get the new version.</span>
       <button class="btn primary" onClick=${() => location.reload()}>Reload</button>
-      <button class="icon" aria-label="Dismiss" onClick=${() => setUpdated(false)}>✕</button>
+      <button class="icon" aria-label="Dismiss" onClick=${() => setUpdated(false)}>${ICON.x}</button>
     </div>`}
     ${stale && html`<div class="appbar" role="status">
       <span>A newer atc app is available (${stale}).</span>
       <button class="btn primary" onClick=${() => APP?.checkUpdate()}>Update</button>
-      <button class="icon" aria-label="Dismiss" onClick=${() => setStale(null)}>✕</button>
+      <button class="icon" aria-label="Dismiss" onClick=${() => setStale(null)}>${ICON.x}</button>
     </div>`}
     ${help && html`<${KeysOverlay} onClose=${() => setHelp(false)} />`}
   `;
@@ -1304,7 +1305,7 @@ function Hold({ live, me, down, limits, say }) {
         <${HoldLine} wait=${wait.length} work=${work.length} end=${72} />
         <button class="sess" onClick=${sessions}><b>Sessions</b><span class="c"><span class="a"><em>${wait.length}</em> waiting</span><span class="w"><em>${work.length}</em> working</span></span></button>
         <button class="dial" onClick=${call} aria-label="Call the assistant" aria-keyshortcuts=".">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1C10.61 21 3 13.39 3 4c0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg></button>
+          ${ICON.phone}</button>
       </div>
       <div class="hkeys">
         <button onClick=${() => to(ASSIST)}>Assistant</button><button onClick=${fresh}>New</button><button onClick=${() => to(pagesHash())}>Pages</button><button onClick=${() => to(BACKLOG)}>Backlog</button>
@@ -1532,7 +1533,7 @@ function CallPanel({ hub, live, captions, full, onMin }) {
         ${!st.ptt && html`<button class="btn ${st.muted ? "on" : ""}" aria-pressed=${st.muted} onClick=${Call.mute} aria-keyshortcuts="m">${st.muted ? "Unmute" : "Mute"} <kbd aria-hidden="true">m</kbd></button>`}
         <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)} title="Who the assistant is in each language: character, room and voice">Person</button>
         <button class="btn end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E">End <kbd aria-hidden="true">E</kbd></button>`
-      : st.phase !== "ended" && html`<button class="btn prime" onClick=${callOrSetup}>Call the assistant</button>
+      : st.phase !== "ended" && html`<button class="btn primary" onClick=${callOrSetup}>Call the assistant</button>
         <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)}>Person</button>`}
     </div>
   </aside>`;
@@ -2005,28 +2006,50 @@ const unread = (s) => {
 };
 const oneLine = (t) => (t || "").replace(/\*\*|__|`+|^#+\s*|^>\s*/gm, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/\s+/g, " ").trim();
 
-const ICON = {
-  phone: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M4.2 2.5h2l1 2.8-1.4 1.1a7 7 0 0 0 3.8 3.8l1.1-1.4 2.8 1v2c0 .6-.5 1.1-1.1 1.1A10.6 10.6 0 0 1 3.1 3.6c0-.6.5-1.1 1.1-1.1z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
-  chat: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2.5 3.5h11v7.5H7l-3 2.5V11H2.5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>`,
-  screen: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 3.5h12v8H2zM6 14h4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg>`,
-  clock: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8.5" r="5.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 5.5v3l2 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
-  mic: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 2a2 2 0 0 1 2 2v4a2 2 0 0 1-4 0V4a2 2 0 0 1 2-2zM4 7.5a4 4 0 0 0 8 0M8 11.5V14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
-  recv: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M11 5L5 11M10 11H5V6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  sent: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M5 11L11 5M6 5h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  plus: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>`,
-  search: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`,
-  pin: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9.5 1.5l5 5-2 .5-2.5 2.5.5 3-1.5 1.5L6 10l-3.5 3.5M6 10L2.5 6.5 4 5l3 .5L9.5 3z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
-  park: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13 9.5A5.5 5.5 0 016.5 3a5.5 5.5 0 106.5 6.5z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>`,
-  play: html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.5v9l7-4.5z" fill="currentColor"/></svg>`,
-  layout: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 2.5v11M8.5 6h3M8.5 9h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>`,
-  globe: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="5.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M2.4 8h11.2M8 2.2c1.8 1.6 2.6 3.6 2.6 5.8S9.8 12.2 8 13.8C6.2 12.2 5.4 10.2 5.4 8S6.2 3.8 8 2.2z" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`,
-  page: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="2.5" y="2" width="11" height="12" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5 5.5h6M5 8h6M5 10.5h3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
-  list: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M6 4h7.5M6 8h7.5M6 12h7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><path d="M2.5 3.3l.8.8 1.4-1.6M2.5 7.3l.8.8 1.4-1.6" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="3.4" cy="12" r="1" fill="currentColor"/></svg>`,
-  gear: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 1.8v2M8 12.2v2M1.8 8h2M12.2 8h2M3.6 3.6l1.4 1.4M11 11l1.4 1.4M3.6 12.4L5 11M11 5l1.4-1.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>`,
-  check: html`<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 8.5l3.2 3.2L13 4.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  back: html`<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M10 3L5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>`,
-  more: html`<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="3.5" cy="8" r="1.3" fill="currentColor"/><circle cx="8" cy="8" r="1.3" fill="currentColor"/><circle cx="12.5" cy="8" r="1.3" fill="currentColor"/></svg>`,
+const ICON_PATHS = {
+  back: '<path d="M10 3 5 8l5 5"/>',
+  fwd: '<path d="m6 3 5 5-5 5"/>',
+  prev: '<path d="M10 3 5 8l5 5"/>',
+  next: '<path d="m6 3 5 5-5 5"/>',
+  down: '<path d="m3 6 5 5 5-5"/>',
+  more: '<circle cx="3.5" cy="8" r=".6"/><circle cx="8" cy="8" r=".6"/><circle cx="12.5" cy="8" r=".6"/>',
+  plus: '<path d="M8 3v10M3 8h10"/>',
+  x: '<path d="m4 4 8 8M12 4l-8 8"/>',
+  check: '<path d="m3 8.5 3 3 7-7"/>',
+  stop: '<rect x="4" y="4" width="8" height="8" rx="1.2"/>',
+  search: '<circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3.3 3.3"/>',
+  list: '<path d="M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h0M2.5 8h0M2.5 12h0"/>',
+  page: '<path d="M4 2h5.5L12 4.5V14H4z"/><path d="M6 7h4M6 9.5h4M6 12h2.5"/>',
+  doc: '<path d="M4 2h5.5L12 4.5V14H4z"/><path d="M6 7h4M6 9.5h4M6 12h2.5"/>',
+  mic: '<rect x="6" y="2" width="4" height="7.5" rx="2"/><path d="M3.8 8a4.2 4.2 0 0 0 8.4 0M8 12.2V14"/>',
+  phone: '<path d="M4.5 2.5h2l1 3-1.5 1a7 7 0 0 0 3.5 3.5l1-1.5 3 1v2a1.5 1.5 0 0 1-1.5 1.5A10.5 10.5 0 0 1 3 4a1.5 1.5 0 0 1 1.5-1.5z"/>',
+  chat: '<path d="M2.5 3.5h11v7.5H7l-3 2.5V11H2.5z"/>',
+  screen: '<path d="M2 3.5h12v8H2zM6 14h4"/>',
+  clock: '<circle cx="8" cy="8" r="5.5"/><path d="M8 5v3l2 1.5"/>',
+  recv: '<path d="M11 5 5 11M10 11H5V6"/>',
+  sent: '<path d="m5 11 6-6M6 5h5v5"/>',
+  pin: '<path d="M6 2h4l-.5 4 2.5 2.5H4L6.5 6zM8 8.5V14"/>',
+  park: '<path d="M13 9.5A5.5 5.5 0 0 1 6.5 3a5.5 5.5 0 1 0 6.5 6.5z"/>',
+  play: '<path d="M5 3.5v9l7-4.5z"/>',
+  layout: '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6 2.5v11M8.5 6h3M8.5 9h3"/>',
+  globe: '<circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2 2 2 10 0 12M8 2c-2 2-2 10 0 12"/>',
+  gear: '<circle cx="8" cy="8" r="2"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/>',
+  refresh: '<path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5"/>',
+  keys: '<rect x="1.5" y="4" width="13" height="8.5" rx="1.5"/><path d="M4 7h0M6.5 7h0M9 7h0M11.5 7h0M5 10h6"/>',
+  people: '<circle cx="6" cy="5.5" r="2.3"/><path d="M1.8 13.5a4.2 4.2 0 0 1 8.4 0M10.5 3.3a2.3 2.3 0 0 1 0 4.4M12 9.6a4.2 4.2 0 0 1 2.2 3.9"/>',
+  mail: '<rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="m2.7 4.7 5.3 4 5.3-4"/>',
+  sun: '<circle cx="8" cy="8" r="2.8"/><path d="M8 1.5v1.3M8 13.2v1.3M1.5 8h1.3M13.2 8h1.3M3.4 3.4l.9.9M11.7 11.7l.9.9M3.4 12.6l.9-.9M11.7 4.3l.9-.9"/>',
+  present: '<rect x="2" y="2.5" width="12" height="8.5" rx="1.3"/><path d="M8 11v2.5M5.5 13.5h5M4.8 8.2l2-2 1.4 1.4 2.8-2.8"/>',
+  lira: '<path d="M6 2.5v10c3 0 5.5-2 5.5-5"/><path d="M3.5 7 9 4.7M3.5 9.7 9 7.4"/>',
+  target: '<circle cx="8" cy="8" r="5.7"/><circle cx="8" cy="8" r="3"/><circle cx="8" cy="8" r=".6"/>',
+  inbox: '<path d="M2 9.5 4 3h8l2 6.5V13H2zM2 9.5h3.5L6.5 11h3l1-1.5H14"/>',
+  calendar: '<rect x="2.3" y="3.3" width="11.4" height="10.2" rx="1.6"/><path d="M2.3 6.7h11.4M5.3 2v2.6M10.7 2v2.6"/>',
+  chart: '<path d="M2.5 13.5h11M4.5 11V8M8 11V4.5M11.5 11V7"/>',
+  pr: '<circle cx="4" cy="4" r="1.6"/><circle cx="4" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><path d="M4 5.6v4.8M12 10.4V6.5a2 2 0 0 0-2-2H7.5m0 0 1.6-1.6M7.5 4.5l1.6 1.6"/>',
+  pulse: '<path d="M2 8h2.7l1.6-4 2.7 8 1.6-4H14"/>',
 };
+const svgIcon = (d) => html`<svg class="i" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" dangerouslySetInnerHTML=${{ __html: d }}></svg>`;
+const ICON = Object.fromEntries(Object.entries(ICON_PATHS).map(([k, d]) => [k, svgIcon(d)]));
 
 const cmdName = (c) => {
   const seg = c.split(/&&|\|\||;|\|/).map((x) => x.trim()).find((x) => x && !/^(cd|export|set|[A-Z_]+=\S*)(\s|$)/.test(x)) || c;
@@ -2137,11 +2160,21 @@ function project(path) {
   const segs = parts.filter(Boolean);
   return { name: segs.at(-1) || "/", rest: "" };
 }
-const HUES = [175, 285, 330, 90, 200, 20, 250];
+const HUES = [110, 135, 165, 190, 285, 310, 335];
+const idColor = (h) => `light-dark(oklch(var(--id-light) ${h}), oklch(var(--id-dark) ${h}))`;
 const hueOf = (name) => {
   let h = (2166136261 ^ 108) >>> 0;
   for (const c of name) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
   return HUES[(h >>> 7) % HUES.length];
+};
+const distinctHues = (names) => {
+  const used = new Set();
+  return new Map(names.map((n) => {
+    let i = HUES.indexOf(hueOf(n));
+    for (let k = 0; used.has(HUES[i]) && k < HUES.length; k++) i = (i + 1) % HUES.length;
+    used.add(HUES[i]);
+    return [n, HUES[i]];
+  }));
 };
 const RANK = { "needs-you": 0, "your-turn": 1, working: 2 };
 function projectTabs(live, keep) {
@@ -2473,7 +2506,7 @@ function PageSplit({ children }) {
 const SUM_OPEN = "atc.summary.open", SUM_HIDDEN = "atc.summary.hidden";
 const stored = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
 const store = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
-const PHONE = matchMedia("(max-width: 899px)");
+const PHONE = matchMedia(BP.phone);
 
 function usePhone() {
   const [on, setOn] = useState(PHONE.matches);
@@ -2517,7 +2550,7 @@ function SummaryBar({ s, say, onFull }) {
         onClick=${more ? toggle : null} onKeyDown=${(e) => more && (e.key === "Enter" || e.key === " ") && (e.preventDefault(), toggle())}>
         <span class="sumtext">${x.status}</span>
         ${more && html`<span class="summore">${phone ? "More" : open ? "Less" : "More"}<i class="caret ${open && !phone ? "up" : ""}"></i></span>`}
-        <button class="icon sumx" onClick=${hide} title="Hide until the next reply" aria-label="Hide the summary">✕</button>
+        <button class="icon sumx" onClick=${hide} title="Hide until the next reply" aria-label="Hide the summary">${ICON.x}</button>
       </div>
       ${chips && html`<${Replies} list=${x.replies} pick=${pick} busy=${sending} />`}
       ${open && !phone && more && html`<div class="sumbody"><${SummaryParts} x=${x} /><${SummaryFoot} onFull=${full} again=${again} /></div>`}
@@ -2567,7 +2600,7 @@ function Unattachable(s, resume, busy, setMode) {
   return html`<div><p class="h">${s.state === "stopped" ? "Stopped" : "Not running"}</p>${s.state === "stopped" && s.ended?.text && s.ended.cause !== "unknown" && html`<p>${s.ended.text}</p>`}<p>Resume it to pick up where it left off. The whole conversation comes back.</p><div class="row"><button class="btn primary" disabled=${busy} onClick=${resume}>${busy ? "Resuming…" : "Resume"}</button></div></div>`;
 }
 
-function Menu({ busy, items, render, label = "•••", cls = "icon", aria = "More actions", width = 190, left, up, sheetCls = "" }) {
+function Menu({ busy, items, render, label = ICON.more, cls = "icon", aria = "More actions", width = 190, left, up, sheetCls = "" }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(), sheet = useRef();
   const bottom = usePhone() && !render;
@@ -3138,7 +3171,7 @@ function FileList({ files, remove }) {
         <div class="file">
           ${f.type?.startsWith("image/") ? html`<img src=${f.url} alt="" />` : html`<span class="ext">${(f.name.split(".").pop() || "file").slice(0, 4)}</span>`}
           <span class="nm">${f.name}<small>${fileSize(f.size || 0)}</small></span>
-          ${remove && html`<button type="button" class="icon" aria-label=${`Remove ${f.name}`} onClick=${() => remove(i)}>✕</button>`}
+          ${remove && html`<button type="button" class="icon" aria-label=${`Remove ${f.name}`} onClick=${() => remove(i)}>${ICON.x}</button>`}
         </div>`)}
     </div>`;
 }
@@ -3332,7 +3365,7 @@ function Dialog({ d, onGone }) {
         ${err && html`<p class="err" role="alert">${err}</p>`}
         <div class="actions">
           <button type="button" class="btn" onClick=${cancel} disabled=${busy}>Cancel</button>
-          <button class="btn ${danger ? "danger solid" : "primary"}" ref=${input ? undefined : first} disabled=${busy || (input && !val.trim())}>
+          <button class="btn ${danger ? "danger primary" : "primary"}" ref=${input ? undefined : first} disabled=${busy || (input && !val.trim())}>
             ${busy ? html`<span class="spin" aria-hidden="true"></span>${busyLabel || ok}` : ok}</button>
         </div>
       </form>
@@ -3350,7 +3383,7 @@ function Sheet({ cls, title, sub, onClose, children }) {
       <div class="sheet ${cls}" role="dialog" aria-label=${title}>
         <header class="uhead">
           <div class="who"><h3>${title}</h3>${sub && html`<div class="sub">${sub}</div>`}</div>
-          <button class="icon" onClick=${onClose} aria-label="Close">✕</button>
+          <button class="icon" onClick=${onClose} aria-label="Close">${ICON.x}</button>
         </header>
         ${children}
       </div>
@@ -4083,7 +4116,8 @@ function TimePage({ live, onOpen }) {
   const topBays = useMemo(() => timeCube(sessions, [], { profile: account }).bays.map((b) => b.name).filter((b) => b !== OUTSIDE).slice(0, TIME_SERIES), [sessions, account]);
   const spend = useMemo(() => reps && costs(reps, account), [reps, account]);
   const cost = useMemo(() => spend && againstSpend(data.rows, spend, sel.bucket), [spend, data, sel.bucket]);
-  const color = (b) => (topBays.includes(b) ? `var(--series-${topBays.indexOf(b) + 1})` : "var(--um-other)");
+  const bayHue = useMemo(() => distinctHues(topBays), [topBays]);
+  const color = (b) => (bayHue.has(b) ? idColor(bayHue.get(b)) : "var(--um-other)");
   const seriesOf = (b) => (topBays.includes(b) || b === OUTSIDE ? b : OTHER_BAYS);
   const rankOf = (b) => (topBays.includes(b) ? topBays.indexOf(b) : b === OTHER_BAYS ? 8 : 9);
   const bars = useMemo(() => ({ buckets: Object.fromEntries(Object.entries(data.buckets).map(([d, b]) => [d, { ...b, models: Object.entries(b.models).reduce((m, [k, n]) => ({ ...m, [seriesOf(k)]: (m[seriesOf(k)] || 0) + n }), {}) }])) }), [data, topBays]);
@@ -4554,10 +4588,10 @@ function Viewer({ list, at, setAt, onClose }) {
   return html`
     <div class="viewer" role="dialog" aria-label=${baseName(f.path)}>
       <header>
-        <button class="icon" onClick=${onClose} aria-label="Close">✕</button>
+        <button class="icon" onClick=${onClose} aria-label="Close">${ICON.x}</button>
         <div class="who"><div class="n">${baseName(f.path)}</div><div class="d">${dirName(f.path)}</div></div>
-        ${list.length > 1 && html`<button class="icon" disabled=${at === 0} onClick=${() => setAt(at - 1)} aria-label="Previous">‹</button>
-        <button class="icon" disabled=${at === list.length - 1} onClick=${() => setAt(at + 1)} aria-label="Next">›</button>`}
+        ${list.length > 1 && html`<button class="icon" disabled=${at === 0} onClick=${() => setAt(at - 1)} aria-label="Previous">${ICON.prev}</button>
+        <button class="icon" disabled=${at === list.length - 1} onClick=${() => setAt(at + 1)} aria-label="Next">${ICON.next}</button>`}
         <button class="btn" onClick=${() => openOut(f.url)}>${APP ? "Open outside" : "New tab"}</button>
       </header>
       <${FileBody} f=${f} />
@@ -4627,7 +4661,7 @@ function CommitView({ s, sha, span, repo, say, open, onClose }) {
   const web = repo && (span ? `${repo}/compare/${span.replace("...", "..").replace("..", "...")}` : `${repo}/commit/${c?.sha || sha}`);
   return html`<div class="viewer commitv" role="dialog" aria-label=${title}>
     <header>
-      <button class="icon" onClick=${onClose} aria-label="Close">✕</button>
+      <button class="icon" onClick=${onClose} aria-label="Close">${ICON.x}</button>
       <div class="who"><div class="n">${title}</div><div class="d">${sub}</div></div>
       ${web && html`<button class="btn" onClick=${() => openOut(web)}>GitHub</button>`}
     </header>
@@ -4932,11 +4966,11 @@ function BrowserView({ p, say }) {
     <div class="brview">
       ${tabs.length > 1 && html`<div class="btabs" role="tablist">${tabs.map((t) => html`<button role="tab" aria-selected=${t === tab} class="ptab ${t === tab ? "on" : ""}" title=${t.url} onClick=${() => setCur(t.id)}><span>${t.title || t.url || "New tab"}</span></button>`)}</div>`}
       <form class="bbar" onSubmit=${go}>
-        <button type="button" class="icon" title="Back" aria-label="Back" onClick=${() => nav(-1)}>←</button>
-        <button type="button" class="icon wide" title="Forward" aria-label="Forward" onClick=${() => nav(1)}>→</button>
-        <button type="button" class="icon" title="Reload" aria-label="Reload" onClick=${() => send("Page.reload")}>⟳</button>
+        <button type="button" class="icon" title="Back" aria-label="Back" onClick=${() => nav(-1)}>${ICON.back}</button>
+        <button type="button" class="icon wide" title="Forward" aria-label="Forward" onClick=${() => nav(1)}>${ICON.fwd}</button>
+        <button type="button" class="icon" title="Reload" aria-label="Reload" onClick=${() => send("Page.reload")}>${ICON.refresh}</button>
         <input class="burl" value=${typed ?? url} onInput=${(e) => setTyped(e.target.value)} onFocus=${(e) => e.target.select()} onBlur=${() => setTyped(null)} spellcheck="false" autocapitalize="off" enterkeyhint="go" aria-label="Address" />
-        <button type="button" class="icon" title="Type into the page" aria-label="Keyboard" onClick=${() => keys.current?.focus()}>⌨</button>
+        <button type="button" class="icon" title="Type into the page" aria-label="Keyboard" onClick=${() => keys.current?.focus()}>${ICON.keys}</button>
       </form>
       <div class="bstage" ref=${stage}>
         ${frame
@@ -5047,7 +5081,7 @@ function PageCard({ p, onOpen, sub, onDown }) {
         <span class="n">${pageFresh(p) && html`<i class="dot"></i>`}${pageTitle(p)}</span>
         <span class="m">${sub ? html`${sub} · ` : ""}${pageInfo(p)}</span>
       </button>
-      ${onDown && html`<button class="icon down" title="Take down" aria-label="Take down" onClick=${onDown}>✕</button>`}
+      ${onDown && html`<button class="icon down" title="Take down" aria-label="Take down" onClick=${onDown}>${ICON.x}</button>`}
     </div>`;
 }
 
@@ -5662,30 +5696,13 @@ function AgentUsage({ name, onClose }) {
 }
 const SourceTag = ({ s, full }) => (s.agent ? html`<${AgentTag} s=${s} />` : html`<${ProjectTag} path=${s.cwd} full=${full} />`);
 
-const APP_ICONS = {
-  people: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 13.8c2.1.8 3.5 2.9 3.5 5.2"/>',
-  mail: '<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="m4 7 8 6 8-6"/>',
-  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>',
-  present: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4M8 20h8M7 12l3-3 2 2 4-4"/>',
-  lira: '<path d="M9 4v14.5c4.5 0 8-3 8-7.5"/><path d="M5.5 10.5 13 7M5.5 14.5 13 11"/>',
-  target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>',
-  inbox: '<path d="M3 13h5l1.5 2.5h5L16 13h5"/><path d="M5.5 5h13L21 13v5.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5V13z"/>',
-  calendar: '<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
-  chart: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
-  pr: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M6 8.5v7M18 15.5V9a3 3 0 0 0-3-3h-4m0 0 2.5-2.5M11 6l2.5 2.5"/>',
-  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/>',
-  pulse: '<path d="M3 12h4l2.5-6 4 12 2.5-6H21"/>',
-  chat: '<path d="M4 5.5h16v10H10l-4.5 3.5v-3.5H4z"/>',
-  doc: '<path d="M7 3h7l5 5v11.5A1.5 1.5 0 0 1 17.5 21h-10A1.5 1.5 0 0 1 6 19.5v-15A1.5 1.5 0 0 1 7.5 3z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>',
-};
-const APP_COLORS = ["blue", "amber", "violet", "green", "red", "teal", "pink", "orange", "slate"];
+const NAMED_HUES = { blue: 190, amber: 110, violet: 285, green: 135, red: 335, teal: 165, pink: 310, orange: 110 };
 const appColor = (a) => /^#[0-9a-f]{3,8}$/i.test(a.color || "") ? a.color
-  : `var(--app-${APP_COLORS.includes(a.color) ? a.color : APP_COLORS[[...a.name].reduce((h, c) => h + c.charCodeAt(0), 0) % APP_COLORS.length]})`;
+  : a.color === "slate" ? "var(--faint)" : idColor(NAMED_HUES[a.color] ?? hueOf(a.name));
 
 function AppTile({ a, size = 32, dot }) {
-  const svg = APP_ICONS[a.icon];
   return html`<span class="atile" style=${`--a: ${appColor(a)}; --s: ${size}px`}>
-    ${svg ? html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" dangerouslySetInnerHTML=${{ __html: svg }}></svg>` : html`<span class="aglyph">${a.icon || a.name[0].toUpperCase()}</span>`}
+    ${ICON_PATHS[a.icon] ? svgIcon(ICON_PATHS[a.icon]) : html`<span class="aglyph">${a.icon || a.name[0].toUpperCase()}</span>`}
     ${dot && html`<i class="adot ${dot}"></i>`}
   </span>`;
 }
@@ -6001,7 +6018,7 @@ function useAgentRuns(sid, live = false) {
   return AGENT_RUNS.get(sid)?.runs || null;
 }
 const agentDoing = (a) => a.last && (a.last.tool === "Bash" ? oneLine(a.last.detail || "running a command") : `${VERB[a.last.tool] || toolName(a.last.tool).toLowerCase()} ${oneLine(a.last.detail || "")}`.trim());
-const AGENT_MARK = { done: "✓", running: "", failed: "✕" };
+const AGENT_MARK = { done: ICON.check, running: "", failed: ICON.x };
 function AgentRow({ st, s, zoom }) {
   useNow(5000);
   const runs = useAgentRuns(s.sessionId), run = runs?.find((a) => a.tool === st.id);
@@ -6220,7 +6237,7 @@ function SettingsPage({ me, say, onClose }) {
   return html`
     <div class="pghome settings" role="dialog" aria-label="Settings">
       <header class="pghead">
-        <button class="icon" onClick=${back} aria-label="Back">←</button>
+        <button class="icon" onClick=${back} aria-label="Back">${ICON.back}</button>
         <div class="who"><h2>${phone && page ? SET_PAGES.find((p) => p.id === page)?.title : "Settings"}</h2></div>
       </header>
       <div class="setshell ${page ? "page" : "list"}">
@@ -6431,7 +6448,7 @@ function BgItem({ t, s, run, out, open, toggle }) {
   const scrolled = (e) => { const el = e.target; if (el.classList?.contains("thread")) atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; };
   return html`<li class="bgi ${state} ${open ? "more" : ""}">
     <button class="bgi-h" onClick=${toggle} aria-expanded=${open}>
-      <span class="bgi-m" aria-hidden="true">${state === "run" ? html`<i class="pulse"></i>` : state === "bad" ? "✕" : "✓"}</span>
+      <span class="bgi-m" aria-hidden="true">${state === "run" ? html`<i class="pulse"></i>` : state === "bad" ? ICON.x : ICON.check}</span>
       <span class="bgi-k">${BG_KIND[t.kind] || t.kind}</span>
       <span class="bgi-n">${name}</span>
       <span class="bgi-t">${[t.kind === "agent" && run?.steps > 0 && plural(run.steps, "step"), exit != null && exit !== 0 && `exit ${exit}`, ended ? `done ${span}` : span].filter(Boolean).join(" · ")}</span>
@@ -6563,7 +6580,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   const hint = hintFor && !asking && !working ? hintFor : asking ? (phone ? "Or type your answer" : "Or type your own answer; enter sends") : working ? (phone ? "Queue a reply" : "Queue a reply for when it stops; esc in an empty box stops it") : phone ? "Reply" : `Reply to ${short}; enter sends`;
   const chips = !hasText && !asking && replies?.length > 0 ? replies : [];
   const strip = confirm ? html`<div class="cstrip confirm" role="alert"><b>Stop the agent?</b><span class="h"><kbd>enter</kbd> stops it, <kbd>esc</kbd> keeps it going</span><span class="sp"></span>
-      <button class="btn" onClick=${() => { setConfirm(false); ta.current?.focus(); }}>Keep going</button><button class="btn prime" onClick=${() => { setConfirm(false); interrupt(); }}>Stop it</button></div>` : null;
+      <button class="btn" onClick=${() => { setConfirm(false); ta.current?.focus(); }}>Keep going</button><button class="btn primary" onClick=${() => { setConfirm(false); interrupt(); }}>Stop it</button></div>` : null;
   return html`<div class="composer">
     <div class="cols"><div class="cx">${top}
       <div class="cmp ${hasText ? "has-text" : ""}">
@@ -6582,7 +6599,7 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
               onInput=${(e) => { setDraft(e.target.value); setSlash(0); if (confirm) setConfirm(false); }} onKeyDown=${onKey}
               onPaste=${(e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); upload(fs); } }}></textarea>
             ${doors}
-            <button class="btn prime send" disabled=${!ready} onClick=${go} title=${working ? "It is working: this waits and sends when it stops" : "Send (enter)"}>${working ? "Queue" : "Send"}</button>
+            <button class="btn primary send" disabled=${!ready} onClick=${go} title=${working ? "It is working: this waits and sends when it stops" : "Send (enter)"}>${working ? "Queue" : "Send"}</button>
           </div>
         </div>
       </div>
@@ -6597,7 +6614,7 @@ function EndBar({ s, resume, busy }) {
   const at = txClock(e?.at || s.updated);
   return html`${why && html`<${EndWhy} s=${s} onClose=${() => setWhy(false)} />`}<div class="endbar ${cutOff(s) ? "loud" : ""}"><div class="cols"><div class="cx">
     <p><b>${s.state === "stopped" || e ? `Stopped${at ? ` ${at}` : ""}.` : "Not running."}</b> ${e ? e.text : "It keeps its transcript; Resume continues the conversation."}</p>
-    <span class="acts">${e && html`<button class="btn" aria-expanded=${why} onClick=${() => setWhy((x) => !x)}>Why</button>`}${cutOff(s) && html`<button class="btn" title="Move it out of Stopped unexpectedly: you know why it stopped and have decided what to do" onClick=${() => dismissEnded([s])}>Dismiss</button>`}<button class="btn prime" disabled=${busy} aria-keyshortcuts="r" onClick=${resume}>${busy ? "Resuming" : html`Resume <kbd aria-hidden="true">r</kbd>`}</button></span>
+    <span class="acts">${e && html`<button class="btn" aria-expanded=${why} onClick=${() => setWhy((x) => !x)}>Why</button>`}${cutOff(s) && html`<button class="btn" title="Move it out of Stopped unexpectedly: you know why it stopped and have decided what to do" onClick=${() => dismissEnded([s])}>Dismiss</button>`}<button class="btn primary" disabled=${busy} aria-keyshortcuts="r" onClick=${resume}>${busy ? "Resuming" : html`Resume <kbd aria-hidden="true">r</kbd>`}</button></span>
   </div></div></div>`;
 }
 
@@ -6795,7 +6812,7 @@ function Ask({ s, a, say, keyRef = { current: null }, onType, compact, sheet }) 
         ${!spec.perm && !locked && (one ? onType && html`<button class="opt type" onClick=${onType}><kbd aria-hidden="true"></kbd><span><span class="lb">Or type an answer</span></span></button>`
           : q.custom && html`<label class="opt type"><kbd aria-hidden="true"></kbd><input value=${typed[qi] || ""} placeholder="Or type an answer" onInput=${(e) => setTyped(Object.assign([...typed], { [qi]: e.target.value }))} /></label>`)}
       </div></div>`)}
-    ${!one && !locked && html`<div class="acts"><button class="btn prime" disabled=${!ready} onClick=${sendAll}>Send answers</button></div>`}
+    ${!one && !locked && html`<div class="acts"><button class="btn primary" disabled=${!ready} onClick=${sendAll}>Send answers</button></div>`}
     ${rec && html`<${AskState} rec=${rec} host=${s.host} retry=${() => answerAsk(s, a, rec)} />`}
   </div>`;
 }
@@ -7059,7 +7076,7 @@ function SentLetter({ st }) {
   </div>`;
 }
 
-const TASK_MARK = { completed: "✓", failed: "✕", killed: "■", stopped: "■" };
+const TASK_MARK = { completed: ICON.check, failed: ICON.x, killed: ICON.stop, stopped: ICON.stop };
 function TxEvent({ e, s, at, call, open }) {
   if (e.kind === "call-end") return html`<div class="chan end phone"><span>${ICON.phone}<b>Call ended</b>${call && html`<time>${txSpan(msOf(at) - msOf(call)) || ""}</time>`}</span></div>`;
   if (e.kind === "line") return html`<p class="evt line">${chIcon(e.channel)} ${e.text}</p>`;
@@ -7814,7 +7831,7 @@ function ZenLook({ prefs }) {
   </div>`;
 }
 
-function useWide(q = "(min-width: 900px)") {
+function useWide(q = BP.desk) {
   const [wide, setWide] = useState(() => matchMedia(q).matches);
   useEffect(() => {
     const m = matchMedia(q), f = () => setWide(m.matches);
