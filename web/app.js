@@ -2534,13 +2534,13 @@ function scrollWhenThere(sel, tries = 20) {
   else if (tries > 0) setTimeout(() => scrollWhenThere(sel, tries - 1), 100);
 }
 
-function Session({ s, say, live, panes, togglePane, back = backHome }) {
+function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) {
   const canAttach = s.attachable;
   const hasTerm = s.kind !== "hub";
   const auto = useRef(AUTO_PANE);
   const shown = usePages(s);
   const [kept] = useState(() => { const n = !auto.current && !routePage() && stored(SESSION_PAGE, {})[s.sessionId]; return n && shown.some((p) => p.name === n) ? n : null; });
-  const agentPage = !auto.current && !routePage() && !kept && !!s.agent && shown[0]?.name;
+  const agentPage = !pageTab && !auto.current && !routePage() && !kept && !!s.agent && shown[0]?.name;
   const [mode, setMode] = useState(() => { AUTO_PANE = null; return auto.current || (routePage() || kept || agentPage ? "page" : paneFor(s)); });
   const [pg, setPg] = useState(() => splitRef(routePage())[0] || kept || agentPage);
   const [at, setAt] = useState(() => atOf(routePage()));
@@ -5844,7 +5844,7 @@ function AgentsPage({ name, agents, live, past, remember, say, reload, panes, to
       if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || document.querySelector(".nsveil, .pal, .veil, .keys-ov")) return;
       const { openable: l, cur } = keys.current, i = l.indexOf(cur);
       const to = (a) => a && location.replace(`${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`);
-      const start = document.querySelector(".agd .conv");
+      const start = document.querySelector(".agp .phd [aria-keyshortcuts='Enter']");
       const f = { j: () => to(l[i + 1]), k: () => to(l[i - 1]), Enter: start && (() => start.click()) }[e.key];
       if (f) { e.preventDefault(); f(); }
     };
@@ -5854,28 +5854,68 @@ function AgentsPage({ name, agents, live, past, remember, say, reload, panes, to
   return html`
     <section class="scrpane agentsv ${cur ? "has-a" : "no-a"}" aria-label="Agents">
       <aside class="agl" aria-label="Agents">
-        <div class="ph"><b>Agents</b><span>${list.length}</span></div>
+        <div class="ph"><h1>Agents</h1><span class="num">${list.length}</span></div>
         <div class="scroll" role="listbox" aria-label="Agents">
           ${!agents && html`<p class="none">Loading…</p>`}
           ${agents && !list.length && html`<${Empty}>No standing agents yet. An agent is a folder with a brief under ~/.config/atc/agents.d.</${Empty}>`}
           ${list.map((a) => { const x = agentRun(live, a.name), keeps = agentKeeps(a); return html`
             <a class="ar ${a === cur ? "sel" : ""}" role="option" aria-selected=${a === cur} href=${`${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`}
               onClick=${(e) => { e.preventDefault(); if (a.name === "assistant") return openAssistant(); const to = `${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`; wide ? location.replace(to) : (location.hash = to); }}>
-              <${AgentMark} a=${a} /><b>${a.name === "assistant" ? "Assistant" : `@${a.name}`}${x?.parked && html`<span class="pz">parked</span>`}</b>
-              <span class="ago" title=${a.last ? stamp(a.last) : null}>${a.last ? age(a.last) : ""}</span>
-              <span class="k ${keeps ? "" : "none"}">${a.error ? "Can't start: see why" : keeps || "Keeps nothing"}</span>
-              ${a.home && html`<span class="l cantstart">Can't start: its folder is your home folder</span>`}
-              ${oneLine(x?.summary?.status || x?.lastReply) && html`<span class="l">${oneLine(x?.summary?.status || x?.lastReply)}</span>`}
-              <span class="l wk">${a.home ? "doesn't wake" : `wakes ${a.every ? `every ${a.every}` : agentWakes(a)}${a.next ? `, next ${soon(a.next)}` : ""}`}</span></a>`; })}
+              <${AgentMark} a=${a} /><b>${a.name === "assistant" ? "Assistant" : `@${a.name}`}${x?.state === "working" && html`<span class="awake">awake</span>`}${x && waiting(x) && html`<span class="cn n" aria-label="waiting on you">1</span>`}</b>
+              <span class="wk">${agentNext(a)}</span>
+              <span class="k ${keeps ? "" : "nil"}">${a.error ? "Can't start: see why" : a.home ? "Can't start: its folder is your home folder" : keeps || "Keeps nothing"}</span></a>`; })}
         </div>
       </aside>
-      ${run ? html`<section class="agv"><${Session} key=${run.sessionId} s=${run} say=${say} live=${live} panes=${panes} togglePane=${togglePane} back=${() => (location.hash = AGENTS_ROUTE)} /></section>`
-        : cur && !lookingUp ? html`<${AgentDetail} key=${cur.name} a=${cur} live=${live} say=${say} reload=${reload} />`
-        : html`<section class="agd">${lookingUp && html`<div class="blank">Opening…</div>`}</section>`}
+      ${cur ? html`<${AgentPane} key=${cur.name} a=${cur} run=${run} lookingUp=${lookingUp} live=${live} say=${say} reload=${reload} panes=${panes} togglePane=${togglePane} />`
+        : html`<section class="agd"></section>`}
     </section>`;
 }
 
-function AgentDetail({ a, live, say, reload, sheet, onClose }) {
+const agentNext = (a) => a.home ? "doesn't wake" : a.next ? `next ${soon(a.next)}${a.every ? `, every ${a.every}` : ""}` : a.every ? `every ${a.every}` : "when messaged";
+const AGENT_TAB = {};
+
+function AgentPane({ a, run, lookingUp, live, say, reload, panes, togglePane }) {
+  const page = a.pages?.[0];
+  const [tab, setTab] = useState(() => AGENT_TAB[a.name] || (page ? "page" : "about"));
+  const pick = (t) => { AGENT_TAB[a.name] = t; setTab(t); };
+  const shown = tab === "page" && !page ? "about" : tab;
+  const onSend = useMemo(() => page && ((t) => sendNote(run || ownerStub(page), page, t, say)), [page && pkey(page), run?.id]);
+  const title = `@${a.name}`;
+  const said = oneLine(run?.summary?.status || run?.preview || run?.lastReply);
+  const conv = () => (run ? pick("chat") : agentApi(a.name, "message").then((r) => { reload(); go(r.id); }, (e) => say(e.message)));
+  const woke = run?.startedAt || a.last;
+  const menu = [
+    run && { label: run.parked ? "Unpark" : "Park", icon: "park", run: () => api(`/api/sessions/${run.sessionId}`, { method: "PATCH", body: { parked: !run.parked } }).then(() => { reload(); say(run.parked ? `Unparked ${title}.` : `Parked ${title}.`); }, (e) => say(e.message)) },
+    run && run.state !== "past" && { label: "Start over", icon: "refresh", run: () => agentApi(a.name, "reset").then(() => { reload(); say(`${title} is starting over.`); }, (e) => say(e.message)) },
+    a.talk && { label: "Call", icon: "phone", run: () => callAgent(a.name, say) },
+    page && { label: "Open the page alone", icon: "page", run: () => (location.hash = aloneLink(page.session, page.name)) },
+  ].filter(Boolean);
+  const tabs = html`<span class="seg" role="group" aria-label="Show">
+    ${page && html`<button aria-pressed=${shown === "page"} onClick=${() => pick("page")}>${ICON.page}Page</button>`}
+    <button aria-pressed=${shown === "chat"} onClick=${() => (run ? pick("chat") : conv())} aria-keyshortcuts="Enter" title="Its conversation (enter)">Conversation</button>
+    <button aria-pressed=${shown === "about"} onClick=${() => pick("about")}>Details</button></span>`;
+  return html`
+    <section class="agd agp">
+      <header class="phd">
+        <a class="back btn quiet icon" href=${AGENTS_ROUTE} aria-label="Agents">${ICON.back}</a>
+        <${AgentMark} a=${a} /><h1>${title}</h1>
+        <span class="where">${[a.host, woke && `woke ${hhmm(woke)}, ${age(woke)} ago`].filter(Boolean).join(" · ")}</span>
+        ${tabs}
+        <span class="r">
+          ${a.prompt && run && html`<button class="btn quiet sm" disabled=${run.state === "working"} title=${a.prompt} onClick=${() => agentApi(a.name, "message").then(() => { reload(); say(`Woke ${title}.`); }, (e) => say(e.message))}>${ICON.refresh}Wake now</button>`}
+          ${menu.length > 0 && html`<${Menu} items=${menu} cls="btn quiet sm icon" aria=${`More for ${title}`} />`}
+        </span>
+      </header>
+      ${shown === "chat" && run ? html`<section class="agv"><${Session} key=${run.sessionId} s=${run} say=${say} live=${live} panes=${panes} togglePane=${togglePane} back=${() => (location.hash = AGENTS_ROUTE)} pageTab=${!!page} /></section>`
+        : shown === "chat" ? html`<div class="blank">${lookingUp ? "Opening…" : "No conversation yet."}</div>`
+        : shown === "page" ? html`<div class="agpage"><${PageBody} key=${pkey(page)} p=${page} onSend=${onSend} say=${say} /></div>`
+        : html`<${AgentDetail} a=${a} live=${live} say=${say} reload=${reload} bare />`}
+      ${shown !== "chat" && (said || run) && html`<footer class="agsaid"><span class="l">Last said${run ? `, ${ago(run)}` : ""}</span><span class="t">${said || "Nothing yet."}</span>
+        <button class="btn quiet sm" onClick=${conv}>Open conversation</button></footer>`}
+    </section>`;
+}
+
+function AgentDetail({ a, live, say, reload, sheet, bare, onClose }) {
   const [busy, setBusy] = useState(false);
   const [use, setUse] = useState(false);
   const x = agentRun(live, a.name);
@@ -5926,6 +5966,7 @@ function AgentDetail({ a, live, say, reload, sheet, onClose }) {
       </div></div>
       ${use && html`<${AgentUsage} name=${a.name} onClose=${() => setUse(false)} />`}`;
   if (sheet) return html`<${Sheet} cls="agsheet" title=${title} sub=${status} onClose=${onClose}><div class="scrpane">${body}</div><//>`;
+  if (bare) return body;
   return html`
     <section class="agd">
       <header class="hd">
