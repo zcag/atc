@@ -404,6 +404,9 @@ pre:hover > .copy, pre > .copy:focus-visible { opacity: 1; }
 .pframe { position: relative; flex: 1; display: flex; background: Canvas; }
 .pframe iframe { flex: 1; border: 0; background: none; width: 100%; }
 .pframe iframe.next { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+.pstuck { position: absolute; left: var(--s3); right: var(--s3); top: var(--s3); display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding: var(--s2) var(--s3); border: 1px solid var(--hair); border-radius: var(--r2); background: var(--board); color: var(--dim); font-size: var(--fs-ui); box-shadow: var(--pop); }
+.pstuck span { flex: 1 1 220px; min-width: 0; }
+.pstuck .btn { max-width: 100%; height: auto; min-height: var(--btn-h); padding-block: 4px; white-space: normal; line-height: 1.2; }
 
 .brview { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .btabs { display: flex; gap: var(--s1); overflow-x: auto; scrollbar-width: none; padding: var(--s1) var(--s2) 0; background: var(--strip); }

@@ -5053,9 +5053,16 @@ function PageFrame({ p, at, onSend, say, changes }) {
   const src = pageSrc(p);
   const [cur, setCur] = useState(src);
   const [next, setNext] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [stuck, setStuck] = useState(false);
   const frames = useRef({});
   const scroll = useRef(0);
   useEffect(() => { if (src !== cur) setNext(src); }, [src]);
+  useEffect(() => {
+    if (loaded) return setStuck(false);
+    const t = setTimeout(() => setStuck(true), 15000);
+    return () => clearTimeout(t);
+  }, [loaded]);
   useEffect(() => {
     const base = `/api/sessions/${p.session}/pages/${encodeURIComponent(p.name)}`, q = hostQ(p.host, HERE);
     const ops = {
@@ -5073,6 +5080,7 @@ function PageFrame({ p, at, onSend, say, changes }) {
       const m = e.data;
       if (!m || m.atc !== 1 || !Object.values(frames.current).some((w) => w && w.contentWindow === e.source)) return;
       if (m.op === "hello") {
+        setLoaded(true);
         e.source.postMessage({ atc: 1, op: "changes", on: !!changesRef.current }, "*");
         return e.source.postMessage({ atc: 1, op: "scroll", y: scroll.current }, "*");
       }
@@ -5104,8 +5112,12 @@ function PageFrame({ p, at, onSend, say, changes }) {
   }, [p.stateAt]);
   const frame = (u, hidden) => html`<iframe key=${u} ref=${(el) => { frames.current[u] = el; }} src=${hidden && jump.current ? `${u}#${jump.current}` : u} class=${hidden ? "next" : ""}
     sandbox="allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-modals allow-downloads"
-    onLoad=${hidden ? () => { delete frames.current[cur]; setCur(u); setNext(null); } : null}></iframe>`;
-  return html`<div class="pframe">${frame(cur, false)}${next && frame(next, true)}</div>`;
+    onLoad=${hidden ? () => { delete frames.current[cur]; setCur(u); setNext(null); setLoaded(true); } : () => setLoaded(true)}></iframe>`;
+  return html`<div class="pframe">${frame(cur, false)}${next && frame(next, true)}
+    ${stuck && html`<div class="pstuck" role="status">
+      <span>This page hasn't loaded in this tab. A debugger or browser automation attached to the tab can hold it back; a new tab loads it.</span>
+      <button class="btn sm" onClick=${() => openOut(`/${aloneLink(p.session, p.name)}`)}>Open in a new tab</button>
+    </div>`}</div>`;
 }
 
 function PageBody({ p, at, onSend, say, changes }) {
