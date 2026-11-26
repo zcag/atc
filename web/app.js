@@ -929,14 +929,15 @@ function BayBar({ bays, only, view, off, down, live, peek, onPeek }) {
     </nav>`;
 }
 
-const PEEK_HOVER = { open: 0, close: 0, on: false };
+const PEEK_HOVER = { close: 0, on: false };
 const peekOnHover = (b, only, peek, onPeek) => ({
   onPointerEnter: (e) => {
     clearTimeout(PEEK_HOVER.close);
     if (e.pointerType !== "mouse" || b.name === only || !(b.needs + b.turn + b.work) || (peek && !PEEK_HOVER.on)) return;
-    PEEK_HOVER.open = setTimeout(() => { PEEK_HOVER.on = true; onPeek(b.name); }, 400);
+    PEEK_HOVER.on = true;
+    onPeek(b.name);
   },
-  onPointerLeave: () => { clearTimeout(PEEK_HOVER.open); if (PEEK_HOVER.on) PEEK_HOVER.close = setTimeout(() => PEEK_HOVER.on && onPeek(null), 300); },
+  onPointerLeave: () => { if (PEEK_HOVER.on) PEEK_HOVER.close = setTimeout(() => PEEK_HOVER.on && onPeek(null), 300); },
 });
 
 function PeekReply({ s, say }) {
