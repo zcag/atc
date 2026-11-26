@@ -19,7 +19,7 @@ export function useSetup(me, api) {
   const [core, setCore] = useState(null);
   const [skipped, setSkipped] = useState(() => { try { return !!sessionStorage.getItem("atc.setup.skip"); } catch { return false; } });
   const check = useCallback((fresh) => api(`/api/caps?local=1&group=core${fresh ? "&fresh=1" : ""}`).then((r) => setCore(r.machines[0]), () => setCore(null)), []);
-  const needed = !skipped && !!core?.rows?.some((r) => r.warn);
+  const needed = !skipped && !!core?.rows?.some((r) => r.warn && !r.optional);
   useEffect(() => { if (me) check(); }, [!!me]);
   useEffect(() => {
     if (!needed) return;
