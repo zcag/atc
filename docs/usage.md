@@ -74,3 +74,26 @@ default account.
 The usage page then has a switch per account, each with its own limits and spend. An account billed per token
 has no limits to show, and for it the dollar figures are close to what it pays. `atc profile` lists the
 accounts and whether each is signed in; `profiles.json` in atc's config folder holds them, on each machine.
+
+## Private sessions
+
+A private session keeps nothing:
+
+```sh
+atc profile add private -ephemeral
+atc profile login private
+```
+
+The first makes an ephemeral profile. Its sessions keep their whole Claude Code folder (transcript, prompt history,
+job, file history, temporary files) in `$XDG_RUNTIME_DIR/atc-private`, which is in memory and empties when the
+machine restarts. `~/.claude-private` keeps only what outlasts that: a `CLAUDE.md` and `settings.json` of its own,
+which you can change, and the long-lived token `atc profile login` gets from `claude setup-token`. The settings
+turn off memory, keep Bash in Claude's sandbox (bubblewrap on Linux) and deny edits outside the session's folder;
+the profile has no MCP servers and no claude.ai connectors, and links nothing from `~/.claude`.
+
+Restart atc and New session has a **Private** switch. A private session starts in an empty folder of its own. Your
+agents can't list, read or write to it through atc, it is left out of history and the backlog, it gets no turn
+summaries, and its pushes say only that it waits on you. Its drafts and uploads stay in memory too. **Erase** in
+its menu ends it and deletes its conversation, folder and files; whatever is left at a restart goes with it.
+Anthropic still receives the conversation as it does any other, and a process running as your user can still
+read the folder while it exists. Linux only for now, since macOS has no folder in memory by default.

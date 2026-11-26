@@ -228,6 +228,9 @@ side with your own. Each account keeps its own sign-in, transcripts and limits, 
 and gets its own view on the usage page. `atc profile add work ~/work` sets it up; a session can move across with its whole
 conversation. [More than one account](docs/usage.md#more-than-one-claude-account)
 
+**Private sessions.** A session that keeps nothing: it lives in memory, your agents can't see it, its pushes say nothing
+of it, and Erase deletes it for good. [Private sessions](docs/usage.md#private-sessions)
+
 <table>
 <tr>
 <td width="50%"><picture>

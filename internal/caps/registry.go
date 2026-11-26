@@ -198,7 +198,8 @@ func All() []Cap {
 			Needs: []string{"claude"}, Check: checkPrivate,
 			Fix: Fix{Command: onMac("", "atc profile add private -ephemeral && atc profile login private"),
 				Text: onMac("Not on macOS yet: it has no folder in memory for them.",
-					"Makes the profile, whose instructions and settings you can change in ~/.claude-private, and signs it in with a long-lived token (claude setup-token). Claude's sandbox needs bubblewrap. Then restart atc.")},
+					"Makes the profile, whose instructions and settings you can change in ~/.claude-private, and signs it in with a long-lived token (claude setup-token). Claude's sandbox needs bubblewrap. Then restart atc."),
+				Guide: "usage#private-sessions"},
 			Cost: "Your Claude plan; nothing kept.",
 		},
 		{
