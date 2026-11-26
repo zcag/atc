@@ -1,9 +1,6 @@
 package server
 
 import (
-	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -95,34 +92,4 @@ func askBody(a *push.Ask) string {
 		return opencode.Wants(a.Tool, a.Cmd)
 	}
 	return a.Text
-}
-
-var (
-	inWorktree = regexp.MustCompile(`/\.claude/worktrees/[^/]+`)
-	homeDir    = regexp.MustCompile(`^/(home|Users)/[^/]+(/.*)?$`)
-	containers = map[string]bool{"proj": true, "projects": true, "src": true, "code": true, "dev": true, "work": true, "repos": true, "git": true, "Developer": true}
-)
-
-func bayOf(x sessions.Session) string {
-	if x.Kind == "hub" || x.Cwd == "" {
-		return ""
-	}
-	p := inWorktree.ReplaceAllString(x.Cwd, "")
-	if home, _ := os.UserHomeDir(); home != "" && (p == home || strings.HasPrefix(p, home+"/")) {
-		p = "~" + strings.TrimPrefix(p, home)
-	} else if m := homeDir.FindStringSubmatch(p); m != nil {
-		p = "~" + m[2]
-	}
-	parts := strings.Split(p, "/")
-	if parts[0] != "~" {
-		return filepath.Base(p)
-	}
-	if len(parts) == 1 || parts[1] == "" {
-		return "~"
-	}
-	i := 1
-	if containers[parts[1]] && len(parts) > 2 {
-		i = 2
-	}
-	return parts[i]
 }

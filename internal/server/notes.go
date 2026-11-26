@@ -88,7 +88,7 @@ func noteAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 		if was, ok := prev[x.SessionID]; prev == nil || (ok && !x.Note.At.After(was)) {
 			continue
 		}
-		m := push.Message{Title: x.Title, Body: x.Note.Text, Tag: x.SessionID + "/note", URL: "/#/s/" + x.SessionID, Bay: bayOf(x)}
+		m := push.Message{Title: x.Title, Body: x.Note.Text, Tag: x.SessionID + "/note", URL: "/#/s/" + x.SessionID, Bay: x.Bay()}
 		if x.Note.Page != "" {
 			m.URL = pages.Link(x.SessionID, x.Note.Page)
 		}
@@ -112,7 +112,7 @@ func (s *Server) pushHead(sid string) (title, bay string) {
 		return agentRef + a, ""
 	}
 	if x, ok := s.M.Session(s.fullID(sid)); ok && x.Title != "" {
-		return x.Title, bayOf(x)
+		return x.Title, x.Bay()
 	}
 	return "atc", ""
 }

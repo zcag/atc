@@ -2,10 +2,14 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
+	"os"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -18,6 +22,7 @@ import (
 	"github.com/zcag/atc/internal/report"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/usage"
+	"github.com/zcag/atc/internal/when"
 )
 
 type input int
@@ -33,7 +38,7 @@ const (
 	newHost
 )
 
-const rowH = 4
+const rowH = 2
 
 type (
 	liveMsg  []sessions.Session
@@ -75,31 +80,34 @@ type panel struct {
 }
 
 type model struct {
-	c          *client.Client
-	w, h       int
-	history    bool
-	live, past []sessions.Session
-	cur, off   [2]int
-	filter     string
-	query      string
-	seq        int
-	in         input
-	ti         textinput.Model
-	confirm    string
-	target     sessions.Session
-	dirs       []client.Dir
-	dirCur     int
-	dir, name  string
-	status     string
-	err        string
-	online     bool
-	down       string
-	want       string
-	home       string
-	hosts      []string
-	host       string
-	limits     usage.Limits
-	panel      *panel
+	c           *client.Client
+	w, h        int
+	history     bool
+	live, past  []sessions.Session
+	cur, off    [2]int
+	filter      string
+	query       string
+	seq         int
+	in          input
+	ti          textinput.Model
+	confirm     string
+	target      sessions.Session
+	dirs        []client.Dir
+	dirsLoading bool
+	dirCur      int
+	dir, name   string
+	status      string
+	err         string
+	online      bool
+	down        string
+	downSince   time.Time
+	want        string
+	home        string
+	hosts       []string
+	host        string
+	limits      usage.Limits
+	panel       *panel
+	keys        bool
 }
 
 func Run(c *client.Client) error {
@@ -157,10 +165,10 @@ func (m model) openPanel(key, title string, load func() ([]string, error)) (mode
 func (m model) panelLines() []string {
 	p := m.panel
 	if p.err != "" {
-		return []string{plain.Foreground(red).Render(p.err)}
+		return []string{plain.Foreground(failC).Render(p.err)}
 	}
 	if p.lines == nil {
-		return []string{dim.Render("loading…")}
+		return []string{dim.Render("Loading…")}
 	}
 	w := max(10, m.w-4)
 	var out []string
@@ -217,7 +225,7 @@ func (m model) rows() []sessions.Session {
 	}
 	var out []sessions.Session
 	for _, s := range m.live {
-		hay := strings.ToLower(s.Title + " " + s.Cwd + " " + s.Branch + " " + s.LastPrompt)
+		hay := strings.ToLower(s.Title + " " + s.Cwd + " " + s.Branch + " " + s.LastPrompt + " " + s.Host)
 		ok := true
 		for _, w := range strings.Fields(strings.ToLower(m.filter)) {
 			ok = ok && strings.Contains(hay, w)
@@ -244,14 +252,68 @@ func (m model) selected() (sessions.Session, bool) {
 	return sessions.Session{}, false
 }
 
-func (m *model) clamp() {
-	t, n := m.tab(), len(m.rows())
-	m.cur[t] = max(0, min(m.cur[t], n-1))
-	vis := max(1, m.bodyH()/rowH)
-	m.off[t] = max(0, min(m.off[t], m.cur[t], n-vis))
-	if m.cur[t] >= m.off[t]+vis {
-		m.off[t] = m.cur[t] - vis + 1
+func groupOf(s sessions.Session) string {
+	switch {
+	case s.Pinned && !s.Parked:
+		return "Pinned"
+	case s.Away() && s.State != sessions.Past:
+		return "Parked"
+	case s.State == sessions.NeedsYou:
+		return "Waiting on you"
+	case s.State == sessions.YourTurn:
+		return "Your turn"
+	case s.State == sessions.Working:
+		return "Working"
+	case s.State == sessions.Stopped:
+		return "Stopped"
 	}
+	return "Past"
+}
+
+func (m model) heads(rows []sessions.Session) []bool {
+	out := make([]bool, len(rows))
+	if m.history {
+		return out
+	}
+	for i := range rows {
+		out[i] = i == 0 || groupOf(rows[i]) != groupOf(rows[i-1])
+	}
+	return out
+}
+
+func (m model) layout(rows []sessions.Session) (top, start []int, total int) {
+	total = 1
+	for i, head := range m.heads(rows) {
+		top = append(top, total)
+		if head {
+			if i > 0 {
+				total++
+			}
+			total++
+		}
+		start = append(start, total)
+		total += rowH
+	}
+	return top, start, total
+}
+
+func (m *model) clamp() {
+	t, rows := m.tab(), m.rows()
+	m.cur[t] = max(0, min(m.cur[t], len(rows)-1))
+	if len(rows) == 0 {
+		m.off[t] = 0
+		return
+	}
+	top, start, total := m.layout(rows)
+	h, c := max(1, m.bodyH()), m.cur[t]
+	m.off[t] = min(m.off[t], top[c])
+	if c == 0 {
+		m.off[t] = 0
+	}
+	if end := start[c] + rowH; end > m.off[t]+h {
+		m.off[t] = end - h
+	}
+	m.off[t] = max(0, min(m.off[t], total-h))
 }
 
 func (m model) bodyH() int {
@@ -261,6 +323,8 @@ func (m model) bodyH() int {
 	}
 	return h
 }
+
+func (m model) page() int { return max(1, m.bodyH()/(rowH+1)) }
 
 func (m model) inputLine() bool {
 	return m.in == filtering || m.in == searching || m.in == renaming ||
@@ -302,10 +366,10 @@ func (m model) open(s sessions.Session) (model, tea.Cmd) {
 	case s.Attachable:
 		return m, m.attach(s.ID, s.Title)
 	case s.Kind == "interactive":
-		m.status = s.Title + " runs in a terminal elsewhere, so it cannot be attached"
+		m.status = s.Title + " runs in a terminal elsewhere, so it can't be attached."
 		return m, nil
 	}
-	m.status = "resuming " + s.Title + "…"
+	m.status = "Resuming " + s.Title + "…"
 	return m, func() tea.Msg {
 		id, err := m.c.Resume(s.SessionID)
 		return resumedMsg{id, s.Title, err}
@@ -328,7 +392,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.panel != nil && m.panel.key == msg.key {
 			m.panel.lines = msg.lines
 			if msg.err != nil {
-				m.panel.err = msg.err.Error()
+				m.panel.err = m.readable(msg.err)
 			}
 		}
 		return m, nil
@@ -346,7 +410,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case downMsg:
-		m.online, m.down = false, msg.err.Error()
+		if m.online || m.downSince.IsZero() {
+			m.downSince = time.Now()
+		}
+		m.online, m.down = false, "the connection closed"
+		if msg.err != nil {
+			m.down = m.readable(msg.err)
+		}
 	case debounce:
 		if int(msg) == m.seq {
 			return m, m.fetchPast()
@@ -357,7 +427,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setErr(msg.err)
 		}
 	case dirsMsg:
-		m.dirs = msg.list
+		m.dirs, m.dirsLoading = msg.list, false
 		m.setErr(msg.err)
 	case resumedMsg:
 		m.status = ""
@@ -388,26 +458,52 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) setErr(err error) {
 	m.err = ""
-	if err == nil {
-		return
+	if err != nil {
+		m.err = m.readable(err)
 	}
-	m.err = err.Error()
+}
+
+func (m model) server() string { return m.c.URL[strings.Index(m.c.URL, "//")+2:] }
+
+func (m model) readable(err error) string {
+	var dns *net.DNSError
+	var op *net.OpError
+	switch {
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return "atc isn't answering at " + m.server()
+	case errors.As(err, &dns):
+		return "can't find " + dns.Name
+	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded):
+		return m.server() + " didn't answer in time"
+	case errors.As(err, &op):
+		return "can't reach " + m.server()
+	case strings.HasPrefix(err.Error(), "401 ") || strings.HasPrefix(err.Error(), "events: 401"):
+		return "atc refused this machine's token; atc login again"
+	}
+	return err.Error()
 }
 
 func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if k.String() == "ctrl+c" {
 		return m, tea.Quit
 	}
+	if m.keys {
+		if s := k.String(); s == "?" || s == "esc" || s == "q" {
+			m.keys = false
+		}
+		return m, nil
+	}
 	if m.confirm != "" {
 		act, s := m.confirm, m.target
 		m.confirm = ""
 		if k.String() != "y" {
+			m.status = map[string]string{"stop": "Left " + s.Title + " running.", "delete": "Kept " + s.Title + "."}[act]
 			return m, nil
 		}
 		if act == "stop" {
-			return m, m.do("stopped "+s.Title, func() error { return m.c.Stop(s.ID, "you", "atc in a terminal") })
+			return m, m.do("Stopped "+s.Title+".", func() error { return m.c.Stop(s.ID, "you", "atc in a terminal") })
 		}
-		return m, m.do("deleted "+s.Title, func() error { return m.c.Remove(s.ID) })
+		return m, m.do("Deleted "+s.Title+".", func() error { return m.c.Remove(s.ID) })
 	}
 	if m.in != noInput {
 		return m.typing(k)
@@ -419,6 +515,9 @@ func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	t := m.tab()
 	s, ok := m.selected()
 	switch k.String() {
+	case "?":
+		m.keys = true
+		return m, nil
 	case "u":
 		if ok {
 			return m.openPanel("u"+s.SessionID, "Usage: "+s.Title, func() ([]string, error) {
@@ -453,9 +552,9 @@ func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "down", "j":
 		m.cur[t]++
 	case "pgup":
-		m.cur[t] -= max(1, m.bodyH()/rowH)
+		m.cur[t] -= m.page()
 	case "pgdown":
-		m.cur[t] += max(1, m.bodyH()/rowH)
+		m.cur[t] += m.page()
 	case "home", "g":
 		m.cur[t] = 0
 	case "end", "G":
@@ -492,9 +591,9 @@ func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch {
 		case !ok || m.history:
 		case s.ID == "":
-			m.status = s.Title + " runs in a terminal elsewhere; stop it there"
+			m.status = s.Title + " runs in a terminal elsewhere; stop it there."
 		case k.String() == "x" && !s.Attachable:
-			m.status = s.Title + " is already stopped"
+			m.status = s.Title + " is already stopped."
 		default:
 			m.confirm, m.target = map[string]string{"x": "stop", "d": "delete"}[k.String()], s
 		}
@@ -505,13 +604,13 @@ func (m model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "p":
 		if ok {
-			verb := map[bool]string{true: "pinned ", false: "unpinned "}[!s.Pinned]
-			return m, m.do(verb+s.Title, func() error { return m.c.Patch(s.SessionID, map[string]any{"pinned": !s.Pinned}) })
+			verb := map[bool]string{true: "Pinned ", false: "Unpinned "}[!s.Pinned]
+			return m, m.do(verb+s.Title+".", func() error { return m.c.Patch(s.SessionID, map[string]any{"pinned": !s.Pinned}) })
 		}
 	case "z":
 		if ok {
-			verb := map[bool]string{true: "parked ", false: "unparked "}[!s.Parked]
-			return m, m.do(verb+s.Title, func() error { return m.c.Patch(s.SessionID, map[string]any{"parked": !s.Parked}) })
+			verb := map[bool]string{true: "Parked ", false: "Unparked "}[!s.Parked]
+			return m, m.do(verb+s.Title+".", func() error { return m.c.Patch(s.SessionID, map[string]any{"parked": !s.Parked}) })
 		}
 	}
 	m.clamp()
@@ -543,6 +642,29 @@ func (m model) panelKey(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m model) wizard() bool {
+	return m.in == newHost || m.in == newDir || m.in == newName || m.in == newPrompt
+}
+
+func (m model) back() (model, tea.Cmd) {
+	switch m.in {
+	case newPrompt:
+		return m, m.edit(newName, m.name, "optional")
+	case newName:
+		cmd := m.edit(newDir, m.dir, "type to filter, or a path like ~/src/app")
+		m.dirCur = 0
+		return m, cmd
+	case newDir:
+		if len(m.hosts) > 1 {
+			m.dirCur = 0
+			return m, m.edit(newHost, m.host, "which machine")
+		}
+	}
+	m.in = noInput
+	m.status = "No new session."
+	return m, nil
+}
+
 func (m model) typing(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k.String() {
 	case "esc":
@@ -553,6 +675,8 @@ func (m model) typing(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.query, m.seq = "", m.seq+1
 			m.in = noInput
 			return m, m.fetchPast()
+		case newHost, newDir, newName, newPrompt:
+			return m.back()
 		}
 		m.in = noInput
 		m.clamp()
@@ -595,7 +719,7 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 	case renaming:
 		m.in = noInput
 		s := m.target
-		return m, m.do("renamed to "+v, func() error { return m.c.Patch(s.SessionID, map[string]any{"name": v}) })
+		return m, m.do(renamed(s.Title, v), func() error { return m.c.Patch(s.SessionID, map[string]any{"name": v}) })
 	case newHost:
 		ch := m.hostChoices()
 		if m.dirCur >= len(ch) {
@@ -609,7 +733,7 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.dir = ch[m.dirCur]
-		return m, m.edit(newName, "", "optional")
+		return m, m.edit(newName, m.name, "optional")
 	case newName:
 		m.name = v
 		return m, m.edit(newPrompt, "", "optional, e.g. fix the failing test")
@@ -620,10 +744,10 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 		if host != "" {
 			where = host + ":" + dir
 		}
-		m.status = "starting a session in " + where + "…"
+		m.status = "Starting a session in " + where + "…"
 		return m, func() tea.Msg {
 			id, err := m.c.StartOn(host, dir, name, v, false)
-			return doneMsg{status: "started " + id + " in " + where, sel: id, err: err}
+			return doneMsg{status: "Started " + id + " in " + where + ".", sel: id, err: err}
 		}
 	}
 	m.in = noInput
@@ -631,12 +755,19 @@ func (m model) submit() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func renamed(from, to string) string {
+	if to == "" {
+		return from + " has Claude's own title again."
+	}
+	return "Renamed " + from + " to " + to + "."
+}
+
 func (m model) tilde(p string) string { return sessions.Tilde(p, m.home) }
 
 func (m *model) pickDir() tea.Cmd {
-	m.dirCur = 0
+	m.dirCur, m.dirsLoading = 0, true
 	host := m.host
-	return tea.Batch(m.edit(newDir, "", "type to filter, or a path like ~/src/app"),
+	return tea.Batch(m.edit(newDir, m.dir, "type to filter, or a path like ~/src/app"),
 		func() tea.Msg { l, err := m.c.Dirs(host); return dirsMsg{l, err} })
 }
 
@@ -678,40 +809,64 @@ func (m model) dirChoices() []string {
 	return out
 }
 
-var (
-	selBg  = lipgloss.AdaptiveColor{Light: "7", Dark: "0"}
-	accent = lipgloss.Color("5")
-	red    = lipgloss.Color("1")
-	looks  = map[string]struct {
-		glyph, word string
-		color       lipgloss.TerminalColor
-	}{
-		sessions.NeedsYou: {"●", "needs you", red},
-		sessions.YourTurn: {"○", "your turn", lipgloss.Color("3")},
-		sessions.Working:  {"◐", "working", lipgloss.Color("4")},
-		sessions.Stopped:  {"◌", "stopped", lipgloss.NoColor{}},
-		sessions.Past:     {"·", "past", lipgloss.NoColor{}},
-	}
-	plain = lipgloss.NewStyle()
-	dim   = plain.Faint(true)
-	bold  = plain.Bold(true)
-)
-
-func elapsed(d time.Duration) string {
-	if d < time.Hour {
-		return fmt.Sprintf("%dm%02ds", int(d.Minutes()), int(d.Seconds())%60)
-	}
-	return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
+type badge struct {
+	letter string
+	style  lipgloss.Style
+	text   lipgloss.TerminalColor
 }
 
-func short(model string) string {
-	l := strings.ToLower(model)
-	for _, f := range []string{"opus", "sonnet", "haiku", "fable"} {
-		if strings.Contains(l, f) {
-			return f
-		}
+var (
+	selBg  = lipgloss.AdaptiveColor{Light: "254", Dark: "236"}
+	accent = lipgloss.AdaptiveColor{Light: "24", Dark: "110"}
+	failC  = lipgloss.AdaptiveColor{Light: "124", Dark: "203"}
+	needsC = lipgloss.AdaptiveColor{Light: "130", Dark: "214"}
+	workC  = lipgloss.AdaptiveColor{Light: "24", Dark: "153"}
+	plain  = lipgloss.NewStyle()
+	dim    = plain.Faint(true)
+	bold   = plain.Bold(true)
+	badges = map[string]badge{
+		sessions.NeedsYou: {"N", bold.Background(lipgloss.Color("214")).Foreground(lipgloss.Color("235")), needsC},
+		sessions.Working:  {"W", bold.Background(lipgloss.AdaptiveColor{Light: "153", Dark: "24"}).Foreground(workC), workC},
+		sessions.YourTurn: {"T", bold.Background(lipgloss.AdaptiveColor{Light: "252", Dark: "238"}).Foreground(lipgloss.AdaptiveColor{Light: "235", Dark: "255"}), lipgloss.NoColor{}},
+		sessions.Stopped:  {"E", dim, lipgloss.NoColor{}},
+		sessions.Past:     {"E", dim, lipgloss.NoColor{}},
 	}
-	return strings.TrimPrefix(l, "claude-")
+)
+
+func badgeOf(s sessions.Session) badge {
+	if b, ok := badges[s.State]; ok {
+		return b
+	}
+	return badges[sessions.Past]
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
+}
+
+func (m model) several() bool { return len(m.hosts) > 1 }
+
+func (m model) said(s sessions.Session) (string, bool) {
+	switch {
+	case s.State == sessions.NeedsYou && len(s.Asks) > 0:
+		if says := s.Asks[0].Says(); says != "" {
+			return says, true
+		}
+	case s.State == sessions.Working && s.Activity != "":
+		return s.Activity, false
+	case s.State != sessions.Working && s.Result() != "":
+		return strings.Join(strings.Fields(s.Result()), " "), false
+	}
+	if s.State == sessions.NeedsYou && s.Activity != "" {
+		return s.Activity, true
+	}
+	if s.LastPrompt != "" {
+		return "“" + strings.Join(strings.Fields(s.LastPrompt), " ") + "”", false
+	}
+	return "", false
 }
 
 func (m model) row(s sessions.Session, sel bool) []string {
@@ -721,165 +876,227 @@ func (m model) row(s sessions.Session, sel bool) []string {
 		}
 		return base
 	}
-	look, ok := looks[s.State]
-	if !ok {
-		look = looks[sessions.Past]
-		look.word = s.State
+	b := badgeOf(s)
+	away := s.Away()
+	letter := b.style.Render(" " + b.letter + " ")
+	if away {
+		letter = st(dim).Render(" " + b.letter + " ")
 	}
-	state := look.glyph + " " + look.word
-	if s.State == sessions.Working && !s.PromptAt.IsZero() {
-		state += " " + elapsed(time.Since(s.PromptAt))
-	}
-	stateSt := st(plain.Foreground(look.color))
-	if s.State == sessions.Stopped || s.State == sessions.Past {
-		stateSt = st(dim)
-	}
-	bar := st(plain).Render("  ")
-	if sel {
-		bar = st(plain.Foreground(accent)).Render("▌ ")
-	}
-	const stateW = 18
-	indent := bar + st(plain).Render(strings.Repeat(" ", stateW))
-	age := s.Age()
-	titleW := max(8, m.w-2-stateW-len(age)-2)
-
-	var meta []string
-	meta = append(meta, st(dim).Render(m.tilde(s.Cwd)))
+	place := s.Bay()
 	if s.Branch != "" && s.Branch != "HEAD" {
-		meta = append(meta, st(dim).Render(s.Branch))
+		place = strings.TrimPrefix(place+" · "+s.Branch, " · ")
 	}
-	if s.Model != "" {
-		meta = append(meta, st(dim).Render(short(s.Model)))
+	age := fmt.Sprintf("%3s", s.Age())
+	if m.history {
+		age = when.Stamp(s.Last(), time.Now())
+	}
+	right := func(place string) string {
+		var parts []string
+		if s.Host != "" && m.several() {
+			parts = append(parts, s.Host)
+		}
+		if place != "" {
+			parts = append(parts, place)
+		}
+		return strings.Join(append(parts, age), "  ") + " "
+	}
+	r1 := right(place)
+	if m.w-5-lipgloss.Width(r1) < 24 {
+		r1 = right("")
+	}
+	titleSt := st(bold)
+	if away {
+		titleSt = st(dim)
+	}
+	gap := st(plain).Render(" ")
+	line1 := st(plain).Render(" ") + letter + gap + titleSt.Render(ansi.Truncate(s.Title, max(4, m.w-6-lipgloss.Width(r1)), "…"))
+
+	text, loud := m.said(s)
+	var tags []string
+	if s.State == sessions.Working && !s.PromptAt.IsZero() {
+		tags = append(tags, when.Duration(time.Since(s.PromptAt)))
 	}
 	if s.Kind == "interactive" {
-		meta = append(meta, st(dim).Render("in a terminal"))
-	}
-	if s.Profile != "" {
-		meta = append(meta, st(dim).Render(s.Profile))
-	}
-	if s.Pinned {
-		meta = append(meta, st(plain.Foreground(accent)).Render("pinned"))
+		tags = append(tags, "in a terminal")
 	}
 	if s.Agent != "" {
-		meta = append(meta, st(dim).Render("@"+s.Agent))
+		tags = append(tags, "@"+s.Agent)
+	}
+	if s.Profile != "" {
+		tags = append(tags, s.Profile)
+	}
+	if s.Pinned {
+		tags = append(tags, "pinned")
 	}
 	if s.Parked {
-		meta = append(meta, st(dim).Render("parked"))
+		tags = append(tags, "parked")
 	}
-	if s.Away() {
-		stateSt = st(dim)
+	r2 := ""
+	if len(tags) > 0 {
+		r2 = strings.Join(tags, " · ") + " "
 	}
-	prompt, promptSt := "", st(dim)
-	if s.LastPrompt != "" {
-		prompt = "“" + strings.Join(strings.Fields(s.LastPrompt), " ") + "”"
+	textSt := st(dim)
+	if loud && !away {
+		textSt = st(plain)
 	}
-	if s.State == sessions.Working && s.Activity != "" {
-		prompt, promptSt = s.Activity, stateSt
-	} else if s.State == sessions.YourTurn && s.Summary != nil {
-		prompt, promptSt = "↳ "+s.Summary.Status, st(plain)
-	}
-	lines := []string{
-		bar + stateSt.Render(ansi.Truncate(fmt.Sprintf("%-*s", stateW, state), stateW, "")) +
-			map[bool]lipgloss.Style{true: st(dim), false: st(bold)}[s.Away()].Render(ansi.Truncate(s.Title, titleW, "…")),
-		indent + strings.Join(meta, st(dim).Render(" · ")),
-		indent + promptSt.Render(ansi.Truncate(prompt, max(8, m.w-2-stateW-1), "…")),
-	}
-	for i, l := range lines {
+	line2 := st(plain).Render("     ") + textSt.Render(ansi.Truncate(text, max(4, m.w-6-lipgloss.Width(r2)), "…"))
+
+	fill := func(l, right string) string {
 		l = ansi.Truncate(l, m.w, "")
-		right := ""
-		if i == 0 {
-			right = st(dim).Render(age + " ")
-		}
-		lines[i] = l + st(plain).Render(strings.Repeat(" ", max(0, m.w-lipgloss.Width(l)-lipgloss.Width(right)))) + right
+		r := st(dim).Render(right)
+		return l + st(plain).Render(strings.Repeat(" ", max(0, m.w-lipgloss.Width(l)-lipgloss.Width(r)))) + r
 	}
-	return append(lines, "")
+	return []string{fill(line1, r1), fill(line2, r2)}
+}
+
+func (m model) groupHead(name string, rows []sessions.Session) string {
+	n := 0
+	for _, s := range rows {
+		if groupOf(s) == name {
+			n++
+		}
+	}
+	st := bold
+	switch name {
+	case "Waiting on you":
+		st = bold.Foreground(needsC)
+	case "Working":
+		st = bold.Foreground(workC)
+	}
+	return " " + st.Render(name) + " " + dim.Render(fmt.Sprint(n))
 }
 
 func (m model) header() string {
 	tab := func(name string, on bool) string {
 		if on {
-			return plain.Bold(true).Underline(true).Foreground(accent).Render(name)
+			return plain.Bold(true).Underline(true).Render(name)
 		}
 		return dim.Render(name)
 	}
-	host := m.c.URL[strings.Index(m.c.URL, "//")+2:]
-	left := " " + bold.Render("atc") + " " + dim.Render(host) + "   " +
+	where := m.server()
+	if m.several() {
+		where = strings.Join(m.hosts, " + ")
+	}
+	left := " " + bold.Render("atc") + " " + dim.Render(where) + "   " +
 		tab(fmt.Sprintf("Live %d", len(m.live)), !m.history) + "  " + tab("History", m.history)
 	counts := map[string]int{}
 	for _, s := range m.live {
-		counts[s.State]++
+		if !s.Away() {
+			counts[s.State]++
+		}
 	}
 	var right []string
 	if n := counts[sessions.NeedsYou]; n > 0 {
-		right = append(right, plain.Foreground(red).Bold(true).Render(fmt.Sprintf("%d need you", n)))
+		right = append(right, bold.Foreground(needsC).Render(map[bool]string{true: "1 needs you", false: fmt.Sprintf("%d need you", n)}[n == 1]))
 	}
 	if n := counts[sessions.YourTurn]; n > 0 {
-		right = append(right, plain.Foreground(looks[sessions.YourTurn].color).Render(fmt.Sprintf("%d your turn", n)))
+		right = append(right, fmt.Sprintf("%d your turn", n))
 	}
 	if n := counts[sessions.Working]; n > 0 {
-		right = append(right, plain.Foreground(looks[sessions.Working].color).Render(fmt.Sprintf("%d working", n)))
+		right = append(right, plain.Foreground(workC).Render(fmt.Sprintf("%d working", n)))
 	}
-	if !m.online && m.down != "" {
-		right = append(right, plain.Foreground(red).Render("offline"))
-	} else if !m.online {
+	switch {
+	case !m.online && m.down != "":
+		right = append(right, plain.Foreground(failC).Render("offline"))
+	case !m.online:
 		right = append(right, dim.Render("connecting…"))
 	}
 	r := strings.Join(right, dim.Render(" · ")) + " "
+	for len(right) > 0 && lipgloss.Width(left)+lipgloss.Width(r) > m.w {
+		right = right[:len(right)-1]
+		r = strings.Join(right, dim.Render(" · ")) + " "
+	}
 	return left + strings.Repeat(" ", max(1, m.w-lipgloss.Width(left)-lipgloss.Width(r))) + r
 }
 
-func (m model) footer() string {
+var allKeys = [][2]string{
+	{"enter", "attach"}, {"n", "new session"},
+	{"/", "filter"}, {"x", "stop"},
+	{"h", "history"}, {"r", "rename"},
+	{"p", "pin"}, {"z", "park"},
+	{"d", "delete"}, {"o", "outputs"},
+	{"u", "usage"}, {"U", "plan usage"},
+	{"j k", "move"}, {"g G", "top, bottom"},
+	{"pgup pgdn", "page"}, {"tab", "live, history"},
+	{"esc", "clear filter"}, {"q", "quit"},
+}
+
+func (m model) footer() (string, string) {
 	var keys [][2]string
 	switch {
+	case m.keys:
+		keys = [][2]string{{"?", "close"}}
 	case m.panel != nil:
 		keys = [][2]string{{"↑↓", "scroll"}, {"esc", "back"}}
-	case m.in != noInput:
-		keys = [][2]string{{"↵", "ok"}, {"esc", "cancel"}}
-		if m.in == newDir || m.in == newHost || m.in == filtering || m.in == searching {
+	case m.wizard():
+		keys = [][2]string{{"enter", "next"}, {"esc", "back"}}
+		if (m.in == newDir && len(m.hosts) <= 1) || m.in == newHost {
+			keys[1][1] = "cancel"
+		}
+		if m.in == newDir || m.in == newHost {
 			keys = append(keys, [2]string{"↑↓", "choose"})
 		}
+		if m.in == newPrompt {
+			keys[0][1] = "start"
+		}
+	case m.in != noInput:
+		keys = [][2]string{{"enter", "ok"}, {"esc", "cancel"}}
+		if m.in == filtering || m.in == searching {
+			keys = append(keys, [2]string{"↑↓", "move"})
+		}
 	case m.history:
-		keys = [][2]string{{"↵", "open"}, {"/", "search"}, {"h", "live"}, {"r", "rename"}, {"p", "pin"}, {"u", "usage"}, {"o", "outputs"}, {"q", "quit"}}
+		keys = [][2]string{{"enter", "open"}, {"/", "search"}, {"h", "live"}, {"r", "rename"}, {"?", "keys"}}
 	default:
-		keys = [][2]string{{"↵", "attach"}, {"n", "new"}, {"/", "filter"}, {"h", "history"}, {"x", "stop"},
-			{"d", "delete"}, {"r", "rename"}, {"p", "pin"}, {"z", "park"}, {"u", "usage"}, {"o", "outputs"}, {"q", "quit"}}
+		keys = [][2]string{{"enter", "attach"}, {"n", "new"}, {"/", "filter"}, {"x", "stop"}, {"?", "keys"}}
 	}
 	var parts []string
 	for _, k := range keys {
 		parts = append(parts, bold.Render(k[0])+" "+dim.Render(k[1]))
 	}
-	return " " + strings.Join(parts, "  ")
+	return " " + strings.Join(parts, "  "), report.LimitsShort(m.limits.Windows, time.Now())
 }
 
-func (m model) statusLine() string {
-	msg := ansi.Truncate(m.message(), m.w, "…")
-	lim := report.LimitsShort(m.limits.Windows, time.Now())
-	if lim == "" || lipgloss.Width(msg)+len(lim)+3 > m.w {
-		return msg
+func (m model) footerLine() string {
+	keys, lim := m.footer()
+	if lim == "" || lipgloss.Width(keys)+len(lim)+3 > m.w {
+		return ansi.Truncate(keys, m.w, "")
 	}
-	return msg + strings.Repeat(" ", m.w-lipgloss.Width(msg)-lipgloss.Width(lim)-1) + dim.Render(lim) + " "
+	return keys + strings.Repeat(" ", m.w-lipgloss.Width(keys)-lipgloss.Width(lim)-1) + dim.Render(lim) + " "
 }
 
 func (m model) message() string {
 	switch {
 	case m.confirm != "":
-		return plain.Foreground(red).Render(" "+m.confirm+" "+m.target.Title+"? ") + bold.Render("y") + dim.Render("/n")
+		return " " + bold.Render(strings.ToUpper(m.confirm[:1])+m.confirm[1:]+" "+m.target.Title+"?") + " " + bold.Render("y") + dim.Render("/n")
 	case m.err != "":
-		return plain.Foreground(red).Render(" " + m.err)
+		return plain.Foreground(failC).Render(" " + upper(m.err) + ".")
 	case m.status != "":
 		return " " + m.status
 	case m.down != "":
-		return plain.Foreground(red).Render(" " + m.down + ", reconnecting…")
+		return plain.Foreground(failC).Render(fmt.Sprintf(" Offline since %s: %s. Trying again…", when.Today(m.downSince, time.Now()), m.down))
 	}
 	return ""
+}
+
+func upper(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + strings.TrimSuffix(s[1:], ".")
 }
 
 func (m model) newView() []string {
 	field := func(label, val string, active bool) string {
 		if active {
-			return "  " + bold.Render(fmt.Sprintf("%-8s", label)) + m.ti.View()
+			return "  " + bold.Render(fmt.Sprintf("%-9s", label)) + m.ti.View()
 		}
-		return "  " + dim.Render(fmt.Sprintf("%-8s", label)) + val
+		return "  " + dim.Render(fmt.Sprintf("%-9s", label)) + val
+	}
+	choice := func(text string, on bool) string {
+		if on {
+			return plain.Foreground(accent).Render("  ▌ ") + bold.Render(text)
+		}
+		return "    " + text
 	}
 	out := []string{"", "  " + bold.Render("New session"), ""}
 	if len(m.hosts) > 1 {
@@ -887,16 +1104,15 @@ func (m model) newView() []string {
 	}
 	if m.in == newHost {
 		for i, h := range m.hostChoices() {
-			if i == m.dirCur {
-				out = append(out, plain.Foreground(accent).Render("  ▌ ")+bold.Render(h))
-			} else {
-				out = append(out, "    "+h)
-			}
+			out = append(out, choice(h, i == m.dirCur))
 		}
 		return out
 	}
-	out = append(out, field("dir", m.dir, m.in == newDir))
+	out = append(out, field("folder", m.dir, m.in == newDir))
 	if m.in == newDir {
+		if m.dirsLoading {
+			return append(out, "    "+dim.Render("Loading folders…"))
+		}
 		recent := map[string]bool{}
 		for _, d := range m.dirs {
 			recent[m.tilde(d.Path)] = d.Recent
@@ -909,11 +1125,7 @@ func (m model) newView() []string {
 			if recent[ch[i]] {
 				tag = dim.Render("  recent")
 			}
-			if i == m.dirCur {
-				out = append(out, plain.Foreground(accent).Render("  ▌ ")+bold.Render(ch[i])+tag)
-			} else {
-				out = append(out, "    "+ch[i]+tag)
-			}
+			out = append(out, choice(ch[i], i == m.dirCur)+tag)
 		}
 		return out
 	}
@@ -922,6 +1134,56 @@ func (m model) newView() []string {
 		out = append(out, field("prompt", "", true))
 	}
 	return out
+}
+
+func (m model) keysBox() []string {
+	widths := func(ks [][2]string) (kw, lw int) {
+		for _, k := range ks {
+			kw, lw = max(kw, len(k[0])), max(lw, len(k[1]))
+		}
+		return
+	}
+	var left, right [][2]string
+	for i, k := range allKeys {
+		if i%2 == 0 {
+			left = append(left, k)
+		} else {
+			right = append(right, k)
+		}
+	}
+	lk, ll := widths(left)
+	rk, rl := widths(right)
+	cell := func(k [2]string, kw, lw int) string {
+		return bold.Render(fmt.Sprintf("%*s", kw, k[0])) + "  " + fmt.Sprintf("%-*s", lw, k[1])
+	}
+	note := "? or esc closes."
+	var lines []string
+	if inner := lk + ll + rk + rl + 7; inner+6 <= m.w {
+		for i := range left {
+			l := cell(left[i], lk, ll)
+			if i < len(right) {
+				l += "   " + cell(right[i], rk, rl)
+			}
+			lines = append(lines, l)
+		}
+	} else {
+		kw, lw := widths(allKeys)
+		for _, k := range allKeys {
+			lines = append(lines, cell(k, kw, lw))
+		}
+	}
+	inner := len(note)
+	for _, l := range lines {
+		inner = max(inner, lipgloss.Width(l))
+	}
+	line := func(s string) string {
+		return "  │ " + s + strings.Repeat(" ", max(0, inner-lipgloss.Width(s))) + " │"
+	}
+	out := []string{"", "  ┌─ " + bold.Render("Keys") + " " + strings.Repeat("─", max(0, inner-5)) + "┐"}
+	for _, l := range lines {
+		out = append(out, line(l))
+	}
+	return append(out, line(""), line(dim.Render(note)), "  └"+strings.Repeat("─", inner+2)+"┘")
 }
 
 func (m model) View() string {
@@ -938,35 +1200,46 @@ func (m model) View() string {
 		if m.in == filtering || m.in == searching || m.in == renaming {
 			val = m.ti.View()
 		}
-		out = append(out, plain.Foreground(accent).Render(label)+val)
+		out = append(out, bold.Render(label)+val)
 	}
 	var body []string
 	switch {
+	case m.keys:
+		body = m.keysBox()
 	case m.panel != nil:
 		body = append([]string{"", "  " + bold.Render(ansi.Truncate(m.panel.title, m.w-4, "…")), ""}, m.panelLines()[m.panel.off:]...)
 		for i := 3; i < len(body); i++ {
 			body[i] = "  " + body[i]
 		}
-	case m.in == newDir || m.in == newName || m.in == newPrompt || m.in == newHost:
+	case m.wizard():
 		body = m.newView()
 	case len(m.rows()) == 0:
-		msg := "no sessions. n starts one"
+		msg := "No sessions. n starts one."
 		if m.history {
-			msg = "no past conversations match"
+			msg = "No past conversations match."
 		} else if m.filter != "" {
-			msg = "nothing matches the filter"
+			msg = "Nothing matches the filter."
 		}
 		body = []string{"", "  " + dim.Render(msg)}
 	default:
 		t, rows := m.tab(), m.rows()
-		for i := m.off[t]; i < len(rows) && len(body)+rowH <= m.bodyH(); i++ {
-			body = append(body, m.row(rows[i], i == m.cur[t])...)
+		heads := m.heads(rows)
+		all := []string{""}
+		for i, s := range rows {
+			if heads[i] {
+				if i > 0 {
+					all = append(all, "")
+				}
+				all = append(all, m.groupHead(groupOf(s), rows))
+			}
+			all = append(all, m.row(s, i == m.cur[t])...)
 		}
+		body = all[min(m.off[t], len(all)):]
 	}
 	for len(body) < m.bodyH() {
 		body = append(body, "")
 	}
 	out = append(out, body[:max(0, m.bodyH())]...)
-	out = append(out, m.statusLine(), ansi.Truncate(m.footer(), m.w, ""))
+	out = append(out, ansi.Truncate(m.message(), m.w, "…"), m.footerLine())
 	return strings.Join(out, "\n")
 }

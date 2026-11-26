@@ -1432,7 +1432,7 @@ func widgetList(list []sessions.Session) []widgetSession {
 		if x.State == sessions.Working && !x.PromptAt.IsZero() {
 			since = x.PromptAt
 		}
-		ws := widgetSession{x.ID, x.SessionID, x.Title, x.State, x.Host, x.Pinned, since, "", bayOf(x), pushAsk(x)}
+		ws := widgetSession{x.ID, x.SessionID, x.Title, x.State, x.Host, x.Pinned, since, "", x.Bay(), pushAsk(x)}
 		if x.Summary != nil && x.State != sessions.Working {
 			ws.Summary = x.Summary.Status
 		}
@@ -1501,7 +1501,7 @@ func alerts(prev map[string]string, list []sessions.Session, viewing func(sessio
 		if !ok || was == x.State || x.Away() || viewing(x) {
 			continue
 		}
-		m := push.Message{Title: x.Title, Tag: x.SessionID, URL: "/#/s/" + x.SessionID, Bay: bayOf(x)}
+		m := push.Message{Title: x.Title, Tag: x.SessionID, URL: "/#/s/" + x.SessionID, Bay: x.Bay()}
 		switch {
 		case x.State == sessions.NeedsYou:
 			m.Body = "Needs you"

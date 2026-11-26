@@ -364,7 +364,7 @@ func pageAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 			if prev == nil || (ok && !p.Shown.After(was)) || x.Away() || viewing(x) {
 				continue
 			}
-			out = append(out, push.Message{Title: x.Title, Bay: bayOf(x), Tag: key, URL: pages.Link(x.SessionID, p.Ref()),
+			out = append(out, push.Message{Title: x.Title, Bay: x.Bay(), Tag: key, URL: pages.Link(x.SessionID, p.Ref()),
 				Body: "Showing you " + cmp.Or(p.Title, p.Name) + prefixed(": ", p.Note)})
 		}
 	}
