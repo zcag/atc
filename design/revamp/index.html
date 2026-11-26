@@ -59,7 +59,8 @@ code { font-family: var(--mono); font-size: .92em; background: var(--code); padd
 <main>
 <header id="top">
   <h1>atc revamp: audit and mocks</h1>
-  <p class="lead">Every screen, state and surface, as it is today next to what it should be. One card per item on the project board: move it in, out or maybe. Nothing here changes the running app.</p>
+  <p class="lead">Every screen, state and surface, as it was before the revamp next to what it should be. One card per item on the project board.</p>
+  <p class="note"><b>Shipped, 26 Nov:</b> every item was approved and built in three waves (foundations; shell and lists; the session view and the other screens), live on both machines, Android app 0.887. "Today" below is the app before that build.</p>
   <p class="note"><b>Today's screenshots</b> come from the live app and show real sessions, so they stay on this machine (<code>design/revamp/current/</code> is not committed). <b>Proposed</b> mocks use invented content and are plain HTML in <code>mocks/</code>: open one to see it at any width, light or dark (<code>?dark</code>). <code>node reshoot.js [item]</code> redraws their screenshots.</p>
   <nav class="toc" id="toc"></nav>
 </header>
