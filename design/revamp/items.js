@@ -389,7 +389,7 @@ window.ITEMS = [
   job: 'Find a page an agent showed you; read it.',
   today: ['Card meta repeats "Page" on every card ("/p/ops-open · Page · updated 8h ago").', 'Unseen is a 6px blue dot, the Working colour.', 'Bay identity is missing from cards in the all-bays view.'],
   prop: ['Card: thumbnail, title, then "bay · 8h" with the bay\'s identity tick. Unseen = bold title and an amber-free dot in ink.', 'Reader keeps its index; index rows get the same tick.'],
-  cur: ['pages-1440-light', 'pages-tab-400'], mock: 'pages', shots: [['pages-desk', 'Gallery'], ['pages-phone', 'Phone']] },
+  cur: ['pages-1440-dark', 'pages-tab-400'], mock: 'pages', shots: [['pages-desk', 'Gallery'], ['pages-phone', 'Phone']] },
 
 { id: 'assistant', sec: 'screens', title: 'Assistant', effort: 'S',
   job: 'Talk to the one agent that drives the others. Often your entry point.',
