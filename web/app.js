@@ -2669,7 +2669,7 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
     ["Session", s.id],
   ].filter(([, v]) => v);
   const [view, setView] = useState(null);
-  useEffect(() => setView(null), [s.sessionId]);
+  useEffect(() => setView(null), [s.sessionId, mode]);
   const viewing = view && !phoneNow && mode !== "state";
   const statePane = html`
     <div class="statep-in">
@@ -2718,7 +2718,7 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
     <div class="smain">
     ${mode !== "chat" && !sideBySide && !pageZen && s.asks?.length > 0 && html`<div class="askstrip"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}
     ${mode !== "chat" && mode !== "state" && mode !== "term" && !sideBySide && !pageZen && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
-    ${viewing && html`<${OutView} s=${s} v=${view} set=${setView} say=${say} />`}
+    ${viewing && html`<${OutView} s=${s} v=${view} set=${setView} say=${say} inline />`}
     ${mode === "state" ? html`<div class="stab">${statePane}</div>`
     : mode === "page" && shown.length > 0
       ? (() => {
@@ -4772,12 +4772,12 @@ function Outputs({ s, data, pages = [], open: openPage, sel, view }) {
   </section>`;
 }
 
-function OutView({ s, v, set, say }) {
+function OutView({ s, v, set, say, inline }) {
   const [repo, setRepo] = useState("");
   useEffect(() => { if (v.sha) api(`/api/sessions/${s.sessionId}/ref/repo`).then((r) => setRepo(r.repo || ""), () => {}); }, [s.sessionId, !!v.sha]);
   const close = () => set(null);
-  if (v.sha) return html`<${CommitView} key=${v.sha} s=${s} sha=${v.sha} repo=${repo} say=${say} open=${(sha) => set({ sha })} onClose=${close} inline />`;
-  return html`<${Viewer} list=${v.list} at=${v.at} setAt=${(at) => set({ ...v, at })} onClose=${close} inline />`;
+  if (v.sha) return html`<${CommitView} key=${v.sha} s=${s} sha=${v.sha} repo=${repo} say=${say} open=${(sha) => set({ sha })} onClose=${close} inline=${inline} />`;
+  return html`<${Viewer} list=${v.list} at=${v.at} setAt=${(at) => set({ ...v, at })} onClose=${close} inline=${inline} />`;
 }
 
 function FilePeek({ f, ext }) {
@@ -6728,9 +6728,9 @@ function BgStrip({ s }) {
 const ATT_URL = new Map();
 const attsOf = (sid) => txStore.get(`atts.${sid}`, []).map((a) => ({ ...a, url: ATT_URL.get(a.id) || null }));
 
-const SLASH = [["/compact", "summarize the conversation to free context"], ["/clear", "start over with an empty context"], ["/model", "switch the model"],
-  ["/review", "review the current diff"], ["/cost", "what this session has cost"], ["/memory", "edit CLAUDE.md memory"], ["/permissions", "what it may run without asking"],
-  ["/agents", "subagents it can call"], ["/init", "write a CLAUDE.md for this repo"], ["/add-dir", "let it read another folder"], ["/mcp", "MCP servers and their tools"], ["/status", "model, account, connections"]];
+const SLASH = [["/compact", "Summarize the conversation to free context"], ["/clear", "Start over with an empty context"], ["/model", "Switch the model"],
+  ["/review", "Review the current diff"], ["/cost", "What this session has cost"], ["/memory", "Edit CLAUDE.md memory"], ["/permissions", "What it may run without asking"],
+  ["/agents", "Subagents it can call"], ["/init", "Write a CLAUDE.md for this repo"], ["/add-dir", "Let it read another folder"], ["/mcp", "MCP servers and their tools"], ["/status", "Model, account, connections"]];
 
 function AttChips({ atts, up, zoom, remove }) {
   return atts.length > 0 && html`<div class="atts" aria-label="Attached">${atts.map((a) => html`<span class="att ${up(a) ? "up" : ""}">
@@ -7072,8 +7072,8 @@ const toolFamilies = (steps) => {
 };
 const BG_STOPPED = new Set([130, 137, 143]);
 const bgEnd = (t) => {
-  const exit = +((t.prompt || "").match(/exit code (\d+)/) || [])[1] || null, st = t.task.status;
-  return { how: st === "completed" ? "done" : st === "killed" || st === "stopped" || BG_STOPPED.has(exit) ? "stopped" : "failed", exit, cmd: ((t.prompt || "").match(/"(.*)"/) || [])[1] || "", id: t.task.id, output: t.task.output };
+  const text = unesc(t.prompt || ""), exit = +(text.match(/exit code (\d+)/) || [])[1] || null, st = t.task.status;
+  return { how: st === "completed" ? "done" : st === "killed" || st === "stopped" || BG_STOPPED.has(exit) ? "stopped" : "failed", exit, cmd: (text.match(/"(.*)"/s) || [])[1] || "", id: t.task.id, output: t.task.output };
 };
 const bgCmd = (t) => !!t?.task && /^Background command\b/.test(t.prompt || "");
 const bgOf = (st) => (st.tool === "Bash" && st.input?.run_in_background ? TX_API?.bg(st.id) || { how: "" } : null);
@@ -7805,7 +7805,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   useEffect(() => {
     const onKey = (e) => {
       const t = e.target;
-      if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable || document.querySelector(".veil, .pghome, .palone, .keys-ov, .sheet")) return;
+      if (e.metaKey || e.ctrlKey || e.altKey || t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable || document.querySelector(".veil, .pghome, .palone, .keys-ov, .sheet, .viewer")) return;
       const k = e.key;
       if (/^[1-9]$/.test(k)) { if (askKey.current && t.closest?.(".ask")) { e.preventDefault(); askKey.current(+k); } }
       else if (k === "J" || k === "K") { e.preventDefault(); step("[data-stop]", k === "J" ? 1 : -1); }
@@ -7942,7 +7942,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
           <div class="prose ptxt" dangerouslySetInnerHTML=${{ __html: Marked.parse(cleanPrompt(r.b?.prompt ?? r.t.prompt), { breaks: true }) }}></div></details></div>`;
       }
       case "anchor": return html`<div id=${`tx${r.i}`}></div>`;
-      case "bgfail": return html`<div class="bgfail" id=${r.anchor ? `tx${r.i}` : null} role="note"><span class="bx" aria-hidden="true">${ICON.x}</span><span class="bt"><code>${r.bg.cmd || "A background command"}</code> failed${r.bg.exit != null ? `, exit ${r.bg.exit}` : ""}</span>${r.bg.output && html`<button class="vlink" onClick=${() => openFileRef(r.bg.output, { exact: true })}>Output</button>`}</div>`;
+      case "bgfail": return html`<div class="bgfail" id=${r.anchor ? `tx${r.i}` : null} role="note"><span class="bx" aria-hidden="true">${ICON.x}</span><span class="bt"><code>${r.bg.cmd.replace(/^cd \S+ && /, "") || "A background command"}</code><span>failed${r.bg.exit != null ? `, exit ${r.bg.exit}` : ""}</span></span>${r.bg.output && html`<button class="vlink" onClick=${() => openFileRef(r.bg.output, { exact: true })}>Output</button>`}</div>`;
       case "gap": return html`<div class="tgap"><span>${r.text}</span></div>`;
       case "model": return html`<div class="tgap model"><span>now on ${r.text}</span></div>`;
       case "you": {

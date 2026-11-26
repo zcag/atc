@@ -36,7 +36,7 @@ export const KEY_GROUPS = [
   ["Session", "", [
     ["write", "enter", "Write to it; on a stopped one, Resume"],
     ["term", "`", "Terminal, and back to the transcript"],
-    ["state", "\\", "State: now, running, made, the session's facts"],
+    ["state", "\\", "State: the summary, its outputs and the facts"],
     ["page", "]", "Its page beside the transcript"],
     ["menu", "x", "Session menu: park, stop, rename, delete"],
     ["send", "enter", "In the composer: send; while it works, queue"],

@@ -7,7 +7,7 @@
 .statep .meter { display: inline-block; width: 44px; height: 4px; border-radius: 2px; background: var(--line); position: relative; vertical-align: 2px; flex: none; overflow: hidden; }
 .statep .meter i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--dim); }
 
-.hd { flex: none; padding: 0 var(--s3) 0 var(--s4); border-bottom: 1px solid var(--line); background: var(--strip); min-width: 0; font-size: var(--fs-ui); }
+.hd { position: relative; z-index: 3; flex: none; padding: 0 var(--s3) 0 var(--s4); border-bottom: 1px solid var(--line); background: var(--strip); min-width: 0; font-size: var(--fs-ui); }
 .hd .l1 { display: flex; align-items: center; gap: var(--s2); height: 43px; min-width: 0; }
 .hd h1 { margin: 0; font-size: var(--fs-title); font-weight: 680; line-height: 22px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: min(160px, 30%); flex: 0 1 auto; }
 .hd .rn { flex: 1; min-width: 0; height: 28px; padding: 0 var(--s2); border: 0; border-radius: var(--r1); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--strip); font-size: var(--fs-title); font-weight: 680; }
@@ -23,7 +23,7 @@
 .smain { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .smain { position: relative; }
 .statep { min-height: 0; overflow-y: auto; border-left: 1px solid var(--line); background: var(--board); }
-.statep .phd { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: var(--s2); height: 44px; padding: 0 var(--s2) 0 var(--s4); border-bottom: 1px solid var(--line); background: var(--strip); }
+.statep .phd { position: sticky; top: 0; display: flex; align-items: center; gap: var(--s2); height: 44px; padding: 0 var(--s2) 0 var(--s4); border-bottom: 1px solid var(--line); background: var(--strip); }
 .statep .phd b { font-size: var(--fs-body); font-weight: 680; }
 .statep .phd .sub { flex: 1; min-width: 0; font-size: var(--fs-small); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .statep-in { font-size: var(--fs-ui); }
