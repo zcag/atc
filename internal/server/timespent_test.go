@@ -1,11 +1,14 @@
 package server
 
 import (
+	"bytes"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -13,6 +16,42 @@ import (
 )
 
 func noRuns() []timeRun { return nil }
+
+func TestTimePostKeepsTotalsAndRunsTogether(t *testing.T) {
+	s := &Server{StateDir: t.TempDir()}
+	post := func(rule int, slots ...int64) int {
+		b, _ := json.Marshal(map[string]any{"rule": rule, "sessions": []map[string]any{{"sessionId": "a", "slots": slots}}})
+		w := httptest.NewRecorder()
+		s.timePost(w, httptest.NewRequest("POST", "/api/time", bytes.NewReader(b)))
+		var out struct{ Counted int }
+		json.Unmarshal(w.Body.Bytes(), &out)
+		return out.Counted
+	}
+	now := time.Now().Unix() / tickSecs
+	if post(timeRule-1, now-3, now-2) != 0 {
+		t.Fatal("a tab counting by an older rule is refused")
+	}
+	if n := post(timeRule, now-3, now-2, now-2); n != 10 {
+		t.Fatalf("each slot once: %d", n)
+	}
+	if post(timeRule, now-2, now-1) != 5 {
+		t.Fatal("a slot already counted is not counted again")
+	}
+	var log timeLog
+	s.loadPref("time.json", &log)
+	runs, days := 0, 0
+	for _, d := range slices.Compact([]string{slotDay(now - 3), slotDay(now - 1)}) {
+		for _, r := range s.dayRuns(d) {
+			runs += int(r.N) * tickSecs
+		}
+	}
+	for _, n := range log.Sessions["a"].Days {
+		days += n
+	}
+	if days != 15 || runs != 15 {
+		t.Fatalf("totals and runs agree: %d %d", days, runs)
+	}
+}
 
 func TestTicksCountOnce(t *testing.T) {
 	var k ticks
@@ -28,7 +67,7 @@ func TestTicksCountOnce(t *testing.T) {
 		t.Fatal("a tick from the future is refused")
 	}
 	var after ticks
-	if after.claim(slot, now, func() []timeRun { return []timeRun{{"a", "", slot - 1, 2}} }) {
+	if after.claim(slot, now, func() []timeRun { return []timeRun{{"a", "", slot - 1, 2, timeRule}} }) {
 		t.Fatal("a tick counted before a restart is not counted again")
 	}
 }
@@ -46,7 +85,7 @@ func TestRunsRoundTrip(t *testing.T) {
 	f.WriteString(`{"s":"cut`)
 	f.Close()
 	runs := s.dayRuns("2026-11-20")
-	if len(runs) != 2 || runs[0] != (timeRun{"a", "desk", base, 4}) || runs[1].N != 1 {
+	if len(runs) != 2 || runs[0] != (timeRun{"a", "desk", base, 4, timeRule}) || runs[1].N != 1 {
 		t.Fatalf("runs join across saves and a torn line is skipped: %+v", runs)
 	}
 	midnight := time.Date(2026, 11, 21, 0, 0, 0, 0, time.Local).Unix() / tickSecs

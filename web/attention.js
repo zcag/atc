@@ -1,4 +1,4 @@
-export const TICK = 5, HOT = 30, KEEP = 14 * 60;
+export const TICK = 5, HOT = 30, KEEP = 14 * 60, RULE = 2;
 
 // Which 5-second slots to count for what is open: those up to HOT seconds after the last input.
 export function attention() {

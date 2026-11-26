@@ -19,9 +19,12 @@ import (
 )
 
 const (
-	tickSecs   = 5
-	ticksBack  = 15 * time.Minute
-	runDays    = 92
+	tickSecs  = 5
+	ticksBack = 15 * time.Minute
+	runDays   = 92
+	// timeRule is what the page counts by (RULE in web/attention.js). Ticks counted by another rule are refused, so a
+	// tab left open from before a change can't mix its time in.
+	timeRule   = 2
 	timeScreen = "screen:"
 )
 
@@ -44,6 +47,7 @@ type timeRun struct {
 	Device string `json:"d,omitempty"`
 	Slot   int64  `json:"t"`
 	N      int64  `json:"n"`
+	Rule   int    `json:"r,omitempty"`
 }
 
 type ticks struct {
@@ -76,6 +80,7 @@ func (t *ticks) claim(slot int64, now time.Time, earlier func() []timeRun) bool 
 
 type timeIn struct {
 	Device   string `json:"device"`
+	Rule     int    `json:"rule"`
 	Sessions []struct {
 		ID      string  `json:"sessionId"`
 		Title   string  `json:"title"`
@@ -95,7 +100,7 @@ func runsOf(id, device string, slots []int64) []timeRun {
 		if n := len(out); n > 0 && out[n-1].Slot+out[n-1].N == s && slotDay(s) == slotDay(out[n-1].Slot) {
 			out[n-1].N++
 		} else {
-			out = append(out, timeRun{id, device, s, 1})
+			out = append(out, timeRun{id, device, s, 1, timeRule})
 		}
 	}
 	return out
@@ -140,7 +145,7 @@ func (s *Server) dayRuns(day string) []timeRun {
 	sort.Slice(out, func(i, j int) bool { return out[i].Slot < out[j].Slot })
 	joined := out[:0]
 	for _, r := range out {
-		if n := len(joined); n > 0 && joined[n-1].ID == r.ID && joined[n-1].Device == r.Device && joined[n-1].Slot+joined[n-1].N == r.Slot {
+		if n := len(joined); n > 0 && joined[n-1].ID == r.ID && joined[n-1].Device == r.Device && joined[n-1].Rule == r.Rule && joined[n-1].Slot+joined[n-1].N == r.Slot {
 			joined[n-1].N += r.N
 		} else {
 			joined = append(joined, r)
@@ -165,7 +170,7 @@ func (s *Server) timePost(w http.ResponseWriter, r *http.Request) {
 	if !decodeOr400(w, r, &in, `{"sessions":[{"sessionId","slots":[unix/5]}]}`, func() bool { return len(in.Sessions) > 0 }) {
 		return
 	}
-	if s.agentsPage(r) {
+	if in.Rule != timeRule || s.agentsPage(r) {
 		reply(w, map[string]int{"counted": 0})
 		return
 	}
@@ -235,6 +240,7 @@ type timeOut struct {
 	Days     []string      `json:"days"`
 	First    string        `json:"first,omitempty"`
 	RunsFrom string        `json:"runsFrom,omitempty"`
+	RuleFrom *time.Time    `json:"ruleFrom,omitempty"`
 	Runs     []timeRun     `json:"runs"`
 }
 
@@ -307,6 +313,20 @@ func (s *Server) timeGet(w http.ResponseWriter, r *http.Request) {
 				out.Runs = append(out.Runs, s.dayRuns(d)...)
 			}
 		}
+		out.RuleFrom = s.ruleFrom(files)
 	}
 	reply(w, out)
+}
+
+// ruleFrom is when the first tick counted by today's rule came in.
+func (s *Server) ruleFrom(days []string) *time.Time {
+	for _, d := range days {
+		for _, r := range s.dayRuns(d) {
+			if r.Rule == timeRule {
+				at := time.Unix(r.Slot*tickSecs, 0)
+				return &at
+			}
+		}
+	}
+	return nil
 }

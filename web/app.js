@@ -7,7 +7,7 @@ import { extended, onLine } from "./call-log.js";
 import { persona } from "./persona.js";
 import { minimal } from "./minimal.js";
 import { cube, niceMax } from "./usage-cube.js";
-import { attention } from "./attention.js";
+import { attention, RULE } from "./attention.js";
 import { timeCube, costs, againstSpend, OUTSIDE } from "./time-cube.js";
 import { partsOf } from "./res-parts.js";
 import { numberedLists } from "./md-lists.js";
@@ -2675,21 +2675,22 @@ const DEVICE = APP ? "app" : (() => {
   return o && !/Mac|Linux|Windows/.test(o) ? `${b} on ${o}` : b;
 })();
 
-let lastInput = Date.now(), lastBeat = 0;
+let lastInput = Date.now(), lastBeat = 0, touchedAt = 0;
 const beat = () => {
   if (document.visibilityState !== "visible" || !document.hasFocus() || Date.now() - lastInput > 120000 || Date.now() - lastBeat < 20000) return;
   lastBeat = Date.now();
   fetch("/api/presence", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device: DEVICE }) }).catch(() => {});
 };
-const acted = () => { lastInput = Date.now(); beat(); };
+const acted = (e) => { if (e.isTrusted === false) return; lastInput = touchedAt = Date.now(); beat(); };
 for (const ev of ["keydown", "pointerdown", "wheel", "touchstart"]) addEventListener(ev, acted, { passive: true, capture: true });
 let mouseAt = "";
 addEventListener("mousemove", (e) => {
+  if (!e.isTrusted) return;
   const at = `${e.screenX},${e.screenY}`;
-  if (at !== mouseAt) lastInput = Date.now();
+  if (at !== mouseAt) lastInput = touchedAt = Date.now();
   mouseAt = at;
 }, { passive: true, capture: true });
-addEventListener("message", (e) => { if (e.data?.atc === 1 && e.data.op === "active") acted(); });
+addEventListener("message", (e) => { if (e.data?.atc === 1 && e.data.op === "active") acted({}); });
 addEventListener("focus", beat);
 setInterval(beat, 30000);
 
@@ -2698,11 +2699,11 @@ const ATTENTION = attention();
 const SCREEN_NAMES = { ...SCREENS, board: "Board and session list", pages: "Pages", assistant: "Assistant", shell: "Shell", settings: "Settings" };
 const openNow = ({ sel, screen }) => sel?.sessionId ? { sessionId: sel.sessionId, title: sel.title || "", cwd: sel.cwd || "", host: sel.host || "", profile: sel.profile || "" }
   : SCREEN_NAMES[screen] ? { sessionId: `screen:${screen}`, title: SCREEN_NAMES[screen], cwd: "", host: "" } : null;
-const tickTime = () => ATTENTION.tick(Date.now(), { on: TIME_ON, here: document.visibilityState === "visible" && document.hasFocus(), input: lastInput });
+const tickTime = () => ATTENTION.tick(Date.now(), { on: TIME_ON, here: document.visibilityState === "visible" && document.hasFocus(), input: touchedAt });
 const sendTicks = async () => {
   const sessions = ATTENTION.take(Date.now());
   if (!sessions.length) return;
-  const ok = await fetch("/api/time", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device: DEVICE, sessions }), keepalive: true }).then((r) => r.ok, () => false);
+  const ok = await fetch("/api/time", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ device: DEVICE, rule: RULE, sessions }), keepalive: true }).then((r) => r.ok, () => false);
   if (!ok) ATTENTION.back(sessions);
 };
 setInterval(tickTime, 5000);
@@ -4102,7 +4103,9 @@ function TimePage({ live, onOpen }) {
   const active = Object.values(data.buckets).filter((b) => b.cost >= 60);
   const perDay = active.length ? active.reduce((a, b) => a + b.cost, 0) / active.length : 0;
   const busiest = Object.entries(data.buckets).sort((a, b) => b[1].cost - a[1].cost)[0];
-  const comparable = def[3] && !sel.bucket && t?.runsFrom && new Date(`${t.runsFrom}T12:00`) <= new Date(new Date(`${t.days[0]}T12:00`) - t.days.length * 864e5);
+  const ruleFrom = t?.ruleFrom ? Date.parse(t.ruleFrom) : null;
+  const comparable = def[3] && !sel.bucket && t?.days && ruleFrom && ruleFrom <= new Date(`${t.days[0]}T00:00`).getTime() - t.days.length * 864e5;
+  const looser = t?.days?.length > 0 && (!ruleFrom || ruleFrom > new Date(`${t.days[0]}T00:00`).getTime()) && data.range > 0;
   const inSessions = data.rows.filter((r) => !r.screen);
   const outside = data.rows.filter((r) => r.screen).reduce((a, r) => a + r.secs, 0);
   const sessSecs = data.total - outside;
@@ -4143,6 +4146,7 @@ function TimePage({ live, onOpen }) {
         : !data.range ? html`<${Empty}>No time counted for ${def[2]}${account ? ` on the ${account} account` : ""} yet.</${Empty}>`
         : html`
           <div class="ukpis">${kpis.map((k) => html`<div class="ukpi ${k.big ? "big" : ""}"><span class="l">${k.l}</span><b>${k.v}</b><span class="s">${k.s}</span></div>`)}</div>
+          ${looser && html`<p class="ufloor">${ruleFrom ? `Counted this way since ${whenAt(ruleFrom)}.` : "Nothing is counted this way yet."} Earlier time was counted more loosely (a minute or more after the last input), so it reads higher and is not compared.</p>`}
           ${days.length > 1 && html`<${UsageBars} days=${days} data=${bars} models=${data.bays.filter((b) => topBays.includes(b.name))} sel=${sel} on=${sel.bay} partial=${today} as=${barsAs}
             onPick=${(d) => pick({ bucket: d })} onPickModel=${(b) => pick({ bay: b })} />`}
           ${data.runs.length > 0 ? html`<${DayLine} runs=${data.runs} color=${color} what=${chips.length ? chips.map((c) => c[1]).join(", ") : def[2]} />`
@@ -4171,7 +4175,7 @@ function TimePage({ live, onOpen }) {
       </div>
       <section class="sec"><div class="sh"><h2>How it is counted</h2></div>
         <p class="unote">In 5-second ticks, while atc is the visible, focused window, for what is open in it. Typing, clicking, scrolling, touching or moving the mouse keeps it counting for 30 seconds. A longer pause counts its first 30 seconds only, even when you come back, since nothing tells reading from being away. Two devices at once count once.</p>
-        <p class="unote">Left out: other apps and browser tabs, a terminal attached with atc attach, voice calls, and anything another session or a schedule typed. So it is time in front of atc, less than the time you worked.${t?.runsFrom && t.first < t.runsFrom ? ` Before ${dateLabel(dayAt(t.runsFrom))} a pause counted its first minute rather than 30 seconds, so those days read higher, while time outside sessions and inside shown pages was missed.` : ""}</p></section>
+        <p class="unote">Left out: other apps and browser tabs, a terminal attached with atc attach, voice calls, and anything another session or a schedule typed. So it is time in front of atc, less than the time you worked.</p></section>
       </div></div>
     </section>`;
 }

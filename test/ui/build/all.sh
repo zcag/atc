@@ -6,3 +6,4 @@ sid=$(curl -s "$base/api/sessions" | python3 -c "import json,sys; d=json.load(sy
 for t in shell board settings pages pagezen transcript phone needs pins landing seen asks assistant hold callmenu ptt ring; do timeout 600 node "test/ui/build/$t.js" "$base"; done
 timeout 200 node test/ui/build/header.js "$base" "$sid"
 timeout 400 node test/ui/build/screens.js "$base"
+timeout 900 node test/ui/build/timecount.mjs ./atc
