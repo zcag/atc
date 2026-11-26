@@ -8,7 +8,8 @@ import { mountPit, memoryStore } from "/pit.js";
 const css = document.createElement("style");
 css.textContent = `:root{--pit-scheme:light dark;--pit-bg:var(--board);--pit-surface:var(--strip);--pit-sunk:var(--board);
   --pit-card:var(--strip);--pit-ink:var(--ink);--pit-muted:var(--dim);--pit-faint:var(--faint);--pit-rule:var(--line);
-  --pit-hair:var(--line);--pit-spark:var(--needs);--pit-spark-ink:var(--needs-ink);--pit-cold:var(--dim);--pit-dead:var(--faint);
+  --pit-hair:var(--line);--pit-spark:var(--ink);--pit-spark-ink:var(--strip);--pit-cold:var(--work);--pit-dead:var(--faint);
+  --pit-shadow:none;--pit-lift:var(--pop);--pit-drop:var(--pop);
   --pit-font:var(--sans);--pit-mono:var(--mono);--pit-display:var(--mono)}
 :root[data-scheme="light"]{--pit-scheme:light}:root[data-scheme="dark"]{--pit-scheme:dark}`;
 document.head.append(css);
