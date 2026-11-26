@@ -282,3 +282,4 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
   .mhead small { font: var(--fs-small) var(--mono); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .mtip { margin: 0; padding: 10px var(--s3) 0; font-size: var(--fs-small); color: var(--faint); }
 }
+.idtick { display: inline-block; flex: none; width: 3px; height: 11px; border-radius: 1px; background: var(--idc); vertical-align: -1px; }

@@ -1,5 +1,5 @@
 let st = { phase: "idle", since: 0, muted: false, why: "" };
-let face = { state: "listening", hearing: "", you: "", said: "", tool: "" };
+let face = { state: "listening", hearing: "", you: "", said: "", tool: "", log: [] };
 const subs = new Set();
 const emit = () => subs.forEach((f) => f());
 const t0 = performance.now();
@@ -16,7 +16,7 @@ export const Call = {
   dial() {
     window.__dialed = (window.__dialed || 0) + 1;
     st = { ...st, phase: "active", since: Date.now() - 134000, why: "" };
-    face = { state: "speaking", hearing: "", you: "Start the orders one on the laptop. And tell the dialogs session: Back closes the dialog first.", said: "Starting #102 on the laptop in a worktree now, then I'll pass your answer to the dialogs session", tool: "" };
+    face = { state: "speaking", hearing: "", you: "Start the orders one on the laptop. And tell the dialogs session: Back closes the dialog first.", said: "Starting #102 on the laptop in a worktree now, then I'll pass your answer to the dialogs session", tool: "", log: [] };
     emit();
   },
   hangup() { window.__hungup = (window.__hungup || 0) + 1; st = { ...st, phase: "ended", why: "you hung up" }; emit(); },

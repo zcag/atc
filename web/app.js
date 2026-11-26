@@ -1460,7 +1460,7 @@ function HoldRow({ s, say }) {
   const line = s.state === "working" ? doing(s) : headline(s);
   const open = (e) => { e.preventDefault(); location.replace(`#/s/${keyOf(s)}`); };
   return html`<div class="hr ${waiting(s) ? "wt" : ""} ${s.state}">
-    <a href=${`#/s/${keyOf(s)}`} onClick=${open}><${StateBlock} s=${s} /><b>${s.title || "Untitled"}</b><span class="by">${bayOf(s) || ""}</span>${!a && line && html`<span class="l">${line}</span>`}</a>
+    <a href=${`#/s/${keyOf(s)}`} onClick=${open}><${StateBlock} s=${s} /><b>${s.title || "Untitled"}</b><span class="by">${bayOf(s) && html`<${IdTick} name=${bayOf(s)} />${bayOf(s)}`}</span>${!a && line && html`<span class="l">${line}</span>`}</a>
     ${a && s.state === "needs-you" && html`<${Ask} s=${s} a=${a} say=${say} compact />`}
   </div>`;
 }
@@ -1495,18 +1495,18 @@ function Hold({ live, me, down, limits, say }) {
   const mem = brief?.machine?.memTotal ? Math.round((brief.machine.memUsed / brief.machine.memTotal) * 100) : -1;
   const offline = down.map((p) => p.name);
   const tile = (label, pct, hash) => html`<button class="htile" onClick=${() => to(hash)}><span>${label}</span><b>${pct < 0 ? "--" : `${pct}%`}</b><${Meter} p=${Math.max(pct, 0)} /></button>`;
-  const tabBtn = (id, label, n, cls) => html`<button class=${tab === id ? "on" : ""} aria-pressed=${tab === id} onClick=${() => setTab(id)}>${label}${n > 0 && html`<i class=${cls}>${n}</i>`}</button>`;
+  const tabBtn = (id, label, n, cls) => html`<button aria-pressed=${tab === id} onClick=${() => setTab(id)}>${label}${n > 0 && html`<i class=${cls}>${n}</i>`}</button>`;
   return html`<div class="hold">
     <div class="htiles">
       ${(me.hosts || [me.host]).filter(Boolean).map((h) => { const off = offline.includes(h); return html`<div class="htile host"><span>${h}</span><b class=${off ? "off" : "up"}>${off ? "down" : "up"}</b></div>`; })}
       ${tile("usage", used, USAGE)}
       ${tile("mem", mem, RESOURCES)}
     </div>
-    <div class="htabs">
+    <div class="htabs"><span class="seg" role="group" aria-label="Show">
       ${tabBtn("wait", "Waiting", wait.length, "a")}
       ${tabBtn("work", "Working", work.length, "w")}
       ${tabBtn("recent", "Recent", 0)}
-    </div>
+    </span></div>
     <div class="hlist">
       ${!live ? [1, 2, 3].map(() => html`<div class="hr sk" aria-hidden="true"><i></i><i></i></div>`)
         : shown.length ? shown.map((s) => html`<${HoldRow} key=${s.sessionId} s=${s} say=${say} />`)
@@ -1520,7 +1520,7 @@ function Hold({ live, me, down, limits, say }) {
           ${ICON.phone}</button>
       </div>
       <div class="hkeys">
-        <button onClick=${() => to(ASSIST)}>Assistant</button><button onClick=${fresh}>New</button><button onClick=${() => to(pagesHash())}>Pages</button><button onClick=${() => to(BACKLOG)}>Backlog</button>
+        <button onClick=${() => to(ASSIST)}>${ICON.mic}Assistant</button><button onClick=${fresh}>${ICON.plus}New</button><button onClick=${() => to(pagesHash())}>${ICON.page}Pages</button><button onClick=${() => to(BACKLOG)}>${ICON.inbox}Backlog</button>
       </div>
     </div>
   </div>`;
@@ -2407,6 +2407,7 @@ const hueOf = (name) => {
   for (const c of name) h = Math.imul(h ^ c.charCodeAt(0), 16777619) >>> 0;
   return HUES[(h >>> 7) % HUES.length];
 };
+const IdTick = ({ name, hue }) => html`<i class="idtick" style=${`--idc: ${idColor(hue ?? hueOf(name))}`} aria-hidden="true"></i>`;
 const distinctHues = (names) => {
   const used = new Set();
   return new Map(names.map((n) => {
