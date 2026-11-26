@@ -60,7 +60,7 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
       await p.keyboard.press('Delete');
       await p.waitForTimeout(100);
       ok(!(await p.$(`[data-sid="${cur}"]`)), `${tag}: Delete on the cursor row deletes it`);
-      await p.keyboard.press('Backspace');
+      await p.keyboard.press('Delete');
       await p.waitForTimeout(100);
       ok(dels.length === 0, `${tag}: two queued, none sent`);
       await p.waitForTimeout(8500);

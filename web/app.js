@@ -638,7 +638,7 @@ function App() {
         e.preventDefault();
         const x = k.ordered.find((x) => x.sessionId === k.cursor);
         if (x) go(keyOf(x));
-      } else if ((e.key === "Delete" || e.key === "Backspace") && k.cursor && k.list && !k.route) {
+      } else if (e.key === "Delete" && k.cursor && k.list && !k.route) {
         const x = k.ordered.find((x) => x.sessionId === k.cursor);
         if (!x || !canDelete(x)) return;
         e.preventDefault();
@@ -2532,7 +2532,7 @@ const openTerm = (s, tries = 30) => {
 const DOOMED = new Map();
 let SHOW_LIVE = () => {};
 const doomed = (x) => DOOMED.has(x.sessionId);
-const canDelete = (s) => !!s.id && !s.private;
+const canDelete = (s) => !!s.id && !s.private && s.kind !== "hub";
 const isOpen = (s) => [s.id, s.sessionId].some((k) => k && location.hash.startsWith(`#/s/${k}`));
 const sendDelete = (sid, keepalive) => {
   const d = DOOMED.get(sid);
@@ -2749,7 +2749,7 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
       else if (e.key === "\\") { e.preventDefault(); openState(); }
       else if (e.key === "]" && shown.length) { e.preventDefault(); choose(mode === "page" ? paneFor(s) : "page"); }
       else if (e.key === "x") { e.preventDefault(); document.querySelector(".hd .more button")?.click(); }
-      else if ((e.key === "Delete" || e.key === "Backspace") && !e.defaultPrevented && canDelete(s) && !document.querySelector("[role=menu]")) { e.preventDefault(); deleteLater(s, say, back); }
+      else if (e.key === "Delete" && !e.defaultPrevented && canDelete(s) && !document.querySelector("[role=menu]")) { e.preventDefault(); deleteLater(s, say, back); }
     };
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
