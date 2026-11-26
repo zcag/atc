@@ -205,7 +205,7 @@ const pagesRoute = () => {
 let PAGES_FROM = null;
 const openUsage = () => { if (location.hash !== USAGE) location.hash = USAGE; };
 const openResources = () => { if (location.hash !== RESOURCES) location.hash = RESOURCES; };
-const SCREENS = { usage: "Usage", time: "Time", resources: "Resources", backlog: "Backlog", agents: "Agents" };
+const SCREENS = { usage: "Usage", time: "Time", resources: "Resources", backlog: "Backlog", agents: "Agents", settings: "Settings" };
 const screenOf = () => location.hash === USAGE ? "usage" : location.hash === TIME ? "time" : location.hash === RESOURCES ? "resources" : location.hash === BACKLOG ? "backlog" : agentRoute() !== null ? "agents" : null;
 const closeScreen = () => { if (screenOf()) { rememberBay(BAY.only, { view: "board" }); go(null); } };
 
@@ -667,10 +667,11 @@ function App() {
 
   return html`
     <div class="app ${assistView ? "assisting" : ""} ${phone && screen === "session" ? "insession" : ""}">
-    <${BayBar} bays=${bays} only=${only} view=${screen} off=${off} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
+    <${BayBar} bays=${bays} only=${only} view=${settings ? "settings" : screen} off=${off} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
     <${StaleLines} off=${off} down=${down} live=${all} retry=${retry} retryPeer=${retryPeer} />
     ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} onBays=${onBays} say=${say} onClose=${() => setPeek(null)} />`}
-    ${assistView ? html`<${AssistantView} hub=${hub} live=${all} loaded=${!!runs} agents=${agents} say=${say} panes=${panes} togglePane=${togglePane} />`
+    ${settings ? html`<main class="shell scr"><${SettingsPage} me=${me} say=${say} onClose=${closeSettings} /></main>`
+    : assistView ? html`<${AssistantView} hub=${hub} live=${all} loaded=${!!runs} agents=${agents} say=${say} panes=${panes} togglePane=${togglePane} />`
     : pagesAt && !route ? html`<div class="shell pagesv"><${PagesView} at=${pagesAt} live=${all} bays=${bays} say=${say} index=${panes.pgindex !== false} /></div>`
     : scr && !route ? html`<main class="shell scr">${scr === "usage" ? html`<${UsagePage} limits=${limits} live=${all} down=${down} onOpen=${openFromUsage} />`
       : scr === "time" ? html`<${TimePage} live=${all} onOpen=${openFromUsage} />`
@@ -694,7 +695,7 @@ function App() {
     </div>`}
     <${Console} hub=${hub} agents=${agents} runs=${runs} onTalk=${openAssistant} onKeys=${() => setHelp(true)} say=${say} />
     ${!calling && html`<${CallPill} hub=${hub} />`}
-    <${TabBar} view=${calling ? "assistant" : screen} onTalk=${openAssistant} waits=${(live || []).filter(waiting).length} />
+    <${TabBar} view=${calling ? "assistant" : settings ? "settings" : screen} onTalk=${openAssistant} waits=${(live || []).filter(waiting).length} />
     </div>
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${me.hosts || [me.host]} down=${down} home=${me.host} live=${all}
       start=${creating === true ? null : creating} context=${creating === true ? here(sel, live) : null} />`}
@@ -703,7 +704,6 @@ function App() {
       actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: openAssistant, ask: openAssistant,
         pane: togglePane, next: () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true })) }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
-    ${settings && html`<${SettingsPage} me=${me} say=${say} onClose=${closeSettings} />`}
     ${alone && html`<${PageAlone} key=${alone.sid} sid=${alone.sid} name=${alone.name} at=${alone.at} live=${all} say=${say} />`}
     ${holding && html`<${Hold} live=${live} me=${me} down=${down} limits=${limits} say=${say} />`}
     ${calling ? html`<${CallScreen} hub=${hub} live=${all} />` : html`<${CallDock} hub=${hub} live=${all} assisting=${assistView} />`}
@@ -6493,17 +6493,17 @@ function SettingsPage({ me, say, onClose }) {
   const face = TX_FACES[prefs.face] || TX_FACES.text;
   const askNotif = () => Notification.requestPermission().then(setNotif);
   const hosts = me?.hosts?.length > 1 ? me.hosts.join(" and ") : me?.host;
+  const cur = SET_PAGES.find((p) => p.id === page);
   return html`
-    <div class="pghome settings" role="dialog" aria-label="Settings">
-      <header class="pghead">
-        <button class="icon" onClick=${back} aria-label="Back">${ICON.back}</button>
-        <div class="who"><h2>${phone && page ? SET_PAGES.find((p) => p.id === page)?.title : "Settings"}</h2></div>
-      </header>
+    <section class="scrpane settings" aria-label="Settings">
       <div class="setshell ${page ? "page" : "list"}">
       <nav class="setnav" aria-label="Settings">
+        <div class="phd setnh"><h1>Settings</h1></div>
         ${SET_PAGES.map((p) => html`<a key=${p.id} href=${`${SETTINGS}/${p.id}`} aria-current=${page === p.id ? "page" : null}>
           <span class="t">${p.title}</span>${warned(p) && html`<span class="warn" title="Needs attention"></span>`}<span class="about">${p.about}</span></a>`)}
       </nav>
+      <div class="setmain">
+      ${cur && html`<header class="phd"><button class="btn quiet icon back" onClick=${back} aria-label="Back">${ICON.back}</button><h1>${cur.title}</h1><span class="where">${cur.about}</span></header>`}
       <div class="pgbody" ref=${body}><div class=${`setpage ${page === "persons" ? "wide" : ""}`}>
         ${!["persons", "appearance", "about"].includes(page) && html`<${CapsBanner} rep=${caps} />`}
         ${page === "persons" && html`<${SettingsPersons} sub=${route.sub} />`}
@@ -6533,24 +6533,12 @@ function SettingsPage({ me, say, onClose }) {
           </div>
         </section>
         <section id="reading">
-          <h2>Reading <span class="n">transcripts, on this device</span></h2>
-          <div class="set">
-            <b>Typeface</b>
-            <p>What the agent says to you. Your own words and the interface stay in Recursive.</p>
-            <div class="ctl"><${Seg} label="Typeface" value=${prefs.face} set=${(v) => txPrefs.set({ face: v })}
-              options=${Object.entries(TX_FACES).map(([k, f]) => [k, f.name, `font-family:${f.css}`])} /></div>
+          <h2>Reading <span class="n">what agents say, on this device</span></h2>
+          <div class="rgrid">
+            <${ReadingPanel} prefs=${prefs} />
+            <p class="rsample" style=${`font-family:${face.css};font-size:${face.sizes[prefs.size]}px;line-height:${(face.lh * TX_SPACINGS[prefs.space]).toFixed(3)};max-width:${TX_MEASURES[prefs.width]}px`}>${TX_SAMPLE}</p>
           </div>
-          <div class="set">
-            <b>Size</b>
-            <div class="ctl"><${Seg} label="Size" value=${prefs.size} set=${(v) => txPrefs.set({ size: v })}
-              options=${["Small", "Medium", "Large", "Larger", "Largest"].map((n, i) => [i, n])} /></div>
-          </div>
-          <div class="set">
-            <b>Line length</b>
-            <div class="ctl"><${Seg} label="Line length" value=${prefs.width} set=${(v) => txPrefs.set({ width: v })}
-              options=${["Narrow", "Normal", "Wide"].map((n, i) => [i, n])} /></div>
-          </div>
-          <p class="rsample" style=${`font-family:${face.css};font-size:${face.sizes[prefs.size]}px;line-height:${face.lh};max-width:${TX_MEASURES[prefs.width]}px`}>${TX_SAMPLE}</p>
+          <p class="rnote">${ICON.zen}Paper colours the page in zen. The same panel opens from zen.</p>
         </section>
         ${!APP && notif !== "none" && html`
           <section id="notifications">
@@ -6571,7 +6559,8 @@ function SettingsPage({ me, say, onClose }) {
         </section>`}
       </div></div>
       </div>
-    </div>`;
+      </div>
+    </section>`;
 }
 
 
@@ -8067,18 +8056,20 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   </div>`;
 }
 
-function ZenLook({ prefs }) {
-  const row = (name, label, cls, options, key) => html`<div class="row ${cls}"><b>${name}</b><span class="seg ${key === "size" ? "sizes" : ""}" role="group" aria-label=${label}>${options.map(([v, text, style]) =>
+function ReadingPanel({ prefs }) {
+  const row = (name, cls, options, key) => html`<div class="row ${cls}"><b>${name}</b><span class="seg ${key === "size" ? "sizes" : ""}" role="group" aria-label=${name}>${options.map(([v, text, style]) =>
     html`<button aria-pressed=${prefs[key] === v} aria-label=${typeof v === "number" && key === "size" ? `Size ${v + 1} of 5` : null} style=${style || ""} onClick=${() => txPrefs.set({ [key]: v })}>${text}</button>`)}</span></div>`;
-  return html`<div class="pop zenlook" role="group" aria-label="How the text looks">
-    ${row("Size", "Size", "", [0, 1, 2, 3, 4].map((i) => [i, "A"]), "size")}
-    ${row("Typeface", "Typeface", "", Object.entries(TX_FACES).map(([k, f]) => [k, f.name, `font-family:${f.css}`]), "face")}
-    ${row("Line length", "Line length", "wide", ["Narrow", "Normal", "Wide"].map((n, i) => [i, n]), "width")}
-    ${row("Line spacing", "Line spacing", "", ["Tight", "Normal", "Loose"].map((n, i) => [i, n]), "space")}
-    <div class="row"><b>Colours</b><span class="papers" role="group" aria-label="Colours">${TX_PAPERS.map(([v, name]) =>
+  return html`<div class="rpanel" role="group" aria-label="How the text looks">
+    ${row("Size", "", [0, 1, 2, 3, 4].map((i) => [i, "A"]), "size")}
+    ${row("Typeface", "", Object.entries(TX_FACES).map(([k, f]) => [k, f.name, `font-family:${f.css}`]), "face")}
+    ${row("Line length", "wide", ["Narrow", "Normal", "Wide"].map((n, i) => [i, n]), "width")}
+    ${row("Line spacing", "", ["Tight", "Normal", "Loose"].map((n, i) => [i, n]), "space")}
+    <div class="row"><b>Paper</b><span class="papers" role="group" aria-label="Paper">${TX_PAPERS.map(([v, name]) =>
       html`<button data-paper=${v || null} aria-pressed=${prefs.paper === v} onClick=${() => txPrefs.set({ paper: v })}>${name}</button>`)}</span></div>
   </div>`;
 }
+
+const ZenLook = ({ prefs }) => html`<div class="pop zenlook"><${ReadingPanel} prefs=${prefs} /></div>`;
 
 function useWide(q = BP.desk) {
   const [wide, setWide] = useState(() => matchMedia(q).matches);
