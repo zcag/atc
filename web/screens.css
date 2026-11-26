@@ -269,7 +269,7 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
 .unote { grid-column: span 12; margin: 0; font-size: var(--fs-small); line-height: 1.5; color: var(--faint); max-width: 900px; }
 
 /* backlog */
-.scrpane > .phd { flex: none; height: 44px; display: flex; align-items: center; gap: var(--s2); min-width: 0; padding: 0 var(--s3) 0 var(--s4); border-bottom: 1px solid var(--line); background: var(--strip); white-space: nowrap; }
+.phd { flex: none; height: 44px; display: flex; align-items: center; gap: var(--s2); min-width: 0; padding: 0 var(--s3) 0 var(--s4); border-bottom: 1px solid var(--line); background: var(--strip); white-space: nowrap; }
 .phd h1 { margin: 0; font-size: var(--fs-title); font-weight: 680; }
 .phd .where { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: var(--fs-small); color: var(--faint); }
 .phd .num { font-family: var(--mono); font-size: var(--fs-small); color: var(--faint); margin-left: var(--s1); }
@@ -467,7 +467,7 @@ button.upick:hover, .upick[aria-pressed="true"] { background: var(--strip-hi); }
   .bk { padding: var(--s3) var(--s4) var(--s6); }
   .bk-add input { height: var(--hit); }
   .bk-add .btn { min-width: 56px; }
-  .scrpane > .phd { height: auto; min-height: 44px; flex-wrap: wrap; padding: var(--s1) var(--s2) var(--s1) var(--s4); }
+  .phd { height: auto; min-height: 44px; flex-wrap: wrap; padding: var(--s1) var(--s2) var(--s1) var(--s4); }
   .phd .r { margin-left: 0; flex: 1 1 100%; overflow-x: auto; scrollbar-width: none; }
   .bk-g { padding-left: 0; }
   .bk-it, .bk.single .bk-it { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; min-height: 56px; padding: 10px 0; }

@@ -443,8 +443,12 @@ pre:hover > .copy, pre > .copy:focus-visible { opacity: 1; }
 .pcard { position: relative; }
 .pcard .pv { border: 0; padding: 0; width: 100%; cursor: pointer; aspect-ratio: 16 / 10; }
 .pcard .cap { border: 0; background: none; text-align: left; color: inherit; font: inherit; cursor: pointer; }
-.pcard .n { display: flex; align-items: center; gap: var(--s2); }
-.pcard .m { display: block; font-size: var(--fs-small); color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pcard .n { display: flex; align-items: center; gap: 6px; font-weight: 560; }
+.pcard.unseen .n { font-weight: 720; }
+.pcard .nd { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); }
+.pcard.updated .nd { background: none; box-shadow: inset 0 0 0 1.5px var(--ink); }
+.pcard .m { display: flex; align-items: center; gap: 6px; font-size: var(--fs-small); color: var(--faint); }
+.pcard .m > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pcard .down { position: absolute; top: 6px; right: 6px; min-width: 28px; height: 28px; border-radius: var(--r3); background: var(--strip); border: 1px solid var(--line); opacity: 0; }
 .pcard:hover .down, .pcard .down:focus { opacity: 1; }
 @media (hover: none) { .pcard .down { opacity: .85; } }

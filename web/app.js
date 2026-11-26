@@ -5326,13 +5326,14 @@ function PageThumb({ p }) {
     : html`<span class="ext">${(p.path.split(".").pop() || "").slice(0, 4)}</span>`;
 }
 
-function PageCard({ p, onOpen, sub, onDown }) {
+function PageCard({ p, onOpen, bay, sub, onDown }) {
+  const st = pageStatus(p);
   return html`
-    <div class="card pcard ${p.kind}">
+    <div class="card pcard ${p.kind} ${st || ""}">
       <button class="pv" onClick=${onOpen} title=${tilde(p.path)}><${PageThumb} p=${p} /></button>
       <button class="cap" onClick=${onOpen}>
-        <span class="n">${pageFresh(p) && html`<i class="dot"></i>`}${pageTitle(p)}</span>
-        <span class="m">${sub ? html`${sub} · ` : ""}${pageInfo(p)}</span>
+        <span class="n">${st && html`<i class="nd" aria-label=${st === "unseen" ? "Unseen" : "Updated"}></i>`}${pageTitle(p)}</span>
+        <span class="m">${bay && html`<${IdTick} name=${bay} />`}<span>${p.gone ? "file is gone" : [bay || sub, age(p.updated || p.shown)].filter(Boolean).join(" · ")}</span></span>
       </button>
       ${onDown && html`<button class="icon down" title="Take down" aria-label="Take down" onClick=${onDown}>${ICON.x}</button>`}
     </div>`;
@@ -5461,7 +5462,7 @@ function PagesView({ at, live, bays, say, index }) {
       <span class="t">${st === "unseen" && html`<span class="sr">Unseen: </span>`}${pageTitle(x.p)}</span>
       <span class="ag" title=${stamp(x.p.updated || x.p.shown)}>${st === "updated" && html`<span class="upd">updated</span>`}${age(x.p.updated || x.p.shown)}</span>
       ${isPin(x.p) ? html`<span class="ss"><span class="mono">/p/${x.p.name}</span></span>`
-        : html`<span class="ss">${x.s ? html`<${StateBlock} s=${x.s} mini />` : html`<span class="sb mini earlier" aria-hidden="true">E</span>`}<span>${x.s?.title || x.p.of || "Earlier session"}</span></span>`}
+        : html`<span class="ss">${x.bay && html`<${IdTick} name=${x.bay} />`}${x.s ? html`<${StateBlock} s=${x.s} mini />` : html`<span class="sb mini earlier" aria-hidden="true">E</span>`}<span>${x.s?.title || x.p.of || "Earlier session"}</span></span>`}
       ${x.p.note && html`<span class="ld">${x.p.note}</span>`}
     </button>`;
   };
@@ -5515,10 +5516,13 @@ function PagesView({ at, live, bays, say, index }) {
     ${list && html`<button class="kb" onClick=${back}>Every page in ${at.bay || "every bay"}</button>`}</div>`;
   const quiet = names.filter((b) => !rows.some((x) => x.bay === b));
   const open = (x) => (location.hash = pagesHash(at.bay, x.p.session, x.p.name));
-  const card = (x, sub) => html`<${PageCard} key=${pkey(x.p)} p=${x.p} sub=${sub} onOpen=${() => open(x)} />`;
+  const card = (x, sub) => html`<${PageCard} key=${pkey(x.p)} p=${x.p} bay=${x.bay} sub=${sub} onOpen=${() => open(x)} />`;
   const recent = more ? scoped : scoped.slice(0, 24);
   if (!at.sid) return html`
-    <div class="pggal"><div class="pggal-in">
+    <div class="pggal">
+      <header class="phd"><h1>Pages</h1><span class="where">${at.bay || "every bay"}${list && counts(scoped) ? ` · ${counts(scoped)}` : ""}</span>
+        <span class="r"><button class="btn quiet sm" onClick=${() => PALETTE_OPEN()} title=${tip("palette", "Search")}>${ICON.search}Search</button></span></header>
+      <div class="pggal-in">
       <section class="gpins" aria-label="Pinned pages">
         <h2 class="gh"><b>Pinned</b><span class="c">${pins.length || ""}</span><span class="r">pages you keep, at /p/name</span></h2>
         ${pins.length ? html`<div class="cards big">${pins.map((x) => card(x, `/p/${x.p.name}`))}</div>`
@@ -5526,7 +5530,7 @@ function PagesView({ at, live, bays, say, index }) {
       </section>
       <section aria-label="Pages from sessions">
         <h2 class="gh"><b>From sessions</b><span class="c">${scoped.length || ""}</span>
-          <span class="r"><button class="kb ${at.bay ? "" : "on"}" aria-pressed=${!at.bay} onClick=${scopeLink}>${at.bay ? `Only ${at.bay}` : "All bays"}</button></span></h2>
+          <span class="r"><button class="btn sm quiet" aria-pressed=${!at.bay} onClick=${scopeLink}>${at.bay ? `Only ${at.bay}` : "All bays"}</button></span></h2>
         ${recent.length ? html`<div class="cards">${recent.map((x) => card(x, x.s?.title || x.p.of || "Earlier session"))}</div>` : list && empty}
         ${scoped.length > recent.length && html`<p class="gmore"><button class="kb" onClick=${() => setMore(true)}>Show all ${scoped.length}</button></p>`}
       </section>
