@@ -19,7 +19,7 @@ Every color, size, radius, shadow and timing in the web UI is a token in `web/to
 - **Type** is Recursive (`--sans`, its mono cut `--mono`, its casual cut through
   `font-variation-settings: var(--v-you)` for your own words) and Literata (`--read`) for what an
   agent says. Eight sizes by role, nothing else: `--fs-micro` (11) `--fs-small` (12) `--fs-ui` (13)
-  `--fs-body` (14) `--fs-title` (16) `--fs-read` (17.5) `--fs-h` (22) `--fs-display` (30).
+  `--fs-body` (14) `--fs-title` (16) `--fs-read` (16.5, the reading face at Medium) `--fs-h` (22) `--fs-display` (30).
 - **Spacing** is `--s1` (4) to `--s7` (48) on a 4px grid. **Radii** `--r1` (4, tags), `--r2` (7,
   controls), `--r3` (10, sheets and popovers) and `--pill` (counts and answer chips only).
   **Shadows** `--pop` (menus, popovers, the palette) and `--pop-up` (bottom sheets). **Motion**
