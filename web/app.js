@@ -2746,6 +2746,12 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
         ${renaming ? renameBox : html`<h1 onDblClick=${() => setRenaming(true)} title=${s.title} lang=${langOf(s.title)}>${s.title || "Untitled"}</h1>`}
         ${where && html`<span class="where">${where}</span>`}
         <span class="r">
+          ${(use?.total > 0 || s.context > 0) && html`<button class="usechip sescost" onClick=${() => setShowUse(true)}
+            title=${[s.model && `Model ${s.model}`, s.context > 0 && `${Math.round(s.context / 1000)}k context in use`, use?.total > 0 && `${withWk(use.cost, usd)} at API prices`].filter(Boolean).join(", ") + ". Click for the breakdown"}>
+            ${!phoneNow && s.model && html`<span class="pc">${modelName(s.model)}</span>`}
+            ${!phoneNow && s.context > 0 && html`<span class="pc"><${CtxMeter} n=${s.context} />${Math.round(s.context / 1000)}k</span>`}
+            ${use?.total > 0 && html`<span class="v">${usd(use.cost)}</span>`}</button>`}
+          ${!phoneNow && s.load && html`<button class="usechip ${hotLoad(s.load) ? "hotload" : ""}" title="This session's processes, in State" onClick=${() => showStateSection(".sres")}><span class="pc">${shortLoad(s.load)}</span></button>`}
           ${!phoneNow && shown.length > 0 && html`<${PagesButton} list=${shown} open=${openPage} on=${mode === "page"} />`}
           ${!phoneNow && hasTerm && html`<button class="btn quiet ${mode === "term" ? "on" : ""}" aria-pressed=${mode === "term"} aria-keyshortcuts="\`" title=${tip("term", "Terminal")} onClick=${() => choose(mode === "term" ? "chat" : "term")}>${ICON.term}Terminal</button>`}
           ${!phoneNow && panes && back === backHome && !panes.rail && html`<${PaneToggle} id="rail" run=${() => togglePane("rail")} icon="rail" label="The bay's sessions beside the transcript" />`}
