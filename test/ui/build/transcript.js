@@ -68,7 +68,7 @@ const css = (p, sel, prop) => p.$eval(sel, (e, k) => getComputedStyle(e)[k], pro
   let long = null;
   for (const s of list.filter((x) => x.state === 'your-turn' && x.attachable && x.kind !== 'hub' && !x.agent && !x.shown?.length)) if (!long && (await turnsOf(s)).length >= 5) long = s;
   long = long || list.find((s) => s.state === 'your-turn');
-  const madeFiles = async (s) => (await turnsOf(s)).slice(-1).some((t) => t.files?.length);
+  const madeFiles = async (s) => (await turnsOf(s)).slice(-1).some((t) => t.files?.some((f) => !/^(\/tmp\/|\/var\/|\/private\/)|\/\.claude\/jobs\/|\/\.cache\//.test(f.path)));
   let edits = null;
   for (const s of list.filter((x) => x.attachable && x.kind !== 'hub').sort((x, y) => (x.state === 'working') - (y.state === 'working')).slice(0, 15)) if (!edits && await madeFiles(s)) edits = s;
   edits = edits || long;
