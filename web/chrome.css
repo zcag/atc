@@ -205,6 +205,10 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
 
 .toast { position: fixed; z-index: 30; left: 50%; bottom: calc(var(--console-h) + var(--s3)); transform: translateX(-50%); display: flex; align-items: center; gap: var(--s3); width: max-content; max-width: min(560px, calc(100vw - 32px)); min-height: 40px; padding: var(--s2) 14px; border-radius: var(--r3); background: var(--toast-bg); color: var(--toast-ink); box-shadow: var(--pop); font-size: var(--fs-ui); }
 .toast:has(.tundo) { padding-right: var(--s2); }
+.appbar { position: fixed; z-index: 31; right: var(--s4); bottom: calc(var(--console-h) + var(--s3)); width: min(420px, calc(100vw - 32px)); display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--s2); padding: var(--s3) var(--s3) var(--s3) var(--s4); border: 1px solid var(--line); border-radius: var(--r3); background: var(--strip); box-shadow: var(--pop); font-size: var(--fs-ui); line-height: var(--lh-ui); }
+.appbar > span { flex: 1 1 100%; min-width: 0; }
+.appbar .icon { position: absolute; top: var(--s1); right: var(--s1); }
+.appbar:has(.icon) > span { padding-right: var(--s5); }
 .toast .tmsg { min-width: 0; }
 .toast .tundo { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 var(--s2); border: 0; border-radius: var(--r2); background: none; color: inherit; font: inherit; font-weight: 600; white-space: nowrap; }
 .toast .tundo:hover { background: color-mix(in oklch, var(--toast-ink) 12%, transparent); }
@@ -220,6 +224,7 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
   .pk .chips button, .pka .ask.compact .btn { height: var(--hit); }
   .peek .pkf { border: 0; padding: var(--s3) 0 0; }
   .toast { left: var(--s4); right: var(--s4); transform: none; width: auto; max-width: none; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + var(--s3)); }
+  .appbar { left: var(--s3); right: var(--s3); width: auto; bottom: auto; top: calc(var(--s2) + env(safe-area-inset-top)); }
 }
 
 .hd .back svg { display: none; }

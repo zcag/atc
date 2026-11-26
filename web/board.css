@@ -1,7 +1,7 @@
 .shell.boardv { display: block; min-height: 0; }
 .bview { height: 100%; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); background: var(--strip); font-size: var(--fs-ui); }
 .bview.withindex { grid-template-columns: minmax(0, 1fr) var(--rail-w); }
-.bmain { min-height: 0; overflow-y: auto; padding-bottom: var(--s6); }
+.bmain { min-height: 0; overflow-y: auto; padding-bottom: var(--s6); container: board / inline-size; }
 .bmain:focus-visible { outline: 0; box-shadow: inset 2px 0 0 var(--focus); }
 
 .bhead { height: 44px; display: flex; align-items: center; gap: var(--s2); min-width: 0; padding: 0 var(--s2) 0 var(--s4); border-bottom: 1px solid var(--line); }
@@ -9,6 +9,8 @@
 .bhead .w { font-family: var(--mono); font-size: var(--fs-small); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .bhead .bcs { display: flex; gap: var(--s2); margin-left: var(--s2); flex: none; }
 .bhead .r { margin-left: auto; display: flex; align-items: center; gap: var(--s1); flex: none; }
+@container board (max-width: 760px) { .bhead .wide, .bhead .w { display: none; } }
+@container board (max-width: 560px) { .bhead .bcs .bc:not(.n) { display: none; } }
 .bc { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: var(--r1); font-size: var(--fs-small); font-weight: 560; color: var(--dim); white-space: nowrap; }
 .bc.n { background: var(--needs-wash); color: var(--needs-text); }
 .bc.w { background: var(--work-wash); color: var(--work); }
