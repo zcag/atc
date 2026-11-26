@@ -83,8 +83,28 @@ func checkClaude(ctx context.Context, env Env) Result {
 	return Result{OK, "Version " + v + "."}
 }
 
+func checkPrivate(ctx context.Context, env Env) Result {
+	i := slices.IndexFunc(claude.Profiles(), func(p claude.Profile) bool { return p.Ephemeral })
+	if i < 0 {
+		return Result{Missing, "No profile for private sessions."}
+	}
+	p := claude.Profiles()[i]
+	switch {
+	case p.Token() == "":
+		return Result{Broken, fmt.Sprintf("%s has no sign-in: atc profile login %s.", p.Name, p.Name)}
+	case !signedIn(ctx, env.Bin, p.Env()):
+		return Result{Broken, fmt.Sprintf("Claude refuses %s's token: atc profile login %s.", p.Name, p.Name)}
+	}
+	if runtime.GOOS == "linux" {
+		if _, err := exec.LookPath("bwrap"); err != nil {
+			return Result{Broken, "Claude's sandbox, which keeps their writes in their own folder, needs bubblewrap (bwrap) installed."}
+		}
+	}
+	return Result{OK, fmt.Sprintf("%s keeps them in %s.", p.Name, p.Home())}
+}
+
 func checkProfiles(ctx context.Context, env Env) Result {
-	ps := claude.Profiles()[1:]
+	ps := slices.DeleteFunc(claude.Profiles()[1:], func(p claude.Profile) bool { return p.Ephemeral })
 	if len(ps) == 0 {
 		return Result{Missing, "Every session runs on the one account Claude Code is signed in to."}
 	}

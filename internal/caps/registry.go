@@ -194,6 +194,14 @@ func All() []Cap {
 			Cost: "Whatever that account is billed; atc only reads its transcripts.",
 		},
 		{
+			ID: "private", Title: "Private sessions", Group: Core, Optional: true, Why: "Sessions that keep nothing: what they write stays in memory and is erased when you delete them or the machine restarts. Your agents can't see them, pushes don't say what they said, and they run without your instructions, memory or MCP servers, writing only in their own folder.",
+			Needs: []string{"claude"}, Check: checkPrivate,
+			Fix: Fix{Command: onMac("", "atc profile add private -ephemeral && atc profile login private"),
+				Text: onMac("Not on macOS yet: it has no folder in memory for them.",
+					"Makes the profile, whose instructions and settings you can change in ~/.claude-private, and signs it in with a long-lived token (claude setup-token). Claude's sandbox needs bubblewrap. Then restart atc.")},
+			Cost: "Your Claude plan; nothing kept.",
+		},
+		{
 			ID: "peers", Title: "Other machines", Group: Machines, Optional: true, Why: "Lists the sessions of your other machines here too.",
 			Check: checkPeers,
 			Fix:   Fix{Text: "List them in peers.json in atc's config folder, each with its name, url and token (`atc token` on that machine).", Guide: "machines"},

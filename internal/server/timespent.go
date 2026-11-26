@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/claude"
+	"github.com/zcag/atc/internal/sessions"
 )
 
 const (
@@ -217,6 +218,9 @@ func (s *Server) timePost(w http.ResponseWriter, r *http.Request) {
 				log.Sessions[x.ID] = row
 			}
 			row.Title, row.Cwd, row.Host, row.Last = x.Title, x.Cwd, x.Host, now
+			if p, ok := claude.ProfileNamed(x.Profile); ok && p.Ephemeral {
+				row.Title, row.Cwd = sessions.PrivateTitle, ""
+			}
 			if x.Profile != "" {
 				row.Profile = x.Profile
 			}

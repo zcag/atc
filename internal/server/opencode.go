@@ -144,6 +144,9 @@ func (s *Server) remove(ctx context.Context, id string) error {
 	if s.hubSession(id) {
 		return errors.New("the assistant runs in atc's hub; it starts over with /new on WhatsApp or a fresh assistant in atc, not by removing it")
 	}
+	if claude.Private(id) {
+		return s.erase(ctx, id)
+	}
 	if !s.M.OpenCode(id) {
 		return s.M.CLI.Remove(ctx, id)
 	}

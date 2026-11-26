@@ -18,6 +18,7 @@ type profileInfo struct {
 	Default bool     `json:"default,omitempty"`
 	Home    string   `json:"home"`
 	Paths   []string `json:"paths,omitempty"`
+	Private bool     `json:"private,omitempty"`
 }
 
 // profiles lists this machine's Claude accounts and, given a dir, the one a new session there runs on.
@@ -27,7 +28,7 @@ func (s *Server) profiles(w http.ResponseWriter, r *http.Request) {
 		For      string        `json:"for,omitempty"`
 	}{Profiles: []profileInfo{}}
 	for _, p := range claude.Profiles() {
-		out.Profiles = append(out.Profiles, profileInfo{p.Name, p.Default(), p.Home(), p.Paths})
+		out.Profiles = append(out.Profiles, profileInfo{p.Name, p.Default(), p.Home(), p.Paths, p.Ephemeral})
 	}
 	if dir := r.URL.Query().Get("dir"); dir != "" {
 		out.For = claude.ProfileFor(dir).Name
@@ -78,6 +79,9 @@ func (s *Server) moveSession(ctx context.Context, sid, name string) (string, err
 		return "", fmt.Errorf("%w %s", errUnknown, sid)
 	}
 	from := claude.ProfileOfFile(path)
+	if from.Ephemeral || to.Ephemeral {
+		return "", badf("a private session stays private, and no other one becomes private")
+	}
 	if from.Name == to.Name {
 		return "", badf("it runs on %s already", to.Name)
 	}

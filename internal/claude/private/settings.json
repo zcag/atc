@@ -1,0 +1,15 @@
+{
+  "autoMemoryEnabled": false,
+  "permissions": {
+    "deny": ["Edit(~/**)", "Edit(//tmp/**)", "Edit(//var/tmp/**)", "Edit(//dev/shm/**)"]
+  },
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "autoAllowBashIfSandboxed": true,
+    "allowUnsandboxedCommands": false,
+    "filesystem": {
+      "denyRead": ["~/.config/atc", "~/.ssh"]
+    }
+  }
+}

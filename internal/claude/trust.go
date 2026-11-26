@@ -35,6 +35,9 @@ var accepting sync.Mutex
 // records the yes the prompt would and runs it again: a git repo needs its own yes even when a folder
 // above it has one, so anything new under an already trusted home would otherwise need a terminal.
 func (c CLI) bg(ctx context.Context, p Profile, dir string, args ...string) (string, error) {
+	if err := p.Prepare(); err != nil {
+		return "", err
+	}
 	out, err := c.run(ctx, p, dir, args...)
 	u, ok := err.(*Untrusted)
 	if !ok || u.Home {

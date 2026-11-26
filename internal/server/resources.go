@@ -82,6 +82,7 @@ func (s *Server) trackResources(list []sessions.Session) {
 	var out []resources.Target
 	for _, x := range list {
 		if x.Host == "" || x.Host == s.Host {
+			x = x.Masked()
 			out = append(out, resources.Target{Key: cmp.Or(x.ID, x.SessionID), SessionID: x.SessionID, Title: x.Title, Cwd: x.Cwd, PID: x.PID})
 		}
 	}

@@ -427,7 +427,7 @@ func (s *Server) waPrompt(ctx context.Context, d whatsapp.Message) (string, stri
 			}
 			log.Printf("whatsapp: transcribe: %v", err)
 		}
-		path, err := saveUpload(waName, cmp.Or(d.Media.Filename, d.Type+extFor(mt)), bytes.NewReader(data))
+		path, err := saveUpload(cachedUploads(waName), cmp.Or(d.Media.Filename, d.Type+extFor(mt)), bytes.NewReader(data))
 		if err != nil {
 			return "", "", err
 		}

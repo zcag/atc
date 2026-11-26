@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/backlog"
+	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/sessions"
 )
 
@@ -185,6 +186,10 @@ func (s *Server) putAside(w http.ResponseWriter, r *http.Request) {
 	var q struct{ Title string }
 	json.NewDecoder(r.Body).Decode(&q)
 	key := r.PathValue("sid")
+	if claude.Private(key) {
+		http.Error(w, "a private session keeps nothing, so it can't wait on the backlog", http.StatusBadRequest)
+		return
+	}
 	live, _ := s.M.Live(r.Context())
 	var x sessions.Session
 	for _, l := range live {

@@ -50,6 +50,7 @@ type Session struct {
 	Engine         string           `json:"engine,omitempty"`
 	Harness        string           `json:"harness,omitempty"`
 	Profile        string           `json:"profile,omitempty"`
+	Private        bool             `json:"private,omitempty"`
 	Asks           []opencode.Ask   `json:"asks,omitempty"`
 	Background     []claude.Task    `json:"background,omitempty"`
 	TurnDone       bool             `json:"turnDone,omitempty"`
@@ -150,7 +151,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 		s := m.build(t)
 		s.SessionID, s.ID, s.Kind, s.Name = a.SessionID, a.ID, a.Kind, a.Name
 		if p, ok := claude.ProfileNamed(a.Profile); ok {
-			s.Profile = profileName(p)
+			s.Profile, s.Private = profileName(p), p.Ephemeral
 		}
 		s.State, s.Attachable, s.PID = state(a), a.Kind == "background" && a.PID > 0, a.PID
 		if b := claude.Asking(a.ID, byID[a.SessionID].Pending != ""); a.Kind == "background" && (len(b.Questions) > 0 || b.Approve != "") {
@@ -175,7 +176,7 @@ func (m *Manager) Live(ctx context.Context) ([]Session, error) {
 				s.Steps, s.Failed, s.Files = last.Steps, last.Failed, len(last.Files)
 			}
 		}
-		if s.State == YourTurn && s.Summary == nil {
+		if s.State == YourTurn && s.Summary == nil && !s.Private {
 			s.Summarizing = m.Summary.Want(byID[a.SessionID])
 		}
 		s.Cwd = first(a.Cwd, s.Cwd)
@@ -223,7 +224,7 @@ func (m *Manager) History(q, dir string, limit int) []Session {
 			continue
 		}
 		s := m.build(t)
-		if s.Agent != "" && q == "" {
+		if s.Agent != "" && q == "" || s.Private {
 			continue
 		}
 		if dir != "" && s.StartCwd != dir && s.Cwd != dir {
@@ -242,15 +243,30 @@ func (m *Manager) History(q, dir string, limit int) []Session {
 
 func (m *Manager) build(t history.Transcript) Session {
 	meta := m.Store.Get(t.SessionID)
+	p := claude.ProfileOfFile(t.Path)
 	return Session{
+		Private:   p.Ephemeral,
 		SessionID: t.SessionID, Kind: "transcript", State: Past,
 		Title: title(meta.Name, t), Name: t.AgentName,
 		Cwd: t.Cwd, StartCwd: t.StartCwd, Branch: t.Branch, Model: t.Model,
 		PermissionMode: t.PermissionMode, LastPrompt: t.LastPrompt, LastFrom: t.LastFrom, Context: t.Context, PromptAt: t.PromptAt,
 		Activity: t.Activity, LastReply: t.LastReply, Preview: t.Preview, Summary: m.Summary.Get(t),
 		Updated: t.Updated, Pinned: meta.Pinned, Parked: meta.Parked, Engine: meta.Engine, Harness: t.Harness, Agent: meta.Agent,
-		Retired: RetiredHub(meta.Name), Profile: profileName(claude.ProfileOfFile(t.Path)),
+		Retired: RetiredHub(meta.Name), Profile: profileName(p),
 	}
+}
+
+// PrivateTitle is what a private session is called anywhere that keeps or carries it past this page.
+const PrivateTitle = "Private session"
+
+// Masked is s without what it says or where it runs, for a private session's push, widget row or record: only that
+// it exists and its state are left.
+func (s Session) Masked() Session {
+	if !s.Private {
+		return s
+	}
+	return Session{SessionID: s.SessionID, Host: s.Host, ID: s.ID, Kind: s.Kind, State: s.State, Attachable: s.Attachable, PID: s.PID,
+		Title: PrivateTitle, Profile: s.Profile, Private: true, StartedAt: s.StartedAt, Updated: s.Updated, PromptAt: s.PromptAt}
 }
 
 // profileName names a session's Claude account when it is not the default one.

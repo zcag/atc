@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"cmp"
 	"context"
 	"encoding/json"
@@ -22,7 +23,7 @@ import (
 var sharedConfig = []string{"CLAUDE.md", "settings.json", "settings.local.json", "keybindings.json", "skills", "commands", "agents", "plugins", "hooks", "output-styles"}
 
 // sharedState is what a profile's .claude.json takes from the default one.
-var sharedState = []string{"mcpServers", "hasCompletedOnboarding", "lastOnboardingVersion", "theme", "installMethod", "autoUpdates"}
+var sharedState = append([]string{"mcpServers"}, claude.Onboarding...)
 
 func profilesPath() string { return filepath.Join(client.ConfigDir(), "profiles.json") }
 
@@ -34,17 +35,21 @@ func profileCmd(args []string) error {
 	case "add":
 		fs := flags("profile")
 		dir := fs.String("dir", "", "its Claude config folder (default ~/.claude-<name>)")
+		ephemeral := fs.Bool("ephemeral", false, "for private sessions, which keep nothing")
 		if len(args) < 2 {
 			return usageErr("profile")
 		}
 		name := args[1]
 		fs.Parse(args[2:])
-		if fs.NArg() == 0 {
-			return errors.New("name the folders whose sessions run on this account")
-		}
 		home, _ := os.UserHomeDir()
 		if *dir == "" {
 			*dir = filepath.Join(home, ".claude-"+name)
+		}
+		if *ephemeral {
+			return addEphemeral(claude.Profile{Name: name, Dir: expandHome(*dir), Ephemeral: true})
+		}
+		if fs.NArg() == 0 {
+			return errors.New("name the folders whose sessions run on this account")
 		}
 		var paths []string
 		for _, p := range fs.Args() {
@@ -83,6 +88,11 @@ func profileCmd(args []string) error {
 			fmt.Printf("Moved %s to %s; it resumes there.\n", s.Title, args[2])
 		}
 		return nil
+	case "login":
+		if len(args) != 2 {
+			return usageErr("profile")
+		}
+		return loginEphemeral(args[1])
 	case "rm":
 		if len(args) != 2 {
 			return usageErr("profile")
@@ -179,9 +189,14 @@ func addProfile(path string, base, p claude.Profile) error {
 			return err
 		}
 	}
-	if err := shareState(base.State(), p.State()); err != nil {
+	if err := claude.ShareState(base.State(), p.State(), sharedState); err != nil {
 		return err
 	}
+	return recordProfile(path, p)
+}
+
+// recordProfile puts p in profiles.json, replacing a profile of the same name.
+func recordProfile(path string, p claude.Profile) error {
 	ps, err := readProfiles(path)
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
@@ -190,43 +205,52 @@ func addProfile(path string, base, p claude.Profile) error {
 	return writeProfiles(path, append(ps, p))
 }
 
-// shareState brings sharedState from Claude Code's state file at from into the one at to, keeping everything else
-// in it, and MCP servers it has that from does not.
-func shareState(from, to string) error {
-	src, dst := map[string]json.RawMessage{}, map[string]json.RawMessage{}
-	if b, err := os.ReadFile(from); err == nil {
-		if err := json.Unmarshal(b, &src); err != nil {
-			return fmt.Errorf("%s: %w", from, err)
-		}
+func addEphemeral(p claude.Profile) error {
+	if claude.MemoryDir() == "" {
+		return errors.New("private sessions need a folder in memory, and this machine has no $XDG_RUNTIME_DIR")
 	}
-	if b, err := os.ReadFile(to); err == nil {
-		if err := json.Unmarshal(b, &dst); err != nil {
-			return fmt.Errorf("%s: %w", to, err)
-		}
-	}
-	for _, k := range sharedState {
-		v, ok := src[k]
-		if !ok {
-			continue
-		}
-		if k == "mcpServers" {
-			merged := map[string]json.RawMessage{}
-			json.Unmarshal(dst[k], &merged)
-			var theirs map[string]json.RawMessage
-			json.Unmarshal(v, &theirs)
-			for name, s := range theirs {
-				merged[name] = s
-			}
-			v, _ = json.Marshal(merged)
-		}
-		dst[k] = v
-	}
-	b, _ := json.MarshalIndent(dst, "", "  ")
-	tmp := to + ".atc"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	if err := p.Init(); err != nil {
 		return err
 	}
-	return os.Rename(tmp, to)
+	if err := recordProfile(profilesPath(), p); err != nil {
+		return err
+	}
+	fmt.Printf("%s: private sessions keep what they write in %s, which a restart empties.\n", p.Name, p.Home())
+	fmt.Printf("Their instructions and settings are in %s; change them there.\n", p.Dir)
+	if p.Token() == "" {
+		fmt.Printf("Sign it in:\n  atc profile login %s\n", p.Name)
+	}
+	fmt.Println("Then restart atc (atc service install, or restart its service) so it reads the profile.")
+	return nil
+}
+
+// loginEphemeral keeps a long-lived token for an ephemeral profile: a sign-in in its Home would not outlast a restart.
+func loginEphemeral(name string) error {
+	ps, err := readProfiles(profilesPath())
+	if err != nil {
+		return err
+	}
+	i := slices.IndexFunc(ps, func(p claude.Profile) bool { return p.Name == name && p.Ephemeral })
+	if i < 0 {
+		return fmt.Errorf("no ephemeral profile called %s", name)
+	}
+	p := ps[i]
+	p.Dir = expandHome(p.Dir)
+	cmd := exec.Command(cmp.Or(os.Getenv("ATC_CLAUDE_BIN"), "claude"), "setup-token")
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	fmt.Print("\nPaste the token it printed: ")
+	tok, _ := bufio.NewReader(os.Stdin).ReadString('\n')
+	if tok = strings.TrimSpace(tok); !strings.HasPrefix(tok, "sk-ant-") {
+		return errors.New("that is not a Claude token (sk-ant-...)")
+	}
+	if err := os.WriteFile(p.TokenFile(), []byte(tok+"\n"), 0o600); err != nil {
+		return err
+	}
+	fmt.Printf("Kept in %s.\n", p.TokenFile())
+	return nil
 }
 
 func rmProfile(path, name string) error {

@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/zcag/atc/internal/claude"
 )
 
 const keepPrefs = 30 * 24 * time.Hour
@@ -114,7 +116,16 @@ func (s *Server) putSeen(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getDrafts(w http.ResponseWriter, r *http.Request) {
 	m := map[string]draft{}
 	s.loadPref("drafts.json", &m)
+	s.prefMu.Lock()
+	maps.Copy(m, s.privateDrafts)
+	s.prefMu.Unlock()
 	reply(w, m)
+}
+
+func (s *Server) dropDraft(sid string) {
+	s.prefMu.Lock()
+	delete(s.privateDrafts, sid)
+	s.prefMu.Unlock()
 }
 
 func (s *Server) putDraft(w http.ResponseWriter, r *http.Request) {
@@ -129,15 +140,28 @@ func (s *Server) putDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.SessionID, req.At = sid, time.Now().UTC()
-	m := map[string]draft{}
-	err := s.editPref("drafts.json", &m, func() {
+	edit := func(m map[string]draft) {
 		if req.Text == "" {
 			delete(m, sid)
 		} else {
 			m[sid] = draft{req.Text, req.At}
 		}
-		stale(m, func(d draft) time.Time { return d.At })
-	})
+	}
+	var err error
+	if claude.Private(sid) {
+		s.prefMu.Lock()
+		if s.privateDrafts == nil {
+			s.privateDrafts = map[string]draft{}
+		}
+		edit(s.privateDrafts)
+		s.prefMu.Unlock()
+	} else {
+		m := map[string]draft{}
+		err = s.editPref("drafts.json", &m, func() {
+			edit(m)
+			stale(m, func(d draft) time.Time { return d.At })
+		})
+	}
 	if err != nil {
 		fail(w, err)
 		return

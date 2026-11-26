@@ -11,7 +11,7 @@ func TestSaveUploadKeepsSameNameFiles(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	paths := map[string]string{}
 	for _, body := range []string{"one", "two", "three"} {
-		path, err := saveUpload("shared", "image.png", strings.NewReader(body))
+		path, err := saveUpload(cachedUploads("shared"), "image.png", strings.NewReader(body))
 		if err != nil {
 			t.Fatal(err)
 		}

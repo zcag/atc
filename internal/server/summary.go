@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zcag/atc/internal/claude"
 	"github.com/zcag/atc/internal/push"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/summary"
@@ -27,6 +28,10 @@ func (s *Server) summary(w http.ResponseWriter, r *http.Request) {
 	t, ok := s.M.Find(r.PathValue("sid"))
 	if !ok {
 		http.Error(w, "no transcript", http.StatusNotFound)
+		return
+	}
+	if claude.Private(t.SessionID) {
+		reply(w, summaryReply{})
 		return
 	}
 	if r.Method == "POST" {

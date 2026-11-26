@@ -3,6 +3,7 @@ package claude
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,10 +12,14 @@ import (
 
 // A Profile is one Claude Code account: its own config folder, so its own sign-in, transcripts and background
 // daemon. The default profile is Claude Code's usual folder; others are chosen by the folder a session runs in.
+//
+// An ephemeral profile is for private sessions: Dir keeps only its instructions, settings and sign-in, and everything
+// a session writes goes to Home, a folder in memory that a reboot empties. Its sessions run in folders under Scratch.
 type Profile struct {
-	Name  string   `json:"name"`
-	Dir   string   `json:"dir,omitempty"`
-	Paths []string `json:"paths,omitempty"`
+	Name      string   `json:"name"`
+	Dir       string   `json:"dir,omitempty"`
+	Paths     []string `json:"paths,omitempty"`
+	Ephemeral bool     `json:"ephemeral,omitempty"`
 }
 
 const DefaultName = "default"
@@ -32,6 +37,9 @@ func (p Profile) Home() string {
 	if p.Default() {
 		return ConfigDir()
 	}
+	if p.Ephemeral {
+		return filepath.Join(MemoryDir(), "atc-"+p.Name)
+	}
 	return p.Dir
 }
 
@@ -42,7 +50,14 @@ func (p Profile) Env() []string {
 	if p.Default() {
 		return nil
 	}
-	return []string{"CLAUDE_CONFIG_DIR=" + p.Dir}
+	if !p.Ephemeral {
+		return []string{"CLAUDE_CONFIG_DIR=" + p.Dir}
+	}
+	env := []string{"CLAUDE_CONFIG_DIR=" + p.Home(), "TMPDIR=" + filepath.Join(p.Home(), "tmp"), "ENABLE_CLAUDEAI_MCP_SERVERS=false"}
+	if tok := p.Token(); tok != "" {
+		env = append(env, "CLAUDE_CODE_OAUTH_TOKEN="+tok)
+	}
+	return env
 }
 
 // State is the file Claude Code keeps its trust list and cached usage in: beside the default folder, inside any other.
@@ -84,6 +99,13 @@ func SetProfiles(in []Profile) error {
 		}
 		if p.Name == "" || seen[p.Name] {
 			return fmt.Errorf("profiles: every profile needs a name of its own, got %q", p.Name)
+		}
+		if p.Ephemeral && (p.Default() || MemoryDir() == "") {
+			log.Printf("profiles: %s is ephemeral, which needs a folder of its own and a memory folder ($XDG_RUNTIME_DIR); left out", p.Name)
+			continue
+		}
+		if p.Ephemeral {
+			p.Paths = append(p.Paths, p.Scratch())
 		}
 		seen[p.Name] = true
 		if p.Default() {
@@ -202,8 +224,13 @@ func Homes() []string {
 	return out
 }
 
-// Move puts the conversation sid's files on the account to: its transcript, its subagents' transcripts and its file
-// history. Resumed after, it runs there with everything it had.
+// files is what p keeps of the conversation sid whose transcript is at path: the transcript, its subagents'
+// transcripts and its file history.
+func files(p Profile, sid, path string) []string {
+	return []string{path, filepath.Join(filepath.Dir(path), sid), filepath.Join(p.Home(), "file-history", sid)}
+}
+
+// Move puts the conversation sid's files on the account to. Resumed after, it runs there with everything it had.
 func Move(sid string, to Profile) error {
 	path := Transcript(sid)
 	if path == "" {
@@ -213,22 +240,15 @@ func Move(sid string, to Profile) error {
 	if from.Name == to.Name {
 		return fmt.Errorf("it is on %s already", to.Name)
 	}
-	src, dst := filepath.Dir(path), filepath.Join(to.Projects(), filepath.Base(filepath.Dir(path)))
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		return err
-	}
-	for _, m := range [][2]string{
-		{path, filepath.Join(dst, sid+".jsonl")},
-		{filepath.Join(src, sid), filepath.Join(dst, sid)},
-		{filepath.Join(from.Home(), "file-history", sid), filepath.Join(to.Home(), "file-history", sid)},
-	} {
-		if _, err := os.Stat(m[0]); err != nil {
+	dst := files(to, sid, filepath.Join(to.Projects(), filepath.Base(filepath.Dir(path)), sid+".jsonl"))
+	for i, src := range files(from, sid, path) {
+		if _, err := os.Stat(src); err != nil {
 			continue
 		}
-		if err := os.MkdirAll(filepath.Dir(m[1]), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(dst[i]), 0o755); err != nil {
 			return err
 		}
-		if err := os.Rename(m[0], m[1]); err != nil {
+		if err := os.Rename(src, dst[i]); err != nil {
 			return err
 		}
 	}

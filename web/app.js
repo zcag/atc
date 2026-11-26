@@ -476,7 +476,9 @@ function App() {
     for (const x of live) {
       const was = prev[x.sessionId];
       if (!was || was === x.state || away(x) || (x.state !== "needs-you" && x.state !== "your-turn")) continue;
-      const n = new Notification(x.title || "atc", { body: x.state === "needs-you" ? `Needs you${x.activity ? ": " + x.activity : ""}` : (x.summary?.status || x.lastReply || "Finished its turn"), tag: x.sessionId, icon: "/icon.svg" });
+      const n = x.private
+        ? new Notification("Private session", { body: x.state === "needs-you" ? "Needs you" : "Finished its turn", tag: x.sessionId, icon: "/icon.svg" })
+        : new Notification(x.title || "atc", { body: x.state === "needs-you" ? `Needs you${x.activity ? ": " + x.activity : ""}` : (x.summary?.status || x.lastReply || "Finished its turn"), tag: x.sessionId, icon: "/icon.svg" });
       n.onclick = () => { window.focus(); go(keyOf(x)); n.close(); };
     }
   }, [live]);
@@ -509,9 +511,10 @@ function App() {
         return { ...base, text: q.question, options: a.questions.length === 1 ? q.options.map((o) => o.label) : undefined };
       };
       const rows = arrange(reach).filter((s) => !away(s) && FEED_STATES.includes(s.state)).slice(0, 12).map((s) => ({
-        id: s.attachable ? s.id : undefined, sid: s.sessionId, title: s.title, state: s.state, host: s.host || undefined, pinned: s.pinned || undefined,
+        id: s.attachable ? s.id : undefined, sid: s.sessionId, title: s.private ? "Private session" : s.title, state: s.state, host: s.host || undefined, pinned: s.pinned || undefined,
         since: (s.state === "working" && s.promptAt) || s.updated || undefined,
-        summary: (s.state !== "working" && s.summary?.status) || undefined, bay: bayOf(s) || undefined, ask: s.state === "needs-you" ? feedAsk(s) : undefined,
+        summary: (s.state !== "working" && !s.private && s.summary?.status) || undefined, bay: (!s.private && bayOf(s)) || undefined,
+        ask: s.state === "needs-you" && !s.private ? feedAsk(s) : undefined,
       }));
       const hub = (live || []).find((s) => s.kind === "hub");
       const said = hub && oneLine(hub.preview || hub.lastReply || hub.summary?.status);
@@ -519,7 +522,7 @@ function App() {
       const key = JSON.stringify([rows.map(({ since, ...r }) => r), said]);
       if (key !== appSent) { appSent = key; APP.setSessions(JSON.stringify({ type: "sessions", at: new Date().toISOString(), sessions: rows, assistant })); }
     } else if (APP?.setTargets) {
-      const targets = JSON.stringify(reach.filter((s) => s.attachable && !away(s)).slice(0, 8).map((s) => ({ id: s.sessionId, title: s.title })));
+      const targets = JSON.stringify(reach.filter((s) => s.attachable && !away(s)).slice(0, 8).map((s) => ({ id: s.sessionId, title: s.private ? "Private session" : s.title })));
       if (targets !== appSent) APP.setTargets((appSent = targets));
     }
   }, [reach]);
@@ -2507,13 +2510,14 @@ function sessionActions(s, say, { rename, open, after } = {}) {
   items.push("-", { label: s.parked ? "Unpark" : "Park", icon: "park", sub: s.parked ? "back in the list" : "out of the list until it needs you", run: run(() => patch({ parked: !s.parked }), () => say(s.parked ? "Unparked." : "Parked.", { undo: () => patch({ parked: !!s.parked }) })) });
   if (!s.attachable && s.kind !== "interactive")
     items.push({ label: "Resume", icon: "play", run: run(() => resumeSession(s), (r) => go(r.id)) });
-  items.push({ label: "Put on the backlog", icon: "inbox", title: "Stop it and take it off the list; its backlog item resumes the same conversation. A working session stops when its turn ends", run: () => putAside(s, say).then(() => after && after()) });
+  if (!s.private) items.push({ label: "Put on the backlog", icon: "inbox", title: "Stop it and take it off the list; its backlog item resumes the same conversation. A working session stops when its turn ends", run: () => putAside(s, say).then(() => after && after()) });
   if (s.agent && s.state !== "past") items.push({ label: "Start over", icon: "refresh", title: "It writes a handover note and a new conversation starts from it", run: run(() => agentApi(s.agent, "reset"), () => say(`${s.title} is starting over.`)) });
   items.push("-");
   if (s.attachable) items.push({ label: "Stop", icon: "stop", run: run(() => api(`/api/sessions/${s.id}/stop?device=${encodeURIComponent(DEVICE)}`, { method: "POST" }), () => say("Stopped. Resume it any time.")) });
   if (s.id)
-    items.push({ label: "Delete…", icon: "x", danger: true, run: () => ask({ title: `Delete “${s.title || "Untitled"}”?`, body: "Its conversation stays in history, where you can resume it.",
-      ok: "Delete", busy: "Deleting…", danger: true, run: () => api(`/api/sessions/${s.id}`, { method: "DELETE" }) })
+    items.push({ label: s.private ? "Erase…" : "Delete…", icon: "x", danger: true, run: () => ask({ title: `${s.private ? "Erase" : "Delete"} “${s.title || "Untitled"}”?`,
+      body: s.private ? "It ends, and its conversation, folder and files are deleted for good." : "Its conversation stays in history, where you can resume it.",
+      ok: s.private ? "Erase" : "Delete", busy: s.private ? "Erasing…" : "Deleting…", danger: true, run: () => api(`/api/sessions/${s.id}`, { method: "DELETE" }) })
       .then((r) => { r && [s.id, s.sessionId].some((k) => location.hash.startsWith(`#/s/${k}`)) && location.replace("#/"); after && after(); }) });
   items.push("-");
   return items;
@@ -8404,6 +8408,9 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
     return () => { live = false; clearTimeout(t); };
   }, [profDir, target]);
   useEffect(() => { if (profs && profile && !profs.profiles.some((p) => p.name === profile)) setProfile(""); }, [profs]);
+  const privProf = !later && !preset && !harness ? profs?.profiles.find((p) => p.private) : null;
+  const [privOn, setPriv] = useState(false);
+  const priv = privOn && !!privProf;
   const byFolder = preset?.profile || profs?.for;
   const profLine = profile ? html`<b>${profile}</b>` : html`<b>${byFolder || "default"}</b>${preset?.profile ? ", from the preset" : profs?.profiles.length > 1 ? ", from the folder" : ""}`;
   const git = !!dirs.find((d) => tilde(d.path) === dir)?.git;
@@ -8415,8 +8422,8 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
   const first = useRef(true);
   useEffect(() => {
     if (first.current || later) { first.current = false; return; }
-    nsDraft.set(prompt.trim() || (folder && folder !== ctxDir) ? { prompt, folder, host } : null);
-  }, [prompt, folder, host]);
+    nsDraft.set(!priv && (prompt.trim() || (folder && folder !== ctxDir)) ? { prompt, folder, host } : null);
+  }, [prompt, folder, host, priv]);
   useEffect(() => {
     const f = (e) => { if (e.key === "Escape") big ? setBig(null) : picking ? (setPicking(false), document.getElementById("ns-prompt")?.focus()) : onClose(); };
     addEventListener("keydown", f);
@@ -8428,7 +8435,8 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
 
   const withFiles = async (h) => {
     const paths = [];
-    for (const f of files) paths.push(await uploadFile(`/api/uploads${hostQ(h, home)}`, f.file, f.name));
+    const q = new URLSearchParams({ ...(h !== home ? { host: h } : {}), ...(priv ? { profile: privProf.name } : {}) }).toString();
+    for (const f of files) paths.push(await uploadFile(`/api/uploads${q ? `?${q}` : ""}`, f.file, f.name));
     return [prompt.trim() && prompt, paths.map(quotePath).join("\n")].filter(Boolean).join("\n\n");
   };
   const putAside = async () => {
@@ -8457,8 +8465,9 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
       const opening = await withFiles(h);
       const r = await (preset
         ? api(`/api/sessions${hostQ(preset.host, home)}`, { method: "POST", body: { preset: preset.name, name: name.trim(), prompt: opening, engine, profile } })
+        : priv ? api(`/api/sessions${hostQ(h, home)}`, { method: "POST", body: { name: name.trim(), prompt: opening, profile: privProf.name } })
         : api(`/api/sessions${hostQ(h, home)}`, { method: "POST", body: { dir: dir.trim(), name: name.trim(), prompt: opening, worktree: wtOn, engine, profile } }));
-      if (!preset) store(NS_HOSTS, { ...stored(NS_HOSTS, {}), [dir]: h });
+      if (!preset && !priv) store(NS_HOSTS, { ...stored(NS_HOSTS, {}), [dir]: h });
       nsDraft.set(null);
       setFiles([]);
       onClose();
@@ -8484,12 +8493,12 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
   const profName = profile || byFolder || "default";
   const optLine = [
     !later && preset ? `preset ${preset.name}` : null,
-    git && !harness && !preset ? (wtOn ? "New worktree" : "In the folder") : null,
-    !later && (eng ? engLine : "Claude, as configured"),
+    git && !harness && !preset && !priv ? (wtOn ? "New worktree" : "In the folder") : null,
+    !later && (priv ? `Claude, on the ${privProf.name} profile` : eng ? engLine : "Claude, as configured"),
     !later && (name.trim() ? `named “${name.trim()}”` : "name from the prompt"),
-    !later && !harness && profs?.profiles.length > 1 && `${profName} account`,
+    !later && !harness && !priv && profs?.profiles.some((p) => !p.default && !p.private) && `${profName} account`,
   ].filter(Boolean).join(" · ");
-  const where = preset ? html`preset <b>${preset.name}</b>, ${tilde(preset.dir)}` : html`${wtOn ? "a new worktree of " : ""}<b>${dir}</b> on ${hostDown && other ? other : host}`;
+  const where = preset ? html`preset <b>${preset.name}</b>, ${tilde(preset.dir)}` : priv ? html`an empty <b>private</b> folder on ${hostDown && other ? other : host}` : html`${wtOn ? "a new worktree of " : ""}<b>${dir}</b> on ${hostDown && other ? other : host}`;
   return html`
     <div class="nsveil" onPointerDown=${(e) => e.target === e.currentTarget && onClose()}
       onDragOver=${(e) => { if (hasFiles(e)) { e.preventDefault(); setDropping(true); } }}
@@ -8513,22 +8522,25 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
               <input type="file" multiple hidden ref=${pickFile} onChange=${(e) => { addFiles([...e.target.files]); e.target.value = ""; }} /></div>
           </div>
           <div class="nspicks">
-            <button type="button" class="nspick folder" aria-expanded=${picking} aria-controls="ns-fl" onClick=${() => setPicking(!picking)}>
-              ${ICON.folder}<span class="l">Folder</span><span class="v">${preset ? `preset ${preset.name}` : dir}</span>${ICON.down}</button>
+            ${!priv && html`<button type="button" class="nspick folder" aria-expanded=${picking} aria-controls="ns-fl" onClick=${() => setPicking(!picking)}>
+              ${ICON.folder}<span class="l">Folder</span><span class="v">${preset ? `preset ${preset.name}` : dir}</span>${ICON.down}</button>`}
+            ${privProf && html`<button type="button" class="nspick priv ${priv ? "folder" : ""}" aria-pressed=${priv} onClick=${() => { setPriv(!priv); setPicking(false); }}
+              title="A private session keeps nothing"><span class="l">Private</span><span class="v">${priv ? "on" : "off"}</span></button>`}
             ${!preset && hosts.length > 1 && html`<${Menu} cls="nspick host" width=${220} aria="Machine" items=${hosts.map((h) => {
               const o = down.find((p) => p.name === h);
               return { label: h, on: h === host, icon: h === host ? "check" : null, sub: o ? "unreachable" : lastHosts[dir] === h ? "last used here" : "", run: () => !o && setHost(h) };
             })} label=${html`${ICON.term}<span class="l">Machine</span><span class="v">${host}</span>${ICON.down}`} />`}
           </div>
-          ${picking && html`<${FolderField} dirs=${dirs} folder=${dir} pick=${pick} host=${target} listHost=${listHost} live=${live} presets=${later ? [] : presets} preset=${preset} setPreset=${pickPreset} home=${home} focus
+          ${priv && html`<div class="why nswhy">What it writes stays in memory and is erased when you delete it or ${target} restarts. Your agents can't see it, pushes don't say what it said, and it runs in an empty folder of its own, without your instructions, memory or MCP servers.</div>`}
+          ${picking && !priv && html`<${FolderField} dirs=${dirs} folder=${dir} pick=${pick} host=${target} listHost=${listHost} live=${live} presets=${later ? [] : presets} preset=${preset} setPreset=${pickPreset} home=${home} focus
             onStart=${() => start(hostDown && !later && other ? other : null)} />`}
           ${why && html`<div class="why nswhy">${why}</div>`}
-          ${trust === "home" && html`<div class="nstrust"><b>Claude Code trusts the home folder one session at a time,</b> so a background session can't start here. Pick a project folder.</div>`}
+          ${!priv && trust === "home" && html`<div class="nstrust"><b>Claude Code trusts the home folder one session at a time,</b> so a background session can't start here. Pick a project folder.</div>`}
           ${optLine && html`<button type="button" class="nsopts" aria-expanded=${opts} onClick=${() => setOpts(!opts)}>${ICON.fwd}<b>Options</b><span>${optLine}</span></button>`}
           ${opts && html`<div class="nsoptb">
-            ${!later && git && !harness && !preset && html`<${WorktreeSwitch} on=${wtOn} setOn=${setWt} why=${wtWhy(busyHere.length, dir, target)} />`}
+            ${!later && !priv && git && !harness && !preset && html`<${WorktreeSwitch} on=${wtOn} setOn=${setWt} why=${wtWhy(busyHere.length, dir, target)} />`}
             ${later && git && html`<${WorktreeSwitch} on=${wtOn} setOn=${setWt} why="The session starts in its own checkout when you start it." />`}
-            ${!later && html`<div class="nsfld"><div class="nslb">Engine</div>
+            ${!later && !priv && html`<div class="nsfld"><div class="nslb">Engine</div>
               <div class="nseng">
                 ${engOpen && usable.length
                   ? html`<select aria-label="Engine" value=${engine} onChange=${(e) => setEngine(e.target.value)} ref=${focusOnMount}>
@@ -8537,11 +8549,11 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
               </div></div>`}
             ${!later && html`<div class="nsfld"><label class="nslb" for="ns-name">Name <span>without one, ${harness || "Claude"} titles it from what you ask</span></label>
               <input id="ns-name" class="nsin nsname" value=${name} onInput=${(e) => setName(e.target.value)} onKeyDown=${submitOnEnter} placeholder=${preset ? preset.name : "From the prompt"} /></div>`}
-            ${!later && !harness && profs?.profiles.length > 1 && html`<div class="nsfld"><div class="nslb">Claude account <span>the sign-in it runs and is billed on</span></div>
+            ${!later && !harness && !priv && profs?.profiles.some((p) => !p.default && !p.private) && html`<div class="nsfld"><div class="nslb">Claude account <span>the sign-in it runs and is billed on</span></div>
               <div class="nseng">
                 ${profOpen
                   ? html`<select aria-label="Claude account" value=${profile} onChange=${(e) => setProfile(e.target.value)} ref=${focusOnMount}>
-                      ${[{ name: "" }, ...profs.profiles].map((p) => html`<option value=${p.name}>${p.name || `By folder (${byFolder || "default"})`}</option>`)}</select>`
+                      ${[{ name: "" }, ...profs.profiles.filter((p) => !p.private)].map((p) => html`<option value=${p.name}>${p.name || `By folder (${byFolder || "default"})`}</option>`)}</select>`
                   : html`<span>${profLine}</span><button type="button" class="btn sm" onClick=${() => setProfOpen(true)}>Change</button>`}
               </div></div>`}
           </div>`}
@@ -8549,8 +8561,8 @@ function NewSession({ onClose, say, hosts, down = [], home, live, start: from, c
         </div>
         <div class="df">
           <span class="sum">${later ? html`On the backlog of ${where}` : html`Starts in ${where}`}</span>
-          ${!later && !preset && html`<button type="button" class="btn quiet" title="Put it on the backlog to start later" disabled=${!dir.trim() || !(name.trim() || prompt.trim() || files.length) || !!busy} onClick=${putAside}>Later</button>`}
-          <button class="btn primary go" disabled=${(!preset && !dir.trim()) || (later && !(name.trim() || prompt.trim() || files.length)) || !!busy || (hostDown && !other && !later)}>${startLabel}</button>
+          ${!later && !preset && !priv && html`<button type="button" class="btn quiet" title="Put it on the backlog to start later" disabled=${!dir.trim() || !(name.trim() || prompt.trim() || files.length) || !!busy} onClick=${putAside}>Later</button>`}
+          <button class="btn primary go" disabled=${(!preset && !priv && !dir.trim()) || (later && !(name.trim() || prompt.trim() || files.length)) || !!busy || (hostDown && !other && !later)}>${startLabel}</button>
         </div>
       </form>
       ${big && html`<div class="lightbox" onClick=${() => setBig(null)}><img src=${big} alt="" /></div>`}

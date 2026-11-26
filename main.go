@@ -65,6 +65,11 @@ func loadSettings() {
 	if err := claude.LoadProfiles(profilesPath()); err != nil {
 		log.Printf("atc: %v", err)
 	}
+	for _, p := range claude.Profiles() {
+		if err := p.Prepare(); err != nil {
+			log.Printf("atc: profile %s: %v", p.Name, err)
+		}
+	}
 }
 
 func main() {

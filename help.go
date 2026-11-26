@@ -364,13 +364,19 @@ list, and kept as an item that resumes the same conversation. ` + sessionArg,
 	},
 	"profile": {
 		what:     "the Claude accounts sessions run on, and whether each is signed in.",
-		usage:    []string{"", "add [--dir DIR] <name> <folder>...", "rm <name>", "move <session> <name>"},
-		flags:    [][2]string{{"--dir DIR", "add: the account's Claude config folder (default ~/.claude-<name>)"}},
-		examples: []string{"atc profile", "atc profile add work ~/work", "atc profile move 3 work"},
+		usage:    []string{"", "add [--dir DIR] <name> <folder>...", "add [--dir DIR] <name> --ephemeral", "login <name>", "rm <name>", "move <session> <name>"},
+		flags: [][2]string{{"--dir DIR", "add: the account's Claude config folder (default ~/.claude-<name>)"},
+			{"--ephemeral", "add: an account for private sessions, which keep nothing"}},
+		examples: []string{"atc profile", "atc profile add work ~/work", "atc profile add private --ephemeral", "atc profile move 3 work"},
 		more: `add      a Claude account for the sessions under those folders: a config folder of its own with
          its own sign-in, transcripts and daemon, sharing your settings, CLAUDE.md, skills,
          commands, agents, plugins and MCP servers. Run it again to bring over MCP servers
          added since.
+         With --ephemeral, an account for private sessions instead: whatever they write is
+         kept in memory ($XDG_RUNTIME_DIR) and erased when they end or the machine restarts.
+         Its folder keeps only a CLAUDE.md and settings of its own (no memory, no MCP servers,
+         writes only in the session's folder) and the token it signs in with.
+login    sign an ephemeral account in: runs claude setup-token and keeps the token
 rm       sessions under its folders go back to the default account; its folder and transcripts
          are left as they are
 move     put a session on another account, with its whole conversation: a session resumes on

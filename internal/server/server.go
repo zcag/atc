@@ -131,17 +131,18 @@ type Server struct {
 	queued   map[string][]string
 	asking   func(id string) bool
 
-	prefMu sync.Mutex
-	mu     sync.Mutex
-	subs   map[chan []byte]bool
-	last   []byte
-	lastAt time.Time
-	kick   chan struct{}
-	seen   map[string]string
-	shown  map[string]time.Time
-	noted  map[string]time.Time
-	held   map[string]held
-	notes  notes
+	prefMu        sync.Mutex
+	privateDrafts map[string]draft
+	mu            sync.Mutex
+	subs          map[chan []byte]bool
+	last          []byte
+	lastAt        time.Time
+	kick          chan struct{}
+	seen          map[string]string
+	shown         map[string]time.Time
+	noted         map[string]time.Time
+	held          map[string]held
+	notes         notes
 
 	web        string
 	widgetSent string
@@ -511,7 +512,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer f.Close()
-	path, err := saveUpload(cmp.Or(r.PathValue("sid"), "shared"), hdr.Filename, f)
+	path, err := saveUpload(uploadDir(r.PathValue("sid"), r.URL.Query().Get("profile")), hdr.Filename, f)
 	if err != nil {
 		fail(w, err)
 		return
@@ -519,9 +520,7 @@ func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
 	reply(w, map[string]string{"path": path})
 }
 
-func saveUpload(folder, filename string, src io.Reader) (string, error) {
-	cache, _ := os.UserCacheDir()
-	dir := filepath.Join(cache, "atc", "uploads", filepath.Base(folder))
+func saveUpload(dir, filename string, src io.Reader) (string, error) {
 	name := strings.Map(func(c rune) rune {
 		if c == '/' || c == '\\' || c < ' ' {
 			return '_'
@@ -726,6 +725,11 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 		s.mu.Lock()
 		b, fresh := s.last, time.Since(s.lastAt) < 3*time.Second
 		s.mu.Unlock()
+		var list []sessions.Session
+		if fresh && b != nil && fromAgent(r) && json.Unmarshal(b, &list) == nil {
+			reply(w, withoutPrivate(list))
+			return
+		}
 		if fresh && b != nil {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write(b)
@@ -740,6 +744,9 @@ func (s *Server) live(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fail(w, err)
 		return
+	}
+	if fromAgent(r) {
+		list = withoutPrivate(list)
 	}
 	reply(w, list)
 }
@@ -824,11 +831,15 @@ func (s *Server) route(next http.Handler) http.Handler {
 			http.Error(w, "guests get no shell", http.StatusForbidden)
 			return
 		}
+		parts := strings.Split(r.URL.Path, "/")
+		if hiddenFromAgent(r, parts) {
+			http.Error(w, "no such session", http.StatusNotFound)
+			return
+		}
 		if len(s.Peers) == 0 || !strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == pair.ClaimPath {
 			next.ServeHTTP(w, r)
 			return
 		}
-		parts := strings.Split(r.URL.Path, "/")
 		host := r.URL.Query().Get("host")
 		if host == "" && (parts[2] == "pins" || len(parts) >= 4 && parts[2] == "sessions" && parts[3] == pages.Pinned) {
 			host = s.Host
@@ -897,6 +908,15 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 		}
 		req.Dir, req.Name, req.Worktree = cmp.Or(req.Dir, p.Dir), cmp.Or(req.Name, p.Name), req.Worktree || p.Worktree
 		req.Profile = cmp.Or(req.Profile, p.Profile)
+	}
+	if p, ok := claude.ProfileNamed(req.Profile); ok && p.Ephemeral {
+		if req.Dir != "" || req.Worktree || req.Preset != "" {
+			return "", badf("a private session runs in an empty folder of its own: start it without a folder, preset or worktree")
+		}
+		var err error
+		if req.Dir, err = p.NewScratch(); err != nil {
+			return "", err
+		}
 	}
 	dir, err := folderAt(req.Dir)
 	if err != nil {
@@ -1508,6 +1528,12 @@ func alerts(prev map[string]string, list []sessions.Session, viewing func(sessio
 	for _, x := range list {
 		was, ok := prev[x.SessionID]
 		if !ok || was == x.State || x.Away() || viewing(x) {
+			continue
+		}
+		if x.Private {
+			if x.State == sessions.NeedsYou || x.State == sessions.YourTurn && was == sessions.Working {
+				out = append(out, privatePush(x, map[string]string{sessions.NeedsYou: "Needs you", sessions.YourTurn: "Your turn"}[x.State]))
+			}
 			continue
 		}
 		m := push.Message{Title: x.Title, Tag: x.SessionID, URL: "/#/s/" + x.SessionID, Bay: x.Bay()}
