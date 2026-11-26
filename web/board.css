@@ -116,7 +116,8 @@
 .rr { position: relative; margin: 0 6px; border-radius: var(--r2); }
 .rr + .rr { margin-top: 1px; }
 .rr:hover, .rr:has(.ctx) { background: var(--strip-hi); }
-.rr.sel { background: var(--strip); box-shadow: 0 0 0 1px var(--line); }
+.rr.sel { background: light-dark(var(--strip), var(--strip-hi)); box-shadow: 0 0 0 1px var(--line-strong); }
+.rr.sel::after { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: var(--r2) 0 0 var(--r2); background: var(--ink); }
 .rr.needs-you:not(.parked)::before { content: ""; position: absolute; left: -6px; top: 6px; bottom: 6px; width: 3px; border-radius: 0 2px 2px 0; background: var(--needs); }
 .rail .brow { grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-areas: "b t e" "b s e"; column-gap: 10px; row-gap: 2px; padding: 8px 10px; width: 100%; border: 0; border-radius: inherit; background: none; text-align: left; color: inherit; font: inherit; }
 .rail .brow:hover, .rail .brow.sel, .rail .brow.cur, .rail .brow.ctx { background: none; box-shadow: none; }
@@ -190,6 +191,7 @@
   .rr { margin: 0; border-radius: 0; border-bottom: 1px solid var(--hair); }
   .rr + .rr { margin-top: 0; }
   .rr.sel { box-shadow: none; }
+  .rr.sel::after { display: none; }
   .rr.needs-you:not(.parked)::before { left: 0; top: 0; bottom: 0; border-radius: 0; }
   .rail .brow { padding: 12px var(--s4); column-gap: var(--s3); }
   .rail .brow .t { font-size: 15px; }
