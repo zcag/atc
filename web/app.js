@@ -817,6 +817,7 @@ function goBay(name, live, session) {
   go(pick ? keyOf(pick) : null);
 }
 
+const bayCounts = (b) => (b.needs + b.turn > 0 || b.work > 0) && html`<span class="cts">${b.needs + b.turn > 0 && html`<i class="cn n">${b.needs + b.turn}</i>`}${b.work > 0 && html`<i class="cn w">${b.work}</i>`}</span>`;
 const bayWords = (b, i) => [`${b.name}, bay ${i + 1}${b.parked ? ", parked" : ""}`, [b.needs + b.turn && `${b.needs + b.turn} waiting on you`, b.work && `${b.work} working`].filter(Boolean).join(", ")].filter(Boolean).join(": ");
 
 let PANES = { panes: {}, wide: true, toggle: () => {}, allBays: () => {} };
@@ -891,7 +892,6 @@ function BayBar({ bays, only, view, off, down, live, peek, onPeek }) {
   });
   const folded = fold ? parkedFold(bays, only) : [];
   const shown = bays.map((b, i) => ({ b, i })).filter(({ b }) => !folded.some((f) => f.b === b));
-  const counts = (b) => html`${b.needs + b.turn > 0 && html`<i class="cn n">${b.needs + b.turn}</i>`}${b.work > 0 && html`<i class="cn w">${b.work}</i>`}`;
   const view_ = (id, label, run) => html`<button aria-pressed=${view === id} aria-current=${view === id ? "page" : null} aria-keyshortcuts=${ariaKeys(id)} title=${tip(id)} onClick=${run}>${label}</button>`;
   return html`
     <nav class="bays" aria-label="Bays">
@@ -901,17 +901,14 @@ function BayBar({ bays, only, view, off, down, live, peek, onPeek }) {
           ${b.parked && !shown[n - 1]?.b.parked && html`<span class="bay-sep" aria-hidden="true"></span>`}
           <span class="bay ${only === b.name ? "on" : ""} ${peek === b.name ? "peeking" : ""} ${b.parked ? "rest" : ""}" data-bay=${b.name} ...${peekOnHover(b, only, peek, onPeek)}>
             <button class="bn" aria-current=${only === b.name ? "true" : null} aria-label=${bayWords(b, i)}
-              aria-keyshortcuts=${i < 9 ? `${i + 1}` : null} onClick=${() => { onPeek(null); goBay(b.name, live); }}
-              onContextMenu=${(e) => { e.preventDefault(); onPeek(b.name); }}>
-              <span class="k" aria-hidden="true">${i + 1}</span><span class="n">${b.name}</span></button>
-            ${(b.needs > 0 || b.turn > 0 || b.work > 0) && html`<button class="cts" aria-label=${`Peek at ${b.name}`} aria-expanded=${peek === b.name}
-              aria-keyshortcuts=${i < 9 ? `Shift+Alt+${i + 1}` : null} onClick=${() => { const hovered = PEEK_HOVER.on && peek === b.name; PEEK_HOVER.on = false; clearTimeout(PEEK_HOVER.close); onPeek(peek === b.name && !hovered ? null : b.name); }}>${counts(b)}</button>`}
+              aria-keyshortcuts=${i < 9 ? `${i + 1}` : null} onClick=${() => { onPeek(null); goBay(b.name, live); }}>
+              <span class="k" aria-hidden="true">${i + 1}</span><span class="n">${b.name}</span>${bayCounts(b)}</button>
           </span>`)}
       </div>
       ${folded.length > 0 && html`<div class="parkedm" ref=${pm}><span class="bay-sep" aria-hidden="true"></span><${Menu} cls="bay parked" left width=${260} aria="Parked bays"
           label=${html`${folded.length} parked${ICON.down}`}
           render=${(close) => html`<div class="pmenu" role="menu">${folded.map(({ b, i }) => html`<button role="menuitem" aria-label=${bayWords(b, i)} onClick=${() => { close(); goBay(b.name, live); }}>
-            <span class="k">${i + 1}</span><span class="n">${b.name}</span>${counts(b)}</button>`)}</div>`} /></div>`}
+            <span class="k">${i + 1}</span><span class="n">${b.name}</span>${bayCounts(b)}</button>`)}</div>`} /></div>`}
       ${hidden > 0 && html`<button class="offneeds" onClick=${() => onPeek(peek === "*" ? null : "*")} aria-label=${`${hidden} more need you in other bays`}><i class="cn n">+${hidden}</i>need you</button>`}
       <div class="views">
         <span class="seg" role="group" aria-label="View">
@@ -929,11 +926,13 @@ function BayBar({ bays, only, view, off, down, live, peek, onPeek }) {
     </nav>`;
 }
 
-const PEEK_HOVER = { close: 0, on: false };
+const PEEK_HOVER = { close: 0, on: false, x: 0, y: 0 };
 const peekOnHover = (b, only, peek, onPeek) => ({
-  onPointerEnter: (e) => {
-    clearTimeout(PEEK_HOVER.close);
-    if (e.pointerType !== "mouse" || b.name === only || !(b.needs + b.turn + b.work) || (peek && !PEEK_HOVER.on)) return;
+  onPointerEnter: () => clearTimeout(PEEK_HOVER.close),
+  onPointerMove: (e) => {
+    const still = e.clientX === PEEK_HOVER.x && e.clientY === PEEK_HOVER.y;
+    PEEK_HOVER.x = e.clientX; PEEK_HOVER.y = e.clientY;
+    if (e.pointerType !== "mouse" || still || peek === b.name || b.name === only || !(b.needs + b.turn + b.work) || (peek && !PEEK_HOVER.on)) return;
     PEEK_HOVER.on = true;
     onPeek(b.name);
   },
@@ -1123,8 +1122,7 @@ function PhoneHome({ live, hist, more, only, bays, cursor, limits, say }) {
   useLayoutEffect(() => strip.current?.querySelector(".bay.on")?.scrollIntoView({ block: "nearest", inline: "nearest" }), [only]);
   const waits = (live || []).filter(waiting).length;
   const tab = (on, k, name, b, rest) => html`<span class="bay ${on ? "on" : ""} ${rest ? "rest" : ""}" key=${name}>
-    <button class="bn" aria-current=${on ? "true" : null} onClick=${() => BAY.set(b ? b.name : null)}><span class="k" aria-hidden="true">${k}</span><span class="n">${name}</span>
-      ${b && (b.needs + b.turn > 0 || b.work > 0) && html`<span class="cts">${b.needs + b.turn > 0 && html`<i class="cn n">${b.needs + b.turn}</i>`}${b.work > 0 && html`<i class="cn w">${b.work}</i>`}</span>`}</button></span>`;
+    <button class="bn" aria-current=${on ? "true" : null} onClick=${() => BAY.set(b ? b.name : null)}><span class="k" aria-hidden="true">${k}</span><span class="n">${name}</span>${b && bayCounts(b)}</button></span>`;
   return html`<div class="shell phomev">
     <div class="phead"><h1>Sessions</h1>${waits > 0 && html`<span class="bc n">${waits} waiting</span>`}
       <${UsageChip} limits=${limits} />

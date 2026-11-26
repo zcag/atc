@@ -163,12 +163,10 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
 
 .bay { padding: 0; gap: 0; }
 .bay:hover { background: none; }
-.bay .bn { display: flex; align-items: center; gap: 7px; height: 100%; padding: 0 4px 0 10px; border: 0; background: none; color: inherit; font: inherit; }
-.bay .bn:only-child { padding-right: 10px; }
-.bay .cts { height: 100%; padding: 0 10px 0 4px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
-.bay .bn:hover, .bay .cts:hover { background: var(--chrome-hi); }
+.bay .bn { display: flex; align-items: center; gap: 7px; height: 100%; padding: 0 10px; border: 0; background: none; color: inherit; font: inherit; }
+.bay .bn:hover { background: var(--chrome-hi); }
 .bay.peeking { background: var(--board); box-shadow: inset 1px 0 0 var(--line), inset -1px 0 0 var(--line); }
-.bay .bn:focus-visible, .bay .cts:focus-visible { outline-offset: -2px; }
+.bay .bn:focus-visible { outline-offset: -2px; }
 
 .peek { position: fixed; top: calc(var(--bar-h) + 4px); width: 460px; max-height: min(72vh, 640px); display: flex; flex-direction: column; background: var(--strip); border-radius: var(--r3); box-shadow: var(--pop); z-index: 30; font-size: var(--fs-ui); overflow: hidden; }
 .peek .pkh { flex: none; display: flex; align-items: center; gap: var(--s2); min-width: 0; padding: 10px var(--s2) 10px var(--s4); border-bottom: 1px solid var(--line); }
@@ -216,8 +214,7 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
 .toast .tundo kbd { padding: 0 4px; line-height: 16px; border-radius: var(--r1); color: var(--toast-ink); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--toast-ink) 45%, transparent); }
 
 @media (max-width: 899px) {
-  .bay .bn { padding: 0 4px 0 var(--s3); min-height: 44px; }
-  .bay .cts { min-width: 32px; padding: 0 var(--s3) 0 4px; }
+  .bay .bn { padding: 0 var(--s3); min-height: 44px; }
   .offneeds { display: inline-flex; min-height: 44px; }
   .peeksheet .peek { position: static; width: auto; max-height: none; box-shadow: none; background: none; border-radius: 0; overflow: visible; }
   .pk { padding: var(--s3) var(--s4); }
@@ -248,7 +245,7 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
   .ptabs { flex: none; display: flex; align-items: stretch; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line); font-size: var(--fs-ui); padding: 0 var(--s1); }
   .ptabs::-webkit-scrollbar { display: none; }
   .ptabs .bay .bn { padding: 0 var(--s3); gap: 6px; }
-  .ptabs .bay .cts { height: auto; min-width: 0; padding: 0; gap: 4px; }
+  .ptabs .bay .cts { gap: 4px; }
   .ptabs .bay.on::after { left: var(--s3); right: var(--s3); }
   .ptabs .bay .bn:hover { background: none; }
   .ptabs .bay.on { order: 0; position: relative; background: none; box-shadow: none; }
