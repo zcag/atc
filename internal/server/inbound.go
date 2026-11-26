@@ -74,7 +74,7 @@ func signed(secret string, body []byte, h http.Header) bool {
 }
 
 // parseInbound reads a delivery; ok is false for what isn't a message waiting on the user (another event type, a
-// test ping, waitsOnYou false, a screened sender). link is a template filled from the fields: "https://x/{conversationId}".
+// test ping, one the Inbox does not show, a group message that neither names the user nor answers them, a screened sender). link is a template filled from the fields: "https://x/{conversationId}".
 func parseInbound(body []byte, link string) (m inbound, ok bool, err error) {
 	var top map[string]any
 	if err := json.Unmarshal(body, &top); err != nil {
@@ -87,8 +87,13 @@ func parseInbound(body []byte, link string) (m inbound, ok bool, err error) {
 	if t, _ := top["type"].(string); t != "" && !strings.HasPrefix(t, "message") {
 		return m, false, nil
 	}
-	if v, set := d["waitsOnYou"].(bool); set && !v {
+	if v, set := d["inInbox"].(bool); set && !v {
 		return m, false, nil
+	}
+	if k, _ := d["conversationKind"].(string); k == "group" || k == "channel" {
+		if v, _ := d["forMe"].(bool); !v {
+			return m, false, nil
+		}
 	}
 	if v, _ := d["screener"].(bool); v {
 		return m, false, nil

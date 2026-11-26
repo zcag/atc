@@ -79,7 +79,7 @@ turns the change waits for your next one. The hub reads the feed from
 Another app can tell the assistant about a message that waits on you: `POST /api/inbound` with
 `{"sender", "network", "text", "link", "id"}`, or an event envelope with those fields under `data`
 (`channel`, `conversationTitle`, `subject` and `messageId` are read too). An event whose `type` isn't a
-`message…` one, or with `"waitsOnYou": false` or `"screener": true`, is dropped. With
+`message…` one, with `"inInbox": false`, a group or channel message without `"forMe": true` (it names you or answers you), or `"screener": true`, is dropped. With
 `ATC_INBOUND_SECRET` set, the endpoint takes deliveries from anywhere that carry an HMAC-SHA256 of the
 raw body under that secret in a `*-Signature` header (`sha256=<hex>`); without it, only signed-in
 callers. `ATC_INBOUND_LINK` builds the link from the message's fields when it has none

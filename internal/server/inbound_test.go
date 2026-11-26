@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-const event = `{"id":"evt_1","type":"message.new","data":{"conversationId":441,"conversationTitle":"Ada Lovelace","channel":"whatsapp","messageId":90211,"sender":"Ada Lovelace","waitsOnYou":true,"screener":false,"text":"Are we still on for tonight?"}}`
+const event = `{"id":"evt_1","type":"message.new","data":{"conversationId":441,"conversationTitle":"Ada Lovelace","channel":"whatsapp","messageId":90211,"sender":"Ada Lovelace","conversationKind":"direct","inInbox":true,"forMe":false,"screener":false,"text":"Are we still on for tonight?"}}`
 
 func TestParseInbound(t *testing.T) {
 	m, ok, err := parseInbound([]byte(event), "https://inbox.example/c/{conversationId}?m={messageId}")
@@ -23,14 +23,18 @@ func TestParseInbound(t *testing.T) {
 		t.Fatalf("got %+v", m)
 	}
 	for name, body := range map[string]string{
-		"ping":        `{"id":"evt_2","type":"ping","data":{"webhook":1}}`,
-		"other event": `{"type":"unread.changed","data":{"unread":3}}`,
-		"not waiting": strings.Replace(event, `"waitsOnYou":true`, `"waitsOnYou":false`, 1),
-		"screened":    strings.Replace(event, `"screener":false`, `"screener":true`, 1),
+		"ping":             `{"id":"evt_2","type":"ping","data":{"webhook":1}}`,
+		"other event":      `{"type":"unread.changed","data":{"unread":3}}`,
+		"not in the inbox": strings.Replace(event, `"inInbox":true`, `"inInbox":false`, 1),
+		"group chatter":    strings.Replace(event, `"conversationKind":"direct"`, `"conversationKind":"group"`, 1),
+		"screened":         strings.Replace(event, `"screener":false`, `"screener":true`, 1),
 	} {
 		if _, ok, err := parseInbound([]byte(body), ""); ok || err != nil {
 			t.Errorf("%s: ok=%v err=%v", name, ok, err)
 		}
+	}
+	if _, ok, _ := parseInbound([]byte(strings.Replace(strings.Replace(event, `"conversationKind":"direct"`, `"conversationKind":"group"`, 1), `"forMe":false`, `"forMe":true`, 1)), ""); !ok {
+		t.Error("a group message for the user is dropped")
 	}
 	m, ok, _ = parseInbound([]byte(`{"sender":"Grace","network":"sms","text":"call me","link":"https://x/1"}`), "")
 	if !ok || m.Sender != "Grace" || m.Link != "https://x/1" || m.ID == "" {
