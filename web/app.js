@@ -321,7 +321,7 @@ function App() {
   const live = useMemo(() => runs && runs.filter((x) => !hiddenRun(x)), [runs]);
   const reach = useMemo(() => runs && runs.filter((x) => !hiddenRun(x) || x.kind === "hub"), [runs]);
   const onBays = useMemo(() => runs && runs.filter((x) => !hiddenRun(x) || agentAtWork(x)), [runs]);
-  const hub = runs?.find((x) => x.kind === "hub" && x.agent === "assistant");
+  const hub = runs?.find(isAssistant);
   const [agents, setAgents] = useState(null);
   const [off, setOff] = useState(0);
   const [link, relink] = useState(0);
@@ -525,7 +525,7 @@ function App() {
         summary: (s.state !== "working" && !s.private && s.summary?.status) || undefined, bay: (!s.private && bayOf(s)) || undefined,
         ask: s.state === "needs-you" && !s.private ? feedAsk(s) : undefined,
       }));
-      const hub = (live || []).find((s) => s.kind === "hub");
+      const hub = (live || []).find(isAssistant);
       const said = hub && oneLine(hub.preview || hub.lastReply || hub.summary?.status);
       const assistant = said ? { text: said, at: hub.updated || undefined } : undefined;
       const key = JSON.stringify([rows.map(({ since, ...r }) => r), said]);
@@ -669,7 +669,7 @@ function App() {
 
   const all = runs || [];
   const sel = route && (all.find((s) => s.id === route || s.sessionId === route) || past[route]);
-  const assistView = assisting || (sel?.kind === "hub" && sel.agent === "assistant");
+  const assistView = assisting || isAssistant(sel);
   const screen = assistView ? "assistant" : route || shellAt ? "session" : pagesAt ? "pages" : scr || "board";
   TIME_ON = openNow({ sel: alone ? all.find((x) => x.sessionId === alone.sid) : assistView || shellAt || settings ? null : sel, screen: alone ? "pages" : settings ? "settings" : shellAt ? "shell" : screen });
   const bays = baysOf(onBays, only);
@@ -5793,7 +5793,8 @@ const away = (s) => !!s.parked && s.state !== "needs-you";
 const homeless = (s) => !!s.agent && !AGENT_INFO[s.agent]?.dir;
 const GUESTS = "guests";
 const guestWork = (s) => s.agent === GUESTS || project(s.cwd).name === GUESTS;
-const hiddenRun = (s) => (s.kind === "hub" || (!!s.agent && !!s.parked)) && s.state !== "needs-you";
+const isAssistant = (s) => s?.kind === "hub" && s.agent === "assistant";
+const hiddenRun = (s) => (isAssistant(s) || (!!s.agent && !!s.parked)) && s.state !== "needs-you";
 const agentAtWork = (s) => hiddenRun(s) && s.state === "working";
 const countsOnBay = (s) => !away(s) || agentAtWork(s);
 const agentApi = (a, what, body) => api(`/api/agents/${encodeURIComponent(a)}/${what}`, { method: "POST", body });
