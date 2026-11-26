@@ -46,7 +46,7 @@ const toSession = async (p, s) => {
   await p.waitForFunction((t) => document.querySelector('.hd h1')?.textContent === t, s.title);
 };
 const menu = async (p) => {
-  await p.click('.hd .more button.kb');
+  await p.click('.hd .more > div > button');
   await p.waitForSelector('.hd .more .menu');
   return p.$$eval('.hd .more .menu .mitem .lb', (l) => l.map((x) => x.textContent.trim()));
 };

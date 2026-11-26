@@ -60,7 +60,7 @@ const hash = (p) => p.evaluate(() => decodeURIComponent(location.hash));
     if (ho.startsWith('#/s/')) {
       ok(ho.includes('/p/') && await p.isVisible('.ppane .pbar'), `${scheme}: o opens the page beside its session`);
       await p.screenshot({ path: `${OUT}page-1400-${scheme}.png` });
-      await p.locator('.pbar .kb', { hasText: 'In Pages' }).click();
+      await p.locator('.pbar [aria-label="Open in Pages"]').click();
       await p.waitForTimeout(800);
       ok((await hash(p)).startsWith('#/g/'), `${scheme}: In Pages returns to the Pages view`);
     } else ok(true, `${scheme}: o skipped, the page's session is not running (${pageName})`);

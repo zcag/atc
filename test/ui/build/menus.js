@@ -1,11 +1,11 @@
-// A session's More menu is on top of everything under it, the State pane's file cards included, and those cards keep to their own width.
+// A session's More menu is on top of everything under it, the State pane's output rows included (its rounded corners aside).
 const { chromium } = require('playwright-core');
 const exe = process.env.CHROME_BIN;
 const base = process.argv[2] || 'http://127.0.0.1:7299';
 const ok = (c, m) => console.log(c ? 'ok  ' : 'FAIL', m);
 const COVERED = () => {
   const sheet = document.querySelector('.hd .more .menu'), r = sheet.getBoundingClientRect(), over = new Set();
-  for (let y = r.top + 2; y < Math.min(r.bottom, innerHeight); y += 8) for (let x = r.left + 2; x < r.right; x += 8) {
+  for (let y = r.top + 6; y < Math.min(r.bottom - 6, innerHeight); y += 8) for (let x = r.left + 6; x < r.right - 6; x += 8) {
     const t = document.elementFromPoint(x, y);
     if (t && !sheet.contains(t)) over.add(`${t.tagName.toLowerCase()}.${t.className}`);
   }
@@ -29,23 +29,18 @@ const STRAY_Z = () => [...document.querySelectorAll('.statep *, .tx *')].filter(
   await p.route(/\/api\//, (r) => r.request().method() === 'GET' ? r.continue() : r.fulfill({ status: 204 }));
   await p.goto(`${base}/#/s/${s.sessionId}`);
   await p.waitForTimeout(2500);
-  if (!(await p.$('.statep'))) await p.click('.hd .l2.items button.stat');
-  await p.waitForSelector('.statep .card');
+  if (!(await p.$('.statep'))) await p.click('.hd .ptog[aria-keyshortcuts="Backslash"], .hd .ptog >> nth=-1');
+  await p.waitForSelector('.statep .orow');
   await p.waitForTimeout(1000);
-  const cards = await p.$$eval('.statep .card .pv', (l) => l.map((pv) => {
-    const inner = pv.querySelector('.pvtext, .peek');
-    return inner ? inner.getBoundingClientRect().width - pv.getBoundingClientRect().width : 0;
-  }));
-  ok(cards.length > 0 && cards.every((d) => Math.abs(d) < 1), `${cards.length} card previews are as wide as their card`);
   ok(!(await p.$('.statep .peek, .tx .peek')), 'the bay peek popover class is not used inside a session');
-  await p.$eval('.statep .card', (c) => c.scrollIntoView({ block: 'start' }));
-  await p.click('.hd .more button.kb');
+  await p.$eval('.statep .outs', (c) => c.scrollIntoView({ block: 'start' }));
+  await p.click('.hd .more > div > button');
   await p.waitForSelector('.hd .more .menu');
   const under = await p.evaluate(() => {
     const r = document.querySelector('.hd .more .menu').getBoundingClientRect();
-    return [...document.querySelectorAll('.statep .card .pv')].filter((e) => { const c = e.getBoundingClientRect(); return c.left < r.right && c.right > r.left && c.top < r.bottom && c.bottom > r.top; }).length;
+    return [...document.querySelectorAll('.statep .orow')].filter((e) => { const c = e.getBoundingClientRect(); return c.left < r.right && c.right > r.left && c.top < r.bottom && c.bottom > r.top; }).length;
   });
-  ok(under > 0, `${under} card previews lie under the open menu`);
+  ok(under > 0, `${under} output rows lie under the open menu`);
   const covered = await p.evaluate(COVERED);
   ok(!covered.length, `nothing paints over the menu${covered.length ? ': ' + covered.join(', ') : ''}`);
   const stray = await p.evaluate(STRAY_Z);

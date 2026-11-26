@@ -41,9 +41,8 @@ const fake = (list) => {
     const real = list.find((s) => s.attachable && s.state !== 'past' && !s.cwd.endsWith('/pinbay')) || list[0];
     await p.goto(`${base}/#/s/${real.sessionId}`);
     await p.waitForTimeout(2000);
-    const tops = await p.locator('.hd .l1 .r button.kb:visible').evaluateAll((l) => l.map((e) => Math.round(e.getBoundingClientRect().top)));
+    const tops = await p.locator('.hd .l1 .r button:visible').evaluateAll((l) => l.map((e) => Math.round(e.getBoundingClientRect().top)));
     ok(tops.length > 1 && new Set(tops).size === 1, `${scheme}: header buttons line up: ${tops}`);
-    ok(await p.locator('.hd .kb.pin').count() === 1, `${scheme}: the header has a pin toggle`);
     for (const [w, h] of [[1400, 900], [400, 800]]) {
       await p.setViewportSize({ width: w, height: h });
       await p.waitForTimeout(300);

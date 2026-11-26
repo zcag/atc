@@ -128,7 +128,7 @@ const css = (p, sel, prop) => p.$eval(sel, (e, k) => getComputedStyle(e)[k], pro
         ok(await p.isVisible('#since'), `${tag}: the since divider shows`);
         const txt = await p.textContent('#since .l').catch(() => '');
         ok(/^Since you last looked, \d\d:\d\d$/.test(txt), `${tag}: "${txt}"`);
-        ok(await css(p, '#since', 'borderTopWidth') === '2px', `${tag}: a 2px rule`);
+        ok(await p.$eval('#since .l', (e) => getComputedStyle(e, '::after').height) === '1px', `${tag}: a hairline beside its label`);
         const top = await p.$eval('#since', (e) => e.getBoundingClientRect().top - e.closest('.tx').getBoundingClientRect().top);
         ok(top >= 0 && top < 60, `${tag}: it lands on the divider (${Math.round(top)}px)`);
         await shot(p, 'since', w, scheme);
@@ -214,7 +214,7 @@ const css = (p, sel, prop) => p.$eval(sel, (e, k) => getComputedStyle(e)[k], pro
         await p.click(ta);
         await p.keyboard.press('Escape');
         await p.waitForTimeout(200);
-        ok(await p.isVisible('.cstrip.confirm'), `${tag}: Esc in an empty box asks "Stop the agent?"`);
+        ok(await p.isVisible('.composer .cq'), `${tag}: Esc in an empty box asks "Stop this turn?" in the box`);
         await shot(p, 'interrupt', w, scheme);
         await p.keyboard.press('Enter');
         await p.waitForTimeout(300);
