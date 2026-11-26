@@ -2286,6 +2286,7 @@ const ICON_PATHS = {
   warn: '<path d="M8 2.5 14 13H2z"/><path d="M8 6.5v3M8 11.3v0"/>',
   side: '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M10 2.5v11"/>',
   rail: '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6 2.5v11"/>',
+  info: '<circle cx="8" cy="8" r="6"/><path d="M8 7.3V11M8 5.2v0"/>',
   link: '<path d="M7 9a2.5 2.5 0 0 0 3.5 0l2-2A2.5 2.5 0 0 0 9 3.5l-.8.8M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l.8-.8"/>',
   attach: '<path d="M12.5 7.5 7.8 12.2a2.8 2.8 0 0 1-4-4l5-5a1.9 1.9 0 0 1 2.7 2.7L6.6 10.8a.9.9 0 0 1-1.3-1.3L9.8 5"/>',
   send: '<path d="M8 13V3M4 7l4-4 4 4"/>',
@@ -3733,6 +3734,12 @@ function X({ why, label, xp }) {
     onClick=${(e) => { e.stopPropagation(); xp.show(e.currentTarget, why, true); }}>${label}</button>`;
 }
 
+const Info = ({ xp, why }) => html`<span class="xi"><${X} xp=${xp} why=${why} label=${html`${ICON.info}<span class="sr">How it is worked out</span>`} /></span>`;
+const Kpi = ({ k, xp }) => html`<div class="ukpi ${k.big ? "big" : ""}"><span class="l">${k.l}${k.why && xp && html`<${Info} xp=${xp} why=${k.why} />`}</span><b>${k.v}</b><span class="s">${k.s}</span></div>`;
+const UsageSkel = ({ label }) => html`<div class="uskel" role="status" aria-busy="true"><span class="sr">${label}</span>
+  <div class="ukpis">${[1, 2, 3, 4, 5].map((i) => html`<div class="ukpi ${i === 1 ? "big" : ""}"><span class="l"><i class="skelv sm"></i></span><i class="skelv"></i><span class="s"><i class="skelv md"></i></span></div>`)}</div>
+  <div class="ubskel" aria-hidden="true">${[38, 62, 45, 80, 30, 55, 70].map((h) => html`<i style=${`height:${h}%`}></i>`)}</div></div>`;
+
 function useExplain() {
   const [at, setAt] = useState(null);
   useEffect(() => {
@@ -4149,10 +4156,8 @@ function ResourcesPage({ hosts, home, live }) {
     : `${bayPicked ? `${bayPicked}: ` : ""}${plural(sessions.length, "session")} using ${gb(sum(sessions))}`;
   return html`
     <section class="scrpane usage res" aria-label="Resources">
-      <header class="hd">
-        <div class="l1"><h1>Resources</h1><span class="where">${host}</span></div>
-        <div class="l2 no-block"><span class="stat">${status}</span>
-          ${rep?.cost > 0 && html`<span class="rd"><span class="l">measuring takes about</span>${Math.round(rep.cost * 1000)} ms every 10 s</span>`}</div>
+      <header class="phd">
+        <h1>Resources</h1><span class="where" title=${rep?.cost > 0 ? `Measuring takes about ${Math.round(rep.cost * 1000)} ms every 10 s` : null}>${host} · ${status}</span>
       </header>
       <div class="scroll"><div class="ubody">
         <div class="sec rtools">
@@ -4285,6 +4290,7 @@ function UsageTabs({ at, accounts, on, onPick }) {
     <span class="seg" role="group" aria-label="Spend or time">${view("usage", "Spend", USAGE)}${view("time", "Time", TIME)}</span></span>`;
 }
 
+const TIME_HOW = "Counted in 5-second ticks while atc is the visible, focused window, for what is open in it. Input keeps it counting for 30 seconds; a longer pause counts its first 30 seconds only. Two devices at once count once. Left out: other apps, a terminal attached with atc attach, voice calls, and anything another session or a schedule typed.";
 const TIME_RANGES = [["1", "Today", "today", "yesterday"], ["7", "7d", "the last 7 days", "the 7 days before"], ["30", "30d", "the last 30 days", "the 30 days before"], ["all", "All", "all time"]];
 const TIME_COLS = [["title", "Session", ""], ["bay", "Bay", "c-bay"], ["count", "Days", "n c-st"], ["secs", "Time", "n"], ["share", "Share", "c-sh"], ["spend", "Spend", "n c-m"], ["last", "Last", "n"]];
 const TIME_SERIES = 5;
@@ -4350,6 +4356,7 @@ function DayLine({ runs, color, what }) {
 }
 
 function TimePage({ live, onOpen }) {
+  const xp = useExplain();
   useNow(60000);
   const [v, setV] = useState(() => {
     const x = { sort: "secs", dir: -1, q: "", range: "7", account: "", ...stored("atc.timepage", {}) };
@@ -4411,22 +4418,22 @@ function TimePage({ live, onOpen }) {
   const multi = profs.length > 1;
   return html`
     <section class="scrpane usage" aria-label="Time">
-      <header class="hd">
-        <div class="l1"><h1>Time</h1><span class="where">yours, in atc</span>
-          <${UsageTabs} at="time" accounts=${multi ? [["", "all"], ...profs.map((p) => [p.name, p.name])] : []} on=${account} onPick=${(a) => { set({ account: a }); setSel({}); }} /></div>
+      <header class="phd">
+        <h1>Time</h1><span class="where">yours, in atc</span>
+        <span class="r"><${UsageTabs} at="time" accounts=${multi ? [["", "all"], ...profs.map((p) => [p.name, p.name])] : []} on=${account} onPick=${(a) => { set({ account: a }); setSel({}); }} /></span>
       </header>
       <div class="scroll"><div class="ubody"><div class="uspend">
         <div class="ubar">
-          <div class="sh"><h2>Your time</h2><span class="n">${account ? `sessions on the ${account} account` : "with atc in front of you"}</span>
+          <div class="sh"><h2>Your time</h2><span class="n">${account ? `sessions on the ${account} account` : "with atc in front of you"}</span><${Info} xp=${xp} why=${TIME_HOW} />
             <span class="r"><span class="seg" role="group" aria-label="Range">${TIME_RANGES.map((r) => html`<button aria-pressed=${r[0] === def[0]} aria-label=${r[2]} onClick=${() => { set({ range: r[0] }); setSel({}); }}>${r[1]}</button>`)}</span></span></div>
           ${chips.length > 0 && html`<div class="uchips">
             ${chips.map(([k, l]) => html`<button class="uchip" aria-label=${`Remove ${l}`} onClick=${() => pick({ [k]: null })}>${l}<span aria-hidden="true">×</span></button>`)}
             ${chips.length > 1 && html`<button class="clr" onClick=${() => setSel({})}>Clear all</button>`}</div>`}
         </div>
-        ${!t ? html`<p class="none">Adding up…</p>` : t.failed ? html`<${Err} what="Couldn't read the time log." />`
+        ${!t ? html`<${UsageSkel} label="Adding up…" />` : t.failed ? html`<${Err} what="Couldn't read the time log." />`
         : !data.range ? html`<${Empty}>No time counted for ${def[2]}${account ? ` on the ${account} account` : ""} yet.</${Empty}>`
         : html`
-          <div class="ukpis">${kpis.map((k) => html`<div class="ukpi ${k.big ? "big" : ""}"><span class="l">${k.l}</span><b>${k.v}</b><span class="s">${k.s}</span></div>`)}</div>
+          <div class="ukpis">${kpis.map((k) => html`<${Kpi} k=${k} xp=${xp} />`)}</div>
           ${looser && html`<p class="ufloor">${ruleFrom ? `Counted this way since ${whenAt(ruleFrom)}.` : "Nothing is counted this way yet."} Earlier time was counted more loosely (a minute or more after the last input), so it reads higher and is not compared.</p>`}
           ${days.length > 1 && html`<${UsageBars} days=${days} data=${bars} models=${data.bays.filter((b) => topBays.includes(b.name))} sel=${sel} on=${sel.bay} partial=${today} as=${barsAs}
             onPick=${(d) => pick({ bucket: d })} onPickModel=${(b) => pick({ bay: b })} />`}
@@ -4454,10 +4461,8 @@ function TimePage({ live, onOpen }) {
           </div>
           <${HoursMap} days=${hourDays} range=${def[0]} filtered=${chips.length > 0} as=${hoursAs} />`}
       </div>
-      <section class="sec"><div class="sh"><h2>How it is counted</h2></div>
-        <p class="unote">In 5-second ticks, while atc is the visible, focused window, for what is open in it. Typing, clicking, scrolling, touching or moving the mouse keeps it counting for 30 seconds. A longer pause counts its first 30 seconds only, even when you come back, since nothing tells reading from being away. Two devices at once count once.</p>
-        <p class="unote">Left out: other apps and browser tabs, a terminal attached with atc attach, voice calls, and anything another session or a schedule typed. So it is time in front of atc, less than the time you worked.</p></section>
       </div></div>
+      <${Explain} at=${xp.at} />
     </section>`;
 }
 
@@ -4503,7 +4508,7 @@ function UsagePage({ limits: mine, live, down, onOpen }) {
   const noLimits = prof ? `The ${prof} account reports no plan limits; an account billed per token has none` : `Limits are not available here${limits?.error ? `: ${limits.error}` : ""}`;
   const status = !limits ? "Checking the limits…" : !ws.length ? noLimits
     : hit ? `${hit.name} runs out ${hit.when} at this rate, ${hit.left} before the reset` : "Every limit lasts to its reset at this rate";
-  const src = limits && (limits.source === "cached" ? `from Claude Code's last check, ${agoLong(limits.fetchedAt)}` : limits.source === "statusline" ? `from Claude Code's status line, ${agoLong(limits.fetchedAt)}` : "");
+  const src = limits && (limits.source === "cached" || limits.source === "statusline") ? `read ${agoLong(limits.fetchedAt)}` : "";
 
   const hourly = rangeDef[0] === "24h";
   const todayKey = new Date().toLocaleDateString("en-CA");
@@ -4538,13 +4543,13 @@ function UsagePage({ limits: mine, live, down, onOpen }) {
     { l: filtered ? "In this selection" : "Spent", v: dollars(data.total),
       s: [wk(data.total), filtered ? `of ${dollars(data.range)}`
         : delta != null ? `${delta >= 0 ? "+" : "-"}${dollars(Math.abs(data.total - rep.previous))} from the ${rangeDef[4] || rangeDef[2].replace("the last", "previous")} (${dollars(rep.previous)})`
-        : rangeDef[2]].filter(Boolean).join(", "), big: true },
+        : rangeDef[2]].filter(Boolean).join(", "), big: true, why: `What the transcripts in ${rangeDef[2]} would cost at API list prices.${weekRate() ? ` ${WK_SCALE()}` : ""}` },
     sel.bucket
       ? { l: `Against the average ${unit}`, v: perUnit > 0 ? `${(data.total / perUnit).toFixed(1)}×` : "0", s: `average ${withWk(perUnit)} a ${unit}` }
-      : { l: `Per active ${unit}`, v: dollars(perUnit), s: [wk(perUnit), busiest && busiest[1].cost > 0 && `busiest ${bucketName(busiest[0])}, ${dollars(busiest[1].cost)}`].filter(Boolean).join(", ") },
-    { l: "Sessions", v: data.rows.length.toLocaleString("en-US"), s: data.rows.length > 5 ? `the top 5 took ${withWk(top5)}` : data.rows.length ? `${withWk(data.total / data.rows.length)} each` : "" },
-    { l: "Replies", v: data.msgs.toLocaleString("en-US"), s: data.msgs ? `${dollars(data.total / data.msgs)} each` : "" },
-    { l: "Tokens", v: tokens(data.tokens), s: data.tokens ? `${dollars(data.total / (data.tokens / 1e6))} a million` : "" },
+      : { l: `Per active ${unit}`, why: `The total divided by the ${unit}s that spent anything.`, v: dollars(perUnit), s: [wk(perUnit), busiest && busiest[1].cost > 0 && `busiest ${bucketName(busiest[0])}, ${dollars(busiest[1].cost)}`].filter(Boolean).join(", ") },
+    { l: "Sessions", why: "Sessions with any spend in this range.", v: data.rows.length.toLocaleString("en-US"), s: data.rows.length > 5 ? `the top 5 took ${withWk(top5)}` : data.rows.length ? `${withWk(data.total / data.rows.length)} each` : "" },
+    { l: "Replies", why: "Replies Claude wrote in this range, and what each cost on average.", v: data.msgs.toLocaleString("en-US"), s: data.msgs ? `${dollars(data.total / data.msgs)} each` : "" },
+    { l: "Tokens", why: "Input, output and cache tokens together, and the cost per million of them.", v: tokens(data.tokens), s: data.tokens ? `${dollars(data.total / (data.tokens / 1e6))} a million` : "" },
   ];
 
   const key = (r, k) => k === "title" ? (r.title || "").toLowerCase() : k === "last" ? -Date.parse(r.last || 0) : k === "share" ? r.cost : k === "bay" || k === "model" ? r[k] || "" : r[k];
@@ -4561,18 +4566,14 @@ function UsagePage({ limits: mine, live, down, onOpen }) {
   const empty = rep && !rep.failed && !sessions.length;
   return html`
     <section class="scrpane usage" aria-label="Usage">
-      <header class="hd">
-        <div class="l1"><h1>Usage</h1><span class="where">Claude Code${MULTI ? " on every host" : ""}${limits?.plan ? `, ${limits.plan} plan` : ""}</span>
-          <${UsageTabs} at="usage" accounts=${profs.length > 1 ? profs.map((p) => [p.default ? "" : p.name, p.name]) : []} on=${prof} onPick=${(p) => { set({ profile: p }); setSel({}); }} /></div>
-        <div class="l2 no-block"><span class="stat">${status}</span>
-          ${todayCost != null && html`<span class="rd"><span class="l">today</span>${withWk(todayCost)}</span>`}
-          ${week && html`<span class="rd"><span class="l">week</span>${withWk(week.cost)}</span>`}
-          ${src && html`<span class="rd"><span class="l">limits</span>${src}</span>`}</div>
+      <header class="phd">
+        <h1>Usage</h1><span class="where" title=${status}>${[`Claude Code${MULTI ? " on every host" : ""}${limits?.plan ? `, ${limits.plan} plan` : ""}`, src && `limits ${src}`].filter(Boolean).join(" · ")}</span>
+        <span class="r"><${UsageTabs} at="usage" accounts=${profs.length > 1 ? profs.map((p) => [p.default ? "" : p.name, p.name]) : []} on=${prof} onPick=${(p) => { set({ profile: p }); setSel({}); }} /></span>
       </header>
       <div class="scroll" ref=${scroll} onScroll=${(e) => store("atc.usage.scroll", e.currentTarget.scrollTop)}>
         <div class="ubody">
           <section class="sec" aria-labelledby="u-lim">
-            <div class="sh"><h2 id="u-lim">Limits</h2><span class="n">${ws.length ? `Claude Code${MULTI ? ", every host" : ""}. ${touch ? "Tap" : "Point at"} a number for how it is worked out.` : ""}</span></div>
+            <div class="sh"><h2 id="u-lim">Limits</h2>${hit && html`<span class="n hitn">${status}</span>`}${limits && ws.length > 0 && html`<${Info} xp=${xp} why=${`Read from Claude Code's ${limits.source === "statusline" ? "status line" : "last check"}${MULTI ? " on every host" : ""}. Each number explains itself: ${touch ? "tap" : "point at"} it.`} />`}</div>
             ${!ws.length && html`<p class="none">${limits ? `${noLimits}.` : "Checking…"}</p>`}
             ${rows.map((r) => html`
               <div class="lim ${r.hit ? "hit" : ""}">
@@ -4583,29 +4584,28 @@ function UsagePage({ limits: mine, live, down, onOpen }) {
                   <span class="ticks"></span>
                   ${r.pace != null && html`<span class="pace" style=${`left:calc(${r.pace}% - 1px)`} data-l=${`pace ${Math.round(r.pace)}%`}></span>`}
                 </div>
-                <div class="pct"><${X} xp=${xp} why=${r.why.used} label=${html`${Math.round(r.w.percent)}<small>%</small>`} /></div>
+                <div class="pct"><${X} xp=${xp} why=${r.why.used} label=${html`${Math.round(r.w.percent)}<small>%</small>`} /><${Info} xp=${xp} why=${r.why.pace || r.why.used} /></div>
                 <div class="say"><${X} xp=${xp} why=${r.why.proj} label=${r.say} /></div>
               </div>`)}
             ${rows.length > 0 && html`<div class="legend"><span><i class="u"></i>used</span><span><i class="p"></i>at this rate, by the reset</span><span><i class="t"></i>even pace: where you would be if it lasted exactly</span></div>`}
           </section>
           <div class="uspend ${rep?.loading ? "loading" : ""}">
             <div class="ubar">
-              <div class="sh"><h2>Spend</h2><span class="n">${prof ? `the ${prof} account, at API prices` : "API prices; a plan is not billed per token"}</span>
+              <div class="sh"><h2>Spend</h2><span class="n">${prof ? `the ${prof} account, at API prices` : "at API prices"}</span><${Info} xp=${xp} why=${`${prof ? `Dollar figures are estimated from the ${prof} account's transcripts at Claude API list prices. If that account is billed per token, this is close to what it pays.` : ESTIMATE()} ${WK_NOTE()}`} />
                 <span class="r"><span class="seg" role="group" aria-label="Range">${RANGES.map((r) => html`<button aria-pressed=${r[0] === rangeDef[0]} aria-label=${r[2]} onClick=${() => { set({ range: r[0] }); pickSel({ bucket: null }); }}>${r[1]}</button>`)}</span></span></div>
               ${chips.length > 0 && html`<div class="uchips">
                 ${chips.map(([k, l]) => html`<button class="uchip" aria-label=${`Remove ${l}`} onClick=${() => pickSel({ [k]: null })}>${l}<span aria-hidden="true">×</span></button>`)}
                 ${chips.length > 1 && html`<button class="clr" onClick=${() => setSel({})}>Clear all</button>`}</div>`}
             </div>
-            ${weekRate() && html`<p class="ufloor">${WK_SCALE()}</p>`}
             ${span && html`<p class="ufloor">Transcripts go back to ${dateLabel(dayAt(rep.first))}. Claude Code deletes older ones, so there is nothing further to add up.</p>`}
             ${!rep && rangeDef[0] === "week" && u && !weekFrom ? html`<p class="none">The weekly limit's reset is not known here, so there is no week to add up.</p>`
-            : !rep ? html`<p class="none">Adding up the transcripts…</p>` : rep.failed ? html`<${Err} what="Couldn't add up the transcripts." />`
+            : !rep ? html`<${UsageSkel} label="Adding up the transcripts…" />` : rep.failed ? html`<${Err} what="Couldn't add up the transcripts." />`
             : empty && rangeDef[0] === "all" ? html`
               <div class="uempty"><h2>No usage yet</h2><p>atc reads usage from Claude Code once a session has run. Spend per day, bay, model and session fill in from the first session on.</p>
                 <button class="btn primary" onClick=${() => NEW_SESSION()}>New session</button></div>`
             : empty ? html`<${Empty}>No sessions ran in ${rangeDef[2]}.</${Empty}>`
             : html`
-            <div class="ukpis">${kpis.map((k) => html`<div class="ukpi ${k.big ? "big" : ""}"><span class="l">${k.l}</span><b>${k.v}</b><span class="s">${k.s}</span></div>`)}</div>
+            <div class="ukpis">${kpis.map((k) => html`<${Kpi} k=${k} xp=${xp} />`)}</div>
             <${UsageBars} days=${dayKeys} data=${data} models=${data.models} sel=${sel} hourly=${hourly} partial=${partial} onPick=${pickBucket} onPickModel=${(m) => pickSel({ model: m })} />
             <div class="ugrid">
               <section class="sec usess" ref=${sessionsRef}><div class="sh"><h2>Biggest sessions</h2><span class="n">${sliceName}</span>
@@ -4634,7 +4634,6 @@ function UsagePage({ limits: mine, live, down, onOpen }) {
             </div>
             <${HoursMap} days=${shownDays} hourly=${hourly} range=${rangeDef[0]} filtered=${filtered} />`}
           </div>
-          <p class="unote">${prof ? `Dollar figures are estimated from the ${prof} account's transcripts at Claude API list prices. If that account is billed per token, this is close to what it pays.` : ESTIMATE()} ${WK_NOTE()}</p>
         </div>
       </div>
       <${Explain} at=${xp.at} />

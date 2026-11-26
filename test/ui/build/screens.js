@@ -138,8 +138,13 @@ async function desktop(b) {
     await wait(p, 2500);
     ok(await p.isVisible('.agentsv'), 'agents: inside the shell');
     ok(await p.locator('.ar').count() > 0, 'agents: listed');
-    ok(await p.isVisible('.agv .hd h1, .agd .hd h1'), 'agents: the chosen agent beside the list');
-    ok(await p.locator('.agv .hd h1').count() === 1, 'agents: its conversation, not its details');
+    ok(await p.isVisible('.agp > .phd h1'), 'agents: the chosen agent beside the list');
+    const hasPage = await p.locator('.agp .phd .seg button', { hasText: 'Page' }).count() === 1;
+    ok(hasPage ? await p.isVisible('.agpage') : true, 'agents: its page first, when it has one');
+    ok(!(await p.isVisible('.agl .pz')), 'agents: parked is not tagged');
+    await p.locator('.agp .phd .seg button', { hasText: 'Conversation' }).click();
+    await wait(p, 1500);
+    ok(await p.locator('.agv .hd h1').count() === 1, 'agents: its conversation behind a tab');
     await p.keyboard.press('z');
     await wait(p, 300);
     ok(!await p.isVisible('.agl') && (await p.locator('.agv').boundingBox()).x === 0, 'agents: zen hides the list and gives the conversation the width');
