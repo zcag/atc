@@ -158,7 +158,7 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
       await p.locator('.setnav a', { hasText: 'Persons' }).click();
       await p.waitForSelector('.gallery');
       ok(!(await p.isVisible('.setnav')), 'phone: a page takes the whole screen');
-      await p.locator('.settings .pghead .icon').click();
+      await p.locator('.settings .setmain > .phd .back').click();
       await p.waitForSelector('.setnav a');
       ok(await p.isVisible('.setnav'), 'phone: Back returns to the list');
     }
