@@ -126,8 +126,9 @@ func (s *Server) showPage(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) pushOpen(p pages.Page, link string) {
 	if s.Push != nil {
-		go s.Push.Send(push.Message{Title: hubName, Tag: p.Session + "/" + p.Name, URL: link,
-			Body: "Showing you " + cmp.Or(p.Title, p.Name) + prefixed(": ", p.Note), Open: true})
+		m := push.Message{Tag: p.Session + "/" + p.Name, URL: link, Body: "Showing you " + cmp.Or(p.Title, p.Name) + prefixed(": ", p.Note), Open: true}
+		m.Title, m.Bay = s.pushHead(p.Session)
+		go s.Push.Send(m)
 	}
 }
 
@@ -234,8 +235,10 @@ func (s *Server) pageToPhone(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "No phone gets atc's pushes yet: open atc in the phone app once.", http.StatusNotFound)
 		return
 	}
-	go s.Push.Send(push.Message{Title: cmp.Or(req.Title, req.Name), Body: "Open the page", Tag: req.Session + "/" + req.Name + "/phone",
-		URL: s.aloneLink(s.owner(req.Session), url.PathEscape(req.Name))})
+	m := push.Message{Body: "Open " + cmp.Or(req.Title, req.Name), Tag: req.Session + "/" + req.Name + "/phone",
+		URL: s.aloneLink(s.owner(req.Session), url.PathEscape(req.Name))}
+	m.Title, m.Bay = s.pushHead(s.owner(req.Session))
+	go s.Push.Send(m)
 	reply(w, map[string]string{"ok": "pushed"})
 }
 
@@ -361,7 +364,7 @@ func pageAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 			if prev == nil || (ok && !p.Shown.After(was)) || x.Away() || viewing(x) {
 				continue
 			}
-			out = append(out, push.Message{Title: x.Title, Tag: key, URL: pages.Link(x.SessionID, p.Ref()),
+			out = append(out, push.Message{Title: x.Title, Bay: bayOf(x), Tag: key, URL: pages.Link(x.SessionID, p.Ref()),
 				Body: "Showing you " + cmp.Or(p.Title, p.Name) + prefixed(": ", p.Note)})
 		}
 	}

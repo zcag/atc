@@ -149,3 +149,13 @@ func TestReviveWaitsForTheServiceToResumeItsOwn(t *testing.T) {
 		t.Fatal("B was not relaunched")
 	}
 }
+
+func TestARevivePushIsFromAtc(t *testing.T) {
+	m := revivedPush("devbox restarted", []string{"A"})
+	if m.Title != "atc" || m.Body != "devbox restarted: 1 session running again (A)." {
+		t.Fatalf("one back: %+v", m)
+	}
+	if m = revivedPush("devbox restarted", []string{"A", "B"}); m.Body != "devbox restarted: 2 sessions running again (A, B)." {
+		t.Fatalf("two back: %+v", m)
+	}
+}

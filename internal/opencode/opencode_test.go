@@ -139,3 +139,19 @@ func TestLive(t *testing.T) {
 		t.Fatalf("attach %q", got)
 	}
 }
+
+func TestAskSays(t *testing.T) {
+	for _, c := range []struct {
+		a    Ask
+		want string
+	}{
+		{Ask{Permission: "Bash", Patterns: []string{"go test ./..."}}, "Wants to run go test ./..."},
+		{Ask{Permission: "Edit", Patterns: []string{"web/app.js"}}, "Wants to use Edit: web/app.js"},
+		{Ask{Permission: "WebFetch"}, "Wants to use WebFetch"},
+		{Ask{Questions: []Question{{Question: "Which font?"}}}, "Asks: Which font?"},
+	} {
+		if got := c.a.Says(); got != c.want {
+			t.Errorf("%+v says %q, want %q", c.a, got, c.want)
+		}
+	}
+}

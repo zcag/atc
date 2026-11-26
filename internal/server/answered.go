@@ -91,11 +91,8 @@ func pushAsk(x sessions.Session) *push.Ask {
 }
 
 func askBody(a *push.Ask) string {
-	switch {
-	case a.Tool == "Bash":
-		return "Wants to run " + a.Cmd
-	case a.Tool != "":
-		return strings.TrimSuffix("Wants to use "+a.Tool+": "+a.Cmd, ": ")
+	if a.Tool != "" {
+		return opencode.Wants(a.Tool, a.Cmd)
 	}
 	return a.Text
 }

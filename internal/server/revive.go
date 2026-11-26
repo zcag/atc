@@ -237,7 +237,7 @@ func (s *Server) revive(lost []running, why string) {
 	log.Printf("revived %d sessions %s", len(back), why)
 	s.refresh()
 	if s.Push != nil && len(back) > 0 {
-		s.Push.Send(push.Message{Title: fmt.Sprintf("%s: %d sessions back", s.Host, len(back)), Body: why + ". Resumed " + strings.Join(back, ", ") + ".", Tag: "revive", URL: "/"})
+		s.Push.Send(revivedPush(why, back))
 	}
 }
 
@@ -313,3 +313,11 @@ func (s *Server) continueOpenCode(r running) {
 }
 
 func revivePath(dir string) string { return filepath.Join(dir, "running.json") }
+
+func revivedPush(why string, back []string) push.Message {
+	n := fmt.Sprintf("%d sessions", len(back))
+	if len(back) == 1 {
+		n = "1 session"
+	}
+	return push.Message{Title: "atc", Body: fmt.Sprintf("%s: %s running again (%s).", why, n, strings.Join(back, ", ")), Tag: "revive", URL: "/"}
+}

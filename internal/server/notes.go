@@ -72,7 +72,9 @@ func (s *Server) postNote(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "atc on "+s.Host+" does not run this session and has no phone to push to", http.StatusNotFound)
 		return
 	}
-	go s.pushAll([]push.Message{{Title: "Claude", Body: note.Text, Tag: sid + "/note"}}, note.Urgent)
+	m := push.Message{Body: note.Text, Tag: sid + "/note"}
+	m.Title, m.Bay = s.pushHead(sid)
+	go s.pushAll([]push.Message{m}, note.Urgent)
 	reply(w, map[string]string{"ok": "pushed"})
 }
 
@@ -86,7 +88,7 @@ func noteAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 		if was, ok := prev[x.SessionID]; prev == nil || (ok && !x.Note.At.After(was)) {
 			continue
 		}
-		m := push.Message{Title: x.Title, Body: x.Note.Text, Tag: x.SessionID + "/note", URL: "/#/s/" + x.SessionID}
+		m := push.Message{Title: x.Title, Body: x.Note.Text, Tag: x.SessionID + "/note", URL: "/#/s/" + x.SessionID, Bay: bayOf(x)}
 		if x.Note.Page != "" {
 			m.URL = pages.Link(x.SessionID, x.Note.Page)
 		}
@@ -101,4 +103,16 @@ func noteAlerts(prev map[string]time.Time, list []sessions.Session, viewing func
 		}
 	}
 	return now, normal, urgent
+}
+
+// pushHead is the title and bay of a push about sid when it is not in the live list: the session's
+// own as its transcript has them, an agent's name, or atc.
+func (s *Server) pushHead(sid string) (title, bay string) {
+	if a, ok := strings.CutPrefix(sid, agentRef); ok {
+		return agentRef + a, ""
+	}
+	if x, ok := s.M.Session(s.fullID(sid)); ok && x.Title != "" {
+		return x.Title, bayOf(x)
+	}
+	return "atc", ""
 }

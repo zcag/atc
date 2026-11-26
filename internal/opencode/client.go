@@ -232,6 +232,28 @@ type Ask struct {
 	Key        string     `json:"key,omitempty"`
 }
 
+// Wants is how a permission reads everywhere: Wants to run <cmd>, or Wants to use <tool>: <what>.
+func Wants(tool, cmd string) string {
+	switch {
+	case tool == "Bash" && cmd != "":
+		return "Wants to run " + cmd
+	case cmd != "":
+		return "Wants to use " + tool + ": " + cmd
+	}
+	return "Wants to use " + tool
+}
+
+// Says is the ask in one line: its permission as Wants puts it, or its first question.
+func (a Ask) Says() string {
+	switch {
+	case a.Permission != "":
+		return Wants(a.Permission, strings.Join(a.Patterns, " "))
+	case len(a.Questions) > 0:
+		return "Asks: " + a.Questions[0].Question
+	}
+	return ""
+}
+
 func (a Ask) Fingerprint() string {
 	h := sha256.New()
 	fmt.Fprintf(h, "%s\x00%s", a.Permission, strings.Join(a.Patterns, "\x00"))
