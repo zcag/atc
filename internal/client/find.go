@@ -16,14 +16,18 @@ func (c *Client) Find(q string, withPast bool) (sessions.Session, error) {
 	if x, err := Resolve(q, pool); err == nil || !withPast {
 		return x, err
 	}
-	if withPast {
-		past, err := c.History("", "", 0)
-		if err != nil {
-			return sessions.Session{}, err
-		}
-		pool = append(pool, past...)
+	past, err := c.History(historyQuery(q), "", 0)
+	if err != nil {
+		return sessions.Session{}, err
 	}
-	return Resolve(q, pool)
+	return Resolve(q, append(pool, past...))
+}
+
+func historyQuery(q string) string {
+	if _, err := strconv.Atoi(q); err == nil && len(q) < 4 || strings.HasPrefix(q, "@") {
+		return ""
+	}
+	return q
 }
 
 func Resolve(q string, pool []sessions.Session) (sessions.Session, error) {
