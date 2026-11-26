@@ -150,8 +150,12 @@ func (c *Client) CreateGroup(ctx context.Context, name string) (Group, error) {
 	if g.ID == "" {
 		return g, errors.New("openwa: the new group has no id")
 	}
-	err := c.do(ctx, "PUT", "/groups/"+url.PathEscape(g.ID)+"/settings", map[string]any{"locked": true, "memberAddMode": "admins"}, nil)
-	return g, err
+	return g, c.LockGroup(ctx, g.ID)
+}
+
+// LockGroup lets only admins rename the group or add people to it.
+func (c *Client) LockGroup(ctx context.Context, id string) error {
+	return c.do(ctx, "PUT", "/groups/"+url.PathEscape(id)+"/settings", map[string]any{"locked": true, "memberAddMode": "admins"}, nil)
 }
 
 // FindGroup is the group named by id or name (any case).

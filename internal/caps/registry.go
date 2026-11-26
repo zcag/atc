@@ -251,8 +251,9 @@ func All() []Cap {
 		{
 			ID: "agent-groups", Title: "Agents' own groups", Group: WhatsApp, Optional: true, Why: "An agent with \"whatsapp\": true in its agent.json gets a WhatsApp group of its own with you: what you write there goes to it and its replies and atc wa come back there. Every other session's atc wa goes to one more group, Sessions, so your chat with the account stays the assistant's.",
 			Needs: []string{"whatsapp", "hub"}, Check: checkAgentGroups,
-			Fix:  Fix{Text: "Set up the hub, then add \"whatsapp\": true to the agent.json of each agent that should have a group; atc makes the groups within ten minutes.", Guide: "whatsapp#agents-own-groups"},
-			Cost: "A Claude process per agent while you write to it (it closes 15 minutes after the last message), plus plan tokens.",
+			Fields: []Field{{Key: "ATC_WHATSAPP_GROUP_MAKER", Label: "Command that makes a group when OpenWA can't (optional)", Hint: "~/.local/bin/make-wa-group"}},
+			Fix:    Fix{Text: "Set up the hub, then add \"whatsapp\": true to the agent.json of each agent that should have a group; atc makes the groups within ten minutes.", Guide: "whatsapp#agents-own-groups"},
+			Cost:   "A Claude process per agent while you write to it (it closes 15 minutes after the last message), plus plan tokens.",
 		},
 		{
 			ID: "stt", Title: "Voice notes: hearing", Group: WhatsApp, Optional: true, Why: "Turns the voice notes you send into text. Only WhatsApp voice notes use this.",

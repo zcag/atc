@@ -9,7 +9,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -180,6 +182,9 @@ func (s *Server) waOwnGroup(ctx context.Context, id string) bool {
 	return err != nil || g.creating[x.Name]
 }
 
+// waPlainName is a group name a maker can type (adb types no emoji): the first of these an agent has goes to it.
+var waPlainName = regexp.MustCompile(`^[A-Za-z0-9 ._-]+$`)
+
 // waGroupName is what an agent's group is called: its icon when that is an emoji, and its title.
 func waGroupName(a Agent) string {
 	if r := []rune(a.Icon); len(r) > 0 && r[0] > unicode.MaxLatin1 {
@@ -221,52 +226,82 @@ func (s *Server) ensureAgentGroups(ctx context.Context) error {
 		return slices.ContainsFunc(list, func(x whatsapp.Group) bool { return x.ID == id })
 	}
 	changed := false
-	ensure := func(key, name, have string, also ...string) (string, error) {
-		if have != "" && in(have) {
-			return have, nil
-		}
+	take := func(list []whatsapp.Group, names []string) string {
 		for _, x := range list {
-			if !slices.ContainsFunc(append([]string{name}, also...), func(n string) bool { return strings.EqualFold(strings.TrimSpace(x.Name), n) }) {
+			if !slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(strings.TrimSpace(x.Name), n) }) {
 				continue
 			}
 			if full, err := wa.Group(ctx, x.ID); err == nil && wa.OnlyOwner(ctx, full) && !slices.Contains(g.ids(), x.ID) {
-				log.Printf("whatsapp: %s takes the group %q (%s) that was already there", key, name, x.ID)
-				changed = true
-				return x.ID, nil
+				if err := wa.LockGroup(ctx, x.ID); err != nil {
+					log.Printf("whatsapp: could not lock the group %q: %v", x.Name, err)
+				}
+				return x.ID
 			}
 		}
+		return ""
+	}
+	ensure := func(key string, names []string, have string) (string, error) {
+		if have != "" && in(have) {
+			return have, nil
+		}
+		if id := take(list, names); id != "" {
+			changed = true
+			log.Printf("whatsapp: %s takes the group %q that was already there (%s)", key, names[0], id)
+			return id, nil
+		}
 		g.mu.Lock()
-		g.creating[name] = true
+		for _, n := range names {
+			g.creating[n] = true
+		}
 		g.mu.Unlock()
-		made, err := wa.CreateGroup(ctx, name)
-		if made.ID == "" {
-			return "", fmt.Errorf("could not make its group (%w); a group called %q with only the user and the account in it is taken instead", err, name)
+		made, err := wa.CreateGroup(ctx, names[0])
+		if made.ID != "" {
+			if err != nil {
+				log.Printf("whatsapp: made %s's group %q, but could not lock it: %v", key, names[0], err)
+			}
+			log.Printf("whatsapp: made %s's group %q (%s)", key, names[0], made.ID)
+			changed = true
+			return made.ID, nil
 		}
-		if err != nil {
-			log.Printf("whatsapp: made %s's group %q, but could not lock it: %v", key, name, err)
+		if i := slices.IndexFunc(names, waPlainName.MatchString); i >= 0 && wa.Maker != "" {
+			plain := names[i]
+			mctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
+			out, merr := exec.CommandContext(mctx, wa.Maker, plain).CombinedOutput()
+			cancel()
+			log.Printf("whatsapp: %s %q: %s", wa.Maker, plain, strings.TrimSpace(string(out)))
+			if merr == nil {
+				if again, lerr := wa.Groups(ctx); lerr == nil {
+					if id := take(again, names); id != "" {
+						log.Printf("whatsapp: made %s's group %q with %s (%s)", key, plain, wa.Maker, id)
+						changed = true
+						return id, nil
+					}
+				}
+			}
+			err = errors.Join(err, fmt.Errorf("%s: %v", wa.Maker, merr))
 		}
-		log.Printf("whatsapp: made %s's group %q (%s)", key, name, made.ID)
-		changed = true
-		return made.ID, nil
+		return "", fmt.Errorf("could not make its group (%w); a group called %q with only the user and the account in it is taken instead", err, names[0])
 	}
 	var errs []error
-	bind := func(key, name, have string, set func(id string), also ...string) {
-		id, err := ensure(key, name, have, also...)
+	bind := func(key string, names []string, have string, set func(id string)) {
+		id, err := ensure(key, names, have)
 		g.mu.Lock()
 		if err == nil {
 			set(id)
 			g.save()
 		}
-		delete(g.creating, name)
+		for _, n := range names {
+			delete(g.creating, n)
+		}
 		g.mu.Unlock()
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", key, err))
 		}
 	}
 	for _, a := range want {
-		bind("@"+a.Name, waGroupName(a), g.agentGroup(a.Name), func(id string) { g.b.Agents[a.Name] = id }, a.label(), a.Name)
+		bind("@"+a.Name, []string{waGroupName(a), a.label(), a.Name}, g.agentGroup(a.Name), func(id string) { g.b.Agents[a.Name] = id })
 	}
-	bind("sessions", waSessionsGroup, g.sessionsGroup(), func(id string) { g.b.Sessions = id })
+	bind("sessions", []string{waSessionsGroup}, g.sessionsGroup(), func(id string) { g.b.Sessions = id })
 	if changed {
 		wa.Bind(g.ids())
 		if err := wa.EnsureHook(ctx); err != nil && !errors.Is(err, whatsapp.ErrNoVotes) {

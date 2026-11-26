@@ -33,6 +33,8 @@ type Client struct {
 	Hook              string
 	// Alerts is the group atc's own alarms go to (a push channel that stopped working), by id or name; "" is the owner.
 	Alerts string
+	// Maker is a command that makes a group of the account and the owner, given its name, for when OpenWA can't.
+	Maker  string
 	Votes  atomic.Bool
 	chat   atomic.Value
 	bound  atomic.Value
@@ -45,7 +47,8 @@ func FromEnv() *Client {
 		URL: strings.TrimRight(os.Getenv("ATC_WHATSAPP_URL"), "/"), Key: os.Getenv("ATC_WHATSAPP_KEY"),
 		Session: os.Getenv("ATC_WHATSAPP_SESSION"),
 		Secret:  os.Getenv("ATC_WHATSAPP_SECRET"), Hook: os.Getenv("ATC_WHATSAPP_HOOK"), Alerts: os.Getenv("ATC_WHATSAPP_ALERTS"),
-		http: &http.Client{Timeout: 60 * time.Second},
+		Maker: os.Getenv("ATC_WHATSAPP_GROUP_MAKER"),
+		http:  &http.Client{Timeout: 60 * time.Second},
 	}
 	for _, id := range strings.Split(os.Getenv("ATC_WHATSAPP_OWNER"), ",") {
 		if id = strings.TrimPrefix(strings.TrimSpace(id), "+"); id != "" {

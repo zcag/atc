@@ -141,8 +141,11 @@ chat as before.
 atc makes the groups itself within ten minutes of an agent asking for one and locks them so only the account can
 rename them or add people. It takes a group that is already there instead, when one is only you and the account and
 is called the agent's group name, its title or its name (any case; `Sessions` for that one). OpenWA's whatsapp-web.js
-engine can't make groups (its Baileys engine can), so with it you make each group yourself, from your phone with the
-account's number, and atc takes it within ten minutes; the log says which are missing. It keeps which is whose in
+engine can't make groups (its Baileys engine can). With it, `ATC_WHATSAPP_GROUP_MAKER` names a command atc runs with
+the group's name (the agent's title, plain letters, since the command may have to type it) to make it some other
+way, such as driving WhatsApp on the account's own phone over adb; atc then finds the group and takes it. Without
+one you make each group yourself, from your phone with the account's number, and atc takes it within ten minutes;
+the log says which are missing. It keeps which is whose in
 `whatsapp-groups.json` in its state folder. These groups never reach the guests' conversation:
 `atc group` lists them as `@name` or `sessions`, they can't be made quiet, and `atc wa --group` refuses them. Only
 you talk there: anyone else's message is ignored, and you are told once. WhatsApp's Communities can bundle them under

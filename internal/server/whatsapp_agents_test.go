@@ -37,10 +37,11 @@ const (
 
 // gateway is a fake OpenWA: it records every request and knows a few groups.
 type gateway struct {
-	mu     sync.Mutex
-	calls  []string
-	n      int
-	groups map[string]string
+	mu       sync.Mutex
+	calls    []string
+	n        int
+	groups   map[string]string
+	noCreate bool
 }
 
 func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -60,6 +61,12 @@ func (g *gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			out = append(out, map[string]string{"id": id, "name": name})
 		}
 		json.NewEncoder(w).Encode(out)
+	case strings.HasPrefix(r.URL.Path, "/make/"):
+		g.mu.Lock()
+		g.groups[fmt.Sprintf("6%d@g.us", n)] = strings.TrimPrefix(r.URL.Path, "/make/")
+		g.mu.Unlock()
+	case path == "/groups" && r.Method == "POST" && g.noCreate:
+		http.Error(w, `{"message":"Operation not supported by the active engine: createGroup"}`, http.StatusNotImplemented)
 	case path == "/groups" && r.Method == "POST":
 		g.mu.Lock()
 		g.groups["50@g.us"] = "Ops"
@@ -329,5 +336,36 @@ func TestAgentGroupsAreMadeOrTaken(t *testing.T) {
 	}
 	if gw.count("POST /api/sessions/bot/groups ") != 1 {
 		t.Errorf("a group was made twice")
+	}
+}
+
+func TestAGroupOpenWACantMakeIsMadeByTheMaker(t *testing.T) {
+	s, _, _, gw := groupsServer(t, false)
+	gw.mu.Lock()
+	gw.noCreate = true
+	gw.groups = map[string]string{}
+	gw.mu.Unlock()
+	maker := filepath.Join(t.TempDir(), "maker")
+	os.WriteFile(maker, []byte("#!/bin/sh\ncurl -s -X POST \""+s.WhatsApp.URL+"/make/$1\"\n"), 0o755)
+	s.WhatsApp.Maker = maker
+	if err := s.ensureAgentGroups(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	g := &s.wa.groups
+	if g.agentGroup("ops") == "" || g.sessionsGroup() == "" || g.agentGroup("ops") == g.sessionsGroup() {
+		t.Fatalf("bound %+v\n%s", g.b, gw.dump())
+	}
+	if gw.count("POST /make/Ops") != 1 || gw.count("POST /make/Sessions") != 1 {
+		t.Errorf("the maker was not asked for both:\n%s", gw.dump())
+	}
+	if gw.count("PUT", "/groups/"+g.agentGroup("ops")+"/settings", `"locked":true`) != 1 {
+		t.Errorf("a group the maker made is not locked:\n%s", gw.dump())
+	}
+	s.WhatsApp.Maker = ""
+	gw.mu.Lock()
+	gw.groups = map[string]string{}
+	gw.mu.Unlock()
+	if err := s.ensureAgentGroups(context.Background()); err == nil || !strings.Contains(err.Error(), `a group called "Ops"`) {
+		t.Errorf("without a maker the error says what to make: %v", err)
 	}
 }
