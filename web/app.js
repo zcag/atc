@@ -2184,14 +2184,27 @@ function Login({ onDone }) {
     }
   };
   return html`
-    <div class="login">
-      <form onSubmit=${submit}>
-        <span class="mark">atc</span>
-        <p>Paste a token for this server: <code>atc token</code> on it prints one. A device already logged in can pair this one under Settings › Devices.</p>
-        <label class="field"><span>Token</span><input type="password" autocomplete="current-password" value=${tok} onInput=${(e) => setTok(e.target.value)} ref=${focusOnMount} /></label>
-        ${err && html`<p class="err">${err}</p>`}
-        <div class="actions"><button class="btn primary" disabled=${!tok}>Log in</button></div>
-      </form>
+    <div class="app login">
+      <nav class="bays"><span class="brand"><span class="on">atc on</span>${location.hostname}</span></nav>
+      <main class="lstage">
+        <form class="lbox" onSubmit=${submit}>
+          <span class="mark" aria-hidden="true">atc</span>
+          <h1>Log in to atc</h1>
+          <p class="lede">This device has no token for this server yet.</p>
+          <label for="ltok">Token</label>
+          <div class="frm">
+            <input id="ltok" type="password" autocomplete="current-password" placeholder="Paste a token" value=${tok} onInput=${(e) => setTok(e.target.value)} ref=${focusOnMount} />
+            <button class="btn primary">Log in</button>
+          </div>
+          ${err && html`<p class="err" role="alert">${err}</p>`}
+          <div class="ways">
+            <div class="h">Two ways to get one</div>
+            <div class="w">${ICON.term}<div>On this server, run <code>atc token</code> and paste what it prints.</div></div>
+            <div class="w">${ICON.link}<div>On a device that is logged in: <b>Settings, Devices, Pair by QR</b>, then scan it here.</div></div>
+          </div>
+        </form>
+      </main>
+      <footer class="console"><span class="last">Not logged in on this device.</span><span class="addr">${location.origin}</span></footer>
     </div>
   `;
 }
@@ -2267,6 +2280,7 @@ const ICON_PATHS = {
   warn: '<path d="M8 2.5 14 13H2z"/><path d="M8 6.5v3M8 11.3v0"/>',
   side: '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M10 2.5v11"/>',
   rail: '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6 2.5v11"/>',
+  link: '<path d="M7 9a2.5 2.5 0 0 0 3.5 0l2-2A2.5 2.5 0 0 0 9 3.5l-.8.8M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l.8-.8"/>',
   bays: '<rect x="2" y="2.5" width="5" height="5" rx="1"/><rect x="9" y="2.5" width="5" height="5" rx="1"/><rect x="2" y="9.5" width="5" height="5" rx="1"/><rect x="9" y="9.5" width="5" height="5" rx="1"/>',
 };
 const svgIcon = (d) => html`<svg class="i" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" dangerouslySetInnerHTML=${{ __html: d }}></svg>`;

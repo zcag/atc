@@ -169,11 +169,35 @@ pre:hover > .copy, pre > .copy:focus-visible { opacity: 1; }
   .sheet { width: 100%; max-height: 100dvh; border-radius: 0; border: 0; padding-top: max(var(--s4), env(safe-area-inset-top)); }
 }
 
-.login { height: 100%; display: grid; place-items: center; padding: var(--s4); }
-.login form { width: min(380px, 100%); }
-.login .mark { font-size: var(--fs-display); display: block; margin-bottom: var(--s2); }
-.login p { color: var(--dim); margin: 0 0 var(--s4); }
-.login code { font-family: var(--mono); font-size: .92em; }
+.login.app { grid-template-rows: var(--bar-h) minmax(0, 1fr) var(--console-h); }
+.login.app > .bays { display: flex; }
+.login .mark { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: var(--r3); background: var(--ink); color: var(--strip); font: 700 15px/1 var(--mono); }
+.login .bays .brand { display: flex; align-items: center; gap: 5px; padding: 0 var(--s4); font-weight: 650; }
+.login .bays .brand .on { color: var(--faint); font-weight: 500; }
+.lstage { display: grid; place-items: center; padding: var(--s5) var(--s4); overflow: auto; min-height: 0; }
+.lbox { width: 100%; max-width: 400px; }
+.lbox h1 { font-size: var(--fs-h); margin: var(--s4) 0 var(--s1); font-weight: 650; }
+.lbox .lede { color: var(--dim); margin: 0 0 var(--s5); }
+.lbox label { display: block; font-size: var(--fs-ui); font-weight: 600; margin-bottom: 6px; }
+.lbox .frm { display: flex; gap: var(--s2); }
+.lbox input { flex: 1; min-width: 0; height: 32px; border: 1px solid var(--line); background: var(--strip); border-radius: var(--r2); padding: 0 var(--s3); font-family: var(--mono); font-size: var(--fs-ui); }
+.lbox .frm .btn { height: 32px; }
+.lbox .err { margin: var(--s2) 0 0; }
+.ways { margin-top: var(--s5); border-top: 1px solid var(--line); padding-top: 14px; font-size: var(--fs-ui); }
+.ways .h { color: var(--faint); font-size: var(--fs-small); margin-bottom: var(--s2); }
+.ways .w { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: var(--s2); padding: 6px 0; color: var(--dim); }
+.ways .w .i { color: var(--faint); margin-top: 2px; }
+.ways code { font-family: var(--mono); color: var(--ink); background: var(--code); padding: 1px 5px; border-radius: var(--r1); }
+.ways b { color: var(--ink); font-weight: 600; }
+.login .console .addr { font: var(--fs-small) var(--mono); color: var(--faint); }
+@media (max-width: 899px) {
+  .login.app { grid-template-rows: 48px minmax(0, 1fr) 0; }
+  .login .console { display: none; }
+  .lstage { place-items: start center; padding-top: var(--s7); }
+  .lbox .frm { flex-direction: column; }
+  .lbox input, .lbox .frm .btn { flex: none; height: var(--hit); font-size: var(--fs-body); }
+  .lbox .frm .btn { justify-content: center; }
+}
 .appbar { position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%); z-index: 31; display: flex; gap: var(--s2); align-items: center; background: var(--strip); border: 1px solid var(--line); border-radius: var(--r3); padding: var(--s2) var(--s2) var(--s2) var(--s4); font-size: var(--fs-body); max-width: calc(100% - 24px); box-shadow: var(--pop); }
 .link { border: 0; background: none; color: var(--dim); font-size: var(--fs-body); text-decoration: underline; align-self: center; padding: var(--s1); }
 
