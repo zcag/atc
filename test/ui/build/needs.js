@@ -42,7 +42,7 @@ const fake = (list) => needsIn(list, 2, ['shop', 'site', 'notes', 'api', 'docs']
     if (bays > 1) {
       await p.keyboard.press('2');
       await p.waitForTimeout(700);
-      ok((await p.locator('.bays .bay.on .bn .n').innerText()) === (await p.locator('.bays .bay[data-bay]').nth(1).getAttribute('data-bay')), `${scheme}: 2 switches to bay 2`);
+      ok((await p.locator('.bays .bay.on .bn > .n').innerText()) === (await p.locator('.bays .bay[data-bay]').nth(1).getAttribute('data-bay')), `${scheme}: 2 switches to bay 2`);
     }
     ok(!errs.length, `${scheme}: no page errors ` + errs.join(' | '));
     await ctx.close();

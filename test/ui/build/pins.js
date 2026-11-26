@@ -35,7 +35,7 @@ const fake = (list) => {
     ok((await p.locator('.bgrp.waiting .brow .t').allInnerTexts()).join() === 'asking', `${scheme}: a pinned row is not repeated in Waiting`);
     ok(/2 waiting/.test(await p.locator('.bhead .bcs').innerText()), `${scheme}: the count includes a pinned session waiting on you`);
     ok(await p.locator('.bwrap.pinned.waiting').count() === 1, `${scheme}: a pinned session waiting keeps its edge`);
-    const c = await p.locator('.bay[data-bay=pinbay] .cn.n').evaluate((e) => { const s = getComputedStyle(e); return s.color !== getComputedStyle(e.closest('.bay').querySelector('.bn .n')).color; });
+    const c = await p.locator('.bay[data-bay=pinbay] .cn.n').evaluate((e) => { const s = getComputedStyle(e); return s.color !== getComputedStyle(e.closest('.bay').querySelector('.bn > .n')).color; });
     ok(c, `${scheme}: the count does not take the bay name's ink`);
     await p.screenshot({ path: `${OUT}pins-board-1400-${scheme}.png` });
     const real = list.find((s) => s.attachable && s.state !== 'past' && !s.cwd.endsWith('/pinbay')) || list[0];

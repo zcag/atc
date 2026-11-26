@@ -14,19 +14,32 @@ const stub = (p) => p.route('**/api/**', (r) => r.request().method() === 'GET' ?
   await stub(p);
   await p.goto(base + '/');
   await p.waitForTimeout(3000);
-  const cts = p.locator('.bays .cts').first();
-  if (await cts.count()) {
-    await cts.click();
-    await p.waitForTimeout(300);
-    ok(await p.isVisible('.peek'), 'clicking a bay\'s counts peeks at it');
+  const busy = p.locator('.bays .bay[data-bay]:not(.on):has(.cts)').first();
+  if (await busy.count()) {
+    const name = await busy.getAttribute('data-bay');
+    await busy.locator('span.n').hover();
+    await p.waitForTimeout(150);
+    ok(await p.isVisible('.peek'), 'hovering a bay with activity shows its peek');
     await p.screenshot({ path: `${OUT}s4-peek-1400-light.png` });
     await p.keyboard.press('Escape');
     await p.waitForTimeout(200);
     ok(!(await p.isVisible('.peek')), 'esc closes the peek');
+    await p.mouse.move(700, 600);
+    await busy.locator('span.n').dispatchEvent('contextmenu', { bubbles: true, cancelable: true });
+    await p.waitForTimeout(200);
+    ok(!(await p.isVisible('.peek')), 'right-clicking a bay does not peek');
+    await p.mouse.move(700, 600);
+    await p.keyboard.press('Escape');
     await p.keyboard.press('Shift+Alt+1');
     await p.waitForTimeout(300);
     ok(await p.isVisible('.peek'), 'shift alt 1 peeks at bay 1');
     await p.keyboard.press('Escape');
+    await p.waitForTimeout(200);
+    await busy.locator('.cts').click();
+    await p.waitForTimeout(400);
+    ok(await p.locator('.bays .bay.on').getAttribute('data-bay') === name && !(await p.isVisible('.peek')), 'clicking a bay\'s counts goes to that bay and closes the peek');
+    await p.goto(base + '/');
+    await p.waitForTimeout(2000);
   }
   const rows = await p.locator('.bview .brow').count();
   ok(rows > 0, `board shows ${rows} rows`);
