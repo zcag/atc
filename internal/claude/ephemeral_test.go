@@ -54,6 +54,17 @@ func TestEphemeralLivesInMemory(t *testing.T) {
 			t.Errorf("%s links to %q", name, dst)
 		}
 	}
+	set, _ := os.ReadFile(filepath.Join(p.Dir, "settings.json"))
+	if !strings.Contains(string(set), "sandbox") || strings.Contains(string(set), "hooks") {
+		t.Errorf("settings %s: want its own, with the sandbox, and nothing of the default's", set)
+	}
+	base := []string{"--dangerously-skip-permissions", "--model", "opus", "--permission-mode", "auto"}
+	if got := strings.Join(p.Flags(base), " "); got != "--model opus --permission-mode acceptEdits" {
+		t.Errorf("private flags %q", got)
+	}
+	if work, _ := ProfileNamed("work"); len(work.Flags(base)) != len(base) {
+		t.Error("another profile's flags changed")
+	}
 	b, _ := os.ReadFile(p.State())
 	if !strings.Contains(string(b), "hasCompletedOnboarding") || strings.Contains(string(b), "mcpServers") {
 		t.Errorf("state %s: wants onboarding and no MCP servers", b)

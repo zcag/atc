@@ -13,11 +13,17 @@ var (
 	containers = map[string]bool{"proj": true, "projects": true, "src": true, "code": true, "dev": true, "work": true, "repos": true, "git": true, "Developer": true}
 )
 
+// PrivateBay is where every private session is grouped, whatever folder of its own it runs in.
+const PrivateBay = "private"
+
 // Bay is the project a session works in, as the list groups it: the folder under home (or under
 // a folder of projects such as ~/proj), its main checkout for a worktree.
 func (x Session) Bay() string {
 	if x.Kind == "hub" || x.Cwd == "" {
 		return ""
+	}
+	if x.Private {
+		return PrivateBay
 	}
 	p := inWorktree.ReplaceAllString(x.Cwd, "")
 	if home, _ := os.UserHomeDir(); home != "" && (p == home || strings.HasPrefix(p, home+"/")) {

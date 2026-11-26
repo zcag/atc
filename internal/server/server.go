@@ -899,7 +899,7 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 	s.done(w, id, err)
 }
 
-func (s *Server) startSession(ctx context.Context, req startReq) (string, error) {
+func (s *Server) startSession(ctx context.Context, req startReq) (id string, err error) {
 	var p Preset
 	if req.Preset != "" {
 		var ok bool
@@ -913,10 +913,14 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 		if req.Dir != "" || req.Worktree || req.Preset != "" {
 			return "", badf("a private session runs in an empty folder of its own: start it without a folder, preset or worktree")
 		}
-		var err error
 		if req.Dir, err = p.NewScratch(); err != nil {
 			return "", err
 		}
+		defer func(scratch string) {
+			if err != nil {
+				os.RemoveAll(scratch)
+			}
+		}(req.Dir)
 	}
 	dir, err := folderAt(req.Dir)
 	if err != nil {
@@ -960,7 +964,7 @@ func (s *Server) startSession(ctx context.Context, req startReq) (string, error)
 	if _, ok := claude.ProfileNamed(req.Profile); !ok {
 		return "", badf("no Claude profile called %s on %s", req.Profile, s.Host)
 	}
-	id, err := s.M.CLI.Start(ctx, req.Profile, dir, req.Name, req.Prompt, extra...)
+	id, err = s.M.CLI.Start(ctx, req.Profile, dir, req.Name, req.Prompt, extra...)
 	if err == nil {
 		s.tag(ctx, id, func(m *store.Meta) { m.Engine = cmp.Or(req.Engine, m.Engine) })
 	}

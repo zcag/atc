@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 //go:embed private
@@ -59,6 +60,26 @@ func (p Profile) Init() error {
 		}
 	}
 	return nil
+}
+
+// Flags are the flags a session on p runs with, from atc's own: an ephemeral profile's sessions drop any that skip
+// Claude's permission checks, which would let them reach any network address without asking, and accept edits in
+// their own folder instead.
+func (p Profile) Flags(base []string) []string {
+	if !p.Ephemeral {
+		return base
+	}
+	var out []string
+	for i := 0; i < len(base); i++ {
+		switch a := base[i]; {
+		case a == "--dangerously-skip-permissions" || a == "--allow-dangerously-skip-permissions" || strings.HasPrefix(a, "--permission-mode="):
+		case a == "--permission-mode":
+			i++
+		default:
+			out = append(out, a)
+		}
+	}
+	return append(out, "--permission-mode", "acceptEdits")
 }
 
 // Prepare makes an ephemeral profile's Home, which a reboot removes: its folders, links to what Dir keeps, and a
@@ -118,6 +139,7 @@ func Erase(p Profile, sid string) error {
 				return err
 			}
 		}
+		os.Remove(filepath.Dir(m[0]))
 	}
 	return dropLines(filepath.Join(p.Home(), "history.jsonl"), sid)
 }

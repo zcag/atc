@@ -786,7 +786,9 @@ const rememberBay = (b, m) => {
   api(`/api/bays/${encodeURIComponent(b)}`, { method: "PATCH", body: { ...m, from: PAGE_ID } }).catch(() => {});
 };
 const AGENT_BAY = "agents";
-const bayOf = (s) => (!s ? null : homeless(s) || s.kind === "hub" ? AGENT_BAY : project(s.cwd).name);
+const PRIVATE_BAY = "private";
+const projectOf = (s) => (s.private ? PRIVATE_BAY : project(s.cwd).name);
+const bayOf = (s) => (!s ? null : homeless(s) || s.kind === "hub" ? AGENT_BAY : projectOf(s));
 const waiting = (s) => (s.state === "needs-you" || s.state === "your-turn") && !away(s);
 
 function baysOf(live, keep) {
@@ -2428,7 +2430,7 @@ function projectTabs(live, keep) {
   const by = new Map();
   for (const x of live) {
     if (x.state === "past" || x.state === "stopped" || homeless(x)) continue;
-    const n = project(x.cwd).name;
+    const n = projectOf(x);
     if (!by.has(n)) by.set(n, { name: n, pips: [], own: false, n: 0, resting: 0 });
     const t = by.get(n);
     t.own ||= !x.agent;
@@ -5284,7 +5286,7 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, onZen, say
   }, [p && pkey(p), p && pageAt(p)]);
   if (!p) return html`<div class="ppane"><div class="fbody"><p class="empty">No pages in this session yet.</p></div></div>`;
   const full = () => APP ? (location.hash = aloneLink(ownerRef(p, s), p.name)) : openOut(`/${aloneLink(ownerRef(p, s), p.name)}`);
-  const bay = bayOf(s) || (s.cwd && project(s.cwd).name) || null;
+  const bay = bayOf(s) || (s.cwd && projectOf(s)) || null;
   return html`
     <div class="ppane" tabindex="-1">
       <div class="pbar">
@@ -5589,7 +5591,7 @@ const STAGES = [
 const baseDir = (d) => (d || "").replace(/\/\.claude\/worktrees\/[^/]+$/, "");
 const here = (sel, live) => {
   if (sel?.cwd) return { dir: baseDir(sel.cwd), host: sel.host };
-  const s = BAY.only && live?.find((x) => x.cwd && project(x.cwd).name === BAY.only);
+  const s = BAY.only && live?.find((x) => x.cwd && projectOf(x) === BAY.only);
   if (!s) return true;
   const { rest } = project(s.cwd), dir = baseDir(s.cwd);
   return { dir: rest ? dir.slice(0, -rest.length - 1) : dir, host: s.host };
@@ -8663,8 +8665,8 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
     if (s.attachable) act("Stop", () => api(`/api/sessions/${s.sessionId}/stop?device=${encodeURIComponent(DEVICE)}`, { method: "POST" }).then(() => say("Stopped. Resume it any time.")), "end");
     act("Put on the backlog", () => putAside(s, say), "later aside backlog");
   }
-  for (const s of live) add("Sessions", s.title || "Untitled", { key: `s:${s.sessionId}`, s, extra: bayOf(s) || project(s.cwd).name, boost: STATE_BOOST[s.state] || 0,
-    sub: s.state === "working" && s.activity ? doing(s) : headline(s), bay: bayOf(s) || project(s.cwd).name, ago: ago(s),
+  for (const s of live) add("Sessions", s.title || "Untitled", { key: `s:${s.sessionId}`, s, extra: bayOf(s) || projectOf(s), boost: STATE_BOOST[s.state] || 0,
+    sub: s.state === "working" && s.activity ? doing(s) : headline(s), bay: bayOf(s) || projectOf(s), ago: ago(s),
     to: `#/s/${keyOf(s)}`, run: run(`s:${s.sessionId}`, () => go(keyOf(s))) });
   const liveIDs = new Set(live.map((s) => s.sessionId));
   for (const s of past.filter((s) => !liveIDs.has(s.sessionId))) add("Earlier", s.title || "Untitled", { s, extra: project(s.cwd).name, bay: project(s.cwd).name, ago: ago(s), sub: (s.lastFrom ? `${s.lastFrom}: ` : "") + oneLine(s.lastPrompt), to: `#/s/${s.sessionId}`, run: run(null, () => go(s.sessionId)) });

@@ -1,7 +1,24 @@
 {
   "autoMemoryEnabled": false,
   "permissions": {
-    "deny": ["Edit(~/**)", "Edit(//tmp/**)", "Edit(//var/tmp/**)", "Edit(//dev/shm/**)"]
+    "allow": ["WebFetch", "WebSearch"],
+    "deny": [
+      "Edit(~/**)",
+      "Edit(//tmp/**)",
+      "Edit(//var/tmp/**)",
+      "Edit(//dev/shm/**)",
+      "mcp__claude-artifacts",
+      "Artifact",
+      "ArtifactComments",
+      "ArtifactData",
+      "CronCreate",
+      "DesignSync",
+      "PushNotification",
+      "RemoteTrigger",
+      "SendFeedback",
+      "SendToProject",
+      "SendToProjectContext"
+    ]
   },
   "sandbox": {
     "enabled": true,
@@ -10,6 +27,9 @@
     "allowUnsandboxedCommands": false,
     "filesystem": {
       "denyRead": ["~/.config/atc", "~/.ssh"]
+    },
+    "network": {
+      "allowedDomains": []
     }
   }
 }

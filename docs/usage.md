@@ -88,8 +88,11 @@ The first makes an ephemeral profile. Its sessions keep their whole Claude Code 
 job, file history, temporary files) in `$XDG_RUNTIME_DIR/atc-private`, which is in memory and empties when the
 machine restarts. `~/.claude-private` keeps only what outlasts that: a `CLAUDE.md` and `settings.json` of its own,
 which you can change, and the long-lived token `atc profile login` gets from `claude setup-token`. The settings
-turn off memory, keep Bash in Claude's sandbox (bubblewrap on Linux) and deny edits outside the session's folder;
-the profile has no MCP servers and no claude.ai connectors, and links nothing from `~/.claude`.
+turn off memory, keep Bash in Claude's sandbox (bubblewrap on Linux) with no network, deny edits outside the
+session's folder and the tools that publish or message (artifacts, pushes, remote triggers), and allow WebFetch and
+WebSearch; the profile has no MCP servers and no claude.ai connectors, and links nothing from `~/.claude`. Its
+sessions run in `acceptEdits` mode whatever `ATC_CLAUDE_ARGS` says: skipping permissions would let them reach any
+address without asking, so a command that wants the network asks you instead.
 
 Restart atc and New session has a **Private** switch. A private session starts in an empty folder of its own. Your
 agents can't list, read or write to it through atc, it is left out of history and the backlog, it gets no turn

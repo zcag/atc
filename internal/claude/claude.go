@@ -128,7 +128,7 @@ func (c CLI) Start(ctx context.Context, profile, dir, name, prompt string, extra
 			return "", fmt.Errorf("no Claude profile called %q here", profile)
 		}
 	}
-	args := append(append([]string{"--bg"}, c.Args...), extra...)
+	args := append([]string{"--bg"}, p.Flags(append(slices.Clone(c.Args), extra...))...)
 	if name != "" {
 		args = append(args, "--name", name)
 	}
@@ -145,7 +145,7 @@ func (c CLI) Start(ctx context.Context, profile, dir, name, prompt string, extra
 // Resume reopens a conversation as the profile that keeps its transcript: no other account can see it.
 func (c CLI) Resume(ctx context.Context, dir, sessionID string, extra ...string) (string, error) {
 	p := ProfileOfSession(sessionID)
-	args := append(append([]string{"--bg"}, c.Args...), extra...)
+	args := append([]string{"--bg"}, p.Flags(append(slices.Clone(c.Args), extra...))...)
 	out, err := c.bg(ctx, p, dir, append(args, "--resume", sessionID)...)
 	if err != nil {
 		return "", err
