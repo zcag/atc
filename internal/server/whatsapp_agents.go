@@ -221,12 +221,12 @@ func (s *Server) ensureAgentGroups(ctx context.Context) error {
 		return slices.ContainsFunc(list, func(x whatsapp.Group) bool { return x.ID == id })
 	}
 	changed := false
-	ensure := func(key, name, have string) (string, error) {
+	ensure := func(key, name, have string, also ...string) (string, error) {
 		if have != "" && in(have) {
 			return have, nil
 		}
 		for _, x := range list {
-			if x.Name != name {
+			if !slices.ContainsFunc(append([]string{name}, also...), func(n string) bool { return strings.EqualFold(strings.TrimSpace(x.Name), n) }) {
 				continue
 			}
 			if full, err := wa.Group(ctx, x.ID); err == nil && wa.OnlyOwner(ctx, full) && !slices.Contains(g.ids(), x.ID) {
@@ -240,7 +240,7 @@ func (s *Server) ensureAgentGroups(ctx context.Context) error {
 		g.mu.Unlock()
 		made, err := wa.CreateGroup(ctx, name)
 		if made.ID == "" {
-			return "", err
+			return "", fmt.Errorf("could not make its group (%w); a group called %q with only the user and the account in it is taken instead", err, name)
 		}
 		if err != nil {
 			log.Printf("whatsapp: made %s's group %q, but could not lock it: %v", key, name, err)
@@ -250,8 +250,8 @@ func (s *Server) ensureAgentGroups(ctx context.Context) error {
 		return made.ID, nil
 	}
 	var errs []error
-	bind := func(key, name, have string, set func(id string)) {
-		id, err := ensure(key, name, have)
+	bind := func(key, name, have string, set func(id string), also ...string) {
+		id, err := ensure(key, name, have, also...)
 		g.mu.Lock()
 		if err == nil {
 			set(id)
@@ -264,7 +264,7 @@ func (s *Server) ensureAgentGroups(ctx context.Context) error {
 		}
 	}
 	for _, a := range want {
-		bind("@"+a.Name, waGroupName(a), g.agentGroup(a.Name), func(id string) { g.b.Agents[a.Name] = id })
+		bind("@"+a.Name, waGroupName(a), g.agentGroup(a.Name), func(id string) { g.b.Agents[a.Name] = id }, a.label(), a.Name)
 	}
 	bind("sessions", waSessionsGroup, g.sessionsGroup(), func(id string) { g.b.Sessions = id })
 	if changed {

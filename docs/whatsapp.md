@@ -138,9 +138,12 @@ and its answer comes back with `atc wa`. So your chat with the account stays the
 are all that write there. Without any agent asking for a group there is no Sessions either, and `atc wa` reaches your
 chat as before.
 
-atc makes the groups itself within ten minutes of an agent asking for one (it takes a group of that name that is only
-you and the account, when there is one), locks them so only the account can rename them or add people, and keeps
-which is whose in `whatsapp-groups.json` in its state folder. These groups never reach the guests' conversation:
+atc makes the groups itself within ten minutes of an agent asking for one and locks them so only the account can
+rename them or add people. It takes a group that is already there instead, when one is only you and the account and
+is called the agent's group name, its title or its name (any case; `Sessions` for that one). OpenWA's whatsapp-web.js
+engine can't make groups (its Baileys engine can), so with it you make each group yourself, from your phone with the
+account's number, and atc takes it within ten minutes; the log says which are missing. It keeps which is whose in
+`whatsapp-groups.json` in its state folder. These groups never reach the guests' conversation:
 `atc group` lists them as `@name` or `sessions`, they can't be made quiet, and `atc wa --group` refuses them. Only
 you talk there: anyone else's message is ignored, and you are told once. WhatsApp's Communities can bundle them under
 one name, but OpenWA can't make one, so that is done on the account's phone.

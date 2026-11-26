@@ -301,7 +301,7 @@ func TestAgentGroupsAreMadeOrTaken(t *testing.T) {
 	s, _, _, gw := groupsServer(t, false)
 	gw.mu.Lock()
 	delete(gw.groups, opsGroup)
-	gw.groups["40@g.us"] = "Sessions"
+	gw.groups["40@g.us"] = "sessions "
 	delete(gw.groups, sessGroup)
 	gw.mu.Unlock()
 	if err := s.ensureAgentGroups(context.Background()); err != nil {
