@@ -1,4 +1,4 @@
-// Deleting a session hides its row at once with an Undo toast and sends the DELETE only when the toast runs out;
+// Deleting a session asks once (Enter confirms), then hides its row with an Undo toast and sends the DELETE only when the toast runs out;
 // a private session keeps its Erase dialog and gets no hover x.
 const { chromium } = require('playwright-core');
 const { fakeSessions } = require('./fake');
@@ -35,6 +35,7 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
     await p.waitForTimeout(500);
     const tag = `${w}-${scheme}`;
     const row = (i) => p.$(`[data-sid^="del${i}"]`);
+    const confirmDel = async () => { await p.waitForSelector('.dlgveil'); await p.keyboard.press('Enter'); await p.waitForTimeout(300); };
     if (w >= 900) {
       ok(!(await p.$('.rdel:visible')), `${tag}: no x on a calm list`);
       await p.hover('[data-sid^="del1"]');
@@ -44,6 +45,7 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
       ok(!(await p.$('.rdel:visible')), `${tag}: no x on a private row`);
       await p.hover('[data-sid^="del1"]');
       await p.click('.bwrap:hover > .rdel');
+      await confirmDel();
       await p.waitForTimeout(200);
       ok(!(await row(1)), `${tag}: the row goes at once`);
       ok((await p.textContent('.toast .tmsg')) === 'Deleted “Sample session 1”.', `${tag}: toast says what was deleted`);
@@ -58,9 +60,11 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
       const cur = await p.$eval('.brow.cur', (e) => e.dataset.sid);
       await p.screenshot({ path: `${out}/board-cursor-${tag}.png` });
       await p.keyboard.press('Delete');
+      await confirmDel();
       await p.waitForTimeout(100);
       ok(!(await p.$(`[data-sid="${cur}"]`)), `${tag}: Delete on the cursor row deletes it`);
       await p.keyboard.press('Delete');
+      await confirmDel();
       await p.waitForTimeout(100);
       ok(dels.length === 0, `${tag}: two queued, none sent`);
       await p.waitForTimeout(8500);
@@ -73,6 +77,7 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
       await p.mouse.move(700, 500);
       await p.screenshot({ path: `${out}/rail-sel-${tag}.png` });
       await p.keyboard.press('Delete');
+      await confirmDel();
       await p.waitForTimeout(300);
       ok(!(await p.evaluate(() => location.hash.startsWith('#/s/del5'))), `${tag}: Delete in the session leaves it`);
       await p.keyboard.press('z');
@@ -83,8 +88,9 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
       ok(labels.includes('Delete') && !labels.includes('Delete…'), `${tag}: More says Delete, no dialog`);
       await p.screenshot({ path: `${out}/more-${tag}.png` });
       await p.click('.hd .more .mitem.danger');
+      await confirmDel();
       await p.waitForTimeout(200);
-      ok(!(await p.$('.veil')), `${tag}: no confirm dialog`);
+      ok(!(await p.$('.veil')), `${tag}: the confirm closed after Enter`);
       await p.evaluate(() => dispatchEvent(new Event('pagehide')));
       await p.waitForTimeout(300);
       ok(dels.length === 1, `${tag}: leaving the page sends it right away`);
@@ -110,8 +116,9 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
       ok(labels.includes('Delete'), `${tag}: the sheet has Delete`);
       await p.screenshot({ path: `${out}/phone-sheet-${tag}.png` });
       await p.click('.msheet .mitem.danger');
+      await confirmDel();
       await p.waitForTimeout(200);
-      ok(!(await row(2)) && !(await p.$('.veil:not(.mveil)')), `${tag}: Delete from the sheet hides it, no dialog`);
+      ok(!(await row(2)) && !(await p.$('.veil:not(.mveil)')), `${tag}: Delete from the sheet asks, then hides it`);
       await p.screenshot({ path: `${out}/phone-toast-${tag}.png` });
     }
     await ctx.close();

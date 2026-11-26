@@ -2547,6 +2547,12 @@ addEventListener("pagehide", sendDeletes);
 document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && sendDeletes());
 function deleteLater(s, say, leave) {
   if (DOOMED.has(s.sessionId)) return;
+  ask({ title: `Delete “${s.title || "Untitled"}”?`, body: "Its conversation stays in history, where you can resume it.", ok: "Delete", danger: true })
+    .then((ok) => ok && dropSession(s, say, leave));
+}
+
+function dropSession(s, say, leave) {
+  if (DOOMED.has(s.sessionId)) return;
   const from = (leave || isOpen(s)) && location.hash;
   if (from) (leave || backHome)();
   DOOMED.set(s.sessionId, { s, say, timer: setTimeout(() => sendDelete(s.sessionId), 8000) });
