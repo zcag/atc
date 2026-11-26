@@ -14,6 +14,7 @@ class Palette(
     val lineStrong get() = ColorUtils.blendARGB(line, ink, .35f)
     val needsText get() = if (dark) needs else ColorUtils.blendARGB(needs, ink, .45f)
     val wash get() = ColorUtils.blendARGB(board, needs, if (dark) .1f else .2f)
+    val sunk get() = if (dark) ColorUtils.blendARGB(board, Color.BLACK, .25f) else ColorUtils.blendARGB(board, ink, .06f)
 }
 
 object Look {

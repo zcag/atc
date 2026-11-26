@@ -516,21 +516,22 @@ class MainActivity : Activity() {
         val k = Ui(this)
         val tailscale = packageManager.getLaunchIntentForPackage("com.tailscale.ipn")?.takeIf { !refused }
         val since = java.text.SimpleDateFormat("HH:mm", java.util.Locale.ROOT).format(java.util.Date())
-        val retryNow = k.button("Retry", primary = true) { ui.removeCallbacks(retry); retry.run() }
-        val v = k.column(k.dp(10),
-            k.heading(if (refused) "atc refused ${serverHost()}" else "Offline since $since"),
-            k.text(if (refused) "${why.replaceFirstChar { it.uppercase() }}, so atc did not connect and sent it nothing."
-                else "${serverHost()} did not answer ($why). atc tries again on its own and opens as soon as it answers.", 14f, k.pal.dim),
-            if (refused) k.text("If its certificate changed on purpose, choose Change server and enter the address again.", 14f, k.pal.dim)
-            else tailscale?.let { k.text("If you reach it over Tailscale, check that Tailscale is connected.", 14f, k.pal.dim) },
-            k.actions(listOfNotNull(
-                if (refused) k.button("Change server", quiet = true) { setup() } else null,
-                tailscale?.let { t -> k.button("Open Tailscale") { startActivity(t) } },
-                retryNow,
-            ), grow = retryNow),
+        val retryNow = k.button("Retry") { ui.removeCallbacks(retry); retry.run() }.apply { minHeight = k.dp(32) }
+        val line = if (refused) android.text.SpannableStringBuilder("atc refused ").append(k.mono(serverHost().orEmpty())).append(".")
+            else android.text.SpannableStringBuilder("Offline since ").append(k.mono(since)).append(".")
+        val v = k.column(0,
+            k.staleLine(line, retryNow),
+            k.column(k.dp(10),
+                k.text(if (refused) "${why.replaceFirstChar { it.uppercase() }}, so atc did not connect and sent it nothing."
+                    else "${serverHost()} did not answer ($why). atc tries again on its own and opens as soon as it answers.", 14f, k.pal.dim),
+                if (refused) k.text("If its certificate changed on purpose, choose Change server and enter the address again.", 14f, k.pal.dim)
+                else tailscale?.let { k.text("If you reach it over Tailscale, check that Tailscale is connected.", 14f, k.pal.dim) },
+                k.actions(listOfNotNull(
+                    if (refused) k.button("Change server") { setup() } else null,
+                    tailscale?.let { t -> k.button("Open Tailscale") { startActivity(t) } },
+                )).apply { gravity = Gravity.START },
+            ).apply { setPadding(k.dp(16), k.dp(16), k.dp(16), k.dp(16)) },
         ).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(k.dp(18), k.dp(22), k.dp(18), k.dp(16))
             setBackgroundColor(k.pal.board)
             setOnClickListener {}
         }

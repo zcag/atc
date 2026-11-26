@@ -83,6 +83,20 @@ class Ui(val c: Context, val pal: Palette = Look.palette(c)) {
         }
     }
 
+    /** The web's stale line: the off icon, what is stale since when, and Retry, on the sunk strip with a hairline under it. */
+    fun staleLine(what: CharSequence, retry: TextView?) = LinearLayout(c).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = dp(44)
+        setPadding(dp(16), dp(8), dp(12), dp(8))
+        background = android.graphics.drawable.LayerDrawable(arrayOf(ColorDrawable(pal.line), ColorDrawable(pal.sunk))).apply { setLayerInset(1, 0, 0, 0, dp(1)) }
+        addView(View(c).apply { background = StrokeIcon(OFF_ICON, pal.dim) }, LinearLayout.LayoutParams(dp(16), dp(16)).apply { marginEnd = dp(12) })
+        addView(text(what, 14f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        retry?.let { addView(it, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = dp(12) }) }
+    }
+
+    fun mono(s: String) = android.text.SpannableString(s).apply { setSpan(android.text.style.TypefaceSpan("monospace"), 0, s.length, 0) }
+
     fun column(gap: Int, vararg views: View?) = LinearLayout(c).apply {
         orientation = LinearLayout.VERTICAL
         views.filterNotNull().forEachIndexed { i, v ->
@@ -146,4 +160,29 @@ class Ui(val c: Context, val pal: Palette = Look.palette(c)) {
 
     fun message(title: String, message: String, vararg acts: Act) =
         dialog(title, body = text(message, 14f, pal.dim).apply { setTextIsSelectable(true) }, acts = acts.toList().ifEmpty { listOf(Act("OK", primary = true)) })
+}
+
+/** The page's 16px line icons, from the same path data. */
+const val OFF_ICON = "M2 2l12 12M5.5 5.6A3.5 3.5 0 0 0 4.5 12H11M7 4.1A4 4 0 0 1 12 7.5a2.3 2.3 0 0 1 1.6 3.8"
+
+class StrokeIcon(path: String, color: Int) : android.graphics.drawable.Drawable() {
+    private val path = androidx.core.graphics.PathParser.createPathFromPathData(path)
+    private val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.STROKE
+        strokeWidth = 1.5f
+        strokeCap = android.graphics.Paint.Cap.ROUND
+        strokeJoin = android.graphics.Paint.Join.ROUND
+        this.color = color
+    }
+    override fun draw(canvas: android.graphics.Canvas) {
+        canvas.save()
+        canvas.translate(bounds.left.toFloat(), bounds.top.toFloat())
+        canvas.scale(bounds.width() / 16f, bounds.height() / 16f)
+        canvas.drawPath(path, paint)
+        canvas.restore()
+    }
+    override fun setAlpha(alpha: Int) { paint.alpha = alpha }
+    override fun setColorFilter(cf: android.graphics.ColorFilter?) { paint.colorFilter = cf }
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
 }
