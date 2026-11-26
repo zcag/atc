@@ -1658,9 +1658,12 @@ function TalkButton({ small }) {
   return html`<button class="btn talkb ${small ? "small" : ""} ${st.talking ? "on" : ""}" aria-pressed=${st.talking} disabled=${st.phase !== "active"}
     onPointerDown=${(e) => { e.currentTarget.setPointerCapture(e.pointerId); Call.press(); }}
     onPointerUp=${Call.release} onPointerCancel=${Call.release} onLostPointerCapture=${Call.release}
-    onContextMenu=${(e) => e.preventDefault()} aria-keyshortcuts="Space">
-    ${st.talking ? (small ? "Talking" : "Talking, let go to send") : (small ? "Talk" : "Hold to talk")}</button>`;
+    onContextMenu=${(e) => e.preventDefault()} aria-keyshortcuts="Space" title="Hold to talk (space)">
+    ${ICON.mic}${st.talking ? (small ? "Talking" : "Talking, let go to send") : (small ? "Talk" : "Hold to talk")}</button>`;
 }
+
+const MuteButton = ({ st, cls = "btn" }) => html`<button class="${cls} ${st.muted ? "on" : ""}" aria-pressed=${st.muted} onClick=${Call.mute} aria-keyshortcuts="m" title=${tip("mute")}>${ICON.muted}${st.muted ? "Unmute" : "Mute"}</button>`;
+const EndButton = ({ cls = "btn" }) => html`<button class="${cls} end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E" title=${tip("hangup")}>${ICON.x}End</button>`;
 
 /** Who the call is with: the assistant and the agents that can talk. A tap moves the line; saying so does the same. */
 function LineStrip() {
@@ -1740,20 +1743,20 @@ function CallPanel({ hub, live, captions, full, onMin }) {
     ${on && st.ptt && html`<div class="ctalk"><${TalkButton} /></div>`}
     <div class="ctl ${on ? "live" : ""}">
       ${st.phase === "ringing" ? html`<${RingButtons} />` : on ? html`
-        <button class="btn ${st.ptt ? "on" : ""}" aria-pressed=${st.ptt} aria-label="Push to talk" onClick=${Call.togglePtt} aria-keyshortcuts="t" title=${tip("ptt", "Push to talk: the microphone stays closed unless you hold the talk button")}>PTT</button>
-        ${!st.ptt && html`<button class="btn ${st.muted ? "on" : ""}" aria-pressed=${st.muted} onClick=${Call.mute} aria-keyshortcuts="m" title=${tip("mute")}>${st.muted ? "Unmute" : "Mute"}</button>`}
-        <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)} title="Who the assistant is in each language: character, room and voice">Person</button>
-        <button class="btn end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E" title=${tip("hangup")}>End</button>`
-      : st.phase !== "ended" && html`<button class="btn primary" onClick=${callOrSetup}>Call the assistant</button>
-        <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)}>Person</button>`}
+        ${!st.ptt && html`<${MuteButton} st=${st} />`}
+        <button class="btn icon ${st.ptt ? "on" : ""}" aria-pressed=${st.ptt} aria-label="Push to talk" onClick=${Call.togglePtt} aria-keyshortcuts="t" title=${tip("ptt", "Push to talk: the microphone stays closed unless you hold Talk")}>${ICON.mic}</button>
+        <button class="btn icon ${opts ? "on" : ""}" aria-pressed=${opts} aria-label="Person" onClick=${() => setOpts(!opts)} title="Who the assistant is in each language: character, room and voice">${ICON.user}</button>
+        <${EndButton} />`
+      : st.phase !== "ended" && html`<button class="btn primary" onClick=${callOrSetup}>${ICON.phone}Call the assistant</button>
+        <button class="btn ${opts ? "on" : ""}" aria-pressed=${opts} onClick=${() => setOpts(!opts)}>${ICON.user}Person</button>`}
     </div>
   </aside>`;
 }
 
 function RingButtons({ small }) {
-  const cls = small ? "kb" : "btn";
-  return html`<button class="${cls} end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E" title="Decline (shift e)">Decline</button>
-    <button class="${cls} answer" onClick=${Call.answer} aria-keyshortcuts="Shift+A" title=${tip("pickup")}>Answer</button>`;
+  const cls = small ? "btn sm" : "btn";
+  return html`<button class="${cls} end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E" title="Decline (shift e)">${ICON.x}Decline</button>
+    <button class="${cls} answer" onClick=${Call.answer} aria-keyshortcuts="Shift+A" title=${tip("pickup")}>${ICON.phone}Answer</button>`;
 }
 
 /** Desktop: the call docked on the right of whatever is open. Minimized, the console line carries it. */
@@ -1794,8 +1797,8 @@ function CallPill() {
   if (!phone || !Call.live()) return null;
   return html`<div class="callpill" role="group" aria-label="Call">
     <button class="back" onClick=${returnToCall} aria-label="Back to the call"><${CallMark} /><${Trace} /><span class="w">${onLine(Call.face())}</span></button>
-    ${Call.get().phase === "ringing" ? html`<button class="btn end" onClick=${Call.hangup}>Decline</button><button class="btn answer" onClick=${Call.answer}>Answer</button>`
-      : html`${Call.get().ptt && html`<${TalkButton} small />`}<button class="btn end" onClick=${Call.hangup}>End</button>`}
+    ${Call.get().phase === "ringing" ? html`<${RingButtons} />`
+      : html`${Call.get().ptt && html`<${TalkButton} small />`}<${EndButton} />`}
   </div>`;
 }
 
@@ -1805,9 +1808,9 @@ function CallLine({ docked }) {
   return html`<footer class="console callline" aria-label="Call">
     <button class="back" onClick=${returnToCall} aria-keyshortcuts="." title=${docked ? "The call" : "Back to the call"}>
       <${CallMark} />${!docked && html`<${Trace} />`}<span class="w">${onLine(f)}</span><span class="said">${st.phase === "ringing" ? st.reason : f.said || callDoing(f)}</span></button>
-    ${!docked && html`<button class="kb" onClick=${returnToCall} tabindex="-1" title="Back to the call (.)">Return</button>`}
-    ${st.phase === "ringing" ? html`<${RingButtons} small />` : html`${st.ptt && html`<${TalkButton} small />`}
-    <button class="kb end" onClick=${Call.hangup} aria-keyshortcuts="Shift+E" title=${tip("hangup")}>End</button>`}
+    ${!docked && html`<button class="btn sm quiet" onClick=${returnToCall} tabindex="-1" title="Back to the call (.)">Return</button>`}
+    ${st.phase === "ringing" ? html`<${RingButtons} small />` : html`${st.ptt ? html`<${TalkButton} small />` : html`<${MuteButton} st=${st} cls="btn sm" />`}
+    <${EndButton} cls="btn sm" />`}
   </footer>`;
 }
 
@@ -2246,6 +2249,8 @@ const ICON_PATHS = {
   page: '<path d="M4 2h5.5L12 4.5V14H4z"/><path d="M6 7h4M6 9.5h4M6 12h2.5"/>',
   doc: '<path d="M4 2h5.5L12 4.5V14H4z"/><path d="M6 7h4M6 9.5h4M6 12h2.5"/>',
   mic: '<rect x="6" y="2" width="4" height="7.5" rx="2"/><path d="M3.8 8a4.2 4.2 0 0 0 8.4 0M8 12.2V14"/>',
+  muted: '<path d="M6 4a2 2 0 0 1 4 0v3.5M3.8 8a4.2 4.2 0 0 0 7 3.1M8 12.2V14M2.5 2.5l11 11"/>',
+  user: '<circle cx="8" cy="5.5" r="2.8"/><path d="M2.8 14a5.2 5.2 0 0 1 10.4 0"/>',
   phone: '<path d="M4.5 2.5h2l1 3-1.5 1a7 7 0 0 0 3.5 3.5l1-1.5 3 1v2a1.5 1.5 0 0 1-1.5 1.5A10.5 10.5 0 0 1 3 4a1.5 1.5 0 0 1 1.5-1.5z"/>',
   chat: '<path d="M2.5 3.5h11v7.5H7l-3 2.5V11H2.5z"/>',
   screen: '<path d="M2 3.5h12v8H2zM6 14h4"/>',
