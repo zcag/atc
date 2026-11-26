@@ -380,16 +380,21 @@ function App() {
   useEffect(() => {
     if (!me) return;
     const es = new EventSource("/api/events");
-    let pinged = false, lost = 0;
+    let pinged = false, lost = 0, raw = [];
+    SHOW_LIVE = () => {
+      LIVE = DOOMED.size ? raw.filter((x) => !doomed(x)) : raw;
+      LIVE_NAMES = LIVE.map((x) => `${keyOf(x)}:${x.title}:${x.agent || ""}`).join("|");
+      setLive(LIVE);
+      dispatchEvent(new Event("atc-live"));
+    };
     const hear = () => { if (navigator.onLine === false) return; HEARD = Date.now(); clearTimeout(lost); lost = 0; setOff(0); };
     const drop = (now) => { if (now) return setOff(HEARD || Date.now()); lost ||= setTimeout(() => setOff(HEARD || Date.now()), 4000); };
     es.onopen = hear;
     es.addEventListener("ping", () => { pinged = true; hear(); });
     es.addEventListener("sessions", (e) => {
-      LIVE = steady(JSON.parse(e.data) || []);
-      LIVE_NAMES = LIVE.map((x) => `${keyOf(x)}:${x.title}:${x.agent || ""}`).join("|");
-      setLive(LIVE);
-      dispatchEvent(new Event("atc-live"));
+      raw = steady(JSON.parse(e.data) || []);
+      DOOMED.forEach((d, sid) => d.done && !raw.some((x) => x.sessionId === sid) && DOOMED.delete(sid));
+      SHOW_LIVE();
       hear();
     });
     es.addEventListener("look", (e) => LOOK.adopt(JSON.parse(e.data)));
@@ -633,6 +638,13 @@ function App() {
         e.preventDefault();
         const x = k.ordered.find((x) => x.sessionId === k.cursor);
         if (x) go(keyOf(x));
+      } else if ((e.key === "Delete" || e.key === "Backspace") && k.cursor && k.list && !k.route) {
+        const x = k.ordered.find((x) => x.sessionId === k.cursor);
+        if (!x || !canDelete(x)) return;
+        e.preventDefault();
+        const near = [step(x.sessionId, 1), step(x.sessionId, -1)].find((y) => y && y.sessionId !== x.sessionId);
+        setCursor(near?.sessionId || null);
+        deleteLater(x, say);
       } else if (act) {
         e.preventDefault(); act();
       } else if (e.key === "Escape") {
@@ -1175,7 +1187,7 @@ function bayLists(live, hist, only) {
   const mine = (s) => (only ? bayOf(s) === only : true);
   const now = (live || []).filter(mine);
   const ids = new Set((live || []).map((s) => s.sessionId));
-  const past = (hist || []).filter((s) => !ids.has(s.sessionId) && mine(s));
+  const past = (hist || []).filter((s) => !ids.has(s.sessionId) && !doomed(s) && mine(s));
   const earlier = [...now.filter((s) => groupOf(s) === "earlier"), ...past.filter((s) => !cutOff(s))]
     .sort((a, b) => (Date.parse(b.updated || b.startedAt || 0) || 0) - (Date.parse(a.updated || a.startedAt || 0) || 0));
   const by = Object.fromEntries(GROUPS.map(([k]) => [k, []]));
@@ -1211,6 +1223,9 @@ const resumeFrom = (s, say) => resumeSession(s).then((r) => go(r.id), (e) => say
 const branchOf = (s) => s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch;
 const swipeable = (s) => s.state !== "past" && s.state !== "stopped";
 
+const DelX = ({ s, say }) => say && canDelete(s) && html`<button class="rdel" tabindex="-1" aria-label=${`Delete “${s.title || "Untitled"}”`} aria-keyshortcuts=${ariaKeys("delete")}
+  title=${tip("delete", "Delete: its conversation stays in history")} onClick=${(e) => { e.stopPropagation(); deleteLater(s, say); }}>${ICON.x}</button>`;
+
 function ResumeBtn({ s, say }) {
   const [busy, setBusy] = useState(false);
   return html`<button class="btn sm rsm" aria-busy=${busy} onClick=${(e) => { e.stopPropagation(); setBusy(true); resumeFrom(s, say).finally(() => setBusy(false)); }}>${ICON.play}Resume</button>`;
@@ -1229,6 +1244,7 @@ function RailRow({ s, sel, cursor, say, qk, when }) {
         <span class="e2">${s.load && hotLoad(s.load) && html`<${LoadTag} s=${s} />`}${s.shown?.length > 0 && html`<span class="pg" title=${plural(s.shown.length, "page")}>${ICON.page}</span>`}${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span></span>
     </button>
     ${canResume(s) && html`<${ResumeBtn} s=${s} say=${say} />`}
+    <${DelX} s=${s} say=${say} />
     ${ask && html`<div class="rask"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}
   </div>`;
 }
@@ -1266,6 +1282,7 @@ function BoardRow({ s, open, toggle, sel, cursor, say, qk, when }) {
         <span class="since" title=${stamp(rowAt(s))}><span>${fresh && html`<i class="dot" aria-hidden="true"></i>`}${when || ago(s)}</span>${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span>
       </div>
       ${canResume(s) && html`<${ResumeBtn} s=${s} say=${say} />`}
+      <${DelX} s=${s} say=${say} />
       ${open && html`<div class="bexp">
         <div class="gx">
           ${s.summary?.gist?.length > 0 && html`<ul>${s.summary.gist.map((x) => html`<li>${x}</li>`)}</ul>`}
@@ -2512,7 +2529,39 @@ const openTerm = (s, tries = 30) => {
   t();
 };
 
-function sessionActions(s, say, { rename, open, after } = {}) {
+const DOOMED = new Map();
+let SHOW_LIVE = () => {};
+const doomed = (x) => DOOMED.has(x.sessionId);
+const canDelete = (s) => !!s.id && !s.private;
+const isOpen = (s) => [s.id, s.sessionId].some((k) => k && location.hash.startsWith(`#/s/${k}`));
+const sendDelete = (sid, keepalive) => {
+  const d = DOOMED.get(sid);
+  if (!d || d.sent) return;
+  clearTimeout(d.timer);
+  d.sent = true;
+  api(`/api/sessions/${d.s.id}`, { method: "DELETE", keepalive }).then(() => (d.done = true),
+    (e) => { DOOMED.delete(sid); SHOW_LIVE(); d.say(`Couldn't delete “${d.s.title || "Untitled"}”: ${e.message}`); });
+};
+const sendDeletes = () => DOOMED.forEach((_, sid) => sendDelete(sid, true));
+addEventListener("pagehide", sendDeletes);
+document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && sendDeletes());
+function deleteLater(s, say, leave) {
+  if (DOOMED.has(s.sessionId)) return;
+  const from = (leave || isOpen(s)) && location.hash;
+  if (from) (leave || backHome)();
+  DOOMED.set(s.sessionId, { s, say, timer: setTimeout(() => sendDelete(s.sessionId), 8000) });
+  SHOW_LIVE();
+  say(`Deleted “${s.title || "Untitled"}”.`, { undo: () => {
+    const d = DOOMED.get(s.sessionId);
+    if (!d || d.sent) return;
+    clearTimeout(d.timer);
+    DOOMED.delete(s.sessionId);
+    SHOW_LIVE();
+    if (from && location.hash !== from) location.hash = from;
+  } });
+}
+
+function sessionActions(s, say, { rename, open, after, leave, delKey = "delete" } = {}) {
   const run = (fn, done) => async () => {
     try {
       const r = await fn();
@@ -2536,11 +2585,11 @@ function sessionActions(s, say, { rename, open, after } = {}) {
   if (s.agent && s.state !== "past") items.push({ label: "Start over", icon: "refresh", title: "It writes a handover note and a new conversation starts from it", run: run(() => agentApi(s.agent, "reset"), () => say(`${s.title} is starting over.`)) });
   items.push("-");
   if (s.attachable) items.push({ label: "Stop", icon: "stop", run: run(() => api(`/api/sessions/${s.id}/stop?device=${encodeURIComponent(DEVICE)}`, { method: "POST" }), () => say("Stopped. Resume it any time.")) });
-  if (s.id)
-    items.push({ label: s.private ? "Erase…" : "Delete…", icon: "x", danger: true, run: () => ask({ title: `${s.private ? "Erase" : "Delete"} “${s.title || "Untitled"}”?`,
-      body: s.private ? "It ends, and its conversation, folder and files are deleted for good." : "Its conversation stays in history, where you can resume it.",
-      ok: s.private ? "Erase" : "Delete", busy: s.private ? "Erasing…" : "Deleting…", danger: true, run: () => api(`/api/sessions/${s.id}`, { method: "DELETE" }) })
-      .then((r) => { r && [s.id, s.sessionId].some((k) => location.hash.startsWith(`#/s/${k}`)) && location.replace("#/"); after && after(); }) });
+  if (s.id && s.private)
+    items.push({ label: "Erase…", icon: "x", danger: true, run: () => ask({ title: `Erase “${s.title || "Untitled"}”?`, body: "It ends, and its conversation, folder and files are deleted for good.",
+      ok: "Erase", busy: "Erasing…", danger: true, run: () => api(`/api/sessions/${s.id}`, { method: "DELETE" }) })
+      .then((r) => { r && isOpen(s) && location.replace("#/"); after && after(); }) });
+  else if (canDelete(s)) items.push({ label: "Delete", icon: "x", danger: true, key: delKey, title: "Its conversation stays in history, where you can resume it", run: () => { deleteLater(s, say, leave); after && after(); } });
   items.push("-");
   return items;
 }
@@ -2700,6 +2749,7 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
       else if (e.key === "\\") { e.preventDefault(); openState(); }
       else if (e.key === "]" && shown.length) { e.preventDefault(); choose(mode === "page" ? paneFor(s) : "page"); }
       else if (e.key === "x") { e.preventDefault(); document.querySelector(".hd .more button")?.click(); }
+      else if ((e.key === "Delete" || e.key === "Backspace") && !e.defaultPrevented && canDelete(s) && !document.querySelector("[role=menu]")) { e.preventDefault(); deleteLater(s, say, back); }
     };
     addEventListener("keydown", k);
     return () => removeEventListener("keydown", k);
@@ -2762,7 +2812,7 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
               ...(chatMenu ? [{ label: "Zen", icon: "zen", key: "zen", run: () => TX_API?.zen() }, { label: "Find in the transcript", icon: "search", key: "find", run: () => TX_API?.find() }, { label: "Contents", icon: "list", key: "contents", run: () => TX_API?.contents() }, { label: "Outline, story or everything", icon: "doc", key: "level", run: () => TX_API?.level() }] : []),
               "-", { icon: "phone", ...callSession(s, say) }, { label: "Files, commits and deploys", icon: "folder", run: () => showStateSection(".outs") },
               { label: "Usage", icon: "chart", run: () => setShowUse(true) }, ...(s.agent ? [{ label: "Agent details", icon: "people", run: () => openAgent(s.agent, "details") }] : []),
-              ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) })]} /></div>
+              ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false), leave: back, delKey: "session.delete" })]} /></div>
         </span>
       </div>
       ${phoneNow && html`<nav class="stabs" aria-label="View">

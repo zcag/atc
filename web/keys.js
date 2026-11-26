@@ -23,6 +23,7 @@ export const KEY_GROUPS = [
     ["altmove", "alt j k", "Next, previous session, even from a terminal"],
     ["open", "enter", "Open the selected row; on Pages: a note to its session"],
     ["expand", "space", "On the board: unfold the selected row"],
+    ["delete", "delete", "Delete the selected session: z brings it back", "backspace"],
     ["rail", "[", "Show or hide the sessions beside the transcript"],
     ["pages.index", "[", "On Pages: the index"],
     ["index", "]", "On the board: the page index"],
@@ -39,6 +40,7 @@ export const KEY_GROUPS = [
     ["state", "\\", "State: the summary, its outputs and the facts"],
     ["page", "]", "Its page beside the transcript"],
     ["menu", "x", "Session menu: park, stop, rename, delete"],
+    ["session.delete", "delete", "Delete it: z brings it back, and its conversation stays in history", "backspace"],
     ["send", "enter", "In the composer: send; while it works, queue"],
     ["stop", "esc", "Empty composer while it works: stop it (asks first)"],
     ["slash", "/", "At the start of the composer: slash commands, ↑ ↓ to choose, tab to complete"],
@@ -83,7 +85,7 @@ export const key = (id) => BY[id]?.k || "";
 
 export const tip = (id, text) => (BY[id] ? `${text || BY[id].what} (${BY[id].k})` : text || "");
 
-const ARIA = { esc: "Escape", enter: "Enter", space: "Space", tab: "Tab", shift: "Shift", alt: "Alt", ctrl: "Control", cmd: "Meta", "←": "ArrowLeft", "→": "ArrowRight", "↑": "ArrowUp", "↓": "ArrowDown", home: "Home", end: "End" };
+const ARIA = { esc: "Escape", enter: "Enter", space: "Space", tab: "Tab", shift: "Shift", alt: "Alt", ctrl: "Control", cmd: "Meta", "←": "ArrowLeft", "→": "ArrowRight", "↑": "ArrowUp", "↓": "ArrowDown", home: "Home", end: "End", delete: "Delete", backspace: "Backspace" };
 const chord = (k) => {
   const p = k.split(" ").filter((x) => x !== "…"), mods = p.filter((x) => ["shift", "alt", "ctrl", "cmd"].includes(x)), rest = p.filter((x) => !mods.includes(x));
   return rest.map((r) => [...mods, r].map((x) => ARIA[x] || (x.length === 1 && mods.length ? x.toUpperCase() : x)).join("+"));

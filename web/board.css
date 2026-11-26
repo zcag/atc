@@ -138,6 +138,12 @@
 .rask .ask.compact .btn.primary { background: none; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); font-weight: 400; }
 .rask .ask.compact .btn.primary kbd { color: var(--faint); box-shadow: inset 0 0 0 1px var(--line-strong); }
 
+.rdel { position: absolute; right: 6px; bottom: 5px; z-index: 1; display: none; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--r1); background: none; color: var(--faint); cursor: pointer; }
+.rdel svg { width: 12px; height: 12px; }
+.rdel:hover { color: var(--fail); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line); }
+.bwrap > .rdel { right: calc(var(--s4) - 4px); bottom: auto; top: 28px; }
+:is(.rr:is(:hover, .sel, .cur), .bwrap:is(:hover, :has(> .brow:is(.sel, .cur)))) > .rdel { display: grid; }
+:is(.rr:is(.sel, .cur):has(> .rdel), .bwrap:has(> .brow:is(.sel, .cur)):has(> .rdel)) > .brow .qk { visibility: hidden; }
 .qk { font-family: var(--mono); font-size: var(--fs-small); line-height: 1; color: var(--faint); opacity: .8; box-shadow: none; padding: 0; min-width: 0; background: none; }
 .brow:hover .qk, .rr.sel .qk { color: var(--dim); }
 
@@ -179,7 +185,7 @@
   .brow .ses .w { display: none; }
   .bexp { grid-template-columns: minmax(0, 1fr); gap: var(--s3); padding: var(--s2) var(--s4) var(--s4) calc(var(--s4) + 20px + var(--s3)); }
   .bexp .btn, .bexp .chips button { height: var(--hit); }
-  .qk, .rsm { display: none !important; }
+  .qk, .rsm, .rdel { display: none !important; }
   :is(.rr, .bwrap):hover > .brow .since, .rr:hover > .brow .e { visibility: visible; }
   .rr { margin: 0; border-radius: 0; border-bottom: 1px solid var(--hair); }
   .rr + .rr { margin-top: 0; }
