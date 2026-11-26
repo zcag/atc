@@ -671,7 +671,7 @@ function App() {
     <${StaleLines} off=${off} down=${down} live=${all} retry=${retry} retryPeer=${retryPeer} />
     ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} onBays=${onBays} say=${say} onClose=${() => setPeek(null)} />`}
     ${settings ? html`<main class="shell scr"><${SettingsPage} me=${me} say=${say} onClose=${closeSettings} /></main>`
-    : assistView ? html`<${AssistantView} hub=${hub} live=${all} loaded=${!!runs} agents=${agents} say=${say} panes=${panes} togglePane=${togglePane} />`
+    : assistView ? html`<${AssistantView} hub=${hub} live=${all} loaded=${!!runs} say=${say} panes=${panes} togglePane=${togglePane} />`
     : pagesAt && !route ? html`<div class="shell pagesv"><${PagesView} at=${pagesAt} live=${all} bays=${bays} say=${say} index=${panes.pgindex !== false} /></div>`
     : scr && !route ? html`<main class="shell scr">${scr === "usage" ? html`<${UsagePage} limits=${limits} live=${all} down=${down} onOpen=${openFromUsage} />`
       : scr === "time" ? html`<${TimePage} live=${all} onOpen=${openFromUsage} />`
@@ -1527,7 +1527,7 @@ function Hold({ live, me, down, limits, say }) {
   </div>`;
 }
 
-function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
+function AssistantView({ hub, live, loaded, say, panes, togglePane }) {
   const phone = usePhone();
   useCall();
   const docked = useCallDock() && Call.live() && !phone;
@@ -1550,44 +1550,57 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
     return true;
   });
 
-  const touched = touchedBy(hub, live, startOfDay());
-  const shown = (agents || []).filter((a) => !a.error && a.name !== "assistant");
-  const runOf = (a) => live.filter((x) => x.agent === a.name).sort(byRecent)[0];
-  const pane = html`<aside class="aleft" aria-label="Touched today">
-    <h3 class="grp"><b>Touched today</b><span class="c">${touched.length}</span></h3>
-    ${touched.length ? touched.map((s) => html`<a class="tr" href=${`#/s/${keyOf(s)}`} data-sid=${s.sessionId} onClick=${() => setSheet(false)}>
-        <${StateBlock} s=${s} /><b>${s.title || "Untitled"}</b><span class="ago">${hhmm(s.updated)}</span>
-        <span class="l">${[bayOf(s), s.state === "working" ? doing(s) : headline(s)].filter(Boolean).join(", ")}</span></a>`)
-      : html`<${Empty}>No sessions touched today yet. Sessions it starts or tells show here.</${Empty}>`}
-    <h3 class="grp"><b>Agents</b><span class="c">${shown.length}</span></h3>
-    ${shown.map((a) => { const r = runOf(a); return html`<a class="tr ag" href=${`${AGENTS_ROUTE}/${encodeURIComponent(a.name)}`} onClick=${() => setSheet(false)}>
-      <b>@${a.name}</b><span class="ago">${r?.updated ? hhmm(r.updated) : ""}</span>
-      <span class="l">${oneLine(r?.summary?.status) || oneLine(r?.preview || r?.lastReply) || a.title || ""}</span></a>`; })}
+  const since = startOfDay();
+  const touched = touchedBy(hub, live, since);
+  const groups = [
+    ["waiting", "Waiting on you", touched.filter(waiting)],
+    ["working", "Working", touched.filter((s) => s.state === "working")],
+    ["ended", "Ended", touched.filter((s) => !waiting(s) && s.state !== "working")],
+  ];
+  const pane = html`<aside class="aleft side" aria-label="Touched today">
+    <div class="ph"><b>Touched today</b><span class="w">${touched.length}</span></div>
+    <div class="rail" onClick=${(e) => e.target.closest("a") && setSheet(false)}>
+      ${groups.filter((g) => g[2].length).map(([k, title, l]) => html`<${GroupHead} k=${k} title=${title} n=${l.length} />${l.map((s) => html`<${RailRow} key=${s.sessionId} s=${s} say=${say} />`)}`)}
+      ${touched.length ? html`<p class="anote">Sessions the assistant started or messaged since ${hhmm(since)}.</p>`
+        : html`<${Empty}>No sessions touched today yet. Sessions it starts or tells show here.<//>`}
+    </div>
   </aside>`;
 
   const busy = touched.filter((s) => s.state === "working" || s.state === "needs-you").slice(0, 3);
   const strips = busy.length > 0 && html`<div class="alive" aria-label="What it set going">${busy.map((s) => html`<${LiveStrip} s=${s} />`)}</div>`;
   const onCall = Call.live();
   const cmp = {
-    prompt: onCall ? html`<span class="apr call"><${CallMark} />${!docked && html`<${Trace} />`}</span>` : html`<span class="apr">assistant<span>></span></span>`,
-    hint: onCall ? "Type while you talk" : phone ? "Ask the assistant" : "Start, steer or ask about any session",
-    doors: !onCall && html`<button class="kb cl" onClick=${callOrSetup} aria-keyshortcuts="." title=${tip("call", "Call it")}>Call</button>`,
+    prompt: onCall ? html`<span class="apr call"><${CallMark} />${!docked && html`<${Trace} />`}</span>` : null,
+    hint: onCall ? "Type while you talk" : "Ask the assistant",
     top: strips,
   };
+  const woke = hub?.startedAt;
+  const menu = [
+    hub && { label: "Zen", icon: "zen", key: "zen", run: () => TX_API?.zen() },
+    hub && { label: "Find in the transcript", icon: "search", key: "find", run: () => TX_API?.find() },
+    phone && { label: "Touched today", icon: "list", run: () => setSheet(true) },
+    !phone && { label: "Close", icon: "x", run: closeAssistant, sub: "esc" },
+  ];
   return html`<div class="shell assistv assist ${left && !phone ? "" : "noleft"}">
     ${left && !phone && pane}
     <main class="amain">
-      <header class="ahd">
-        ${hub ? html`<${StateBlock} s=${hub} />` : html`<span class="sb earlier" aria-hidden="true">E</span>`}
-        <h1>Assistant</h1>
-        <span class="r">${!hub && html`<button class="kb" onClick=${callOrSetup}>Call</button>`} ${hub && html`<button class="kb" aria-keyshortcuts="z" title=${tip("zen", "Only the words, nothing around them")} onClick=${() => TX_API?.zen()}>Zen</button>`} ${!phone && !docked && html`<${PaneToggle} id="touched" on=${panes.aleft} run=${() => togglePane("aleft")} icon="rail" label="Sessions it started or told today, and the agents" />`} ${phone ? html`<button class="kb" onClick=${() => setSheet(true)}>Today</button>`
-          : html`<button class="kb" onClick=${closeAssistant} aria-keyshortcuts="Escape" title="Close (esc)">Close</button>`}</span>
-        <p class="stat">${hubLine(hub)}</p>
+      <header class="hd">
+        <div class="l1">
+          ${hub ? html`<${StateBlock} s=${hub} />` : html`<span class="sb earlier" aria-hidden="true">E</span>`}
+          <h1>Assistant</h1>
+          <span class="where">${[hub?.host || (MULTI ? HERE : ""), woke && `since ${hhmm(woke)}`].filter(Boolean).join(" · ")}</span>
+          <span class="r">
+            ${onCall ? html`<button class="btn quiet" onClick=${returnToCall} title="Back to the call (.)">${ICON.phone}On a call</button>`
+              : html`<button class="btn primary" onClick=${callOrSetup} aria-keyshortcuts="." title=${tip("call", "Call the assistant")}>${ICON.phone}Call</button>`}
+            ${!phone && !docked && html`<${PaneToggle} id="touched" on=${panes.aleft} run=${() => togglePane("aleft")} icon="rail" label="Sessions it started or told today" />`}
+            <div class="more"><${Menu} cls="btn quiet icon" aria="Assistant menu" width=${220} items=${menu} /></div>
+          </span>
+        </div>
       </header>
       ${hub ? html`<${Transcript} key=${hub.sessionId} s=${hub} say=${say} cmp=${cmp} />`
         : html`<div class="blank">${loaded ? "Starting the assistant…" : "Opening…"}</div>`}
     </main>
-    ${sheet && html`<${Sheet} cls="asheet" title="Today" onClose=${() => setSheet(false)}>${pane}<//>`}
+    ${sheet && html`<${Sheet} cls="asheet" title="Touched today" onClose=${() => setSheet(false)}>${pane}<//>`}
   </div>`;
 }
 
