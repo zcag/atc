@@ -1047,15 +1047,14 @@ function UsageChip({ limits }) {
   const hotSess = week && sess && sess.percent >= 75 ? sess : null;
   const left = sess && Date.parse(sess.resetsAt) - Date.now();
   const title = [
-    `${SHORT[main.key]} ${used}%${pace != null ? `, even pace ${Math.round(pace)}%` : ""}`,
+    `${SHORT[main.key]} ${used}%${pace != null ? `, even pace ${Math.round(pace)}%${off ? ` (${Math.abs(off)} ${off > 0 ? "over" : "under"})` : ""}` : ""}`,
     week && sess && `Session ${Math.round(sess.percent)}%`,
     left > 0 && `session resets in ${duration(left / 1000)}`,
   ].filter(Boolean).join(", ");
   const open = inUsage();
   return html`<button class="usechip ${open ? "on" : ""}" onClick=${toggleUsage} title=${`${title}. ${open ? "Click to go back" : "Click for Usage"}`} aria-label=${`Usage: ${title}`} aria-pressed=${open}>
     <span class="v">${used}%</span>
-    ${off != null && Math.abs(off) >= 1 && html`<span class=${`pc ${off > 15 ? "hot" : off > 0 ? "over" : ""}`}>${Math.abs(off)} ${off > 0 ? "over" : "under"} pace</span>`}
-    ${off != null && Math.abs(off) < 1 && html`<span class="pc">on pace</span>`}
+    ${off ? html`<span class=${`pc ${off > 15 ? "hot" : off > 0 ? "over" : ""}`}>${off > 0 ? "+" : "−"}${Math.abs(off)}</span>` : null}
     ${hotSess && html`<span class="v">5h ${Math.round(hotSess.percent)}%</span>`}</button>`;
 }
 

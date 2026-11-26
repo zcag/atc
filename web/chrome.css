@@ -85,7 +85,8 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
 .usechip { flex: none; display: inline-flex; align-items: baseline; gap: 6px; height: 24px; padding: 0 var(--s2); border: 0; border-radius: var(--r2); background: none; color: var(--faint); font: inherit; font-size: var(--fs-small); line-height: 24px; cursor: pointer; }
 .usechip:hover { background: var(--chrome-hi); }
 .usechip.on { background: var(--strip); box-shadow: 0 0 0 1px var(--line); }
-.usechip .v { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.usechip .v, .usechip .pc { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.usechip .v { color: var(--ink); }
 .usechip .pc.over { color: var(--ink); }
 .usechip .pc.hot { color: var(--fail); font-weight: 600; }
 .console .btn svg { width: 14px; height: 14px; }
