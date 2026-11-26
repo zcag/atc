@@ -60,7 +60,6 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
 .staleline .btn { flex: none; }
 .staleline .btn svg { width: 14px; height: 14px; }
 .stage > .staleline { position: absolute; top: 0; left: 0; right: 0; z-index: 6; }
-.stage:has(> .staleline) > .attach { top: 44px; }
 .sb.hatch[class] { color: var(--faint); background: repeating-linear-gradient(135deg, var(--line) 0 1.5px, transparent 1.5px 4px); box-shadow: inset 0 0 0 1px var(--line); }
 .ptog svg { width: 16px; height: 16px; }
 .ptog[aria-pressed="true"] { color: var(--ink); background: var(--chrome-hi); }
@@ -244,13 +243,13 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
   .hd .back svg { display: block; width: 20px; height: 20px; }
   .hd .back .bk { display: none; }
   .hd .back .bdot { position: absolute; top: 9px; right: 8px; width: 8px; height: 8px; border-radius: 50%; background: var(--needs); }
-  .stabs { display: flex; margin: 4px calc(var(--s2) * -1) -6px; border-top: 1px solid var(--hair); }
+  .stabs { display: flex; margin: 0 calc(var(--s1) * -1); border-top: 1px solid var(--hair); }
   .stabs button { flex: 1; height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 0; background: none; color: var(--faint); font-size: var(--fs-ui); position: relative; }
   .stabs button.on { color: var(--ink); font-weight: 650; }
   .stabs button.on::after { content: ""; position: absolute; left: 22%; right: 22%; bottom: 0; height: 2px; background: var(--ink); }
   .stabs .dot { width: 6px; height: 6px; background: var(--needs); }
   .stab { flex: 1; min-height: 0; overflow-y: auto; }
-  .stab .statep-in { padding: var(--s3) var(--s4) var(--s6); }
+  .stab .statep-in { padding-bottom: var(--s6); }
 
 }
 @media (max-width: 899px) { .hd .more > .mwrap > button { width: 44px; justify-content: center; padding: 0; } .hd .more > .mwrap > button svg { width: 20px; height: 20px; } }

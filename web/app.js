@@ -100,7 +100,7 @@ const LOOK = {
   },
   message() { return { atc: 1, op: "look", scheme: this.scheme, theme: this.theme }; },
   restyle() {
-    for (const d of DOCK.values()) d.term.options.theme = termTheme();
+    for (const d of DOCK.values()) Object.assign(d.term.options, { theme: termTheme(), minimumContrastRatio: termContrast() });
   },
   palettes(names = NATIVE_COLORS, fmt = hexColor) {
     const r = document.documentElement, keep = r.dataset.theme;
@@ -126,6 +126,7 @@ const LOOK = {
   },
 };
 LOOK.load();
+addEventListener("atc-look", () => LOOK.restyle());
 addEventListener("message", (e) => { if (e.data?.atc === 1 && e.data.op === "hello" && e.source) e.source.postMessage(LOOK.message(), "*"); });
 const tilde = (p) => {
   if (!p) return "";
@@ -2286,6 +2287,13 @@ const ICON_PATHS = {
   side: '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M10 2.5v11"/>',
   rail: '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6 2.5v11"/>',
   link: '<path d="M7 9a2.5 2.5 0 0 0 3.5 0l2-2A2.5 2.5 0 0 0 9 3.5l-.8.8M9 7a2.5 2.5 0 0 0-3.5 0l-2 2A2.5 2.5 0 0 0 7 12.5l.8-.8"/>',
+  attach: '<path d="M12.5 7.5 7.8 12.2a2.8 2.8 0 0 1-4-4l5-5a1.9 1.9 0 0 1 2.7 2.7L6.6 10.8a.9.9 0 0 1-1.3-1.3L9.8 5"/>',
+  send: '<path d="M8 13V3M4 7l4-4 4 4"/>',
+  up: '<path d="m3 10 5-5 5 5"/>',
+  out: '<path d="M9.5 2.5h4v4M13.5 2.5 8 8M11.5 9.5v3a1 1 0 0 1-1 1h-7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h3"/>',
+  branch: '<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M4.5 5v6M11.5 7a4 4 0 0 1-4 4h-1.5"/>',
+  user: '<circle cx="8" cy="5.5" r="2.8"/><path d="M2.8 14a5.2 5.2 0 0 1 10.4 0"/>',
+  upload: '<path d="M8 10.5V2.5M4.5 6 8 2.5 11.5 6M2.5 10.5v2a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1v-2"/>',
   bays: '<rect x="2" y="2.5" width="5" height="5" rx="1"/><rect x="9" y="2.5" width="5" height="5" rx="1"/><rect x="2" y="9.5" width="5" height="5" rx="1"/><rect x="9" y="9.5" width="5" height="5" rx="1"/>',
 };
 const svgIcon = (d) => html`<svg class="i" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" dangerouslySetInnerHTML=${{ __html: d }}></svg>`;
@@ -2512,13 +2520,8 @@ function QuickMenu({ quick, say, onClose }) {
     <${MenuItems} items=${items} onPick=${pick} /></div></div>`;
 }
 
-const PANE = "atc.pane", SESSION_PAGE = "atc.sessionPage";
-function paneFor(s) {
-  let p = null;
-  try { p = localStorage.getItem(PANE); } catch {}
-  if (p === "out") return p;
-  return "chat";
-}
+const SESSION_PAGE = "atc.sessionPage";
+const paneFor = () => "chat";
 
 const STATE_LETTER = { "needs-you": ["N", "needs"], "your-turn": ["T", "turn"], working: ["W", "working"] };
 function StateBlock({ s, mini }) {
@@ -2575,7 +2578,7 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
   const openPage = (ref) => { const [name] = splitRef(ref); setPg(name); setAt(atOf(ref)); setMode("page"); keep(name); history.replaceState(null, "", `${base()}/p/${encodeURIComponent(name)}`); };
   const leavePage = (m) => { setMode(m); keep(null); history.replaceState(null, "", base()); };
   useEffect(() => { if (kept || at) history.replaceState(null, "", `${base()}/p/${encodeURIComponent(pg)}`); }, []);
-  const choose = (m) => { if (m === "page") return openPage(pg || shown[0]?.name); leavePage(m); try { localStorage.setItem(PANE, m); } catch {} };
+  const choose = (m) => { if (m === "page") return openPage(pg || shown[0]?.name); leavePage(m); };
   useEffect(() => { if (mode !== "chat" && !sideBySide) markLooked(s); }, [mode, sideBySide, s.updated]);
   useEffect(() => {
     const f = () => { const n = routePage(); if (n) openPage(n); };
@@ -2613,10 +2616,10 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
       go(r.id);
     });
   const patch = (body) => act(() => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body }));
-  const outs = useOutputs(s, mode === "out" ? 10000 : 60000);
+  const outs = useOutputs(s, panes?.state || mode === "state" ? 10000 : 60000);
   const [showUse, setShowUse] = useState(false);
   useEffect(() => {
-    SESSION_API = { s, canAttach, mode: choose, page: openPage, pages: shown, zen, usage: () => setShowUse(true), rename: () => setRenaming(true) };
+    SESSION_API = { s, canAttach, mode: choose, page: openPage, pages: shown, zen, outputs: () => showStateSection(".outs"), usage: () => setShowUse(true), rename: () => setRenaming(true) };
     return () => { SESSION_API = null; };
   });
   USAGE_PROFILE = s.profile || "";
@@ -2634,7 +2637,7 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
     if (!panes?.state) togglePane("state");
     scrollWhenThere(`.statep ${sel}`);
   };
-  const where = [MULTI && s.host, s.profile, s.branch && s.branch !== "HEAD" && s.branch].filter(Boolean).join(" ");
+  const where = [MULTI && s.host, s.profile, s.branch && s.branch !== "HEAD" && s.branch].filter(Boolean).join(" · ");
   const elsewhere = phoneNow ? (live || []).filter((x) => x.sessionId !== s.sessionId && x.state === "needs-you" && !away(x) && !hiddenRun(x)).length : 0;
   const pagesFresh = phoneNow && shown.some(pageFresh);
   useEffect(() => {
@@ -2650,32 +2653,38 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
     return () => removeEventListener("keydown", k);
   });
   const facts = [
-    ["Context", s.context > 0 && `${Math.round(s.context / 1000)}k`],
-    ["Cost", use?.total > 0 && html`<button class="link" onClick=${() => setShowUse(true)}>${withWk(use.cost, usd)}</button>`],
-    ["Steps", s.steps > 0 && `${s.steps}${s.failed > 0 ? `, ${s.failed} failed` : ""}`],
-    ["Model", engineTag(s) || (s.model && model(s.model))],
-    ["Permissions", s.permissionMode === "bypassPermissions" ? "no prompts" : s.permissionMode],
-    ["Host", s.host],
-    ["Claude account", s.profile],
-    ["Branch", s.branch !== "HEAD" && s.branch],
+    ["Machine", s.host],
     ["Folder", s.cwd && tilde(s.cwd)],
+    ["Branch", s.branch !== "HEAD" && s.branch],
+    ["Model", engineTag(s) || (s.model && model(s.model))],
+    ["Context", s.context > 0 && html`<span class="ctx"><${CtxMeter} n=${s.context} />${Math.round(s.context / 1000)}k</span>`],
+    ["Cost", use?.total > 0 && html`<button class="link" onClick=${() => setShowUse(true)}>${withWk(use.cost, usd)}</button>`],
     ["Started", s.startedAt && agoLong(s.startedAt)],
-    [s.lastFrom ? `Last message, from ${s.lastFrom}` : "Your last prompt", s.lastPrompt && oneLine(s.lastPrompt)],
+    ["Steps", s.steps > 0 && `${s.steps}${s.failed > 0 ? `, ${s.failed} failed` : ""}`],
+    ["Permissions", s.permissionMode === "bypassPermissions" ? "no prompts" : s.permissionMode],
+    ["Account", s.profile],
+    [s.lastFrom ? `From ${s.lastFrom}` : "Your last", s.lastPrompt && oneLine(s.lastPrompt)],
     ["Reports to", s.reportsTo && (live?.find((x) => (x.root || x.sessionId) === s.reportsTo)?.title || "a session")],
     ["Pinned", s.pinned && "yes"],
+    ["Session", s.id],
   ].filter(([, v]) => v);
+  const [view, setView] = useState(null);
+  useEffect(() => setView(null), [s.sessionId]);
+  const viewing = view && !phoneNow && mode !== "state";
   const statePane = html`
     <div class="statep-in">
-      <section><h3>Now</h3>
+      <section class="ssum"><h3>Summary</h3>
         <p class="now">${headline(s) || WORD[s.state] || s.state}</p>
         ${s.summary && html`<${SummaryParts} x=${s.summary} />`}
         ${replyable(s) && html`<${Replies} list=${s.summary.replies} pick=${(text) => api(`/api/sessions/${s.id}/send`, { method: "POST", body: { text, suggested: true } }).catch((e) => say(e.message))} />`}
-        ${s.summary && html`<button class="kb" onClick=${() => api(`/api/sessions/${s.sessionId}/summary`, { method: "POST" }).then(() => say("Summarizing again…"), (e) => say(e.message))}>Summarize again</button>`}
+        ${s.summary && html`<button class="btn quiet sagain" onClick=${() => api(`/api/sessions/${s.sessionId}/summary`, { method: "POST" }).then(() => say("Summarizing again…"), (e) => say(e.message))}>${ICON.refresh}Summarize again</button>`}
       </section>
-      <${Outputs} s=${s} data=${outs} pages=${shown} open=${openPage} />
+      <${Outputs} s=${s} data=${outs} pages=${shown} open=${openPage} sel=${view} view=${setView} />
       <${SessionResources} s=${s} />
-      <section><h3>Session</h3><dl class="kv">${facts.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl></section>
+      <section class="facts"><h3>Facts</h3><dl class="kv">${facts.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl></section>
     </div>`;
+  const tabs = [["chat", "Chat"], hasTerm && ["term", "Terminal"], shown.length > 0 && ["page", "Page"], ["state", "State"]].filter(Boolean);
+  const chatMenu = mode === "chat" || sideBySide;
 
   return html`
     <header class="hd">
@@ -2685,32 +2694,22 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
         ${renaming ? renameBox : html`<h1 onDblClick=${() => setRenaming(true)} title=${s.title} lang=${langOf(s.title)}>${s.title || "Untitled"}</h1>`}
         ${where && html`<span class="where">${where}</span>`}
         <span class="r">
-          ${shown.length > 0 && html`<${PagesButton} list=${shown} open=${openPage} on=${mode === "page"} />`}
-          <button class="kb pin ${s.pinned ? "on" : ""}" aria-pressed=${!!s.pinned} aria-label=${s.pinned ? "Unpin" : "Pin"} title=${s.pinned ? "Pinned to the top of the bay; unpin" : "Pin to the top of the bay"}
-            onClick=${() => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }).catch((e) => say(e.message))}>${ICON.pin}</button>
-          ${hasTerm && html`<button class="kb ${mode === "term" ? "on" : ""}" aria-pressed=${mode === "term"} aria-keyshortcuts="\`" title=${tip("term", "Terminal")} onClick=${() => choose(mode === "term" ? "chat" : "term")}>Terminal</button>`}
-          ${!phoneNow && (mode === "chat" || sideBySide) && html`<button class="kb" aria-keyshortcuts="z" title=${tip("zen", "Only the words, nothing around them")} onClick=${() => TX_API?.zen()}>Zen</button>`}
+          ${!phoneNow && shown.length > 0 && html`<${PagesButton} list=${shown} open=${openPage} on=${mode === "page"} />`}
+          ${!phoneNow && hasTerm && html`<button class="btn quiet ${mode === "term" ? "on" : ""}" aria-pressed=${mode === "term"} aria-keyshortcuts="\`" title=${tip("term", "Terminal")} onClick=${() => choose(mode === "term" ? "chat" : "term")}>${ICON.term}Terminal</button>`}
           ${!phoneNow && panes && back === backHome && !panes.rail && html`<${PaneToggle} id="rail" run=${() => togglePane("rail")} icon="rail" label="The bay's sessions beside the transcript" />`}
-          ${!phoneNow && panes && html`<${PaneToggle} id="state" on=${panes.state} run=${openState} icon="side" label="What the session is doing, what it made, and its facts" />`}
-          <div class="more"><${Menu} cls="kb" busy=${busy} aria="Session menu" label=${phoneNow ? ICON.more : "More"}
+          ${!phoneNow && panes && html`<${PaneToggle} id="state" on=${panes.state} run=${openState} icon="side" label="State: summary, outputs and facts" />`}
+          <div class="more"><${Menu} cls="btn quiet icon" busy=${busy} aria="Session menu" title=${tip("menu", "More")} width=${260}
             items=${[
               ...(onPage && !sideBySide ? [{ label: "Zen", icon: "zen", key: "zen", run: () => setPageZen(true) }] : []),
-              ...(mode === "chat" || sideBySide ? [{ label: "Zen", icon: "zen", key: "zen", run: () => TX_API?.zen() }, { label: "Find in the transcript", icon: "search", key: "find", run: () => TX_API?.find() }, { label: "Contents", icon: "list", key: "contents", run: () => TX_API?.contents() }, { label: "Outline, story or everything", icon: "doc", key: "level", run: () => TX_API?.level() }] : []),
-              "-", { icon: "phone", ...callSession(s, say) }, ...(mode === "chat" || sideBySide ? [{ label: "Files, commits and deploys", icon: "folder", run: () => TX_API?.results() }] : []),
-              { label: "State and outputs", icon: "layout", key: "state", run: openState }, { label: "Usage", icon: "chart", run: () => setShowUse(true) }, ...(s.agent ? [{ label: "Agent details", icon: "people", run: () => openAgent(s.agent, "details") }] : []),
+              ...(chatMenu ? [{ label: "Zen", icon: "zen", key: "zen", run: () => TX_API?.zen() }, { label: "Find in the transcript", icon: "search", key: "find", run: () => TX_API?.find() }, { label: "Contents", icon: "list", key: "contents", run: () => TX_API?.contents() }, { label: "Outline, story or everything", icon: "doc", key: "level", run: () => TX_API?.level() }] : []),
+              "-", { icon: "phone", ...callSession(s, say) }, { label: "Files, commits and deploys", icon: "folder", run: () => showStateSection(".outs") },
+              { label: "Usage", icon: "chart", run: () => setShowUse(true) }, ...(s.agent ? [{ label: "Agent details", icon: "people", run: () => openAgent(s.agent, "details") }] : []),
               ...sessionActions(s, say, { rename: () => setRenaming(true), after: () => setBusy(false) })]} /></div>
         </span>
       </div>
-      <div class="l2 items">
-        <button class="stat" aria-keyshortcuts="\\" title="State and outputs" onClick=${openState}>${headline(s) || WORD[s.state] || s.state}</button>
-        ${(engineTag(s) || s.model) && html`<button class="rd" title="Usage: tokens, cost and models" onClick=${() => setShowUse(true)}>${engineTag(s) || model(s.model)}</button>`}
-        ${s.context > 0 && html`<button class="rd" title="Context in use. Usage has the breakdown." onClick=${() => setShowUse(true)}><${CtxMeter} n=${s.context} />${Math.round(s.context / 1000)}k</button>`}
-        ${use?.total > 0 && html`<button class="rd" title="Estimated at API prices. Usage has the breakdown." onClick=${() => setShowUse(true)}>${withWk(use.cost, usd)}</button>`}
-        ${s.load && html`<button class="rd ${hotLoad(s.load) ? "hotrd" : ""}" title="This session's processes, in State" onClick=${() => showStateSection(".sres")}>${shortLoad(s.load)}</button>`}
-      </div>
       ${phoneNow && html`<nav class="stabs" aria-label="View">
-        ${[["chat", "Chat"], hasTerm && ["term", "Terminal"], shown.length > 0 && ["page", "Page"], ["state", "State"]].filter(Boolean).map(([m, label]) => {
-          const on = m === "chat" ? mode === "chat" || mode === "out" : mode === m;
+        ${tabs.map(([m, label]) => {
+          const on = mode === m;
           return html`<button class=${on ? "on" : ""} aria-current=${on ? "page" : null} onClick=${() => (m === "state" ? setMode("state") : choose(m))}>${label}${m === "page" && !on && pagesFresh && html`<i class="dot" aria-label="new"></i>`}</button>`;
         })}
       </nav>`}
@@ -2718,7 +2717,8 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
     <div class="sbody ${panes?.state && !phoneNow ? "withstate" : ""}">
     <div class="smain">
     ${mode !== "chat" && !sideBySide && !pageZen && s.asks?.length > 0 && html`<div class="askstrip"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}
-    ${mode !== "chat" && mode !== "state" && !sideBySide && !pageZen && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
+    ${mode !== "chat" && mode !== "state" && mode !== "term" && !sideBySide && !pageZen && html`<${SummaryBar} s=${s} say=${say} onFull=${() => setMode("chat")} />`}
+    ${viewing && html`<${OutView} s=${s} v=${view} set=${setView} say=${say} />`}
     ${mode === "state" ? html`<div class="stab">${statePane}</div>`
     : mode === "page" && shown.length > 0
       ? (() => {
@@ -2732,10 +2732,11 @@ function Session({ s, say, live, panes, togglePane, back = backHome, pageTab }) 
       ? canAttach
         ? html`<${Term} key=${s.id} s=${s} say=${say} />`
         : html`<div class="stage"><div class="cover">${Unattachable(s, () => resume(), busy, setMode)}</div></div>`
-      : mode === "out" ? html`<${Outputs} s=${s} data=${outs} pages=${shown} open=${openPage} />` : html`<${Transcript} s=${s} say=${say} resume=${() => resume("chat")} busy=${busy} />`}
+      : html`<${Transcript} s=${s} say=${say} resume=${() => resume("chat")} busy=${busy} />`}
     </div>
-    ${panes?.state && !phoneNow && html`<aside class="statep" aria-label="State">${statePane}</aside>`}
+    ${panes?.state && !phoneNow && html`<aside class="statep" aria-label="State"><div class="phd"><b>State</b><span class="sub">${s.summary?.at ? `updated ${agoLong(s.summary.at)}` : clipWords(s.title, 40)}</span><button class="btn quiet icon" aria-label="Close the State pane" title=${tip("state", "Close")} onClick=${() => togglePane("state")}>${ICON.x}</button></div>${statePane}</aside>`}
     </div>
+    ${phoneNow && view && html`<${OutView} s=${s} v=${view} set=${setView} say=${say} />`}
     ${pageZen && html`<button class="kb pzenout" onClick=${() => setPageZen(false)} title="Leave zen (z)">Leave zen</button>`}
     ${showUse && html`<${SessionUsage} s=${s} use=${use} onClose=${() => setShowUse(false)} />`}
   `;
@@ -2925,18 +2926,20 @@ function Menu({ busy, items, label = ICON.more, cls = "icon", aria = "More actio
 const TERM_COLORS = ["background", "foreground", "cursor", "cursorAccent", "selectionBackground",
   ...["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"].flatMap((c) => [c, `bright${c[0].toUpperCase()}${c.slice(1)}`])];
 const TERM_THEMES = {};
+const atcScheme = () => document.documentElement.dataset.scheme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
 const termTheme = () => {
-  const key = `${CLAUDE_THEME} ${LOOK.theme}`;
+  const key = `${atcScheme()} ${LOOK.theme}`;
   if (!TERM_THEMES[key]) {
-    const v = cssColors(CLAUDE_THEME, TERM_COLORS.map((c) => `ansi-${c}`));
+    const v = cssColors(atcScheme(), TERM_COLORS.map((c) => `ansi-${c}`));
     TERM_THEMES[key] = Object.fromEntries(TERM_COLORS.map((c, i) => [c, v[i]]));
   }
   return TERM_THEMES[key];
 };
+const termContrast = () => (CLAUDE_THEME === atcScheme() ? 1 : 4.5);
 
 const KEYS = [
-  ["esc", "\x1b"], ["tab", "\t"], ["⇧tab", "\x1b[Z"], ["ctrl", null],
-  ["↑", "\x1b[A"], ["↓", "\x1b[B"], ["←", "\x1b[D"], ["→", "\x1b[C"], ["/", "/"], ["^C", "\x03"],
+  ["esc", "\x1b"], ["tab", "\t"], ["shift tab", "\x1b[Z"], ["ctrl", null],
+  ["left", "\x1b[D", "prev"], ["up", "\x1b[A", "up"], ["down", "\x1b[B", "down"], ["right", "\x1b[C", "next"], ["ctrl c", "\x03"], ["/", "/"],
 ];
 
 function useKeyboard() {
@@ -3051,6 +3054,7 @@ function makeDock(id, path, alive) {
     fontSize: touch ? 12.5 : 14,
     lineHeight: 1.1,
     theme: termTheme(),
+    minimumContrastRatio: termContrast(),
     allowProposedApi: true,
     scrollback: 2000,
     macOptionIsMeta: true,
@@ -3066,7 +3070,7 @@ function makeDock(id, path, alive) {
   fit.fit();
 
   const enc = new TextEncoder();
-  const d = { id, el, term, box: null, used: Date.now(), state: { cover: null, foreign: null, retrying: false }, ui: null, hooks: {} };
+  const d = { id, el, term, box: null, used: Date.now(), state: { cover: null, foreign: null, retrying: false, size: null }, ui: null, hooks: {} };
   let ws = null, exited = false, owner = false, tries = 0, timer = null, dead = false, heard = 0, opened = 0, me = 0;
   const WS_STATE = ["connecting", "open", "closing", "closed"];
   const wsState = () => WS_STATE[ws?.readyState] || "none";
@@ -3115,11 +3119,11 @@ function makeDock(id, path, alive) {
         if (owner) {
           scale(false);
           if (d.box) fit.fit(); else term.resize(c.cols, c.rows);
-          emit({ foreign: null });
+          emit({ foreign: null, size: `${term.cols}×${term.rows}` });
         } else {
           term.resize(c.cols, c.rows);
           if (d.box) requestAnimationFrame(() => scale(true));
-          emit({ foreign: d.box ? c.holder || "another screen" : null });
+          emit({ foreign: d.box ? c.holder || "another screen" : null, size: `${c.cols}×${c.rows}` });
         }
       } else if (c.type === "exit") {
         exited = true;
@@ -3148,6 +3152,7 @@ function makeDock(id, path, alive) {
   connect();
 
   term.onData((data) => d.send(d.hooks.data ? d.hooks.data(data) : data));
+  term.onResize(({ cols, rows }) => owner && emit({ size: `${cols}×${rows}` }));
   term.onBinary((data) => ws?.readyState === 1 && ws.send(Uint8Array.from(data, (c) => c.charCodeAt(0))));
 
   const ro = new ResizeObserver(() => requestAnimationFrame(relayout));
@@ -3236,8 +3241,8 @@ function Term({ s, say, sh }) {
     api_.current.focus?.();
   };
   const [gen, setGen] = useState(0);
-  const [st, setSt] = useState({ cover: null, foreign: null, retrying: false });
-  const { cover, foreign, retrying, lostAt } = st;
+  const [st, setSt] = useState({ cover: null, foreign: null, retrying: false, size: null });
+  const { cover, foreign, retrying, lostAt, size } = st;
   const downAt = !sh && STALE.hosts[s.host];
   const reopen = () => { DOCK.get(key_)?.dispose(); setGen(gen + 1); };
   useEffect(() => {
@@ -3284,18 +3289,18 @@ function Term({ s, say, sh }) {
     onDrop: (e) => { e.preventDefault(); setDropping(false); upload.current([...e.dataTransfer.files]); },
   };
   return html`
-    <div class="stage ${dropping ? "dropping" : ""}" style=${`--term-bg: ${termTheme().background}`} ...${drop}>
+    <div class="stage ${dropping ? "dropping" : ""}" ...${drop}>
       <input type="file" multiple hidden ref=${picker} onChange=${(e) => { upload.current([...e.target.files]); e.target.value = ""; }} />
-      <button class="attach" title="Attach a file (or paste or drop one)" aria-label="Attach a file" onClick=${() => picker.current.click()}>Attach</button>
+      <div class="tsize" role="status">
+        ${retrying && !cover ? html`<span class="who">Reconnecting…</span>` : size && html`<span class="mono">${size}</span><span class="who">${foreign || "this screen"}</span>`}
+        <span class="sp"></span>
+        ${foreign && !cover && !retrying && html`<button class="btn sm" onClick=${() => api_.current.claim?.()} title="Size the terminal for this screen">Take size</button>`}
+        <button class="btn quiet sm tatt" title="Attach a file (or paste or drop one)" aria-label="Attach a file" onClick=${() => picker.current.click()}>${ICON.attach}<span>Attach</span></button>
+      </div>
       <div class="term" ref=${box}></div>
       ${downAt ? html`<${StaleLine} retry=${reopen}>The screen as it was at <span class="tm">${hhmm(downAt)}</span>. Typing is off until ${s.host} answers.<//>`
         : cover === "lost" ? html`<${StaleLine} retry=${reopen}>Connection lost at <span class="tm">${hhmm(lostAt)}</span>. The ${sh ? "shell" : "session"} keeps running.<//>`
-        : retrying && !cover && html`<div class="notice"><span>Reconnecting…</span></div>`}
-      ${foreign && !cover && !retrying && html`
-        <div class="notice">
-          <span>Sized for ${foreign}</span>
-          <button class="btn" onClick=${() => api_.current.claim?.()}>Fit to this one</button>
-        </div>`}
+        : null}
       ${cover === "detached" && !downAt && html`
         <div class="cover">
           <div>
@@ -3310,8 +3315,8 @@ function Term({ s, say, sh }) {
           </div>
         </div>`}
       <div class="keys ${keyboard ? "show" : ""}" onPointerDown=${(e) => e.preventDefault()}>
-        ${KEYS.map(([label, seq]) => html`<button class=${label === "ctrl" && ctrl ? "on" : ""} onClick=${() => key(label, seq)}>${label}</button>`)}
-        <button onClick=${() => picker.current.click()}>file</button>
+        ${KEYS.map(([label, seq, icon]) => html`<button class=${`${label === "ctrl" && ctrl ? "on" : ""} ${icon ? "ar" : ""}`} aria-label=${icon ? label : null} aria-pressed=${label === "ctrl" ? ctrl : null} onClick=${() => key(label, seq)}>${icon ? ICON[icon] : label}</button>`)}
+        <button class="ar" aria-label="Attach a file" onClick=${() => picker.current.click()}>${ICON.attach}</button>
       </div>
     </div>
   `;
@@ -4732,83 +4737,47 @@ const KIND_LABEL = { browser: "Browser", table: "Table", image: "Image", html: "
 const baseName = (p) => p.split("/").pop();
 const dirName = (p) => tilde(p.slice(0, p.lastIndexOf("/")) || "/");
 
-function Outputs({ s, data, pages = [], open: openPage }) {
-  const [open, setOpen] = useState(null);
-  if (!data) return html`<div class="outputs"><p class="empty">Looking through this session…</p></div>`;
-  const made = data.files.filter((f) => f.kind !== "text");
-  const code = data.files.filter((f) => f.kind === "text");
-  const viewable = [...made, ...code];
-  const nothing = !pages.length && !data.servers.length && !data.links.length && !data.files.length;
-  return html`
-    <div class="outputs">
-      <div class="inner">
-        ${nothing && html`<div class="none">
-          <p>${data.failed ? "Couldn't read this session's outputs." : "Nothing here yet."}</p>
-          <p class="sub">Pages it shows you, files it writes and servers it starts show up here as it works.</p>
-        </div>`}
-        ${pages.length > 0 && html`
-          <section>
-            <h4>Pages it showed you</h4>
-            <div class="cards">${pages.map((p) => html`<${PageCard} key=${pkey(p)} p=${p} onOpen=${() => openPage(p.name)} />`)}</div>
-          </section>`}
-        ${data.servers.length > 0 && html`
-          <section>
-            <h4>Running</h4>
-            ${data.servers.map((v) => html`
-              <button class="srvrow" onClick=${() => openOut(v.url)}>
-                <i class="dot"></i>
-                <span class="u">${v.url.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>
-                <span class="note">${v.localOnly ? `Listens on localhost only, so it opens on ${s.host || "that machine"} itself, not here.` : "Started by this session"}</span>
-              </button>`)}
-          </section>`}
-        ${made.length > 0 && html`
-          <section>
-            <h4>Files</h4>
-            <div class="cards">
-              ${made.map((f) => html`<${OutCard} f=${f} onOpen=${() => setOpen(viewable.indexOf(f))} />`)}
-            </div>
-          </section>`}
-        ${data.links.length > 0 && html`
-          <section>
-            <h4>Links</h4>
-            ${data.links.map((l) => {
-              const u = new URL(l.url);
-              return html`<button class="linkrow" onClick=${() => openOut(l.url)}>
-                <span class="h">${u.host}</span><span class="p">${(u.pathname + u.search).replace(/^\/$/, "")}</span>
-                <span class="when" title=${stamp(l.at)}>${age(l.at)}</span>
-              </button>`;
-            })}
-          </section>`}
-        ${code.length > 0 && html`
-          <section>
-            <h4>Code it touched</h4>
-            ${code.map((f) => html`<button class="coderow" onClick=${() => setOpen(viewable.indexOf(f))}>
-              <span class="n">${baseName(f.path)}</span><span class="d">${dirName(f.path)}</span>
-              <span class="op">${f.op} ${agoLong(f.at)}</span>
-            </button>`)}
-          </section>`}
-      </div>
-    </div>
-    ${open !== null && viewable[open] && html`<${Viewer} list=${viewable} at=${open} setAt=${setOpen} onClose=${() => setOpen(null)} />`}
-  `;
+function useTurnIndex(s) {
+  const [turns, setTurns] = useState(null);
+  useEffect(() => {
+    let on = true;
+    api(`/api/sessions/${s.sessionId}/turns`).then((r) => on && setTurns(r.turns || []), () => on && setTurns((t) => t || []));
+    return () => { on = false; };
+  }, [s.sessionId, s.updated]);
+  return turns;
 }
 
-function OutCard({ f, onOpen }) {
-  const ext = (baseName(f.path).split(".").pop() || "").slice(0, 4);
-  return html`
-    <button class="card ${f.kind}" onClick=${onOpen} title=${tilde(f.path)}>
-      <div class="pv">
-        ${f.kind === "image" ? html`<${Pic} src=${f.url} fallback=${html`<span class="ext">${ext}</span>`} />`
-          : f.kind === "html" ? html`<iframe src=${f.url} sandbox="allow-scripts" loading="lazy" tabindex="-1" aria-hidden="true"></iframe>`
-          : f.kind === "video" ? html`<video src=${f.url} preload="metadata" muted></video>`
-          : f.kind === "markdown" || f.kind === "table" ? html`<${FilePeek} f=${f} ext=${ext} />`
-          : html`<span class="ext">${ext}</span>`}
-      </div>
-      <div class="cap">
-        <span class="n">${baseName(f.path)}</span>
-        <span class="m">${KIND_LABEL[f.kind]}${f.size ? ` · ${fileSize(f.size)}` : ""} · ${f.op} ${agoLong(f.at)}</span>
-      </div>
-    </button>`;
+const fileMeta = (f) => [KIND_LABEL[f.kind], f.size && fileSize(f.size)].filter(Boolean).join(" · ");
+function Outputs({ s, data, pages = [], open: openPage, sel, view }) {
+  const turns = useTurnIndex(s);
+  if (!data) return html`<section class="outs"><h3>Outputs</h3><p class="empty">Looking through this session…</p></section>`;
+  const made = data.files.filter((f) => f.kind !== "text"), code = data.files.filter((f) => f.kind === "text"), files = [...made, ...code];
+  const badges = (turns || []).flatMap((t) => t.badges || []);
+  const commits = [...new Map(badges.filter((b) => b.kind === "commit" && b.ref).map((b) => [b.ref, b])).values()].reverse();
+  const shipped = [...new Set(badges.filter((b) => (b.kind === "push" || b.kind === "deploy") && b.ok).map((b) => b.kind === "deploy" ? `Deployed ${b.ref || b.text}` : b.text))];
+  const n = pages.length + data.servers.length + files.length + data.links.length + commits.length;
+  const open = (f) => view({ list: files, at: files.indexOf(f) });
+  const row = ({ key, icon, name, sub, right, on, run, mono }) => html`<li key=${key}><button class="orow ${on ? "on" : ""}" aria-current=${on ? "true" : null} onClick=${run}>
+    <span class="oi" aria-hidden="true">${ICON[icon]}</span><span class="on"><span class=${`onm ${mono ? "mono" : ""}`}>${name}</span>${sub && html`<span class="osub">${sub}</span>`}</span>${right && html`<span class="ort">${right}</span>`}</button></li>`;
+  const group = (title, list) => list.length > 0 && html`<h4>${title}</h4><ul class="olist">${list.map(row)}</ul>`;
+  return html`<section class="outs"><h3>Outputs${n > 0 && html`<span class="n">${n}</span>`}</h3>
+    ${!n && html`<p class="empty">${data.failed ? "Couldn't read this session's outputs." : "Nothing yet. Pages it shows you, files it writes, servers it starts and commits it makes show up here."}</p>`}
+    ${group("Pages", pages.map((p) => ({ key: pkey(p), icon: "page", name: pageTitle(p), right: age(p.updated || p.shown), run: () => openPage(p.name) })))}
+    ${group("Running", data.servers.map((v) => ({ key: v.url, icon: "play", name: v.url.replace(/^https?:\/\//, "").replace(/\/$/, ""), mono: true, sub: v.localOnly ? `Listens on localhost only, so it opens on ${s.host || "that machine"} itself` : "Started by this session", run: () => openOut(v.url) })))}
+    ${group("Files", made.map((f) => ({ key: f.path, icon: "file", name: baseName(f.path), mono: true, sub: fileMeta(f), right: age(f.at), on: sel?.list?.[sel.at] === f || sel?.list?.[sel.at]?.path === f.path, run: () => open(f) })))}
+    ${group("Links", data.links.map((l) => { const u = new URL(l.url); return { key: l.url, icon: "out", name: u.host, sub: (u.pathname + u.search).replace(/^\/$/, ""), right: age(l.at), run: () => openOut(l.url) }; }))}
+    ${group("Commits", commits.map((c) => ({ key: c.ref, icon: "branch", name: c.text || c.ref, right: html`<span class="mono">${c.ref.slice(0, 7)}</span>`, on: sel?.sha === c.ref, run: () => view({ sha: c.ref }) })))}
+    ${shipped.length > 0 && html`<p class="oship">${shipped.join(" · ")}</p>`}
+    ${group("Code it touched", code.map((f) => ({ key: f.path, icon: "file", name: html`<span class="mono">${baseName(f.path)}</span> <span class="osub in">${dirName(f.path)}</span>`, right: f.op, on: sel?.list?.[sel.at]?.path === f.path, run: () => open(f) })))}
+  </section>`;
+}
+
+function OutView({ s, v, set, say }) {
+  const [repo, setRepo] = useState("");
+  useEffect(() => { if (v.sha) api(`/api/sessions/${s.sessionId}/ref/repo`).then((r) => setRepo(r.repo || ""), () => {}); }, [s.sessionId, !!v.sha]);
+  const close = () => set(null);
+  if (v.sha) return html`<${CommitView} key=${v.sha} s=${s} sha=${v.sha} repo=${repo} say=${say} open=${(sha) => set({ sha })} onClose=${close} inline />`;
+  return html`<${Viewer} list=${v.list} at=${v.at} setAt=${(at) => set({ ...v, at })} onClose=${close} inline />`;
 }
 
 function FilePeek({ f, ext }) {
@@ -4826,7 +4795,8 @@ function Peek({ kind, text, tsv }) {
   return html`<div class="pvtext"><table class="data">${rows.map((r, i) => html`<tr>${r.slice(0, 6).map((c) => (i ? html`<td>${c}</td>` : html`<th>${c}</th>`))}</tr>`)}</table></div>`;
 }
 
-function Viewer({ list, at, setAt, onClose }) {
+const ClipPath = ({ p }) => html`<span class="vpath" title=${tilde(p)}><bdi>${tilde(p)}</bdi></span>`;
+function Viewer({ list, at, setAt, onClose, inline }) {
   const f = list[at];
   useEffect(() => {
     const k = (e) => {
@@ -4839,15 +4809,17 @@ function Viewer({ list, at, setAt, onClose }) {
     addEventListener("keydown", k, true);
     return () => removeEventListener("keydown", k, true);
   }, [at, list.length]);
+  const meta = [KIND_LABEL[f.kind], f.size && fileSize(f.size), f.at && `${f.op || "written"} ${agoLong(f.at)}`].filter(Boolean).join(" · ");
   return html`
-    <div class="viewer" role="dialog" aria-label=${baseName(f.path)}>
+    <div class="viewer ${inline ? "inline" : ""}" role=${inline ? "region" : "dialog"} aria-label=${baseName(f.path)}>
       <header>
-        <button class="icon" onClick=${onClose} aria-label="Close">${ICON.x}</button>
-        <div class="who"><div class="n">${baseName(f.path)}</div><div class="d">${dirName(f.path)}</div></div>
-        ${list.length > 1 && html`<button class="icon" disabled=${at === 0} onClick=${() => setAt(at - 1)} aria-label="Previous">${ICON.prev}</button>
-        <button class="icon" disabled=${at === list.length - 1} onClick=${() => setAt(at + 1)} aria-label="Next">${ICON.next}</button>`}
-        <button class="btn" onClick=${() => openOut(f.url)}>${APP ? "Open outside" : "New tab"}</button>
+        <button class="btn quiet icon" onClick=${onClose} aria-label="Close" title=${tip("close", "Close")}>${ICON.x}</button>
+        <${ClipPath} p=${f.path} />
+        ${list.length > 1 && html`<span class="vn">${at + 1} of ${list.length}</span><button class="btn quiet icon" disabled=${at === 0} onClick=${() => setAt(at - 1)} aria-label="Previous" title=${tip("viewer", "Previous")}>${ICON.prev}</button>
+        <button class="btn quiet icon" disabled=${at === list.length - 1} onClick=${() => setAt(at + 1)} aria-label="Next" title=${tip("viewer", "Next")}>${ICON.next}</button>`}
+        <button class="btn quiet" onClick=${() => openOut(f.url)}>${ICON.out}${APP ? "Open outside" : "New tab"}</button>
       </header>
+      ${meta && html`<div class="vmeta"><span>${meta}</span>${!touch && html`<span class="vk">esc closes${list.length > 1 ? ", ← → step through outputs" : ""}</span>`}</div>`}
       <${FileBody} f=${f} />
     </div>`;
 }
@@ -4899,7 +4871,7 @@ function CodeFile({ text, path, line, end }) {
   </div>`;
 }
 
-function CommitView({ s, sha, span, repo, say, open, onClose }) {
+function CommitView({ s, sha, span, repo, say, open, onClose, inline }) {
   const [c, setC] = useState(null);
   useEffect(() => {
     let on = true;
@@ -4912,11 +4884,11 @@ function CommitView({ s, sha, span, repo, say, open, onClose }) {
   const list = c?.commits, title = span ? (list ? `${plural(list.length, "commit")} pushed` : span) : c ? c.subject : sha;
   const sub = span ? (list?.length ? span : c ? "No new commits, only a move" : "Reading the push…") : c ? `${sha}, ${c.author}, ${stamp(c.date)}` : "Reading the commit…";
   const web = repo && (span ? `${repo}/compare/${span.replace("...", "..").replace("..", "...")}` : `${repo}/commit/${c?.sha || sha}`);
-  return html`<div class="viewer commitv" role="dialog" aria-label=${title}>
+  return html`<div class="viewer commitv ${inline ? "inline" : ""}" role=${inline ? "region" : "dialog"} aria-label=${title}>
     <header>
-      <button class="icon" onClick=${onClose} aria-label="Close">${ICON.x}</button>
+      <button class="btn quiet icon" onClick=${onClose} aria-label="Close" title=${tip("close", "Close")}>${ICON.x}</button>
       <div class="who"><div class="n">${title}</div><div class="d">${sub}</div></div>
-      ${web && html`<button class="btn" onClick=${() => openOut(web)}>GitHub</button>`}
+      ${web && html`<button class="btn quiet" onClick=${() => openOut(web)}>${ICON.out}GitHub</button>`}
     </header>
     <div class="fbody"><article class="md">
       ${c?.body && html`<p class="cbody">${c.body}</p>`}
@@ -5155,6 +5127,7 @@ function BrowserView({ p, say }) {
   const { frame, info, gone, send } = useTab(p.session, tab?.id, stage);
   const url = info?.url ?? tab?.url ?? "";
   const [typed, setTyped] = useState(null);
+  const [driving, setDriving] = useState(false);
   const at = (e) => {
     const r = img.current.getBoundingClientRect(), meta = frame.meta;
     return { x: ((e.clientX - r.left) * meta.deviceWidth) / r.width, y: ((e.clientY - r.top) * meta.deviceHeight) / r.height };
@@ -5223,14 +5196,15 @@ function BrowserView({ p, say }) {
         <button type="button" class="icon wide" title="Forward" aria-label="Forward" onClick=${() => nav(1)}>${ICON.fwd}</button>
         <button type="button" class="icon" title="Reload" aria-label="Reload" onClick=${() => send("Page.reload")}>${ICON.refresh}</button>
         <input class="burl" value=${typed ?? url} onInput=${(e) => setTyped(e.target.value)} onFocus=${(e) => e.target.select()} onBlur=${() => setTyped(null)} spellcheck="false" autocapitalize="off" enterkeyhint="go" aria-label="Address" />
-        <button type="button" class="icon" title="Type into the page" aria-label="Keyboard" onClick=${() => keys.current?.focus()}>${ICON.keys}</button>
+        <button type="button" class="icon" aria-pressed=${driving} title=${driving ? "Release the page" : "Type into the page"} aria-label="Keyboard" onMouseDown=${(e) => e.preventDefault()} onClick=${() => (driving ? keys.current?.blur() : keys.current?.focus())}>${ICON.keys}</button>
       </form>
-      <div class="bstage" ref=${stage}>
+      ${driving && html`<div class="bdrive" role="status">${ICON.user}<span><b>You are driving.</b> Your clicks and keys go to the page.</span><button class="btn primary" onMouseDown=${(e) => e.preventDefault()} onClick=${() => keys.current?.blur()}>Release</button></div>`}
+      <div class="bstage ${driving ? "driving" : ""}" ref=${stage}>
         ${frame
           ? html`<img ref=${img} src=${`data:image/jpeg;base64,${frame.data}`} alt=${info?.title || tab.title} draggable="false"
               onMouseDown=${(e) => e.preventDefault()} onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${() => (drag.current = null)} onWheel=${wheel} onContextMenu=${(e) => e.preventDefault()} />`
           : html`<p class="sub">${gone ? "This tab is closed." : "Connecting to the tab…"}</p>`}
-        <textarea ref=${keys} class="bkeys" aria-label="Type into the page" autocapitalize="off" autocomplete="off" spellcheck="false" onKeyDown=${key} onInput=${text}></textarea>
+        <textarea ref=${keys} class="bkeys" aria-label="Type into the page" autocapitalize="off" autocomplete="off" spellcheck="false" onKeyDown=${(e) => (e.key === "Escape" && !e.shiftKey ? e.target.blur() : key(e))} onInput=${text} onFocus=${() => setDriving(true)} onBlur=${() => setDriving(false)}></textarea>
       </div>
     </div>`;
 }
@@ -5284,13 +5258,13 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, onZen, say
               ${list.map((x) => html`<button role="tab" aria-selected=${x === p} class="pgtab ${x === p ? "on" : ""} ${x.gone ? "gone" : ""}" title=${`${pageTitle(x)}\n${pageInfo(x)}`} onClick=${() => pick(x.name)}>
                 ${x !== p && pageFresh(x) && html`<i class="pgdot"></i>`}<span>${pageTitle(x)}</span></button>`)}
             </div>`
-          : html`<span class="pgone"><span class="kind">${(KIND_LABEL[p.kind] || "Page").toLowerCase()}</span><b title=${pageTitle(p)}>${pageTitle(p)}</b></span>`}
-        <span class="pupd" title=${tilde(p.path)}>${p.gone ? "gone" : whenAt(pageAt(p))}</span>
-        ${onZen && html`<button class="kb pzen" aria-keyshortcuts="z" title="Only this page, nothing around it" onClick=${onZen}>Zen</button>`}
-        ${setSplit && html`<button class="kb" onClick=${() => setSplit(!split)}>${split ? "Page only" : "Side by side"}</button>`}
-        ${p.kind !== "browser" && html`<button class="kb" onClick=${() => (location.hash = pagesHash(bay, p.session, p.name))} title="This page in the Pages view">In Pages</button>
-        <${Menu} cls="kb" label="More" aria="Page actions" items=${[
-          { label: "Reload", run: () => setNonce((n) => n + 1) },
+          : html`<span class="pgone"><b title=${pageTitle(p)}>${pageTitle(p)}</b></span>`}
+        <span class="pupd" title=${tilde(p.path)}>${p.gone ? "gone" : `updated ${age(pageAt(p))}`}</span>
+        ${setSplit && html`<button class="btn quiet icon" aria-pressed=${!split} aria-label=${split ? "Page only" : "Side by side"} title=${split ? "Page only: the page fills the session" : "Side by side with the transcript"} onClick=${() => setSplit(!split)}>${ICON.zen}</button>`}
+        ${p.kind !== "browser" && html`<button class="btn quiet icon" aria-label="Open in Pages" onClick=${() => (location.hash = pagesHash(bay, p.session, p.name))} title="Open in Pages">${ICON.out}</button>
+        <${Menu} cls="btn quiet icon" aria="Page actions" title="More" width=${220} items=${[
+          onZen && { label: "Zen", icon: "zen", key: "zen", run: onZen },
+          { label: "Reload", icon: "refresh", run: () => setNonce((n) => n + 1) },
           !alone && { label: "Open full page", run: full },
           { label: "Open the file in a new tab", run: () => openOut(p.url) },
           { label: "Copy link", run: () => copyPageLink(p, say, s) },
@@ -5300,7 +5274,7 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, onZen, say
           !APP && { label: "On phone", run: () => pageToPhone(p, say) },
           { label: "Take down", danger: true, run: () => askTakeDown(p).then((ok) => ok && say(`Took down “${pageTitle(p)}”.`)) },
         ].filter(Boolean)} />`}
-        ${onClose && html`<button class="kb" onClick=${onClose}>Close</button>`}
+        ${onClose && html`<button class="btn quiet icon" aria-label="Close the page" title="Close" onClick=${onClose}>${ICON.x}</button>`}
       </div>
       ${p.note && html`<div class="pnote">${p.note}</div>`}
       <${PageBody} key=${`${pkey(p)}:${nonce}`} p=${p} at=${at?.name === p.name ? at : null} onSend=${onSend} say=${say} />
@@ -5310,9 +5284,9 @@ function PagePane({ s, list, cur, at, pick, split, setSplit, onClose, onZen, say
 function PagesButton({ list, open, on }) {
   useSeenTick();
   const top = list[0], fresh = list.some(pageFresh);
-  const face = html`<span class="t">${list.length === 1 ? pageTitle(top) : plural(list.length, "page")}</span>${fresh && html`<i class="pgdot" aria-label="new"></i>`}`;
-  if (list.length === 1) return html`<button class="kb pgbtn ${on ? "on" : ""}" aria-pressed=${on} aria-keyshortcuts="]" title=${`${pageTitle(top)}\n${pageInfo(top)}`} onClick=${() => open(top.name)}>${face}</button>`;
-  return html`<${Menu} cls=${`kb pgbtn ${on ? "on" : ""}`} aria="Pages" width="min(320px, calc(100vw - 24px))" label=${face}
+  const face = html`${ICON.page}${list.length === 1 ? "Page" : "Pages"}${list.length > 1 && html`<span class="n">${list.length}</span>`}${fresh && html`<i class="pgdot" aria-label="new"></i>`}`;
+  if (list.length === 1) return html`<button class="btn quiet pgbtn ${on ? "on" : ""}" aria-pressed=${on} aria-keyshortcuts="]" title=${tip("page", `${pageTitle(top)}, ${pageInfo(top)}`)} onClick=${() => open(top.name)}>${face}</button>`;
+  return html`<${Menu} cls=${`btn quiet pgbtn ${on ? "on" : ""}`} aria="Pages" title=${tip("page", "Its pages")} width="min(320px, calc(100vw - 24px))" label=${face}
     items=${list.map((p) => ({ cls: "pgitem", title: tilde(p.path), run: () => open(p.name),
       label: html`<i class="pgdot ${pageFresh(p) ? "" : "off"}"></i><span class="tx"><b>${pageTitle(p)}</b><small>${pageInfo(p)}</small></span>` }))} />`;
 }
@@ -6387,13 +6361,14 @@ function Step({ st, s, zoom, pin }) {
   if (st.tool === "Bash" && st.badge?.kind === "show") return html`<div class=${cls}><${PageRef} b=${st.badge} s=${s} /></div>`;
   if (st.tool === "Bash") {
     const cmd = i.command || st.detail || "";
-    const b = st.badge;
+    const b = st.badge, bg = bgOf(st);
     return html`<div class=${cls}>
       <button class="line" aria-expanded=${open} onClick=${toggle}>
         ${b ? html`<${BadgeChip} b=${b} />` : html`<b>${i.description || "Ran"}</b>`}
         ${!b && !i.description && html`<span class="arg">${cmd.split("\n")[0]}</span>`}
         ${b && i.description && html`<span class="arg sans">${i.description}</span>`}
-        <${Failed} st=${b ? {} : st} />${running}
+        ${bg && html`<span class="bgw">in the background</span>`}
+        ${bg ? html`<${BgNote} e=${bg} />` : html`<${Failed} st=${b ? {} : st} />`}${running}
       </button>
       ${open && html`<div class="tbox"><pre class="tpre"><span class="ps">$ </span>${cmd}</pre><${Clip} out=${st.out} bad=${bad} tailFirst=${!!failing} n=${failing ? 14 : 8} /></div>`}
     </div>`;
@@ -6601,42 +6576,6 @@ function SettingsPage({ me, say, onClose }) {
 }
 
 
-function Results({ turns, s, bodies, need, go, close }) {
-  const files = new Map(), commits = [], deploys = [], pushes = [];
-  turns.forEach((t, i) => {
-    for (const f of t.files || []) { const cur = files.get(f.path) || { path: f.path, add: 0, del: 0, turns: [] }; cur.add += f.add; cur.del += f.del; cur.turns.push(i); files.set(f.path, cur); }
-    for (const b of t.badges || []) {
-      if (b.kind === "commit") commits.push({ ...b, i });
-      if (b.kind === "deploy" && b.ok) deploys.push({ ...b, i });
-      if (b.kind === "push" && b.ok) pushes.push({ ...b, i });
-    }
-  });
-  const [file, setFile] = useState(null);
-  const [showJunk, setShowJunk] = useState(false);
-  const all = [...files.values()], kept = all.filter((f) => !scratch(f.path)), junk = all.filter((f) => scratch(f.path));
-  const fileRow = (f) => html`<li><button onClick=${() => setFile(f)}><span class="p"><bdi>${relPath(f.path, s)}</bdi></span><span class="n"><span class="plus">+${f.add}</span>${f.del > 0 && html` <span class="minus">−${f.del}</span>`}</span></button></li>`;
-  useEffect(() => { if (file) file.turns.forEach((i) => need(i)); }, [file]);
-  const fileEdits = file && file.turns.flatMap((i) => txSteps(bodies[turns[i].from]?.items || []).filter((x) => txKind(x) === "edit" && x.input.file_path === file.path && !x.out?.error).flatMap((x) => x.tool === "Write" ? [{ old: "", new: x.input.content || "" }] : txEdits(x)));
-  const pages = s.shown || [];
-  const sec = (title, n, body) => n > 0 && html`<section><h4>${title}<span>${n}</span></h4>${body}</section>`;
-  return html`<div class="pop results" role="dialog" aria-label="What this session produced">
-    <div class="pop-head"><b>What this session produced</b><button class="x" onClick=${close} >Close</button></div>
-    ${file ? html`<div class="file-diff">
-      <button class="back" onClick=${() => setFile(null)}>All files</button>
-      <p class="p"><bdi>${relPath(file.path, s)}</bdi> <span class="plus">+${file.add}</span> <span class="minus">−${file.del}</span></p>
-      ${fileEdits.length ? html`<${Diff} edits=${fileEdits} path=${file.path} />` : html`<p class="cont">Loading the edits…</p>`}
-    </div>` : html`
-      ${sec("Files changed", kept.length || junk.length, html`<ul class="rlist">${kept.map(fileRow)}${junk.length > 0 && html`<li><button onClick=${() => setShowJunk(!showJunk)}><span class="l quiet">${showJunk ? "Hide" : "Show"} ${junk.length} scratch file${junk.length > 1 ? "s" : ""}</span></button></li>`}${showJunk && junk.map(fileRow)}</ul>`)}
-      ${sec("Commits", commits.length, html`<ul class="rlist">${commits.map((c) => html`<li><button onClick=${() => { go(c.i); close(); }}><code>${c.ref}</code><span class="l">${c.text}</span></button></li>`)}</ul>`)}
-      ${sec("Pushed", new Set(pushes.map((p) => p.text)).size, html`<ul class="rlist">${[...new Set(pushes.map((p) => p.text))].map((t) => html`<li><span class="l">${t}</span></li>`)}</ul>`)}
-      ${sec("Deployed", deploys.length, html`<ul class="rlist">${deploys.map((d) => html`<li><button onClick=${() => { go(d.i); close(); }}><span class="l">${d.ref}</span><span class="n">${hhmm(turns[d.i].at)}</span></button></li>`)}</ul>`)}
-      ${sec("Pages", pages.length, html`<ul class="rlist">${pages.map((p) => html`<li><button onClick=${() => { SESSION_API?.page(p.name); close(); }}><span class="l">${pageTitle(p)}</span><span class="n">${agoLong(p.updated || p.shown)}</span></button></li>`)}</ul>`)}
-      ${sec("Running", (s.servers || []).length, html`<ul class="rlist">${(s.servers || []).map((p) => html`<li><a href=${serverURL(s, p)} data-out><span class="l">:${p}</span></a></li>`)}</ul>`)}
-      ${!files.size && !commits.length && !deploys.length && !pages.length && html`<p class="cont">Nothing yet: no files changed, commits, deploys or pages.</p>`}
-    `}
-  </div>`;
-}
-
 const TX_FILTERS = [["failed", "Failures", (t) => t.failed > 0], ["commit", "Commits", (t) => (t.badges || []).some((b) => b.kind === "commit")], ["files", "Changed files", (t) => (t.files || []).length > 0], ["deploy", "Deploys", (t) => (t.badges || []).some((b) => b.kind === "deploy")], ["asks", "Questions", (t) => t.asks > 0]];
 
 function Find({ turns, s, go, close, init }) {
@@ -6792,16 +6731,15 @@ const attsOf = (sid) => txStore.get(`atts.${sid}`, []).map((a) => ({ ...a, url: 
 const SLASH = [["/compact", "summarize the conversation to free context"], ["/clear", "start over with an empty context"], ["/model", "switch the model"],
   ["/review", "review the current diff"], ["/cost", "what this session has cost"], ["/memory", "edit CLAUDE.md memory"], ["/permissions", "what it may run without asking"],
   ["/agents", "subagents it can call"], ["/init", "write a CLAUDE.md for this repo"], ["/add-dir", "let it read another folder"], ["/mcp", "MCP servers and their tools"], ["/status", "model, account, connections"]];
-const fileSize2 = (n) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1e3))} KB`);
 
 function AttChips({ atts, up, zoom, remove }) {
   return atts.length > 0 && html`<div class="atts" aria-label="Attached">${atts.map((a) => html`<span class="att ${up(a) ? "up" : ""}">
     ${a.url ? html`<img src=${a.url} alt="" onClick=${() => zoom(a.url)} />` : html`<span class="fi" aria-hidden="true">${(a.name.split(".").pop() || "").slice(0, 4)}</span>`}
-    <span class="nm">${a.name}</span><span class="sz">${up(a) ? "uploading" : a.size ? fileSize2(a.size) : ""}</span>
+    <span class="nm">${a.name}</span><span class="sz">${up(a) ? "uploading" : a.size ? fileSize(a.size) : ""}</span>
     <button type="button" class="rm" aria-label=${`Remove ${a.name}`} onClick=${() => remove(a)}></button></span>`)}</div>`;
 }
 
-function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, focusRef, uploadRef, working, asking, interrupt, top, prompt, doors, hintFor }) {
+function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, focusRef, uploadRef, working, asking, interrupt, top, prompt, doors, hintFor, drop }) {
   const ta = useRef(), file = useRef();
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -6861,30 +6799,31 @@ function Composer({ s, say, draft, setDraft, quotes, setQuotes, send, replies, f
   };
   const hasText = !!(draft.trim() || atts.length || quotes.length);
   const ready = hasText && !busy && !atts.some((a) => !a.path);
-  const short = clipWords(s.title, 30) || "this session";
-  const hint = hintFor && !asking && !working ? hintFor : asking ? (phone ? "Or type your answer" : "Or type your own answer; enter sends") : working ? (phone ? "Queue a reply" : "Queue a reply for when it stops; esc in an empty box stops it") : phone ? "Reply" : `Reply to ${short}; enter sends`;
+  const hint = hintFor && !asking && !working ? hintFor : asking ? "Or type your own answer" : working ? "Queue a reply" : "Reply";
   const chips = !hasText && !asking && replies?.length > 0 ? replies : [];
-  const strip = confirm ? html`<div class="cstrip confirm" role="alert"><b>Stop the agent?</b><span class="h"><kbd>enter</kbd> stops it, <kbd>esc</kbd> keeps it going</span><span class="sp"></span>
-      <button class="btn" onClick=${() => { setConfirm(false); ta.current?.focus(); }}>Keep going</button><button class="btn primary" onClick=${() => { setConfirm(false); interrupt(); }}>Stop it</button></div>` : null;
+  const keep = () => { setConfirm(false); ta.current?.focus(); };
+  const slashHint = () => { setDraft("/"); requestAnimationFrame(() => { const el = ta.current; el?.focus(); el?.setSelectionRange(1, 1); }); };
   return html`<div class="composer">
     <div class="cols"><div class="cx">${top}
       <div class="cmp ${hasText ? "has-text" : ""}">
-        ${slashes && html`<div class="slash" role="listbox" aria-label="Slash commands">${slashes.length ? slashes.map(([c, d], j) => html`<button class="sl ${j === Math.min(slash, slashes.length - 1) ? "on" : ""}" role="option" aria-selected=${j === slash} onMouseDown=${(e) => e.preventDefault()} onClick=${() => pickSlash(c)}><span class="c">${c}</span><span class="d">${d}</span></button>`)
-          : html`<div class="sl none">No command starts with ${draft}</div>`}<div class="slh"><span><kbd>up</kbd> <kbd>down</kbd> choose</span><span><kbd>tab</kbd> complete</span><span><kbd>esc</kbd> close</span></div></div>`}
-        ${strip}
-        ${quotes.map((q, j) => html`<div class="cstrip quote"><span class="qx">${q}</span><span class="sp"></span><button class="btn" onClick=${() => setQuotes(quotes.filter((_, k) => k !== j))}>Remove</button></div>`)}
-        <div class="cbox ${chips.length ? "has-chips" : ""}">
-          ${chips.length > 0 && html`<div class="chips" aria-label="Suggested replies">${chips.map((r) => html`<button class="chip" disabled=${busy} onClick=${async () => { setBusy(true); await send(r, { suggested: true }); setBusy(false); }}>${r}</button>`)}</div>`}
-          <div class="box" onClick=${(e) => e.target === e.currentTarget && ta.current?.focus()}>
-            ${prompt}
-            <${AttChips} atts=${atts} up=${(a) => !a.path} zoom=${setBig} remove=${(a) => setAtts(atts.filter((x) => x.id !== a.id))} />
-            <button class="kb att-b" title="Attach files (or paste, or drop them on the transcript)" aria-label="Attach files" onClick=${() => file.current?.click()}>${ICON.plus}<span class="lbl">Attach</span></button>
+        ${slashes && html`<div class="slash" role="listbox" aria-label="Slash commands">${slashes.length ? slashes.map(([c, d], j) => html`<button class="sl ${j === Math.min(slash, slashes.length - 1) ? "on" : ""}" role="option" aria-selected=${j === slash} onMouseDown=${(e) => e.preventDefault()} onClick=${() => pickSlash(c)}><span class="c"><b>${draft}</b>${c.slice(draft.length)}</span><span class="d">${d}</span></button>`)
+          : html`<div class="sl none">No command starts with ${draft}</div>`}<div class="slh"><span>enter runs</span><span>tab completes</span><span>esc closes</span></div></div>`}
+        ${quotes.map((q, j) => html`<div class="cstrip quote"><span class="qx">${q}</span><span class="sp"></span><button class="btn quiet" onClick=${() => setQuotes(quotes.filter((_, k) => k !== j))}>Remove</button></div>`)}
+        <div class="box ${drop ? "drop" : ""}" onClick=${(e) => e.target === e.currentTarget && ta.current?.focus()}>
+          ${drop && html`<div class="cdrop" aria-hidden="true">${ICON.upload}Drop to attach</div>`}
+          ${chips.length > 0 && html`<div class="chips" aria-label="Suggested replies">${chips.map((r) => html`<button class="chip" disabled=${busy} title=${`Send “${r}”`} onClick=${async () => { setBusy(true); await send(r, { suggested: true }); setBusy(false); }}>${r}</button>`)}</div>`}
+          <${AttChips} atts=${atts} up=${(a) => !a.path} zoom=${setBig} remove=${(a) => setAtts(atts.filter((x) => x.id !== a.id))} />
+          <div class="crow">${prompt}<textarea ref=${ta} rows="1" value=${draft} placeholder=${hint} aria-label=${`Reply to ${s.title || "the session"}`} enterkeyhint=${touch ? "enter" : "send"}
+            onInput=${(e) => { setDraft(e.target.value); setSlash(0); if (confirm) setConfirm(false); }} onKeyDown=${onKey}
+            onPaste=${(e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); upload(fs); } }}></textarea></div>
+          <div class="cbar">
+            <button class="btn quiet icon att-b" title="Attach files (or paste, or drop them on the session)" aria-label="Attach files" onClick=${() => file.current?.click()}>${ICON.attach}</button>
             <input type="file" multiple hidden ref=${file} onChange=${(e) => { upload([...e.target.files]); e.target.value = ""; }} />
-            <textarea ref=${ta} rows="1" value=${draft} placeholder=${hint} aria-label=${`Reply to ${s.title || "the session"}`} enterkeyhint=${touch ? "enter" : "send"}
-              onInput=${(e) => { setDraft(e.target.value); setSlash(0); if (confirm) setConfirm(false); }} onKeyDown=${onKey}
-              onPaste=${(e) => { const fs = [...(e.clipboardData?.files || [])]; if (fs.length) { e.preventDefault(); upload(fs); } }}></textarea>
-            ${doors}
-            <button class="btn primary send" disabled=${!ready} onClick=${go} title=${working ? "It is working: this waits and sends when it stops" : "Send (enter)"}>${working ? "Queue" : "Send"}</button>
+            ${confirm ? html`<span class="cq" role="alert"><b>Stop this turn?</b> <span>What it has done so far stays.</span></span>
+                <button class="btn" onClick=${keep} title="Keep going (esc)">Keep going</button><button class="btn danger primary" onClick=${() => { setConfirm(false); interrupt(); }} title="Stop (enter)">${ICON.stop}Stop</button>`
+              : html`<button class="slh0" onClick=${slashHint} title=${tip("slash", "Slash commands")}>${phone ? "/" : "/ for commands"}</button><span class="sp"></span>${doors}
+                ${working && !hasText && html`<button class="btn quiet" onClick=${() => setConfirm(true)} title=${tip("stop", "Stop its turn")}>${ICON.stop}Stop</button>`}
+                <button class="btn send ${ready ? "primary" : ""}" disabled=${!ready} onClick=${go} title=${working ? "Queue: it sends when this turn ends (enter)" : slashes ? "Run (enter)" : "Send (enter)"}>${ICON.send}${slashes ? "Run" : working ? "Queue" : "Send"}</button>`}
           </div>
         </div>
       </div>
@@ -6898,8 +6837,8 @@ function EndBar({ s, resume, busy }) {
   const e = (s.state === "stopped" || unexpected(s)) && s.ended?.text && s.ended.cause !== "unknown" ? s.ended : null;
   const at = hhmm(e?.at || s.updated);
   return html`${why && html`<${EndWhy} s=${s} onClose=${() => setWhy(false)} />`}<div class="endbar ${cutOff(s) ? "loud" : ""}"><div class="cols"><div class="cx">
-    <p><b>${s.state === "stopped" || e ? `Stopped${at ? ` ${at}` : ""}.` : "Not running."}</b> ${e ? e.text : "It keeps its transcript; Resume continues the conversation."}</p>
-    <span class="acts">${e && html`<button class="btn" aria-expanded=${why} onClick=${() => setWhy((x) => !x)}>Why</button>`}${cutOff(s) && html`<button class="btn" title="Move it out of Stopped unexpectedly: you know why it stopped and have decided what to do" onClick=${() => dismissEnded([s])}>Dismiss</button>`}<button class="btn primary" disabled=${busy} aria-keyshortcuts="Enter" title=${tip("write", "Resume")} onClick=${resume}>${busy ? "Resuming…" : "Resume"}</button></span>
+    <p class=${why ? "" : "clamp"}><b>${s.state === "stopped" || e ? `Stopped${at ? ` ${at}` : ""}.` : "Not running."}</b> ${e ? e.text : "It keeps its transcript; Resume continues the conversation."}</p>
+    <span class="acts">${e && html`<button class="btn quiet why" aria-expanded=${why} onClick=${() => setWhy((x) => !x)}>${why ? "Less" : "Why"}</button>`}${cutOff(s) && html`<button class="btn" title="Move it out of Stopped unexpectedly: you know why it stopped and have decided what to do" onClick=${() => dismissEnded([s])}>Dismiss</button>`}<button class="btn primary" disabled=${busy} aria-keyshortcuts="Enter" title=${tip("write", "Resume")} onClick=${resume}>${ICON.play}${busy ? "Resuming…" : "Resume"}</button></span>
   </div></div></div>`;
 }
 
@@ -7014,7 +6953,7 @@ async function answerAsk(s, a, rec) {
 function askSpec(s, a) {
   if (a.permission) {
     const cmd = (a.patterns || []).join(" ");
-    return { perm: true, qs: [{ text: cmd ? `${toolName(a.permission)} wants to run:` : `${s.harness || "Claude"} wants to use ${toolName(a.permission)}.`, cmd, options: [
+    return { perm: true, qs: [{ text: cmd ? "Wants to run" : `Wants to use ${toolName(a.permission)}`, cmd, options: [
       { label: "Allow once", note: "it runs now and asks again next time", body: { reply: "once" } },
       ...(s.harness ? [{ label: "Always for this pattern", note: cmd ? `allows ${cmd} for this session` : "allows it for this session", body: { reply: "always" } }] : []),
       { label: "Deny", note: "it stops and waits for you", body: { reject: true } }] }] };
@@ -7072,8 +7011,7 @@ function Ask({ s, a, say, keyRef = { current: null }, onType, compact, sheet }) 
   if (compact) return html`<div class="ask compact ${locked ? `st-${rec.st}` : ""}" data-ask role="group" aria-label=${spec.perm ? "Permission request" : "Question"}
     onKeyDown=${(e) => { if (/^[1-9]$/.test(e.key) && !e.target.matches("input") && keyRef.current) { e.preventDefault(); e.stopPropagation(); keyRef.current(+e.key); } }}>
     ${spec.qs.map((q, qi) => html`<div class="aqb">
-      <div class="aq">${q.text}</div>
-      ${q.cmd && html`<code class="cmd">${q.cmd}</code>`}
+      <div class="aq">${q.text}${q.cmd && html` <code class="cmd">${q.cmd}</code>`}</div>
       <div class="acts" role="group" aria-label="Answers">
         ${q.options.map((o, i) => html`<button class="btn ${spec.perm && i === 0 && !rec ? "primary" : ""} ${chosen(qi, i) ? "ch" : ""}" disabled=${locked && !chosen(qi, i)}
           aria-pressed=${one ? null : chosen(qi, i)} aria-keyshortcuts=${i < 9 ? String(i + 1) : null} title=${o.note} onClick=${() => pick(qi, i)}><kbd aria-hidden="true">${i + 1}</kbd>${o.label}</button>`)}
@@ -7088,8 +7026,7 @@ function Ask({ s, a, say, keyRef = { current: null }, onType, compact, sheet }) 
     ${!sheet && html`<div class="who2"><span>Waiting on you${waited && waited !== "now" ? `, ${waited}` : ""}${spec.perm ? ": run a command" : ""}</span>
       ${!spec.perm && !locked && html`<button class="kb" onClick=${dismiss}>Dismiss</button>`}</div>`}
     ${spec.qs.map((q, qi) => html`<div class="aqb">
-      <div class="aq ${spec.perm ? "ui" : ""}">${q.text}</div>
-      ${q.cmd && html`<code class="cmd">${q.cmd}</code>`}
+      <div class="aq ${spec.perm ? "ui" : ""}">${q.text}${q.cmd && html` <code class="cmd">${q.cmd}</code>`}</div>
       <div class="opts" role="group" aria-label="Answers">
         ${q.options.map((o, i) => html`<button class="opt ${chosen(qi, i) ? "ch" : ""}" disabled=${locked && !chosen(qi, i)} aria-disabled=${locked ? "true" : null}
           aria-pressed=${one ? null : chosen(qi, i)} aria-keyshortcuts=${i < 9 ? String(i + 1) : null} onClick=${() => pick(qi, i)}>
@@ -7120,6 +7057,27 @@ function stepNote(st, s) {
   const bad = !!st.out?.error || st.badge?.ok === false;
   return { v, c, n: bad ? "failed" : n, bad };
 }
+const mcpParts = (tool) => { const p = tool.split("__"); return p[0] === "mcp" && p.length > 2 ? [p[1], p.slice(2).join("__")] : null; };
+const toolFamilies = (steps) => {
+  const by = new Map();
+  for (const x of steps) { const m = mcpParts(x.tool); if (m) by.set(m[0], (by.get(m[0]) || new Set()).add(m[1])); }
+  const label = new Map();
+  for (const x of steps) {
+    const m = mcpParts(x.tool);
+    if (!m) { label.set(x.tool, VERB[x.tool] || toolName(x.tool).toLowerCase()); continue; }
+    const tools = [...by.get(m[0])], seg = m[1].split("_")[0];
+    label.set(x.tool, tools.length > 1 && tools.every((t) => t.split("_")[0] === seg && t.includes("_")) ? seg : m[0]);
+  }
+  return label;
+};
+const BG_STOPPED = new Set([130, 137, 143]);
+const bgEnd = (t) => {
+  const exit = +((t.prompt || "").match(/exit code (\d+)/) || [])[1] || null, st = t.task.status;
+  return { how: st === "completed" ? "done" : st === "killed" || st === "stopped" || BG_STOPPED.has(exit) ? "stopped" : "failed", exit, cmd: ((t.prompt || "").match(/"(.*)"/) || [])[1] || "", id: t.task.id, output: t.task.output };
+};
+const bgCmd = (t) => !!t?.task && /^Background command\b/.test(t.prompt || "");
+const bgOf = (st) => (st.tool === "Bash" && st.input?.run_in_background ? TX_API?.bg(st.id) || { how: "" } : null);
+const BgNote = ({ e }) => e.how && html`<span class="end ${e.how === "failed" ? "bad" : ""}">${e.how === "failed" ? `failed${e.exit != null ? `, exit ${e.exit}` : ""}` : e.how}</span>`;
 const groupSpan = (steps) => {
   const a = Date.parse(steps[0]?.time || 0), b = Math.max(...steps.map((x) => Date.parse(x.out?.time || x.time || 0)));
   return a && b - a >= 1000 ? duration((b - a) / 1000) : "";
@@ -7140,14 +7098,16 @@ const stepsGist = (steps, s) => {
   const count = (kind) => steps.filter((x) => txKind(x) === kind), files = (l) => new Set(l.map((x) => x.input.file_path || x.detail)).size;
   const reads = steps.filter((x) => x.tool === "Read"), finds = steps.filter((x) => x.tool === "Grep" || x.tool === "Glob"), edits = count("edit");
   const named = steps.filter((x) => !["run", "look", "edit", "web", "agent", "ask", "letter", "wa"].includes(txKind(x)));
-  const others = [...new Set(named.map((x) => (x.badge ? x.badge.kind : VERB[x.tool] || toolName(x.tool).toLowerCase())))];
+  const fam = toolFamilies(named), counts = new Map();
+  for (const x of named) { const k = x.badge ? x.badge.kind : fam.get(x.tool); counts.set(k, (counts.get(k) || 0) + 1); }
+  const others = [...counts].map(([k, n]) => (n > 1 ? `${k} ×${n}` : k));
   return [reads.length && `read ${plural(files(reads), "file")}`, finds.length && `searched ${finds.length}`, count("run").length && `ran ${plural(count("run").length, "command")}`,
     edits.length && `edited ${plural(files(edits), "file")}`, count("web").length && `${count("web").length} web`, count("agent").length && (count("agent").every((x) => /^Async agent launched/.test(x.out?.text || "")) ? `started ${plural(count("agent").length, "agent")}` : plural(count("agent").length, "agent")), ...new Set(count("letter").map(letterGist)), ...new Set(count("wa").filter((x) => x.badge.wa).map(waGist)), ...others].filter(Boolean).join(", ");
 };
 
-const InlineSteps = ({ steps, s, open, toggle, at }) => {
-  const failed = steps.filter((x) => x.out?.error || x.badge?.ok === false).length;
-  return html`<button class="inl-steps" aria-expanded=${open} onClick=${toggle} title=${open ? "Fold the steps" : "Show every step"}><span class="chev" aria-hidden="true"></span><span class="v">${stepsGist(steps, s)}</span>${failed > 0 && html`<b>${failed} failed</b>`}<span class="h">${groupSpan(steps)}</span>${at && html`<time>${at}</time>`}</button>`;
+const InlineSteps = ({ steps, s, open, toggle }) => {
+  const failed = steps.filter((x) => x.out?.error || x.badge?.ok === false || bgOf(x)?.how === "failed").length, span = groupSpan(steps);
+  return html`<button class="inl-steps" aria-expanded=${open} onClick=${toggle} title=${open ? "Fold the steps" : "Show every step"}><span class="chev" aria-hidden="true"></span><span class="v">${stepsGist(steps, s)}</span>${failed > 0 && html`<b>, ${failed} failed</b>`}${span && html`<span class="h"> · ${span}</span>`}</button>`;
 };
 
 function Edits({ steps, s }) {
@@ -7190,7 +7150,7 @@ function agentRows(b) {
   if (b.answer) rows.push({ k: "say", text: b.answer, at: b.answerAt || rows[rows.length - 1]?.at, answer: true });
   const out = [];
   for (let j = 0; j < rows.length; j++) {
-    if (rows[j].k === "steps" && rows[j + 1]?.k === "say") { out.push({ ...rows[j + 1], steps: rows[j].steps, at: rows[j].at || rows[j + 1].at }); j++; }
+    if (rows[j].k === "steps" && rows[j + 1]?.k === "say") { out.push({ ...rows[j + 1], steps: rows[j].steps, at: rows[j].at || rows[j + 1].at, textAt: rows[j + 1].at }); j++; }
     else out.push(rows[j]);
   }
   return out;
@@ -7833,11 +7793,13 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   };
   useEffect(() => { goSpot(); addEventListener("hashchange", goSpot); return () => removeEventListener("hashchange", goSpot); });
   const ends = new Map(turns.flatMap((t) => (t.ended || []).map((e) => [e.call, e])));
+  const bgEnds = new Map([...turns, ...Object.values(bodies).flatMap((b) => b.items.filter((x) => x.t === "event").map((x) => ({ prompt: x.text, task: x.task })))]
+    .filter((t) => bgCmd(t) && t.task.call).map((t) => [t.task.call, bgEnd(t)]));
   const reveal = (sel) => requestAnimationFrame(() => { if (!box.current?.querySelector(sel)) return; hold.current = sel; atEnd.current = false; settle(); });
-  TX_API = { ended: (call) => ends.get(call), reveal, jump: (i) => { openTurn(i); reveal(`#tx${i}`); },
+  TX_API = { ended: (call) => ends.get(call), bg: (call) => bgEnds.get(call), reveal, jump: (i) => { openTurn(i); reveal(`#tx${i}`); },
     answered: (ref, at) => { const i = turns.findIndex((t) => t.via?.ref === ref && msOf(t.at) > msOf(at)); return i < 0 ? null : { i, at: turns[i].at }; },
     asked: (ref, at) => { for (let i = turns.length - 1; i >= 0; i--) { if (msOf(turns[i].at) > msOf(at)) continue; const st = txSteps(bodies[turns[i].from]?.items || []).findLast((x) => txKind(x) === "letter" && letterOut(x)?.ref === ref && x.input.report); if (st) return { i, at: st.time || turns[i].at }; } return null; },
-    level: () => setLevel((level % 3) + 1), find: () => { findQ.current = ""; setPop("find"); }, results: () => setPop("results"), contents: () => setContents(!contents), zen: () => setZen(!zen) };
+    level: () => setLevel((level % 3) + 1), find: () => { findQ.current = ""; setPop("find"); }, contents: () => setContents(!contents), zen: () => setZen(!zen) };
   useEffect(() => () => { TX_API = null; }, []);
 
   useEffect(() => {
@@ -7885,7 +7847,7 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
   const replies = live && !working && !pending.some((p) => p.state !== "failed") && s.state === "your-turn" && !s.asks?.length ? s.summary?.replies : null;
 
   const rows = [];
-  const askedQs = new Set(), shownAns = new Set();
+  const askedQs = new Set(), shownAns = new Set(), shownFail = new Set();
   let callAt = null, lastModel = "", lastDay = "";
   turns.forEach((t, i) => {
     const b = bodies[t.from], open = isOpen(i), prev = turns[i - 1];
@@ -7902,15 +7864,20 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     }
     const call = !!callAt, callFrom = callAt;
     if (t.kind === "call-end") callAt = null;
+    const bg = bgCmd(t) && bgEnd(t), quietBg = bg && (bg.how !== "failed" || shownFail.has(bg.id));
+    if (quietBg && !open && !t.reply) return;
     if (!open) {
       rows.push({ k: "fold", key: `f${t.from}`, at: t.at, i, t, call, callFrom });
       if (t.callEnd && callAt) { rows.push({ k: "evt", key: `ce${t.from}`, at: t.callEnd, kind: "call-end", call, callFrom }); callAt = null; }
       return;
     }
-    rows.push({ k: t.notice ? "notice" : t.partial ? "partial" : t.kind === "wake" || t.kind === "restart" ? t.kind : "you", key: `y${t.from}`, at: t.at, i, t, b, call, callFrom });
+    if (bg) { rows.push({ k: quietBg ? "anchor" : "bgfail", key: `y${t.from}`, at: t.at, i, bg, anchor: true, call, callFrom }); shownFail.add(bg.id); }
+    else rows.push({ k: t.notice ? "notice" : t.partial ? "partial" : t.kind === "wake" || t.kind === "restart" ? t.kind : "you", key: `y${t.from}`, at: t.at, i, t, b, call, callFrom });
     if (!b) return (t.steps || t.reply) && rows.push({ k: "skel", key: `s${t.from}`, i, call });
     agentRows(b).forEach((r, j) => {
       if (t.notice && j === 0 && r.k === "evt") return;
+      const ebg = r.k === "evt" && bgCmd({ prompt: r.text, task: r.task }) && bgEnd({ prompt: r.text, task: r.task });
+      if (ebg) { if (ebg.how === "failed" && !shownFail.has(ebg.id)) rows.push({ k: "bgfail", key: `${t.from}:${j}`, at: r.at, i, bg: ebg, call, callFrom }); shownFail.add(ebg.id); return; }
       (r.steps || []).filter((x) => x.tool === "AskUserQuestion").forEach((x) => { (x.input.questions || []).forEach((q) => askedQs.add(q.question)); Object.values(answersOf(x)).forEach((a) => shownAns.add(a)); });
       rows.push({ ...r, key: `${t.from}:${j}`, i, live: working && i === turns.length - 1, call, callFrom, dest: r.answer ? replyDest(t) : "" });
       if (r.kind === "call-end") callAt = null;
@@ -7974,6 +7941,8 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
           <details class="handover"><summary>The handover note${whole ? html`, from <a href=${`#/s/${prev}`} onClick=${(e) => e.stopPropagation()}>the conversation before</a>` : ""}</summary>
           <div class="prose ptxt" dangerouslySetInnerHTML=${{ __html: Marked.parse(cleanPrompt(r.b?.prompt ?? r.t.prompt), { breaks: true }) }}></div></details></div>`;
       }
+      case "anchor": return html`<div id=${`tx${r.i}`}></div>`;
+      case "bgfail": return html`<div class="bgfail" id=${r.anchor ? `tx${r.i}` : null} role="note"><span class="bx" aria-hidden="true">${ICON.x}</span><span class="bt"><code>${r.bg.cmd || "A background command"}</code> failed${r.bg.exit != null ? `, exit ${r.bg.exit}` : ""}</span>${r.bg.output && html`<button class="vlink" onClick=${() => openFileRef(r.bg.output, { exact: true })}>Output</button>`}</div>`;
       case "gap": return html`<div class="tgap"><span>${r.text}</span></div>`;
       case "model": return html`<div class="tgap model"><span>now on ${r.text}</span></div>`;
       case "you": {
@@ -7992,8 +7961,8 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
       case "partial": return html`<p class="evt" id=${`tx${r.i}`}>This turn started before what is loaded here.</p>`;
       case "skel": return html`<div class="skel" aria-label="Loading"><i></i><i></i><i></i></div>`;
       case "say": case "steps":
-        return html`${r.answer && html`<h2 class="sr">${s.agent ? `@${s.agent}` : "agent"}, ${hhmm(r.at)}</h2>`}${r.steps && html`${!zen && html`<${InlineSteps} steps=${r.steps} s=${s} at=${clock(r.at)} open=${gOpen} toggle=${() => flip(gk)} />`}<${GroupBody} steps=${zen ? r.steps.filter((x) => txKind(x) === "ask" || txKind(x) === "letter") : r.steps} s=${s} open=${gOpen && !zen} zoom=${setShot} live=${r.live && !r.text} />`}
-            ${r.text && html`<div id=${`said-${r.key}`} data-said data-stop=${r.answer ? "" : null}><${Prose} text=${r.text} cut=${r.cut} dest=${r.dest} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`;
+        return html`${r.answer && html`<h2 class="sr">${s.agent ? `@${s.agent}` : "agent"}, ${hhmm(r.at)}</h2>`}${r.steps && html`${!zen && html`<${InlineSteps} steps=${r.steps} s=${s} open=${gOpen} toggle=${() => flip(gk)} />`}<${GroupBody} steps=${zen ? r.steps.filter((x) => txKind(x) === "ask" || txKind(x) === "letter") : r.steps} s=${s} open=${gOpen && !zen} zoom=${setShot} live=${r.live && !r.text} />`}
+            ${r.text && html`<div id=${`said-${r.key}`} data-said data-stop=${r.answer ? "" : null}>${(() => { const c = !zen && clock(r.textAt || r.at); return c && html`<time class="rclk" datetime=${r.textAt || r.at}>${c}</time>`; })()}<${Prose} text=${r.text} cut=${r.cut} dest=${r.dest} id=${`h-${r.key.replace(":", "-")}`} /></div>`}`;
       case "evt": return !zen && html`<${TxEvent} e=${r} s=${s} at=${r.at} call=${r.callFrom} open=${openFileRef} />`;
       case "note": return html`<${Lead} at=${clock(r.at, true)} when=${r.at} text=${r.text} via=${r.via} pastes=${r.pastes} />`;
       case "answered": {
@@ -8089,13 +8058,11 @@ function Transcript({ s, say, resume, busy, cmp = {} }) {
     </div>
     ${pop === "find" && html`<${Find} turns=${turns} s=${s} go=${go} close=${() => { setPop(null); box.current?.focus({ preventScroll: true }); }} init=${findQ.current} key=${findQ.current} />`}
     ${pop === "look" && html`<${ZenLook} prefs=${prefs} />`}
-    ${pop === "results" && html`<${Results} turns=${turns} s=${s} bodies=${bodies} need=${need} go=${go} close=${() => setPop(null)} />`}
     ${below && fresh > 0 && html`<button class="btn to-end" onClick=${() => { letGo(); atEnd.current = true; setFresh(0); box.current?.scrollTo({ top: box.current.scrollHeight }); }}>${working ? "New activity below" : "New reply below"}</button>`}
     </div>
-    ${drop && html`<div class="droptarget" aria-hidden="true"><span>Drop to attach to <b>${s.title || "this session"}</b></span></div>`}
     ${!live && resume && s.kind !== "interactive" && html`<${EndBar} s=${s} resume=${resume} busy=${busy} />`}
     ${live && html`<${Composer} s=${s} say=${say} draft=${draft} setDraft=${setDraft} quotes=${quotes} setQuotes=${setQuotes} send=${send} replies=${replies}
-      focusRef=${composerFocus} uploadRef=${uploadRef} working=${working} asking=${!!asking && !asking.permission} interrupt=${interrupt}
+      focusRef=${composerFocus} uploadRef=${uploadRef} working=${working} asking=${!!asking && !asking.permission} interrupt=${interrupt} drop=${drop}
       prompt=${cmp.prompt} doors=${cmp.doors} hintFor=${cmp.hint} top=${html`${cmp.top}<${BgStrip} s=${s} />`} />`}
     ${shot && html`<div class="lightbox" onClick=${() => setShot(null)}><img src=${shot} alt="" /></div>`}
   </div>`;
@@ -8623,7 +8590,7 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
     const act = (label, f, kw = "", hint, boost) => add(g, label, { run: run(null, f), kw, hint, boost, sub: s.title || "Untitled" });
     if (cur.canAttach) act("Terminal", () => cur.mode("term"), "shell attach", keyFor("term"));
     act("Transcript", () => cur.mode("chat"), "read conversation");
-    act("Outputs", () => cur.mode("out"), "files servers links");
+    act("Outputs", () => cur.outputs(), "files servers links commits results", keyFor("state"));
     if (cur.zen || TX_API) act("Zen", () => (cur.zen || TX_API?.zen)?.(), "read focus text", keyFor("zen"));
     act("Sessions pane", () => actions.pane("rail"), "rail list", keyFor("rail"));
     act("State pane", () => actions.pane("state"), "summary facts", keyFor("state"));
