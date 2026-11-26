@@ -226,6 +226,9 @@ html.pal-bar .tx .toc { top: calc(104px + var(--pal-bar-h, 0px)); }
 .dl-v { font-family: var(--mono); color: var(--dim); text-align: right; }
 .dl-t { position: relative; height: 18px; background: var(--sunk); }
 .dl-t em { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--hair); }
+.dl-rows.days { row-gap: 2px; }
+.dl-rows.days .dl-t { height: 12px; }
+.dl-rows.days .dl-t i { top: 1px; bottom: 1px; }
 .dl-t i { position: absolute; top: 2px; bottom: 2px; min-width: 2px; border-radius: 1px; }
 .dl-t i.on { outline: 2px solid var(--focus); z-index: 1; }
 .dl-x { position: relative; height: 14px; font-family: var(--mono); font-size: var(--fs-micro); color: var(--faint); }

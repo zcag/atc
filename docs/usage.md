@@ -21,8 +21,8 @@ time beside what Claude spent in it. Pick a day or a bay and the rest narrows to
 
 The page counts 5-second ticks while it is visible and focused, for the session that is open, or for the screen (the board,
 pages, settings) when none is. Typing, clicking, scrolling, touching or moving the mouse, also inside a page a session showed
-you, keeps it counting for a minute. A pause of up to 3 minutes, such as reading a long reply, counts once you move again or
-switch away; of a longer one only the first minute does. Two devices at once count once, and atc open in a session's browser
+you, keeps it counting for 30 seconds; a longer pause counts its first 30 seconds only, even when you come back, since nothing
+tells reading from being away. Two devices at once count once, and atc open in a session's browser
 tab doesn't count. Ticks that couldn't be sent go out with the next ones, up to 14 minutes later.
 
 It leaves out other apps and tabs, `atc attach` in a terminal, and calls, so it is less than the time you worked.

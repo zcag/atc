@@ -2672,14 +2672,12 @@ addEventListener("message", (e) => { if (e.data?.atc === 1 && e.data.op === "act
 addEventListener("focus", beat);
 setInterval(beat, 30000);
 
-let TIME_ON = null, cameBack = 0;
+let TIME_ON = null;
 const ATTENTION = attention();
 const SCREEN_NAMES = { ...SCREENS, board: "Board and session list", pages: "Pages", assistant: "Assistant", shell: "Shell", settings: "Settings" };
 const openNow = ({ sel, screen }) => sel?.sessionId ? { sessionId: sel.sessionId, title: sel.title || "", cwd: sel.cwd || "", host: sel.host || "", profile: sel.profile || "" }
   : SCREEN_NAMES[screen] ? { sessionId: `screen:${screen}`, title: SCREEN_NAMES[screen], cwd: "", host: "" } : null;
-const timeInput = () => Math.max(lastInput, cameBack);
-const tickTime = () => ATTENTION.tick(Date.now(), { on: TIME_ON, here: document.visibilityState === "visible" && document.hasFocus(), input: timeInput() });
-const leftPage = () => { if (!touch) ATTENTION.left(Date.now(), timeInput()); };
+const tickTime = () => ATTENTION.tick(Date.now(), { on: TIME_ON, here: document.visibilityState === "visible" && document.hasFocus(), input: lastInput });
 const sendTicks = async () => {
   const sessions = ATTENTION.take(Date.now());
   if (!sessions.length) return;
@@ -2688,9 +2686,7 @@ const sendTicks = async () => {
 };
 setInterval(tickTime, 5000);
 setInterval(sendTicks, 30000);
-addEventListener("focus", () => { cameBack = Date.now(); });
-addEventListener("blur", () => { if (!document.hasFocus()) leftPage(); });
-addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") { leftPage(); sendTicks(); } });
+addEventListener("visibilitychange", () => document.visibilityState === "hidden" && sendTicks());
 addEventListener("pagehide", sendTicks);
 
 const markFocus = () => document.documentElement.classList.toggle("unfocused", !document.hasFocus());
@@ -4032,32 +4028,36 @@ function useAccountReports(days, profs) {
   return profs.length > 0 && profs.every((p) => reps[p.name]) ? reps : null;
 }
 
-function DayLine({ runs, day, color }) {
+// One day reads per bay; a range reads one line per day, each block in its bay's colour.
+function DayLine({ runs, color, what }) {
   const [at, setAt] = useState(null);
-  useEffect(() => setAt(null), [day]);
+  const H = 3600000, sinceMidnight = (r, t) => (t - new Date(`${r.day}T00:00`).getTime()) / H;
+  const oneDay = runs.every((r) => r.day === runs[0].day);
   const rows = useMemo(() => {
     const m = new Map();
     for (const r of runs) {
-      const bay = m.get(r.s.bay) || { name: r.s.bay, secs: 0, runs: [] };
-      bay.secs += r.secs;
-      const last = bay.runs[bay.runs.length - 1];
-      if (last && last.s === r.s && r.from - last.to <= 60000) { last.to = r.to; last.secs += r.secs; } else bay.runs.push({ ...r });
-      m.set(r.s.bay, bay);
+      const k = oneDay ? r.s.bay : r.day;
+      const row = m.get(k) || { name: oneDay ? r.s.bay : dayOf(r.day, { weekday: "short", day: "numeric", month: "short" }), key: k, secs: 0, runs: [] };
+      row.secs += r.secs;
+      const last = row.runs[row.runs.length - 1];
+      if (last && last.s === r.s && r.from - last.to <= 60000) { last.to = r.to; last.secs += r.secs; } else row.runs.push({ ...r });
+      m.set(k, row);
     }
-    return [...m.values()].sort((a, b) => b.secs - a.secs);
+    return [...m.values()].sort(oneDay ? (a, b) => b.secs - a.secs : (a, b) => (a.key < b.key ? 1 : -1));
   }, [runs]);
-  const midnight = new Date(`${day}T00:00`).getTime(), H = 3600000;
-  const h0 = Math.floor((runs[0].from - midnight) / H), h1 = Math.max(h0 + 1, Math.ceil((Math.max(...runs.map((r) => r.to)) - midnight) / H));
-  const x = (t) => ((t - midnight) / H - h0) / (h1 - h0) * 100;
+  useEffect(() => setAt(null), [runs]);
+  const h0 = Math.floor(Math.min(...runs.map((r) => sinceMidnight(r, r.from)))), h1 = Math.max(h0 + 1, Math.ceil(Math.max(...runs.map((r) => sinceMidnight(r, r.to)))));
+  const x = (r, t) => ((sinceMidnight(r, t) - h0) / (h1 - h0)) * 100;
   const step = Math.max(1, Math.ceil((h1 - h0) / 8));
   const marks = Array.from({ length: h1 - h0 + 1 }, (_, i) => h0 + i).filter((h) => (h - h0) % step === 0);
-  return html`<section class="sec udayl"><div class="sh"><h2>${bucketName(day)}</h2><span class="n">when you were in which bay</span></div>
-    <div class="dl-rows" role="img" aria-label=${`${bucketName(day)}: ${rows.map((r) => `${r.name} ${span(r.secs)}`).join(", ")}`} onPointerLeave=${() => setAt(null)}>
-      ${rows.map((b) => html`<span class="dl-n">${b.name}</span><span class="dl-t">${marks.map((h) => html`<em style=${`left:${((h - h0) / (h1 - h0)) * 100}%`}></em>`)}${b.runs.map((r) => html`
-        <i class=${at && at.from === r.from ? "on" : ""} style=${`left:${x(r.from)}%;width:${x(r.to) - x(r.from)}%;background:${color(b.name)}`} onPointerEnter=${() => setAt(r)} onClick=${() => setAt(r)}></i>`)}</span><span class="dl-v">${span(b.secs)}</span>`)}
-      <span></span><span class="dl-x">${marks.map((h) => html`<em style=${`left:${((h - h0) / (h1 - h0)) * 100}%`}>${h % 24}</em>`)}</span><span></span>
+  const pos = (h) => `left:${((h - h0) / (h1 - h0)) * 100}%`;
+  return html`<section class="sec udayl"><div class="sh"><h2>${oneDay ? bucketName(runs[0].day) : "Day by day"}</h2><span class="n">${oneDay ? "when you were in which bay" : `when you were in which bay, ${what}`}</span></div>
+    <div class="dl-rows ${oneDay ? "" : "days"}" role="img" aria-label=${rows.map((r) => `${r.name} ${span(r.secs)}`).join(", ")} onPointerLeave=${() => setAt(null)}>
+      ${rows.map((row) => html`<span class="dl-n">${row.name}</span><span class="dl-t">${marks.map((h) => html`<em style=${pos(h)}></em>`)}${row.runs.map((r) => html`
+        <i class=${at && at.from === r.from ? "on" : ""} style=${`left:${x(r, r.from)}%;width:${x(r, r.to) - x(r, r.from)}%;background:${color(r.s.bay)}`} onPointerEnter=${() => setAt(r)} onClick=${() => setAt(r)}></i>`)}</span><span class="dl-v">${span(row.secs)}</span>`)}
+      <span></span><span class="dl-x">${marks.map((h) => html`<em style=${pos(h)}>${h % 24}</em>`)}</span><span></span>
     </div>
-    <div class="ro" aria-live="polite">${at ? html`<span>${hhmm(at.from)} to ${hhmm(at.to)}</span><b>${span(at.secs)}</b><span>${at.s.title || at.s.sessionId.slice(0, 8)}</span>`
+    <div class="ro" aria-live="polite">${at ? html`<span>${oneDay ? "" : `${dayOf(at.day, { weekday: "short" })} `}${hhmm(at.from)} to ${hhmm(at.to)}</span><b>${span(at.secs)}</b><span>${at.s.title || at.s.sessionId.slice(0, 8)}${oneDay ? "" : `, ${at.s.bay}`}</span>`
       : html`<span>${touch ? "Tap" : "Point at"} a block for its session</span>`}</div></section>`;
 }
 
@@ -4116,8 +4116,6 @@ function TimePage({ live, onOpen }) {
   const shown = more ? matched : matched.slice(0, SHOWN_ROWS);
   const sortBy = (k) => set({ sort: k, dir: v.sort === k ? -v.dir : ["title", "bay", "last"].includes(k) ? 1 : -1 });
   const maxRow = Math.max(1, ...matched.map((r) => r.secs));
-  const runDay = sel.bucket || data.runs[data.runs.length - 1]?.day;
-  const dayRuns = data.runs.filter((r) => r.day === runDay);
   const hourDays = days.filter((d) => t.runsFrom && d >= t.runsFrom).map((d) => ({ day: d, hours: data.hours[d] }));
   const multi = profs.length > 1;
   return html`
@@ -4140,7 +4138,7 @@ function TimePage({ live, onOpen }) {
           <div class="ukpis">${kpis.map((k) => html`<div class="ukpi ${k.big ? "big" : ""}"><span class="l">${k.l}</span><b>${k.v}</b><span class="s">${k.s}</span></div>`)}</div>
           ${days.length > 1 && html`<${UsageBars} days=${days} data=${bars} models=${data.bays.filter((b) => topBays.includes(b.name))} sel=${sel} on=${sel.bay} partial=${today} as=${barsAs}
             onPick=${(d) => pick({ bucket: d })} onPickModel=${(b) => pick({ bay: b })} />`}
-          ${dayRuns.length > 0 ? html`<${DayLine} runs=${dayRuns} day=${runDay} color=${color} />`
+          ${data.runs.length > 0 ? html`<${DayLine} runs=${data.runs} color=${color} what=${chips.length ? chips.map((c) => c[1]).join(", ") : def[2]} />`
             : sel.bucket && html`<p class="ufloor">Only a total was kept for this day. Times of day are kept ${t.runsFrom ? `from ${dayOf(t.runsFrom, { day: "numeric", month: "short" })}` : "from now"} on.</p>`}
           <div class="ugrid">
             <section class="sec usess"><div class="sh"><h2>Sessions</h2><span class="n">${chips.length ? chips.map((c) => c[1]).join(", ") : def[2]}</span>
@@ -4165,8 +4163,8 @@ function TimePage({ live, onOpen }) {
           <${HoursMap} days=${hourDays} range=${def[0]} filtered=${chips.length > 0} as=${hoursAs} />`}
       </div>
       <section class="sec"><div class="sh"><h2>How it is counted</h2></div>
-        <p class="unote">In 5-second ticks, while atc is the visible, focused window, for what is open in it. Typing, clicking, scrolling, touching or moving the mouse keeps it counting for a minute. A pause up to 3 minutes, like reading a long reply, counts once you move again or switch away; of a longer one only the first minute counts. Two devices at once count once.</p>
-        <p class="unote">Left out: other apps and browser tabs, a terminal attached with atc attach, voice calls, and anything another session or a schedule typed. So it is time in front of atc, less than the time you worked.${t?.runsFrom && t.first < t.runsFrom ? ` Before ${dayOf(t.runsFrom, { day: "numeric", month: "short" })} pauses over a minute, scrolling inside a shown page and time outside sessions were not counted, so those days read low.` : ""}</p></section>
+        <p class="unote">In 5-second ticks, while atc is the visible, focused window, for what is open in it. Typing, clicking, scrolling, touching or moving the mouse keeps it counting for 30 seconds. A longer pause counts its first 30 seconds only, even when you come back, since nothing tells reading from being away. Two devices at once count once.</p>
+        <p class="unote">Left out: other apps and browser tabs, a terminal attached with atc attach, voice calls, and anything another session or a schedule typed. So it is time in front of atc, less than the time you worked.${t?.runsFrom && t.first < t.runsFrom ? ` Before ${dayOf(t.runsFrom, { day: "numeric", month: "short" })} a pause counted its first minute rather than 30 seconds, so those days read higher, while time outside sessions and inside shown pages was missed.` : ""}</p></section>
       </div></div>
     </section>`;
 }
