@@ -17,6 +17,7 @@ const LOOK = () => {
   const list = [...live.filter((s) => s.state === 'your-turn' || s.state === 'stopped'), ...hist].filter((s, i, a) => a.findIndex((x) => x.sessionId === s.sessionId) === i).slice(0, 8);
   for (const [name, vp] of [['desktop', { width: 1400, height: 900 }], ['phone', { width: 400, height: 800 }]]) {
     const ctx = await b.newContext({ viewport: vp });
+    await ctx.addInitScript(() => { try { localStorage.setItem('atc.notifask', '1'); } catch {} });
     const p = await ctx.newPage();
     const seen = Object.fromEntries(list.map((s) => [s.sessionId, new Date().toISOString()]));
     await p.route(/\/api\//, (r) => r.request().method() === 'GET' ? r.continue() : r.fulfill({ status: 204 }));

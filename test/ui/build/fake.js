@@ -12,7 +12,7 @@ async function fakeSessions(page, base, change) {
 }
 
 function needsIn(list, n, bays) {
-  const live = list.filter((s) => ['your-turn', 'working'].includes(s.state));
+  const live = list.filter((s) => ['your-turn', 'working'].includes(s.state) && s.kind !== 'hub');
   for (const s of live.filter((x) => !x.pinned && !x.parked).slice(0, n)) {
     s.state = 'needs-you';
     s.asks = ASK('Keep both date formats, or normalise to cents?', ['Keep both', 'Normalise to cents']);

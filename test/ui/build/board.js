@@ -45,6 +45,8 @@ const stub = (p) => p.route('**/api/**', (r) => r.request().method() === 'GET' ?
   await p.keyboard.press('j');
   await p.waitForTimeout(200);
   ok(await p.locator('.brow.cur').count() === 1, 'j selects a row');
+  const hubs = (await (await fetch(base + '/api/sessions')).json()).filter((s) => s.kind === 'hub').map((s) => s.sessionId);
+  for (let i = 0; i < 5 && hubs.includes(await p.$eval('.brow.cur', (e) => e.dataset.sid)); i++) { await p.keyboard.press('j'); await p.waitForTimeout(100); }
   await p.keyboard.press(' ');
   await p.waitForTimeout(200);
   ok(await p.isVisible('.bexp'), 'space opens the selected row');
