@@ -3112,7 +3112,7 @@ function makeDock(id, path, alive) {
   term.loadAddon(new WebLinksAddon.WebLinksAddon((_, uri) => openOut(uri)));
   term.loadAddon(new Unicode11Addon.Unicode11Addon());
   term.unicode.activeVersion = "11";
-  term.loadAddon(new ClipboardAddon.ClipboardAddon(undefined, { readText: (sel) => sel === "c" ? navigator.clipboard.readText() : "", writeText: (sel, text) => sel === "c" && copyText(text) }));
+  term.loadAddon(new ClipboardAddon.ClipboardAddon(undefined, { readText: (sel) => sel === "c" ? navigator.clipboard.readText() : "", writeText: (sel, text) => (sel === "" || sel.includes("c")) && copyText(text) }));
   term.open(el);
   fit.fit();
 

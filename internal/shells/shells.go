@@ -145,7 +145,7 @@ func (s *Shells) Start(ctx context.Context, dir, run string) (Shell, error) {
 	if run != "" {
 		command = []string{"/bin/sh", "-c", runThenWait, loginShell(), run}
 	}
-	args = append(args, ";", "set-option", "-sa", "terminal-features", "xterm-256color:RGB:clipboard:focus",
+	args = append(args, ";", "set-option", "-sa", "terminal-features", "xterm-256color:RGB:clipboard:focus:hyperlinks",
 		";", "new-session", "-d", "-s", prefix+id, "-c", dir, "-x", "120", "-y", "40", "--")
 	args = append(args, command...)
 	if run != "" {
