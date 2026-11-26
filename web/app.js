@@ -394,7 +394,7 @@ function App() {
     es.addEventListener("ping", () => { pinged = true; hear(); });
     es.addEventListener("sessions", (e) => {
       raw = steady(JSON.parse(e.data) || []);
-      DOOMED.forEach((d, sid) => d.done && !raw.some((x) => x.sessionId === sid) && DOOMED.delete(sid));
+      DOOMED.forEach((_, sid) => !raw.some((x) => x.sessionId === sid) && DOOMED.delete(sid));
       SHOW_LIVE();
       hear();
     });
@@ -644,8 +644,7 @@ function App() {
         if (!x || !canDelete(x)) return;
         e.preventDefault();
         const near = [step(x.sessionId, 1), step(x.sessionId, -1)].find((y) => y && y.sessionId !== x.sessionId);
-        setCursor(near?.sessionId || null);
-        deleteLater(x, say);
+        deleteLater(x, say).then((ok) => ok && setCursor(near?.sessionId || null));
       } else if (act) {
         e.preventDefault(); act();
       } else if (e.key === "Escape") {
@@ -2466,37 +2465,19 @@ let SHOW_LIVE = () => {};
 const doomed = (x) => DOOMED.has(x.sessionId);
 const canDelete = (s) => !!s.id && !s.private && s.kind !== "hub";
 const isOpen = (s) => [s.id, s.sessionId].some((k) => k && location.hash.startsWith(`#/s/${k}`));
-const sendDelete = (sid, keepalive) => {
-  const d = DOOMED.get(sid);
-  if (!d || d.sent) return;
-  clearTimeout(d.timer);
-  d.sent = true;
-  api(`/api/sessions/${d.s.id}`, { method: "DELETE", keepalive }).then(() => (d.done = true),
-    (e) => { DOOMED.delete(sid); SHOW_LIVE(); d.say(`Couldn't delete “${d.s.title || "Untitled"}”: ${e.message}`); });
-};
-const sendDeletes = () => DOOMED.forEach((_, sid) => sendDelete(sid, true));
-addEventListener("pagehide", sendDeletes);
-document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && sendDeletes());
 function deleteLater(s, say, leave) {
-  if (DOOMED.has(s.sessionId)) return;
-  ask({ title: `Delete “${s.title || "Untitled"}”?`, body: "Its conversation stays in history, where you can resume it.", ok: "Delete", danger: true })
-    .then((ok) => ok && dropSession(s, say, leave));
+  if (DOOMED.has(s.sessionId)) return Promise.resolve(false);
+  return ask({ title: `Delete “${s.title || "Untitled"}”?`, body: "Its conversation stays in history, where you can resume it.", ok: "Delete", danger: true })
+    .then((ok) => { if (ok) dropSession(s, say, leave); return !!ok; });
 }
 
 function dropSession(s, say, leave) {
   if (DOOMED.has(s.sessionId)) return;
-  const from = (leave || isOpen(s)) && location.hash;
-  if (from) (leave || backHome)();
-  DOOMED.set(s.sessionId, { s, say, timer: setTimeout(() => sendDelete(s.sessionId), 8000) });
+  if ((leave || isOpen(s)) && location.hash) (leave || backHome)();
+  DOOMED.set(s.sessionId, s);
   SHOW_LIVE();
-  say(`Deleted “${s.title || "Untitled"}”.`, { undo: () => {
-    const d = DOOMED.get(s.sessionId);
-    if (!d || d.sent) return;
-    clearTimeout(d.timer);
-    DOOMED.delete(s.sessionId);
-    SHOW_LIVE();
-    if (from && location.hash !== from) location.hash = from;
-  } });
+  api(`/api/sessions/${s.id}`, { method: "DELETE" })
+    .catch((e) => { DOOMED.delete(s.sessionId); SHOW_LIVE(); say(`Couldn't delete “${s.title || "Untitled"}”: ${e.message}`); });
 }
 
 function sessionActions(s, say, { rename, open, after, leave, delKey = "delete" } = {}) {

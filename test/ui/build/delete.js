@@ -1,4 +1,4 @@
-// Deleting a session asks once (Enter confirms), then hides its row with an Undo toast and sends the DELETE only when the toast runs out;
+// Deleting a session asks once (Enter confirms, Esc keeps it), then deletes it at once with no toast;
 // a private session keeps its Erase dialog and gets no hover x.
 const { chromium } = require('playwright-core');
 const { fakeSessions } = require('./fake');
@@ -26,7 +26,7 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
     });
     await fakeSessions(p, base, (l) => {
       const t = l.find((s) => s.kind === 'background') || l[0];
-      return [mk(t, 1), mk(t, 2), mk(t, 3, { state: 'needs-you', pinned: true }), mk(t, 4, { private: true, title: 'Private sample' }), mk(t, 5)];
+      return [mk(t, 1), mk(t, 2), mk(t, 3, { state: 'needs-you', pinned: true }), mk(t, 4, { private: true, title: 'Private sample' }), mk(t, 5), mk(t, 6)];
     });
     await p.addInitScript((sc) => { try { localStorage.setItem('atc.notifask', '1'); localStorage.removeItem('atc.project'); } catch {} document.documentElement.dataset.scheme = sc; }, scheme);
     await p.goto(`${base}/#/`);
@@ -35,7 +35,7 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
     await p.waitForTimeout(500);
     const tag = `${w}-${scheme}`;
     const row = (i) => p.$(`[data-sid^="del${i}"]`);
-    const confirmDel = async () => { await p.waitForSelector('.dlgveil'); await p.keyboard.press('Enter'); await p.waitForTimeout(300); };
+    const confirmDel = async () => { await p.waitForSelector('.dlgveil'); await p.keyboard.press('Enter'); await p.waitForSelector('.dlgveil', { state: 'detached' }); await p.waitForTimeout(150); };
     if (w >= 900) {
       ok(!(await p.$('.rdel:visible')), `${tag}: no x on a calm list`);
       await p.hover('[data-sid^="del1"]');
@@ -48,27 +48,23 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
       await confirmDel();
       await p.waitForTimeout(200);
       ok(!(await row(1)), `${tag}: the row goes at once`);
-      ok((await p.textContent('.toast .tmsg')) === 'Deleted “Sample session 1”.', `${tag}: toast says what was deleted`);
-      await p.screenshot({ path: `${out}/board-toast-${tag}.png` });
-      ok(dels.length === 0, `${tag}: nothing sent yet`);
+      ok(!(await p.$('.toast')), `${tag}: no toast after deleting`);
+      ok(dels.length === 1, `${tag}: sent right after confirming`);
       await p.mouse.move(5, 5);
-      await p.keyboard.press('z');
-      await p.waitForTimeout(200);
-      ok(!!(await row(1)), `${tag}: z brings it back`);
       await p.keyboard.press('j');
       await p.waitForTimeout(100);
       const cur = await p.$eval('.brow.cur', (e) => e.dataset.sid);
       await p.screenshot({ path: `${out}/board-cursor-${tag}.png` });
       await p.keyboard.press('Delete');
-      await confirmDel();
-      await p.waitForTimeout(100);
-      ok(!(await p.$(`[data-sid="${cur}"]`)), `${tag}: Delete on the cursor row deletes it`);
+      await p.waitForSelector('.dlgveil');
+      await p.keyboard.press('Escape');
+      await p.waitForSelector('.dlgveil', { state: 'detached' });
+      await p.waitForTimeout(150);
+      ok(!!(await p.$(`[data-sid="${cur}"]`)) && dels.length === 1, `${tag}: Esc in the confirm keeps it`);
       await p.keyboard.press('Delete');
       await confirmDel();
       await p.waitForTimeout(100);
-      ok(dels.length === 0, `${tag}: two queued, none sent`);
-      await p.waitForTimeout(8500);
-      ok(dels.length === 2, `${tag}: both sent when their toasts ran out (${dels.join(' ')})`);
+      ok(!(await p.$(`[data-sid="${cur}"]`)) && dels.length === 2, `${tag}: Delete on the cursor row deletes it`);
       dels.length = 0;
       await p.goto(`${base}/#/s/del5`);
       await p.waitForSelector('.hd h1');
@@ -79,21 +75,19 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
       await p.keyboard.press('Delete');
       await confirmDel();
       await p.waitForTimeout(300);
-      ok(!(await p.evaluate(() => location.hash.startsWith('#/s/del5'))), `${tag}: Delete in the session leaves it`);
-      await p.keyboard.press('z');
-      await p.waitForTimeout(300);
-      ok(await p.evaluate(() => location.hash.startsWith('#/s/del5')), `${tag}: z goes back into it`);
+      ok(!(await p.evaluate(() => location.hash.startsWith('#/s/del5'))) && dels.length === 1, `${tag}: Delete in the session deletes it and leaves`);
+      dels.length = 0;
+      await p.goto(`${base}/#/s/del6`);
+      await p.waitForSelector('.hd h1');
+      await p.waitForTimeout(500);
       await p.click('.hd .more > div > button');
       const labels = await p.$$eval('.hd .more .mitem .lb', (l) => l.map((e) => e.textContent));
-      ok(labels.includes('Delete') && !labels.includes('Delete…'), `${tag}: More says Delete, no dialog`);
+      ok(labels.includes('Delete') && !labels.includes('Delete…'), `${tag}: More says Delete`);
       await p.screenshot({ path: `${out}/more-${tag}.png` });
       await p.click('.hd .more .mitem.danger');
       await confirmDel();
       await p.waitForTimeout(200);
-      ok(!(await p.$('.veil')), `${tag}: the confirm closed after Enter`);
-      await p.evaluate(() => dispatchEvent(new Event('pagehide')));
-      await p.waitForTimeout(300);
-      ok(dels.length === 1, `${tag}: leaving the page sends it right away`);
+      ok(!(await p.$('.veil')) && dels.length === 1, `${tag}: More's Delete asks, then deletes`);
       await p.goto(`${base}/#/s/del4`);
       await p.waitForSelector('.hd h1');
       await p.waitForTimeout(500);
@@ -118,7 +112,7 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
       await p.click('.msheet .mitem.danger');
       await confirmDel();
       await p.waitForTimeout(200);
-      ok(!(await row(2)) && !(await p.$('.veil:not(.mveil)')), `${tag}: Delete from the sheet asks, then hides it`);
+      ok(!(await row(2)) && !(await p.$('.veil:not(.mveil)')) && dels.length === 1, `${tag}: Delete from the sheet asks, then deletes it`);
       await p.screenshot({ path: `${out}/phone-toast-${tag}.png` });
     }
     await ctx.close();
