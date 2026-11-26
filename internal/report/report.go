@@ -12,6 +12,7 @@ import (
 
 	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/usage"
+	"github.com/zcag/atc/internal/when"
 )
 
 func Tokens(n int64) string {
@@ -44,33 +45,12 @@ func Dollars(c float64) string {
 	return fmt.Sprintf("$%.2f", c)
 }
 
-func Span(d time.Duration) string {
-	sec := d.Seconds()
-	m := int(math.Round(sec / 60))
-	h := m / 60
-	switch {
-	case sec < 60:
-		return fmt.Sprintf("%ds", max(0, int(math.Round(sec))))
-	case m < 60:
-		return fmt.Sprintf("%dm", m)
-	case h < 48:
-		return fmt.Sprintf("%dh %dm", h, m%60)
-	}
-	return fmt.Sprintf("%dd %dh", h/24, h%24)
-}
-
 func Ago(t, now time.Time) string {
-	switch d := now.Sub(t); {
-	case t.IsZero():
-		return ""
-	case d < time.Minute:
-		return "just now"
-	case d < time.Hour:
-		return fmt.Sprintf("%dm ago", int(d.Minutes()))
-	case d < 48*time.Hour:
-		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	switch a := when.Age(t, now); a {
+	case "", "now":
+		return map[string]string{"": "", "now": "just now"}[a]
 	default:
-		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
+		return a + " ago"
 	}
 }
 
@@ -82,11 +62,7 @@ func Reset(t, now time.Time) string {
 	case d <= 0:
 		return "resetting now"
 	}
-	layout := "Mon 15:04"
-	if d < 20*time.Hour {
-		layout = "15:04"
-	}
-	return "resets in " + Span(d) + ", " + t.Local().Format(layout)
+	return "resets in " + when.Duration(d) + ", " + when.Today(t.Local(), now.Local())
 }
 
 func Pct(p float64) string { return fmt.Sprintf("%d%%", int(math.Round(p))) }
@@ -101,7 +77,7 @@ func LimitsShort(ws []usage.Window, now time.Time) string {
 			parts = append(parts, s+" "+Pct(w.Percent))
 		}
 		if w.Key == "session" && w.ResetsAt.After(now) {
-			reset = "resets " + Span(w.ResetsAt.Sub(now))
+			reset = "resets " + when.Duration(w.ResetsAt.Sub(now))
 		}
 	}
 	if len(parts) > 0 && reset != "" {
@@ -215,14 +191,14 @@ func Plan(l usage.Limits, days []usage.Day, perPct float64, now time.Time) []str
 		sum.Cost += d.Cost
 		label := d.Day
 		if t, err := time.ParseInLocation("2006-01-02", d.Day, time.Local); err == nil {
-			label = t.Format("Mon Jan 02")
+			label = when.Day(t, now)
 		}
 		if d.Day == today {
-			label = "Today     "
+			label = "Today"
 		}
-		out = append(out, "  "+label+"  "+dayLine(d, perPct))
+		out = append(out, fmt.Sprintf("  %-6s  %s", label, dayLine(d, perPct)))
 	}
-	out = append(out, fmt.Sprintf("  Total       %6s tokens  %s", Tokens(sum.Total), withWeek(sum.Cost, perPct)), "", weekScale(perPct)+Estimate(""))
+	out = append(out, fmt.Sprintf("  %-6s  %6s tokens  %s", "Total", Tokens(sum.Total), withWeek(sum.Cost, perPct)), "", weekScale(perPct)+Estimate(""))
 	return out
 }
 
@@ -263,10 +239,10 @@ func Session(st usage.Stats, perPct float64) []string {
 	}
 	wall := "n/a"
 	if !st.Start.IsZero() {
-		wall = Span(time.Duration(st.Wall)*time.Second) + ", since " + st.Start.Local().Format("Jan 2 15:04")
+		wall = when.Duration(time.Duration(st.Wall)*time.Second) + ", since " + when.Stamp(st.Start.Local(), time.Now())
 	}
 	out := []string{fmt.Sprintf("%s tokens · %s at API prices (estimate) · %s Claude working",
-		Tokens(st.Total), withWeek(st.Cost, perPct), Span(time.Duration(st.Active)*time.Second)), ""}
+		Tokens(st.Total), withWeek(st.Cost, perPct), when.Duration(time.Duration(st.Active)*time.Second)), ""}
 	out = append(out, facts([][2]string{
 		{"Input", Tokens(st.Input)}, {"Output", Tokens(st.Output)}, {"Cache reads", Tokens(st.CacheRead)},
 		{"Cache writes", Tokens(st.CacheWrite)}, {"Turns", strconv.Itoa(st.Turns)}, {"Tool calls", strconv.Itoa(st.ToolCalls)},

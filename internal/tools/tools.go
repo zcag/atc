@@ -18,6 +18,7 @@ import (
 	"github.com/zcag/atc/internal/history"
 	"github.com/zcag/atc/internal/sessions"
 	"github.com/zcag/atc/internal/summary"
+	"github.com/zcag/atc/internal/when"
 )
 
 const instructions = `atc is how the user runs Claude Code sessions on their machines: these tools list, start, read and message them. ` +
@@ -416,7 +417,7 @@ func (t *tools) status(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) 
 		if x.Kind == "hub" || x.SessionID == me.SessionID && me.SessionID != "" {
 			continue
 		}
-		b := brief{Ref: client.Ref(x), Title: x.Title, Host: x.Host, Agent: x.Agent, Ago: ago(x.Last()), at: x.Last()}
+		b := brief{Ref: client.Ref(x), Title: x.Title, Host: x.Host, Agent: x.Agent, Ago: when.Age(x.Last(), time.Now()), at: x.Last()}
 		switch {
 		case x.Agent == "" && x.Away() && x.State == sessions.YourTurn:
 			b.Result, b.Open = result(x), x.Open()
@@ -450,22 +451,6 @@ func (t *tools) status(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) 
 }
 
 func result(x sessions.Session) string { return clip(x.Result(), 140) }
-
-func ago(at time.Time) string {
-	if at.IsZero() {
-		return ""
-	}
-	switch d := time.Since(at); {
-	case d < time.Minute:
-		return "now"
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	case d < 48*time.Hour:
-		return fmt.Sprintf("%dh", int(d.Hours()))
-	default:
-		return fmt.Sprintf("%dd", int(d.Hours()/24))
-	}
-}
 
 func (t *tools) find(q string, past bool) (sessions.Session, error) {
 	return t.c.Find(q, past)
@@ -526,7 +511,7 @@ func (t *tools) read(ctx context.Context, _ *mcp.CallToolRequest, in readIn) (*m
 func outline(n int, u history.Turn) string {
 	parts := []string{fmt.Sprintf("#%d", n)}
 	if !u.At.IsZero() {
-		parts[0] += " " + u.At.Local().Format("01-02 15:04")
+		parts[0] += " " + when.Stamp(u.At.Local(), time.Now())
 	}
 	parts = append(parts, fmt.Sprintf("%q", clip(oneLine(u.Prompt), 100)))
 	if len(u.Files) > 0 {
@@ -565,7 +550,7 @@ func outline(n int, u history.Turn) string {
 		parts = append(parts, fmt.Sprintf("%d failed steps", u.Failed))
 	}
 	if u.Ms > 0 {
-		parts = append(parts, (time.Duration(u.Ms) * time.Millisecond).Round(time.Second).String())
+		parts = append(parts, when.Duration(time.Duration(u.Ms)*time.Millisecond))
 	}
 	if u.Partial {
 		parts = append(parts, "still running")

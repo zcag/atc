@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/zcag/atc/internal/resources"
+	"github.com/zcag/atc/internal/when"
 )
 
 type Owner = resources.Owner
@@ -651,11 +652,7 @@ func clock(t time.Time) string {
 	if t.IsZero() {
 		return "an unknown time"
 	}
-	now := time.Now()
-	if y, m, d := t.Date(); y == now.Year() && m == now.Month() && d == now.Day() {
-		return t.Format("15:04")
-	}
-	return t.Format("Jan 2 15:04")
+	return when.Today(t, time.Now())
 }
 
 func gb(n int64) string {

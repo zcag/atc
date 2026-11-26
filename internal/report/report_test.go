@@ -21,11 +21,6 @@ func TestNumbers(t *testing.T) {
 			t.Errorf("Dollars(%v) = %q, want %q", in, got, want)
 		}
 	}
-	for in, want := range map[time.Duration]string{30 * time.Second: "30s", 28 * time.Minute: "28m", 4*time.Hour + 41*time.Minute: "4h 41m", 64 * time.Hour: "2d 16h"} {
-		if got := Span(in); got != want {
-			t.Errorf("Span(%v) = %q, want %q", in, got, want)
-		}
-	}
 }
 
 func TestModelName(t *testing.T) {
@@ -43,14 +38,14 @@ func TestLimits(t *testing.T) {
 		{Key: "weekly_all", Label: "This week, all models", Percent: 72.6, ResetsAt: now.Add(64 * time.Hour)},
 		{Key: "weekly_scoped", Label: "This week, Fable", Percent: 0, ResetsAt: now.Add(64 * time.Hour)},
 	}
-	if got, want := LimitsShort(ws, now), "session 4% · week 73% · resets 28m"; got != want {
+	if got, want := LimitsShort(ws, now), "session 4% · week 73% · resets 28m 00s"; got != want {
 		t.Errorf("LimitsShort = %q, want %q", got, want)
 	}
 	if got := LimitsShort(nil, now); got != "" {
 		t.Errorf("LimitsShort(nil) = %q", got)
 	}
 	lines := LimitLines(ws, now)
-	if want := "Current session         4%  resets in 28m, 09:28"; lines[0] != want {
+	if want := "Current session         4%  resets in 28m 00s, 09:28"; lines[0] != want {
 		t.Errorf("line 0 = %q, want %q", lines[0], want)
 	}
 	if want := "This week, all models  73%  resets in 2d 16h, Mon 01:00"; lines[1] != want {
@@ -68,7 +63,7 @@ func TestPlanTotals(t *testing.T) {
 	now := time.Date(2026, 10, 23, 9, 0, 0, 0, time.Local)
 	days := []usage.Day{{Day: "2026-10-22", Part: usage.Part{Total: 1_000_000, Cost: 1.5}, Sessions: 2}, {Day: "2026-10-23", Part: usage.Part{Total: 500_000, Cost: 0.5}, Sessions: 1}}
 	out := strings.Join(Plan(usage.Limits{}, days, 0, now), "\n")
-	for _, want := range []string{"Thu Oct 22", "Today", "1 session\n", "2 sessions", "Total", "1.5M tokens  ~$2.00", "Estimated"} {
+	for _, want := range []string{"Thu ", "Today", "1 session\n", "2 sessions", "Total", "1.5M tokens  ~$2.00", "Estimated"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("plan lacks %q:\n%s", want, out)
 		}
@@ -131,7 +126,7 @@ func TestSession(t *testing.T) {
 	st := usage.Stats{Part: usage.Part{Total: 2_400_000, Cost: 1.82}, Turns: 3, Active: 300, PricesAt: "October 2026",
 		Models: []usage.ModelPart{{Model: "claude-opus-5-5", Part: usage.Part{Total: 2_400_000, Cost: 1.82, Messages: 1}}}}
 	out := strings.Join(Session(st, 0), "\n")
-	for _, want := range []string{"2.4M tokens · ~$1.82 at API prices (estimate) · 5m Claude working", "Turns         3", "Opus 5.5  2.4M tokens · ~$1.82 · 1 reply", "(October 2026)", "Wall time     n/a"} {
+	for _, want := range []string{"2.4M tokens · ~$1.82 at API prices (estimate) · 5m 00s Claude working", "Turns         3", "Opus 5.5  2.4M tokens · ~$1.82 · 1 reply", "(October 2026)", "Wall time     n/a"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("session lacks %q:\n%s", want, out)
 		}

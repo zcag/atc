@@ -22,6 +22,7 @@ import (
 	"github.com/zcag/atc/internal/resources"
 	"github.com/zcag/atc/internal/store"
 	"github.com/zcag/atc/internal/summary"
+	"github.com/zcag/atc/internal/when"
 )
 
 const (
@@ -384,20 +385,7 @@ func (s Session) Last() time.Time {
 }
 
 func (s Session) Age() string {
-	t := s.Last()
-	if t.IsZero() {
-		return ""
-	}
-	d := time.Since(t)
-	switch {
-	case d < time.Minute:
-		return "now"
-	case d < time.Hour:
-		return fmt.Sprintf("%dm", int(d.Minutes()))
-	case d < 48*time.Hour:
-		return fmt.Sprintf("%dh", int(d.Hours()))
-	}
-	return fmt.Sprintf("%dd", int(d.Hours()/24))
+	return when.Age(s.Last(), time.Now())
 }
 
 var homeDir = regexp.MustCompile(`^/(home|Users)/[^/]+(/|$)`)
