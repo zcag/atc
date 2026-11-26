@@ -905,7 +905,7 @@ function BayBar({ bays, only, view, off, down, live, peek, onPeek }) {
               onContextMenu=${(e) => { e.preventDefault(); onPeek(b.name); }}>
               <span class="k" aria-hidden="true">${i + 1}</span><span class="n">${b.name}</span></button>
             ${(b.needs > 0 || b.turn > 0 || b.work > 0) && html`<button class="cts" aria-label=${`Peek at ${b.name}`} aria-expanded=${peek === b.name}
-              aria-keyshortcuts=${i < 9 ? `Shift+Alt+${i + 1}` : null} onClick=${() => onPeek(peek === b.name ? null : b.name)}>${counts(b)}</button>`}
+              aria-keyshortcuts=${i < 9 ? `Shift+Alt+${i + 1}` : null} onClick=${() => { const hovered = PEEK_HOVER.on && peek === b.name; PEEK_HOVER.on = false; clearTimeout(PEEK_HOVER.close); onPeek(peek === b.name && !hovered ? null : b.name); }}>${counts(b)}</button>`}
           </span>`)}
       </div>
       ${folded.length > 0 && html`<div class="parkedm" ref=${pm}><span class="bay-sep" aria-hidden="true"></span><${Menu} cls="bay parked" left width=${260} aria="Parked bays"
@@ -3610,7 +3610,7 @@ function Dialog({ d, onGone }) {
     leaveDialog(id, () => { onGone(); done(r); });
   };
   const cancel = () => !busyNow.current && end(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const from = document.activeElement;
     history.pushState({ ...history.state, atcDialog: id }, "");
     const back = () => { if (!ended.current && history.state?.atcDialog !== id) busyNow.current ? history.pushState({ ...history.state, atcDialog: id }, "") : end(null); };
@@ -3622,10 +3622,8 @@ function Dialog({ d, onGone }) {
     };
     addEventListener("popstate", back);
     addEventListener("keydown", key, true);
-    requestAnimationFrame(() => {
-      first.current?.focus({ preventScroll: true });
-      input && first.current?.select();
-    });
+    first.current?.focus({ preventScroll: true });
+    input && first.current?.select();
     return () => {
       removeEventListener("popstate", back);
       removeEventListener("keydown", key, true);
