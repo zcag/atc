@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -45,5 +46,40 @@ func TestPeerErrorStatusKeepsItUp(t *testing.T) {
 	f.get(context.Background(), f.peers[0], "/api/me", &v)
 	if f.isDown("up") {
 		t.Fatal("an answering peer was marked offline")
+	}
+}
+
+func TestDownPeerKeepsItsLastSessions(t *testing.T) {
+	var up atomic.Bool
+	up.Store(true)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !up.Load() {
+			panic(http.ErrAbortHandler)
+		}
+		w.Write([]byte(`[{"sessionId":"s1","title":"Backfill","state":"working"}]`))
+	}))
+	defer srv.Close()
+	f := newFleet([]Peer{{Name: "laptop", URL: srv.URL}})
+	if got := f.gather(context.Background(), sessionsPath); len(got) != 1 || got[0].Host != "laptop" {
+		t.Fatalf("first gather: %+v", got)
+	}
+	if st := f.statuses()[0]; !st.Since.IsZero() {
+		t.Fatalf("an answering peer has a since: %+v", st)
+	}
+	up.Store(false)
+	got := f.gather(context.Background(), sessionsPath)
+	if len(got) != 1 || got[0].SessionID != "s1" || got[0].Host != "laptop" {
+		t.Fatalf("down peer: want its last list, got %+v", got)
+	}
+	st := f.statuses()[0]
+	if st.Error == "" || st.Since.IsZero() || time.Since(st.Since) > time.Minute {
+		t.Fatalf("down peer status: %+v", st)
+	}
+	if other := f.gather(context.Background(), "/api/history?local=1"); len(other) != 0 {
+		t.Fatalf("only the session list is kept: %+v", other)
+	}
+	up.Store(true)
+	if err := f.retry(context.Background(), "laptop"); err != nil || f.isDown("laptop") {
+		t.Fatalf("retry: %v, down=%v", err, f.isDown("laptop"))
 	}
 }

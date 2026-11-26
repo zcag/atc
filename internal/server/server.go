@@ -319,6 +319,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/caps/{id}/test", s.capsTest)
 	mux.HandleFunc("PUT /api/settings", s.putSettings)
 	mux.HandleFunc("GET /api/me", func(w http.ResponseWriter, r *http.Request) { reply(w, s.me()) })
+	mux.HandleFunc("POST /api/peers/{name}/retry", func(w http.ResponseWriter, r *http.Request) {
+		if err := s.fleet.retry(r.Context(), r.PathValue("name")); err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		s.refresh()
+		reply(w, s.me())
+	})
 	mux.HandleFunc("POST /api/login", s.login)
 	mux.HandleFunc("POST /api/pair", s.pairStart)
 	mux.HandleFunc("POST "+pair.ClaimPath, s.pairClaim)
@@ -764,7 +772,7 @@ func (s *Server) liveAll(ctx context.Context, localOnly bool) ([]sessions.Sessio
 	if localOnly || len(s.Peers) == 0 {
 		return list, nil
 	}
-	list = append(list, s.fleet.gather(ctx, "/api/sessions?local=1")...)
+	list = append(list, s.fleet.gather(ctx, sessionsPath)...)
 	sessions.Sort(list)
 	return list, nil
 }
@@ -830,7 +838,7 @@ func (s *Server) route(next http.Handler) http.Handler {
 			host = s.agentHost(parts[3])
 		} else if host == "" && len(parts) >= 4 && parts[2] == "sessions" {
 			if host = s.fleet.ownerOf(parts[3]); host == "" {
-				s.fleet.gather(r.Context(), "/api/sessions?local=1")
+				s.fleet.gather(r.Context(), sessionsPath)
 				host = s.fleet.ownerOf(parts[3])
 			}
 		}
@@ -1206,7 +1214,7 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	if last != nil && !send(frame("sessions", last)) {
 		return
 	}
-	ping := time.NewTicker(25 * time.Second)
+	ping := time.NewTicker(15 * time.Second)
 	defer ping.Stop()
 	for {
 		select {
@@ -1217,8 +1225,9 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case <-ping.C:
-			fmt.Fprint(w, ": ping\n\n")
-			fl.Flush()
+			if !send(frame("ping", []byte("{}"))) {
+				return
+			}
 		}
 	}
 }

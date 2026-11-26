@@ -29,8 +29,9 @@ type Peer struct {
 }
 
 type peerStatus struct {
-	Name  string `json:"name"`
-	Error string `json:"error,omitempty"`
+	Name  string    `json:"name"`
+	Error string    `json:"error,omitempty"`
+	Since time.Time `json:"since,omitzero"`
 }
 
 func LoadPeers(path string) ([]Peer, error) {
@@ -71,7 +72,12 @@ type fleet struct {
 	status map[string]string
 	views  map[string]int
 	down   map[string]bool
+	seen   map[string]time.Time
+	downAt map[string]time.Time
+	kept   map[string][]sessions.Session
 }
+
+const sessionsPath = "/api/sessions?local=1"
 
 const probeEvery = 10 * time.Second
 
@@ -87,7 +93,7 @@ func newFleet(peers []Peer) *fleet {
 		tr.TLSClientConfig = cfg
 	}
 	return &fleet{peers: peers, client: &http.Client{Transport: tr}, owner: map[string]string{}, status: map[string]string{},
-		views: map[string]int{}, down: map[string]bool{}}
+		views: map[string]int{}, down: map[string]bool{}, seen: map[string]time.Time{}, downAt: map[string]time.Time{}, kept: map[string][]sessions.Session{}}
 }
 
 type offline struct{ name string }
@@ -113,7 +119,31 @@ func (f *fleet) failed(p Peer, err error) {
 		return
 	}
 	f.down[p.Name] = true
+	f.downAt[p.Name] = time.Now()
 	go f.probe(p)
+}
+
+func (f *fleet) answered(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.down[name], f.status[name] = false, ""
+	f.seen[name] = time.Now()
+}
+
+// retry asks a down peer once, now, rather than waiting for the next probe.
+func (f *fleet) retry(ctx context.Context, name string) error {
+	p := f.peer(name)
+	if p == nil {
+		return fmt.Errorf("no machine called %s", name)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	var me any
+	if err := f.fetch(ctx, *p, "/api/me", &me); err != nil {
+		return err
+	}
+	f.answered(name)
+	return nil
 }
 
 func (f *fleet) probe(p Peer) {
@@ -123,10 +153,10 @@ func (f *fleet) probe(p Peer) {
 		var me map[string]any
 		err := f.fetch(ctx, p, "/api/me", &me)
 		cancel()
-		if err == nil {
-			f.mu.Lock()
-			f.down[p.Name], f.status[p.Name] = false, ""
-			f.mu.Unlock()
+		if err == nil || !f.isDown(p.Name) {
+			if err == nil {
+				f.answered(p.Name)
+			}
 			return
 		}
 	}
@@ -176,6 +206,10 @@ func (f *fleet) get(ctx context.Context, p Peer, path string, out any) error {
 	var ne net.Error
 	if errors.As(err, &ne) || errors.Is(err, context.DeadlineExceeded) {
 		f.failed(p, err)
+	} else if err == nil {
+		f.mu.Lock()
+		f.seen[p.Name] = time.Now()
+		f.mu.Unlock()
 	}
 	return err
 }
@@ -208,13 +242,24 @@ func (f *fleet) gather(ctx context.Context, path string) []sessions.Session {
 			ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 			defer cancel()
 			var list []sessions.Session
-			if f.get(ctx, p, path, &list) != nil {
-				return
+			if err := f.get(ctx, p, path, &list); err != nil {
+				if path != sessionsPath || errors.Is(err, context.Canceled) {
+					return
+				}
+				f.mu.Lock()
+				list = slices.Clone(f.kept[p.Name])
+				f.mu.Unlock()
+			} else {
+				for i := range list {
+					list[i].Host = p.Name
+				}
+				f.remember(p.Name, list)
+				if path == sessionsPath {
+					f.mu.Lock()
+					f.kept[p.Name] = slices.Clone(list)
+					f.mu.Unlock()
+				}
 			}
-			for i := range list {
-				list[i].Host = p.Name
-			}
-			f.remember(p.Name, list)
 			mu.Lock()
 			out = append(out, list...)
 			mu.Unlock()
@@ -233,7 +278,14 @@ func (f *fleet) statuses() []peerStatus {
 		if f.down[p.Name] {
 			st = "offline: " + st
 		}
-		out = append(out, peerStatus{p.Name, st})
+		since := f.seen[p.Name]
+		if since.IsZero() {
+			since = f.downAt[p.Name]
+		}
+		if !f.down[p.Name] {
+			since = time.Time{}
+		}
+		out = append(out, peerStatus{p.Name, st, since})
 	}
 	return out
 }
