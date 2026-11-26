@@ -2,7 +2,7 @@ import { html, useState, useEffect, useCallback } from "./vendor/preact-htm.js";
 
 export const slug = (g) => g.toLowerCase().replace(/\s+/g, "-");
 const word = (r) => (r.status === "ok" ? "Working" : r.status === "broken" ? "Stopped working" : r.optional ? "Not set up" : "Needed");
-const tone = (r) => (r.status === "ok" ? "ok" : r.status === "broken" || r.warn ? "bad" : "off");
+const tone = (r) => (r.status === "ok" ? "ok" : r.status === "broken" || r.warn ? (r.optional ? "warn" : "bad") : "off");
 
 /** Where the page is pointing inside Settings: #/settings#calls is the Calls section, #/settings#talker one row. */
 const anchorNow = () => (location.hash.match(/^#\/settings#(.+)$/) || [])[1] || "";
