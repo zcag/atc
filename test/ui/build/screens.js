@@ -104,6 +104,7 @@ async function desktop(b) {
     ok(await p.isVisible('.scrpane.usage'), 'usage: inside the shell');
     ok(await p.isVisible('.bays .views [aria-pressed="true"] >> text=Usage'), 'usage: the bay bar shows Usage as a fourth view');
     ok(await p.locator('.lim').count() > 0, 'usage: limits drawn');
+    await p.waitForSelector('.hm i', { timeout: 20000 }).catch(() => {});
     ok(await p.locator('.hm i').count() >= 24, 'usage: hour map drawn');
     await p.screenshot({ path: `${OUT}s7-usage-1400-light.png` });
     await p.locator('.lim .pct .x').first().hover();
@@ -180,7 +181,7 @@ async function shots(b) {
       await p.goto(base + '/#/agents'); await wait(p, 2000); await shot('agents');
       if (phone) { await p.locator('.ar').first().tap(); await wait(p, 600); await shot('agent'); }
       await p.goto(base + '/'); await wait(p, 2000);
-      if (phone) await p.locator('.tabbar button', { hasText: 'Go' }).tap();
+      if (phone) await p.locator('.tabbar button', { hasText: 'Search' }).tap();
       else await p.keyboard.press('/');
       await wait(p, 800);
       await shot('palette');

@@ -43,7 +43,7 @@ const PERM = [{ id: 'p1', permission: 'Bash', patterns: ['bundle exec rspec spec
       let q = null, perm = null;
       for (let i = 0; i < n && !(q && perm); i++) {
         const t = await rows.nth(i).innerText();
-        if (!perm && /Bash|bundle exec/.test(t)) perm = rows.nth(i); else if (!q) q = rows.nth(i);
+        if (!perm && /Bash|bundle exec/.test(t)) perm = rows.nth(i); else if (!q && t.includes('Keep both date formats')) q = rows.nth(i);
       }
       await q.locator('.brow').click({ position: { x: 600, y: 10 } });
       await p.waitForTimeout(300);
@@ -77,29 +77,33 @@ const PERM = [{ id: 'p1', permission: 'Bash', patterns: ['bundle exec rspec spec
     }
     {
       let sid;
-      const { ctx, p, errs } = await open(scheme, false, (l) => { needsIn(l, 1); sid = l.find((s) => s.state === 'needs-you').sessionId; return l; }, () => { try { localStorage.setItem('atc.notifask', '1'); localStorage.setItem('atc.pane', 'out'); } catch {} });
+      const { ctx, p, errs } = await open(scheme, false, (l) => { needsIn(l, 1); sid = l.find((s) => s.state === 'needs-you').sessionId; return l; }, () => { try { localStorage.setItem('atc.notifask', '1'); } catch {} });
       await p.goto(`${base}/#/s/${sid}`);
       await p.waitForTimeout(3000);
+      await p.locator('.hd button[aria-keyshortcuts="`"]').click();
+      await p.waitForTimeout(1000);
       ok(await p.isVisible('.askstrip .ask.compact'), `${scheme}: terminal mode shows the ask above the terminal`);
       await p.screenshot({ path: `${OUT}asks-term-1400-${scheme}.png` });
       ok(!errs.length, `${scheme}: no page errors ${errs.join(' | ')}`);
       await ctx.close();
     }
     {
-      const { ctx, p, writes, errs } = await open(scheme, true, (l) => needsIn(l, 2, ['shop', 'site', 'notes']), () => { try { localStorage.setItem('atc.project', 'atc'); } catch {} });
+      const { ctx, p, writes, errs } = await open(scheme, true, (l) => needsIn(l, 2, ['shop', 'site', 'notes']), quiet);
       await p.goto(base + '/');
       await p.waitForTimeout(3000);
-      await p.tap('.offneeds');
+      await p.locator('.ptabs .bay').first().tap();
       await p.waitForTimeout(400);
-      ok(await p.isVisible('.peeksheet .ask.rows'), `${scheme} phone: the sheet carries the asks as rows`);
-      ok(!(await p.$('.peeksheet #pending-ask')) && !(await p.$('.peeksheet .ask .who2')), `${scheme} phone: no transcript id or header in the sheet`);
-      ok((await p.$$eval('.peeksheet .ask kbd', (l) => l.filter((k) => k.offsetParent && getComputedStyle(k).visibility !== 'hidden').length)) === 0, `${scheme} phone: no key hints`);
-      ok((await p.$eval('.peeksheet .ask .opt', (e) => e.getBoundingClientRect().height)) >= 44, `${scheme} phone: 44px answers`);
+      const row = p.locator('.rr.needs-you', { hasText: 'Which branch should this land on?' }).first();
+      ok(await row.locator('.rask .ask.compact').isVisible(), `${scheme} phone: a needs row carries its ask`);
+      ok(!(await p.$('.rask #pending-ask')) && !(await p.$('.rask .ask .who2')), `${scheme} phone: no transcript id or header in the row`);
+      ok((await row.locator('.rask .ask kbd').evaluateAll((l) => l.filter((k) => k.offsetParent && getComputedStyle(k).visibility !== 'hidden').length)) === 0, `${scheme} phone: no key hints`);
+      const h = await row.locator('.rask .ask .acts .btn').first().evaluate((e) => e.getBoundingClientRect().height);
+      ok(h >= 44, `${scheme} phone: 44px answers (${h})`);
       await p.screenshot({ path: `${OUT}asks-peek-400-${scheme}.png` });
-      await p.tap('.peeksheet .ask .opt');
+      await row.locator('.rask .ask .acts .btn').first().tap();
       await p.waitForTimeout(1200);
       ok(writes.some((w) => w.path.includes('/asks/')), `${scheme} phone: a tap answers (stubbed)`);
-      ok(await p.isVisible('.peeksheet .ask .ast'), `${scheme} phone: the answer's state shows`);
+      ok(await row.locator('.rask .ask .ast').isVisible(), `${scheme} phone: the answer's state shows`);
       ok(!errs.length, `${scheme} phone: no page errors ${errs.join(' | ')}`);
       await ctx.close();
     }

@@ -17,9 +17,9 @@ const sid = (n) => `seen${n}000-0000-0000-0000-000000000000`;
   const seen = { [sid(1)]: iso(-5 * 60000), [sid(2)]: iso(-60 * 60000) };
   const b = await chromium.launch({ executablePath: exe });
 
-  const open = async (events, pane) => {
+  const open = async (events) => {
     const ctx = await b.newContext({ viewport: { width: 1400, height: 900 } });
-    await ctx.addInitScript((pane) => { try { localStorage.setItem('atc.notifask', '1'); localStorage.removeItem('atc.project'); localStorage.removeItem('atc.seen'); if (pane) localStorage.setItem('atc.pane', pane); } catch {} }, pane);
+    await ctx.addInitScript(() => { try { localStorage.setItem('atc.notifask', '1'); localStorage.removeItem('atc.project'); localStorage.removeItem('atc.seen'); } catch {} });
     const p = await ctx.newPage(), writes = [], errs = [];
     p.on('pageerror', (e) => errs.push(e.message));
     await p.route(/\/api\/(?!events)/, (r) => {
@@ -52,9 +52,11 @@ const sid = (n) => `seen${n}000-0000-0000-0000-000000000000`;
     await ctx.close();
   }
   {
-    const { ctx, p, writes } = await open([], 'out');
+    const { ctx, p, writes } = await open([]);
     await p.goto(`${base}/#/s/${sid(2)}`);
-    await p.waitForTimeout(3000);
+    await p.waitForTimeout(2000);
+    await p.locator('.hd button[aria-keyshortcuts="`"]').click();
+    await p.waitForTimeout(1000);
     ok(writes.some((w) => w.path === '/api/seen' && w.body.includes(sid(2))), 'opening it in the terminal marks it seen on the server (stubbed)');
     await ctx.close();
   }

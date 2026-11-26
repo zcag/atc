@@ -580,7 +580,7 @@ function App() {
         const n = +e.code.slice(5), bays = baysOf(k.onBays, BAY.only);
         e.preventDefault();
         if (e.altKey && e.shiftKey) { if (bays[n - 1]) k.setPeek((v) => (v === bays[n - 1].name ? null : bays[n - 1].name)); return; }
-        if (n === 0 && k.pages) { const b = BAY.only; location.hash = pagesHash(b === null ? PAGES_FROM || bays[0]?.name || null : null); PAGES_FROM = b || PAGES_FROM; return; }
+        if (n === 0 && k.pages) { const b = BAY.only, r = pagesRoute(); location.hash = pagesHash(b === null ? PAGES_FROM || bays[0]?.name || null : null, r?.sid, r?.name); PAGES_FROM = b || PAGES_FROM; return; }
         if (n === 0) return BAY.set(null);
         const b = bays[n - 1];
         if (!b) return;
@@ -901,7 +901,7 @@ function BayBar({ bays, only, view, off, down, live, peek, onPeek }) {
           ${b.parked && !shown[n - 1]?.b.parked && html`<span class="bay-sep" aria-hidden="true"></span>`}
           <span class="bay ${only === b.name ? "on" : ""} ${peek === b.name ? "peeking" : ""} ${b.parked ? "rest" : ""}" data-bay=${b.name} ...${peekOnHover(b, only, peek, onPeek)}>
             <button class="bn" aria-current=${only === b.name ? "true" : null} aria-label=${bayWords(b, i)}
-              aria-keyshortcuts=${i < 9 ? `${i + 1}` : null} onClick=${() => goBay(b.name, live)}
+              aria-keyshortcuts=${i < 9 ? `${i + 1}` : null} onClick=${() => { clearTimeout(PEEK_HOVER.open); goBay(b.name, live); }}
               onContextMenu=${(e) => { e.preventDefault(); onPeek(b.name); }}>
               <span class="k" aria-hidden="true">${i + 1}</span><span class="n">${b.name}</span></button>
             ${(b.needs > 0 || b.turn > 0 || b.work > 0) && html`<button class="cts" aria-label=${`Peek at ${b.name}`} aria-expanded=${peek === b.name}
@@ -5468,7 +5468,7 @@ function PagesView({ at, live, bays, say, index }) {
     const n = l.filter((x) => pageStatus(x.p) === "unseen").length, u = l.filter((x) => pageStatus(x.p) === "updated").length;
     return [n && `${n} new`, u && `${u} updated`].filter(Boolean).join(", ");
   };
-  const scopeLink = () => { location.hash = pagesHash(at.bay ? null : PAGES_FROM || names[0] || null); PAGES_FROM = at.bay || PAGES_FROM; };
+  const scopeLink = () => { location.hash = pagesHash(at.bay ? null : PAGES_FROM || names[0] || null, at.sid, at.name); PAGES_FROM = at.bay || PAGES_FROM; };
   const row = (x) => {
     const st = pageStatus(x.p), on = cur === x && !phone;
     return html`<button class="pgi ${st} ${on ? "sel" : ""}" data-pk=${pkey(x.p)} aria-current=${on ? "page" : null} onClick=${() => pick(x)}>

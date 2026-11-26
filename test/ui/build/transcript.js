@@ -51,6 +51,8 @@ async function open(b, { w, scheme, sid, patch, seen, ask = {}, voice }) {
     return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
   });
   await p.goto(`${base}/#/s/${sid}`);
+  await p.waitForSelector('.tx .flow .tb, .stabs', { timeout: 15000 });
+  if (!(await p.$('.tx .flow .tb'))) await p.locator('.stabs button', { hasText: 'Chat' }).click();
   await p.waitForSelector('.tx .flow .tb', { timeout: 15000 });
   await p.waitForTimeout(2500);
   return { ctx, p, errs, writes, phone };
@@ -62,8 +64,14 @@ const css = (p, sel, prop) => p.$eval(sel, (e, k) => getComputedStyle(e)[k], pro
   const b = await chromium.launch({ executablePath: exe, args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
   const list = await (await fetch(`${base}/api/sessions`)).json();
   const byTitle = (t) => list.find((s) => (s.title || '').includes(t));
-  const long = byTitle('db migration') || list.find((s) => s.state === 'your-turn');
-  const edits = byTitle('atc redesign build') || long;
+  const turnsOf = async (s) => ((await (await fetch(`${base}/api/sessions/${s.sessionId}/turns`)).json()).turns || []);
+  let long = null;
+  for (const s of list.filter((x) => x.state === 'your-turn' && x.attachable && x.kind !== 'hub' && !x.agent && !x.shown?.length)) if (!long && (await turnsOf(s)).length >= 5) long = s;
+  long = long || list.find((s) => s.state === 'your-turn');
+  const madeFiles = async (s) => (await turnsOf(s)).slice(-1).some((t) => t.files?.length);
+  let edits = null;
+  for (const s of list.filter((x) => x.attachable && x.kind !== 'hub').slice(0, 15)) if (!edits && await madeFiles(s)) edits = s;
+  edits = edits || long;
   const quiet = list.find((s) => s.state === 'your-turn' && s.attachable && s.kind !== 'hub' && s.sessionId !== long.sessionId) || list.find((s) => s.attachable && s.kind !== 'hub' && s.sessionId !== long.sessionId) || long;
   const qturns = (await (await fetch(`${base}/api/sessions/${quiet.sessionId}/turns`)).json()).turns;
   const qmark = qturns[qturns.length - 1].end || qturns[qturns.length - 1].at;
@@ -78,9 +86,12 @@ const css = (p, sel, prop) => p.$eval(sel, (e, k) => getComputedStyle(e)[k], pro
       {
         const { ctx, p, errs, writes, phone } = await open(b, { w, scheme, sid: long.sessionId, seen: '' });
         ok(await css(p, '.tx .prose', 'fontFamily') && (await css(p, '.tx .prose', 'fontFamily')).includes('system-ui'), `${tag}: prose is the system font`);
-        ok(await css(p, '.tx .prose', 'fontSize') === (phone ? '17px' : '17.5px'), `${tag}: reading size ${await css(p, '.tx .prose', 'fontSize')}`);
-        ok(await css(p, '.tx .lead p', 'fontSize') === '16px' && await css(p, '.tx .lead p', 'fontWeight') === '500', `${tag}: your prompt is a 16px/500 head`);
-        ok(phone ? !(await p.isVisible('.tx .flow > .mg time')) && await p.isVisible('.tx .lead-at') : await p.isVisible('.tx .flow > .mg time'), `${tag}: ${phone ? 'margin inline above the paragraph' : 'margin notes beside the text'}`);
+        ok(await css(p, '.tx .prose', 'fontSize') === (phone ? '16px' : '16.5px'), `${tag}: reading size ${await css(p, '.tx .prose', 'fontSize')}`);
+        const lead = await p.$$eval('.tx .lead:not(.via) > .lead-at', (l) => l.map((x) => ({ at: x.textContent.trim(), size: getComputedStyle(x.parentElement.querySelector('.prose')).fontSize })));
+        const prose = await css(p, '.tx .tb .prose', 'fontSize');
+        ok(lead.length ? lead.every((x) => /^you \d\d:\d\d$/.test(x.at) && x.size === prose) : await p.isVisible('.tx .lead.via .vh'), `${tag}: ${lead.length ? 'your prompt is its own block, "you" and its clock above, at the reading size' : 'every prompt came from a session and says which'}`);
+        const clock = await p.$$eval('.tx .flow .tb .rclk', (l) => l.map((t) => { const r = t.getBoundingClientRect(), x = t.closest('.tb').querySelector('.prose').getBoundingClientRect(); return { vis: !!t.offsetParent, beside: r.right <= x.left }; }));
+        ok(clock.length ? clock.every((c) => c.vis && c.beside === !phone) : await p.isVisible('.tx .lead-at'), `${tag}: ${clock.length ? `a reply's clock ${phone ? 'sits inline at the paragraph' : 'is in the margin beside the text'}` : 'no timed replies here; the prompt carries its clock'}`);
         ok(!phone || (await p.$$eval('kbd', (l) => l.filter((k) => k.offsetParent).length)) === 0, `${tag}: no key hints on the phone`);
         if (!phone) {
           ok(await p.evaluate(() => document.activeElement?.classList.contains('tx')), `${tag}: the reader has focus`);
@@ -208,7 +219,7 @@ const css = (p, sel, prop) => p.$eval(sel, (e, k) => getComputedStyle(e)[k], pro
       // working: queue, stop, slash, attach, drafts
       {
         const { ctx, p, errs, writes, phone } = await open(b, { w, scheme, sid: quiet.sessionId, patch: { state: 'working', turnDone: false, activity: 'Bash go test ./internal/server/...', updated: new Date().toISOString() } });
-        ok(await p.isVisible('.tx .work .livebar'), `${tag}: the live step has the one moving bar`);
+        ok(await p.isVisible('.tx .work .pulse') && await p.locator('.tx .work').count() === 1, `${tag}: the live step has the one breathing dot`);
         ok((await p.textContent('.composer .send')) === 'Queue', `${tag}: Send reads Queue while it works`);
         const ta = '.composer textarea';
         await p.click(ta);
@@ -260,7 +271,7 @@ const css = (p, sel, prop) => p.$eval(sel, (e, k) => getComputedStyle(e)[k], pro
           const last = ef[ef.length - 1];
           await last.scrollIntoViewIfNeeded(); await last.click(); await p.waitForTimeout(300);
           ok(await p.isVisible('.tx .ef .code .l'), `${tag}: an edited file opens to its diff`);
-          ok(await p.evaluate(() => { const l = [...document.querySelectorAll('.tx .ef .code .l')]; const i = l.findIndex((x) => x.classList.contains('add')); return i < 0 || !l.slice(i).some((x, j) => x.classList.contains('del') && l[i + j - 1]?.classList.contains('add')); }), `${tag}: deletions come before additions`);
+          ok(await p.evaluate(() => { const l = [...document.querySelectorAll('.tx .ef li.open .code > div')]; return !l.some((x, i) => i > 0 && x.classList.contains('del') && l[i - 1].classList.contains('add')); }), `${tag}: deletions come before additions in every edit`);
           await p.$eval('.tx .ef li.open', (e) => e.scrollIntoView({ block: 'start' }));
           await p.$eval('.tx', (e) => (e.scrollTop -= 60));
           await shot(p, 'edits', w, scheme);

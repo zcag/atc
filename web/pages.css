@@ -12,6 +12,7 @@
 .pgidx .grp { display: flex; align-items: baseline; gap: var(--s2); margin: 0; padding: var(--s3) var(--s3) 6px; font-size: var(--fs-small); font-weight: 400; color: var(--faint); border-bottom: 1px solid var(--hair); }
 .pgidx .grp b { color: var(--dim); font-weight: 620; }
 .pgidx .grp .c { font-family: var(--mono); }
+.pgidx .emp { padding: var(--s3); font-size: var(--fs-small); }
 .pgidx .grp .r { margin-left: auto; }
 .pgidx .grp .fold { all: unset; display: flex; align-items: baseline; gap: var(--s2); flex: 1; cursor: pointer; }
 .pgidx .grp .fold::after { content: "▸"; margin-left: auto; color: var(--faint); }
@@ -34,7 +35,7 @@
 .pgi.updated .t { font-weight: 600; color: var(--ink); }
 
 .pgread { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--strip); }
-.pghd .l2 { cursor: auto; }
+.pghd .l2 { display: flex; align-items: baseline; gap: var(--s2); min-width: 0; font-size: var(--fs-small); color: var(--dim); cursor: auto; }
 .pghd .where { white-space: pre; }
 .pghd .l2 .sl { border: 0; background: none; padding: 0; font: inherit; color: var(--dim); text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; cursor: pointer; }
 .pghd .l2 .sl:hover { color: var(--ink); }
@@ -85,6 +86,7 @@
   .pgi .ss { display: none; }
   .pgi .ld { -webkit-line-clamp: 1; }
   .pghd .more { display: block; }
+  .pghd .r > :not(.more) { display: none; }
   .pghd .l2 .sl { padding: 12px 0; margin: -12px 0; line-height: 20px; }
   .pgnone { padding: var(--s5) var(--s4); }
   .pbar .kb, .pbar .btn { height: 44px; }

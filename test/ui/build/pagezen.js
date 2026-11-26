@@ -8,7 +8,7 @@ const token = process.argv[3] || '';
 const OUT = __dirname + '/../../shots/build/';
 let fails = 0;
 const ok = (c, m) => { if (!c) fails++; console.log(c ? 'ok  ' : 'FAIL', m); };
-const zenKeys = /const zenKeysScript = `(.*)`/.exec(fs.readFileSync(__dirname + '/../../../internal/server/outputs.go', 'utf8'))[1];
+const zenKeys = /const pageKeysScript = `(.*)`/.exec(fs.readFileSync(__dirname + '/../../../internal/server/outputs.go', 'utf8'))[1];
 const sid = 'fa4e0000-0000-0000-0000-000000000000';
 const at = new Date().toISOString();
 const session = {
@@ -40,6 +40,7 @@ async function open(b, opts, split) {
 const frameBox = (p) => p.locator('.ppane iframe').first().boundingBox();
 const inner = (p) => p.frameLocator('.ppane iframe').first().locator('h1');
 const zenOn = (p) => p.evaluate(() => document.body.classList.contains('pagezen'));
+const barZen = async (p) => { await p.locator('.pbar [aria-label="Page actions"]').click(); await p.getByRole('menuitem', { name: 'Zen', exact: true }).click(); };
 const txZen = (p) => p.evaluate(() => document.body.classList.contains('zen'));
 
 (async () => {
@@ -76,20 +77,20 @@ const txZen = (p) => p.evaluate(() => document.body.classList.contains('zen'));
     const back = await frameBox(p);
     ok(!await zenOn(p) && await p.isVisible('.pgchat') && back.x === before.x && back.width === before.width, `${scheme}: z from inside the page brings the split back`);
 
-    await p.locator('.pzen').click();
+    await barZen(p);
     await p.waitForTimeout(250);
-    ok(await zenOn(p), `${scheme}: Zen on the page's bar`);
+    ok(await zenOn(p), `${scheme}: Zen in the page bar's menu`);
     await p.keyboard.press('Escape');
     await p.waitForTimeout(250);
     ok(!await zenOn(p) && (await p.evaluate(() => location.hash)).includes('/s/'), `${scheme}: esc from inside the page leaves zen and stays in the session`);
 
-    await p.locator('.pzen').click();
+    await barZen(p);
     await p.waitForTimeout(250);
     await p.goBack();
     await p.waitForTimeout(300);
     ok(!await zenOn(p) && await p.isVisible('.pgchat'), `${scheme}: the back button leaves zen`);
 
-    await p.locator('.pzen').click();
+    await barZen(p);
     await p.waitForTimeout(250);
     await p.locator('.pzenout').click();
     await p.waitForTimeout(250);

@@ -18,7 +18,7 @@ async function open(b, { width, scheme, ptt }) {
     if (path === '/api/events') return r.fulfill({ status: 200, headers: { 'Content-Type': 'text/event-stream' }, body: 'event: sessions\ndata: []\n\n' });
     if (path === '/api/sessions') return json(r, []);
     if (path === '/api/agents') return json(r, []);
-    if (path === '/api/me') return r.fetch().then((x) => (x.ok() ? x.json().then((me) => json(r, { ...me, call: true })) : r.fulfill({ response: x })));
+    if (path === '/api/me') return r.fetch().then((x) => (x.ok() ? x.json().then((me) => json(r, { ...me, call: true })) : r.fulfill({ response: x }))).catch(() => {});
     return r.continue();
   });
   const line = { cmds: [], seq: [], loud: 0, frames: 0, reset() { this.loud = this.frames = 0; } };

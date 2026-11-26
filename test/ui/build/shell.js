@@ -54,6 +54,11 @@ const ok = (c, m) => console.log(c ? 'ok  ' : 'FAIL', m);
   ok(!errs.length, 'no page errors ' + errs.join(' | '));
   await p.setViewportSize({ width: 400, height: 860 });
   await p.waitForTimeout(300);
-  ok(await p.isVisible('.tabbar') && !(await p.isVisible('.console')), 'phone: tab bar, no console');
+  if (await p.evaluate(() => location.hash.startsWith('#/s/'))) {
+    ok(!(await p.isVisible('.tabbar')) && !(await p.isVisible('.console')) && await p.isVisible('.hd .back'), 'phone session: its own header with Back, no tab bar or console');
+    await p.click('.hd .back');
+    await p.waitForTimeout(400);
+  }
+  ok(await p.isVisible('.tabbar') && !(await p.isVisible('.console')), 'phone home: tab bar, no console');
   await b.close();
 })();

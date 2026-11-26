@@ -91,7 +91,7 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
 .usechip .pc.hot { color: var(--fail); font-weight: 600; }
 .usechip .pc .meter { display: inline-block; width: 22px; height: 4px; margin-right: 5px; vertical-align: 2px; }
 .usechip.hotload .pc { color: var(--fail); }
-.hd .usechip { align-self: center; }
+.hd .usechip { align-self: center; height: 28px; line-height: 28px; }
 .console .btn svg { width: 14px; height: 14px; }
 .console .btn.icon svg { width: 16px; height: 16px; }
 .agentsb .num { font-family: var(--mono); font-size: var(--fs-small); color: var(--faint); }

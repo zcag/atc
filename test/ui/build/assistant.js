@@ -16,6 +16,13 @@ const prep = async (ctx) => {
     posts.push(r.request().method() + ' ' + new URL(r.request().url()).pathname);
     return r.fulfill({ status: 204 });
   });
+  const doc = { persons: [
+    { id: 'ada', name: 'Ada', character: 'orb', voices: { en: 'en_one', tr: 'tr_one' } },
+    { id: 'ben', name: 'Ben', character: 'orb', voices: { en: 'en_two' } },
+  ], langs: { en: 'ada', tr: 'ada' } };
+  await ctx.route('**/api/call/persons', (r) => r.request().method() === 'GET' ? r.fulfill({ json: doc }) : r.fulfill({ status: 204 }));
+  await ctx.route('**/api/call/persons/pick', (r) => { const { lang, id } = r.request().postDataJSON(); doc.langs[lang] = id; return r.fulfill({ json: doc }); });
+  await ctx.route('**/api/call/voices', (r) => r.fulfill({ json: { en: { voices: ['en_one', 'en_two'], current: 'en_one', sample: 'A short sample.' }, tr: { voices: ['tr_one'], current: 'tr_one', sample: 'Kısa bir örnek.' } } }));
   await ctx.route('**/api/call/voices/sample**', (r) => r.fulfill({ status: 200, contentType: 'audio/wav', body: SILENCE }));
 };
 const desk = (b, scheme) => b.newContext({ viewport: { width: 1400, height: 900 }, colorScheme: scheme, permissions: ['microphone'] });
@@ -79,7 +86,6 @@ const hash = (p) => p.evaluate(() => location.hash);
     await other.click();
     await wait(p, 600);
     ok(await p.evaluate(() => document.querySelector('.picks .pick[aria-checked="true"] b').textContent) === name, `picking ${name} takes at once`);
-    await p.locator('.picks .pick', { hasText: 'orb' }).first().click();
     const vrows = await p.locator('.picks .vpick').count();
     ok(vrows > 0, `it lists ${vrows} voices`);
     if (vrows) {
@@ -188,7 +194,7 @@ const hash = (p) => p.evaluate(() => location.hash);
     ok(!errs.length, 'phone: no page errors ' + errs.join(' | '));
     await ctx.close();
   }
-  const bad = posts.filter((x) => !/^POST \/api\/(assist|seen|drafts|bays|term|presence)/.test(x) && !/^(PUT|PATCH) \/api\/(seen|drafts|bays)/.test(x));
+  const bad = posts.filter((x) => !/^POST \/api\/(assist|seen|drafts|bays|term|presence|time)/.test(x) && !/^(PUT|PATCH) \/api\/(seen|drafts|bays)/.test(x));
   ok(!bad.length, 'only expected writes were attempted (all stubbed) ' + bad.join(', '));
   await b.close();
   process.exitCode = fails ? 1 : 0;

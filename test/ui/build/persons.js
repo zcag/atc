@@ -1,5 +1,5 @@
-// A person per language on a private instance: changing language swaps character, background and name, and the
-// panel makes and picks persons. Writes persons.json, so never point it at a real atc.
+// A person per language: changing language swaps character, background and name, and the panel makes and picks
+// persons. The persons and voices are faked in the browser and every other write is stubbed, so it runs against any atc.
 const { chromium } = require('playwright-core');
 const fs = require('fs');
 const base = process.argv[2] || 'http://127.0.0.1:7299';
@@ -7,21 +7,37 @@ const OUT = process.argv[3] || __dirname + '/../../shots/build/';
 const FAKE = fs.readFileSync(__dirname + '/fakecall.js', 'utf8');
 let fails = 0;
 const ok = (c, m) => { if (!c) fails++; console.log(c ? 'ok  ' : 'FAIL', m); };
-const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json());
+const json = (r, v) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(v) });
+const VOICES = { tr: { voices: ['voice_f', 'voice_m'], current: 'voice_m', sample: 'Kısa bir örnek.' }, en: { voices: ['en_merchant', 'voice_en'], current: 'en_merchant', sample: 'A short sample.' } };
+
+function persons() {
+  const doc = { persons: [], langs: {} };
+  const add = (p) => { const id = p.id || p.name.toLowerCase(); doc.persons = [...doc.persons.filter((x) => x.id !== id), { ...p, id }]; };
+  add({ name: 'Mira', character: 'woman', background: 'night.jpg', voices: { tr: 'voice_f' } });
+  add({ name: 'Hoca', character: 'professor', voices: { tr: 'voice_m', en: 'en_merchant' } });
+  add({ name: 'Sessiz', character: 'professor', background: 'evening.jpg', voices: { tr: 'voice_m', en: 'voice_en' } });
+  Object.assign(doc.langs, { tr: 'mira', en: 'hoca' });
+  return async (ctx) => {
+    await ctx.route(/\/api\//, (r) => r.request().method() === 'GET' ? r.continue() : r.fulfill({ status: 204 }));
+    await ctx.route('**/api/call/voices', (r) => json(r, VOICES));
+    await ctx.route(/\/api\/call\/persons(\/.*)?$/, (r) => {
+      const req = r.request(), rest = new URL(req.url()).pathname.replace('/api/call/persons', '');
+      if (req.method() === 'POST' && rest === '/pick') { const { lang, id } = req.postDataJSON(); doc.langs[lang] = id; }
+      else if (req.method() === 'POST' && !rest) add(req.postDataJSON());
+      else if (req.method() === 'DELETE') { const id = decodeURIComponent(rest.slice(1)); doc.persons = doc.persons.filter((x) => x.id !== id); }
+      return json(r, doc);
+    });
+  };
+}
 
 (async () => {
   fs.mkdirSync(OUT, { recursive: true });
-  for (const { id } of (await (await fetch(base + '/api/call/persons')).json()).persons) await fetch(`${base}/api/call/persons/${id}`, { method: 'DELETE' });
-  await post('/api/call/persons', { name: 'Mira', character: 'woman', background: 'night.jpg', voices: { tr: 'voice_f' } });
-  await post('/api/call/persons', { name: 'Hoca', character: 'professor', voices: { tr: 'voice_m', en: 'en_merchant' } });
-  await post('/api/call/persons', { name: 'Sessiz', character: 'professor', background: 'evening.jpg', voices: { tr: 'voice_m', en: 'voice_en' } });
-  await post('/api/call/persons/pick', { lang: 'tr', id: 'mira' });
-  await post('/api/call/persons/pick', { lang: 'en', id: 'hoca' });
 
   const b = await chromium.launch({ executablePath: process.env.CHROME_BIN, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   for (const [label, scheme, width] of [['light400', 'light', 400], ['dark620', 'dark', 620]]) {
     const ctx = await b.newContext({ viewport: { width, height: 860 }, isMobile: width < 900, hasTouch: width < 900, colorScheme: scheme });
     await ctx.addInitScript(() => { try { sessionStorage.setItem('atc.setup.skip', '1'); localStorage.setItem('atc.notifask', '1'); } catch {} });
+    await persons()(ctx);
     const focus = { name: 'focus', title: 'Focus', talk: true, person: '', background: '' };
     await ctx.route('**/api/agents', (r) => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([focus]) }));
     await ctx.route('**/api/agents/focus/person', (r) => { Object.assign(focus, r.request().postDataJSON()); return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }); });
@@ -121,7 +137,7 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
 
     const row = p.locator('.agrow', { hasText: 'Focus' });
     ok(await row.count() === 1, 'a talking agent has a row');
-    await row.getByRole('radio', { name: /Night/ }).click();
+    await row.getByRole('radio', { name: 'Night', exact: true }).click();
     await p.waitForFunction(() => document.querySelector('.agrow [aria-checked="true"]')?.textContent.includes('Night'));
     ok(focus.background === 'night.jpg' && focus.person === '', 'an agent can take a background and stay the assistant');
     await row.locator('select').selectOption('sessiz');
@@ -140,7 +156,8 @@ const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Co
     await p.waitForSelector('.peditor');
     await p.waitForTimeout(3000);
     await shot('edit');
-    ok(await p.locator('.picktiles').first().locator('.tile').count() === 3, 'orb and two characters: line and bars are views, not characters');
+    const tiles = await p.locator('.picktiles').first().locator('.tile').allInnerTexts();
+    ok(tiles[0].includes('Orb') && tiles.length > 2 && !tiles.some((t) => /^(Line|Bars)$/.test(t.trim())), `orb and the characters: line and bars are views, not characters (${tiles.length})`);
     ok(await p.locator('.pvframe canvas').count() === 1, 'the editor has a live preview');
     await p.locator('.tile', { hasText: 'Orb' }).click();
     await p.waitForTimeout(500);

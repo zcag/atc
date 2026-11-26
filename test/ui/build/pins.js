@@ -28,12 +28,12 @@ const fake = (list) => {
     await p.waitForTimeout(2500);
     await p.locator('.bay[data-bay=pinbay] .bn').click();
     await p.waitForTimeout(800);
-    if (await p.locator('.bview').count() === 0) { await p.keyboard.press('b'); await p.waitForTimeout(500); }
+    if (await p.locator('.bview').count() === 0) { await p.locator('.views button', { hasText: 'Board' }).click(); await p.waitForTimeout(500); }
     const pinned = await p.locator('.bgrp.pinned .brow .t').allInnerTexts();
     ok(pinned.join() === 'pinned-stopped,pinned-turn', `${scheme}: Pinned leads, whatever the state, stopped too: ${pinned}`);
     ok((await p.locator('.bgrp').first().getAttribute('class')).includes('pinned'), `${scheme}: Pinned is the first group`);
     ok((await p.locator('.bgrp.waiting .brow .t').allInnerTexts()).join() === 'asking', `${scheme}: a pinned row is not repeated in Waiting`);
-    ok(/2 waiting on you/.test(await p.locator('.b2').innerText()), `${scheme}: the count includes a pinned session waiting on you`);
+    ok(/2 waiting/.test(await p.locator('.bhead .bcs').innerText()), `${scheme}: the count includes a pinned session waiting on you`);
     ok(await p.locator('.bwrap.pinned.waiting').count() === 1, `${scheme}: a pinned session waiting keeps its edge`);
     const c = await p.locator('.bay[data-bay=pinbay] .cn.n').evaluate((e) => { const s = getComputedStyle(e); return s.color !== getComputedStyle(e.closest('.bay').querySelector('.bn .n')).color; });
     ok(c, `${scheme}: the count does not take the bay name's ink`);
@@ -48,10 +48,11 @@ const fake = (list) => {
       await p.waitForTimeout(300);
       await p.locator('.hd .more > div > button').click();
       await p.waitForTimeout(200);
-      const m = await p.locator('.hd .more .menu').evaluate((s) => { const r = s.getBoundingClientRect(); return { fits: r.left >= 0 && r.right <= innerWidth, over: [...s.querySelectorAll('.mitem')].filter((x) => x.scrollWidth > x.clientWidth + 1).map((x) => x.textContent) }; });
+      const m = await p.locator('.hd .more :is(.menu, .msheet)').evaluate((s) => { const r = s.getBoundingClientRect(); return { fits: r.left >= 0 && r.right <= innerWidth, over: [...s.querySelectorAll('.mitem')].filter((x) => x.scrollWidth > x.clientWidth + 1).map((x) => x.textContent) }; });
       ok(m.fits && !m.over.length, `${scheme} ${w}: the More menu fits, nothing overflows ${m.over}`);
       await p.screenshot({ path: `${OUT}pins-more-${w}-${scheme}.png` });
-      await p.locator('.hd .more > div > button').click();
+      await p.keyboard.press('Escape');
+      await p.waitForTimeout(200);
     }
     ok(!errs.length, `${scheme}: no page errors ${errs}`);
     await ctx.close();

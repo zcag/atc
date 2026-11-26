@@ -23,7 +23,7 @@ async function open(b, { width, scheme }) {
     }
     if (path === '/api/sessions') return json(r, []);
     if (path === '/api/agents') return json(r, []);
-    if (path === '/api/me') return r.fetch().then((x) => (x.ok() ? x.json().then((me) => json(r, { ...me, call: true })) : r.fulfill({ response: x })));
+    if (path === '/api/me') return r.fetch().then((x) => (x.ok() ? x.json().then((me) => json(r, { ...me, call: true })) : r.fulfill({ response: x }))).catch(() => {});
     return r.continue();
   });
   const line = { cmds: [], frames: 0, ws: null };
