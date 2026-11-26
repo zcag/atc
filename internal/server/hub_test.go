@@ -32,6 +32,8 @@ type fakeHub struct {
 	calls  []hub.CallReq
 	events chan hub.Event
 	srv    *httptest.Server
+
+	lineEvents map[string]chan hub.Event
 }
 
 func newFakeHub(t *testing.T, sid string) *fakeHub {
@@ -82,9 +84,67 @@ func newFakeHub(t *testing.T, sid string) *fakeHub {
 			}
 		}
 	})
+	f.lineEvents = map[string]chan hub.Event{}
+	mux.HandleFunc("POST /lines/{name}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		name := r.PathValue("name")
+		if f.lineEvents[name] == nil {
+			f.lineEvents[name] = make(chan hub.Event, 64)
+		}
+		f.got = append(f.got, "open line "+name+" via "+r.URL.Query().Get("via"))
+		f.mu.Unlock()
+		w.Write([]byte(`{"session":"line-` + name + `"}`))
+	})
+	mux.HandleFunc("GET /lines", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		out := []hub.Line{}
+		for name := range f.lineEvents {
+			out = append(out, hub.Line{Name: name, Session: "line-" + name})
+		}
+		json.NewEncoder(w).Encode(out)
+	})
+	mux.HandleFunc("GET /lines/{name}/status", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(hub.Status{Session: "line-" + r.PathValue("name"), Alive: true, Owners: []string{"whatsapp"}})
+	})
+	mux.HandleFunc("POST /lines/{name}/message", func(w http.ResponseWriter, r *http.Request) {
+		var m struct{ Channel, Text string }
+		json.NewDecoder(r.Body).Decode(&m)
+		f.mu.Lock()
+		f.got = append(f.got, "line "+r.PathValue("name")+" "+m.Channel+": "+m.Text)
+		f.mu.Unlock()
+		w.Write([]byte(`{"status":"sent"}`))
+	})
+	mux.HandleFunc("GET /lines/{name}/events", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		ch := f.lineEvents[r.PathValue("name")]
+		f.mu.Unlock()
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil || ch == nil {
+			return
+		}
+		wsjson.Write(r.Context(), c, hub.Event{Type: "session", Text: "line-" + r.PathValue("name")})
+		for {
+			select {
+			case <-r.Context().Done():
+				return
+			case e := <-ch:
+				if wsjson.Write(r.Context(), c, e) != nil {
+					return
+				}
+			}
+		}
+	})
 	f.srv = httptest.NewServer(mux)
 	t.Cleanup(f.srv.Close)
 	return f
+}
+
+func (f *fakeHub) lineEvent(name string, e hub.Event) {
+	f.mu.Lock()
+	ch := f.lineEvents[name]
+	f.mu.Unlock()
+	ch <- e
 }
 
 func (f *fakeHub) sent() []string {
@@ -300,7 +360,7 @@ func TestWhatsAppTurnTheHubLostEnds(t *testing.T) {
 	eventually(t, "typing paused", func() bool { return count(`"paused"`) == 1 })
 	s.wa.mu.Lock()
 	defer s.wa.mu.Unlock()
-	if s.wa.hub != nil {
+	if s.wa.dm.turn != nil {
 		t.Fatal("turn still open")
 	}
 }

@@ -115,6 +115,39 @@ for that group's matters. Longer work for a group goes to a session in `~/guests
 out of a group you are in (a group the account posts alerts to, say), `atc group on NAME` lets it back in; the list
 is `~/.config/atc/groups-quiet`, read fresh on every message.
 
+## Agents' own groups
+
+An [agent](presets-and-agents.md) with `"whatsapp": true` in its `agent.json` gets a WhatsApp group of its own: you
+and atc's account, nobody else, named after the agent (its icon first when that is an emoji). What you write there
+goes to that agent and its replies come back there, the way the assistant's do in your chat with the account: text,
+photos, files, voice notes (answered with one), a reply quoting one of its messages, a reaction to one of its
+questions, a tap on its poll. `/stop` interrupts it and `/help` says this. Its `atc wa` with no `--to` or `--group`
+lands there too, so what it tells you on its own (a finding, a digest, a question) is where your answer reaches it.
+
+It talks there on a line, the same conversation it holds on a [call](calls.md#talking-to-an-agent), which the hub
+runs: your first message opens it (stopping its background copy), and it closes 15 minutes after your last one and
+goes back to the background. An agent in the middle of something in the background is waited for: you are told
+what it is doing, and your messages go in once it is done (for up to 30 minutes). Its schedule and its checks still
+wake it while the line is open; what they make it write stays in atc, unless it sends it with `atc wa`. Nobody can
+approve a tool from WhatsApp, so it may do there what an agent may do on a call
+([what it may do](presets-and-agents.md#on-a-call)).
+
+Every other session's `atc wa` goes to one more group of atc's own, **Sessions**, each message under the session's
+title; a message there quoting one of them goes to that session (one quoting nothing, to the one that wrote last),
+and its answer comes back with `atc wa`. So your chat with the account stays the assistant's alone: it and a shell
+are all that write there. Without any agent asking for a group there is no Sessions either, and `atc wa` reaches your
+chat as before.
+
+atc makes the groups itself within ten minutes of an agent asking for one (it takes a group of that name that is only
+you and the account, when there is one), locks them so only the account can rename them or add people, and keeps
+which is whose in `whatsapp-groups.json` in its state folder. These groups never reach the guests' conversation:
+`atc group` lists them as `@name` or `sessions`, they can't be made quiet, and `atc wa --group` refuses them. Only
+you talk there: anyone else's message is ignored, and you are told once. WhatsApp's Communities can bundle them under
+one name, but OpenWA can't make one, so that is done on the account's phone.
+
+`ATC_WHATSAPP_ALERTS` names a group (by id or name) for atc's own alarms, such as a phone that stopped getting its
+pushes; without it they go to your chat.
+
 ## Speech services
 
 These services are for WhatsApp voice notes, in and out. They all speak the OpenAI API (a local

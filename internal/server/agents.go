@@ -51,7 +51,9 @@ type Agent struct {
 	Talk       bool   `json:"talk,omitempty"`
 	Person     string `json:"person,omitempty"`
 	Background string `json:"background,omitempty"`
-	Err        string `json:"error,omitempty"`
+	// WhatsApp gives it a WhatsApp group of its own with the user, where they write to it and it writes to them.
+	WhatsApp bool   `json:"whatsapp,omitempty"`
+	Err      string `json:"error,omitempty"`
 }
 
 // share names the page whose state the agent keeps for other sessions to read, and what it holds.

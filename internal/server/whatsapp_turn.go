@@ -59,8 +59,8 @@ func (s *Server) waType(ctx context.Context, msg waMsg, text, voice string) erro
 	if text == "" {
 		return nil
 	}
-	if s.hubUp() {
-		return s.waHubType(ctx, msg, text, voice)
+	if s.hubUp() && s.wa.dm != nil {
+		return s.waHubType(ctx, s.wa.dm, msg, text, voice)
 	}
 	id, err := s.keep(ctx, waName, false)
 	if err != nil {

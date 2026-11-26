@@ -31,17 +31,20 @@ type Client struct {
 	Quiet             *Quiet
 	Secret            string
 	Hook              string
-	Votes             atomic.Bool
-	chat              atomic.Value
-	http              *http.Client
-	groups            groupCache
+	// Alerts is the group atc's own alarms go to (a push channel that stopped working), by id or name; "" is the owner.
+	Alerts string
+	Votes  atomic.Bool
+	chat   atomic.Value
+	bound  atomic.Value
+	http   *http.Client
+	groups groupCache
 }
 
 func FromEnv() *Client {
 	c := &Client{
 		URL: strings.TrimRight(os.Getenv("ATC_WHATSAPP_URL"), "/"), Key: os.Getenv("ATC_WHATSAPP_KEY"),
 		Session: os.Getenv("ATC_WHATSAPP_SESSION"),
-		Secret:  os.Getenv("ATC_WHATSAPP_SECRET"), Hook: os.Getenv("ATC_WHATSAPP_HOOK"),
+		Secret:  os.Getenv("ATC_WHATSAPP_SECRET"), Hook: os.Getenv("ATC_WHATSAPP_HOOK"), Alerts: os.Getenv("ATC_WHATSAPP_ALERTS"),
 		http: &http.Client{Timeout: 60 * time.Second},
 	}
 	for _, id := range strings.Split(os.Getenv("ATC_WHATSAPP_OWNER"), ",") {
@@ -81,6 +84,10 @@ func (c *Client) chatOf(ctx context.Context) string {
 	}
 	return c.OwnerChat()
 }
+
+// Bind is the groups atc talks in as someone's own (an agent's): EnsureHook brings their reactions, edits and poll
+// votes too, which the owner's hook leaves out.
+func (c *Client) Bind(groups []string) { c.bound.Store(slices.Clone(groups)) }
 
 func (c *Client) UseChat(id string) {
 	if id != "" {
@@ -293,6 +300,13 @@ func (c *Client) EnsureHook(ctx context.Context) error {
 			events []string
 			conds  []map[string]any
 		}{c.Hook + sep + "guests=1", []string{"message.received"}, direct})
+	}
+	if bound, _ := c.bound.Load().([]string); len(bound) > 0 {
+		want = append(want, struct {
+			url    string
+			events []string
+			conds  []map[string]any
+		}{c.Hook + sep + "bound=1", []string{"message.reaction", "message.edited", "poll.vote"}, []map[string]any{cond("chatId", bound), cond("fromMe", false)}})
 	}
 	var noVotes error
 	for _, w := range want {

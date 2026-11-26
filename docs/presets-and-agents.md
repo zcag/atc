@@ -70,6 +70,8 @@ email/
 - `reset`: when its conversation starts over (below).
 - `talk`: `true` lets the user talk to it directly on a call ([Talking to an agent](calls.md#talking-to-an-agent)), off
   by default, and [what it may do there](#on-a-call) follows the assistant's level. `person` names who it sounds and looks like there, and `background` a background of its own over theirs. Settings, Persons sets both.
+- `whatsapp`: `true` gives it a WhatsApp group of its own with the user, where they write to it and it writes to them
+  ([Agents' own groups](whatsapp.md#agents-own-groups)); there it may do what it may [on a call](#on-a-call).
 - `share`: `{"page": "items", "about": "what it holds"}` names the page whose state other sessions
   read with the `state` tool, so the assistant answers "what's open?" from it instead of asking the
   agent. Give that state a `headline` and `badge` and keep its keys small and named (`counts`

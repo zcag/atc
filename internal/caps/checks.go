@@ -668,6 +668,13 @@ func checkGroups(_ context.Context, env Env) Result {
 	return Result{OK, "The guests' conversation takes part in the groups you are in with atc's account (atc group lists them)."}
 }
 
+func checkAgentGroups(_ context.Context, env Env) Result {
+	if env.Get("ATC_HUB") == "" {
+		return Result{Missing, "No hub, so agents can't talk in groups: each talks on a line the hub runs."}
+	}
+	return Result{OK, "Agents with \"whatsapp\": true have their own groups, other sessions write in Sessions (atc group lists them)."}
+}
+
 func checkWhatsApp(ctx context.Context, env Env) Result {
 	keys := []string{"ATC_WHATSAPP_URL", "ATC_WHATSAPP_KEY", "ATC_WHATSAPP_SESSION", "ATC_WHATSAPP_OWNER", "ATC_WHATSAPP_SECRET"}
 	var unset []string

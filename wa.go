@@ -18,8 +18,11 @@ const waHelp = `atc wa: send the user something on WhatsApp, from the account at
   atc wa --group GROUP [--file PATH]... [--voice TEXT] [text...]
 
 It reaches the user, with --to one of the guests atc listens to (atc guest), or with
---group a WhatsApp group the user is in (atc group); anyone else is refused. In the whatsapp session your replies are delivered
-already; use this for what a reply can't carry:
+--group a WhatsApp group the user is in (atc group); anyone else is refused. Without either it goes
+where you belong: the assistant to the user's chat, an agent with a group of its own to that group,
+any other session to the Sessions group under its title, where a reply quoting it comes back to you.
+Where your replies are delivered already (the assistant's chat, an agent talking in its group), use
+this for what a reply can't carry:
 
   --file PATH      a file: images and videos show inline, audio plays, anything else
                    arrives as a document (PDF, CSV, a zip). Repeat for more.

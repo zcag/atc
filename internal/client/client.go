@@ -300,9 +300,10 @@ func (c *Client) Message(agent, text string) (string, error) {
 	return r.ID, c.do("POST", "/api/agents/"+url.PathEscape(agent)+"/message", map[string]string{"text": text}, &r)
 }
 
-// AgentLine asks atc for an agent's conversation to put on a call, for the hub: the status and body as they came.
-func (c *Client) AgentLine(agent string) (int, []byte, error) {
-	req, err := http.NewRequest("POST", c.URL+"/api/agents/"+url.PathEscape(agent)+"/line", nil)
+// AgentLine asks atc for an agent's conversation to put on a call (via "") or on its WhatsApp group (via
+// "whatsapp"), for the hub: the status and body as they came.
+func (c *Client) AgentLine(agent, via string) (int, []byte, error) {
+	req, err := http.NewRequest("POST", c.URL+"/api/agents/"+url.PathEscape(agent)+"/line?via="+url.QueryEscape(via), nil)
 	if err != nil {
 		return 0, nil, err
 	}

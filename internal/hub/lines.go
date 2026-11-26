@@ -10,16 +10,18 @@ import (
 	"time"
 )
 
-// A line is an agent's conversation while the user talks to it on a call: a stream-json process like the
-// assistant's, resumed on the agent's own session, so its words stream to the talker as they are written (its
-// background session only writes a reply to its transcript when the turn ends: 8 s for a two-sentence answer,
-// measured, against 0.7 s to the first word here). atc stops the background copy and starts it again after.
+// A line is an agent's conversation while the user talks to it directly, on a call or in the agent's own
+// WhatsApp group: a stream-json process like the assistant's, resumed on the agent's own session, so its words
+// stream out as they are written (its background session only writes a reply to its transcript when the turn
+// ends: 8 s for a two-sentence answer, measured, against 0.7 s to the first word here). atc stops the background
+// copy and starts it again after.
 //
-//	POST /lines/<agent>              open it (atc says whether it may), the answer is atc's
-//	GET  /lines                      what is open
-//	/lines/<agent>/ws, /status, ...  the same API as the hub's, for that conversation
+//	POST /lines/<agent>[?via=whatsapp]  open it (atc says whether it may), the answer is atc's
+//	GET  /lines                         what is open
+//	/lines/<agent>/ws, /status, ...     the same API as the hub's, for that conversation
 //
-// It closes itself once no talker holds it and its last turn has ended.
+// It closes itself once no talker holds it, nothing was written into it for lineTextHold and its last turn has
+// ended.
 
 // LineSpec is what atc answers to opening a line, beside what the talker uses (title, person, voices).
 type LineSpec struct {
@@ -28,8 +30,9 @@ type LineSpec struct {
 	Args    []string `json:"args"`
 }
 
-// OpenLine is the agent's name going in, and atc's status and body coming out.
-type OpenLine func(name string) (int, []byte, error)
+// OpenLine is the agent's name and what the line is for ("" a call, "whatsapp" its group) going in, and atc's
+// status and body coming out.
+type OpenLine func(name, via string) (int, []byte, error)
 
 type Line struct {
 	Name    string `json:"name"`
@@ -40,6 +43,8 @@ const (
 	lineGrace = 30 * time.Second
 	lineQuiet = 3
 )
+
+var lineTextHold = 15 * time.Minute
 
 var lineName = regexp.MustCompile(`^[\w.-]+$`)
 
@@ -57,7 +62,7 @@ func (h *Hub) serveOpenLine(w http.ResponseWriter, r *http.Request) {
 	}
 	h.lineMu.Lock()
 	defer h.lineMu.Unlock()
-	code, body, err := h.cfg.OpenLine(name)
+	code, body, err := h.cfg.OpenLine(name, r.URL.Query().Get("via"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
@@ -93,9 +98,9 @@ func (h *Hub) startLine(name string, spec LineSpec) error {
 	return nil
 }
 
-// closeWhenDone ends a line once no talker has been on it for a few seconds and nothing is left to do. A
-// talker that never connects gets lineGrace. The line ends with the call, not with moving away, so coming
-// back to the agent in the same call is instant.
+// closeWhenDone ends a line once no talker has been on it for a few seconds, nobody has written into it for
+// lineTextHold and nothing is left to do. A talker that never connects gets lineGrace. The line ends with the
+// call, not with moving away, so coming back to the agent in the same call is instant.
 func (h *Hub) closeWhenDone(name string, sub *Hub) {
 	t := time.NewTicker(time.Second)
 	defer t.Stop()
@@ -109,9 +114,10 @@ func (h *Hub) closeWhenDone(name string, sub *Hub) {
 			}
 		}
 		idle := sub.turn == nil && len(sub.pending) == 0 && len(sub.held) == 0
-		joined := sub.talked
+		joined := sub.talked || !sub.wroteAt.IsZero()
+		written := !sub.wroteAt.IsZero() && sub.cfg.Now().Sub(sub.wroteAt) < lineTextHold
 		sub.mu.Unlock()
-		if holders > 0 || !idle || !joined && time.Since(opened) < lineGrace {
+		if holders > 0 || written || !idle || !joined && time.Since(opened) < lineGrace {
 			quiet = 0
 			continue
 		}

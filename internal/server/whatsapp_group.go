@@ -23,6 +23,10 @@ func (s *Server) waGroup(d whatsapp.Message) {
 	if d.FromMe || !d.IsGroup {
 		return
 	}
+	if agent, toSessions, ok := s.wa.groups.whose(d.ChatID); ok {
+		s.waBound(d, agent, toSessions)
+		return
+	}
 	g, ok := wa.Open(ctx, d.ChatID)
 	if !ok {
 		log.Printf("whatsapp: ignored a message in group %s", d.ChatID)
@@ -57,7 +61,7 @@ func (s *Server) waGroupMembers(ev whatsapp.GroupEvent, joined bool) {
 	defer cancel()
 	wa := s.WhatsApp
 	wa.ForgetGroup(ev.GroupID)
-	if !joined {
+	if !joined || s.waOwnGroup(ctx, ev.GroupID) {
 		return
 	}
 	self, err := wa.Self(ctx)
@@ -76,6 +80,9 @@ func (s *Server) waGroupMembers(ev whatsapp.GroupEvent, joined bool) {
 	}
 	if !ok {
 		log.Printf("whatsapp: a join in group %s, which atc stays out of (the user is not in it, it is quiet, or WhatsApp did not say)", ev.GroupID)
+		return
+	}
+	if s.waOwnGroup(ctx, ev.GroupID) {
 		return
 	}
 	if !slices.ContainsFunc(ev.ParticipantIDs, func(id string) bool { return s.waNumber(ctx, g, id) == self }) {

@@ -160,6 +160,8 @@ type Hub struct {
 	lines    map[string]*Hub
 	lineMu   sync.Mutex
 	talked   bool
+	// wroteAt is when a written channel (not a call, not a report) last spoke into it.
+	wroteAt time.Time
 	// onLine is the agent the user's call is with instead of this conversation, "" for here.
 	onLine string
 }
@@ -365,6 +367,9 @@ func (h *Hub) say(ch, text string) (string, error) {
 		h.unsaid = false
 	}
 	if !aside(ch) && ch != reset {
+		if !spoken(ch) {
+			h.wroteAt = h.cfg.Now()
+		}
 		if ch != h.last {
 			if mode := h.cfg.Mode(ch); mode != "" {
 				text = fmt.Sprintf("[talk-mode: %s, until the next talk-mode line]\n%s\n[message]\n%s", ch, mode, text)

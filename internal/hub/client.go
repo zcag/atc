@@ -24,6 +24,21 @@ func NewClient(url string) *Client {
 	return &Client{URL: strings.TrimRight(url, "/"), HTTP: &http.Client{Timeout: 10 * time.Second}}
 }
 
+// OpenLine opens an agent's line (via "whatsapp" for its group): the status and body as atc answered them.
+func (c *Client) OpenLine(ctx context.Context, agent, via string) (int, []byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", c.URL+"/lines/"+agent+"?via="+via, nil)
+	if err != nil {
+		return 0, nil, err
+	}
+	resp, err := (&http.Client{Timeout: time.Minute}).Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("hub: %w", err)
+	}
+	defer resp.Body.Close()
+	b, err := io.ReadAll(resp.Body)
+	return resp.StatusCode, b, err
+}
+
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
 	var rd io.Reader
 	if body != nil {

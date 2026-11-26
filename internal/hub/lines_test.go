@@ -60,7 +60,7 @@ func lines(t *testing.T, srv *httptest.Server) []Line {
 
 func TestLineTalksThenClosesWhenTheCallLeaves(t *testing.T) {
 	sid := NewID()
-	_, srv := lineRig(t, func(name string) (int, []byte, error) {
+	_, srv := lineRig(t, func(name, _ string) (int, []byte, error) {
 		b, _ := json.Marshal(map[string]any{"session": sid, "dir": t.TempDir(), "title": "Focus"})
 		return 200, b, nil
 	})
@@ -86,8 +86,38 @@ func TestLineTalksThenClosesWhenTheCallLeaves(t *testing.T) {
 	}
 }
 
+func TestLineWrittenToStaysUntilTheTextGoesQuiet(t *testing.T) {
+	defer func(d time.Duration) { lineTextHold = d }(lineTextHold)
+	lineTextHold = 6 * time.Second
+	sid := NewID()
+	var via string
+	_, srv := lineRig(t, func(_, v string) (int, []byte, error) {
+		via = v
+		b, _ := json.Marshal(map[string]any{"session": sid, "dir": t.TempDir()})
+		return 200, b, nil
+	})
+	resp, err := http.Post(srv.URL+"/lines/ops?via=whatsapp", "application/json", nil)
+	if err != nil || resp.StatusCode != 200 || via != "whatsapp" {
+		t.Fatalf("open: %v %v via %q", resp.Status, err, via)
+	}
+	resp, err = http.Post(srv.URL+"/lines/ops/message", "application/json", strings.NewReader(`{"channel":"whatsapp","text":"hi"}`))
+	if err != nil || resp.StatusCode != 200 {
+		t.Fatalf("message: %v %v", resp.Status, err)
+	}
+	opened := time.Now()
+	for len(lines(t, srv)) > 0 {
+		if time.Since(opened) > 20*time.Second {
+			t.Fatal("the line stayed open after the text went quiet")
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	if time.Since(opened) < lineTextHold {
+		t.Fatalf("closed after %s, while text still held it", time.Since(opened))
+	}
+}
+
 func TestLineRefusedIsPassedOn(t *testing.T) {
-	_, srv := lineRig(t, func(string) (int, []byte, error) {
+	_, srv := lineRig(t, func(string, string) (int, []byte, error) {
 		return http.StatusConflict, []byte(`{"why":"busy","title":"Focus","activity":"running tests"}`), nil
 	})
 	resp, err := http.Post(srv.URL+"/lines/focus", "application/json", nil)

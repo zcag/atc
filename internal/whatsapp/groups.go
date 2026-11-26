@@ -132,6 +132,28 @@ func (c *Client) Open(ctx context.Context, id string) (Group, bool) {
 	return g, err == nil && g.HasNumber(c.Owner)
 }
 
+// OnlyOwner is whether the group is the owner and the account and nobody else.
+func (c *Client) OnlyOwner(ctx context.Context, g Group) bool {
+	self, err := c.Self(ctx)
+	if err != nil || !g.HasNumber(c.Owner) {
+		return false
+	}
+	return !slices.ContainsFunc(g.Members, func(m Member) bool { return m.Number != c.Owner && m.Number != self })
+}
+
+// CreateGroup makes a group of the account and the owner, which only admins (the account) can rename or add to.
+func (c *Client) CreateGroup(ctx context.Context, name string) (Group, error) {
+	var g Group
+	if err := c.do(ctx, "POST", "/groups", map[string]any{"name": name, "participants": []string{c.Owner + "@c.us"}}, &g); err != nil {
+		return g, err
+	}
+	if g.ID == "" {
+		return g, errors.New("openwa: the new group has no id")
+	}
+	err := c.do(ctx, "PUT", "/groups/"+url.PathEscape(g.ID)+"/settings", map[string]any{"locked": true, "memberAddMode": "admins"}, nil)
+	return g, err
+}
+
 // FindGroup is the group named by id or name (any case).
 func (c *Client) FindGroup(ctx context.Context, ref string) (Group, error) {
 	if strings.HasSuffix(ref, "@g.us") {

@@ -121,10 +121,14 @@ func guestsMode(ch string) string {
 	return modes.Text(ch)
 }
 
-// lineMode is how an agent's conversation talks while it is on a call; the rest is as for any conversation.
+// lineMode is how an agent's conversation talks while it is on a call or in its own WhatsApp group; the rest is as
+// for any conversation.
 func lineMode(ch string) string {
-	if ch == hub.Phone {
+	switch ch {
+	case hub.Phone:
 		return modes.Text("line")
+	case "whatsapp":
+		return modes.Text("line-whatsapp")
 	}
 	return modes.Text(ch)
 }

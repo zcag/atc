@@ -25,19 +25,22 @@ import (
 
 const waName = "whatsapp"
 
-// waChat is the one conversation: which messages were seen, the turn being relayed, where in
-// the session's transcript relaying stopped, and what atc said, so a reaction can be read.
+// waChat is the owner's WhatsApp: which messages were seen, the turn being relayed, where in the session's
+// transcript relaying stopped, and what atc said, so a reaction can be read. dm is the assistant in the owner's
+// DM, through the hub; agents' groups have routes of their own (whatsapp_agents.go).
 type waChat struct {
 	mu    sync.Mutex
 	seen  map[string]time.Time
 	turn  *waTurn
-	hub   *waHubTurn
+	dm    *waRoute
 	mark  waMark
 	path  string
 	said  map[string]string
 	order []string
 	heard map[string]string
 	votes map[string]*time.Timer
+
+	groups waGroupState
 
 	out    sync.Mutex
 	sentAt time.Time
@@ -120,6 +123,8 @@ func (s *Server) startWhatsApp() {
 			s.WhatsApp.UseChat(s.wa.mark.Chat)
 		}
 	}
+	s.wa.groups.load(s.StateDir)
+	s.WhatsApp.Bind(s.wa.groups.ids())
 	go s.waWatch()
 	go func() {
 		for try := range 10 {
@@ -315,13 +320,18 @@ func (s *Server) waReaction(x whatsapp.Reaction) {
 		return
 	}
 	text := fmt.Sprintf("[reacted %s to your message]\n%s", x.Reaction, quoted(said, 400))
+	if strings.HasSuffix(x.ChatID, "@g.us") {
+		s.waBoundChange(ctx, x.ChatID, x.MessageID, waMsg{}, text)
+		return
+	}
 	s.waFailed(ctx, waMsg{}, s.waType(ctx, waMsg{}, text, ""))
 }
 
 func (s *Server) waEdited(x whatsapp.Edit) {
 	ctx, cancel := waContext()
 	defer cancel()
-	if x.FromMe || x.IsGroup || strings.TrimSpace(x.Body) == "" || !s.WhatsApp.IsOwner(ctx, cmp.Or(x.SenderID, x.From), "") {
+	_, _, bound := s.wa.groups.whose(x.ChatID)
+	if x.FromMe || x.IsGroup && !bound || strings.TrimSpace(x.Body) == "" || !s.WhatsApp.IsOwner(ctx, cmp.Or(x.SenderID, x.From), "") {
 		return
 	}
 	text := "[edited a message]\n"
@@ -329,6 +339,10 @@ func (s *Server) waEdited(x whatsapp.Edit) {
 		text += "It said:\n" + quoted(was, 400) + "\nNow:\n"
 	}
 	s.wa.remember(s.wa.heard, x.MessageID, x.Body)
+	if bound {
+		s.waBoundChange(ctx, x.ChatID, "", waMsg{x.ChatID, x.MessageID}, text+x.Body)
+		return
+	}
 	msg := waMsg{cmp.Or(x.ChatID, s.WhatsApp.OwnerChat()), x.MessageID}
 	s.WhatsApp.React(ctx, msg.chat, msg.id, "⏳")
 	s.waFailed(ctx, msg, s.waType(ctx, msg, text+x.Body, ""))
@@ -362,6 +376,10 @@ func (s *Server) waVote(x whatsapp.Vote) {
 		defer cancel()
 		question := cmp.Or(x.PollName, s.wa.recall(s.wa.said, x.PollMessageID))
 		text := fmt.Sprintf("[poll vote] %s\n→ %s", question, strings.Join(x.SelectedOptions, ", "))
+		if strings.HasSuffix(x.ChatID, "@g.us") {
+			s.waBoundChange(ctx, x.ChatID, x.PollMessageID, waMsg{x.ChatID, x.PollMessageID}, text)
+			return
+		}
 		msg := waMsg{cmp.Or(x.ChatID, s.WhatsApp.OwnerChat()), x.PollMessageID}
 		s.WhatsApp.React(ctx, msg.chat, msg.id, "⏳")
 		s.waFailed(ctx, msg, s.waType(ctx, msg, text, ""))

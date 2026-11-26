@@ -138,8 +138,10 @@ func (s *Server) startHub() {
 	s.hub = s.newHubLink(hubName, s.Hub, "hub.json")
 	s.guests = s.newHubLink(guestsName, hub.NewClient(s.Hub.URL+"/guests"), "hub-guests.json")
 	if s.WhatsApp != nil {
-		go s.waHubLoop()
+		s.wa.dm = &waRoute{link: s.hub}
+		go s.waHubLoop(s.wa.dm)
 		go s.guestsDaily()
+		go s.waAgentGroups()
 	}
 	s.spawn(func(context.Context) { s.watchHub(s.hub, s.hubEvent) })
 	s.spawn(func(context.Context) {

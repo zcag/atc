@@ -7,6 +7,8 @@ import (
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/zcag/atc/internal/whatsapp"
 )
 
 // pushDeafAfter is how long a phone may leave a push unconfirmed before it counts as not hearing them.
@@ -22,7 +24,8 @@ func (s *Server) pushHeard(w http.ResponseWriter, r *http.Request) {
 }
 
 // watchPushes tells the user, once, when a phone stops confirming pushes, and once more when it hears them
-// again. It goes on WhatsApp when atc has it, since the pushes are what stopped; the log and Settings always.
+// again. It goes on WhatsApp when atc has it, since the pushes are what stopped (to the alerts group when
+// ATC_WHATSAPP_ALERTS names one); the log and Settings always.
 func (s *Server) watchPushes() {
 	told := map[string]time.Time{}
 	for range time.Tick(30 * time.Second) {
@@ -33,12 +36,12 @@ func (s *Server) watchPushes() {
 				continue
 			}
 			told[d.Endpoint] = d.Since
-			s.tellAboutPushes(fmt.Sprintf("%s hasn't received atc's notifications since %s. Check that it is online and its push app (such as ntfy) is connected.", d.Name, d.Since.Format("15:04")))
+			s.tellAboutPushes(true, fmt.Sprintf("%s hasn't received atc's notifications since %s. Check that it is online and its push app (such as ntfy) is connected.", d.Name, d.Since.Format("15:04")))
 		}
 		for endpoint, since := range told {
 			if !deaf[endpoint] {
 				delete(told, endpoint)
-				s.tellAboutPushes(fmt.Sprintf("%s gets atc's notifications again (missed since %s).", s.pushName(endpoint), since.Format("15:04")))
+				s.tellAboutPushes(false, fmt.Sprintf("%s gets atc's notifications again (missed since %s).", s.pushName(endpoint), since.Format("15:04")))
 			}
 		}
 	}
@@ -53,12 +56,25 @@ func (s *Server) pushName(endpoint string) string {
 	return "The phone"
 }
 
-func (s *Server) tellAboutPushes(text string) {
+func (s *Server) tellAboutPushes(deaf bool, text string) {
 	log.Printf("push: %s", text)
-	if s.WhatsApp == nil {
+	wa := s.WhatsApp
+	if wa == nil {
 		return
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
+	if wa.Alerts != "" {
+		g, err := wa.FindGroup(ctx, wa.Alerts)
+		if err == nil {
+			mark := "✅ "
+			if deaf {
+				mark = "🚨 "
+			}
+			s.waText(whatsapp.To(ctx, g.ID), mark+text)
+			return
+		}
+		log.Printf("push: the alerts group %q: %v", wa.Alerts, err)
+	}
 	s.waText(ctx, text)
 }

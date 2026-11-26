@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zcag/atc/internal/client"
 	"github.com/zcag/atc/internal/outputs"
 	"github.com/zcag/atc/internal/pages"
 	"github.com/zcag/atc/internal/whatsapp"
@@ -28,8 +29,8 @@ const (
 )
 
 // waSend paces everything sent to WhatsApp, so a long reply goes out as a steady trickle, and
-// remembers what each message said, so a reaction to it can be read.
-func (s *Server) waSend(said string, f func() (string, error)) (string, error) {
+// remembers what each message said, so a reaction to it can be read, and in Sessions which session sent it.
+func (s *Server) waSend(ctx context.Context, said string, f func() (string, error)) (string, error) {
 	s.wa.out.Lock()
 	defer s.wa.out.Unlock()
 	if d := waGap - time.Since(s.wa.sentAt); d > 0 {
@@ -41,11 +42,14 @@ func (s *Server) waSend(said string, f func() (string, error)) (string, error) {
 		log.Printf("whatsapp: send: %v", err)
 	}
 	s.wa.remember(s.wa.said, id, said)
+	if sid, _ := ctx.Value(waFromKey{}).(string); sid != "" {
+		s.wa.groups.wrote(id, sid)
+	}
 	return id, err
 }
 
 func (s *Server) waText(ctx context.Context, text string) (string, error) {
-	return s.waSend(text, func() (string, error) { return s.WhatsApp.Text(ctx, text, "") })
+	return s.waSend(ctx, text, func() (string, error) { return s.WhatsApp.Text(ctx, text, "") })
 }
 
 func (s *Server) waReply(ctx context.Context, md string) error {
@@ -69,7 +73,7 @@ func (s *Server) waReply(ctx context.Context, md string) error {
 var langExt = map[string]string{"bash": ".sh", "shell": ".sh", "python": ".py", "golang": ".go", "javascript": ".js", "typescript": ".ts", "ruby": ".rb", "markdown": ".md", "yaml": ".yml"}
 
 func (s *Server) waFile(ctx context.Context, data []byte, mt, name, caption string) (string, error) {
-	return s.waSend(caption, func() (string, error) { return s.WhatsApp.Media(ctx, data, mt, name, caption, false) })
+	return s.waSend(ctx, caption, func() (string, error) { return s.WhatsApp.Media(ctx, data, mt, name, caption, false) })
 }
 
 func (s *Server) waTable(ctx context.Context, rows [][]string) error {
@@ -129,7 +133,7 @@ func (s *Server) waVoice(ctx context.Context, text, lang string, condense bool) 
 	if err != nil {
 		return err
 	}
-	_, err = s.waSend("", func() (string, error) { return s.WhatsApp.Media(ctx, ogg, "audio/ogg; codecs=opus", "", "", true) })
+	_, err = s.waSend(ctx, "", func() (string, error) { return s.WhatsApp.Media(ctx, ogg, "audio/ogg; codecs=opus", "", "", true) })
 	return err
 }
 
@@ -246,6 +250,9 @@ func (s *Server) waGroups(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		g, err := wa.FindGroup(ctx, in.Group)
+		if _, _, own := s.wa.groups.whose(g.ID); err == nil && own {
+			err = fmt.Errorf("%s is a group of atc's own (an agent's, or Sessions): it is never the guests'", cmp.Or(g.Name, g.ID))
+		}
 		if err == nil {
 			err = wa.Quiet.Set(g.ID, g.Name, in.Op == "quiet")
 		}
@@ -268,7 +275,12 @@ func (s *Server) waGroups(w http.ResponseWriter, r *http.Request) {
 	out := []row{}
 	for _, g := range list {
 		st := "in"
-		if wa.Quiet.Has(g.ID) {
+		if agent, toSessions, own := s.wa.groups.whose(g.ID); own {
+			st = "@" + agent
+			if toSessions {
+				st = "sessions"
+			}
+		} else if wa.Quiet.Has(g.ID) {
 			st = "quiet"
 		} else if _, ok := wa.Open(ctx, g.ID); !ok {
 			st = "without you"
@@ -307,6 +319,14 @@ func (s *Server) waPost(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusNotFound)
 			return
 		}
+		if agent, _, own := s.wa.groups.whose(g.ID); own {
+			who := "a session"
+			if agent != "" {
+				who = "@" + agent
+			}
+			http.Error(w, fmt.Sprintf("%s is a group of atc's own: only %s writes there, with a bare atc wa", cmp.Or(g.Name, in.Group), who), http.StatusForbidden)
+			return
+		}
 		if g, ok := s.WhatsApp.Open(ctx, g.ID); !ok {
 			http.Error(w, fmt.Sprintf("atc stays out of %s: the user is not in it, or it is quiet (atc group)", cmp.Or(g.Name, in.Group)), http.StatusForbidden)
 			return
@@ -328,6 +348,31 @@ func (s *Server) waPost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ctx = whatsapp.To(ctx, chat)
+	}
+	if in.To == "" && in.Group == "" {
+		t, err := s.waTargetOf(r.Header.Get(client.CallerHeader))
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		if t.chat != "" {
+			ctx = whatsapp.To(ctx, t.chat)
+		}
+		if t.sid != "" {
+			if in.Poll != nil {
+				http.Error(w, "polls go to the user's DM or an agent's own group; in Sessions, offer numbered options in text", http.StatusBadRequest)
+				return
+			}
+			ctx = context.WithValue(ctx, waFromKey{}, t.sid)
+			switch {
+			case in.Text != "":
+				in.Text = "**" + t.label + "**\n" + in.Text
+			case len(in.Files) > 0 || len(in.Render) > 0:
+				in.Caption = strings.TrimSpace("*" + t.label + "*\n" + in.Caption)
+			default:
+				in.Text = "**" + t.label + "**"
+			}
+		}
 	}
 	var sent []string
 	send := func(what string, err error) bool {
@@ -373,7 +418,7 @@ func (s *Server) waPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p := in.Poll; p != nil {
-		_, err := s.waSend(p.Question, func() (string, error) { return s.WhatsApp.Poll(ctx, p.Question, p.Options, p.Multi) })
+		_, err := s.waSend(ctx, p.Question, func() (string, error) { return s.WhatsApp.Poll(ctx, p.Question, p.Options, p.Multi) })
 		if !send("poll", err) {
 			return
 		}

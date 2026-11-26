@@ -236,7 +236,8 @@ func All() []Cap {
 				{Key: "ATC_WHATSAPP_SESSION", Label: "Session id"},
 				{Key: "ATC_WHATSAPP_OWNER", Label: "Your number", Hint: "12025550100", Hub: true},
 				{Key: "ATC_WHATSAPP_SECRET", Label: "Webhook secret, 16 characters or more", Secret: true},
-				{Key: "ATC_WHATSAPP_HOOK", Label: "Webhook address atc is reached at", URL: true}},
+				{Key: "ATC_WHATSAPP_HOOK", Label: "Webhook address atc is reached at", URL: true},
+				{Key: "ATC_WHATSAPP_ALERTS", Label: "Group for atc's own alarms (optional, else your chat)", Hint: "alarms"}},
 			Check: checkWhatsApp,
 			Fix:   Fix{Text: "Run an OpenWA gateway, link a WhatsApp account to it, and fill these in.", Guide: "whatsapp#whatsapp"},
 			Cost:  "A second phone number, and plan tokens for the assistant.",
@@ -246,6 +247,12 @@ func All() []Cap {
 			Needs: []string{"whatsapp", "hub"}, Check: checkGroups,
 			Fix:  Fix{Text: "Set up the hub. Give the guests' conversation the tools your groups need in ~/guests/mcp.json.", Guide: "whatsapp#groups"},
 			Cost: "Plan tokens: one turn of the guests' conversation for every message in those groups.",
+		},
+		{
+			ID: "agent-groups", Title: "Agents' own groups", Group: WhatsApp, Optional: true, Why: "An agent with \"whatsapp\": true in its agent.json gets a WhatsApp group of its own with you: what you write there goes to it and its replies and atc wa come back there. Every other session's atc wa goes to one more group, Sessions, so your chat with the account stays the assistant's.",
+			Needs: []string{"whatsapp", "hub"}, Check: checkAgentGroups,
+			Fix:  Fix{Text: "Set up the hub, then add \"whatsapp\": true to the agent.json of each agent that should have a group; atc makes the groups within ten minutes.", Guide: "whatsapp#agents-own-groups"},
+			Cost: "A Claude process per agent while you write to it (it closes 15 minutes after the last message), plus plan tokens.",
 		},
 		{
 			ID: "stt", Title: "Voice notes: hearing", Group: WhatsApp, Optional: true, Why: "Turns the voice notes you send into text. Only WhatsApp voice notes use this.",

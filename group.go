@@ -9,13 +9,15 @@ import (
 
 const groupHelp = `atc group: the WhatsApp groups atc's account is in.
 
-  atc group                  list them: in (atc takes part), quiet, or without you
+  atc group                  list them: in (atc takes part), quiet, without you, or @name
+                             and sessions for the groups of atc's own
   atc group quiet GROUP      stay out of GROUP although you are in it (by name or id)
   atc group on GROUP         take part in GROUP again
 
 atc takes part in every group you are in: the guests' conversation reads each message and
 answers with atc wa --group when it judges it should. Being added to a group you are
-in is enough; nobody else there needs to be a guest.
+in is enough; nobody else there needs to be a guest. The groups of atc's own (an agent's,
+and Sessions, see docs/whatsapp.md) are never the guests': only their owner talks there.
 `
 
 func group(args []string) error {

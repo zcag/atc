@@ -61,7 +61,7 @@ func (s *Server) syncLines(open []hub.Line) {
 	if s.lines == nil {
 		s.lines = map[string]*hubLink{}
 	}
-	var gone []*hubLink
+	var gone, born []*hubLink
 	for name, l := range s.lines {
 		if !slices.ContainsFunc(open, func(o hub.Line) bool { return o.Name == name }) {
 			gone = append(gone, l)
@@ -74,17 +74,33 @@ func (s *Server) syncLines(open []hub.Line) {
 			l.path = ""
 			l.ctx, l.cancel = context.WithCancel(s.life)
 			s.lines[o.Name] = l
-			s.spawn(func(context.Context) { s.watchHub(l, func(hub.Event) {}) })
+			s.spawn(func(context.Context) { s.watchHub(l, func(e hub.Event) { s.lineEvent(l, e) }) })
 			log.Printf("agent %s: on the line", o.Name)
+			born = append(born, l)
 		}
 	}
 	s.linesMu.Unlock()
+	for _, l := range born {
+		s.waLineRoute(l)
+	}
 	for _, l := range gone {
 		l.cancel()
 		go s.lineOver(l)
 	}
 	if len(gone) > 0 {
 		s.refresh()
+	}
+}
+
+// lineEvent passes what the agent writes on the whatsapp channel to its group's route.
+func (s *Server) lineEvent(l *hubLink, e hub.Event) {
+	if e.Channel != waName || s.WhatsApp == nil {
+		return
+	}
+	select {
+	case l.wa <- e:
+	default:
+		log.Printf("agent %s: whatsapp is behind, dropped a %s", l.name, e.Type)
 	}
 }
 
@@ -108,15 +124,20 @@ func (s *Server) lineOver(l *hubLink) {
 	}
 }
 
-// agentLine is the hub asking for an agent's conversation to put on a call. An agent in the middle of
-// something stays where it is: the answer says what it is doing, and the talker tells the one on the line.
+// agentLine is the hub asking for an agent's conversation to put on a call, or (via=whatsapp) to talk to in its
+// WhatsApp group. An agent in the middle of something stays where it is: the answer says what it is doing, and
+// the talker tells the one on the line.
 func (s *Server) agentLine(w http.ResponseWriter, r *http.Request) {
 	a, ok := s.agentNamed(r.PathValue("name"))
 	if !ok {
 		lineRefused(w, http.StatusNotFound, map[string]string{"why": "unknown", "error": "no agent named " + r.PathValue("name") + " on " + s.Host})
 		return
 	}
-	if !a.Talk {
+	switch via := r.URL.Query().Get("via"); {
+	case via == waName && !a.WhatsApp:
+		lineRefused(w, http.StatusForbidden, map[string]string{"why": "off", "title": a.label(), "error": a.label() + " has no \"whatsapp\": true in its agent.json"})
+		return
+	case via != waName && !a.Talk:
 		lineRefused(w, http.StatusForbidden, map[string]string{"why": "off", "title": a.label(), "error": a.label() + " has no \"talk\": true in its agent.json"})
 		return
 	}
