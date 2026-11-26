@@ -203,7 +203,10 @@ const pagesRoute = () => {
   return { bay: bay === "all" ? null : bay, sid: m[2] ? decodeURIComponent(m[2]) : null, name: m[3] ? decodeURIComponent(m[3]) : null };
 };
 let PAGES_FROM = null;
-const openUsage = () => { if (location.hash !== USAGE) location.hash = USAGE; };
+let USAGE_FROM = null;
+const inUsage = () => location.hash === USAGE || location.hash === TIME;
+const openUsage = () => { if (inUsage()) return; USAGE_FROM = location.hash; location.hash = USAGE; };
+const toggleUsage = () => (inUsage() ? (location.hash = USAGE_FROM || "#/") : openUsage());
 const openResources = () => { if (location.hash !== RESOURCES) location.hash = RESOURCES; };
 const SCREENS = { usage: "Usage", time: "Time", resources: "Resources", backlog: "Backlog", agents: "Agents", settings: "Settings" };
 const screenOf = () => location.hash === USAGE ? "usage" : location.hash === TIME ? "time" : location.hash === RESOURCES ? "resources" : location.hash === BACKLOG ? "backlog" : agentRoute() !== null ? "agents" : null;
@@ -1025,15 +1028,35 @@ function ConsoleAgents({ agents, runs }) {
       <button class="more" onClick=${() => { close(); location.hash = AGENTS_ROUTE; }}>${list.length > 8 ? `All ${list.length} agents…` : "Agents page"}</button></div>`} />`;
 }
 
+const WINDOW_MS = { session: 5 * 3.6e6, weekly_all: 7 * 24 * 3.6e6 };
+const paceOf = (w) => {
+  const end = Date.parse(w.resetsAt), len = WINDOW_MS[w.key];
+  if (!end || !len) return null;
+  const gone = (Date.now() - (end - len)) / len;
+  return gone > 0.03 && gone <= 1 ? gone * 100 : null;
+};
+
 function UsageChip({ limits }) {
   useNow(60000);
+  useRoute();
   const ws = (limits?.windows || []).filter((w) => SHORT[w.key]);
-  if (!ws.length) return null;
-  const sess = ws.find((w) => w.key === "session");
+  const week = ws.find((w) => w.key === "weekly_all"), sess = ws.find((w) => w.key === "session");
+  const main = week || sess;
+  if (!main) return null;
+  const used = Math.round(main.percent), pace = paceOf(main), off = pace == null ? null : Math.round(main.percent - pace);
+  const hotSess = week && sess && sess.percent >= 75 ? sess : null;
   const left = sess && Date.parse(sess.resetsAt) - Date.now();
-  const title = [...ws.map((w) => `${SHORT[w.key]} ${Math.round(w.percent)}%`), left > 0 && `session resets in ${duration(left / 1000)}`].filter(Boolean).join(", ");
-  return html`<button class="usechip" onClick=${openUsage} title=${title} aria-label=${`Usage: ${title}`}>
-    ${ws.map((w) => html`<span class="u"><span class="k">${SHORT[w.key]}</span><${Meter} p=${w.percent} /><span class="v">${Math.round(w.percent)}%</span></span>`)}</button>`;
+  const title = [
+    `${SHORT[main.key]} ${used}%${pace != null ? `, even pace ${Math.round(pace)}%` : ""}`,
+    week && sess && `Session ${Math.round(sess.percent)}%`,
+    left > 0 && `session resets in ${duration(left / 1000)}`,
+  ].filter(Boolean).join(", ");
+  const open = inUsage();
+  return html`<button class="usechip ${open ? "on" : ""}" onClick=${toggleUsage} title=${`${title}. ${open ? "Click to go back" : "Click for Usage"}`} aria-label=${`Usage: ${title}`} aria-pressed=${open}>
+    <span class="v">${used}%</span>
+    ${off != null && Math.abs(off) >= 1 && html`<span class=${`pc ${off > 15 ? "hot" : off > 0 ? "over" : ""}`}>${Math.abs(off)} ${off > 0 ? "over" : "under"} pace</span>`}
+    ${off != null && Math.abs(off) < 1 && html`<span class="pc">on pace</span>`}
+    ${hotSess && html`<span class="v">5h ${Math.round(hotSess.percent)}%</span>`}</button>`;
 }
 
 function Console({ hub, agents, runs, limits, onTalk, onKeys, say }) {
@@ -8683,7 +8706,7 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
   action("All bays", keyFor("all"), "the board across every bay", () => { BAY.set(null); go(null); });
   action("Next session that needs you", keyFor("next"), "any bay, in bay order", actions.next);
   action("Usage", "", "limits, pace, cost per bay and session", actions.usage, "tokens cost week limits");
-  action("Time", "", "the time you spent per session, bay and day", () => (location.hash = TIME), "usage hours spent attention focus");
+  action("Time", "", "the time you spent per session, bay and day", () => { if (!inUsage()) USAGE_FROM = location.hash; location.hash = TIME; }, "usage hours spent attention focus");
   action("Resources", "", "memory, CPU and disk per session, and what outlived its session", openResources, "ram cpu disk processes top memory load");
   action("Backlog", "", "future tasks of this bay", () => (location.hash = BACKLOG), "later todo tasks ideas");
   action("New backlog item", "", "put a task aside for later", () => actions.create({ later: true }), "later todo task add put");

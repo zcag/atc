@@ -82,12 +82,12 @@ kbd { font-family: var(--mono); font-size: var(--fs-micro); }
 .console .ask input::placeholder { color: var(--faint); }
 .console .ask kbd { flex: none; padding: 0 4px; line-height: 16px; border-radius: var(--r1); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--faint); }
 .console .btn.sm { height: 24px; }
-.usechip { flex: none; display: inline-flex; align-items: center; gap: var(--s3); height: 24px; padding: 0 var(--s2); border: 0; border-radius: var(--r2); background: none; color: var(--dim); font: inherit; font-size: var(--fs-small); cursor: pointer; }
-.usechip:hover { background: var(--chrome-hi); color: var(--ink); }
-.usechip .u { display: inline-flex; align-items: center; gap: 5px; }
-.usechip .k { color: var(--faint); }
-.usechip .meter { width: 28px; height: 4px; }
+.usechip { flex: none; display: inline-flex; align-items: baseline; gap: 6px; height: 24px; padding: 0 var(--s2); border: 0; border-radius: var(--r2); background: none; color: var(--faint); font: inherit; font-size: var(--fs-small); line-height: 24px; cursor: pointer; }
+.usechip:hover { background: var(--chrome-hi); }
+.usechip.on { background: var(--strip); box-shadow: 0 0 0 1px var(--line); }
 .usechip .v { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.usechip .pc.over { color: var(--ink); }
+.usechip .pc.hot { color: var(--fail); font-weight: 600; }
 .console .btn svg { width: 14px; height: 14px; }
 .console .btn.icon svg { width: 16px; height: 16px; }
 .agentsb .num { font-family: var(--mono); font-size: var(--fs-small); color: var(--faint); }
