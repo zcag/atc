@@ -100,7 +100,7 @@ async function desktop(b) {
     await p.goto(base + '/#/usage');
     await wait(p, 3500);
     ok(await p.isVisible('.scrpane.usage'), 'usage: inside the shell');
-    ok(await p.isVisible('.bays .views .kb.on >> text=Usage'), 'usage: the bay bar shows Usage as a fourth view');
+    ok(await p.isVisible('.bays .views [aria-pressed="true"] >> text=Usage'), 'usage: the bay bar shows Usage as a fourth view');
     ok(await p.locator('.lim').count() > 0, 'usage: limits drawn');
     ok(await p.locator('.hm i').count() >= 24, 'usage: hour map drawn');
     await p.screenshot({ path: `${OUT}s7-usage-1400-light.png` });
@@ -116,7 +116,7 @@ async function desktop(b) {
     await p.goto(base + '/#/backlog');
     await wait(p, 2500);
     ok(await p.isVisible('.backlogv'), 'backlog: inside the shell');
-    ok(await p.isVisible('.bays .views .kb.on >> text=Backlog'), 'backlog: Backlog as the fourth view');
+    ok(await p.isVisible('.bays .views [aria-pressed="true"] >> text=Backlog'), 'backlog: Backlog as the fourth view');
     const all = p.locator('.backlogv .hd .kb', { hasText: 'All bays' });
     if (await all.count()) await all.click();
     await p.locator('.bk-bar .seg button', { hasText: 'All' }).last().click();

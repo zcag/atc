@@ -46,7 +46,9 @@ async function api(path, opts = {}) {
 }
 
 const rowAt = (s) => Math.max(Date.parse(s.updated || 0) || 0, Date.parse(s.startedAt || 0) || 0);
-const ago = (s) => age(rowAt(s));
+let STALE = { off: 0, hosts: {} };
+const staleAt = (s) => (s?.host && STALE.hosts[s.host] && s.state !== "past" && s.state !== "stopped" ? STALE.hosts[s.host] : STALE.off && s?.state === "working" ? STALE.off : 0);
+const ago = (s) => { const t = staleAt(s); return t ? `as of ${hhmm(t)}` : age(rowAt(s)); };
 
 let HOME = "", CLAUDE_THEME = "dark";
 const cssColors = (scheme, names) => {
@@ -131,7 +133,7 @@ const tilde = (p) => {
   const m = p.match(/^\/(home|Users)\/[^/]+(\/.*)?$/);
   return m ? "~" + (m[2] || "") : p;
 };
-let MULTI = false, HERE = "", LIVE = [], LIVE_NAMES = "";
+let MULTI = false, HERE = "", LIVE = [], LIVE_NAMES = "", HEARD = 0;
 const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 let PALETTE_OPEN = () => {}, NEW_SESSION = () => {}, PAL_TOGGLE = null;
 const FRAMED = window.self !== window.top;
@@ -316,7 +318,8 @@ function App() {
   const onBays = useMemo(() => runs && runs.filter((x) => !hiddenRun(x) || agentAtWork(x)), [runs]);
   const hub = runs?.find((x) => x.kind === "hub" && x.agent === "assistant");
   const [agents, setAgents] = useState(null);
-  const [up, setUp] = useState(true);
+  const [off, setOff] = useState(0);
+  const [link, relink] = useState(0);
   const [past, setPast] = useState({});
   const [creating, setCreating] = useState(false);
   NEW_SESSION = (start) => setCreating(start || true);
@@ -373,12 +376,17 @@ function App() {
   useEffect(() => {
     if (!me) return;
     const es = new EventSource("/api/events");
+    let pinged = false, lost = 0;
+    const hear = () => { if (navigator.onLine === false) return; HEARD = Date.now(); clearTimeout(lost); lost = 0; setOff(0); };
+    const drop = (now) => { if (now) return setOff(HEARD || Date.now()); lost ||= setTimeout(() => setOff(HEARD || Date.now()), 4000); };
+    es.onopen = hear;
+    es.addEventListener("ping", () => { pinged = true; hear(); });
     es.addEventListener("sessions", (e) => {
       LIVE = steady(JSON.parse(e.data) || []);
       LIVE_NAMES = LIVE.map((x) => `${keyOf(x)}:${x.title}:${x.agent || ""}`).join("|");
       setLive(LIVE);
       dispatchEvent(new Event("atc-live"));
-      setUp(true);
+      hear();
     });
     es.addEventListener("look", (e) => LOOK.adopt(JSON.parse(e.data)));
     es.addEventListener("seen", (e) => syncEvent("seen", JSON.parse(e.data)));
@@ -387,11 +395,17 @@ function App() {
     es.addEventListener("ring", (e) => ringHere(JSON.parse(e.data)));
     loadBays();
     es.onerror = () => {
-      setUp(false);
+      drop();
       api("/api/me").catch((e) => e.auth && setMe(null));
     };
-    return () => es.close();
-  }, [me]);
+    const quiet = setInterval(() => { if (pinged && Date.now() - HEARD > 40000) { drop(true); relink((n) => n + 1); } }, 5000);
+    const gone = () => drop(true), back = () => relink((n) => n + 1);
+    addEventListener("offline", gone);
+    addEventListener("online", back);
+    return () => { es.close(); clearTimeout(lost); clearInterval(quiet); removeEventListener("offline", gone); removeEventListener("online", back); };
+  }, [me, link]);
+  const retry = () => { relink((n) => n + 1); return api("/api/me").then(setMe, () => say("Still offline.")); };
+  const retryPeer = (name) => api(`/api/peers/${encodeURIComponent(name)}/retry`, { method: "POST" }).then(setMe, () => say(`${name} still isn't answering.`));
 
   useEffect(() => {
     if (!me) return;
@@ -631,6 +645,7 @@ function App() {
   HERE = me.host || "";
   CAN_CALL = !!me.call && (!!APP?.call || (!APP && Call.supported()));
   const down = (me.peers || []).filter((p) => p.error);
+  STALE = { off, hosts: staleHosts(down) };
   if (setup.machine) return html`<${SetupScreen} machine=${setup.machine} check=${setup.check} skip=${setup.skip} ui=${{ ...capsUI(say), home: me.host, shell: () => { setup.skip(); setShelling(true); } }} />`;
 
   const all = runs || [];
@@ -639,6 +654,7 @@ function App() {
   const screen = assistView ? "assistant" : route || shellAt ? "session" : pagesAt ? "pages" : scr || "board";
   TIME_ON = openNow({ sel: alone ? all.find((x) => x.sessionId === alone.sid) : assistView || shellAt || settings ? null : sel, screen: alone ? "pages" : settings ? "settings" : shellAt ? "shell" : screen });
   const bays = baysOf(onBays, only);
+  PANES = { panes, wide, toggle: togglePane, allBays: () => BAY.set(only === null ? bays[0]?.name || null : null) };
   const inBay = (live || []).filter((x) => x.state !== "stopped" && (only ? bayOf(x) === only : !homeless(x))).length;
   const railPath = only && (live || []).find((x) => bayOf(x) === only);
   const remember = rememberPast;
@@ -650,7 +666,8 @@ function App() {
 
   return html`
     <div class="app ${assistView ? "assisting" : ""} ${phone && screen === "session" ? "insession" : ""}">
-    <${BayBar} bays=${bays} only=${only} view=${screen} panes=${panes} togglePane=${togglePane} up=${up} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
+    <${BayBar} bays=${bays} only=${only} view=${screen} off=${off} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
+    <${StaleLines} off=${off} down=${down} live=${all} retry=${retry} retryPeer=${retryPeer} />
     ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} onBays=${onBays} say=${say} onClose=${() => setPeek(null)} />`}
     ${assistView ? html`<${AssistantView} hub=${hub} live=${all} loaded=${!!runs} agents=${agents} say=${say} panes=${panes} togglePane=${togglePane} />`
     : pagesAt && !route ? html`<div class="shell pagesv"><${PagesView} at=${pagesAt} live=${all} bays=${bays} say=${say} index=${panes.pgindex !== false} /></div>`
@@ -664,7 +681,7 @@ function App() {
     <div class="shell open ${!panes.rail ? "norail" : ""}">
       <aside class="side">
         <div class="ph"><b>${only || "Every bay"}</b>${railPath ? html`<span class="w" title=${tilde(baseDir(railPath.cwd))}>${clipPath(tilde(baseDir(railPath.cwd)))}</span>` : html`<span class="w">${plural(inBay, "session")}</span>`}
-          <span class="r"><button class="btn quiet" onClick=${() => setCreating(true)} aria-keyshortcuts=${ariaKeys("new")} title=${tip("new")}>${ICON.plus}New</button><${BayMore} only=${only} live=${live} say=${say} /></span></div>
+          <span class="r"><button class="btn quiet" onClick=${() => setCreating(true)} aria-keyshortcuts=${ariaKeys("new")} title=${tip("new")}>${ICON.plus}New</button><${BayMore} only=${only} live=${live} say=${say} /><${PaneToggle} id="rail" on run=${() => togglePane("rail")} icon="rail" label="Hide the bay's sessions" /></span></div>
         <${RailList} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} shell=${shellAt} say=${say} />
       </aside>
       <main class="main">
@@ -674,7 +691,7 @@ function App() {
           : html`<div class="blank">${!live || lookingUp ? "Opening…" : "This session is gone. Pick another from the list."}</div>`}
       </main>
     </div>`}
-    <${Console} hub=${hub} agents=${agents} runs=${runs} onTalk=${openAssistant} onKeys=${() => setHelp(true)} />
+    <${Console} hub=${hub} agents=${agents} runs=${runs} onTalk=${openAssistant} onKeys=${() => setHelp(true)} say=${say} />
     ${!calling && html`<${CallPill} hub=${hub} />`}
     <${TabBar} view=${calling ? "assistant" : screen} onTalk=${openAssistant} waits=${(live || []).filter(waiting).length} />
     </div>
@@ -693,7 +710,7 @@ function App() {
     ${agentSheet && html`<${AgentDetail} sheet a=${(agents || []).find((a) => a.name === agentSheet) || { name: agentSheet }} live=${all} say=${say} reload=${loadAgents} onClose=${() => setAgentSheet(null)} />`}
     ${agentUse && html`<${AgentUsage} name=${agentUse} onClose=${() => setAgentUse(null)} />`}
     <${Dialogs} />
-    ${toast && html`<div class="toast" role="status">${toast.msg}${toast.undo && html` <button class="tundo" onClick=${undo} aria-keyshortcuts="z">Undo <kbd aria-hidden="true">z</kbd></button>`}</div>`}
+    ${toast && html`<div class="toast" role="status"><span class="tmsg">${toast.msg}</span>${toast.undo && html`<button class="tundo" onClick=${undo} aria-keyshortcuts="z">${ICON.undo}Undo<kbd aria-hidden="true">z</kbd></button>`}</div>`}
     ${notifAsk && me && !updated && !settings && html`<div class="appbar" role="status">
       <span>Get a desktop notification when a session finishes or needs you, while this tab is in the background?</span>
       <button class="btn primary" onClick=${() => notifDone(true)}>Turn on</button>
@@ -783,10 +800,49 @@ function goBay(name, live, session) {
 
 const bayWords = (b, i) => [`${b.name}, bay ${i + 1}${b.parked ? ", parked" : ""}`, [b.needs + b.turn && `${b.needs + b.turn} waiting on you`, b.work && `${b.work} working`].filter(Boolean).join(", ")].filter(Boolean).join(": ");
 
-function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onPeek }) {
-  const now = new Date();
+let PANES = { panes: {}, wide: true, toggle: () => {}, allBays: () => {} };
+const PaneToggle = ({ id, on, run, icon, label }) => html`<button class="btn quiet icon ptog" aria-pressed=${!!on} aria-keyshortcuts=${ariaKeys(id)} aria-label=${label} title=${tip(id, label)} onClick=${run}>${ICON[icon]}</button>`;
+const BoardToggles = ({ only }) => PANES.wide && html`<span class="ptogs"><${PaneToggle} id="all" on=${only === null} run=${PANES.allBays} icon="bays" label="Every bay on one board" /><${PaneToggle} id="index" on=${PANES.panes.index} run=${() => PANES.toggle("index")} icon="side" label="The bay's pages beside the board" /></span>`;
+
+const DOWN_SEEN = {};
+const staleHosts = (down) => {
+  for (const n of Object.keys(DOWN_SEEN)) if (!down.some((p) => p.name === n)) delete DOWN_SEEN[n];
+  return Object.fromEntries(down.map((p) => [p.name, Date.parse(p.since || 0) || (DOWN_SEEN[p.name] ||= Date.now())]));
+};
+
+function StaleLine({ children, retry }) {
+  const [busy, setBusy] = useState(false);
+  const run = () => { setBusy(true); Promise.resolve(retry()).finally(() => setBusy(false)); };
+  return html`<div class="staleline" role="status">${ICON.off}<span class="t">${children}</span>
+    ${retry && html`<button class="btn sm" aria-busy=${busy} onClick=${run}>${ICON.refresh}Retry</button>`}</div>`;
+}
+
+function StaleLines({ off, down, live, retry, retryPeer }) {
+  return html`<div class="staleslot">${off
+    ? html`<${StaleLine} retry=${retry}>Offline since <span class="tm">${hhmm(off)}</span>. Showing what was there.<//>`
+    : down.map((p) => {
+      const at = STALE.hosts[p.name], kept = live.some((s) => s.host === p.name);
+      return html`<${StaleLine} key=${p.name} retry=${() => retryPeer(p.name)}>${p.since ? html`${p.name} hasn't answered since <span class="tm">${hhmm(at)}</span>.` : `${p.name} isn't answering.`}${kept && " Its sessions show what was there then."}<//>`;
+    })}</div>`;
+}
+
+function MemMeter() {
+  const b = useMachineBrief();
+  const m = b?.machine;
+  const pct = m?.memTotal ? Math.round((m.memUsed / m.memTotal) * 100) : 0;
+  if (pct <= 85) return null;
+  return html`<button class="st mem" onClick=${openResources} title=${`Memory ${gb(m.memUsed)} of ${gb(m.memTotal)}, CPU ${Math.round(m.cpu / m.cores)}%`}>
+    ${ICON.warn}${HERE ? `${HERE} memory` : "Memory"}<span class="mm" aria-hidden="true"><i style=${`width:${pct}%`}></i></span><span class="num">${pct}%</span></button>`;
+}
+
+const parkedFold = (bays, only) => bays.map((b, i) => ({ b, i })).filter(({ b }) => b.parked && b.name !== only);
+
+function BayBar({ bays, only, view, off, down, live, peek, onPeek }) {
   const scroller = useRef();
   const [hidden, setHidden] = useState(0);
+  const [fold, setFold] = useState(false);
+  const need = useRef(0), pm = useRef();
+  const names = bays.map((b) => b.name).join();
   useEffect(() => {
     const el = scroller.current;
     if (!el) return;
@@ -802,39 +858,54 @@ function BayBar({ bays, only, view, panes, togglePane, up, down, live, peek, onP
     addEventListener("resize", check);
     return () => { el.removeEventListener("scroll", check); removeEventListener("resize", check); };
   }, [bays.map((b) => b.name + b.needs).join()]);
-  const kb = (on, label, id, run, title) => html`<button class="kb ${on ? "on" : ""}" aria-pressed=${on} aria-keyshortcuts=${ariaKeys(id)} title=${tip(id, title)} onClick=${run}>${label}</button>`;
+  useEffect(() => setFold(false), [names]);
+  useLayoutEffect(() => {
+    const fit = () => {
+      const el = scroller.current;
+      if (!el || !el.clientWidth) return;
+      if (!fold) { need.current = el.scrollWidth; if (el.scrollWidth > el.clientWidth + 1 && parkedFold(bays, only).length) setFold(true); }
+      else if (el.clientWidth + (pm.current?.offsetWidth || 0) >= need.current) setFold(false);
+    };
+    fit();
+    addEventListener("resize", fit);
+    return () => removeEventListener("resize", fit);
+  });
+  const folded = fold ? parkedFold(bays, only) : [];
+  const shown = bays.map((b, i) => ({ b, i })).filter(({ b }) => !folded.some((f) => f.b === b));
+  const counts = (b) => html`${b.needs + b.turn > 0 && html`<i class="cn n">${b.needs + b.turn}</i>`}${b.work > 0 && html`<i class="cn w">${b.work}</i>`}`;
+  const view_ = (id, label, run) => html`<button aria-pressed=${view === id} aria-current=${view === id ? "page" : null} aria-keyshortcuts=${ariaKeys(id)} title=${tip(id)} onClick=${run}>${label}</button>`;
   return html`
     <nav class="bays" aria-label="Bays">
       <div class="bays-scroll" ref=${scroller}>
         ${only === null && html`<span class="bay on"><button class="bn" aria-current="true" title=${tip("all")}><span class="k">0</span><span class="n">All</span></button></span>`}
-        ${bays.map((b, i) => html`
-          ${b.parked && !bays[i - 1]?.parked && html`<span class="bay-rest" aria-hidden="true">parked</span>`}
+        ${shown.map(({ b, i }, n) => html`
+          ${b.parked && !shown[n - 1]?.b.parked && html`<span class="bay-sep" aria-hidden="true"></span>`}
           <span class="bay ${only === b.name ? "on" : ""} ${peek === b.name ? "peeking" : ""} ${b.parked ? "rest" : ""}" data-bay=${b.name} ...${peekOnHover(b, only, peek, onPeek)}>
             <button class="bn" aria-current=${only === b.name ? "true" : null} aria-label=${bayWords(b, i)}
               aria-keyshortcuts=${i < 9 ? `${i + 1}` : null} onClick=${() => goBay(b.name, live)}
               onContextMenu=${(e) => { e.preventDefault(); onPeek(b.name); }}>
               <span class="k" aria-hidden="true">${i + 1}</span><span class="n">${b.name}</span></button>
             ${(b.needs > 0 || b.turn > 0 || b.work > 0) && html`<button class="cts" aria-label=${`Peek at ${b.name}`} aria-expanded=${peek === b.name}
-              aria-keyshortcuts=${i < 9 ? `Shift+Alt+${i + 1}` : null} onClick=${() => onPeek(peek === b.name ? null : b.name)}>
-              ${b.needs + b.turn > 0 && html`<i class="cn n">${b.needs + b.turn}</i>`}${b.work > 0 && html`<i class="cn w">${b.work}</i>`}</button>`}
+              aria-keyshortcuts=${i < 9 ? `Shift+Alt+${i + 1}` : null} onClick=${() => onPeek(peek === b.name ? null : b.name)}>${counts(b)}</button>`}
           </span>`)}
       </div>
+      ${folded.length > 0 && html`<div class="parkedm" ref=${pm}><span class="bay-sep" aria-hidden="true"></span><${Menu} cls="bay parked" left width=${260} aria="Parked bays"
+          label=${html`${folded.length} parked${ICON.down}`}
+          render=${(close) => html`<div class="pmenu" role="menu">${folded.map(({ b, i }) => html`<button role="menuitem" aria-label=${bayWords(b, i)} onClick=${() => { close(); goBay(b.name, live); }}>
+            <span class="k">${i + 1}</span><span class="n">${b.name}</span>${counts(b)}</button>`)}</div>`} /></div>`}
       ${hidden > 0 && html`<button class="offneeds" onClick=${() => onPeek(peek === "*" ? null : "*")} aria-label=${`${hidden} more need you in other bays`}><i class="cn n">+${hidden}</i>need you</button>`}
-      <span class="sp"></span>
       <div class="views">
-        ${kb(view === "session", "Session", "session", () => goBay(only, live, true))}
-        ${kb(view === "board", "Board", "board", () => { rememberBay(only, { view: "board" }); go(null); })}
-        ${kb(view === "pages", "Pages", "pages", () => (location.hash = pagesHash()))}
-        ${SCREENS[view] && html`<button class="kb on" aria-current="page">${SCREENS[view]}</button>`}
+        <span class="seg" role="group" aria-label="View">
+          ${view_("session", "Session", () => goBay(only, live, true))}
+          ${view_("board", "Board", () => { rememberBay(only, { view: "board" }); go(null); })}
+          ${view_("pages", "Pages", () => (location.hash = pagesHash()))}
+          ${SCREENS[view] && html`<button aria-pressed="true" aria-current="page">${SCREENS[view]}</button>`}
+        </span>
       </div>
-      ${view === "board" && html`<div class="tgl">${kb(only === null, html`<span class="nm">All bays</span>`, "all", () => BAY.set(only === null ? bays[0]?.name || null : null), "Every bay on one board")}${kb(panes.index, html`<span class="nm">Page index</span>`, "index", () => togglePane("index"), "The bay's pages beside the board")}</div>`}
-      ${view === "pages" && html`<div class="tgl">${kb(panes.pgindex !== false, html`<span class="nm">Index</span>`, "pages.index", () => togglePane("pgindex"), "Every page in the bay, newest first")}${kb(only === null, html`<span class="nm">All bays</span>`, "all", () => { location.hash = pagesHash(only === null ? PAGES_FROM || bays[0]?.name || null : null); PAGES_FROM = only || PAGES_FROM; }, "Pages from every bay, grouped by bay")}</div>`}
-      ${view === "assistant" && html`<div class="tgl">${kb(panes.aleft, html`<span class="nm">Touched today</span>`, "touched", () => togglePane("aleft"), "Sessions it started or told today, and the agents")}</div>`}
-      ${view === "session" && html`<div class="tgl">${kb(panes.rail, html`<span class="nm">Sessions</span>`, "rail", () => togglePane("rail"), "The bay's sessions beside the transcript")}${kb(panes.state, html`<span class="nm">State</span>`, "state", () => togglePane("state"), "What the session is doing, what it made, and its facts")}</div>`}
       <div class="meta">
-        ${!up && html`<span class="host off" role="status">reconnecting</span>`}
-        ${down.map((p) => html`<span class="host off" title=${p.error}>${p.name} off</span>`)}
-        <span class="clock">${hhmm(now)}</span>
+        ${off ? html`<span class="st off" role="status">${ICON.off}Offline</span>`
+          : down.map((p) => html`<span class="st off" title=${p.error}>${ICON.off}${p.name} down</span>`)}
+        <${MemMeter} />
       </div>
     </nav>`;
 }
@@ -932,27 +1003,48 @@ const hubLine = (hub) => {
 };
 
 function ConsoleAgents({ agents, runs }) {
-  const last = (a) => Math.max(0, ...(runs || []).filter((x) => x.agent === a.name).map((x) => Date.parse(x.updated || 0) || 0));
-  const list = (agents || []).filter((a) => !a.error).sort((a, b) => last(b) - last(a));
-  const link = (a) => html`<a href="#" onClick=${(e) => { e.preventDefault(); openAgent(a.name); }}>@<b>${a.name}</b></a>`;
-  return html`<span class="agents">${list.slice(0, 4).map(link)}${list.length > 4 && html`<${Menu} cls="kb" up aria="Every agent" width=${220} label=${`+${list.length - 4}`}
-    items=${list.slice(4).map((a) => ({ cls: "viewitem", label: `@${a.name}`, run: () => openAgent(a.name) }))} />`}</span>`;
+  const last = (a) => Math.max(Date.parse(a.last || 0) || 0, ...(runs || []).filter((x) => x.agent === a.name).map((x) => Date.parse(x.updated || 0) || 0));
+  const list = (agents || []).filter((a) => !a.error && a.name !== "assistant").sort((a, b) => last(b) - last(a));
+  if (!list.length) return null;
+  const runOf = (a) => agentRun(runs || [], a.name);
+  const needs = list.filter((a) => { const r = runOf(a); return r && waiting(r); }).length;
+  const row = (a, close) => {
+    const r = runOf(a), keeps = agentKeeps(a) || oneLine(r?.summary?.status || r?.lastReply) || "Keeps nothing";
+    return html`<button class="ar ${r && waiting(r) ? "nd" : ""}" role="menuitem" onClick=${() => { close(); openAgent(a.name); }}>
+      <b>@${a.name}</b><span class="ag" title=${last(a) ? stamp(last(a)) : null}>${last(a) ? age(last(a)) : ""}</span><span class="k">${keeps}</span></button>`;
+  };
+  return html`<${Menu} cls="btn quiet sm agentsb" up width=${360} aria="Agents"
+    label=${html`Agents${needs > 0 ? html`<i class="cn n" aria-label=${`${needs} waiting on you`}>${needs}</i>` : html`<span class="num">${list.length}</span>`}`}
+    render=${(close) => html`<div class="agpop" role="menu">
+      <div class="ah"><b>Agents</b><span class="num">${list.length}</span><span class="sp"></span><span>what each keeps</span></div>
+      ${list.slice(0, 8).map((a) => row(a, close))}
+      <button class="more" onClick=${() => { close(); location.hash = AGENTS_ROUTE; }}>${list.length > 8 ? `All ${list.length} agents…` : "Agents page"}</button></div>`} />`;
 }
 
-function Console({ hub, agents, runs, onTalk, onKeys }) {
+function Console({ hub, agents, runs, onTalk, onKeys, say }) {
   useCall();
   const docked = useCallDock();
+  const [text, setText] = useState("");
   if (Call.live()) return html`<${CallLine} docked=${docked} />`;
+  const send = () => {
+    const t = text.trim();
+    if (!t) return;
+    if (!hub) return onTalk();
+    setText("");
+    api(`/api/sessions/${hub.id || hub.sessionId}/send`, { method: "POST", body: { text: t } })
+      .then(() => say("Sent to the assistant."), (e) => { setText(t); say(`Couldn't send to the assistant: ${e.message}`); });
+  };
   return html`
     <footer class="console" aria-label="Assistant">
-      <button class="pr" onClick=${onTalk} aria-keyshortcuts=".">assistant<span>></span></button>
+      <button class="who" onClick=${onTalk} aria-keyshortcuts="." title=${tip("assistant", "Open the assistant")}>assistant</button>
       <span class="last">${hubLine(hub)}</span>
       ${hub && html`<span class="ago" title=${stamp(rowAt(hub))}>${ago(hub)}</span>`}
-      <button class="type" onClick=${onTalk}>talk to the assistant</button>
-      <button class="kb" onClick=${callOrSetup}>Call</button>
+      <label class="ask"><input value=${text} placeholder="Talk to the assistant" aria-label="Talk to the assistant" autocomplete="off" spellcheck="false"
+        onInput=${(e) => setText(e.target.value)} onKeyDown=${(e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); send(); } else if (e.key === "Escape") e.target.blur(); }} />
+        ${text.trim() && html`<kbd>enter</kbd>`}</label>
+      <button class="btn quiet sm" onClick=${callOrSetup}>${ICON.phone}Call</button>
       <${ConsoleAgents} agents=${agents} runs=${runs} />
-      <${ResourceChip} />
-      <button class="kb" onClick=${onKeys} aria-keyshortcuts="?" title=${tip("keys", "Every key")}>Keys</button>
+      <button class="btn quiet sm icon" onClick=${onKeys} aria-keyshortcuts="?" aria-label="Keys" title=${tip("keys", "Every key")}>${ICON.keys}</button>
     </footer>`;
 }
 
@@ -1001,9 +1093,9 @@ function KeysOverlay({ onClose }) {
   return html`
     <div class="keys-ov" onPointerDown=${onClose}>
       <div class="kp" role="dialog" aria-modal="true" aria-label="Keys" onPointerDown=${(e) => e.stopPropagation()}>
-        <div class="kh"><b>Keys</b><input ref=${focusOnMount} value=${q} onInput=${(e) => setQ(e.target.value)} placeholder="Type to filter: park, zen, answer…" aria-label="Filter the keys"
-          onKeyDown=${(e) => e.key === "Escape" && (e.preventDefault(), e.stopPropagation(), q ? setQ("") : onClose())} autocomplete="off" spellcheck="false" />
-          <span class="r"><button class="kb" onClick=${onClose} title="Close (esc)">Close</button></span></div>
+        <div class="kh"><h2>Keys</h2><label class="kf1">${ICON.search}<input ref=${focusOnMount} value=${q} onInput=${(e) => setQ(e.target.value)} placeholder="Type to filter: park, zen, answer…" aria-label="Filter the keys"
+          onKeyDown=${(e) => e.key === "Escape" && (e.preventDefault(), e.stopPropagation(), q ? setQ("") : onClose())} autocomplete="off" spellcheck="false" /></label>
+          <span class="r"><button class="btn quiet sm" onClick=${onClose}>Close<kbd>esc</kbd></button></span></div>
         <div class="kg">${groups.map(([g, note, rows]) => html`
           <section><h3>${g}${note && html` <small>${note}</small>`}</h3><dl>${rows.map(([, k, what, alt]) => html`<dt><${Keys} k=${k} />${alt && html` <${Keys} k=${alt} />`}</dt><dd>${what}</dd>`)}</dl></section>`)}
           ${!groups.length && html`<p class="none">No key does “${q}”. <button class="vlink" onClick=${() => setQ("")}>Show every key</button></p>`}</div>
@@ -1260,7 +1352,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index }) {
           <h1>${only || "Every bay"}</h1>${path && html`<span class="w" title=${tilde(baseDir(path.cwd))}>${clipPath(tilde(baseDir(path.cwd)))}</span>`}
           <span class="bcs">${counts.map(([k, c, w]) => html`<span class="bc ${c}">${n(k)} ${w}</span>`)}</span>
           <span class="r"><button class="btn quiet" onClick=${() => PALETTE_OPEN()} aria-keyshortcuts=${ariaKeys("palette")} title=${tip("palette", "Search and commands")}>${ICON.search}<span class="wide">Search</span></button>
-            <${BayMore} only=${only} live=${live} say=${say} />
+            <${BayMore} only=${only} live=${live} say=${say} /><${BoardToggles} only=${only} />
             <button class="btn primary" onClick=${() => NEW_SESSION()} aria-keyshortcuts=${ariaKeys("new")} title=${tip("new")}>${ICON.plus}New session</button></span>
         </div>
         <div class="bcols" aria-hidden="true"><span></span><span>Session</span><span>Status</span><span>Since</span></div>
@@ -1487,7 +1579,7 @@ function AssistantView({ hub, live, loaded, agents, say, panes, togglePane }) {
       <header class="ahd">
         ${hub ? html`<${StateBlock} s=${hub} />` : html`<span class="sb earlier" aria-hidden="true">E</span>`}
         <h1>Assistant</h1>
-        <span class="r">${!hub && html`<button class="kb" onClick=${callOrSetup}>Call</button>`} ${hub && html`<button class="kb" aria-keyshortcuts="z" title=${tip("zen", "Only the words, nothing around them")} onClick=${() => TX_API?.zen()}>Zen</button>`} ${phone ? html`<button class="kb" onClick=${() => setSheet(true)}>Today</button>`
+        <span class="r">${!hub && html`<button class="kb" onClick=${callOrSetup}>Call</button>`} ${hub && html`<button class="kb" aria-keyshortcuts="z" title=${tip("zen", "Only the words, nothing around them")} onClick=${() => TX_API?.zen()}>Zen</button>`} ${!phone && !docked && html`<${PaneToggle} id="touched" on=${panes.aleft} run=${() => togglePane("aleft")} icon="rail" label="Sessions it started or told today, and the agents" />`} ${phone ? html`<button class="kb" onClick=${() => setSheet(true)}>Today</button>`
           : html`<button class="kb" onClick=${closeAssistant} aria-keyshortcuts="Escape" title="Close (esc)">Close</button>`}</span>
         <p class="stat">${hubLine(hub)}</p>
       </header>
@@ -2170,6 +2262,12 @@ const ICON_PATHS = {
   zen: '<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/>',
   file: '<path d="M4 2h5.5L12 4.5V14H4z"/>',
   folder: '<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h3l1.5 1.5h4.5A1.5 1.5 0 0 1 14 6v5.5a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>',
+  undo: '<path d="M5.5 5H10a3.5 3.5 0 0 1 0 7H6M5.5 5l2.5-2.5M5.5 5 8 7.5"/>',
+  off: '<path d="M2 2l12 12M5.5 5.6A3.5 3.5 0 0 0 4.5 12H11M7 4.1A4 4 0 0 1 12 7.5a2.3 2.3 0 0 1 1.6 3.8"/>',
+  warn: '<path d="M8 2.5 14 13H2z"/><path d="M8 6.5v3M8 11.3v0"/>',
+  side: '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M10 2.5v11"/>',
+  rail: '<rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M6 2.5v11"/>',
+  bays: '<rect x="2" y="2.5" width="5" height="5" rx="1"/><rect x="9" y="2.5" width="5" height="5" rx="1"/><rect x="2" y="9.5" width="5" height="5" rx="1"/><rect x="9" y="9.5" width="5" height="5" rx="1"/>',
 };
 const svgIcon = (d) => html`<svg class="i" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" dangerouslySetInnerHTML=${{ __html: d }}></svg>`;
 const ICON = Object.fromEntries(Object.entries(ICON_PATHS).map(([k, d]) => [k, svgIcon(d)]));
@@ -2405,7 +2503,8 @@ function paneFor(s) {
 const STATE_LETTER = { "needs-you": ["N", "needs"], "your-turn": ["T", "turn"], working: ["W", "working"] };
 function StateBlock({ s, mini }) {
   const [l, c] = away(s) ? ["P", "parked"] : STATE_LETTER[s.state] || ["E", "earlier"];
-  return html`<span class="sb ${c} ${mini ? "mini" : ""}" role="img" aria-label=${away(s) ? "parked" : WORD[s.state] || "earlier"}>${l}</span>`;
+  const old = staleAt(s);
+  return html`<span class="sb ${c} ${mini ? "mini" : ""} ${old ? "hatch" : ""}" role="img" aria-label=${`${away(s) ? "parked" : WORD[s.state] || "earlier"}${old ? `, as of ${hhmm(old)}` : ""}`}>${l}</span>`;
 }
 const CtxMeter = ({ n, max = n > 200000 ? 1000000 : 200000 }) => html`<span class="meter" aria-hidden="true"><i style=${`width:${Math.min(100, Math.round((n / max) * 100))}%`}></i></span>`;
 
@@ -2571,6 +2670,8 @@ function Session({ s, say, live, panes, togglePane, back = backHome }) {
             onClick=${() => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }).catch((e) => say(e.message))}>${ICON.pin}</button>
           ${hasTerm && html`<button class="kb ${mode === "term" ? "on" : ""}" aria-pressed=${mode === "term"} aria-keyshortcuts="\`" title=${tip("term", "Terminal")} onClick=${() => choose(mode === "term" ? "chat" : "term")}>Terminal</button>`}
           ${!phoneNow && (mode === "chat" || sideBySide) && html`<button class="kb" aria-keyshortcuts="z" title=${tip("zen", "Only the words, nothing around them")} onClick=${() => TX_API?.zen()}>Zen</button>`}
+          ${!phoneNow && panes && back === backHome && !panes.rail && html`<${PaneToggle} id="rail" run=${() => togglePane("rail")} icon="rail" label="The bay's sessions beside the transcript" />`}
+          ${!phoneNow && panes && html`<${PaneToggle} id="state" on=${panes.state} run=${openState} icon="side" label="What the session is doing, what it made, and its facts" />`}
           <div class="more"><${Menu} cls="kb" busy=${busy} aria="Session menu" label=${phoneNow ? ICON.more : "More"}
             items=${[
               ...(onPage && !sideBySide ? [{ label: "Zen", icon: "zen", key: "zen", run: () => setPageZen(true) }] : []),
@@ -3016,7 +3117,7 @@ function makeDock(id, path, alive) {
       tlog("closed", { code: e.code, reason: e.reason || "-", clean: e.wasClean, lasted: opened ? `${Math.round((Date.now() - opened) / 1000)}s` : "never opened", quiet: quiet(), attempt: tries });
       opened = me = 0;
       if (exited || dead) return;
-      if (tries >= 20) return emit({ cover: "lost" });
+      if (tries >= 20) return emit({ cover: "lost", lostAt: heard || Date.now() });
       emit({ retrying: true });
       const retry = () => { if (!dead) timer = setTimeout(connect, Math.min(1000 * 2 ** tries++, 8000)); };
       if (!alive) return retry();
@@ -3116,7 +3217,9 @@ function Term({ s, say, sh }) {
   };
   const [gen, setGen] = useState(0);
   const [st, setSt] = useState({ cover: null, foreign: null, retrying: false });
-  const { cover, foreign, retrying } = st;
+  const { cover, foreign, retrying, lostAt } = st;
+  const downAt = !sh && STALE.hosts[s.host];
+  const reopen = () => { DOCK.get(key_)?.dispose(); setGen(gen + 1); };
   useEffect(() => {
     if (sh && cover === "detached") SHELLS.load().then(() => {
       if ((SHELLS.list || []).some((x) => x.id === sh.id) || location.hash !== shellHash(sh)) return;
@@ -3165,21 +3268,23 @@ function Term({ s, say, sh }) {
       <input type="file" multiple hidden ref=${picker} onChange=${(e) => { upload.current([...e.target.files]); e.target.value = ""; }} />
       <button class="attach" title="Attach a file (or paste or drop one)" aria-label="Attach a file" onClick=${() => picker.current.click()}>Attach</button>
       <div class="term" ref=${box}></div>
-      ${retrying && !cover && html`<div class="notice"><span>Reconnecting…</span></div>`}
+      ${downAt ? html`<${StaleLine} retry=${reopen}>The screen as it was at <span class="tm">${hhmm(downAt)}</span>. Typing is off until ${s.host} answers.<//>`
+        : cover === "lost" ? html`<${StaleLine} retry=${reopen}>Connection lost at <span class="tm">${hhmm(lostAt)}</span>. The ${sh ? "shell" : "session"} keeps running.<//>`
+        : retrying && !cover && html`<div class="notice"><span>Reconnecting…</span></div>`}
       ${foreign && !cover && !retrying && html`
         <div class="notice">
           <span>Sized for ${foreign}</span>
           <button class="btn" onClick=${() => api_.current.claim?.()}>Fit to this one</button>
         </div>`}
-      ${cover && html`
+      ${cover === "detached" && !downAt && html`
         <div class="cover">
           <div>
-            <p class="h">${cover === "detached" ? (sh ? "The shell ended" : "Detached") : "Connection lost"}</p>
-            <p>${cover === "detached" ? (sh ? "It exited, or someone closed it." : "The terminal closed. The session keeps running.") : `The link to the server dropped. The ${sh ? "shell" : "session"} keeps running.`}</p>
+            <p class="h">${sh ? "The shell ended" : "Detached"}</p>
+            <p>${sh ? "It exited, or someone closed it." : "The terminal closed. The session keeps running."}</p>
             <div class="row">
-              ${sh && cover === "detached"
+              ${sh
                 ? html`<button class="btn primary" onClick=${() => startShell(sh.host, sh.dir || "~").catch((e) => say(e.message))}>New shell here</button>`
-                : html`<button class="btn primary" onClick=${() => { DOCK.get(key_)?.dispose(); setGen(gen + 1); }}>Reopen</button>`}
+                : html`<button class="btn primary" onClick=${reopen}>Reopen</button>`}
               <button class="btn" onClick=${() => go(null)}>Back to list</button>
             </div>
           </div>
@@ -4147,13 +4252,6 @@ function useMachineBrief() {
     return () => clearInterval(t);
   }, []);
   return b;
-}
-
-function ResourceChip() {
-  const b = useMachineBrief();
-  if (!b?.machine?.memTotal) return null;
-  const pct = Math.round((b.machine.memUsed / b.machine.memTotal) * 100);
-  return html`<button class="kb reschip" onClick=${openResources} title=${`Memory ${gb(b.machine.memUsed)} of ${gb(b.machine.memTotal)}, CPU ${Math.round(b.machine.cpu / b.machine.cores)}%`}>mem ${pct}%</button>`;
 }
 
 function UsageTabs({ at, accounts, on, onPick }) {
@@ -5363,6 +5461,7 @@ function PagesView({ at, live, bays, say, index }) {
         <h1 title=${pageTitle(p)}>${pageTitle(p)}</h1>
         <span class="where">${(KIND_LABEL[p.kind] || "Page").toLowerCase()}  ${p.name}</span>
         <span class="r">
+          ${!phone && html`<${PaneToggle} id="pages.index" on=${index} run=${() => PANES.toggle("pgindex")} icon="rail" label="Every page in the bay, newest first" />`}
           ${upd && html`${kb("Changes", "d", act.changes, { on: op.changes, title: "Mark what changed since you saw it" })}<span class="div"></span>`}
           ${!isPin(p) && kb("Beside its session", "\\", act.beside, { title: s ? "The page beside its conversation" : "Its session is not running", cls: s ? "" : "off" })}
           ${!APP && kb("On phone", null, act.phone, { title: "Push this page to your phone" })}

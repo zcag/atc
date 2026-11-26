@@ -9,13 +9,10 @@
 .scrpane .none { padding: var(--s4) 0; color: var(--dim); margin: 0; }
 .scrpane code { font-family: var(--mono); font-size: .9em; background: var(--code); padding: 0 .3em; border-radius: 2px; }
 
-.toast .tundo { height: var(--btn-h); padding: 0 var(--s3); display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: var(--r2); background: var(--strip); box-shadow: inset 0 0 0 1px var(--line-strong); color: var(--ink); font-size: var(--fs-ui); font-weight: 500; white-space: nowrap; }
 .scrpane .btn { flex: none; }
 .scrpane .seg .c { font-family: var(--mono); font-size: var(--fs-micro); opacity: .8; }
 .usage .hd .utabs { margin-left: auto; flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); }
 
-.toast .tundo { height: 26px; margin-left: var(--s3); background: none; box-shadow: none; color: inherit; text-decoration: underline; text-underline-offset: 3px; font-weight: 650; }
-.toast .tundo kbd { margin-left: 4px; opacity: .7; }
 
 /* new session */
 .nsveil { position: fixed; inset: 0; z-index: 40; background: var(--scrim); }

@@ -176,7 +176,6 @@ pre:hover > .copy, pre > .copy:focus-visible { opacity: 1; }
 .login code { font-family: var(--mono); font-size: .92em; }
 .appbar { position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top)); transform: translateX(-50%); z-index: 31; display: flex; gap: var(--s2); align-items: center; background: var(--strip); border: 1px solid var(--line); border-radius: var(--r3); padding: var(--s2) var(--s2) var(--s2) var(--s4); font-size: var(--fs-body); max-width: calc(100% - 24px); box-shadow: var(--pop); }
 .link { border: 0; background: none; color: var(--dim); font-size: var(--fs-body); text-decoration: underline; align-self: center; padding: var(--s1); }
-.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 30; background: var(--ink); color: var(--board); padding: var(--s2) var(--s4); border-radius: var(--r3); font-size: var(--fs-body); max-width: calc(100% - 32px); }
 
 .share { position: fixed; inset: 0; z-index: 25; background: var(--scrim); display: grid; place-items: center; padding: var(--s4); }
 .share .sheet { padding-bottom: max(var(--s4), env(safe-area-inset-bottom)); }

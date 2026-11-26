@@ -19,7 +19,7 @@ const hash = (p) => p.evaluate(() => decodeURIComponent(location.hash));
     await p.waitForTimeout(2500);
     ok((await hash(p)).startsWith('#/g/'), `${scheme}: #/pages lands on #/g/<bay>`);
     ok(await p.isVisible('.pgv') && await p.isVisible('.bays'), `${scheme}: Pages sits inside the shell, under the bay bar`);
-    ok(await p.locator('.views .kb.on', { hasText: 'Pages' }).count() === 1, `${scheme}: the view switch marks Pages`);
+    ok(await p.locator('.views [aria-pressed="true"]', { hasText: 'Pages' }).count() === 1, `${scheme}: the view switch marks Pages`);
     await p.goto(`${base}/#/g/${bay}`);
     await p.waitForTimeout(3000);
     const rows = await p.locator('.pgi').count();
