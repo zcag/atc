@@ -678,7 +678,7 @@ function App() {
       : scr === "resources" ? html`<${ResourcesPage} hosts=${(me.hosts || [me.host]).filter((h) => h)} home=${me.host} live=${all} />`
       : scr === "backlog" ? html`<${BacklogPage} live=${all} say=${say} onAdd=${setCreating} only=${only} />`
       : html`<${AgentsPage} name=${agentName} agents=${agents} live=${all} past=${past} remember=${rememberPast} say=${say} reload=${loadAgents} panes=${panes} togglePane=${togglePane} />`}</main>`
-    : !route && !shellAt && phone ? html`<${PhoneHome} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} bays=${bays} cursor=${cursor} say=${say} />`
+    : !route && !shellAt && phone ? html`<${PhoneHome} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} bays=${bays} cursor=${cursor} limits=${limits} say=${say} />`
     : !route && !shellAt ? html`<div class="shell boardv"><${BoardView} live=${live} hist=${hist} more=${canMore && moreHist} only=${only} sel=${sel} cursor=${cursor} say=${say} index=${panes.index && wide} /></div>` : html`
     <div class="shell open ${!panes.rail ? "norail" : ""}">
       <aside class="side">
@@ -693,7 +693,7 @@ function App() {
           : html`<div class="blank">${!live || lookingUp ? "Opening…" : "This session is gone. Pick another from the list."}</div>`}
       </main>
     </div>`}
-    <${Console} hub=${hub} agents=${agents} runs=${runs} onTalk=${openAssistant} onKeys=${() => setHelp(true)} say=${say} />
+    <${Console} hub=${hub} agents=${agents} runs=${runs} limits=${limits} onTalk=${openAssistant} onKeys=${() => setHelp(true)} say=${say} />
     ${!calling && html`<${CallPill} hub=${hub} />`}
     <${TabBar} view=${calling ? "assistant" : settings ? "settings" : screen} onTalk=${openAssistant} waits=${(live || []).filter(waiting).length} />
     </div>
@@ -1022,7 +1022,18 @@ function ConsoleAgents({ agents, runs }) {
       <button class="more" onClick=${() => { close(); location.hash = AGENTS_ROUTE; }}>${list.length > 8 ? `All ${list.length} agents…` : "Agents page"}</button></div>`} />`;
 }
 
-function Console({ hub, agents, runs, onTalk, onKeys, say }) {
+function UsageChip({ limits }) {
+  useNow(60000);
+  const ws = (limits?.windows || []).filter((w) => SHORT[w.key]);
+  if (!ws.length) return null;
+  const sess = ws.find((w) => w.key === "session");
+  const left = sess && Date.parse(sess.resetsAt) - Date.now();
+  const title = [...ws.map((w) => `${SHORT[w.key]} ${Math.round(w.percent)}%`), left > 0 && `session resets in ${duration(left / 1000)}`].filter(Boolean).join(", ");
+  return html`<button class="usechip" onClick=${openUsage} title=${title} aria-label=${`Usage: ${title}`}>
+    ${ws.map((w) => html`<span class="u"><span class="k">${SHORT[w.key]}</span><${Meter} p=${w.percent} /><span class="v">${Math.round(w.percent)}%</span></span>`)}</button>`;
+}
+
+function Console({ hub, agents, runs, limits, onTalk, onKeys, say }) {
   useCall();
   const docked = useCallDock();
   const [text, setText] = useState("");
@@ -1043,6 +1054,7 @@ function Console({ hub, agents, runs, onTalk, onKeys, say }) {
       <label class="ask"><input value=${text} placeholder="Talk to the assistant" aria-label="Talk to the assistant" autocomplete="off" spellcheck="false"
         onInput=${(e) => setText(e.target.value)} onKeyDown=${(e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); send(); } else if (e.key === "Escape") e.target.blur(); }} />
         ${text.trim() && html`<kbd>enter</kbd>`}</label>
+      <${UsageChip} limits=${limits} />
       <button class="btn quiet sm" onClick=${callOrSetup}>${ICON.phone}Call</button>
       <${ConsoleAgents} agents=${agents} runs=${runs} />
       <button class="btn quiet sm icon" onClick=${onKeys} aria-keyshortcuts="?" aria-label="Keys" title=${tip("keys", "Every key")}>${ICON.keys}</button>
@@ -1068,7 +1080,7 @@ function TabBar({ view, onTalk, waits }) {
     ]} /><//>`}`;
 }
 
-function PhoneHome({ live, hist, more, only, bays, cursor, say }) {
+function PhoneHome({ live, hist, more, only, bays, cursor, limits, say }) {
   const strip = useRef();
   useLayoutEffect(() => strip.current?.querySelector(".bay.on")?.scrollIntoView({ block: "nearest", inline: "nearest" }), [only]);
   const waits = (live || []).filter(waiting).length;
@@ -1077,6 +1089,7 @@ function PhoneHome({ live, hist, more, only, bays, cursor, say }) {
       ${b && (b.needs + b.turn > 0 || b.work > 0) && html`<span class="cts">${b.needs + b.turn > 0 && html`<i class="cn n">${b.needs + b.turn}</i>`}${b.work > 0 && html`<i class="cn w">${b.work}</i>`}</span>`}</button></span>`;
   return html`<div class="shell phomev">
     <div class="phead"><h1>Sessions</h1>${waits > 0 && html`<span class="bc n">${waits} waiting</span>`}
+      <${UsageChip} limits=${limits} />
       <button class="btn icon pib" aria-label="Settings" title=${tip("settings", "Settings")} onClick=${() => (location.hash = SETTINGS)}>${ICON.gear}</button></div>
     <nav class="ptabs" aria-label="Bays" ref=${strip}>
       ${tab(only === null, 0, "All", null)}
