@@ -70,7 +70,7 @@ const css = (p, sel, prop) => p.$eval(sel, (e, k) => getComputedStyle(e)[k], pro
   long = long || list.find((s) => s.state === 'your-turn');
   const madeFiles = async (s) => (await turnsOf(s)).slice(-1).some((t) => t.files?.length);
   let edits = null;
-  for (const s of list.filter((x) => x.attachable && x.kind !== 'hub').slice(0, 15)) if (!edits && await madeFiles(s)) edits = s;
+  for (const s of list.filter((x) => x.attachable && x.kind !== 'hub').sort((x, y) => (x.state === 'working') - (y.state === 'working')).slice(0, 15)) if (!edits && await madeFiles(s)) edits = s;
   edits = edits || long;
   const quiet = list.find((s) => s.state === 'your-turn' && s.attachable && s.kind !== 'hub' && s.sessionId !== long.sessionId) || list.find((s) => s.attachable && s.kind !== 'hub' && s.sessionId !== long.sessionId) || long;
   const qturns = (await (await fetch(`${base}/api/sessions/${quiet.sessionId}/turns`)).json()).turns;
