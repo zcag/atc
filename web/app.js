@@ -929,12 +929,13 @@ function BayBar({ bays, only, view, off, down, live, peek, onPeek }) {
 }
 
 const PEEK_HOVER = { close: 0, on: false, x: 0, y: 0 };
+const bayListShown = () => !!document.querySelector(".shell.open > .side")?.offsetParent;
 const peekOnHover = (b, only, peek, onPeek) => ({
   onPointerEnter: () => clearTimeout(PEEK_HOVER.close),
   onPointerMove: (e) => {
     const still = e.clientX === PEEK_HOVER.x && e.clientY === PEEK_HOVER.y;
     PEEK_HOVER.x = e.clientX; PEEK_HOVER.y = e.clientY;
-    if (e.pointerType !== "mouse" || still || peek === b.name || b.name === only || !(b.needs + b.turn + b.work) || (peek && !PEEK_HOVER.on)) return;
+    if (e.pointerType !== "mouse" || still || peek === b.name || (b.name === only && bayListShown()) || !(b.needs + b.turn + b.work) || (peek && !PEEK_HOVER.on)) return;
     PEEK_HOVER.on = true;
     onPeek(b.name);
   },
