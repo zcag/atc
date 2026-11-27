@@ -462,7 +462,7 @@ function App() {
     addEventListener("hashchange", f);
     return () => removeEventListener("hashchange", f);
   }, []);
-  const loadAgents = useCallback(() => api("/api/agents").then((l) => { AGENT_INFO = Object.fromEntries((l || []).map((a) => [a.name, a])); setAgents(l || []); }, () => {}), []);
+  const loadAgents = useCallback(() => api("/api/agents").then((l) => { AGENT_INFO = Object.fromEntries((l || []).map((a) => [a.name, a])); setAgents(l || []); }, () => setAgents((a) => a || [])), []);
   useEffect(() => {
     if (!me) return;
     loadAgents();
@@ -495,12 +495,12 @@ function App() {
 
   const bayFor = useRef(null);
   useEffect(() => {
-    if (!live) return;
+    if (!live || !agents) return;
     const x = route && live.find((v) => v.id === route || v.sessionId === route);
     const b = bayOf(x);
     if (b && bayFor.current !== x.sessionId) { bayFor.current = x.sessionId; BAY.set(b); rememberBay(b, { sid: x.sessionId, view: "session" }); }
     if (!route) bayFor.current = null;
-  }, [live, route]);
+  }, [live, route, agents]);
 
   const warmed = useRef(false);
   useEffect(() => {
@@ -813,7 +813,7 @@ function baysOf(live, keep) {
 function goBay(name, live, session) {
   BAY.set(name);
   const m = bayMem(name), mine = (live || []).filter((s) => bayOf(s) === name && !away(s));
-  const known = m.sid && (live || []).find((s) => s.sessionId === m.sid);
+  const known = m.sid && (live || []).find((s) => s.sessionId === m.sid && bayOf(s) === name);
   if (!session && (pagesRoute() || m.view === "pages")) return (location.hash = pagesHash(name));
   if (!session && (m.view === "board" || !name)) return go(null);
   const pick = known || mine.find((s) => s.state === "needs-you") || mine.find((s) => s.state === "your-turn") || mine[0];
