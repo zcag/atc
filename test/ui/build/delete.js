@@ -18,10 +18,11 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
   const run = async (w, h, scheme) => {
     const ctx = await b.newContext({ viewport: { width: w, height: h }, hasTouch: w < 900 });
     const p = await ctx.newPage();
-    const dels = [];
+    const dels = [], patches = [];
     await p.route(/\/api\//, (r) => {
       const q = r.request();
       if (q.method() === 'DELETE') dels.push(new URL(q.url()).pathname);
+      if (q.method() === 'PATCH') patches.push(q.postDataJSON());
       return q.method() === 'GET' ? r.continue() : r.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
     });
     await fakeSessions(p, base, (l) => {
@@ -39,12 +40,27 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
     if (w >= 900) {
       ok(!(await p.$('.rdel:visible')), `${tag}: no x on a calm list`);
       await p.hover('[data-sid^="del1"]');
-      ok(!!(await p.$('.bwrap:hover > .rdel:visible, .rr:hover > .rdel:visible')), `${tag}: hover shows the x`);
+      ok(!!(await p.$('.bwrap:hover > .rx > .rdel:visible, .rr:hover > .rx > .rdel:visible')), `${tag}: hover shows the x`);
       await p.screenshot({ path: `${out}/board-hover-${tag}.png` });
+      await p.click('.bwrap:hover > .rx > .rpin');
+      ok(patches.at(-1)?.pinned === true, `${tag}: the pin beside the x pins it`);
+      await p.hover('[data-sid^="del3"]');
+      ok(await p.$eval('.bwrap:hover > .rx > .rpin', (e) => e.classList.contains('on') && e.title === 'Unpin'), `${tag}: a pinned row's pin unpins`);
+      await p.hover('.bays .bay[data-bay="sample"] .n');
+      await p.waitForSelector('.peek .pk');
+      await p.hover('.peek .pk:has([href*="del3"])');
+      ok(!!(await p.$('.pk:hover > .rx > .rpin:visible')) && !!(await p.$('.pk:hover > .rx > .rdel:visible')), `${tag}: a peek row shows pin and x on hover`);
+      await p.screenshot({ path: `${out}/peek-hover-${tag}.png` });
+      await p.click('.pk:hover > .rx > .rpin');
+      ok(patches.at(-1)?.pinned === false, `${tag}: the peek's pin unpins`);
+      await p.mouse.move(700, 700);
+      await p.keyboard.press('Escape');
+      await p.waitForTimeout(200);
+      await p.hover('[data-sid^="del1"]');
       await p.hover('[data-sid^="del4"]');
       ok(!(await p.$('.rdel:visible')), `${tag}: no x on a private row`);
       await p.hover('[data-sid^="del1"]');
-      await p.click('.bwrap:hover > .rdel');
+      await p.click('.bwrap:hover > .rx > .rdel');
       await confirmDel();
       await p.waitForTimeout(200);
       ok(!(await row(1)), `${tag}: the row goes at once`);

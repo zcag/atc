@@ -994,6 +994,7 @@ function BayPeek({ bay, live, onBays, say, onClose }) {
     return html`<div class="pk ${s.state} ${!phone && order[at] === s ? "on" : ""}" key=${s.sessionId} onPointerMove=${() => order[at] !== s && setAt(order.indexOf(s))}>
       <${StateBlock} s=${s} /><a class="ti" lang=${langOf(s.title)} href=${`#/s/${keyOf(s)}`} onClick=${(e) => { e.preventDefault(); open(s); }}>${s.title || "Untitled"}</a>
       <span class="ago" title=${stamp(rowAt(s))}>${every && html`<span class="bayn">${bayOf(s)}</span>`}${ago(s)}</span>
+      ${!phone && html`<span class="rx"><${PinX} s=${s} say=${say} /><${DelX} s=${s} say=${say} /></span>`}
       <p class="what" lang=${typeof line === "string" ? langOf(line) : null}>${line}</p>
       ${s.asks?.length > 0 && html`<div class="pka"><${Ask} compact=${!phone} sheet=${phone} s=${s} a=${s.asks[0]} say=${say} keyRef=${ref} /></div>`}
       ${replyable(s) && html`<div class="pka"><${CardReplies} s=${s} /></div>`}
@@ -1225,6 +1226,9 @@ const resumeFrom = (s, say) => resumeSession(s).then((r) => go(r.id), (e) => say
 const branchOf = (s) => s.branch && !["HEAD", "main", "master"].includes(s.branch) && s.branch;
 const swipeable = (s) => s.state !== "past" && s.state !== "stopped";
 
+const togglePin = (s, say) => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }).catch((e) => say(e.message));
+const PinX = ({ s, say }) => say && !s.private && s.kind !== "hub" && swipeable(s) && html`<button class="rpin ${s.pinned ? "on" : ""}" tabindex="-1" aria-pressed=${!!s.pinned} aria-label=${`${s.pinned ? "Unpin" : "Pin"} “${s.title || "Untitled"}”`}
+  title=${s.pinned ? "Unpin" : "Pin to the top"} onClick=${(e) => { e.stopPropagation(); togglePin(s, say); }}>${ICON.pin}</button>`;
 const DelX = ({ s, say }) => say && canDelete(s) && html`<button class="rdel" tabindex="-1" aria-label=${`Delete “${s.title || "Untitled"}”`} aria-keyshortcuts=${ariaKeys("delete")}
   title=${tip("delete", "Delete: its conversation stays in history")} onClick=${(e) => { e.stopPropagation(); deleteLater(s, say); }}>${ICON.x}</button>`;
 
@@ -1246,7 +1250,7 @@ function RailRow({ s, sel, cursor, say, qk, when }) {
         <span class="e2">${s.profile && html`<span class="prof" title=${`Runs on the ${s.profile} Claude account`}>${s.profile}</span>`}<${LoadTag} s=${s} short />${s.shown?.length > 0 && html`<span class="pg" title=${plural(s.shown.length, "page")}>${ICON.page}${s.shown.length > 1 && s.shown.length}</span>`}${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span></span>
     </button>
     ${canResume(s) && html`<${ResumeBtn} s=${s} say=${say} />`}
-    <${DelX} s=${s} say=${say} />
+    <span class="rx"><${PinX} s=${s} say=${say} /><${DelX} s=${s} say=${say} /></span>
     ${ask && html`<div class="rask"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}
   </div>`;
 }
@@ -1284,7 +1288,7 @@ function BoardRow({ s, open, toggle, sel, cursor, say, qk, when }) {
         <span class="since" title=${stamp(rowAt(s))}><span>${fresh && html`<i class="dot" aria-hidden="true"></i>`}${when || ago(s)}</span>${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span>
       </div>
       ${canResume(s) && html`<${ResumeBtn} s=${s} say=${say} />`}
-      <${DelX} s=${s} say=${say} />
+      <span class="rx"><${PinX} s=${s} say=${say} /><${DelX} s=${s} say=${say} /></span>
       ${open && html`<div class="bexp">
         <div class="gx">
           ${s.summary?.gist?.length > 0 && html`<ul>${s.summary.gist.map((x) => html`<li>${x}</li>`)}</ul>`}
@@ -8662,7 +8666,7 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
     act(call.label, call.run, "voice talk phone assistant", undefined, call.boost);
     act("Session usage", cur.usage, "tokens cost limit");
     act("Rename", cur.rename, "title name");
-    act(s.pinned ? "Unpin" : "Pin", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { pinned: !s.pinned } }).then(() => say(s.pinned ? "Unpinned." : "Pinned."), (e) => say(e.message)));
+    act(s.pinned ? "Unpin" : "Pin", () => togglePin(s, say));
     act(s.parked ? "Unpark" : "Park", () => api(`/api/sessions/${s.sessionId}`, { method: "PATCH", body: { parked: !s.parked } }).then(() => say(s.parked ? "Unparked." : "Parked."), (e) => say(e.message)), "hide quiet");
     if (s.attachable) act("Stop", () => api(`/api/sessions/${s.sessionId}/stop?device=${encodeURIComponent(DEVICE)}`, { method: "POST" }).then(() => say("Stopped. Resume it any time.")), "end");
     act("Put on the backlog", () => putAside(s, say), "later aside backlog");
