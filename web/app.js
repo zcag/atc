@@ -355,6 +355,7 @@ function App() {
   const wide = useWide();
   const phone = usePhone();
   const [peek, setPeek] = useState(null);
+  useEffect(() => { if (!peek) PEEK_HOVER.on = false; }, [peek]);
   useNow(30000);
 
   useEffect(() => {
@@ -928,18 +929,19 @@ function BayBar({ bays, only, view, off, down, live, peek, onPeek }) {
     </nav>`;
 }
 
-const PEEK_HOVER = { close: 0, on: false, x: 0, y: 0 };
+const PEEK_HOVER = { close: 0, on: false, x: 0, y: 0, quiet: null };
 const bayListShown = () => !!document.querySelector(".shell.open > .side")?.offsetParent;
 const peekOnHover = (b, only, peek, onPeek) => ({
   onPointerEnter: () => clearTimeout(PEEK_HOVER.close),
   onPointerMove: (e) => {
     const still = e.clientX === PEEK_HOVER.x && e.clientY === PEEK_HOVER.y;
     PEEK_HOVER.x = e.clientX; PEEK_HOVER.y = e.clientY;
-    if (e.pointerType !== "mouse" || still || peek === b.name || (b.name === only && bayListShown()) || !(b.needs + b.turn + b.work) || (peek && !PEEK_HOVER.on)) return;
+    if (e.pointerType !== "mouse" || still || PEEK_HOVER.quiet === b.name || peek === b.name || (b.name === only && bayListShown()) || !(b.needs + b.turn + b.work) || (peek && !PEEK_HOVER.on)) return;
     PEEK_HOVER.on = true;
     onPeek(b.name);
   },
-  onPointerLeave: () => { if (PEEK_HOVER.on) PEEK_HOVER.close = setTimeout(() => PEEK_HOVER.on && onPeek(null), 300); },
+  onPointerDown: () => (PEEK_HOVER.quiet = b.name),
+  onPointerLeave: () => { if (PEEK_HOVER.quiet === b.name) PEEK_HOVER.quiet = null; if (PEEK_HOVER.on) PEEK_HOVER.close = setTimeout(() => PEEK_HOVER.on && onPeek(null), 300); },
 });
 
 function BayPeek({ bay, live, hist, more, sel, say, onClose }) {
@@ -969,7 +971,7 @@ function BayPeek({ bay, live, hist, more, sel, say, onClose }) {
     addEventListener("keydown", k, true);
     addEventListener("pointerdown", out);
     addEventListener("hashchange", onClose);
-    return () => { removeEventListener("keydown", k, true); removeEventListener("pointerdown", out); removeEventListener("hashchange", onClose); PEEK_HOVER.on = false; clearTimeout(PEEK_HOVER.close); };
+    return () => { removeEventListener("keydown", k, true); removeEventListener("pointerdown", out); removeEventListener("hashchange", onClose); clearTimeout(PEEK_HOVER.close); };
   }, []);
   useLayoutEffect(() => {
     const a = document.querySelector(every ? ".bays .offneeds" : `.bays .bay[data-bay="${CSS.escape(bay)}"]`)?.getBoundingClientRect(), el = box.current;
