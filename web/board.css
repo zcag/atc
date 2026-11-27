@@ -142,7 +142,6 @@
 .rail .brow .load.hot { color: var(--fail); }
 .rail .brow .pg svg { width: 14px; height: 14px; }
 .rask { padding: 0 10px 8px 38px; }
-.rask .chips { margin: 0; }
 .rask .ask.compact { box-shadow: none; padding: 0; margin: 0; }
 .rask .ask.compact .btn { height: 26px; padding: 0 8px 0 5px; }
 .rask .ask.compact .btn.primary { background: none; color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); font-weight: 400; }
@@ -168,9 +167,9 @@
 .brow.swiping[data-dir="l"]::after { left: 100%; background: var(--sunk); }
 .brow.swiping.armed::after { background: var(--ink); color: var(--strip); }
 .brow.swiping[data-swipe=""]::after { display: none; }
-:is(.bexp, .rask) .chips { display: flex; flex-wrap: wrap; gap: var(--s2); }
-:is(.bexp, .rask) .chips button { height: var(--btn-h); padding: 0 var(--s3); border: 0; border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--strip); color: var(--ink); font-size: var(--fs-ui); font-weight: 400; font-variation-settings: var(--v-you); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-:is(.bexp, .rask) .chips button:hover { box-shadow: inset 0 0 0 1px var(--dim); }
+.bexp .chips { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.bexp .chips button { height: var(--btn-h); padding: 0 var(--s3); border: 0; border-radius: var(--r2); box-shadow: inset 0 0 0 1px var(--line-strong); background: var(--strip); color: var(--ink); font-size: var(--fs-ui); font-weight: 400; font-variation-settings: var(--v-you); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bexp .chips button:hover { box-shadow: inset 0 0 0 1px var(--dim); }
 
 .shrow { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-areas: "i t a" "i m m"; column-gap: 10px; row-gap: 2px; align-items: baseline; width: 100%; padding: 8px 10px; border: 0; border-radius: var(--r2); background: none; text-align: left; color: inherit; font: inherit; cursor: pointer; }
 .rail .shrow { width: calc(100% - 12px); margin: 0 6px; }

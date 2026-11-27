@@ -942,19 +942,6 @@ const peekOnHover = (b, only, peek, onPeek) => ({
   onPointerLeave: () => { if (PEEK_HOVER.on) PEEK_HOVER.close = setTimeout(() => PEEK_HOVER.on && onPeek(null), 300); },
 });
 
-function PeekReply({ s, say }) {
-  const [text, setText] = useState("");
-  const send = (e) => {
-    e.preventDefault();
-    const t = text.trim();
-    if (!t) return;
-    setText("");
-    api(`/api/sessions/${s.id}/send`, { method: "POST", body: { text: t } }).then(() => say(`Sent to ${s.title || "the session"}.`), (err) => { setText(t); say(err.message); });
-  };
-  return html`<form class="preply" onSubmit=${send}><input value=${text} onInput=${(e) => setText(e.target.value)} placeholder=${`Reply to ${s.title || "Untitled"}`} aria-label=${`Reply to ${s.title || "Untitled"}`}
-    onKeyDown=${(e) => e.key === "Escape" && text && (e.stopPropagation(), setText(""))} /><button class="btn sm primary" disabled=${!text.trim()}>Send</button></form>`;
-}
-
 function BayPeek({ bay, live, hist, more, sel, say, onClose }) {
   const phone = usePhone();
   const box = useRef();
@@ -964,15 +951,14 @@ function BayPeek({ bay, live, hist, more, sel, say, onClose }) {
   const [cur, setCur] = useState(null);
   const keys = useRef({});
   const rows = () => [...(box.current?.querySelectorAll("[data-sid]") || [])].map((el) => el.dataset.sid);
-  const at = cur || rows()[0];
-  useLayoutEffect(() => { if (!cur && rows()[0]) setCur(rows()[0]); });
+  const at = cur;
   const nav = useRef();
   nav.current = (e) => {
     if (e.key === "Escape") { e.stopPropagation(); return onClose(); }
     if (e.target.matches?.("input, textarea") || e.altKey || e.ctrlKey || e.metaKey) return;
     const ids = rows(), d = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[e.key], qi = QWERTY.indexOf(e.key);
     const stop = () => { e.preventDefault(); e.stopPropagation(); };
-    if (d) { stop(); const i = ids.indexOf(at); setCur(ids[Math.max(0, Math.min(ids.length - 1, i < 0 ? 0 : i + d))]); }
+    if (d) { stop(); const i = ids.indexOf(at); setCur(ids[i < 0 ? (d > 0 ? 0 : ids.length - 1) : Math.max(0, Math.min(ids.length - 1, i + d))]); }
     else if (/^[1-9]$/.test(e.key) && keys.current[at]?.current) { stop(); keys.current[at].current(+e.key); }
     else if (qi >= 0 && !e.shiftKey && ids[qi]) { stop(); open(ids[qi]); }
     else if (e.key === "Enter" && at && !e.target.closest?.("button, a")) { stop(); open(at); }
@@ -997,7 +983,6 @@ function BayPeek({ bay, live, hist, more, sel, say, onClose }) {
     ${!every && html`<div class="pkf"><button class="btn" onClick=${() => { onClose(); goBay(bay, live); }}>Go to ${bay}</button></div>`}</div><//>`;
   return html`<div class="peek" ref=${box} role="dialog" aria-label=${`Peek at ${bay}`}
       onPointerEnter=${() => clearTimeout(PEEK_HOVER.close)} onPointerDown=${() => (PEEK_HOVER.on = false)}
-      onPointerMove=${(e) => { const sid = e.target.closest?.("[data-sid], .rr")?.querySelector?.("[data-sid]")?.dataset.sid || e.target.closest?.("[data-sid]")?.dataset.sid; sid && sid !== at && setCur(sid); }}
       onPointerLeave=${() => PEEK_HOVER.on && (PEEK_HOVER.close = setTimeout(onClose, 300))}>
     <div class="pkh"><b>${every ? "Every bay" : bay}</b>${path && html`<span class="w">${clipPath(tilde(baseDir(path)))}</span>`}${waits > 0 && html`<span class="bc n">${waits} waiting</span>`}
       ${!every && html`<span class="r"><button class="btn sm quiet" onClick=${() => { onClose(); BAY.set(bay); rememberBay(bay, { view: "board" }); go(null); }}>Board</button>
@@ -1242,8 +1227,6 @@ function RailRow({ s, sel, cursor, say, qk, when, peek }) {
     ${canResume(s) && html`<${ResumeBtn} s=${s} say=${say} />`}
     <span class="rx"><${PinX} s=${s} say=${say} /><${DelX} s=${s} say=${say} /></span>
     ${ask && html`<div class="rask"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} keyRef=${keyRef} /></div>`}
-    ${peek && replyable(s) && html`<div class="rask"><${CardReplies} s=${s} /></div>`}
-    ${peek && s.state === "your-turn" && s.attachable && !s.asks?.length && html`<div class="rask"><${PeekReply} s=${s} say=${say} /></div>`}
   </div>`;
 }
 
