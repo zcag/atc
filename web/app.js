@@ -687,7 +687,7 @@ function App() {
     <div class="app ${assistView ? "assisting" : ""} ${phone && screen === "session" ? "insession" : ""}">
     <${BayBar} bays=${bays} only=${only} view=${settings ? "settings" : screen} off=${off} down=${down} live=${live} peek=${peek} onPeek=${setPeek} />
     <${StaleLines} off=${off} down=${down} live=${all} retry=${retry} retryPeer=${retryPeer} />
-    ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} onBays=${onBays} say=${say} onClose=${() => setPeek(null)} />`}
+    ${peek && html`<${BayPeek} key=${peek} bay=${peek} live=${live} hist=${hist} more=${canMore && moreHist} sel=${sel} say=${say} onClose=${() => setPeek(null)} />`}
     ${settings ? html`<main class="shell scr"><${SettingsPage} me=${me} say=${say} onClose=${closeSettings} /></main>`
     : assistView ? html`<${AssistantView} hub=${hub} live=${all} loaded=${!!runs} say=${say} panes=${panes} togglePane=${togglePane} />`
     : pagesAt && !route ? html`<div class="shell pagesv"><${PagesView} at=${pagesAt} live=${all} bays=${bays} say=${say} index=${panes.pgindex !== false} /></div>`
@@ -955,66 +955,55 @@ function PeekReply({ s, say }) {
     onKeyDown=${(e) => e.key === "Escape" && text && (e.stopPropagation(), setText(""))} /><button class="btn sm primary" disabled=${!text.trim()}>Send</button></form>`;
 }
 
-function BayPeek({ bay, live, onBays, say, onClose }) {
+function BayPeek({ bay, live, hist, more, sel, say, onClose }) {
   const phone = usePhone();
   const box = useRef();
   const every = bay === "*";
-  const mine = (onBays || []).filter((s) => (every ? waiting(s) : bayOf(s) === bay) && countsOnBay(s));
-  const pins = pinnedOf(mine), rest = mine.filter((s) => !pins.includes(s)), waits = mine.filter(waiting).length;
-  const wait = rest.filter(waiting).sort((a, b) => (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1)), work = rest.filter((s) => s.state === "working");
-  const order = [...pins, ...wait, ...work];
-  const [at, setAt] = useState(0);
+  const list = every ? (live || []).filter(waiting) : live;
+  const waits = (live || []).filter((s) => waiting(s) && (every || bayOf(s) === bay)).length;
+  const [cur, setCur] = useState(null);
   const keys = useRef({});
+  const rows = () => [...(box.current?.querySelectorAll("[data-sid]") || [])].map((el) => el.dataset.sid);
+  const at = cur || rows()[0];
+  useLayoutEffect(() => { if (!cur && rows()[0]) setCur(rows()[0]); });
   const nav = useRef();
   nav.current = (e) => {
     if (e.key === "Escape") { e.stopPropagation(); return onClose(); }
     if (e.target.matches?.("input, textarea") || e.altKey || e.ctrlKey || e.metaKey) return;
-    const d = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[e.key];
-    if (d) { e.preventDefault(); e.stopPropagation(); setAt((i) => Math.max(0, Math.min(order.length - 1, i + d))); }
-    else if (/^[1-9]$/.test(e.key) && keys.current[order[at]?.sessionId]) { e.preventDefault(); e.stopPropagation(); keys.current[order[at].sessionId](+e.key); }
-    else if (e.key === "Enter" && order[at] && !e.target.closest?.("button, a")) { e.preventDefault(); open(order[at]); }
+    const ids = rows(), d = { j: 1, ArrowDown: 1, k: -1, ArrowUp: -1 }[e.key], qi = QWERTY.indexOf(e.key);
+    const stop = () => { e.preventDefault(); e.stopPropagation(); };
+    if (d) { stop(); const i = ids.indexOf(at); setCur(ids[Math.max(0, Math.min(ids.length - 1, i < 0 ? 0 : i + d))]); }
+    else if (/^[1-9]$/.test(e.key) && keys.current[at]?.current) { stop(); keys.current[at].current(+e.key); }
+    else if (qi >= 0 && !e.shiftKey && ids[qi]) { stop(); open(ids[qi]); }
+    else if (e.key === "Enter" && at && !e.target.closest?.("button, a")) { stop(); open(at); }
   };
   useEffect(() => {
     const k = (e) => nav.current(e);
-    const out = (e) => !box.current?.contains(e.target) && !e.target.closest?.(".bays") && onClose();
+    const out = (e) => !box.current?.contains(e.target) && !e.target.closest?.(".bays, [role=menu], .veil, .msheet") && onClose();
     addEventListener("keydown", k, true);
     addEventListener("pointerdown", out);
-    return () => { removeEventListener("keydown", k, true); removeEventListener("pointerdown", out); PEEK_HOVER.on = false; clearTimeout(PEEK_HOVER.close); };
+    addEventListener("hashchange", onClose);
+    return () => { removeEventListener("keydown", k, true); removeEventListener("pointerdown", out); removeEventListener("hashchange", onClose); PEEK_HOVER.on = false; clearTimeout(PEEK_HOVER.close); };
   }, []);
   useLayoutEffect(() => {
     const a = document.querySelector(every ? ".bays .offneeds" : `.bays .bay[data-bay="${CSS.escape(bay)}"]`)?.getBoundingClientRect(), el = box.current;
     if (!phone && a && el) el.style.left = `${Math.max(8, Math.min(a.left, innerWidth - el.offsetWidth - 8))}px`;
   });
-  const open = (s) => { onClose(); go(keyOf(s)); };
-  const path = !every && mine[0]?.cwd && tilde(baseDir(mine[0].cwd));
-  const n = baysOf(onBays, BAY.only).findIndex((b) => b.name === bay) + 1;
-  const row = (s) => {
-    const line = lineOf(s), ref = { current: null };
-    keys.current[s.sessionId] = (k) => ref.current?.(k);
-    return html`<div class="pk ${s.state} ${!phone && order[at] === s ? "on" : ""}" key=${s.sessionId} onPointerMove=${() => order[at] !== s && setAt(order.indexOf(s))}>
-      <${StateBlock} s=${s} /><a class="ti" lang=${langOf(s.title)} href=${`#/s/${keyOf(s)}`} onClick=${(e) => { e.preventDefault(); open(s); }}>${s.title || "Untitled"}</a>
-      <span class="ago" title=${stamp(rowAt(s))}>${every && html`<span class="bayn">${bayOf(s)}</span>`}${ago(s)}</span>
-      ${!phone && html`<span class="rx"><${PinX} s=${s} say=${say} /><${DelX} s=${s} say=${say} /></span>`}
-      <p class="what" lang=${typeof line === "string" ? langOf(line) : null}>${line}</p>
-      ${s.asks?.length > 0 && html`<div class="pka"><${Ask} compact=${!phone} sheet=${phone} s=${s} a=${s.asks[0]} say=${say} keyRef=${ref} /></div>`}
-      ${replyable(s) && html`<div class="pka"><${CardReplies} s=${s} /></div>`}
-      ${!phone && s.state === "your-turn" && s.attachable && !s.asks?.length && html`<div class="pka"><${PeekReply} s=${s} say=${say} /></div>`}
-    </div>`;
-  };
-  const group = (title, l) => l.length > 0 && html`<h3 class="grp"><b>${title}</b><span class="c">${l.length}</span></h3>${l.map(row)}`;
-  const body = html`
-    ${group("Pinned", pins)}${group("Waiting on you", wait)}${group("Working", work)}
-    ${!mine.length && html`<p class="pkn">Nothing running in ${bay}.</p>`}`;
+  const open = (sid) => { const s = (live || []).find((x) => x.sessionId === sid) || (hist || []).find((x) => x.sessionId === sid); onClose(); s && go(keyOf(s)); };
+  const path = !every && (live || []).find((s) => bayOf(s) === bay)?.cwd;
+  const n = baysOf(live, BAY.only).findIndex((b) => b.name === bay) + 1;
+  const body = html`<${RailList} live=${list} hist=${every ? null : hist} more=${!every && more} only=${every ? null : bay} sel=${sel} cursor=${phone ? null : at} say=${say} peek=${{ keys: keys.current, every }} />`;
   if (phone) return html`<${Sheet} cls="peeksheet" title=${every ? "Every bay" : bay} onClose=${onClose}><div class="peek" ref=${box}>${body}
     ${!every && html`<div class="pkf"><button class="btn" onClick=${() => { onClose(); goBay(bay, live); }}>Go to ${bay}</button></div>`}</div><//>`;
   return html`<div class="peek" ref=${box} role="dialog" aria-label=${`Peek at ${bay}`}
       onPointerEnter=${() => clearTimeout(PEEK_HOVER.close)} onPointerDown=${() => (PEEK_HOVER.on = false)}
+      onPointerMove=${(e) => { const sid = e.target.closest?.("[data-sid], .rr")?.querySelector?.("[data-sid]")?.dataset.sid || e.target.closest?.("[data-sid]")?.dataset.sid; sid && sid !== at && setCur(sid); }}
       onPointerLeave=${() => PEEK_HOVER.on && (PEEK_HOVER.close = setTimeout(onClose, 300))}>
-    <div class="pkh"><b>${every ? "Every bay" : bay}</b>${path && html`<span class="w">${clipPath(path)}</span>`}${waits > 0 && html`<span class="bc n">${waits} waiting</span>`}
+    <div class="pkh"><b>${every ? "Every bay" : bay}</b>${path && html`<span class="w">${clipPath(tilde(baseDir(path)))}</span>`}${waits > 0 && html`<span class="bc n">${waits} waiting</span>`}
       ${!every && html`<span class="r"><button class="btn sm quiet" onClick=${() => { onClose(); BAY.set(bay); rememberBay(bay, { view: "board" }); go(null); }}>Board</button>
         <button class="btn sm quiet" onClick=${() => { onClose(); goBay(bay, live); }}>Go to ${bay}${n > 0 && n < 10 && html`<kbd>${n}</kbd>`}</button></span>`}</div>
     <div class="pkb">${body}</div>
-    ${order.length > 0 && html`<div class="pkf"><span><kbd>1</kbd>…<kbd>9</kbd> answers the highlighted one</span><span><kbd>j</kbd><kbd>k</kbd> moves</span><span><kbd>esc</kbd> closes</span></div>`}
+    <div class="pkf"><span><kbd>q</kbd><kbd>w</kbd>… opens</span><span><kbd>1</kbd>…<kbd>9</kbd> answers</span><span><kbd>j</kbd><kbd>k</kbd> moves</span><span><kbd>esc</kbd> closes</span></div>
   </div>`;
 }
 
@@ -1237,7 +1226,8 @@ function ResumeBtn({ s, say }) {
   return html`<button class="btn sm rsm" aria-busy=${busy} onClick=${(e) => { e.stopPropagation(); setBusy(true); resumeFrom(s, say).finally(() => setBusy(false)); }}>${ICON.play}Resume</button>`;
 }
 
-function RailRow({ s, sel, cursor, say, qk, when }) {
+function RailRow({ s, sel, cursor, say, qk, when, peek }) {
+  const keyRef = peek && (peek.keys[s.sessionId] ||= { current: null });
   const { events } = useRowEvents(s, null, swipeable(s));
   const on = sel?.sessionId === s.sessionId, fresh = unread(s), g = s.pinned && waiting(s) ? "pinned waiting" : groupOf(s);
   const line = lineOf(s), ask = say && s.state === "needs-you" && s.asks?.length > 0;
@@ -1245,13 +1235,15 @@ function RailRow({ s, sel, cursor, say, qk, when }) {
     <button class="brow ${on ? "sel" : ""}" data-sid=${s.sessionId} aria-current=${on ? "true" : null} aria-description=${fresh ? "new since you looked" : null} ...${events}>
       <${StateBlock} s=${s} />
       <span class="r1"><span class="t" lang=${langOf(s.title)}>${s.title || "Untitled"}</span>
-        <span class="ago" title=${stamp(rowAt(s))}>${fresh && html`<i class="dot" aria-hidden="true"></i>`}${when || ago(s)}</span></span>
+        <span class="ago" title=${stamp(rowAt(s))}>${peek?.every && html`<span class="bayn">${bayOf(s)}</span>`}${fresh && html`<i class="dot" aria-hidden="true"></i>`}${when || ago(s)}</span></span>
       <span class="r2"><span class="s ${ask ? "q" : ""}" lang=${typeof line === "string" ? langOf(line) : null}>${line}</span>
         <span class="e2">${s.profile && html`<span class="prof" title=${`Runs on the ${s.profile} Claude account`}>${s.profile}</span>`}<${LoadTag} s=${s} short />${s.shown?.length > 0 && html`<span class="pg" title=${plural(s.shown.length, "page")}>${ICON.page}${s.shown.length > 1 && s.shown.length}</span>`}${qk && html`<kbd class="qk" aria-hidden="true">${qk}</kbd>`}</span></span>
     </button>
     ${canResume(s) && html`<${ResumeBtn} s=${s} say=${say} />`}
     <span class="rx"><${PinX} s=${s} say=${say} /><${DelX} s=${s} say=${say} /></span>
-    ${ask && html`<div class="rask"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} /></div>`}
+    ${ask && html`<div class="rask"><${Ask} compact s=${s} a=${s.asks[0]} say=${say} keyRef=${keyRef} /></div>`}
+    ${peek && replyable(s) && html`<div class="rask"><${CardReplies} s=${s} /></div>`}
+    ${peek && s.state === "your-turn" && s.attachable && !s.asks?.length && html`<div class="rask"><${PeekReply} s=${s} say=${say} /></div>`}
   </div>`;
 }
 
@@ -1442,15 +1434,15 @@ const useEarlierOpen = () => {
   return [open, () => { store("atc.earlier", !open); set(!open); }];
 };
 
-function RailList({ live, hist, more, only, sel, cursor, shell, say }) {
+function RailList({ live, hist, more, only, sel, cursor, shell, say, peek }) {
   const by = bayLists(live, hist, only);
   let qn = 0;
-  const row = (s, qk, when) => html`<${RailRow} key=${s.sessionId} s=${s} sel=${sel} say=${say} cursor=${cursor} qk=${qk} when=${when} />`;
+  const row = (s, qk, when) => html`<${RailRow} key=${s.sessionId} s=${s} sel=${sel} say=${say} cursor=${cursor} qk=${qk} when=${when} peek=${peek} />`;
   const busy = GROUPS.filter(([k]) => k !== "earlier" && by[k].length);
-  return html`<div class="rail" id="rscroll">
+  return html`<div class="rail" id=${peek ? null : "rscroll"}>
     ${busy.map(([k, title]) => html`<${GroupHead} k=${k} title=${title} n=${by[k].length}>${k === "parked" && html`<span class="r">to resume later</span>`}<//>
       ${by[k].map((s) => row(s, QWERTY[qn++]))}`)}
-    <${ShellGroup} cur=${shell} />
+    ${!peek?.every && html`<${ShellGroup} cur=${shell} />`}
     <${EarlierSection} list=${by.earlier} row=${row} start=${qn} sel=${sel} more=${more} />
     ${!busy.length && !by.earlier.length && html`<p class="calm">Nothing here yet. <button class="vlink" onClick=${() => NEW_SESSION()}>Start a session</button></p>`}
   </div>`;

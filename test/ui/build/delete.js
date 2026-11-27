@@ -47,11 +47,11 @@ const mk = (t, i, extra = {}) => Object.assign(JSON.parse(JSON.stringify(t)), {
       await p.hover('[data-sid^="del3"]');
       ok(await p.$eval('.bwrap:hover > .rx > .rpin', (e) => e.classList.contains('on') && e.title === 'Unpin'), `${tag}: a pinned row's pin unpins`);
       await p.hover('.bays .bay[data-bay="sample"] .n');
-      await p.waitForSelector('.peek .pk');
-      await p.hover('.peek .pk:has([href*="del3"])');
-      ok(!!(await p.$('.pk:hover > .rx > .rpin:visible')) && !!(await p.$('.pk:hover > .rx > .rdel:visible')), `${tag}: a peek row shows pin and x on hover`);
+      await p.waitForSelector('.peek .rr');
+      await p.hover('.peek [data-sid^="del3"]');
+      ok(!!(await p.$('.peek .rr:hover > .rx > .rpin:visible')) && !!(await p.$('.peek .rr:hover > .rx > .rdel:visible')), `${tag}: a peek row shows pin and x on hover`);
       await p.screenshot({ path: `${out}/peek-hover-${tag}.png` });
-      await p.click('.pk:hover > .rx > .rpin');
+      await p.click('.peek .rr:hover > .rx > .rpin');
       ok(patches.at(-1)?.pinned === false, `${tag}: the peek's pin unpins`);
       await p.mouse.move(700, 700);
       await p.keyboard.press('Escape');
