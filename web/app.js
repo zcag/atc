@@ -318,9 +318,8 @@ function App() {
   useSync();
   const [me, setMe] = useState(undefined);
   const [runs, setLive] = useState(null);
-  const live = useMemo(() => runs && runs.filter((x) => !hiddenRun(x)), [runs]);
-  const reach = useMemo(() => runs && runs.filter((x) => !hiddenRun(x) || x.kind === "hub"), [runs]);
-  const onBays = useMemo(() => runs && runs.filter((x) => !hiddenRun(x) || agentAtWork(x)), [runs]);
+  const live = useMemo(() => runs && runs.filter(listed), [runs]);
+  const reach = useMemo(() => runs && runs.filter((x) => listed(x) || x.kind === "hub"), [runs]);
   const hub = runs?.find(isAssistant);
   const [agents, setAgents] = useState(null);
   const [off, setOff] = useState(0);
@@ -551,7 +550,7 @@ function App() {
 
   const ordered = arrange(live);
   const keys = useRef({});
-  keys.current = { ordered, route, cursor, creating, live, onBays, togglePane, setPeek, pages: !!pagesAt, toast, undo, list: !screenOf() && !pagesAt };
+  keys.current = { ordered, route, cursor, creating, live, togglePane, setPeek, pages: !!pagesAt, toast, undo, list: !screenOf() && !pagesAt };
   useEffect(() => {
     const step = (from, d) => {
       const k = keys.current;
@@ -578,7 +577,7 @@ function App() {
       const typing = t.closest?.(".xterm") || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable;
       const digit = /^Digit\d$/.test(e.code) && !e.metaKey && !e.ctrlKey && ((e.altKey && e.shiftKey) || (!e.altKey && !e.shiftKey && !typing && !t.closest?.(".ask, [data-ask]") && !document.querySelector(".veil, .pghome, .palone, .keys-ov, .peek, [role=menu]")));
       if (digit) {
-        const n = +e.code.slice(5), bays = baysOf(k.onBays, BAY.only);
+        const n = +e.code.slice(5), bays = baysOf(k.live, BAY.only);
         e.preventDefault();
         if (e.altKey && e.shiftKey) { if (bays[n - 1]) k.setPeek((v) => (v === bays[n - 1].name ? null : bays[n - 1].name)); return; }
         if (n === 0 && k.pages) { const b = BAY.only, r = pagesRoute(); location.hash = pagesHash(b === null ? PAGES_FROM || bays[0]?.name || null : null, r?.sid, r?.name); PAGES_FROM = b || PAGES_FROM; return; }
@@ -616,7 +615,7 @@ function App() {
         ".": () => (Call.live() ? returnToCall() : openAssistant()),
         "+": () => setCreating(location.hash === BACKLOG ? { later: true } : true),
         n: () => {
-          const bays = baysOf(k.onBays, BAY.only).map((b) => b.name);
+          const bays = baysOf(k.live, BAY.only).map((b) => b.name);
           const needs = (k.live || []).filter(waiting).sort((a, b) => bays.indexOf(bayOf(a)) - bays.indexOf(bayOf(b)) || (a.state === "needs-you" ? 0 : 1) - (b.state === "needs-you" ? 0 : 1));
           const i = needs.findIndex((x) => keyOf(x) === k.route || x.sessionId === k.route);
           const next = needs[(i + 1) % needs.length];
@@ -673,7 +672,7 @@ function App() {
   const assistView = assisting || isAssistant(sel);
   const screen = assistView ? "assistant" : route || shellAt ? "session" : pagesAt ? "pages" : scr || "board";
   TIME_ON = openNow({ sel: alone ? all.find((x) => x.sessionId === alone.sid) : assistView || shellAt || settings ? null : sel, screen: alone ? "pages" : settings ? "settings" : shellAt ? "shell" : screen });
-  const bays = baysOf(onBays, only);
+  const bays = baysOf(live, only);
   PANES = { panes, wide, toggle: togglePane, allBays: () => BAY.set(only === null ? bays[0]?.name || null : null) };
   const inBay = (live || []).filter((x) => x.state !== "stopped" && (only ? bayOf(x) === only : !homeless(x))).length;
   const railPath = only && (live || []).find((x) => bayOf(x) === only);
@@ -719,7 +718,7 @@ function App() {
     ${creating && html`<${NewSession} onClose=${() => setCreating(false)} say=${say} hosts=${me.hosts || [me.host]} down=${down} home=${me.host} live=${all}
       start=${creating === true ? null : creating} context=${creating === true ? here(sel, live) : null} />`}
     ${shelling && html`<${NewShell} onClose=${() => setShelling(false)} hosts=${me.hosts || [me.host]} down=${down} home=${me.host} live=${all} start=${shelling === true ? null : shelling} />`}
-    ${palette && html`<${Palette} live=${reach || []} onBays=${onBays} sel=${sel} say=${say} home=${me.host} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} onClose=${() => setPalette(false)}
+    ${palette && html`<${Palette} live=${reach || []} bayLive=${live} sel=${sel} say=${say} home=${me.host} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} onClose=${() => setPalette(false)}
       actions=${{ create: (start) => setCreating(start || true), usage: openUsage, help: () => setHelp(true), talk: openAssistant, ask: openAssistant,
         pane: togglePane, next: () => document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "n", bubbles: true })) }} />`}
     ${sharing && html`<${Share} key=${sharing} live=${live} say=${say} hosts=${(me.hosts || [me.host]).filter((h) => !down.some((p) => p.name === h))} home=${me.host} />`}
@@ -793,9 +792,9 @@ const bayOf = (s) => (!s ? null : homeless(s) || s.kind === "hub" ? AGENT_BAY : 
 const waiting = (s) => (s.state === "needs-you" || s.state === "your-turn") && !away(s);
 
 function baysOf(live, keep) {
-  const tabs = projectTabs(live || [], keep);
+  const tabs = projectTabs(live || [], keep === AGENT_BAY ? null : keep);
   const ag = (live || []).filter((s) => bayOf(s) === AGENT_BAY && s.state !== "stopped" && s.state !== "past");
-  if (ag.length || keep === AGENT_BAY) tabs.push({ name: AGENT_BAY, n: ag.length, resting: ag.filter((s) => !countsOnBay(s)).length, pips: ag.filter((s) => countsOnBay(s) && RANK[s.state] !== undefined).map((s) => s.state) });
+  if (ag.length || keep === AGENT_BAY) tabs.push({ name: AGENT_BAY, n: ag.length, resting: ag.filter(away).length, pips: ag.filter((s) => !away(s) && RANK[s.state] !== undefined).map((s) => s.state) });
   const names = tabs.map((t) => t.name);
   let order = BAYDATA.order;
   const fresh = names.filter((n) => !order.includes(n));
@@ -1329,11 +1328,11 @@ function useHistorySearch(q, only) {
   return only ? [all.filter((s) => bayOf(s) === only), all.filter((s) => bayOf(s) !== only)] : [all, []];
 }
 
-function EarlierSection({ list, row, start = 0, sel, more }) {
+function EarlierSection({ list, row, start = 0, sel, more, only }) {
   const [q, setQ] = useState("");
   const [olderOpen, flipOlder] = useEarlierOpen();
   const [shown, setShown] = useState(10);
-  const found = useHistorySearch(q, BAY.only);
+  const found = useHistorySearch(q, only);
   if (!list.length && !q) return null;
   const t0 = startOfDay();
   const today = list.filter((s) => rowAt(s) >= t0), older = list.filter((s) => rowAt(s) < t0);
@@ -1400,7 +1399,7 @@ function BoardView({ live, hist, more, only, sel, cursor, say, index }) {
           ${by[k].map((s) => row(s, QWERTY[qn++]))}
         </section>`)}
         <${ShellGroup} />
-        <${EarlierSection} list=${by.earlier} row=${row} start=${qn} sel=${sel} more=${more} />
+        <${EarlierSection} list=${by.earlier} row=${row} start=${qn} sel=${sel} more=${more} only=${only} />
         ${!busy.length && !by.earlier.length && html`<p class="calm">Nothing running${only ? ` in ${only}` : ""}. <button class="vlink" onClick=${() => NEW_SESSION()}>Start a session</button></p>`}
       </div>
       ${index && html`<aside class="pindex" aria-label="Pages">
@@ -1428,7 +1427,7 @@ function RailList({ live, hist, more, only, sel, cursor, shell, say, peek }) {
     ${busy.map(([k, title]) => html`<${GroupHead} k=${k} title=${title} n=${by[k].length}>${k === "parked" && html`<span class="r">to resume later</span>`}<//>
       ${by[k].map((s) => row(s, QWERTY[qn++]))}`)}
     ${!peek?.every && html`<${ShellGroup} cur=${shell} />`}
-    <${EarlierSection} list=${by.earlier} row=${row} start=${qn} sel=${sel} more=${more} />
+    <${EarlierSection} list=${by.earlier} row=${row} start=${qn} sel=${sel} more=${more} only=${only} />
     ${!busy.length && !by.earlier.length && html`<p class="calm">Nothing here yet. <button class="vlink" onClick=${() => NEW_SESSION()}>Start a session</button></p>`}
   </div>`;
 }
@@ -2417,8 +2416,8 @@ function projectTabs(live, keep) {
     const t = by.get(n);
     t.own ||= !x.agent;
     t.n++;
-    if (!countsOnBay(x)) t.resting++;
-    if (countsOnBay(x) && RANK[x.state] !== undefined) t.pips.push(x.state);
+    if (away(x)) t.resting++;
+    if (!away(x) && RANK[x.state] !== undefined) t.pips.push(x.state);
   }
   const tabs = [...by.values()].filter((t) => t.own || t.name === keep);
   if (keep && !by.has(keep)) tabs.push({ name: keep, pips: [] });
@@ -5771,14 +5770,14 @@ function BacklogRow({ it, stage, run, sel, tag, chip, select, primary, done, blo
 }
 
 let AGENT_INFO = {};
-const away = (s) => !!s.parked && s.state !== "needs-you";
+const away = (s) => !!s.parked && s.state !== "needs-you" && !agentAtWork(s);
 const homeless = (s) => !!s.agent && !AGENT_INFO[s.agent]?.dir;
 const GUESTS = "guests";
 const guestWork = (s) => s.agent === GUESTS || project(s.cwd).name === GUESTS;
 const isAssistant = (s) => s?.kind === "hub" && s.agent === "assistant";
 const hiddenRun = (s) => (isAssistant(s) || (!!s.agent && !!s.parked)) && s.state !== "needs-you";
-const agentAtWork = (s) => hiddenRun(s) && s.state === "working";
-const countsOnBay = (s) => !away(s) || agentAtWork(s);
+const agentAtWork = (s) => !!s.agent && !!s.parked && s.state === "working";
+const listed = (s) => !hiddenRun(s) || agentAtWork(s);
 const agentApi = (a, what, body) => api(`/api/agents/${encodeURIComponent(a)}/${what}`, { method: "POST", body });
 const mins = (ns) => Math.round(ns / 6e10);
 const spanOf = (ns) => { const m = mins(ns); return m % 60 ? (m > 60 ? `${Math.floor(m / 60)}h${m % 60}m` : `${m}m`) : `${m / 60}h`; };
@@ -8603,7 +8602,7 @@ const PAL_RECENT = "atc.palrecent";
 const PAL_CAP = { Sessions: 6, Shells: 4, Pages: 4, Actions: 6, Folders: 4, Agents: 4, Earlier: 4, Bays: 4, Appearance: 4 };
 const STATE_BOOST = { "needs-you": 30, "your-turn": 12, working: 6 };
 
-function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
+function Palette({ live, bayLive, sel, say, home, hosts, actions, onClose }) {
   const [q, setQ] = useState("");
   const [at, setAt] = useState(0);
   const [presets, setPresets] = useState([]);
@@ -8627,7 +8626,7 @@ function Palette({ live, onBays, sel, say, home, hosts, actions, onClose }) {
   const items = [];
   const add = (group, label, opts) => items.push({ group, label, ...opts });
   const run = (key, f) => () => { if (key) remember(key); onClose(); f(); };
-  const bays = baysOf(onBays, BAY.only);
+  const bays = baysOf(bayLive, BAY.only);
   const cur = SESSION_API;
   if (cur && sel) {
     const s = cur.s, g = "This session";
