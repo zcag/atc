@@ -184,6 +184,8 @@ public class CallBridge {
         final AudioMix players, injector;
         final AudioRecord rec;
         final AudioTrack play;
+        final Thread idle;
+        volatile boolean silent = true;
 
         Voip() throws Exception {
             AudioMixingRule.Builder heard = new AudioMixingRule.Builder().setTargetMixRole(AudioMixingRule.MIX_ROLE_PLAYERS)
@@ -202,9 +204,20 @@ public class CallBridge {
             play = policy.createAudioTrackSource(injector);
             rec.startRecording();
             play.play();
+            idle = new Thread(() -> {
+                byte[] zero = new byte[FRAME];
+                while (silent && play.write(zero, 0, FRAME) > 0) {}
+            });
+            idle.start();
+        }
+
+        void speak() throws InterruptedException {
+            silent = false;
+            idle.join();
         }
 
         void release() {
+            try { speak(); } catch (InterruptedException ignored) {}
             rec.release();
             play.release();
             try { staticCall("unregisterAudioPolicyAsyncStatic", policy); }
@@ -262,6 +275,7 @@ public class CallBridge {
             }
             if (voip != null || audioMode() == AudioManager.MODE_IN_COMMUNICATION) {
                 if (voip == null) voip = new Voip();
+                voip.speak();
                 rec = voip.rec;
                 play = voip.play;
                 byte[] stale = new byte[FRAME * 50];
